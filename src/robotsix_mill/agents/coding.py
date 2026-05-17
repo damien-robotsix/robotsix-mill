@@ -76,7 +76,9 @@ def run_implement_agent(
     from .base import build_agent
 
     tools = build_fs_tools(repo_dir, settings)
-    agent = build_agent(settings, system_prompt=SYSTEM_PROMPT, tools=tools)
+    agent = build_agent(
+        settings, system_prompt=SYSTEM_PROMPT, tools=tools, web=True
+    )
 
     if feedback is None:
         prompt = f"<ticket>\n{spec}\n</ticket>"

@@ -29,7 +29,7 @@ def run_refine_agent(*, settings: Settings, title: str, draft: str) -> str:
     OpenRouter key is configured (build_agent enforces this)."""
     from .base import build_agent
 
-    agent = build_agent(settings, system_prompt=SYSTEM_PROMPT)
+    agent = build_agent(settings, system_prompt=SYSTEM_PROMPT, web=True)
     result = agent.run_sync(
         f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
     )

@@ -77,6 +77,26 @@ class Settings(BaseSettings):
         default=None, alias="MILL_SANDBOX_DATA_MOUNT"
     )
 
+    # --- agent web access (refine + implement) ---
+    # OpenRouter server-side web search via the ":online" model suffix.
+    web_search: bool = Field(default=True, alias="MILL_WEB_SEARCH")
+    # web_fetch runs in its OWN container: network ON, but NO repo/data
+    # mount, non-root, read-only, fixed curl. Trade-off accepted: an
+    # agent could encode data into a fetched URL. http(s) only.
+    fetch_image: str = Field(
+        default="curlimages/curl:latest", alias="MILL_FETCH_IMAGE"
+    )
+    web_fetch_max_bytes: int = Field(
+        default=2_000_000, alias="MILL_WEB_FETCH_MAX_BYTES"
+    )
+    web_fetch_timeout: int = Field(
+        default=30, alias="MILL_WEB_FETCH_TIMEOUT"
+    )
+    # Directory of skill docs (skills/<name>/SKILL.md) injected into the
+    # refine + implement agents' system prompt. Relative to CWD (/app in
+    # the container, repo root locally).
+    skills_dir: Path = Field(default=Path("skills"), alias="MILL_SKILLS_DIR")
+
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
     langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")

@@ -5,6 +5,14 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core.service import TicketService
 
 
+@pytest.fixture(autouse=True)
+def _no_dotenv(monkeypatch):
+    """Hermeticity: never let the developer's ./.env leak into tests
+    (it can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
+    the suite hit the network). Disable env_file for every Settings()."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+
+
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     db.reset_engine()  # don't reuse a cached engine across tests
@@ -34,5 +42,9 @@ def fake_sandbox(monkeypatch):
             return (0, c[5:] + "\n")
         return (0, "")  # "true", "", and anything else: success
 
+    def _fetch(url, *, settings):
+        return (0, f"<fake page for {url}>")
+
     monkeypatch.setattr(sandbox, "run", _run)
+    monkeypatch.setattr(sandbox, "fetch", _fetch)
     return _run

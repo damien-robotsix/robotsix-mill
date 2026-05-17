@@ -66,6 +66,27 @@ the host, the network, or recurse. There is intentionally **no
 in-process / "local" mode** — that was a foot-gun that let the agent
 edit the host and recursively re-invoke the pipeline.
 
+## web_fetch — a deliberate, narrowed exception
+
+The refine/implement agents need to read real docs (web search is the
+model's native OpenRouter `:online`; `web_fetch` reads a specific URL).
+`web_fetch` runs in its **own** container that, unlike the command
+sandbox, **has network**. To bound the trade-off it is locked down the
+other way:
+
+- **no repo/data mount** — nothing local to exfiltrate;
+- non-root, `--read-only`, `--cap-drop ALL`, `--security-opt
+  no-new-privileges`, pids/memory capped, `--rm`;
+- a **fixed `curl`** (the dedicated `curlimages/curl` image), not a
+  shell — the URL is a plain argv item (no command injection);
+- http(s) only, size- and time-capped.
+
+**Residual risk (accepted):** the agent chooses the URL, so it could in
+principle encode data it already holds into a fetched URL. There is no
+local data in that container to steal, but the URL itself is an egress
+channel. This is a conscious trade for letting the agent learn unfamiliar
+libraries instead of guessing.
+
 ## Trust boundary / residual risk
 
 Mounting `/var/run/docker.sock` into mill gives mill (and any code that
