@@ -2,9 +2,14 @@
 tools until the change is done.
 
 This is the single seam the stage drives — tests monkeypatch
-``run_implement_agent`` to avoid network/LLM. The function is stateless
-across the fix loop except for ``history`` (the running message list),
-which lets a retry see what it already tried.
+``run_implement_agent`` to avoid network/LLM. ``history`` is the running
+pydantic-ai message list; persisting it (``dump_history``/
+``load_history``) is what lets a BLOCKED ticket *resume* its reasoning
+instead of restarting from scratch.
+
+Budget/agent failures raise :class:`AgentBudgetError` /
+:class:`AgentRunError` carrying the partial transcript, so the stage can
+commit WIP, save the transcript, and block-as-resumable.
 """
 
 from __future__ import annotations
@@ -18,6 +23,13 @@ SYSTEM_PROMPT = """\
 You are a senior software engineer working inside a single git repository.
 All file and shell tools operate inside that repo only.
 
+Start by exploring with list_dir — do not assume paths. Spec paths are
+usually relative to the package, not the repo root (e.g. a src/ layout),
+so locate files before reading or editing them.
+
+You may be RESUMING earlier work: inspect the repo (it may already have
+partial changes) before acting, and continue rather than restart.
+
 Implement the ticket below end to end:
 - Make the smallest change that fully satisfies it, matching the
   surrounding code's style and conventions.
@@ -30,6 +42,22 @@ reply with a short summary of what you changed and why.
 """
 
 
+class AgentBudgetError(RuntimeError):
+    """Usage/budget cap hit mid-run — operationally retryable."""
+
+    def __init__(self, message: str, messages: list) -> None:
+        super().__init__(message)
+        self.messages = messages
+
+
+class AgentRunError(RuntimeError):
+    """Agent raised mid-run — block-as-resumable, keep the transcript."""
+
+    def __init__(self, message: str, messages: list) -> None:
+        super().__init__(message)
+        self.messages = messages
+
+
 def run_implement_agent(
     *,
     settings: Settings,
@@ -38,9 +66,13 @@ def run_implement_agent(
     feedback: str | None = None,
     history: list | None = None,
 ) -> tuple[str, list]:
-    """Run one implementation pass. Returns ``(summary, messages)``;
-    pass ``messages`` back as ``history`` on a retry so the agent
-    remembers prior attempts."""
+    """Run one implementation pass. Returns ``(summary, messages)``.
+    On a usage cap or agent error, raises Agent*Error carrying the
+    partial messages so the caller can persist + resume."""
+    from pydantic_ai import capture_run_messages
+    from pydantic_ai.exceptions import UsageLimitExceeded
+    from pydantic_ai.usage import UsageLimits
+
     from .base import build_agent
 
     tools = build_fs_tools(repo_dir, settings)
@@ -54,5 +86,28 @@ def run_implement_agent(
             f"<test_output>\n{feedback}\n</test_output>"
         )
 
-    result = agent.run_sync(prompt, message_history=history)
+    limits = UsageLimits(request_limit=settings.agent_request_limit)
+    # capture_run_messages keeps the transcript even when the run raises
+    with capture_run_messages() as msgs:
+        try:
+            result = agent.run_sync(
+                prompt, message_history=history, usage_limits=limits
+            )
+        except UsageLimitExceeded as e:
+            raise AgentBudgetError(str(e), list(msgs)) from e
+        except Exception as e:  # noqa: BLE001 — block-as-resumable, keep msgs
+            raise AgentRunError(str(e), list(msgs)) from e
     return str(result.output), result.all_messages()
+
+
+def dump_history(messages: list) -> bytes:
+    """Serialize a pydantic-ai message list for resume."""
+    from pydantic_ai.messages import ModelMessagesTypeAdapter
+
+    return ModelMessagesTypeAdapter.dump_json(messages)
+
+
+def load_history(data: bytes) -> list:
+    from pydantic_ai.messages import ModelMessagesTypeAdapter
+
+    return list(ModelMessagesTypeAdapter.validate_json(data))

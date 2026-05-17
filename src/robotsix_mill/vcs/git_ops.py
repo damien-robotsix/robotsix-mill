@@ -59,6 +59,22 @@ def has_changes(repo: Path) -> bool:
     return bool(_git(repo, "status", "--porcelain"))
 
 
+def branch_exists(repo: Path, name: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--verify", "--quiet",
+             f"refs/heads/{name}"],
+            capture_output=True,
+            text=True,
+        ).returncode
+        == 0
+    )
+
+
+def checkout(repo: Path, name: str) -> None:
+    _git(repo, "checkout", "-q", name)
+
+
 def current_branch(repo: Path) -> str:
     return _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
 

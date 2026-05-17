@@ -26,25 +26,40 @@ def _safe(root: Path, rel: str) -> Path:
 def build_fs_tools(root: Path, settings: Settings) -> list:
     root = Path(root).resolve()
 
+    # Tools return errors as strings so the model can self-correct
+    # (try another path, list the dir, ...) instead of the whole agent
+    # run aborting on an exception.
     def read_file(path: str) -> str:
         """Return the text content of a file in the repository."""
-        return _safe(root, path).read_text(encoding="utf-8", errors="replace")
+        try:
+            return _safe(root, path).read_text(
+                encoding="utf-8", errors="replace"
+            )
+        except (ValueError, OSError) as e:
+            return f"error: {e}"
 
     def write_file(path: str, content: str) -> str:
         """Create or overwrite a file in the repository with ``content``."""
-        p = _safe(root, path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
+        try:
+            p = _safe(root, path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+        except (ValueError, OSError) as e:
+            return f"error: {e}"
         return f"wrote {len(content)} bytes to {path}"
 
     def list_dir(path: str = ".") -> str:
         """List entries of a directory in the repository (dirs end '/')."""
-        d = _safe(root, path)
-        return "\n".join(
-            sorted(
-                f"{e.name}/" if e.is_dir() else e.name for e in d.iterdir()
+        try:
+            d = _safe(root, path)
+            return "\n".join(
+                sorted(
+                    f"{e.name}/" if e.is_dir() else e.name
+                    for e in d.iterdir()
+                )
             )
-        )
+        except (ValueError, OSError) as e:
+            return f"error: {e}"
 
     def run_command(command: str) -> str:
         """Run a shell command against the repository (tests, linters,

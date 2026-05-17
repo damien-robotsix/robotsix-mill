@@ -85,8 +85,11 @@ def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     assert read_file("a/b.txt") == "hi"
     assert "a/" in list_dir(".")
     assert "exit=0" in run_command("echo ok")
-    with pytest.raises(ValueError):
-        read_file("../escape.txt")
+    # errors come back as strings (so the model can self-correct), and
+    # the path-escape guard still refuses the op
+    esc = read_file("../escape.txt")
+    assert esc.startswith("error:") and "escapes" in esc
+    assert read_file("nope.txt").startswith("error:")  # missing file
 
 
 # --- implement stage ----------------------------------------------------
@@ -160,3 +163,72 @@ def test_test_failure_exhausts_then_blocks(ctx_factory, tmp_path, monkeypatch):
         capture_output=True, text=True,
     ).stdout
     assert "WIP" in log
+
+
+def _commits(repo):
+    return subprocess.run(
+        ["git", "-C", str(repo), "log", "--pretty=%s"],
+        capture_output=True, text=True,
+    ).stdout.splitlines()
+
+
+def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypatch):
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    monkeypatch.setattr(coding, "dump_history", lambda _m: b"TRANSCRIPT")
+
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None):
+        del settings, spec, feedback, history
+        (Path(repo_dir) / "partial.txt").write_text("half done")
+        raise coding.AgentBudgetError("request_limit of 50", ["m1"])
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+    t = _ticket(ctx)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "resumable" in out.note and "budget" in out.note
+    ws = ctx.service.workspace(t)
+    assert "WIP" in _commits(ws.dir / "repo")[0]
+    assert (ws.artifacts_dir / "implement_messages.json").read_bytes() == b"TRANSCRIPT"
+
+
+def test_resume_continues_from_wip_without_reclone(ctx_factory, tmp_path, monkeypatch):
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    monkeypatch.setattr(coding, "dump_history", lambda _m: b"T")
+    monkeypatch.setattr(coding, "load_history", lambda _b: ["RESUMED_CTX"])
+    seen = {}
+    n = {"i": 0}
+
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None):
+        del settings, spec, feedback
+        n["i"] += 1
+        if n["i"] == 1:  # first pass: partial work, hit the cap
+            (Path(repo_dir) / "first.txt").write_text("1")
+            raise coding.AgentBudgetError("cap", ["m1"])
+        seen["history"] = history  # resume must replay the transcript
+        (Path(repo_dir) / "second.txt").write_text("2")
+        return ("finished on resume", ["m2"])
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+    t = _ticket(ctx)
+
+    first = ImplementStage().run(t, ctx)
+    assert first.next_state is State.BLOCKED
+    repo = ctx.service.workspace(t).dir / "repo"
+    git_inode = (repo / ".git").stat().st_ino  # detect a re-clone
+
+    # worker applies the Outcome; operator moves it back to READY
+    ctx.service.transition(t.id, first.next_state, first.note)
+    ctx.service.transition(t.id, State.READY, "retry")
+    second = ImplementStage().run(ctx.service.get(t.id), ctx)
+
+    assert second.next_state is State.IN_REVIEW
+    assert seen["history"] == ["RESUMED_CTX"]              # transcript replayed
+    assert (repo / ".git").stat().st_ino == git_inode      # NOT re-cloned
+    assert (repo / "first.txt").exists()                   # prior WIP kept
+    assert (repo / "second.txt").exists()
+    msgs = _commits(repo)
+    assert any("WIP" in m for m in msgs) and len(msgs) >= 2
