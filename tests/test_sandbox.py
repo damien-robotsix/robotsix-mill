@@ -38,7 +38,8 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     assert "--read-only" in a
     assert "-v" in a and "mill_data:/data" in a
     assert a[a.index("-w") + 1] == "/data/work/repo"
-    assert a[-3:] == ["sh", "-lc", "pytest -q"]
+    assert a[a.index("--entrypoint") + 1] == "sh"  # image ENTRYPOINT bypassed
+    assert a[-3:] == ["python:3.14-slim", "-lc", "pytest -q"]
 
 
 def test_sandbox_data_mount_overrides_volume(tmp_path, monkeypatch):

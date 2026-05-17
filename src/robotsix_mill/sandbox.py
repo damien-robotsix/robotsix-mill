@@ -59,7 +59,9 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
     ]
     if settings.sandbox_readonly:
         argv.append("--read-only")
-    argv += [settings.sandbox_image, "sh", "-lc", command]
+    # Override the image ENTRYPOINT: images like robotsix/mill have one
+    # (it starts the server) which would otherwise swallow our command.
+    argv += ["--entrypoint", "sh", settings.sandbox_image, "-lc", command]
 
     try:
         r = subprocess.run(
