@@ -111,3 +111,15 @@ class TicketService:
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()
+
+    def set_content_hash(self, ticket_id: str, content_hash: str) -> None:
+        """Keep the DB pointer in sync after a stage rewrites the
+        file-canonical description (so it isn't seen as an external edit)."""
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.content_hash = content_hash
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()

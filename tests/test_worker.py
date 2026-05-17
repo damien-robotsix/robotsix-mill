@@ -13,11 +13,13 @@ def ctx(settings, service):
 
 
 async def test_stub_pauses_chain(ctx, service):
-    """Real refine stub raises NotImplementedError: the chain pauses,
-    leaving the ticket in DRAFT (not FAILED)."""
+    """A still-stub stage (review) raises NotImplementedError: the chain
+    pauses, leaving the ticket in that state (not FAILED)."""
     t = service.create("x")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.IN_REVIEW)
     await process_ticket(t.id, ctx)
-    assert service.get(t.id).state is State.DRAFT
+    assert service.get(t.id).state is State.IN_REVIEW
 
 
 async def test_working_stages_chain_to_terminal(ctx, service, monkeypatch):
