@@ -12,8 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..config import Settings
-from ..sandbox import SandboxError
-from ..sandbox import run as sandbox_run
+from .. import sandbox
 
 
 def _safe(root: Path, rel: str) -> Path:
@@ -53,8 +52,8 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
         stdout/stderr (truncated). Runs in an isolated, network-less
         sandbox — no internet, nothing outside the repo is reachable."""
         try:
-            rc, out = sandbox_run(command, repo_dir=root, settings=settings)
-        except SandboxError as e:
+            rc, out = sandbox.run(command, repo_dir=root, settings=settings)
+        except sandbox.SandboxError as e:
             return f"sandbox error: {e}"
         return f"exit={rc}\n{out}"
 

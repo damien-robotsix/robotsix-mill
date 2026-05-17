@@ -50,13 +50,7 @@ class Settings(BaseSettings):
     # command, so a hung command can't stall a worker forever.
     command_timeout: int = Field(default=600, alias="MILL_COMMAND_TIMEOUT")
 
-    # --- command sandbox ---
-    # docker: each command runs in a fresh disposable sibling container
-    #   (isolated, no network). Requires the Docker socket in the mill
-    #   container. local: in-process shell — NOT isolated, dev/CI only.
-    sandbox_mode: Literal["docker", "local"] = Field(
-        default="docker", alias="MILL_SANDBOX_MODE"
-    )
+    # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain
     # MILL_TEST_COMMAND needs.
     sandbox_image: str = Field(

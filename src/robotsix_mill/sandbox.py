@@ -1,17 +1,15 @@
-"""Command execution isolation.
+"""Command execution isolation — always containerized.
 
 The implement agent's ``run_command`` tool and the stage's test command
 run **attacker-influenceable** code (ticket text and cloned repo content
-steer the LLM). They must not run in the mill process.
+steer the LLM). They must never run in the mill process or on the host.
 
-``docker`` mode runs each command in a fresh, disposable sibling
-container: ``--network none``, ``--rm``, non-root, read-only root with a
-tmpfs ``/tmp``, pids/memory capped, and **only the ticket's repo
-reachable** (via the shared data volume — see below).
-
-``local`` mode runs in-process (``shell=True``) with a process-group
-kill on timeout. It is *not* isolated and is only for trusted dev/CI
-where no Docker socket is available.
+There is intentionally **no in-process / "local" mode** — that was a
+foot-gun that let an agent edit the host and recursively re-invoke the
+pipeline. Every command runs in a fresh, disposable sibling container:
+``--network none``, ``--rm``, non-root, read-only root with a tmpfs
+``/tmp``, pids/memory capped, and **only the ticket's repo reachable**.
+Tests fake :func:`run` (the seam) rather than relying on an unsafe mode.
 
 Sibling-container mount caveat: when mill talks to the host Docker
 daemon over the mounted socket, ``-v`` paths resolve on the **host**,
@@ -24,7 +22,6 @@ under the data dir) lines up on both sides.
 from __future__ import annotations
 
 import os
-import signal
 import subprocess
 import uuid
 from pathlib import Path
@@ -43,30 +40,10 @@ def _truncate(out: str) -> str:
     return out[:_OUT_CAP]
 
 
-def _run_local(command: str, repo_dir: Path, timeout: int) -> tuple[int, str]:
-    # start_new_session => the shell leads its own process group, so on
-    # timeout we can SIGKILL the whole tree, not just the shell.
-    proc = subprocess.Popen(
-        command,
-        shell=True,
-        cwd=repo_dir,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        start_new_session=True,
-    )
-    try:
-        out, _ = proc.communicate(timeout=timeout)
-        return proc.returncode, _truncate(out or "")
-    except subprocess.TimeoutExpired:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        proc.wait()
-        return 124, f"command timed out after {timeout}s"
-
-
-def _run_docker(
-    command: str, repo_dir: Path, settings: Settings
-) -> tuple[int, str]:
+def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
+    """Execute ``command`` against ``repo_dir`` in a disposable
+    container. Returns ``(exit_code, combined_output)``. Raises
+    :class:`SandboxError` on isolation-infrastructure failure."""
     name = f"mill-sbx-{uuid.uuid4().hex[:12]}"
     argv = [
         "docker", "run", "--rm", "--name", name,
@@ -85,7 +62,10 @@ def _run_docker(
 
     try:
         r = subprocess.run(
-            argv, capture_output=True, text=True, timeout=settings.command_timeout
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=settings.command_timeout,
         )
     except FileNotFoundError as e:
         raise SandboxError("docker CLI not found in the mill image") from e
@@ -98,14 +78,7 @@ def _run_docker(
 
     # 125 == docker daemon/usage error (not the command's own exit code)
     if r.returncode == 125:
-        raise SandboxError(f"docker run failed: {(r.stderr or '').strip()[:300]}")
+        raise SandboxError(
+            f"docker run failed: {(r.stderr or '').strip()[:300]}"
+        )
     return r.returncode, _truncate((r.stdout or "") + (r.stderr or ""))
-
-
-def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
-    """Execute ``command`` against ``repo_dir``. Returns
-    ``(exit_code, combined_output)``. Raises :class:`SandboxError` on
-    isolation-infrastructure failure."""
-    if settings.sandbox_mode == "local":
-        return _run_local(command, repo_dir, settings.command_timeout)
-    return _run_docker(command, repo_dir, settings)

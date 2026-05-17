@@ -17,3 +17,22 @@ def settings(tmp_path) -> Settings:
 @pytest.fixture
 def service(settings) -> TicketService:
     return TicketService(settings)
+
+
+@pytest.fixture
+def fake_sandbox(monkeypatch):
+    """Replace the (always-containerized) sandbox seam with a tiny
+    interpreter so the suite is hermetic and never invokes Docker.
+    There is no 'local' mode to fall back on by design."""
+    from robotsix_mill import sandbox
+
+    def _run(command, *, repo_dir, settings):
+        c = command.strip()
+        if c == "false":
+            return (1, "false: command failed")
+        if c.startswith("echo "):
+            return (0, c[5:] + "\n")
+        return (0, "")  # "true", "", and anything else: success
+
+    monkeypatch.setattr(sandbox, "run", _run)
+    return _run

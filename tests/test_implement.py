@@ -38,15 +38,15 @@ def make_bare_repo(tmp_path: Path) -> str:
 
 
 @pytest.fixture
-def ctx_factory(tmp_path):
+def ctx_factory(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
     created = []
 
     def make(**env):
         db.reset_engine()
-        # tests have no Docker socket — exercise the in-process path
-        env.setdefault("MILL_SANDBOX_MODE", "local")
+        # fake_sandbox replaces the (always-containerized) seam; no
+        # Docker, no host execution.
         s = Settings(MILL_DATA_DIR=str(tmp_path / f"data{len(created)}"), **env)
         db.init_db(s)
         svc = TicketService(s)
@@ -76,10 +76,10 @@ def _fake_agent(write: dict | None):
 
 # --- fs_tools sandbox ---------------------------------------------------
 
-def test_fs_tools_roundtrip_and_sandbox(tmp_path):
+def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_SANDBOX_MODE="local")
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
     read_file, write_file, list_dir, run_command = build_fs_tools(tmp_path, s)
     assert "wrote" in write_file("a/b.txt", "hi")
     assert read_file("a/b.txt") == "hi"

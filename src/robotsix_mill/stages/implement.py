@@ -14,11 +14,10 @@ import logging
 import shutil
 import subprocess
 
+from .. import sandbox
 from ..agents import coding
 from ..core.models import Ticket
 from ..core.states import State
-from ..sandbox import SandboxError
-from ..sandbox import run as sandbox_run
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -68,7 +67,7 @@ class ImplementStage(Stage):
             )
             try:
                 rc, output = self._run_tests(repo_dir, s)
-            except SandboxError as e:
+            except sandbox.SandboxError as e:
                 return Outcome(State.BLOCKED, f"sandbox unavailable: {e}")
             if rc == 0:
                 if not git_ops.has_changes(repo_dir):
@@ -96,7 +95,7 @@ class ImplementStage(Stage):
         if not cmd:
             return 0, ""  # test gate disabled
         # same sandbox as the agent's run_command: isolated, no network
-        return sandbox_run(cmd, repo_dir=repo_dir, settings=settings)
+        return sandbox.run(cmd, repo_dir=repo_dir, settings=settings)
 
     @staticmethod
     def _finalize(ctx, ticket, repo_dir, branch, summary, *, ok: bool) -> None:

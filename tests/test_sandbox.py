@@ -11,35 +11,13 @@ def _settings(tmp_path, **env):
     return Settings(**env)
 
 
-# --- local mode ---------------------------------------------------------
+# Every command is always containerized — there is no local mode. These
+# tests assert the isolation flags without needing a Docker daemon
+# (subprocess.run is mocked).
 
-def test_local_runs_and_reports_exit_code(tmp_path):
-    s = _settings(tmp_path, MILL_SANDBOX_MODE="local")
-    rc, out = sandbox.run("echo hello", repo_dir=tmp_path, settings=s)
-    assert rc == 0 and "hello" in out
-    rc, _ = sandbox.run("exit 3", repo_dir=tmp_path, settings=s)
-    assert rc == 3
-
-
-def test_local_runs_in_repo_dir(tmp_path):
-    (tmp_path / "marker").write_text("x")
-    s = _settings(tmp_path, MILL_SANDBOX_MODE="local")
-    rc, out = sandbox.run("ls", repo_dir=tmp_path, settings=s)
-    assert rc == 0 and "marker" in out
-
-
-def test_local_timeout_killed(tmp_path):
-    s = _settings(tmp_path, MILL_SANDBOX_MODE="local", MILL_COMMAND_TIMEOUT="1")
-    rc, out = sandbox.run("sleep 30", repo_dir=tmp_path, settings=s)
-    assert rc == 124 and "timed out" in out
-
-
-# --- docker mode (argv only — no daemon needed) -------------------------
-
-def test_docker_argv_is_isolated(tmp_path, monkeypatch):
+def test_argv_is_isolated(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
-        MILL_SANDBOX_MODE="docker",
         MILL_DATA_DIR="/data",
         MILL_DATA_VOLUME="mill_data",
         MILL_SANDBOX_IMAGE="python:3.14-slim",
@@ -64,7 +42,7 @@ def test_docker_argv_is_isolated(tmp_path, monkeypatch):
 
 
 def test_docker_missing_raises_sandbox_error(tmp_path, monkeypatch):
-    s = _settings(tmp_path, MILL_SANDBOX_MODE="docker")
+    s = _settings(tmp_path)
 
     def boom(*a, **k):
         raise FileNotFoundError("docker")
@@ -75,7 +53,7 @@ def test_docker_missing_raises_sandbox_error(tmp_path, monkeypatch):
 
 
 def test_docker_daemon_error_raises(tmp_path, monkeypatch):
-    s = _settings(tmp_path, MILL_SANDBOX_MODE="docker")
+    s = _settings(tmp_path)
 
     def fake_run(argv, **kw):
         return subprocess.CompletedProcess(argv, 125, stdout="", stderr="no daemon")

@@ -74,9 +74,10 @@ and runs the container instead. Nothing host-specific differs between
 local and Docker except the data dir (`./.mill-data` vs `/data`), set
 purely by `MILL_DATA_DIR`.
 
-Locally there is no Docker socket, so set `MILL_SANDBOX_MODE=local` in
-`./.env` (the `implement` agent's shell + test command then run
-in-process — fine for trusted dev, see **Security model**).
+Running the pipeline always needs Docker (the agent's commands run in
+disposable containers — there is no in-process mode; see **Security
+model**). The unit test suite does **not** need Docker — it fakes the
+sandbox seam — so `make test` works anywhere.
 
 ## Security model
 
@@ -87,15 +88,14 @@ execution is isolated from the mill process:
 - **File tools** (`read_file`/`write_file`/`list_dir`) run in-process
   but are **path-confined** to the ticket's clone (`..`/symlink/abs
   escapes are rejected).
-- **Command execution** (`run_command` and the test command) goes
-  through the sandbox:
-  - `MILL_SANDBOX_MODE=docker` (default): a fresh, disposable sibling
-    container per command — `--network none`, `--rm`, non-root,
-    read-only root + tmpfs `/tmp`, pids/memory capped, only the
-    ticket's repo reachable. Needs the host Docker socket
-    (root-equivalent on the host — see `docker-compose.yml`).
-  - `MILL_SANDBOX_MODE=local`: in-process shell with a process-group
-    timeout kill. **Not isolated** — trusted dev/CI only.
+- **Command execution** (`run_command` and the test command) **always**
+  runs in a fresh, disposable sibling container — `--network none`,
+  `--rm`, non-root, read-only root + tmpfs `/tmp`, pids/memory capped,
+  only the ticket's repo reachable. Needs the host Docker socket
+  (root-equivalent on the host — see `docker-compose.yml`). There is
+  **no in-process/local mode**: it was a foot-gun that let the agent
+  edit the host and recursively re-invoke the pipeline. Tests fake the
+  sandbox seam instead.
 
 ## Layout
 
