@@ -68,10 +68,14 @@ class Settings(BaseSettings):
     sandbox_readonly: bool = Field(
         default=True, alias="MILL_SANDBOX_READONLY"
     )
-    # Name of the volume mounted at MILL_DATA_DIR on the mill container;
-    # the sandbox mounts it by name so workspace paths line up (see
-    # sandbox.py). Only used in docker mode.
+    # What the sandbox sibling containers mount at MILL_DATA_DIR. The
+    # daemon resolves -v on the host, so this must be a named volume OR
+    # the host path of a bind mount. data_volume is the fallback name;
+    # sandbox_data_mount (host path) overrides it for bind-mounted ./.data.
     data_volume: str = Field(default="mill_data", alias="MILL_DATA_VOLUME")
+    sandbox_data_mount: str | None = Field(
+        default=None, alias="MILL_SANDBOX_DATA_MOUNT"
+    )
 
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")

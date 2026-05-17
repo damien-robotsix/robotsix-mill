@@ -41,6 +41,26 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     assert a[-3:] == ["sh", "-lc", "pytest -q"]
 
 
+def test_sandbox_data_mount_overrides_volume(tmp_path, monkeypatch):
+    s = _settings(
+        tmp_path,
+        MILL_DATA_DIR="/data",
+        MILL_DATA_VOLUME="mill_data",
+        MILL_SANDBOX_DATA_MOUNT="/host/abs/.data",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+    a = seen["argv"]
+    assert "/host/abs/.data:/data" in a
+    assert "mill_data:/data" not in a
+
+
 def test_docker_missing_raises_sandbox_error(tmp_path, monkeypatch):
     s = _settings(tmp_path)
 

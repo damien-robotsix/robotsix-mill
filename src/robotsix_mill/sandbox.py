@@ -53,7 +53,8 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
         "--memory", settings.sandbox_memory,
         "--tmpfs", "/tmp",
         "-e", "HOME=/tmp",
-        "-v", f"{settings.data_volume}:{settings.data_dir}",
+        "-v", f"{settings.sandbox_data_mount or settings.data_volume}"
+              f":{settings.data_dir}",
         "-w", str(repo_dir),
     ]
     if settings.sandbox_readonly:
