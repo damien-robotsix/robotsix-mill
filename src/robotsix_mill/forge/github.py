@@ -1,0 +1,12 @@
+"""GitHub forge adapter. STUB — to be implemented."""
+
+from __future__ import annotations
+
+from .base import Forge
+
+
+class GitHubForge(Forge):
+    def open_merge_request(
+        self, *, source_branch: str, title: str, body: str
+    ) -> str:
+        raise NotImplementedError("GitHub forge adapter not implemented yet")

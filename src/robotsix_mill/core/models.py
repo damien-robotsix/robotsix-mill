@@ -1,0 +1,68 @@
+"""Management-plane data model (SQLModel / SQLite).
+
+The DB is authoritative for *management* — state, history, queueing,
+relationships — and is what the API (and a future web frontend) read.
+The ticket *body* is not stored here: it lives in the filesystem
+workspace (``description.md``); the row keeps only ``workspace_path`` and
+``content_hash`` as the pointer. SQLModel classes double as API schemas.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from sqlmodel import Field, SQLModel
+
+from .states import State
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Ticket(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    title: str
+    state: State = Field(default=State.DRAFT, index=True)
+    # pointer into the work plane (file-canonical body)
+    workspace_path: str
+    content_hash: str = ""
+    # set by the implement stage
+    branch: str | None = None
+    # epic / sub-ticket relationships (future use)
+    parent_id: str | None = Field(default=None, foreign_key="ticket.id")
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class TicketEvent(SQLModel, table=True):
+    """Append-only state-transition history."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    ticket_id: str = Field(foreign_key="ticket.id", index=True)
+    state: State
+    note: str | None = None
+    at: datetime = Field(default_factory=_now)
+
+
+# --- API request/response shapes ---
+
+
+class TicketCreate(SQLModel):
+    title: str
+    description: str = ""
+
+
+class TicketTransition(SQLModel):
+    state: State
+    note: str | None = None
+
+
+class TicketRead(SQLModel):
+    id: str
+    title: str
+    state: State
+    branch: str | None
+    parent_id: str | None
+    created_at: datetime
+    updated_at: datetime

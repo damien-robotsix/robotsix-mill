@@ -1,0 +1,13 @@
+# Keep local-only artifacts out of the build context so they can't be
+# baked into the image (notably .env — secrets — and .mill-data).
+.git
+.venv
+venv
+.env
+.mill-data
+.pytest_cache
+__pycache__
+*.py[cod]
+*.egg-info
+dist
+build
