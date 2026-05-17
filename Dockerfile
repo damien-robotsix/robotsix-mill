@@ -35,7 +35,10 @@ RUN groupadd --system --gid 1000 mill \
 
 WORKDIR /app
 COPY . /app
-RUN pip install --no-cache-dir --root-user-action=ignore . \
+# [dev,tracing]: this image doubles as the test-gate sandbox, so it
+# needs pytest + the OpenTelemetry/Langfuse stack to run the project's
+# own suite (incl. tracing tests) against an agent's changes.
+RUN pip install --no-cache-dir --root-user-action=ignore ".[dev,tracing]" \
     && chown -R mill:mill /app
 
 USER mill
