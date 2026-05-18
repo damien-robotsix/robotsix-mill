@@ -66,15 +66,19 @@ def run_retrospect_agent(
     langfuse_summary: str | None,
     memory: str = "",
 ) -> RetrospectResult:
+    from pydantic_ai import PromptedOutput
+
     from .base import build_agent
 
-    # Structured output_type -> pydantic-ai forces tool_choice, which
-    # the cheap driver model can't serve (404). Use the strong model.
+    # PromptedOutput (not the default ToolOutput): the cheap driver
+    # model has no OpenRouter endpoint for the forced `tool_choice`
+    # ToolOutput needs (404), and it doesn't support NativeOutput
+    # either — but it produces schema-valid JSON from a prompt fine.
+    # This keeps retrospect on the cheap model (no deepseek cost).
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
-        output_type=RetrospectResult,
-        model_name=settings.deep_model,
+        output_type=PromptedOutput(RetrospectResult),
     )
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (
