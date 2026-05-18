@@ -138,3 +138,19 @@ class TicketService:
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()
+
+    def add_cost(self, ticket_id: str, amount: float) -> None:
+        """Atomically increment ``cost_usd`` for *ticket_id* by *amount*.
+
+        Called by ``CostInstrumentedOpenRouterModel`` via the
+        ``active_ticket_id`` contextvar bridge — never by stages directly.
+        No-op when the ticket doesn't exist (e.g. race with deletion).
+        """
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                return
+            ticket.cost_usd += amount
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()

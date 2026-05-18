@@ -127,3 +127,65 @@ def test_approve_enqueues_implement(client, service):
     assert data["state"] == State.READY
     # READY is in STAGE_FOR_STATE -> implement should pick it up
     assert State.READY in STAGE_FOR_STATE
+
+
+# --- cost_usd in API responses ---
+
+
+def test_create_ticket_cost_usd_zero(client):
+    """POST /tickets creates a ticket with cost_usd=0.0."""
+    r = client.post("/tickets", json={"title": "Cost zero"})
+    assert r.status_code == 201
+    data = r.json()
+    assert "cost_usd" in data
+    assert data["cost_usd"] == 0.0
+
+
+def test_get_tickets_includes_cost_usd(client):
+    """GET /tickets response includes cost_usd for each ticket."""
+    client.post("/tickets", json={"title": "C1"})
+    client.post("/tickets", json={"title": "C2"})
+    ts = client.get("/tickets").json()
+    assert len(ts) >= 2
+    for t in ts:
+        assert "cost_usd" in t
+        assert t["cost_usd"] == 0.0
+
+
+def test_get_ticket_returns_cost_usd_with_known_value(client, service):
+    """GET /tickets/{id} returns cost_usd matching what was set."""
+    t = service.create("Known cost")
+    service.add_cost(t.id, 0.0943)
+
+    r = client.get(f"/tickets/{t.id}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["cost_usd"] == 0.0943
+
+
+# --- board HTML cost rendering ---
+
+
+def test_board_has_cost_rendering_code(client):
+    """The board HTML source includes the cost rendering function and
+    CSS class (cost values are populated by client-side JS from the
+    /tickets JSON endpoint, not server-side)."""
+    r = client.get("/")
+    body = r.text
+    # The fmtCost function formats cost with $ prefix and 4 decimal places
+    assert "fmtCost" in body
+    assert ".cost" in body
+    assert "cost_usd" in body  # JS reads this field from JSON
+    # CSS class for the cost span
+    assert "class=\"cost\"" in body
+
+
+def test_board_rendering_no_langfuse_calls(client):
+    """Board rendering should NOT call Langfuse (no external HTTP requests).
+    The board is pure static HTML + API JSON; the worker handles tracing.
+    Since tests are hermetic, any external request would fail — we just
+    verify the board endpoint succeeds and doesn't reference Langfuse."""
+    r = client.get("/")
+    assert r.status_code == 200
+    # The board HTML does not contain any Langfuse references
+    assert "langfuse" not in r.text.lower()

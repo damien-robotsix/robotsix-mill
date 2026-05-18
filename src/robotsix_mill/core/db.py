@@ -51,15 +51,23 @@ def _run_migrations(settings: Settings) -> None:
         if cur.fetchone() is None:
             return  # ticket table doesn't exist yet
 
-        # Check if the source column already exists.
+        # Check which columns already exist.
         cur = conn.execute("PRAGMA table_info('ticket')")
         columns = {row[1] for row in cur.fetchall()}
+
         if "source" not in columns:
             conn.execute(
                 "ALTER TABLE ticket ADD COLUMN source TEXT NOT NULL DEFAULT 'user'"
             )
             conn.commit()
             log.info("migration: added source column to ticket table")
+
+        if "cost_usd" not in columns:
+            conn.execute(
+                "ALTER TABLE ticket ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+            log.info("migration: added cost_usd column to ticket table")
     finally:
         conn.close()
 

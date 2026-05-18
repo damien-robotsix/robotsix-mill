@@ -56,6 +56,7 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-user{background:#1d3a5c;color:#60a5fa}
 .src-retrospect{background:#3b2f1a;color:#f59e0b}
 .src-audit{background:#1a3b2f;color:#34d399}
+.cost{display:inline-block;font-size:10px;color:#9ca3af;margin-left:6px}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
@@ -87,6 +88,7 @@ const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":"user");
+const fmtCost=c=>"$"+(c??0).toFixed(4);
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
 async function refresh(){
  const ts=await jget("/tickets"); if(!ts)return;
@@ -98,9 +100,10 @@ async function refresh(){
   <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
-   <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
+   <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>
+   <span class="cost">${fmtCost(t.cost_usd)}</span>`+
    (s==="awaiting_approval"?
-    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>":"")+
+    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`:"")+
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
@@ -133,6 +136,7 @@ async function open_(id){
    <p>state <b class="s-${t.state}" style="border-left:3px solid var(--c);
       padding-left:6px">${t.state}</b> · branch ${esc(t.branch)||"—"}<br>
    source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><br>
+   llm cost <b>${fmtCost(t.cost_usd)}</b><br>
    created ${t.created_at} · updated ${t.updated_at}</p>
    <h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}

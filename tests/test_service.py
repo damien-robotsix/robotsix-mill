@@ -24,6 +24,14 @@ def test_explicit_source_is_stored(service):
     assert t.source == "retrospect"
 
 
+def test_default_cost_usd_is_zero(service):
+    """New tickets start with cost_usd = 0.0."""
+    t = service.create("Cost check")
+    assert t.cost_usd == 0.0
+    reloaded = service.get(t.id)
+    assert reloaded.cost_usd == 0.0
+
+
 def test_list_filters_by_state(service):
     a = service.create("a")
     service.create("b")
@@ -60,3 +68,51 @@ def test_state_machine_edges():
     assert not can_transition(State.CLOSED, State.DONE)   # terminal
     assert not can_transition(State.DELIVERABLE, State.DONE)  # via in_review
     assert not can_transition(State.READY, State.DONE)
+
+
+# --- add_cost ---
+
+
+def test_add_cost_single_increment(service):
+    """add_cost increments cost_usd by the given amount."""
+    t = service.create("Cost test")
+    assert t.cost_usd == 0.0
+
+    service.add_cost(t.id, 0.0123)
+    reloaded = service.get(t.id)
+    assert reloaded.cost_usd == 0.0123
+
+
+def test_add_cost_accumulates(service):
+    """Multiple add_cost calls accumulate the total."""
+    t = service.create("Accumulate test")
+    service.add_cost(t.id, 0.001)
+    service.add_cost(t.id, 0.002)
+    service.add_cost(t.id, 0.0005)
+    reloaded = service.get(t.id)
+    assert reloaded.cost_usd == pytest.approx(0.0035)
+
+
+def test_add_cost_survives_state_transition(service):
+    """Cost is preserved across state transitions."""
+    t = service.create("Transition cost test")
+    service.add_cost(t.id, 0.05)
+    service.transition(t.id, State.READY, note="refined")
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.READY
+    assert reloaded.cost_usd == 0.05
+
+
+def test_add_cost_resume_keeps_adding(service):
+    """After a state transition, more cost can be added and accumulates."""
+    t = service.create("Resume cost test")
+    service.add_cost(t.id, 0.01)
+    service.transition(t.id, State.READY)
+    service.add_cost(t.id, 0.02)
+    reloaded = service.get(t.id)
+    assert reloaded.cost_usd == pytest.approx(0.03)
+
+
+def test_add_cost_noop_on_missing_ticket(service):
+    """Calling add_cost with a nonexistent ticket id does not raise."""
+    service.add_cost("nonexistent-id", 999.0)  # must not raise

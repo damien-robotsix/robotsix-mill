@@ -77,6 +77,23 @@ Stored in the `ticket` table as `source TEXT NOT NULL DEFAULT 'user'`.
 An idempotent migration in `db.init_db` adds the column to existing
 databases that lack it.
 
+## Per-ticket LLM cost
+
+Every ticket's cumulative LLM spend is tracked automatically in the
+`cost_usd` column (`REAL`, default `0.0`). The cost-instrumented model
+attributes each OpenRouter completion call to the ticket currently being
+processed (via a `ContextVar` set by the worker), and the total is
+displayed on the Kanban board — both on the card (e.g. `$0.0943`) and in
+the detail drawer. Shows `$0.00` when no cost has been incurred yet.
+
+Cost is cumulative across all model calls for that ticket: refine,
+implement, retrospect, the driver, and any sub-agents (explore, deep,
+web research). No Langfuse dependency — cost is recorded locally in the
+management-plane DB.
+
+An idempotent migration in `db.init_db` adds the `cost_usd` column to
+existing databases that lack it.
+
 ## Run
 
 ```sh
