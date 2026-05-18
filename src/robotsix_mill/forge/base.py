@@ -33,6 +33,39 @@ class Forge(ABC):
         target branch, ``False`` when it does, and ``None`` when the
         forge hasn't yet performed the check (treat as mergeable)."""
 
+    @abstractmethod
+    def check_status(self, *, source_branch: str) -> dict | None:
+        """Return remote CI check-run status for the PR of *source_branch*.
+
+        Returns ``None`` when no PR exists for the branch.
+        When a PR exists, returns::
+
+            {
+                "conclusion": "success" | "failure" | "pending" | None,
+                "failing": [
+                    {
+                        "name": str,
+                        "summary": str | None,
+                        "text": str | None,
+                        "annotations": [
+                            {"path": str, "start_line": int | None,
+                             "message": str, "level": str}
+                        ]
+                    }
+                ],
+            }
+
+        ``"success"`` = all completed checks pass.
+        ``"failure"``  = at least one completed check has a non-success
+                         conclusion.
+        ``"pending"``  = at least one check is not yet complete and none
+                         have failed.
+        ``None``       = no checks exist at all.
+
+        Summaries are capped at 2000 chars, text at 4000, annotations at
+        20 per failing check (adapter-enforced truncation).
+        """
+
 
 def get_forge(settings: Settings) -> Forge:
     """Resolve the configured forge adapter."""

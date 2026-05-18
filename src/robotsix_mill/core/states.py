@@ -11,7 +11,11 @@ approves. ``REBASING`` is an active state between ``IN_REVIEW`` and
 to ``REBASING``, then on the next poll runs the rebase agent and
 force-pushes the ticket branch. On success it returns to ``IN_REVIEW``;
 on temporary failure it stays in ``REBASING`` for a retry; on exhaustion
-it escalates to ``BLOCKED``.
+it escalates to ``BLOCKED``. ``FIXING_CI`` is an active state between
+``IN_REVIEW`` and ``IN_REVIEW``: the merge stage detects a mergeable PR
+with failing CI and transitions to ``FIXING_CI``, then on the next poll
+runs the CI-fix agent. On success it returns to ``IN_REVIEW``; on
+failure it escalates to ``BLOCKED``.
 
 When a ticket is blocked, the state it was blocked *from* is recorded
 (``Ticket.blocked_from``). A human can **resume** the blocked ticket
@@ -33,6 +37,7 @@ class State(StrEnum):
     DELIVERABLE = "deliverable"  # implemented; awaiting MR delivery
     IN_REVIEW = "in_review"   # PR/MR open; awaiting human merge
     REBASING = "rebasing"     # conflicting PR; rebase agent in progress
+    FIXING_CI = "fixing_ci"   # PR open + failing CI; auto-fix in progress
     DONE = "done"             # PR/MR merged; awaiting retrospect
     CLOSED = "closed"        # retrospected; pipeline complete (terminal)
     ERRORED = "errored"       # a stage threw an unhandled exception
@@ -51,11 +56,19 @@ TRANSITIONS: dict[State, set[State]] = {
     State.READY: {State.DELIVERABLE, State.ERRORED, State.BLOCKED},
     State.DELIVERABLE: {State.IN_REVIEW, State.ERRORED, State.BLOCKED},
     # PR open: merge stage polls -> merged=done, closed-unmerged=blocked,
-    # conflicting=rebasing (auto-rebase cycle).
-    State.IN_REVIEW: {State.DONE, State.REBASING, State.ERRORED, State.BLOCKED},
+    # conflicting=rebasing (auto-rebase cycle), failing CI=fixing_ci.
+    State.IN_REVIEW: {
+        State.DONE,
+        State.REBASING,
+        State.FIXING_CI,
+        State.ERRORED,
+        State.BLOCKED,
+    },
     # rebasing: merge stage runs rebase agent -> back to in_review on
     # success, retry on failure, block on exhaustion.
     State.REBASING: {State.IN_REVIEW, State.ERRORED, State.BLOCKED},
+    # ci fix: on success -> in_review; on failure -> blocked; on crash -> errored.
+    State.FIXING_CI: {State.IN_REVIEW, State.BLOCKED, State.ERRORED},
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED},
     State.CLOSED: set(),
@@ -73,6 +86,7 @@ STAGE_FOR_STATE: dict[State, str] = {
     State.DELIVERABLE: "deliver",
     State.IN_REVIEW: "merge",
     State.REBASING: "merge",
+    State.FIXING_CI: "ci_fix",
     State.DONE: "retrospect",
 }
 

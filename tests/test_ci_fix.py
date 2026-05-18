@@ -1,0 +1,393 @@
+"""Tests for the CIFixStage (FIXING_CI → IN_REVIEW | BLOCKED)."""
+
+import pytest
+
+from robotsix_mill.config import Settings
+from robotsix_mill.core import db
+from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
+from robotsix_mill.forge import github
+from robotsix_mill.stages import StageContext
+from robotsix_mill.stages.ci_fix import (
+    CIFixStage,
+    _read_counter,
+    _write_counter,
+    _build_failing_summary,
+)
+
+
+def _ctx(tmp_path, **env):
+    db.reset_engine()
+    env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    s = Settings(**env)
+    db.init_db(s)
+    return StageContext(settings=s, service=TicketService(s))
+
+
+def _fixing_ci(ctx):
+    t = ctx.service.create("x", "y")
+    for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW, State.FIXING_CI):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    return ctx.service.get(t.id)
+
+
+def _gh(tmp_path, **extra):
+    return _ctx(
+        tmp_path, FORGE_KIND="github", FORGE_TOKEN="t",
+        FORGE_REMOTE_URL="https://github.com/o/r.git", **extra,
+    )
+
+
+def _setup_repo(ctx, ticket):
+    """Create a minimal .git in the workspace so _workspace_repo_dir succeeds."""
+    repo_dir = ctx.service.workspace(ticket).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+    return str(repo_dir)
+
+
+# --- E.27: Fix success + push success → IN_REVIEW ---
+
+def test_fix_success_push_success_returns_in_review(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "lint", "summary": "err", "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: True,
+    )
+    push_seen = {}
+
+    def fake_push(repo, branch, remote_url, token):
+        push_seen.update(branch=branch, token=token)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push", fake_push,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IN_REVIEW
+    assert push_seen["branch"] == f"mill/{t.id}"
+
+    # Counter reset to 0.
+    counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+    assert _read_counter(counter) == 0
+
+
+# --- E.28: Fix success + push failure → BLOCKED ---
+
+def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: True,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda **k: (_ for _ in ()).throw(RuntimeError("remote rejected")),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "force-push failed" in out.note
+
+
+# --- E.29: Fix failure, attempts remaining → IN_REVIEW ---
+
+def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="3")
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "test", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: False,
+    )
+
+    push_calls = []
+
+    def fake_push(*a, **k):
+        push_calls.append(1)
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push", fake_push)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+
+    # Attempt 1: fails → IN_REVIEW, counter=1
+    out1 = CIFixStage().run(t, ctx)
+    assert out1.next_state is State.IN_REVIEW
+    assert _read_counter(counter) == 1
+    assert push_calls == []  # never pushed on failure
+
+
+# --- E.30: Fix failure, attempts exhausted → BLOCKED ---
+
+def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="2")
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "test", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: False,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+
+    # Attempt 1: fails → IN_REVIEW
+    out1 = CIFixStage().run(t, ctx)
+    assert out1.next_state is State.IN_REVIEW
+
+    # Attempt 2: fails → BLOCKED (exhausted)
+    out2 = CIFixStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "ci fix failed after 2 attempt" in out2.note
+
+    # Counter reset on exhaustion.
+    assert _read_counter(counter) == 0
+
+
+# --- E.31: Agent crash → treated as failure ---
+
+def test_agent_crash_treated_as_failure(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="1")
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: (_ for _ in ()).throw(RuntimeError("LLM timeout")),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "ci fix failed after 1 attempt" in out.note
+
+
+# --- E.32: Missing workspace clone → BLOCKED ---
+
+def test_missing_workspace_clone_blocks(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path)
+    t = _fixing_ci(ctx)
+    # No repo dir created.
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "workspace clone is missing" in out.note
+
+
+# --- E.33: Forge not configured → BLOCKED ---
+
+def test_forge_not_configured_blocks(tmp_path):
+    ctx = _ctx(tmp_path)
+    out = CIFixStage().run(_fixing_ci(ctx), ctx)
+    assert out.next_state is State.BLOCKED
+    assert "forge not configured" in out.note
+
+
+# --- E.34: Force-push refspec is ticket branch only ---
+
+def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: True,
+    )
+    push_args = {}
+
+    def fake_push(repo, branch, remote_url, token):
+        push_args.update(branch=branch, remote_url=remote_url, token=token)
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push", fake_push)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    CIFixStage().run(t, ctx)
+    assert push_args["branch"] == f"mill/{t.id}"
+    assert push_args["branch"] != "main"
+
+
+# --- CI green/pending while in FIXING_CI → back to IN_REVIEW ---
+
+def test_ci_green_while_in_fixing_ci_returns_in_review(tmp_path, monkeypatch):
+    """If CI turns green while we're in FIXING_CI, go back to IN_REVIEW."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IN_REVIEW
+
+
+def test_ci_pending_while_in_fixing_ci_returns_in_review(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IN_REVIEW
+
+
+def test_check_status_returns_none_while_in_fixing_ci(tmp_path, monkeypatch):
+    """PR disappeared → back to IN_REVIEW."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IN_REVIEW
+
+
+def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
+    """Transient error → back to IN_REVIEW for re-poll."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("api down")),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IN_REVIEW
+
+
+# --- Counter location ---
+
+def test_counter_location_is_artifacts_dir(tmp_path, monkeypatch):
+    """E.36: Counter is at artifacts_dir / ci_fix_attempts.txt."""
+    ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="3")
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "test", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: False,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    CIFixStage().run(t, ctx)
+
+    counter_path = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+    assert counter_path.exists()
+    assert _read_counter(counter_path) == 1
+
+
+# --- _build_failing_summary ---
+
+def test_build_failing_summary_formats_correctly():
+    failing = [
+        {
+            "name": "lint / ruff",
+            "summary": "Found 3 errors",
+            "text": "line 1: unused import\nline 2: missing docstring",
+            "annotations": [
+                {"path": "src/foo.py", "start_line": 10, "message": "unused import os", "level": "failure"},
+            ],
+        },
+        {
+            "name": "test / pytest",
+            "summary": None,
+            "text": None,
+            "annotations": [],
+        },
+    ]
+    result = _build_failing_summary(failing)
+    assert "## Failing check #1: lint / ruff" in result
+    assert "Found 3 errors" in result
+    assert "unused import" in result
+    assert "src/foo.py:10" in result
+    assert "## Failing check #2: test / pytest" in result
+
+
+def test_build_failing_summary_empty():
+    assert _build_failing_summary([]) == ""
+
+
+# --- Counter helpers ---
+
+def test_ci_fix_counter_read_write(tmp_path):
+    p = tmp_path / "ci_fix_counter.txt"
+    assert _read_counter(p) == 0
+    p.write_text("garbage")
+    assert _read_counter(p) == 0
+    _write_counter(p, 5)
+    assert _read_counter(p) == 5
+    _write_counter(p, 0)
+    assert _read_counter(p) == 0

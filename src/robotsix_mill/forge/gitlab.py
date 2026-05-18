@@ -13,3 +13,6 @@ class GitLabForge(Forge):
 
     def pr_status(self, *, source_branch: str) -> dict | None:
         raise NotImplementedError("GitLab forge adapter not implemented yet")
+
+    def check_status(self, *, source_branch: str) -> dict | None:
+        raise NotImplementedError("GitLab forge adapter not implemented yet")

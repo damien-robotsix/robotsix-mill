@@ -13,6 +13,25 @@ _REMOTE_RE = re.compile(
     r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
 )
 
+# Check-run conclusions that are not "success"-like.
+_FAILING_CONCLUSIONS = frozenset({
+    "failure", "timed_out", "action_required", "cancelled",
+    "startup_failure", "stale",
+})
+
+# Statuses that mean the check is still in-flight.
+_PENDING_STATUSES = frozenset({
+    "in_progress", "queued", "waiting", "requested", "pending",
+})
+
+
+def _build_headers(token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
 
 def _parse_owner_repo(remote_url: str) -> tuple[str, str]:
     m = _REMOTE_RE.search(remote_url or "")
@@ -48,11 +67,7 @@ class GitHubForge(Forge):
         s = self.settings
         api = s.github_api_url.rstrip("/")
         url = f"{api}/repos/{owner}/{repo}/pulls"
-        headers = {
-            "Authorization": f"Bearer {github_token(s)}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
+        headers = _build_headers(github_token(s))
         payload = {"title": title, "head": head, "base": base, "body": body}
         with httpx.Client(timeout=30) as c:
             r = c.post(url, headers=headers, json=payload)
@@ -78,7 +93,12 @@ class GitHubForge(Forge):
         owner, repo = _parse_owner_repo(s.forge_remote_url or "")
         return self._get_pr(owner=owner, repo=repo, head=source_branch)
 
-    # --- HTTP seam (monkeypatched in tests) ---
+    def check_status(self, *, source_branch: str) -> dict | None:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        return self._check_status(owner=owner, repo=repo, head=source_branch)
+
+    # --- HTTP seamm (monkeypatched in tests) ---
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
         import httpx
 
@@ -86,11 +106,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = {
-            "Authorization": f"Bearer {github_token(s)}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
+        headers = _build_headers(github_token(s))
         with httpx.Client(timeout=30) as c:
             lst = c.get(
                 f"{api}/repos/{owner}/{repo}/pulls",
@@ -112,4 +128,151 @@ class GitHubForge(Forge):
             "state": pr.get("state", "open"),
             "url": pr.get("html_url", ""),
             "mergeable": pr.get("mergeable"),  # True/False/None
+            "sha": (pr.get("head") or {}).get("sha", ""),
         }
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _check_status(
+        self, *, owner: str, repo: str, head: str
+    ) -> dict | None:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s))
+
+        pr = self._get_pr(owner=owner, repo=repo, head=head)
+        if pr is None:
+            return None
+
+        sha = pr.get("sha", "")
+        if not sha:
+            return None
+
+        with httpx.Client(timeout=30) as c:
+            # 1. Fetch check runs (completed).
+            cr_resp = c.get(
+                f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
+                headers=headers,
+                params={"per_page": 100, "status": "completed"},
+            )
+            cr_resp.raise_for_status()
+            check_runs = cr_resp.json().get("check_runs", [])
+
+            if not check_runs:
+                # 2. Fallback: combined statuses API.
+                st_resp = c.get(
+                    f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
+                    headers=headers,
+                )
+                st_resp.raise_for_status()
+                statuses_data = st_resp.json()
+                check_runs = _statuses_to_check_runs(statuses_data)
+
+            return _derive_check_conclusion(
+                c, api, owner, repo, headers, check_runs
+            )
+
+
+def _statuses_to_check_runs(statuses_data: dict) -> list[dict]:
+    """Convert combined statuses response into check-run–shaped dicts."""
+    statuses = statuses_data.get("statuses", [])
+    if not statuses:
+        return []
+    # Collapse per-context into a single item.
+    by_context: dict[str, list[dict]] = {}
+    for st in statuses:
+        ctx = st.get("context", "")
+        by_context.setdefault(ctx, []).append(st)
+    runs = []
+    for ctx, items in by_context.items():
+        # overall state: "success", "failure", "pending"
+        state = statuses_data.get("state", "success")
+        conclusion = state if state != "pending" else None
+        runs.append({
+            "id": None,  # no detail fetch for statuses
+            "name": ctx,
+            "status": "completed" if state != "pending" else "in_progress",
+            "conclusion": conclusion,
+            "output": {
+                "summary": None,
+                "text": None,
+                "annotations": [],
+            },
+        })
+    return runs
+
+
+def _derive_check_conclusion(
+    client, api: str, owner: str, repo: str, headers: dict,
+    check_runs: list[dict],
+) -> dict:
+    """Derive the overall conclusion and build the failing list."""
+    if not check_runs:
+        return {"conclusion": None, "failing": []}
+
+    has_pending = False
+    has_failure = False
+    failing: list[dict] = []
+
+    for cr in check_runs:
+        status = cr.get("status", "")
+        conclusion = cr.get("conclusion")
+
+        if status in _PENDING_STATUSES:
+            has_pending = True
+            continue
+
+        # status == "completed" (or unknown, treat as completed)
+        if conclusion in _FAILING_CONCLUSIONS:
+            has_failure = True
+            cr_id = cr.get("id")
+            name = cr.get("name", "unknown")
+            summary = None
+            text = None
+            annotations = []
+
+            if cr_id is not None:
+                # Fetch full check-run detail for output.
+                try:
+                    detail = client.get(
+                        f"{api}/repos/{owner}/{repo}/check-runs/{cr_id}",
+                        headers=headers,
+                    )
+                    detail.raise_for_status()
+                    output = detail.json().get("output", {}) or {}
+                    summary = output.get("summary")
+                    text = output.get("text")
+                    raw_anns = output.get("annotations") or []
+                    annotations = [
+                        {
+                            "path": a.get("path", ""),
+                            "start_line": a.get("start_line"),
+                            "message": a.get("message", ""),
+                            "level": a.get("annotation_level", "failure"),
+                        }
+                        for a in raw_anns[:20]
+                    ]
+                except Exception:
+                    pass  # detail fetch is best-effort
+
+            # Apply truncation.
+            if summary and len(summary) > 2000:
+                summary = summary[:1999] + "…"
+            if text and len(text) > 4000:
+                text = text[:3999] + "…"
+
+            failing.append({
+                "name": name,
+                "summary": summary,
+                "text": text,
+                "annotations": annotations,
+            })
+
+    if has_failure:
+        return {"conclusion": "failure", "failing": failing}
+    if has_pending:
+        return {"conclusion": "pending", "failing": []}
+    return {"conclusion": "success", "failing": []}
