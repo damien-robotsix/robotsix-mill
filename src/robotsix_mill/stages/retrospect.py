@@ -77,7 +77,9 @@ class RetrospectStage(Stage):
             and res.draft_title
             and res.draft_body
         ):
-            draft = ctx.service.create(res.draft_title, res.draft_body)
+            draft = ctx.service.create(
+                res.draft_title, res.draft_body, source="retrospect"
+            )
             ctx.service.set_parent(draft.id, ticket.id)
             spawned = draft.id
             log.info("%s: retrospect spawned draft %s", ticket.id, spawned)

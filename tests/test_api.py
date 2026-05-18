@@ -43,6 +43,34 @@ def test_create_and_get(client):
     assert tid in [t["id"] for t in client.get("/tickets").json()]
 
 
+def test_create_ticket_source_is_user(client):
+    """POST /tickets creates a ticket with source='user'."""
+    r = client.post("/tickets", json={"title": "Source check"})
+    assert r.status_code == 201
+    data = r.json()
+    assert data["source"] == "user"
+
+
+def test_get_tickets_includes_source(client):
+    """GET /tickets response includes source for each ticket."""
+    client.post("/tickets", json={"title": "S1"})
+    client.post("/tickets", json={"title": "S2"})
+    ts = client.get("/tickets").json()
+    assert len(ts) >= 2
+    for t in ts:
+        assert "source" in t
+        assert t["source"] == "user"
+
+
+def test_board_renders_source_badge(client):
+    """The board HTML includes source badge styling and rendering."""
+    r = client.get("/")
+    body = r.text
+    assert "src-badge" in body
+    assert "src-user" in body
+    assert "src-retrospect" in body
+
+
 def test_get_missing_404(client):
     assert client.get("/tickets/nope").status_code == 404
 

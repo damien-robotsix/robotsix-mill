@@ -83,6 +83,27 @@ def test_spawns_linked_draft(tmp_path, monkeypatch):
     assert drafts[0].title == "Cut retry tokens"
 
 
+def test_spawned_draft_has_source_retrospect(tmp_path, monkeypatch):
+    """Retrospect-spawned drafts have source='retrospect'."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="wastes tokens",
+            conclusion="improvement draft filed",
+            propose_draft=True,
+            draft_title="Cut retry tokens",
+            draft_body="do the thing",
+        ),
+    )
+    t = _done(ctx)
+    RetrospectStage().run(t, ctx)
+    drafts = [x for x in ctx.service.list() if x.parent_id == t.id]
+    assert len(drafts) == 1
+    assert drafts[0].source == "retrospect"
+
+
 def test_spawning_disabled(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path, MILL_RETROSPECT_SPAWN_DRAFTS="false")
     _no_langfuse(monkeypatch)

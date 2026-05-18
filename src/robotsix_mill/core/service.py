@@ -60,7 +60,9 @@ class TicketService:
             return list(s.exec(stmt).all())
 
     # --- writes ---
-    def create(self, title: str, description: str = "") -> Ticket:
+    def create(
+        self, title: str, description: str = "", source: str = "user"
+    ) -> Ticket:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         ticket_id = f"{stamp}-{_slug(title)}-{token_hex(2)}"
         ws = Workspace(self.settings.workspaces_dir, ticket_id)
@@ -72,6 +74,7 @@ class TicketService:
                 state=State.DRAFT,
                 workspace_path=str(ws.dir),
                 content_hash=content_hash,
+                source=source,
             )
             s.add(ticket)
             s.add(
