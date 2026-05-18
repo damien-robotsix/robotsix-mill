@@ -139,6 +139,11 @@ class Settings(BaseSettings):
     merge_poll_seconds: int = Field(
         default=120, alias="MILL_MERGE_POLL_SECONDS"
     )
+    # When true (default), the workspace's clone (repo/) is removed on
+    # close to save disk space.
+    prune_clone_on_close: bool = Field(
+        default=True, alias="MILL_PRUNE_CLONE_ON_CLOSE"
+    )
 
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
