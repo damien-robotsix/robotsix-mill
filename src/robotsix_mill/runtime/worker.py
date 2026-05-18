@@ -1,9 +1,12 @@
 """Event-driven worker. No scheduler.
 
 A ticket is enqueued the moment it is emitted (or transitions into an
-actionable state). The worker pulls it and **chains** stages —
+actionable state). A consumer pulls it and **chains** stages —
 ``draft → … → done`` — until it hits a terminal state, a stub, or an
-error. One worker, sequential, for v1.
+error. A bounded **pool** of consumers (``MILL_MAX_CONCURRENCY``) runs
+distinct tickets in parallel; a dedupe set guarantees one ticket is
+never processed by two consumers at once (one ticket's stages still
+run sequentially within its own consumer).
 """
 
 from __future__ import annotations
@@ -87,13 +90,23 @@ class Worker:
     def __init__(self, ctx: StageContext) -> None:
         self.ctx = ctx
         self.queue: asyncio.Queue[str] = asyncio.Queue()
-        self._task: asyncio.Task | None = None
+        # pool of consumer tasks — tickets run concurrently, not serially
+        self._tasks: list[asyncio.Task] = []
         self._poll_task: asyncio.Task | None = None
         self._audit_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
+        # ids queued OR in-flight — dedupe so the same ticket is never
+        # processed by two workers at once (the merge poll, emit, and
+        # requeue can all enqueue the same id).
+        self._pending: set[str] = set()
 
     def enqueue(self, ticket_id: str) -> None:
+        # asyncio is single-threaded; enqueue is only ever called from
+        # the loop thread, so this set check needs no lock.
+        if ticket_id in self._pending:
+            return
+        self._pending.add(ticket_id)
         self.queue.put_nowait(ticket_id)
 
     async def _run(self) -> None:
@@ -111,6 +124,9 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the consumer die
                 log.exception("processing %s crashed", ticket_id)
             finally:
+                # drop from in-flight FIRST so a re-enqueue (e.g. next
+                # merge-poll cycle) is accepted again.
+                self._pending.discard(ticket_id)
                 self.queue.task_done()
 
     def _check_progress(self, ticket_id: str, before, after) -> None:
@@ -178,8 +194,12 @@ class Worker:
                 log.exception("audit poll failed")
 
     def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._run())
+        if not self._tasks:
+            n = max(1, self.ctx.settings.max_concurrency)
+            self._tasks = [
+                asyncio.create_task(self._run()) for _ in range(n)
+            ]
+            log.info("worker pool started: concurrency=%d", n)
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
         # Opt-in periodic audit
@@ -191,15 +211,20 @@ class Worker:
             )
 
     async def stop(self) -> None:
-        for attr in ("_task", "_poll_task", "_audit_task"):
+        tasks = list(self._tasks)
+        for attr in ("_poll_task", "_audit_task"):
             t = getattr(self, attr)
             if t is not None:
-                t.cancel()
-                try:
-                    await t
-                except asyncio.CancelledError:
-                    pass
+                tasks.append(t)
                 setattr(self, attr, None)
+        for t in tasks:
+            t.cancel()
+        for t in tasks:
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        self._tasks = []
         tracing.flush_tracing()
 
     def requeue_unfinished(self) -> None:

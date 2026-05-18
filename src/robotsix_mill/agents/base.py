@@ -20,6 +20,17 @@ from .skills import load_skills
 from .web_research import make_web_research_tool
 
 
+def timeout_http_client(settings: Settings):
+    """A fresh httpx.AsyncClient with a hard per-request timeout, so a
+    hung/glacial provider connection raises instead of blocking the
+    worker forever. Pass to OpenRouterProvider(http_client=...)."""
+    import httpx
+
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(settings.model_request_timeout, connect=15.0)
+    )
+
+
 def _model_name(settings: Settings) -> str:
     # No "openrouter:" prefix — the provider is set explicitly so we can
     # use the cost-instrumented model subclass. The main agent NEVER
@@ -39,14 +50,15 @@ def build_agent(
     output_type: Any = str,
     tools: list | None = None,
     web: bool = False,
+    model_name: str | None = None,
 ):
-    """Construct a pydantic-ai Agent bound to the configured OpenRouter
-    model. Raises if no OpenRouter key is configured.
+    """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
+    role passes its own ``model_name`` (see Settings per-agent models);
+    falls back to the coordinator ``model``. Raises if no key.
 
-    Note: for a structured ``output_type`` on the cheap driver model,
-    wrap it in ``PromptedOutput`` at the call site — the default
-    ``ToolOutput`` mode forces ``tool_choice``, which the cheap driver
-    has no OpenRouter endpoint for (404)."""
+    Note: for a structured ``output_type`` on a model whose provider
+    rejects forced ``tool_choice``, wrap it in ``PromptedOutput`` at
+    the call site (the default ``ToolOutput`` mode 404s there)."""
     if not settings.openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
@@ -57,8 +69,11 @@ def build_agent(
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
     model = CostInstrumentedOpenRouterModel(
-        _model_name(settings),
-        provider=OpenRouterProvider(api_key=settings.openrouter_api_key),
+        model_name or _model_name(settings),
+        provider=OpenRouterProvider(
+            api_key=settings.openrouter_api_key,
+            http_client=timeout_http_client(settings),
+        ),
     )
 
     all_tools = list(tools or [])

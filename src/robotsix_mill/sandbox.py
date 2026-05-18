@@ -13,10 +13,11 @@ Tests fake :func:`run` (the seam) rather than relying on an unsafe mode.
 
 Sibling-container mount caveat: when mill talks to the host Docker
 daemon over the mounted socket, ``-v`` paths resolve on the **host**,
-not inside the mill container. So we mount the *named data volume*
-(``MILL_DATA_VOLUME``) at ``MILL_DATA_DIR`` in the sandbox; because mill
-also sees the volume at that same path, ``repo_dir`` (an absolute path
-under the data dir) lines up on both sides.
+not inside the mill container. The sandbox therefore exposes **only
+the ticket's own ``repo/`` sub-tree** (at its real path so ``-w`` and
+absolute refs line up) — never the data-dir root. ``mill.db``, the
+agent memory ledgers, and other tickets' workspaces are NOT reachable:
+a ticket's tests/commands cannot read or corrupt the management plane.
 """
 
 from __future__ import annotations
@@ -40,6 +41,34 @@ def _truncate(out: str) -> str:
     return out[:_OUT_CAP]
 
 
+def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
+    """Mount ONLY this ticket's repo sub-tree into the sandbox — never
+    the data-dir root (which holds ``mill.db``, the memory ledgers and
+    every other ticket's workspace). Target = the repo's real path so
+    ``-w`` and any absolute path in the repo still resolve."""
+    repo_dir = Path(repo_dir)
+    try:
+        rel = repo_dir.relative_to(settings.data_dir)
+    except ValueError as e:
+        raise SandboxError(
+            f"repo_dir {repo_dir} is not under data_dir "
+            f"{settings.data_dir}; refusing to mount"
+        ) from e
+    if rel == Path("."):
+        raise SandboxError("refusing to mount the data-dir root as repo")
+    target = str(repo_dir)
+    if settings.sandbox_data_mount:
+        # bind case: resolve the repo's host path (data_mount + rel)
+        host_src = str(Path(settings.sandbox_data_mount) / rel)
+        return ["-v", f"{host_src}:{target}"]
+    # named-volume case: bind just the sub-path of the volume
+    return [
+        "--mount",
+        f"type=volume,src={settings.data_volume},dst={target},"
+        f"volume-subpath={rel.as_posix()}",
+    ]
+
+
 def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
     """Execute ``command`` against ``repo_dir`` in a disposable
     container. Returns ``(exit_code, combined_output)``. Raises
@@ -53,8 +82,7 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
         "--memory", settings.sandbox_memory,
         "--tmpfs", "/tmp",
         "-e", "HOME=/tmp",
-        "-v", f"{settings.sandbox_data_mount or settings.data_volume}"
-              f":{settings.data_dir}",
+        *_repo_mount(Path(repo_dir), settings),
         "-w", str(repo_dir),
     ]
     if settings.sandbox_readonly:

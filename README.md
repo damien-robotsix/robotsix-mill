@@ -42,9 +42,12 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
 ```
 
 - **Engine:** `pydantic-ai` over OpenRouter.
-- **Event-driven:** ticket emission / state change enqueues; the
-  in-process worker picks it up at once and **chains** stages until a
-  terminal state or a stub. No cron, no polling (except merge check).
+- **Event-driven:** ticket emission / state change enqueues; an
+  in-process **pool** (`MILL_MAX_CONCURRENCY`, default 4) picks it up at
+  once and **chains** stages until a terminal state or a stub. Distinct
+  tickets run in parallel (one ticket's stages stay ordered; a dedupe
+  set stops the same ticket running twice). No cron, no polling (except
+  merge check).
 - **Delivery:** pluggable forge adapter (GitHub / GitLab), invoked only
   by the `deliver` stage.
 - **Tracing:** optional Langfuse; a no-op unless `LANGFUSE_*` is set.
@@ -162,28 +165,24 @@ worker-driven transitions trigger notifications — API/CLI transitions
 
 ## Cost controls & resilience
 
-- **Cheap driver, strong author (refine + implement).** A ~$3 ticket
-  traced to the expensive model running the whole agentic loop. Now a
-  cheap, small-context **driver** (`MILL_MODEL`, default
-  `tencent/hy3-preview`) orchestrates and delegates to bounded,
-  context-isolated sub-agents — it never reads the repo or authors
-  code itself:
-  - `explore(question)` — fresh-context read-only sub-agent on the
-    driver model (`MILL_EXPLORE_REQUEST_LIMIT`) navigates the repo and
-    returns only what was asked, so the driver's context stays small.
-  - `web_research(query)` — cheap sub-agent
-    (`MILL_WEB_RESEARCH_MODEL`, `MILL_WEB_RESEARCH_REQUEST_LIMIT`),
-    returns a conclusion only.
-  - `deep_refine` / `deep_implement` — the **strong** model
-    (`MILL_DEEP_MODEL`, default `deepseek/deepseek-v4-pro`,
-    `MILL_DEEP_MODEL_REQUEST_LIMIT`) is handed one complete curated
-    context and returns the finished spec / the full changed-file
-    contents. No tools, ~one-shot, never `:online` — invoked
-    deliberately, not for the whole loop.
-  The driver applies `deep_implement`'s output with `write_file` and
-  verifies with `run_tests` (trimmed result), re-calling the strong
-  model with failures. The expensive model is thus paid once per
-  authored artifact, on full context — not per exploration step.
+- **Implement agent + two lean sub-agents (each its own model).** A
+  capable agent (`MILL_MODEL`) reads and edits the repo **itself**,
+  kept lean by:
+  - `explore(question)` — a cheap **scout** (`MILL_EXPLORE_MODEL`,
+    `MILL_EXPLORE_REQUEST_LIMIT`) that returns concise pointers
+    (paths/symbols/line-ranges), **never whole files**; the main
+    agent then `read_file`s only what it needs.
+  - `run_tests()` — a cheap **test sub-agent** (`MILL_TEST_MODEL`)
+    runs the suite in the sandbox and **distills** failures into
+    actionable feedback (never the raw log in the conversation).
+  - `web_research(query)` — cheap web lookups, conclusion only, never
+    `:online`.
+  It loops read→edit→`run_tests` (≤`MILL_MAX_FIX_ITERATIONS`) until
+  green or BLOCK-resumable. Refine likewise authors the spec with a
+  `web_research` delegate. Each role has its own model so cheap models
+  can be slotted in per-agent for cost leverage (all default to the
+  capable model). No implement sub-agent and no `deep_*` layer — both
+  re-explored everything and never converged.
 - **No-progress safety net.** If a ticket re-enters the same
   model-driven stage `MILL_MAX_STUCK_CYCLES` times (default 3) without
   ever advancing — e.g. a run repeatedly killed before any checkpoint —

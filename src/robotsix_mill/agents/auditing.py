@@ -75,6 +75,7 @@ def run_audit_agent(
         system_prompt=SYSTEM_PROMPT,
         output_type=PromptedOutput(AuditResult),
         web=True,  # gives web_research tool
+        model_name=settings.audit_model,
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
@@ -82,5 +83,9 @@ def run_audit_agent(
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
         "Perform the audit and return your result."
     )
-    result = agent.run_sync(prompt)
+    from .retry import call_with_retry
+
+    result = call_with_retry(
+        lambda: agent.run_sync(prompt), settings=settings, what="audit"
+    )
     return result.output

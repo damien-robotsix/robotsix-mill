@@ -18,19 +18,18 @@ from pathlib import Path
 from ..config import Settings
 
 _SYSTEM_PROMPT = """\
-You are a code exploration assistant for ONE git repository. You have
-read-only tools (read_file, list_dir). Answer the caller's question as
-concisely as possible:
+You are a code-orientation scout for ONE git repository. You have
+read-only tools (read_file, list_dir). The caller will read the files
+it needs itself — your job is only to point it there fast.
 
-- Start with list_dir; never assume paths.
-- If asked "what/where", reply with a tight summary (paths + the
-  specific relevant lines), NOT whole files.
-- If explicitly asked for a file's full content (so it can be handed to
-  an authoring model), return that file VERBATIM under a clear
-  `FILE: <path>` header.
+Reply with a TIGHT answer:
+- the relevant file path(s) and the specific symbol / line range,
+- a one-line note on what's there and how it relates to the question,
+- at most a SHORT snippet (<=15 lines) ONLY if essential to answer.
 
-No speculation, no preamble. Be the caller's eyes — return the minimum
-that fully answers the question.
+NEVER paste whole files or large blocks — that is explicitly not your
+job and wastes the caller's context. No speculation, no preamble.
+Return the minimum that orients the caller.
 """
 
 
@@ -53,9 +52,14 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     all_fs = build_fs_tools(repo_dir, settings)
     ro_tools = [t for t in all_fs if t.__name__ in ("read_file", "list_dir")]
 
-    model = CostInstrumentedOpenRouterModel(  # cheap driver model, no :online
-        settings.model,
-        provider=OpenRouterProvider(api_key=settings.openrouter_api_key),
+    from .base import timeout_http_client
+
+    model = CostInstrumentedOpenRouterModel(  # dedicated cheap explore model
+        settings.explore_model,
+        provider=OpenRouterProvider(
+            api_key=settings.openrouter_api_key,
+            http_client=timeout_http_client(settings),
+        ),
     )
     agent = Agent(
         model=model,
@@ -65,7 +69,12 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     )
     limits = UsageLimits(request_limit=settings.explore_request_limit)
     try:
-        result = agent.run_sync(question, usage_limits=limits)
+        from .retry import call_with_retry
+
+        result = call_with_retry(
+            lambda: agent.run_sync(question, usage_limits=limits),
+            settings=settings, what="explore",
+        )
     except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
         return f"explore failed: {e}"
     return str(result.output).strip()

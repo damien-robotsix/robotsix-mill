@@ -72,69 +72,51 @@ class ImplementStage(Stage):
         ctx.service.set_branch(ticket.id, branch)
 
         spec = ws.read_description()
-        history = self._load_transcript(ws)
-        feedback: str | None = None
-        summary = ""
 
-        for attempt in range(1, s.max_fix_attempts + 1):
-            try:
-                summary, history = coding.run_implement_agent(
-                    settings=s,
-                    repo_dir=repo_dir,
-                    spec=spec,
-                    feedback=feedback,
-                    history=history,
-                )
-            except AgentBudgetError as e:
-                self._save_transcript(ws, e.messages)
-                self._finalize(
-                    ctx, ticket, repo_dir, branch,
-                    f"budget cap hit: {e}", ok=False,
-                )
-                return Outcome(
-                    State.BLOCKED,
-                    f"agent budget cap — resumable (move to READY): {e}",
-                )
-            except AgentRunError as e:
-                self._save_transcript(ws, e.messages)
-                self._finalize(
-                    ctx, ticket, repo_dir, branch,
-                    f"agent error: {e}", ok=False,
-                )
-                return Outcome(
-                    State.BLOCKED, f"agent error — resumable: {e}"
-                )
-
-            self._save_transcript(ws, history)
-            try:
-                rc, output = self._run_tests(repo_dir, s)
-            except sandbox.SandboxError as e:
-                self._finalize(
-                    ctx, ticket, repo_dir, branch, summary, ok=False
-                )
-                return Outcome(State.BLOCKED, f"sandbox unavailable: {e}")
-
-            if rc == 0:
-                if not git_ops.has_changes(repo_dir) and not resuming:
-                    return Outcome(State.BLOCKED, "agent produced no changes")
-                self._finalize(ctx, ticket, repo_dir, branch, summary, ok=True)
-                # straight to deliverable — review stage not built yet
-                return Outcome(
-                    State.DELIVERABLE, (summary[:200] or "implemented")
-                )
-            log.info(
-                "%s: tests failed attempt %d/%d",
-                ticket.id, attempt, s.max_fix_attempts,
+        # The coordinator owns the explore→plan→implement→test loop
+        # (it re-explores fresh on a resume — no transcript needed).
+        try:
+            summary, _ = coding.run_implement_agent(
+                settings=s, repo_dir=repo_dir, spec=spec,
             )
-            feedback = output
+        except AgentBudgetError as e:
+            self._finalize(
+                ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
+                ok=False,
+            )
+            return Outcome(
+                State.BLOCKED,
+                f"agent budget cap — resumable (move to READY): {e}",
+            )
+        except AgentRunError as e:
+            self._finalize(
+                ctx, ticket, repo_dir, branch, f"agent error: {e}",
+                ok=False,
+            )
+            return Outcome(
+                State.BLOCKED, f"agent error — resumable: {e}"
+            )
 
-        # exhausted: WIP branch + transcript kept so a READY move resumes
-        self._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
-        return Outcome(
-            State.BLOCKED,
-            f"tests still failing after {s.max_fix_attempts} attempts "
-            "— resumable (move to READY)",
-        )
+        # Authoritative final gate: the coordinator already looped via
+        # the test sub-agent, but the stage re-verifies once as the
+        # trusted word before delivering.
+        try:
+            rc, _ = self._run_tests(repo_dir, s)
+        except sandbox.SandboxError as e:
+            self._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
+            return Outcome(State.BLOCKED, f"sandbox unavailable: {e}")
+
+        if rc != 0:
+            self._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
+            return Outcome(
+                State.BLOCKED,
+                "coordinator finished but the test gate still fails "
+                "— resumable (move to READY)",
+            )
+        if not git_ops.has_changes(repo_dir) and not resuming:
+            return Outcome(State.BLOCKED, "no changes produced")
+        self._finalize(ctx, ticket, repo_dir, branch, summary, ok=True)
+        return Outcome(State.DELIVERABLE, summary[:200] or "implemented")
 
     # --- helpers ---
     @staticmethod

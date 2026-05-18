@@ -58,9 +58,16 @@ def send_notification(
         f"Board: {settings.api_url}"
     )
 
-    try:
+    from .agents.retry import call_with_retry
+
+    def _post() -> None:
         r = httpx.post(url, headers=headers, content=body, timeout=_TIMEOUT)
         r.raise_for_status()
+
+    try:
+        # bounded retry on transient (429/5xx/timeout); still fully
+        # best-effort — never raises out of here.
+        call_with_retry(_post, settings=settings, what="ntfy")
         log.debug("ntfy notification sent for %s -> %s", ticket.id, dst.value)
     except Exception:
         log.warning("ntfy notification failed for %s -> %s", ticket.id, dst.value, exc_info=True)

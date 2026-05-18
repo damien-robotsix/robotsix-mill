@@ -33,14 +33,15 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     assert seen["q"] == "where is the worker?" and seen["dir"] == tmp_path
 
 
-def test_explore_subagent_is_read_only_and_uses_driver_model(
+def test_explore_subagent_is_read_only_and_uses_explore_model(
     tmp_path, monkeypatch
 ):
     """The sub-agent gets ONLY read_file/list_dir (never write_file or
-    run_command) and runs on the cheap driver model, bounded."""
+    run_command) and runs on its own explore_model, bounded."""
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
-        tmp_path, OPENROUTER_API_KEY="k", MILL_MODEL="cheap/drv",
+        tmp_path, OPENROUTER_API_KEY="k",
+        MILL_MODEL="coordinator/big", MILL_EXPLORE_MODEL="explore/cheap",
         MILL_EXPLORE_REQUEST_LIMIT="7",
     )
     cap = {}
@@ -67,6 +68,6 @@ def test_explore_subagent_is_read_only_and_uses_driver_model(
 
     out = explore.run_explore(settings=s, repo_dir=tmp_path, question="q")
     assert out == "answer"
-    assert cap["model"] == "cheap/drv"
+    assert cap["model"] == "explore/cheap"  # its own model, not coordinator
     assert cap["tools"] == ["list_dir", "read_file"]  # NO write/run
     assert cap["limit"] == 7

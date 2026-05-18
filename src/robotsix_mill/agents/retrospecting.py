@@ -79,6 +79,7 @@ def run_retrospect_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
         output_type=PromptedOutput(RetrospectResult),
+        model_name=settings.retrospect_model,
     )
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (
@@ -87,5 +88,9 @@ def run_retrospect_agent(
         f"<langfuse>\n{lf}\n</langfuse>\n\n"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
     )
-    result = agent.run_sync(prompt)
+    from .retry import call_with_retry
+
+    result = call_with_retry(
+        lambda: agent.run_sync(prompt), settings=settings, what="retrospect"
+    )
     return result.output
