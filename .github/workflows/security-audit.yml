@@ -1,0 +1,36 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install project + tracing extras
+        run: .venv/bin/pip install ".[tracing]"
+
+      - uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          virtual-environment: .venv/
+          local: true
+          inputs: .
