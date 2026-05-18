@@ -93,14 +93,64 @@ class TicketService:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
-            if not can_transition(ticket.state, dst):
+            blocked_from = (
+                State(ticket.blocked_from)
+                if ticket.blocked_from
+                else None
+            )
+            if not can_transition(ticket.state, dst, blocked_from):
                 raise TransitionError(
                     f"{ticket_id}: {ticket.state} -> {dst} not allowed"
                 )
+            # Record originating state when blocking; clear when leaving
+            # BLOCKED (regardless of resume or override path).
+            if dst is State.BLOCKED:
+                ticket.blocked_from = ticket.state.value
+            elif ticket.state is State.BLOCKED:
+                ticket.blocked_from = None
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.add(TicketEvent(ticket_id=ticket_id, state=dst, note=note))
+            s.commit()
+            s.refresh(ticket)
+            return ticket
+
+    def resume_blocked(self, ticket_id: str) -> Ticket:
+        """Resume a blocked ticket to the state it was blocked from.
+
+        Reads ``ticket.blocked_from`` and transitions the ticket back to
+        that state so only the failed stage is re-run.
+        """
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            if ticket.state is not State.BLOCKED:
+                raise TransitionError(
+                    f"{ticket_id}: cannot resume — not BLOCKED (currently {ticket.state})"
+                )
+            if not ticket.blocked_from:
+                raise TransitionError(
+                    f"{ticket_id}: cannot resume — no blocked_from recorded; "
+                    "use a manual transition (READY or DRAFT) instead"
+                )
+            dst = State(ticket.blocked_from)
+            if not can_transition(ticket.state, dst, dst):
+                raise TransitionError(
+                    f"{ticket_id}: {ticket.state} -> {dst} not allowed"
+                )
+            ticket.blocked_from = None
+            ticket.state = dst
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.add(
+                TicketEvent(
+                    ticket_id=ticket_id,
+                    state=dst,
+                    note=f"resumed from blocked (was blocked from {dst.value})",
+                )
+            )
             s.commit()
             s.refresh(ticket)
             return ticket

@@ -129,6 +129,101 @@ def test_approve_enqueues_implement(client, service):
     assert State.READY in STAGE_FOR_STATE
 
 
+# --- resume-blocked endpoint tests ---
+
+
+def test_resume_blocked_success(client, service):
+    """POST /tickets/{id}/resume-blocked resumes BLOCKED → blocked_from."""
+    t = service.create("Resume via API")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+    assert service.get(t.id).state is State.BLOCKED
+    assert service.get(t.id).blocked_from == State.READY.value
+
+    r = client.post(f"/tickets/{t.id}/resume-blocked")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == t.id
+    assert data["state"] == State.READY
+
+
+def test_resume_blocked_from_done(client, service):
+    """POST /tickets/{id}/resume-blocked resumes BLOCKED (blocked from DONE) → DONE."""
+    t = service.create("Retrospect resume via API")
+    service.transition(t.id, State.READY, note="refined")
+    service.transition(t.id, State.DELIVERABLE, note="implemented")
+    service.transition(t.id, State.IN_REVIEW, note="PR opened")
+    service.transition(t.id, State.DONE, note="merged")
+    service.transition(t.id, State.BLOCKED, note="retrospect failed")
+
+    r = client.post(f"/tickets/{t.id}/resume-blocked")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["state"] == State.DONE
+
+    # Can then complete retrospect → CLOSED
+    service.transition(t.id, State.CLOSED)
+    assert service.get(t.id).state is State.CLOSED
+
+
+def test_resume_blocked_missing_ticket_404(client):
+    """POST /tickets/{id}/resume-blocked with bogus id returns 404."""
+    r = client.post("/tickets/nonexistent/resume-blocked")
+    assert r.status_code == 404
+
+
+def test_resume_blocked_wrong_state_409(client, service):
+    """POST /tickets/{id}/resume-blocked on non-BLOCKED ticket returns 409."""
+    t = service.create("Not blocked")
+    r = client.post(f"/tickets/{t.id}/resume-blocked")
+    assert r.status_code == 409
+
+
+# --- BLOCKED manual override via transition endpoint ---
+
+
+def test_blocked_override_to_ready_via_api(client, service):
+    """POST /tickets/{id}/transition to READY overrides BLOCKED → READY.
+
+    The API response is verified; the worker may race to process the
+    ticket after enqueue (implement stage), so we don't assert final
+    DB state here.  Service-level tests cover blocked_from clearing.
+    """
+    t = service.create("Override to ready via API")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck")
+    assert service.get(t.id).blocked_from == State.READY.value
+
+    r = client.post(
+        f"/tickets/{t.id}/transition",
+        json={"state": State.READY.value, "note": "manual override"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["state"] == State.READY
+
+
+def test_blocked_override_to_draft_via_api(client, service):
+    """POST /tickets/{id}/transition to DRAFT overrides BLOCKED → DRAFT.
+
+    The API response is verified; the worker may race to process the
+    ticket after enqueue (refine stage), so we don't assert final
+    DB state here.  Service-level tests cover blocked_from clearing.
+    """
+    t = service.create("Override to draft via API")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck")
+    assert service.get(t.id).blocked_from == State.READY.value
+
+    r = client.post(
+        f"/tickets/{t.id}/transition",
+        json={"state": State.DRAFT.value, "note": "manual override to draft"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["state"] == State.DRAFT
+
+
 def test_board_script_is_well_formed():
     """Regression: a malformed template literal in _BOARD_HTML (a
     missing closing backtick on the Approve button) was a JS syntax

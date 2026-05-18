@@ -60,3 +60,185 @@ def test_state_machine_edges():
     assert not can_transition(State.CLOSED, State.DONE)   # terminal
     assert not can_transition(State.DELIVERABLE, State.DONE)  # via in_review
     assert not can_transition(State.READY, State.DONE)
+
+
+# --- BLOCKED resume path ---
+
+
+def test_blocked_from_done_can_transition_with_blocked_from():
+    """can_transition(BLOCKED, DONE) returns True when blocked_from=DONE."""
+    assert can_transition(State.BLOCKED, State.DONE, blocked_from=State.DONE)
+
+
+def test_blocked_from_done_fails_without_blocked_from():
+    """can_transition(BLOCKED, DONE) returns False without blocked_from."""
+    assert not can_transition(State.BLOCKED, State.DONE)
+
+
+def test_blocked_to_ready_always_allowed():
+    """Existing BLOCKED → READY works regardless of blocked_from."""
+    assert can_transition(State.BLOCKED, State.READY)
+    assert can_transition(State.BLOCKED, State.READY, blocked_from=State.DONE)
+    assert can_transition(State.BLOCKED, State.READY, blocked_from=State.READY)
+    assert can_transition(State.BLOCKED, State.READY, blocked_from=None)
+
+
+def test_blocked_to_draft_always_allowed():
+    """Existing BLOCKED → DRAFT works regardless of blocked_from."""
+    assert can_transition(State.BLOCKED, State.DRAFT)
+    assert can_transition(State.BLOCKED, State.DRAFT, blocked_from=State.DONE)
+    assert can_transition(State.BLOCKED, State.DRAFT, blocked_from=None)
+
+
+def test_blocked_from_implement_can_resume_to_ready():
+    """BLOCKED from READY can resume back to READY."""
+    assert can_transition(State.BLOCKED, State.READY, blocked_from=State.READY)
+
+
+def test_blocked_from_refine_can_resume_to_draft():
+    """BLOCKED from DRAFT can resume back to DRAFT (also covered by override)."""
+    assert can_transition(State.BLOCKED, State.DRAFT, blocked_from=State.DRAFT)
+
+
+def test_blocked_resume_wrong_state_rejected():
+    """BLOCKED from DONE cannot resume to a non-matching state via resume-only path."""
+    assert not can_transition(
+        State.BLOCKED, State.DELIVERABLE, blocked_from=State.DONE
+    )
+
+
+# --- Service-level integration tests ---
+
+
+def test_transition_to_blocked_records_blocked_from(service):
+    """Transitioning to BLOCKED sets blocked_from to the current state."""
+    t = service.create("block test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.BLOCKED
+    assert reloaded.blocked_from == State.READY.value
+
+
+def test_resume_blocked_back_to_originating_state(service):
+    """resume_blocked transitions BLOCKED → <blocked_from>."""
+    t = service.create("resume test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+    resumed = service.resume_blocked(t.id)
+    assert resumed.state is State.READY
+    assert resumed.blocked_from is None
+    hist = service.history(t.id)
+    assert hist[-1].state is State.READY
+    assert "resumed from blocked" in (hist[-1].note or "")
+
+
+def test_resume_blocked_after_retrospect_failure(service):
+    """Full scenario: DONE → BLOCKED → resume → DONE → CLOSED.
+    This simulates a retrospect failure and proves the ticket can be
+    recovered without re-running implement or refine."""
+    t = service.create("retrospect fail test")
+    # Walk through the pipeline to DONE
+    service.transition(t.id, State.READY, note="refined")
+    service.transition(t.id, State.DELIVERABLE, note="implemented")
+    service.transition(t.id, State.IN_REVIEW, note="PR opened")
+    service.transition(t.id, State.DONE, note="merged")
+    # Now retrospect fails → BLOCKED
+    service.transition(t.id, State.BLOCKED, note="retrospect failed")
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.BLOCKED
+    assert reloaded.blocked_from == State.DONE.value
+
+    # Resume back to DONE
+    resumed = service.resume_blocked(t.id)
+    assert resumed.state is State.DONE
+    assert resumed.blocked_from is None
+
+    # Re-run retrospect → CLOSED
+    service.transition(t.id, State.CLOSED, note="retrospect succeeded")
+    closed = service.get(t.id)
+    assert closed.state is State.CLOSED
+
+
+def test_blocked_to_ready_still_works_after_blocked_from_recorded(service):
+    """The existing BLOCKED → READY override still works."""
+    t = service.create("override test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck")
+    assert service.get(t.id).blocked_from == State.READY.value
+    # Override to READY
+    service.transition(t.id, State.READY, note="manual unblock")
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.READY
+    assert reloaded.blocked_from is None
+
+
+def test_blocked_to_draft_still_works_after_blocked_from_recorded(service):
+    """The existing BLOCKED → DRAFT override still works."""
+    t = service.create("override draft test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck")
+    # Override to DRAFT
+    service.transition(t.id, State.DRAFT, note="manual unblock to draft")
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.DRAFT
+    assert reloaded.blocked_from is None
+
+
+def test_resume_blocked_rejects_non_blocked_ticket(service):
+    """resume_blocked raises TransitionError if ticket is not BLOCKED."""
+    t = service.create("not blocked")
+    with pytest.raises(TransitionError, match="not BLOCKED"):
+        service.resume_blocked(t.id)
+
+
+def test_resume_blocked_rejects_missing_blocked_from(service):
+    """resume_blocked raises TransitionError if blocked_from is not set."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Ticket
+
+    t = service.create("no blocked_from")
+    # Manually set the ticket to BLOCKED with blocked_from=None via
+    # direct DB manipulation to simulate a legacy record.
+    with db.session(service.settings) as s:
+        ticket = s.get(Ticket, t.id)
+        ticket.state = State.BLOCKED
+        ticket.blocked_from = None
+        s.add(ticket)
+        s.commit()
+
+    with pytest.raises(TransitionError, match="no blocked_from"):
+        service.resume_blocked(t.id)
+
+
+def test_transition_table_consistency():
+    """Every source state's declared destinations should be reachable
+    and no dangling states exist."""
+    from robotsix_mill.core.states import TRANSITIONS
+
+    all_states = set(State)
+    declared_sources = set(TRANSITIONS.keys())
+    assert declared_sources == all_states, "TRANSITIONS must cover every State"
+
+    for src, dsts in TRANSITIONS.items():
+        for dst in dsts:
+            assert dst in all_states, f"{src} -> {dst}: {dst} not a State"
+            # Verify can_transition returns True for these edges
+            assert can_transition(src, dst), (
+                f"can_transition({src}, {dst}) should be True per TRANSITIONS"
+            )
+
+    # Terminal states: CLOSED must have no outgoing edges
+    assert TRANSITIONS[State.CLOSED] == set()
+
+    # Every active state must be able to reach BLOCKED and ERRORED
+    for src in [
+        State.DRAFT, State.AWAITING_APPROVAL, State.READY,
+        State.DELIVERABLE, State.IN_REVIEW, State.DONE,
+    ]:
+        assert State.BLOCKED in TRANSITIONS[src], (
+            f"{src} missing BLOCKED escalation edge"
+        )
+        assert State.ERRORED in TRANSITIONS[src], (
+            f"{src} missing ERRORED escalation edge"
+        )

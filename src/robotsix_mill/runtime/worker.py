@@ -152,8 +152,9 @@ class Worker:
         note = (
             f"no progress after {n} {stage_name} cycles in {after} — "
             "likely interrupted mid-run or non-terminating; escalated "
-            "to BLOCKED to stop wasted LLM runs. Move to READY/DRAFT "
-            "to retry."
+            "to BLOCKED to stop wasted LLM runs. Use resume-blocked "
+            "to re-run this stage, or move to READY/DRAFT to retry "
+            "the full chain."
         )
         log.error("%s: %s", ticket_id, note)
         self.ctx.service.transition(ticket_id, State.BLOCKED, note=note[:200])

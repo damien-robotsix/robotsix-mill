@@ -237,6 +237,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _maybe_enqueue(ticket)  # implement picks it up from ready
         return ticket
 
+    @app.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)
+    def resume_blocked(ticket_id: str) -> Ticket:
+        """Resume a blocked ticket back to the state it was blocked from."""
+        try:
+            ticket = _svc().resume_blocked(ticket_id)
+        except KeyError:
+            raise HTTPException(404, "ticket not found") from None
+        except TransitionError as e:
+            raise HTTPException(409, str(e)) from None
+        _maybe_enqueue(ticket)
+        return ticket
+
     @app.post("/audit")
     def audit_pass() -> dict:
         """Trigger an audit pass: reads memory, runs audit agent,

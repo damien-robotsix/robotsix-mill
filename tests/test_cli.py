@@ -122,3 +122,101 @@ def test_approve_failure(settings, service):
         assert rc == 1  # non-zero exit
     finally:
         cli_mod.httpx.Client = original
+
+
+# --- resume-blocked CLI tests ---
+
+
+def test_resume_blocked_success(settings, service):
+    """CLI `ticket resume-blocked <id>` exits 0 on success."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeResponse:
+        def __init__(self, status_code, json_data):
+            self.status_code = status_code
+            self._json = json_data
+            self.text = ""
+
+        def json(self):
+            return self._json
+
+        @property
+        def is_success(self):
+            return 200 <= self.status_code < 300
+
+        def raise_for_status(self):
+            if not self.is_success:
+                raise cli_mod.httpx.HTTPStatusError(
+                    "", request=None, response=self
+                )
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, **kwargs):
+            if url.endswith("/resume-blocked"):
+                return FakeResponse(
+                    200,
+                    {"id": "test-id", "state": "done", "title": "T"},
+                )
+            return FakeResponse(404, {})
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["ticket", "resume-blocked", "test-id"])
+        assert rc == 0
+    finally:
+        cli_mod.httpx.Client = original
+
+
+def test_resume_blocked_failure(settings, service):
+    """CLI `ticket resume-blocked <id>` exits non-zero on failure (e.g. 409)."""
+    import robotsix_mill.cli as cli_mod
+
+    class FakeResponse:
+        def __init__(self, status_code, detail):
+            self.status_code = status_code
+            self._detail = detail
+            self.text = ""
+
+        def json(self):
+            return {"detail": self._detail}
+
+        @property
+        def is_success(self):
+            return 200 <= self.status_code < 300
+
+        def raise_for_status(self):
+            if not self.is_success:
+                raise cli_mod.httpx.HTTPStatusError(
+                    "", request=None, response=self
+                )
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, **kwargs):
+            return FakeResponse(409, "cannot resume — not BLOCKED")
+
+    original = cli_mod.httpx.Client
+    cli_mod.httpx.Client = FakeClient
+    try:
+        rc = main(["ticket", "resume-blocked", "bad-id"])
+        assert rc == 1  # non-zero exit
+    finally:
+        cli_mod.httpx.Client = original
