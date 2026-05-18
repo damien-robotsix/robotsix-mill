@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     audit_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_AUDIT_MODEL"
     )
+    # Model for the pre-refine dedup/already-done check — a cheap call
+    # that short-circuits duplicate drafts before the expensive refiner.
+    dedup_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_DEDUP_MODEL"
+    )
     # Per-call request caps (bound each role's loop). Sized for slow
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
     # ~49 implement calls, so 200 leaves generous headroom; raising it
@@ -109,6 +114,20 @@ class Settings(BaseSettings):
     # coordinator uses instead of reading the repo into its own context.
     explore_request_limit: int = Field(
         default=20, alias="MILL_EXPLORE_REQUEST_LIMIT"
+    )
+    # Per-call cap for the dedup check — one cheap call, so keep it tight.
+    dedup_request_limit: int = Field(
+        default=4, alias="MILL_DEDUP_REQUEST_LIMIT"
+    )
+    # How many days back closed tickets are considered as duplicate
+    # candidates by the pre-refine dedup check.
+    dedup_lookback_days: int = Field(
+        default=30, alias="MILL_DEDUP_LOOKBACK_DAYS"
+    )
+    # How many recent commits on the forge target branch to inspect for
+    # "already implemented" by the pre-refine dedup check.
+    dedup_lookback_commits: int = Field(
+        default=20, alias="MILL_DEDUP_LOOKBACK_COMMITS"
     )
     # Local-dev default: a repo-local, gitignored dir. The Dockerfile
     # sets MILL_DATA_DIR=/data explicitly, so the container is unaffected.
