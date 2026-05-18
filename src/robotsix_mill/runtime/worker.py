@@ -89,6 +89,7 @@ class Worker:
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self._task: asyncio.Task | None = None
         self._poll_task: asyncio.Task | None = None
+        self._audit_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
 
@@ -158,14 +159,39 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("merge poll failed")
 
+    async def _audit_poll_loop(self) -> None:
+        """Periodic audit pass loop. Only runs when
+        ``MILL_AUDIT_PERIODIC=true``."""
+        settings = self.ctx.settings
+        interval = max(60, settings.audit_interval_seconds)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                log.info("Starting periodic audit pass")
+                from ..audit_runner import run_audit_pass
+                result = run_audit_pass()
+                log.info(
+                    "Audit pass completed, created %d draft(s)",
+                    len(result.drafts_created),
+                )
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("audit poll failed")
+
     def start(self) -> None:
         if self._task is None:
             self._task = asyncio.create_task(self._run())
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
+        # Opt-in periodic audit
+        if self.ctx.settings.audit_periodic and self._audit_task is None:
+            self._audit_task = asyncio.create_task(self._audit_poll_loop())
+            log.info(
+                "Periodic audit enabled: interval %ds",
+                self.ctx.settings.audit_interval_seconds,
+            )
 
     async def stop(self) -> None:
-        for attr in ("_task", "_poll_task"):
+        for attr in ("_task", "_poll_task", "_audit_task"):
             t = getattr(self, attr)
             if t is not None:
                 t.cancel()
