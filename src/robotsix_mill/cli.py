@@ -7,6 +7,7 @@
     robotsix-mill ticket approve <id>
     robotsix-mill ticket resume-blocked <id>
     robotsix-mill audit                        # run an audit pass
+    robotsix-mill scout                        # run a scout pass
 
 The same API backs a future web frontend.
 """
@@ -69,6 +70,16 @@ def main(argv: list[str] | None = None) -> int:
         help="output full JSON result (default: summary)",
     )
 
+    # --- scout command ---
+    p_scout = sub.add_parser(
+        "scout", help="run a scout pass and emit model-improvement drafts"
+    )
+    p_scout.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
     args = parser.parse_args(argv)
     settings = Settings()
 
@@ -103,6 +114,34 @@ def main(argv: list[str] | None = None) -> int:
             ))
         else:
             print(f"Audit pass complete.")
+            print(f"Memory updated: {len(result.updated_memory)} chars")
+            if result.drafts_created:
+                print(f"Draft tickets created: {len(result.drafts_created)}")
+                for d in result.drafts_created:
+                    print(f"  - {d['id']}: {d['title']}")
+            else:
+                print("No new draft tickets created.")
+        return 0
+
+    if args.cmd == "scout":
+        from .scout_runner import run_scout_pass
+
+        try:
+            result = run_scout_pass()
+        except Exception as e:
+            print(f"scout failed: {e}", file=sys.stderr)
+            return 1
+
+        if args.json:
+            print(json.dumps(
+                {
+                    "memory": result.updated_memory,
+                    "tickets_created": result.drafts_created,
+                },
+                indent=2,
+            ))
+        else:
+            print("Scout pass complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
             if result.drafts_created:
                 print(f"Draft tickets created: {len(result.drafts_created)}")

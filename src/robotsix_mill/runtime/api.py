@@ -61,6 +61,7 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-retrospect{background:#3b2f1a;color:#f59e0b}
 .src-audit{background:#1a3b2f;color:#34d399}
 .cost{font-size:10px;color:#7d828c;margin-left:6px}
+.src-scout{background:#2a1a3b;color:#c084fc}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
@@ -86,6 +87,11 @@ border-radius:6px;padding:10px;overflow-x:auto}
 background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">
   Run Audit
 </button>
+<button onclick="runScout()" style="font-size:11px;padding:3px 10px;
+background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Run Scout
+</button>
 </header>
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
@@ -95,7 +101,7 @@ const LBL={ready:"implementing"};   // display label only; state value stays "re
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":"user");
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
 async function refresh(){
  const ts=await jget("/tickets"); if(!ts)return;
@@ -129,6 +135,20 @@ async function runAudit(){
    alert("Audit failed to start: "+e);
  } finally {
    btn.disabled=false; btn.textContent='Run Audit';
+ }
+}
+async function runScout(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await fetch("/scout",{method:"POST"});
+   const data=await r.json();
+   alert("Scout complete. Created "+data.tickets_created.length+" draft(s).");
+   refresh();
+ } catch(e) {
+   alert("Scout failed: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Run Scout';
  }
 }
 async function open_(id){
@@ -280,5 +300,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             target=_run, name="audit-pass", daemon=True
         ).start()
         return {"status": "started"}
+
+    @app.post("/scout")
+    def scout_pass() -> dict:
+        """Trigger a scout pass: reads memory, evaluates OpenRouter
+        models, writes updated memory, creates draft tickets for model
+        improvements."""
+        from ..scout_runner import run_scout_pass
+
+        try:
+            result = run_scout_pass()
+            return {
+                "memory_updated": len(result.updated_memory) > 0,
+                "tickets_created": result.drafts_created,
+            }
+        except Exception as e:
+            raise HTTPException(500, f"scout pass failed: {e}") from None
 
     return app
