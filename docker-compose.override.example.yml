@@ -1,0 +1,15 @@
+# Local development override: build the mill image from the local
+# Dockerfile instead of pulling robotsix/mill:latest from Docker Hub.
+#
+# Copy this file to docker-compose.override.yml (already git-ignored):
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#
+# Then run as usual — Docker Compose merges both files automatically:
+#   docker compose up -d --build
+#
+# The --build flag ensures the image is rebuilt when sources change;
+# omit it to use the cached local image.
+
+services:
+  mill:
+    build: .
