@@ -4,6 +4,7 @@
     robotsix-mill ticket new --title T [--description-file F | -]
     robotsix-mill ticket list [--state S]
     robotsix-mill ticket show <id>
+    robotsix-mill ticket approve <id>
 
 The same API backs a future web frontend.
 """
@@ -43,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_show = tsub.add_parser("show", help="show one ticket + history")
     p_show.add_argument("id")
+
+    p_approve = tsub.add_parser(
+        "approve", help="approve a ticket in awaiting_approval state"
+    )
+    p_approve.add_argument("id")
 
     args = parser.parse_args(argv)
     settings = Settings()
@@ -87,6 +93,19 @@ def main(argv: list[str] | None = None) -> int:
             for e in h.json():
                 print(f"{e['at']}\t{e['state']}\t{e.get('note')}")
             return 0
+        if args.tcmd == "approve":
+            r = c.post(f"/tickets/{args.id}/approve")
+            if r.is_success:
+                data = r.json()
+                print(f"ticket {data['id']} approved — now in {data['state']}")
+                return 0
+            else:
+                try:
+                    detail = r.json().get("detail", r.text)
+                except Exception:
+                    detail = r.text
+                print(f"approve failed: {detail}", file=sys.stderr)
+                return 1
 
     parser.error("unknown command")
     return 2

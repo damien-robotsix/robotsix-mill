@@ -4,6 +4,10 @@ Rewrites the file-canonical ``description.md`` into a precise spec the
 implement agent can act on unattended; the original draft is kept as an
 artifact for traceability. Empty draft or missing OpenRouter key ->
 BLOCKED with a clear note (not a crash).
+
+When ``require_approval`` is true (the default), the refined ticket
+enters ``awaiting_approval`` instead of ``ready`` — a human must approve
+before the implement stage picks it up.
 """
 
 from __future__ import annotations
@@ -40,4 +44,9 @@ class RefineStage(Stage):
         )
         new_hash = ws.write_description(spec)
         ctx.service.set_content_hash(ticket.id, new_hash)
-        return Outcome(State.READY, "refined")
+
+        next_state = (
+            State.AWAITING_APPROVAL if ctx.settings.require_approval
+            else State.READY
+        )
+        return Outcome(next_state, "refined")
