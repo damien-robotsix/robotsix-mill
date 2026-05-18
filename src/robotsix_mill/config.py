@@ -59,29 +59,35 @@ class Settings(BaseSettings):
     audit_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_AUDIT_MODEL"
     )
-    # Per-call request caps (bound each role's loop).
+    # Per-call request caps (bound each role's loop). Sized for slow
+    # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
+    # ~49 implement calls, so 200 leaves generous headroom; raising it
+    # only matters if a ticket genuinely needs more steps.
     coordinator_request_limit: int = Field(
-        default=60, alias="MILL_COORDINATOR_REQUEST_LIMIT"
+        default=200, alias="MILL_COORDINATOR_REQUEST_LIMIT"
     )
     test_request_limit: int = Field(
-        default=6, alias="MILL_TEST_REQUEST_LIMIT"
+        default=8, alias="MILL_TEST_REQUEST_LIMIT"
     )
-    # Max coordinator implement→test fix iterations before BLOCKing.
+    # Max implement→test fix iterations before BLOCKing. Complex
+    # tickets may need several correction rounds.
     max_fix_iterations: int = Field(
-        default=4, alias="MILL_MAX_FIX_ITERATIONS"
+        default=8, alias="MILL_MAX_FIX_ITERATIONS"
     )
     # Bounded retry for TRANSIENT model/network failures (HTTP 429,
     # HTTP 5xx, connection/read timeouts) — used by every model call
     # and the ntfy POST. Non-transient errors (other 4xx, budget caps)
     # are never retried. Backoff is exponential, jittered, and capped
     # so a worker can't be stalled long.
-    # Hard per-request timeout on EVERY model call. Without it a hung
-    # or pathologically slow provider (hy3's sole provider has served
-    # 10-min+ requests) blocks the single sequential worker forever
-    # with no error. On timeout the call raises -> classified transient
-    # -> the retry/backoff below rides it out (or it BLOCKs visibly).
+    # Hard per-request timeout on EVERY model call — catches a truly
+    # hung connection, but must sit ABOVE the model's tail latency or
+    # it aborts legitimate long generations. deepseek-v4-pro routinely
+    # runs 60-130s and was observed up to ~190s per generation; complex
+    # tickets push higher. 900s comfortably clears that while still
+    # bounding a real hang. On timeout the call raises -> transient ->
+    # retry/backoff rides it out (or it BLOCKs visibly).
     model_request_timeout: float = Field(
-        default=180.0, alias="MILL_MODEL_REQUEST_TIMEOUT"
+        default=900.0, alias="MILL_MODEL_REQUEST_TIMEOUT"
     )
     # How many tickets the worker pool processes in parallel. One
     # ticket's stages still run sequentially within its consumer; this
@@ -152,7 +158,7 @@ class Settings(BaseSettings):
     )
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.
-    command_timeout: int = Field(default=600, alias="MILL_COMMAND_TIMEOUT")
+    command_timeout: int = Field(default=900, alias="MILL_COMMAND_TIMEOUT")
     # Safety net: if a ticket re-enters the *same* model-driven stage
     # this many times without ever progressing (e.g. its run keeps being
     # interrupted, or a stage churns), the worker escalates it to BLOCKED
