@@ -14,6 +14,7 @@ import logging
 
 from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
+from ..notify import send_notification, _TRIGGER_STATES
 from . import tracing
 
 log = logging.getLogger("robotsix_mill.worker")
@@ -58,6 +59,10 @@ async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
             log.exception("%s: %s failed", stage_name, ticket_id)
             ctx.service.transition(ticket_id, State.ERRORED, note=repr(e)[:200])
+            # Best-effort notification for the errored transition.
+            ticket = ctx.service.get(ticket_id)
+            if ticket is not None:
+                send_notification(ticket, State.ERRORED, repr(e)[:200], ctx.settings)
             return
         if outcome.next_state == ticket.state:
             # no-op (e.g. merge: PR still open) — leave it; the poll
@@ -69,6 +74,11 @@ async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
             return
         ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
         log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
+        # Best-effort push notification for human-attention states.
+        if outcome.next_state in _TRIGGER_STATES:
+            ticket = ctx.service.get(ticket_id)
+            if ticket is not None:
+                send_notification(ticket, outcome.next_state, outcome.note, ctx.settings)
 
 
 class Worker:

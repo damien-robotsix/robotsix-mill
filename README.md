@@ -111,6 +111,25 @@ before the implement stage starts. Approve via:
 To run fully autonomous (refine → implement with no pause), set
 `MILL_REQUIRE_APPROVAL=false`.
 
+## Notifications
+
+When a ticket enters a human-attention state — `awaiting_approval`,
+`in_review`, `blocked`, or `errored` — the worker fires a best-effort
+push notification via [ntfy.sh](https://ntfy.sh) so you know to
+intervene without watching the board.
+
+Configure with two environment variables:
+
+| Variable | Description |
+|---|---|
+| `NTFY_URL` | Full ntfy topic URL, e.g. `https://ntfy.sh/mytopic`. Leave blank to disable (the default). |
+| `NTFY_TOKEN` | Optional bearer token sent as `Authorization: Bearer <token>`. |
+
+Notification delivery is fire-and-forget: network errors and timeouts are
+logged at warning level and never interfere with ticket processing. Only
+worker-driven transitions trigger notifications — API/CLI transitions
+(e.g. manual approve) do not.
+
 ## Retrospect memory
 
 The retrospect agent maintains a single Markdown file — a living ledger

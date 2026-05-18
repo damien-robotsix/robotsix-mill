@@ -145,6 +145,10 @@ class Settings(BaseSettings):
     langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
     langfuse_secret_key: str | None = Field(default=None, alias="LANGFUSE_SECRET_KEY")
 
+    # --- notifications (optional) ---
+    ntfy_url: str | None = Field(default=None, alias="NTFY_URL")
+    ntfy_token: str | None = Field(default=None, alias="NTFY_TOKEN")
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "mill.db"
