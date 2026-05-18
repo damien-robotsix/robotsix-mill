@@ -6,7 +6,12 @@ tickets in that state and transitions them onward. ``ERRORED`` and
 errors or escalates; they require human attention before re-entering the
 pipeline. ``AWAITING_APPROVAL`` is a human-wait state between refine and
 implement — it has no stage owner and pauses the chain until a human
-approves.
+approves. ``REBASING`` is an active state between ``IN_REVIEW`` and
+``IN_REVIEW``: the merge stage detects a conflicting PR and transitions
+to ``REBASING``, then on the next poll runs the rebase agent and
+force-pushes the ticket branch. On success it returns to ``IN_REVIEW``;
+on temporary failure it stays in ``REBASING`` for a retry; on exhaustion
+it escalates to ``BLOCKED``.
 
 When a ticket is blocked, the state it was blocked *from* is recorded
 (``Ticket.blocked_from``). A human can **resume** the blocked ticket
@@ -27,6 +32,7 @@ class State(StrEnum):
     READY = "ready"           # actionable; awaiting implementation
     DELIVERABLE = "deliverable"  # implemented; awaiting MR delivery
     IN_REVIEW = "in_review"   # PR/MR open; awaiting human merge
+    REBASING = "rebasing"     # conflicting PR; rebase agent in progress
     DONE = "done"             # PR/MR merged; awaiting retrospect
     CLOSED = "closed"        # retrospected; pipeline complete (terminal)
     ERRORED = "errored"       # a stage threw an unhandled exception
@@ -44,8 +50,12 @@ TRANSITIONS: dict[State, set[State]] = {
     # review — no separate pre-deliver code-review state).
     State.READY: {State.DELIVERABLE, State.ERRORED, State.BLOCKED},
     State.DELIVERABLE: {State.IN_REVIEW, State.ERRORED, State.BLOCKED},
-    # PR open: merge stage polls -> merged=done, closed-unmerged=blocked
-    State.IN_REVIEW: {State.DONE, State.ERRORED, State.BLOCKED},
+    # PR open: merge stage polls -> merged=done, closed-unmerged=blocked,
+    # conflicting=rebasing (auto-rebase cycle).
+    State.IN_REVIEW: {State.DONE, State.REBASING, State.ERRORED, State.BLOCKED},
+    # rebasing: merge stage runs rebase agent -> back to in_review on
+    # success, retry on failure, block on exhaustion.
+    State.REBASING: {State.IN_REVIEW, State.ERRORED, State.BLOCKED},
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED},
     State.CLOSED: set(),
@@ -62,6 +72,7 @@ STAGE_FOR_STATE: dict[State, str] = {
     State.READY: "implement",
     State.DELIVERABLE: "deliver",
     State.IN_REVIEW: "merge",
+    State.REBASING: "merge",
     State.DONE: "retrospect",
 }
 

@@ -1,14 +1,19 @@
-"""Merge stage: IN_REVIEW -> DONE (merged) | BLOCKED (closed unmerged).
+"""Merge stage: IN_REVIEW -> DONE (merged) | BLOCKED (closed unmerged)
+                                    -> REBASING (conflicting, deferred).
 
 The PR is the review. This stage is re-run by the worker's lightweight
-poll while the ticket sits in IN_REVIEW; it checks the forge:
+poll while the ticket sits in IN_REVIEW or REBASING; it checks the forge:
 
+IN_REVIEW:
 - merged            -> DONE
 - closed, unmerged  -> BLOCKED (resumable)
 - open, mergeable   -> no-op (return IN_REVIEW; the poll retries later)
-- open, conflicting -> invoke rebase agent; on success force-push the
-                       ticket branch and stay IN_REVIEW; on failure
-                       after MILL_REBASE_MAX_ATTEMPTS → BLOCKED.
+- open, conflicting -> REBASING (no rebase agent run; defers to next poll)
+
+REBASING:
+- invokes rebase agent; on success force-pushes the ticket branch and
+  returns to IN_REVIEW; on failure with attempts remaining stays in
+  REBASING for a retry; on exhaustion → BLOCKED.
 
 Returning the *same* state is the worker's "leave it, re-poll" signal —
 no history spam, no busy loop.
@@ -66,6 +71,11 @@ class MergeStage(Stage):
         except RuntimeError as e:
             return Outcome(State.BLOCKED, f"forge auth not configured: {e}")
 
+        # REBASING path: skip PR status, go straight to rebase execution.
+        if ticket.state is State.REBASING:
+            return self._run_rebase(ticket, ctx)
+
+        # IN_REVIEW path: poll PR status.
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         try:
             pr = get_forge(s).pr_status(source_branch=branch)
@@ -93,7 +103,16 @@ class MergeStage(Stage):
             # mergeable=True or None (unchecked) → no conflict; standard wait.
             return Outcome(State.IN_REVIEW)  # still open — re-poll
 
-        # --- PR is open and conflicting → attempt rebase ---
+        # PR is open and conflicting — transition to REBASING.
+        # The rebase agent runs on the next poll (REBASING path).
+        log.info("%s: PR conflicting — deferring to REBASING state", ticket.id)
+        return Outcome(State.REBASING, "PR is conflicting; rebase agent will run next poll")
+
+    def _run_rebase(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Execute the rebase agent for a ticket already in REBASING."""
+        s = ctx.settings
+        branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
+
         repo_dir = _workspace_repo_dir(ctx, ticket)
         if repo_dir is None:
             return Outcome(
@@ -147,7 +166,7 @@ class MergeStage(Stage):
             # Reset counter on success.
             _write_counter(counter_path, 0)
             log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
-            return Outcome(State.IN_REVIEW)  # stay in_review; next poll re-checks
+            return Outcome(State.IN_REVIEW)  # back to in_review; next poll re-checks
 
         # Agent failed.
         if attempt < max_attempts:
@@ -156,7 +175,7 @@ class MergeStage(Stage):
                 "%s: rebase attempt %d/%d failed — retrying next poll",
                 ticket.id, attempt, max_attempts,
             )
-            return Outcome(State.IN_REVIEW)  # no-op; retry next poll
+            return Outcome(State.REBASING)  # no-op; retry next poll
 
         # Exhausted all attempts.
         _write_counter(counter_path, 0)  # reset for any future resume
