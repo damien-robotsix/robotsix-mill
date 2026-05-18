@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from robotsix_mill.stages import Outcome, StageContext
@@ -205,3 +207,66 @@ def test_no_progress_counter_resets_on_advance(ctx, service):
     for _ in range(ctx.settings.max_stuck_cycles - 1):
         w._check_progress(t.id, State.DONE, State.DONE)
     assert service.get(t.id).state is State.DONE  # not blocked yet
+
+
+# --- bounded-concurrency pool ------------------------------------------
+
+def test_enqueue_dedupes(ctx):
+    w = Worker(ctx)
+    w.enqueue("a"); w.enqueue("a"); w.enqueue("b")
+    assert w.queue.qsize() == 2
+    assert w._pending == {"a", "b"}
+
+
+async def test_start_creates_pool_of_max_concurrency(ctx):
+    ctx.settings.max_concurrency = 3
+    w = Worker(ctx)
+    w.start()
+    try:
+        assert len(w._tasks) == 3
+    finally:
+        await w.stop()
+    assert w._tasks == []
+
+
+async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
+    """Distinct tickets are processed concurrently (not serialized),
+    and a re-enqueue of an in-flight ticket is deduped."""
+    import threading
+    import time
+
+    lock = threading.Lock()
+    live = {"now": 0, "max": 0, "done": 0}
+
+    class SlowRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            with lock:
+                live["now"] += 1
+                live["max"] = max(live["max"], live["now"])
+            time.sleep(0.15)  # hold so peers overlap if truly parallel
+            with lock:
+                live["now"] -= 1
+                live["done"] += 1
+            return Outcome(State.AWAITING_APPROVAL, "refined")
+
+    monkeypatch.setitem(registry.STAGES, "refine", SlowRefine())
+    ctx.settings.max_concurrency = 4
+    w = Worker(ctx)
+    w.start()
+    try:
+        ids = [service.create(f"t{i}").id for i in range(4)]
+        for tid in ids:
+            w.enqueue(tid)
+            w.enqueue(tid)  # dup while pending -> must be ignored
+        await asyncio.wait_for(w.queue.join(), timeout=10)
+    finally:
+        await w.stop()
+
+    assert live["done"] == 4              # each processed exactly once
+    assert live["max"] >= 2               # genuinely overlapped
+    assert all(
+        service.get(i).state is State.AWAITING_APPROVAL for i in ids
+    )

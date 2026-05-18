@@ -42,9 +42,12 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
 ```
 
 - **Engine:** `pydantic-ai` over OpenRouter.
-- **Event-driven:** ticket emission / state change enqueues; the
-  in-process worker picks it up at once and **chains** stages until a
-  terminal state or a stub. No cron, no polling (except merge check).
+- **Event-driven:** ticket emission / state change enqueues; an
+  in-process **pool** (`MILL_MAX_CONCURRENCY`, default 4) picks it up at
+  once and **chains** stages until a terminal state or a stub. Distinct
+  tickets run in parallel (one ticket's stages stay ordered; a dedupe
+  set stops the same ticket running twice). No cron, no polling (except
+  merge check).
 - **Delivery:** pluggable forge adapter (GitHub / GitLab), invoked only
   by the `deliver` stage.
 - **Tracing:** optional Langfuse; a no-op unless `LANGFUSE_*` is set.

@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     model_request_timeout: float = Field(
         default=180.0, alias="MILL_MODEL_REQUEST_TIMEOUT"
     )
+    # How many tickets the worker pool processes in parallel. One
+    # ticket's stages still run sequentially within its consumer; this
+    # is cross-ticket concurrency. Each in-flight implement may spawn a
+    # sandbox container and hit the model API, so keep it modest.
+    max_concurrency: int = Field(
+        default=4, alias="MILL_MAX_CONCURRENCY"
+    )
     transient_retries: int = Field(
         default=4, alias="MILL_TRANSIENT_RETRIES"
     )
