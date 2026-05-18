@@ -112,6 +112,18 @@ class TicketService:
             s.add(ticket)
             s.commit()
 
+    def set_parent(self, ticket_id: str, parent_id: str) -> None:
+        """Link a spawned ticket to the ticket it originated from
+        (e.g. a retrospect improvement draft -> the reviewed ticket)."""
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.parent_id = parent_id
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def set_content_hash(self, ticket_id: str, content_hash: str) -> None:
         """Keep the DB pointer in sync after a stage rewrites the
         file-canonical description (so it isn't seen as an external edit)."""

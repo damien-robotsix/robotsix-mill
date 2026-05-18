@@ -50,6 +50,14 @@ async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
                 log.exception("%s: %s failed", stage_name, ticket_id)
                 ctx.service.transition(ticket_id, State.FAILED, note=repr(e)[:200])
                 return
+            if outcome.next_state == ticket.state:
+                # no-op (e.g. merge stage: PR still open) — leave the
+                # ticket; the periodic poll re-enqueues it later.
+                log.debug(
+                    "%s: %s no-op at %s (awaiting external event)",
+                    stage_name, ticket_id, ticket.state,
+                )
+                return
             ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
             log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
 
@@ -61,6 +69,7 @@ class Worker:
         self.ctx = ctx
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self._task: asyncio.Task | None = None
+        self._poll_task: asyncio.Task | None = None
 
     def enqueue(self, ticket_id: str) -> None:
         self.queue.put_nowait(ticket_id)
@@ -75,18 +84,35 @@ class Worker:
             finally:
                 self.queue.task_done()
 
+    async def _poll_loop(self) -> None:
+        """Lightweight merge poll: periodically re-enqueue in_review
+        tickets so the merge stage re-checks the PR. mill has no
+        scheduler; this timer exists solely for the external merge event."""
+        interval = max(15, self.ctx.settings.merge_poll_seconds)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                for t in self.ctx.service.list(state=State.IN_REVIEW):
+                    self.enqueue(t.id)
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("merge poll failed")
+
     def start(self) -> None:
         if self._task is None:
             self._task = asyncio.create_task(self._run())
+        if self._poll_task is None:
+            self._poll_task = asyncio.create_task(self._poll_loop())
 
     async def stop(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        for attr in ("_task", "_poll_task"):
+            t = getattr(self, attr)
+            if t is not None:
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
+                setattr(self, attr, None)
         tracing.flush_tracing()
 
     def requeue_unfinished(self) -> None:

@@ -28,9 +28,12 @@ it directly); the DB row only holds the pointer + a content hash.
     description.md              # canonical body (agent-editable)
     artifacts/                 # per-stage output
 
-emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages ─▶ done
-   draft ─refine▶ ready ─implement▶ in_review ─review▶ deliverable ─deliver▶ done
-   (any active state ─▶ failed / blocked; a human transition re-enqueues)
+emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
+  draft ─refine▶ ready ─implement▶ deliverable ─deliver▶ in_review
+        ─(PR merged; merge-poll)▶ done ─retrospect▶ reviewed
+  in_review = PR open (the PR is the review); merge poll flips it.
+  retrospect audits the run + Langfuse and may spawn an improvement draft.
+  (any state ─▶ failed / blocked; a human transition re-enqueues)
 ```
 
 - **Engine:** `pydantic-ai` over OpenRouter.
@@ -119,10 +122,10 @@ execution is isolated from the mill process:
 | `runtime/api.py` | FastAPI app (API + worker lifespan) |
 | `runtime/tracing.py` | Langfuse tracing + OpenRouter cost ✅ |
 | `sandbox.py` | isolated command execution (always containerized) |
-| `stages/refine.py` · `implement.py` · `deliver.py` | ✅ done |
-| `stages/review.py` | still a stub |
-| `forge/github.py` · `forge/auth.py` | GitHub PR + PAT/App-bot auth ✅ |
-| `agents/coding.py` · `agents/fs_tools.py` | implement agent + sandboxed tools |
+| `stages/` refine·implement·deliver·merge·retrospect | ✅ all real |
+| `forge/github.py` · `forge/auth.py` | GitHub PR/status + PAT/App-bot auth ✅ |
+| `langfuse_client.py` | read-side session summary (for retrospect) |
+| `agents/coding.py` · `fs_tools.py` · `retrospecting.py` | agents + sandboxed tools |
 | `vcs/git_ops.py` | clone / branch / commit / push helpers |
 
 **Delivery identity** (PAT or GitHub App bot) setup procedure:
@@ -130,5 +133,7 @@ execution is isolated from the mill process:
 
 ## Next steps
 
-`refine → implement → deliver` run end-to-end. Remaining: the `review`
-stage (gate `in_review` before deliver), and the GitLab forge adapter.
+Full chain `refine → implement → deliver → merge → retrospect` runs
+end-to-end. Remaining: a **human gate after refine** (approve a draft
+before implement — also bounds the retrospect→draft loop), and the
+**GitLab** forge adapter (`forge/gitlab.py` is still a stub).

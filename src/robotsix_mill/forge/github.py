@@ -72,3 +72,43 @@ class GitHubForge(Forge):
                 f"GitHub PR create failed: {r.status_code} "
                 f"{r.text[:300]}"
             )
+
+    def pr_status(self, *, source_branch: str) -> dict | None:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        return self._get_pr(owner=owner, repo=repo, head=source_branch)
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = {
+            "Authorization": f"Bearer {github_token(s)}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        with httpx.Client(timeout=30) as c:
+            lst = c.get(
+                f"{api}/repos/{owner}/{repo}/pulls",
+                headers=headers,
+                params={"head": f"{owner}:{head}", "state": "all"},
+            )
+            lst.raise_for_status()
+            items = lst.json()
+            if not items:
+                return None
+            num = items[0]["number"]
+            d = c.get(
+                f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers
+            )
+            d.raise_for_status()
+            pr = d.json()
+        return {
+            "merged": bool(pr.get("merged")),
+            "state": pr.get("state", "open"),
+            "url": pr.get("html_url", ""),
+        }

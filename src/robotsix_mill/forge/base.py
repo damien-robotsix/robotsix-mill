@@ -20,8 +20,14 @@ class Forge(ABC):
     def open_merge_request(
         self, *, source_branch: str, title: str, body: str
     ) -> str:
-        """Push ``source_branch`` to the remote and open an MR/PR against
+        """Open an MR/PR for ``source_branch`` against
         ``settings.forge_target_branch``. Returns the MR/PR URL."""
+
+    @abstractmethod
+    def pr_status(self, *, source_branch: str) -> dict | None:
+        """Status of the PR/MR for ``source_branch``:
+        ``{"merged": bool, "state": "open"|"closed", "url": str}`` or
+        ``None`` if no PR/MR exists yet."""
 
 
 def get_forge(settings: Settings) -> Forge:

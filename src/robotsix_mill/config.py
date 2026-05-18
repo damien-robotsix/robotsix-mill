@@ -114,6 +114,19 @@ class Settings(BaseSettings):
     # the container, repo root locally).
     skills_dir: Path = Field(default=Path("skills"), alias="MILL_SKILLS_DIR")
 
+    # --- retrospect stage (done -> reviewed) ---
+    # When True, retrospect may file an improvement DRAFT. Until the
+    # human-gate-after-refine exists, that draft auto-flows to done and
+    # is retrospected again — set False to analyse without spawning.
+    retrospect_spawn_drafts: bool = Field(
+        default=True, alias="MILL_RETROSPECT_SPAWN_DRAFTS"
+    )
+    # in_review (PR open) re-check cadence. mill has no scheduler; this
+    # timer exists only to observe the external merge event.
+    merge_poll_seconds: int = Field(
+        default=120, alias="MILL_MERGE_POLL_SECONDS"
+    )
+
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
     langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")

@@ -15,9 +15,10 @@ from enum import StrEnum
 class State(StrEnum):
     DRAFT = "draft"            # raw idea, awaiting refinement
     READY = "ready"           # actionable; awaiting implementation
-    IN_REVIEW = "in_review"   # implemented; awaiting quality review
-    DELIVERABLE = "deliverable"  # passed review; awaiting MR delivery
-    DONE = "done"             # delivered (MR opened)
+    DELIVERABLE = "deliverable"  # implemented; awaiting MR delivery
+    IN_REVIEW = "in_review"   # PR/MR open; awaiting human merge
+    DONE = "done"             # PR/MR merged; awaiting retrospect
+    REVIEWED = "reviewed"     # retrospected — terminal
     FAILED = "failed"         # a stage hit an unrecoverable error
     BLOCKED = "blocked"       # escalated; needs a human
 
@@ -26,15 +27,15 @@ class State(StrEnum):
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {
     State.DRAFT: {State.READY, State.FAILED, State.BLOCKED},
-    # implement currently routes straight to deliverable (review stage
-    # not built yet); IN_REVIEW kept for when review lands.
-    State.READY: {
-        State.DELIVERABLE, State.IN_REVIEW, State.FAILED, State.BLOCKED,
-    },
-    # review can pass forward or bounce back for changes
-    State.IN_REVIEW: {State.DELIVERABLE, State.READY, State.FAILED, State.BLOCKED},
-    State.DELIVERABLE: {State.DONE, State.FAILED, State.BLOCKED},
-    State.DONE: set(),
+    # implement routes straight to deliverable (the PR itself is the
+    # review — no separate pre-deliver code-review state).
+    State.READY: {State.DELIVERABLE, State.FAILED, State.BLOCKED},
+    State.DELIVERABLE: {State.IN_REVIEW, State.FAILED, State.BLOCKED},
+    # PR open: merge stage polls -> merged=done, closed-unmerged=blocked
+    State.IN_REVIEW: {State.DONE, State.FAILED, State.BLOCKED},
+    # done = merged: retrospect analyses it -> reviewed
+    State.DONE: {State.REVIEWED, State.FAILED, State.BLOCKED},
+    State.REVIEWED: set(),
     # a human moves these back into the pipeline manually
     State.FAILED: {State.READY, State.DRAFT},
     State.BLOCKED: {State.READY, State.DRAFT},
@@ -44,8 +45,9 @@ TRANSITIONS: dict[State, set[State]] = {
 STAGE_FOR_STATE: dict[State, str] = {
     State.DRAFT: "refine",
     State.READY: "implement",
-    State.IN_REVIEW: "review",
     State.DELIVERABLE: "deliver",
+    State.IN_REVIEW: "merge",
+    State.DONE: "retrospect",
 }
 
 

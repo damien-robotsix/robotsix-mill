@@ -1,7 +1,8 @@
 """Stage registry: name -> Stage instance.
 
-Adding a stage = importing its class here. The supervisor and CLI look
-stages up by name; :data:`STAGES` is the single source of truth.
+Adding a stage = importing its class here. :data:`STAGES` is the single
+source of truth; it must cover every value in
+:data:`robotsix_mill.core.states.STAGE_FOR_STATE`.
 """
 
 from __future__ import annotations
@@ -9,14 +10,16 @@ from __future__ import annotations
 from .base import Stage
 from .deliver import DeliverStage
 from .implement import ImplementStage
+from .merge import MergeStage
 from .refine import RefineStage
-from .review import ReviewStage
+from .retrospect import RetrospectStage
 
 _REGISTERED: list[type[Stage]] = [
     RefineStage,
     ImplementStage,
-    ReviewStage,
     DeliverStage,
+    MergeStage,
+    RetrospectStage,
 ]
 
 STAGES: dict[str, Stage] = {cls.name: cls() for cls in _REGISTERED}

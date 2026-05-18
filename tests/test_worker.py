@@ -12,42 +12,67 @@ def ctx(settings, service):
     return StageContext(settings=settings, service=service)
 
 
-async def test_stub_pauses_chain(ctx, service):
-    """A still-stub stage (review) raises NotImplementedError: the chain
-    pauses, leaving the ticket in that state (not FAILED)."""
+async def test_stub_pauses_chain(ctx, service, monkeypatch):
+    """A stage raising NotImplementedError pauses the chain, leaving the
+    ticket in place (not FAILED)."""
+
+    class Stub(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            raise NotImplementedError("not built")
+
+    monkeypatch.setitem(registry.STAGES, "refine", Stub())
     t = service.create("x")
-    service.transition(t.id, State.READY)
-    service.transition(t.id, State.IN_REVIEW)
     await process_ticket(t.id, ctx)
-    assert service.get(t.id).state is State.IN_REVIEW
+    assert service.get(t.id).state is State.DRAFT
 
 
-async def test_working_stages_chain_to_terminal(ctx, service, monkeypatch):
-    """Two cooperating fake stages drive draft -> ready -> in_review and
-    then stop at the (still-stub) review stage."""
+async def test_noop_outcome_leaves_ticket(ctx, service, monkeypatch):
+    """Same-state Outcome (e.g. merge: PR still open) = no transition,
+    no history spam — the poll re-runs it later."""
+
+    class NoOp(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            return Outcome(State.DRAFT, "waiting")
+
+    monkeypatch.setitem(registry.STAGES, "refine", NoOp())
+    t = service.create("x")
+    await process_ticket(t.id, ctx)
+    assert service.get(t.id).state is State.DRAFT
+    assert [e.state for e in service.history(t.id)] == [State.DRAFT]
+
+
+async def test_working_stages_chain_to_real_tail(ctx, service, monkeypatch):
+    """Fakes drive draft->ready->deliverable; the real deliver stage
+    then BLOCKs (no forge configured) — exercises real chaining."""
 
     class FakeRefine(Stage):
         name = "refine"
         input_state = State.DRAFT
 
-        def run(self, _ticket, _ctx):
+        def run(self, _t, _c):
             return Outcome(State.READY, "refined")
 
     class FakeImplement(Stage):
         name = "implement"
         input_state = State.READY
 
-        def run(self, _ticket, _ctx):
-            return Outcome(State.IN_REVIEW, "implemented")
+        def run(self, _t, _c):
+            return Outcome(State.DELIVERABLE, "implemented")
 
     monkeypatch.setitem(registry.STAGES, "refine", FakeRefine())
     monkeypatch.setitem(registry.STAGES, "implement", FakeImplement())
 
     t = service.create("x")
     await process_ticket(t.id, ctx)
-    assert service.get(t.id).state is State.IN_REVIEW
+    assert service.get(t.id).state is State.BLOCKED  # real deliver: no forge
     states = [e.state for e in service.history(t.id)]
-    assert State.READY in states and State.IN_REVIEW in states
+    assert State.READY in states and State.DELIVERABLE in states
 
 
 async def test_failing_stage_marks_failed(ctx, service, monkeypatch):
