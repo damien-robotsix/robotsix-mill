@@ -24,8 +24,15 @@ class Settings(BaseSettings):
     # The cheap DRIVER model. It runs the agentic loop (explore, gather
     # complete context, apply, verify) for both refine and implement,
     # and delegates the actual authoring to the strong `deep_model` via
-    # the deep_refine / deep_implement tools. Keep this one cheap.
-    model: str = Field(default="tencent/hy3-preview", alias="MILL_MODEL")
+    # the deep_refine / deep_implement tools. Keep this one cheap AND
+    # served by MANY providers: tencent/hy3-preview had a single
+    # provider (SiliconFlow) and rate-limited (429s) with no fallback,
+    # repeatedly blocking tickets. deepseek-v4-flash is ~same price
+    # ($0.11/$0.22 /1M), strong at tool-calling, and has ~12 providers
+    # so OpenRouter routes around any single provider's 429.
+    model: str = Field(
+        default="deepseek/deepseek-v4-flash", alias="MILL_MODEL"
+    )
     # The strong AUTHORING model. Called as a tool with a complete,
     # curated context; returns the precise spec / code change. No tools,
     # ~one-shot per call — expensive, so it is invoked deliberately by
