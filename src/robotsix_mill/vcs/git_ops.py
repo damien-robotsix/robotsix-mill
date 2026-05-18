@@ -7,6 +7,7 @@ the container only needs the git binary (already in the image).
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -127,3 +128,28 @@ def branch_is_ahead_of_main(repo: Path) -> bool:
         return False  # no diff → not ahead
     # exit 1 = diff exists (ahead); anything else is an error → assume ahead
     return True
+
+
+def recent_commits(repo: Path, n: int) -> list[dict]:
+    """Return the last *n* non-merge commits as ``[{sha, subject}]``.
+
+    Shells out to ``git log --oneline -n <N> --no-merges``.  Gracefully
+    handles shallow repos or repos with fewer than *n* commits (``git
+    log`` simply returns what it has).  The repo must exist (``.git``
+    present); raises ``FileNotFoundError`` otherwise.
+    """
+    if not (repo / ".git").exists():
+        raise FileNotFoundError(f"not a git repository: {repo}")
+    output = subprocess.run(
+        ["git", "-C", str(repo), "log", "--oneline", "-n", str(n), "--no-merges"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if not output:
+        return []
+    commits = []
+    for line in output.split("\n"):
+        sha, _, subject = line.partition(" ")
+        commits.append({"sha": sha, "subject": subject})
+    return commits

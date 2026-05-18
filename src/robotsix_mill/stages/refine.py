@@ -8,13 +8,22 @@ BLOCKED with a clear note (not a crash).
 When ``require_approval`` is true (the default), the refined ticket
 enters ``awaiting_approval`` instead of ``ready`` — a human must approve
 before the implement stage picks it up.
+
+Before the expensive refine agent runs, a cheap **dedup / already-done
+check** inspects the draft against existing tickets and recent commits.
+If the draft is a clear duplicate or the change is already committed,
+the ticket is short-circuited to ``CLOSED`` — no refiner, no human
+approval gate, no wasted cost.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
+from datetime import datetime, timezone
 
+from ..agents import dedup
 from ..agents import refining
 from ..core.models import Ticket
 from ..core.states import State
@@ -56,6 +65,69 @@ class RefineStage(Stage):
                         "%s: refine clone failed, draft-only: %s",
                         ticket.id, (e.stderr or "")[:200],
                     )
+
+        # --- dedup / already-done guard (best-effort) ---
+        # Gather candidate tickets: all non-terminal + recently closed.
+        all_tickets = ctx.service.list()
+        now = datetime.now(timezone.utc)
+        lookback_cutoff = datetime.fromtimestamp(
+            now.timestamp() - s.dedup_lookback_days * 86400, tz=timezone.utc
+        )
+        non_terminal = {State.CLOSED, State.ERRORED}
+        candidates = [
+            t for t in all_tickets
+            if t.id != ticket.id and (
+                t.state not in non_terminal
+                or (t.state == State.CLOSED and t.updated_at >= lookback_cutoff)
+            )
+        ]
+        candidates_json = json.dumps(
+            [{"id": t.id, "title": t.title, "state": t.state.value, "source": t.source}
+             for t in candidates],
+            default=str,
+        )
+
+        # Gather recent commits (only when we have a clone).
+        recent_commits_json: str | None = None
+        if repo_dir is not None:
+            try:
+                commits = git_ops.recent_commits(repo_dir, s.dedup_lookback_commits)
+                recent_commits_json = json.dumps(
+                    [{"sha": c["sha"], "subject": c["subject"]} for c in commits]
+                )
+            except Exception:
+                log.warning("%s: recent_commits failed, skipping commit dedup", ticket.id)
+
+        try:
+            verdict = dedup.run_dedup_check(
+                settings=s,
+                draft_title=ticket.title,
+                draft_body=draft,
+                candidates_json=candidates_json,
+                recent_commits_json=recent_commits_json,
+            )
+        except Exception:
+            log.warning(
+                "%s: dedup check failed, proceeding with refine", ticket.id,
+                exc_info=True,
+            )
+            verdict = {
+                "duplicate_of": None,
+                "already_done": None,
+                "reason": "dedup check failed",
+            }
+
+        if verdict.get("duplicate_of"):
+            return Outcome(
+                State.CLOSED,
+                f"duplicate of {verdict['duplicate_of']}: {verdict.get('reason', 'no reason')}",
+            )
+        if verdict.get("already_done"):
+            return Outcome(
+                State.CLOSED,
+                f"already implemented in {verdict['already_done']}: {verdict.get('reason', 'no reason')}",
+            )
+        # --- end dedup guard ---
 
         try:
             spec = refining.run_refine_agent(
