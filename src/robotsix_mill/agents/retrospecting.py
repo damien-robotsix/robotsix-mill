@@ -14,24 +14,48 @@ from ..config import Settings
 SYSTEM_PROMPT = """\
 You are a retrospective auditor for an autonomous ticket pipeline.
 Given a finished ticket's workflow (state history + notes), its spec,
-and a summary of its Langfuse traces (cost, latency, retries, errors),
-identify the single most valuable concrete improvement to the
-*pipeline/codebase* — a bug, a fragility, wasted retries, or a token/
-cost reduction.
+a summary of its Langfuse traces (cost, latency, retries, errors), and
+the current retrospect memory (a Markdown ledger of issues observed
+across past tickets), do the following:
+
+1. Identify the single most valuable concrete improvement to the
+   *pipeline/codebase* — a bug, a fragility, wasted retries, or a
+   token/cost reduction. Fill `findings` with your analysis regardless.
+
+2. Write a concise one-sentence `conclusion` summarising the outcome of
+   this ticket's audit (distinct from the full findings).
+
+3. Update the `memory` document you are given.  The memory is *yours* —
+   you own its structure and content.  For this ticket, record or merge
+   its notable observations under the relevant issue, tracking which
+   ticket ids exhibited it and how strong the evidence is.  When you
+   judge that an issue now has **enough corroboration across enough
+   distinct tickets** to act, set propose_draft=true and provide
+   draft_title/draft_body.  There is no hard numeric threshold; you
+   judge sufficiency and explain your reasoning in the memory.
+
+4. Once you have filed a draft for an issue, record that fact in the
+   memory and do **not** re-file the same issue on later tickets.
 
 Be conservative: only set propose_draft=true when there is a specific,
-actionable change worth implementing. Vague observations -> false.
-When proposing, write draft_title and draft_body as a normal ticket a
-human could approve as-is (problem + concrete change). Always fill
-`findings` with your analysis regardless.
+actionable change worth implementing AND the memory shows enough
+corroboration. Vague observations -> false.  When proposing, write
+draft_title and draft_body as a normal ticket a human could approve
+as-is (problem + concrete change).  Always fill `findings` with your
+analysis regardless.
+
+Return the full, updated memory document in `updated_memory`.  If the
+incoming memory is empty, you are starting a fresh ledger.
 """
 
 
 class RetrospectResult(BaseModel):
     findings: str
+    conclusion: str
     propose_draft: bool = False
     draft_title: str | None = None
     draft_body: str | None = None
+    updated_memory: str = ""
 
 
 def run_retrospect_agent(
@@ -40,6 +64,7 @@ def run_retrospect_agent(
     ticket_summary: str,
     history_text: str,
     langfuse_summary: str | None,
+    memory: str = "",
 ) -> RetrospectResult:
     from .base import build_agent
 
@@ -52,7 +77,8 @@ def run_retrospect_agent(
     prompt = (
         f"<ticket>\n{ticket_summary}\n</ticket>\n\n"
         f"<workflow>\n{history_text}\n</workflow>\n\n"
-        f"<langfuse>\n{lf}\n</langfuse>"
+        f"<langfuse>\n{lf}\n</langfuse>\n\n"
+        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
     )
     result = agent.run_sync(prompt)
     return result.output

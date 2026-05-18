@@ -129,6 +129,11 @@ class Settings(BaseSettings):
     retrospect_spawn_drafts: bool = Field(
         default=True, alias="MILL_RETROSPECT_SPAWN_DRAFTS"
     )
+    # Path to the agent-maintained Markdown memory ledger.  Override to
+    # pin a specific path; unset (default) derives <data_dir>/retrospect_memory.md.
+    retrospect_memory_path: Path | None = Field(
+        default=None, alias="MILL_RETROSPECT_MEMORY_PATH"
+    )
     # in_review (PR open) re-check cadence. mill has no scheduler; this
     # timer exists only to observe the external merge event.
     merge_poll_seconds: int = Field(
@@ -159,6 +164,13 @@ class Settings(BaseSettings):
             and self.langfuse_public_key
             and self.langfuse_secret_key
         )
+
+    @property
+    def retrospect_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained retrospect memory ledger."""
+        if self.retrospect_memory_path is not None:
+            return self.retrospect_memory_path
+        return self.data_dir / "retrospect_memory.md"
 
 
 def load_settings() -> Settings:
