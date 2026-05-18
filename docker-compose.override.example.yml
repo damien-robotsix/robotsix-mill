@@ -1,15 +1,30 @@
-# Local development override: build the mill image from the local
-# Dockerfile instead of pulling robotsix/mill:latest from Docker Hub.
+# Local development override — hermetic local build.
 #
-# Copy this file to docker-compose.override.yml (already git-ignored):
+# Copy to docker-compose.override.yml (git-ignored), then run as usual;
+# Docker Compose merges both files automatically:
 #   cp docker-compose.override.example.yml docker-compose.override.yml
+#   docker compose up -d --build mill
 #
-# Then run as usual — Docker Compose merges both files automatically:
-#   docker compose up -d --build
+# Why this exists:
+#  - base docker-compose.yml runs the PUBLISHED image
+#    (robotsix/mill:latest from Docker Hub) + watchtower auto-update —
+#    that's for deployment hosts.
+#  - For dev you want YOUR code. `build: .` builds from the local
+#    Dockerfile, and a DEDICATED `robotsix/mill:dev` tag keeps it from
+#    colliding with Hub's :latest (so a stray pull / watchtower can
+#    never swap your build out from under you).
+#  - The implement test-gate sandbox must run the SAME local build, so
+#    MILL_SANDBOX_IMAGE is pinned to :dev here (it's a local-build
+#    artifact, only meaningful when you local-build — that's why it
+#    lives here and not in .env). All other runtime config stays in
+#    .env (single source of truth).
 #
-# The --build flag ensures the image is rebuilt when sources change;
-# omit it to use the cached local image.
+# Run only the `mill` service locally (the base `watchtower` service is
+# for deployment, not dev): `docker compose up -d --build mill`.
 
 services:
   mill:
     build: .
+    image: robotsix/mill:dev
+    environment:
+      - MILL_SANDBOX_IMAGE=robotsix/mill:dev
