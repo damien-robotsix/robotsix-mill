@@ -37,7 +37,12 @@ def run_refine_agent(*, settings: Settings, title: str, draft: str) -> str:
         tools=[make_deep_refine_tool(settings)],
         web=True,
     )
-    result = agent.run_sync(
-        f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
+    from .retry import call_with_retry
+
+    result = call_with_retry(
+        lambda: agent.run_sync(
+            f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
+        ),
+        settings=settings, what="refine",
     )
     return str(result.output).strip()

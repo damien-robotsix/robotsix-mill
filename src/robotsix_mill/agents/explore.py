@@ -65,7 +65,12 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     )
     limits = UsageLimits(request_limit=settings.explore_request_limit)
     try:
-        result = agent.run_sync(question, usage_limits=limits)
+        from .retry import call_with_retry
+
+        result = call_with_retry(
+            lambda: agent.run_sync(question, usage_limits=limits),
+            settings=settings, what="explore",
+        )
     except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
         return f"explore failed: {e}"
     return str(result.output).strip()

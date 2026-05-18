@@ -57,7 +57,12 @@ def run_web_research(*, settings: Settings, query: str) -> str:
     )
     limits = UsageLimits(request_limit=settings.web_research_request_limit)
     try:
-        result = agent.run_sync(query, usage_limits=limits)
+        from .retry import call_with_retry
+
+        result = call_with_retry(
+            lambda: agent.run_sync(query, usage_limits=limits),
+            settings=settings, what="web_research",
+        )
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller
         return f"web research failed: {e}"
     return str(result.output)

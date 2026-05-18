@@ -135,10 +135,15 @@ def run_implement_agent(
 
     limits = UsageLimits(request_limit=settings.agent_request_limit)
     # capture_run_messages keeps the transcript even when the run raises
+    from .retry import call_with_retry
+
     with capture_run_messages() as msgs:
         try:
-            result = agent.run_sync(
-                prompt, message_history=history, usage_limits=limits
+            result = call_with_retry(
+                lambda: agent.run_sync(
+                    prompt, message_history=history, usage_limits=limits
+                ),
+                settings=settings, what="implement",
             )
         except UsageLimitExceeded as e:
             raise AgentBudgetError(str(e), list(msgs)) from e

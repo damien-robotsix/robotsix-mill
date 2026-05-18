@@ -75,7 +75,12 @@ def _run_deep(*, settings: Settings, system_prompt: str, context: str) -> str:
     agent = Agent(model=model, system_prompt=system_prompt, output_type=str)
     limits = UsageLimits(request_limit=settings.deep_model_request_limit)
     try:
-        result = agent.run_sync(context, usage_limits=limits)
+        from .retry import call_with_retry
+
+        result = call_with_retry(
+            lambda: agent.run_sync(context, usage_limits=limits),
+            settings=settings, what="deep model",
+        )
     except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
         return f"deep model failed: {e}"
     return str(result.output).strip()

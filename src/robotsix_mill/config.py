@@ -24,14 +24,26 @@ class Settings(BaseSettings):
     # The cheap DRIVER model. It runs the agentic loop (explore, gather
     # complete context, apply, verify) for both refine and implement,
     # and delegates the actual authoring to the strong `deep_model` via
-    # the deep_refine / deep_implement tools. Keep this one cheap AND
-    # served by MANY providers: tencent/hy3-preview had a single
-    # provider (SiliconFlow) and rate-limited (429s) with no fallback,
-    # repeatedly blocking tickets. deepseek-v4-flash is ~same price
-    # ($0.11/$0.22 /1M), strong at tool-calling, and has ~12 providers
-    # so OpenRouter routes around any single provider's 429.
+    # the deep_refine / deep_implement tools. tencent/hy3-preview has a
+    # single provider (SiliconFlow) that intermittently 429s; rather
+    # than trade down to a weaker model, transient 429/5xx/timeouts are
+    # absorbed by a bounded retry+backoff (see transient_* below).
     model: str = Field(
-        default="deepseek/deepseek-v4-flash", alias="MILL_MODEL"
+        default="tencent/hy3-preview", alias="MILL_MODEL"
+    )
+    # Bounded retry for TRANSIENT model/network failures (HTTP 429,
+    # HTTP 5xx, connection/read timeouts) — used by every model call
+    # and the ntfy POST. Non-transient errors (other 4xx, budget caps)
+    # are never retried. Backoff is exponential, jittered, and capped
+    # so a worker can't be stalled long.
+    transient_retries: int = Field(
+        default=4, alias="MILL_TRANSIENT_RETRIES"
+    )
+    transient_backoff_base: float = Field(
+        default=2.0, alias="MILL_TRANSIENT_BACKOFF_BASE"
+    )
+    transient_backoff_cap: float = Field(
+        default=30.0, alias="MILL_TRANSIENT_BACKOFF_CAP"
     )
     # The strong AUTHORING model. Called as a tool with a complete,
     # curated context; returns the precise spec / code change. No tools,

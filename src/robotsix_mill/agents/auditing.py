@@ -82,5 +82,9 @@ def run_audit_agent(
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
         "Perform the audit and return your result."
     )
-    result = agent.run_sync(prompt)
+    from .retry import call_with_retry
+
+    result = call_with_retry(
+        lambda: agent.run_sync(prompt), settings=settings, what="audit"
+    )
     return result.output
