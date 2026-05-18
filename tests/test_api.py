@@ -127,3 +127,18 @@ def test_approve_enqueues_implement(client, service):
     assert data["state"] == State.READY
     # READY is in STAGE_FOR_STATE -> implement should pick it up
     assert State.READY in STAGE_FOR_STATE
+
+
+def test_board_script_is_well_formed():
+    """Regression: a malformed template literal in _BOARD_HTML (a
+    missing closing backtick on the Approve button) was a JS syntax
+    error that wedged the whole board on 'loading…'. Guard the
+    structural invariants."""
+    import re
+
+    from robotsix_mill.runtime.api import _BOARD_HTML
+
+    js = re.search(r"<script>(.*?)</script>", _BOARD_HTML, re.S).group(1)
+    assert js.count("`") % 2 == 0, "unbalanced template-literal backticks"
+    assert '</button>":' not in _BOARD_HTML  # the exact past defect
+    assert '</button>`:' in _BOARD_HTML      # correctly-closed literal
