@@ -19,15 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.14"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
 
-      - name: Create virtual environment
-        run: python -m venv .venv
-
       - name: Install project + tracing extras
-        run: .venv/bin/pip install ".[tracing]"
+        run: uv sync --frozen --extra tracing
 
       - uses: pypa/gh-action-pip-audit@v1.1.0
         with:

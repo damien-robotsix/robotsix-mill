@@ -1,5 +1,9 @@
 FROM python:3.14-slim
 
+# Pin uv to a specific version for reproducible builds.
+COPY --from=ghcr.io/astral-sh/uv:0.11.14 /uv /uvx /bin/
+ENV UV_LINK_MODE=copy
+
 # git: the implement stage branches/commits on per-ticket work trees.
 # Acquire::Retries lets apt recover from transient mirror glitches.
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
@@ -34,11 +38,17 @@ RUN groupadd --system --gid 1000 mill \
     && chown -R mill:mill /data
 
 WORKDIR /app
-COPY . /app
-# [dev,tracing]: this image doubles as the test-gate sandbox, so it
-# needs pytest + the OpenTelemetry/Langfuse stack to run the project's
-# own suite (incl. tracing tests) against an agent's changes.
-RUN pip install --no-cache-dir --root-user-action=ignore ".[dev,tracing]" \
+
+# Install dependencies in a cached layer, then the project.
+# uv sync --frozen fails if uv.lock is out of date or missing.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --extra dev --extra tracing
+
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --extra dev --extra tracing \
     && chown -R mill:mill /app
 
 USER mill

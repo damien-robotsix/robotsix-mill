@@ -43,3 +43,6 @@ testpaths = ["tests"]
 targets = ["src/"]
 exclude_dirs = ["tests/"]
 skips = ["B101"]
+
+[tool.uv]
+exclude-newer = "7 days"

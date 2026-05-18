@@ -7,24 +7,21 @@ BIN    := $(VENV)/bin
 .PHONY: install test serve dev docker clean
 
 $(BIN)/activate:
-	$(PYTHON) -m venv $(VENV)
-	$(BIN)/pip install -q --upgrade pip
+	uv sync --frozen
 
-# Editable install with dev (+tracing) extras into a local venv.
 install: $(BIN)/activate
-	$(BIN)/pip install -q -e ".[dev,tracing]"
 
 test: install
-	$(BIN)/python -m pytest -q
+	uv run --frozen pytest -q
 
 # Run the service as it runs in prod/Docker (reads ./.env, data in
 # ./.mill-data). Ctrl-C to stop.
 serve: install
-	$(BIN)/robotsix-mill serve
+	uv run --frozen robotsix-mill serve
 
 # Same service with hot-reload for development.
 dev: install
-	$(BIN)/uvicorn --factory robotsix_mill.runtime.api:create_app \
+	uv run --frozen uvicorn --factory robotsix_mill.runtime.api:create_app \
 		--reload --reload-dir src --host 127.0.0.1 --port 8077
 
 # Build + run the container instead.

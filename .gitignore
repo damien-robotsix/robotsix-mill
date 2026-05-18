@@ -10,3 +10,5 @@ venv/
 dist/
 build/
 docker-compose.override.yml
+
+# uv.lock is committed intentionally — it pins exact versions + hashes.
