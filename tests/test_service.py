@@ -14,6 +14,16 @@ def test_create_writes_db_and_workspace(service):
     assert service.history(t.id)[0].note == "created"
 
 
+def test_default_source_is_user(service):
+    t = service.create("Default source test")
+    assert t.source == "user"
+
+
+def test_explicit_source_is_stored(service):
+    t = service.create("Explicit source", source="retrospect")
+    assert t.source == "retrospect"
+
+
 def test_list_filters_by_state(service):
     a = service.create("a")
     service.create("b")

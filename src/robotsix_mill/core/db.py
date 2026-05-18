@@ -8,9 +8,14 @@ single-writer model is respected.
 
 from __future__ import annotations
 
+import sqlite3
+import logging
+
 from sqlmodel import Session, SQLModel, create_engine
 
 from ..config import Settings
+
+log = logging.getLogger("robotsix_mill.db")
 
 _engine = None
 
@@ -26,11 +31,45 @@ def get_engine(settings: Settings):
     return _engine
 
 
+def _run_migrations(settings: Settings) -> None:
+    """Run idempotent schema migrations on the existing database.
+
+    SQLModel.metadata.create_all only creates missing tables; it does not
+    alter existing ones. Use raw SQL (via the sqlite3 module, not the
+    SQLAlchemy engine) for ALTER TABLE so we bypass ORM machinery.
+    """
+    db_path = str(settings.db_path)
+    if not settings.db_path.exists():
+        return  # nothing to migrate — create_all will build from scratch
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type='table' AND name='ticket'"
+        )
+        if cur.fetchone() is None:
+            return  # ticket table doesn't exist yet
+
+        # Check if the source column already exists.
+        cur = conn.execute("PRAGMA table_info('ticket')")
+        columns = {row[1] for row in cur.fetchall()}
+        if "source" not in columns:
+            conn.execute(
+                "ALTER TABLE ticket ADD COLUMN source TEXT NOT NULL DEFAULT 'user'"
+            )
+            conn.commit()
+            log.info("migration: added source column to ticket table")
+    finally:
+        conn.close()
+
+
 def init_db(settings: Settings) -> None:
     # import models so SQLModel.metadata is populated before create_all
     from . import models  # noqa: F401
 
     SQLModel.metadata.create_all(get_engine(settings))
+    _run_migrations(settings)
 
 
 def session(settings: Settings) -> Session:

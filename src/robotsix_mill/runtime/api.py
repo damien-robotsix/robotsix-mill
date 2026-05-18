@@ -50,6 +50,10 @@ border-radius:6px;padding:7px 9px;cursor:pointer}
 .card:hover{background:#232836}.card .t{color:#eef0f4}
 .card .id{color:#6b7280;font-size:11px;margin-top:3px;
 overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
+margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+.src-user{background:#1d3a5c;color:#60a5fa}
+.src-retrospect{background:#3b2f1a;color:#f59e0b}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
@@ -75,6 +79,7 @@ border-radius:6px;padding:10px;overflow-x:auto}
 const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","closed","blocked","errored"];
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const srcClass=s=>(s==="retrospect"?"retrospect":"user");
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
 async function refresh(){
  const ts=await jget("/tickets"); if(!ts)return;
@@ -85,7 +90,8 @@ async function refresh(){
  document.getElementById("board").innerHTML=ST.map(s=>`<div class="col">
   <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
-   <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>`+
+   <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
+   <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
    (s==="awaiting_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`:"")+
    `</div>`)
@@ -105,6 +111,7 @@ async function open_(id){
    <div class="muted">${t.id}</div>
    <p>state <b class="s-${t.state}" style="border-left:3px solid var(--c);
       padding-left:6px">${t.state}</b> · branch ${esc(t.branch)||"—"}<br>
+   source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><br>
    created ${t.created_at} · updated ${t.updated_at}</p>
    <h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}

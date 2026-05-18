@@ -31,6 +31,9 @@ class Ticket(SQLModel, table=True):
     branch: str | None = None
     # epic / sub-ticket relationships (future use)
     parent_id: str | None = Field(default=None, foreign_key="ticket.id")
+    # which actor created the ticket — free-form for forward compatibility
+    # (e.g. "user", "retrospect", "some-future-agent")
+    source: str = Field(default="user")
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
@@ -64,5 +67,6 @@ class TicketRead(SQLModel):
     state: State
     branch: str | None
     parent_id: str | None
+    source: str
     created_at: datetime
     updated_at: datetime
