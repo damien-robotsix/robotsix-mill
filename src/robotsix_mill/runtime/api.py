@@ -92,7 +92,7 @@ background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">
 <script>
 const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","closed","blocked","errored"];
 const LBL={ready:"implementing"};   // display label only; state value stays "ready"
-let showClosed=false;               // CLOSED column hidden by default
+let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":"user");
@@ -103,7 +103,7 @@ async function refresh(){
  ts.forEach(t=>(by[t.state]=by[t.state]||[]).push(t));
  document.getElementById("meta").textContent=
    ts.length+" tickets · "+new Date().toLocaleTimeString();
- document.getElementById("board").innerHTML=ST.filter(s=>s!=="closed"||showClosed).map(s=>`<div class="col">
+ document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"||showClosed)).map(s=>`<div class="col">
   <h2>${LBL[s]||s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
