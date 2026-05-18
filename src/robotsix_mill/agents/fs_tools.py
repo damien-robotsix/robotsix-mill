@@ -48,6 +48,34 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
             return f"error: {e}"
         return f"wrote {len(content)} bytes to {path}"
 
+    def edit_file(path: str, old_string: str, new_string: str) -> str:
+        """Replace a unique string in a file. Reads the file, locates
+        ``old_string``, and if it appears exactly once replaces it with
+        ``new_string``.  Returns a short result string — prefer this
+        for surgical edits over ``write_file``."""
+        try:
+            p = _safe(root, path)
+            content = p.read_text(encoding="utf-8", errors="replace")
+            count = content.count(old_string)
+            if count == 0:
+                return (
+                    f"edit_file: old_string not found in {path} "
+                    f"— read the file and retry, or use write_file"
+                )
+            if count > 1:
+                return (
+                    f"edit_file: old_string appears {count} times "
+                    f"in {path} (must be unique) — read the file and "
+                    f"retry, or use write_file"
+                )
+            p.write_text(
+                content.replace(old_string, new_string, 1),
+                encoding="utf-8",
+            )
+            return f"edit_file: replaced 1 occurrence in {path}"
+        except (ValueError, OSError) as e:
+            return f"error: {e}"
+
     def list_dir(path: str = ".") -> str:
         """List entries of a directory in the repository (dirs end '/')."""
         try:
@@ -72,4 +100,4 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
             return f"sandbox error: {e}"
         return f"exit={rc}\n{out}"
 
-    return [read_file, write_file, list_dir, run_command]
+    return [read_file, write_file, edit_file, list_dir, run_command]

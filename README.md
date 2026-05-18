@@ -341,6 +341,9 @@ worker-driven transitions trigger notifications — API/CLI transitions
     actionable feedback (never the raw log in the conversation).
   - `web_research(query)` — cheap web lookups, conclusion only, never
     `:online`.
+  - `edit_file(path, old, new)` — preferred surgical-edit tool that
+    replaces a unique substring; `write_file` is the fallback for
+    new files or when `edit_file` can't apply.
   It loops read→edit→`run_tests` (≤`MILL_MAX_FIX_ITERATIONS`) until
   green or BLOCK-resumable. Refine likewise authors the spec with a
   `web_research` delegate. Each role has its own model so cheap models
@@ -663,7 +666,7 @@ The `implement` agent runs LLM-chosen shell commands, and ticket text /
 cloned repo content can steer that LLM (prompt injection). So command
 execution is isolated from the mill process:
 
-- **File tools** (`read_file`/`write_file`/`list_dir`) run in-process
+- **File tools** (`read_file`/`write_file`/`edit_file`/`list_dir`) run in-process
   but are **path-confined** to the ticket's clone (`..`/symlink/abs
   escapes are rejected).
 - **Command execution** (`run_command` and the test command) **always**

@@ -9,7 +9,7 @@ context lean via two cheap sub-agents:
 - ``run_tests`` — the test sub-agent runs the suite in the sandbox and
   returns a distilled PASS/FAIL diagnosis, never the raw log.
 
-It implements directly (``read_file``/``write_file``/``list_dir``),
+It implements directly (``read_file``/``write_file``/``edit_file``/``list_dir``),
 runs tests, and loops on failure. No separate implement sub-agent —
 that layer just re-explored everything and never converged.
 
@@ -32,15 +32,18 @@ Tools:
   locate things instead of scanning the tree yourself.
 - `read_file`/`list_dir` — read exactly the files explore pointed you
   to (only what you need; don't bulk-read).
-- `write_file` — make the edits.
+- `edit_file(path, old_string, new_string)` — replace a unique string
+  in a file; **prefer this for changes**.
+- `write_file` — create a new file, or overwrite when `edit_file`
+  reports it can't apply.
 - `web_research(query)` — anything not in the repo.
 - `run_tests()` — runs the suite in the sandbox; returns PASS or FAIL
   plus a short, actionable diagnosis (never the raw log).
 
 Procedure:
 1. `explore` to orient; `read_file` the specific files you'll change.
-2. Make the smallest change that fully satisfies the spec, matching
-   the surrounding style; add/adjust tests for the behaviour.
+2. Make the smallest change that fully satisfies the spec (prefer
+   `edit_file` over `write_file`); add/adjust tests for the behaviour.
 3. `run_tests`. On PASS, stop and reply with a 1–3 sentence summary.
 4. On FAIL, fix using the diagnosis and `run_tests` again — at most
    {max_iters} test cycles; if still failing, stop and reply starting
@@ -87,7 +90,7 @@ def run_coordinator(
     # sub-agent (run_tests), so no raw run_command here.
     fs_tools = [
         t for t in fs if t.__name__ in
-        ("read_file", "write_file", "list_dir")
+        ("read_file", "write_file", "list_dir", "edit_file")
     ]
     agent = build_agent(
         settings,
