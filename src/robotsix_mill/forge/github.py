@@ -43,11 +43,13 @@ class GitHubForge(Forge):
     ) -> str:
         import httpx
 
+        from .auth import github_token  # lazy: avoid import cycle
+
         s = self.settings
         api = s.github_api_url.rstrip("/")
         url = f"{api}/repos/{owner}/{repo}/pulls"
         headers = {
-            "Authorization": f"Bearer {s.forge_token}",
+            "Authorization": f"Bearer {github_token(s)}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }

@@ -39,6 +39,19 @@ class Settings(BaseSettings):
     forge_remote_url: str | None = Field(default=None, alias="FORGE_REMOTE_URL")
     forge_token: str | None = Field(default=None, alias="FORGE_TOKEN")
     forge_target_branch: str = Field(default="main", alias="FORGE_TARGET_BRANCH")
+    # token  = use FORGE_TOKEN (PAT) directly.
+    # app    = mint a short-lived GitHub App installation token so the
+    #          bot identity (<app-slug>[bot]) authors the PR.
+    forge_auth: Literal["token", "app"] = Field(
+        default="token", alias="FORGE_AUTH"
+    )
+    github_app_id: str | None = Field(default=None, alias="GITHUB_APP_ID")
+    github_app_private_key: str | None = Field(
+        default=None, alias="GITHUB_APP_PRIVATE_KEY"
+    )
+    github_app_private_key_path: str | None = Field(
+        default=None, alias="GITHUB_APP_PRIVATE_KEY_PATH"
+    )
     # GitHub API base (override for GitHub Enterprise).
     github_api_url: str = Field(
         default="https://api.github.com", alias="MILL_GITHUB_API_URL"

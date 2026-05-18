@@ -112,16 +112,18 @@ execution is isolated from the mill process:
 | `core/workspace.py` | per-ticket file workspace (file-canonical body) |
 | `runtime/worker.py` | event-driven queue + stage chaining |
 | `runtime/api.py` | FastAPI app (API + worker lifespan) |
-| `runtime/tracing.py` | optional Langfuse tracing |
-| `sandbox.py` | isolated command execution (docker / local) |
-| `stages/implement.py` | clone → branch → agent → test/fix loop ✅ |
-| `stages/` (refine, review, deliver) | still stubs |
-| `forge/` | GitHub/GitLab delivery adapters (stubs) |
+| `runtime/tracing.py` | Langfuse tracing + OpenRouter cost ✅ |
+| `sandbox.py` | isolated command execution (always containerized) |
+| `stages/refine.py` · `implement.py` · `deliver.py` | ✅ done |
+| `stages/review.py` | still a stub |
+| `forge/github.py` · `forge/auth.py` | GitHub PR + PAT/App-bot auth ✅ |
 | `agents/coding.py` · `agents/fs_tools.py` | implement agent + sandboxed tools |
-| `vcs/git_ops.py` | clone / branch / commit helpers |
+| `vcs/git_ops.py` | clone / branch / commit / push helpers |
+
+**Delivery identity** (PAT or GitHub App bot) setup procedure:
+[docs/github-app.md](docs/github-app.md).
 
 ## Next steps
 
-`implement` is done. Remaining stages, one at a time: `refine`
-(draft→ready), `review` (gate in_review), `deliver` (push branch + open
-MR via the forge adapter).
+`refine → implement → deliver` run end-to-end. Remaining: the `review`
+stage (gate `in_review` before deliver), and the GitLab forge adapter.
