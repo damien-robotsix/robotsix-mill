@@ -1,19 +1,20 @@
-"""The implement coordinator.
+"""The implement agent.
 
-A capable model that ORCHESTRATES but never holds raw files or logs —
-so its history stays short. It:
+A capable model that reads and edits the repo ITSELF — but keeps its
+context lean via two cheap sub-agents:
 
-1. uses ``explore`` (cheap sub-agent) to understand the repo,
-2. uses ``web_research`` (cheap sub-agent) for anything external,
-3. drafts a concrete plan,
-4. delegates the edit to ``implement(instructions)`` — the capable
-   implement sub-agent, FRESH each call, given precise instructions,
-5. calls ``run_tests`` — the cheap test sub-agent runs the suite and
-   returns a distilled diagnosis (never the raw log),
-6. loops 4–5 with refined instructions until tests pass or the fix
-   budget is exhausted.
+- ``explore`` — a scout that returns concise pointers (paths, symbols,
+  line ranges), NEVER whole files. The main agent then reads only the
+  specific files it needs with ``read_file``.
+- ``run_tests`` — the test sub-agent runs the suite in the sandbox and
+  returns a distilled PASS/FAIL diagnosis, never the raw log.
 
-``run_coordinator`` is the seam ``coding.run_implement_agent`` drives.
+It implements directly (``read_file``/``write_file``/``list_dir``),
+runs tests, and loops on failure. No separate implement sub-agent —
+that layer just re-explored everything and never converged.
+
+``run_coordinator`` is the seam ``coding.run_implement_agent`` drives
+(name kept for the stage/tests).
 """
 
 from __future__ import annotations
@@ -23,48 +24,31 @@ from pathlib import Path
 from ..config import Settings
 
 _SYSTEM_PROMPT = """\
-You are an implementation COORDINATOR. You do not read the repo, write
-code, or run tests yourself — you have no tools for that on purpose.
-Keep your own context minimal: never paste file contents or test logs
-into your reasoning; pass concise instructions and act on concise
-results.
+You are a senior engineer implementing ONE ticket in a git repo.
+
+Tools:
+- `explore(question)` — a fast scout: it returns the paths/symbols/
+  line-ranges relevant to your question, NOT file contents. Use it to
+  locate things instead of scanning the tree yourself.
+- `read_file`/`list_dir` — read exactly the files explore pointed you
+  to (only what you need; don't bulk-read).
+- `write_file` — make the edits.
+- `web_research(query)` — anything not in the repo.
+- `run_tests()` — runs the suite in the sandbox; returns PASS or FAIL
+  plus a short, actionable diagnosis (never the raw log).
 
 Procedure:
-1. Use `explore` to learn the structure and the exact current content
-   of the files the change touches. Ask targeted questions; use
-   `web_research` for anything not in the repo.
-2. Draft a concrete plan: the precise edits, file by file, plus the
-   tests to add/update.
-3. Call `implement` with PRECISE, self-contained instructions for the
-   whole change (it is stateless — include everything it needs:
-   target files, exact changes, the relevant current code, the tests
-   to write). Do NOT make it explore.
-4. Call `run_tests`. If it returns PASS, stop and reply with a 1–3
-   sentence summary of the change.
-5. If it returns FAIL, call `implement` again with NEW precise
-   instructions that incorporate the distilled failure (re-`explore`
-   only if you genuinely need fresher context). Repeat at most
-   {max_iters} implement→test cycles; if still failing, stop and
-   reply starting with "UNRESOLVED:" and a short reason.
+1. `explore` to orient; `read_file` the specific files you'll change.
+2. Make the smallest change that fully satisfies the spec, matching
+   the surrounding style; add/adjust tests for the behaviour.
+3. `run_tests`. On PASS, stop and reply with a 1–3 sentence summary.
+4. On FAIL, fix using the diagnosis and `run_tests` again — at most
+   {max_iters} test cycles; if still failing, stop and reply starting
+   with "UNRESOLVED:" and a short reason.
 
-Do not commit, push, or touch git — the system handles that.
+Keep your context lean: prefer `explore` over wide reading; never
+paste whole files into your reasoning. Do not commit/push/touch git.
 """
-
-
-def make_implement_tool(settings: Settings, repo_dir: Path):
-    def implement(instructions: str) -> str:
-        """Delegate the code change to the implement sub-agent with
-        PRECISE, self-contained instructions (it is fresh/stateless and
-        cannot explore — include the target files, exact edits, the
-        relevant current code, and the tests to write). Returns a
-        concise summary of what it changed."""
-        from .implement_worker import run_implement_worker
-
-        return run_implement_worker(
-            settings=settings, repo_dir=repo_dir, instructions=instructions
-        )
-
-    return implement
 
 
 def make_run_tests_tool(settings: Settings, repo_dir: Path):
@@ -88,15 +72,23 @@ def run_coordinator(
     repo_dir: Path,
     spec: str,
 ) -> str:
-    """Drive explore → plan → implement → test → loop. Returns the
-    coordinator's final summary (starts with 'UNRESOLVED:' if it gave
-    up). The seam tests monkeypatch this."""
+    """Drive explore → read → implement → test → loop. Returns the
+    final summary (starts with 'UNRESOLVED:' if it gave up). The seam
+    tests monkeypatch this."""
     from pydantic_ai.usage import UsageLimits
 
     from .base import build_agent
     from .explore import make_explore_tool
+    from .fs_tools import build_fs_tools
     from .retry import call_with_retry
 
+    fs = build_fs_tools(repo_dir, settings)
+    # the main agent reads + writes itself; tests go through the test
+    # sub-agent (run_tests), so no raw run_command here.
+    fs_tools = [
+        t for t in fs if t.__name__ in
+        ("read_file", "write_file", "list_dir")
+    ]
     agent = build_agent(
         settings,
         system_prompt=_SYSTEM_PROMPT.format(
@@ -104,17 +96,17 @@ def run_coordinator(
         ),
         tools=[
             make_explore_tool(settings, repo_dir),
-            make_implement_tool(settings, repo_dir),
+            *fs_tools,
             make_run_tests_tool(settings, repo_dir),
         ],
         web=True,  # adds the cheap web_research tool
-        model_name=settings.model,  # the capable coordinator model
+        model_name=settings.model,  # the capable implement model
     )
     limits = UsageLimits(request_limit=settings.coordinator_request_limit)
     result = call_with_retry(
         lambda: agent.run_sync(
             f"<ticket_spec>\n{spec}\n</ticket_spec>", usage_limits=limits
         ),
-        settings=settings, what="coordinator",
+        settings=settings, what="implement",
     )
     return str(result.output).strip()

@@ -165,26 +165,24 @@ worker-driven transitions trigger notifications — API/CLI transitions
 
 ## Cost controls & resilience
 
-- **Coordinator + delegated sub-agents (each its own model).** The
-  implement stage runs a capable **coordinator** (`MILL_MODEL`) that
-  *orchestrates only* — it never reads the repo, writes code, or runs
-  tests itself, so its history stays short:
-  - `explore(question)` — read-only repo sub-agent
-    (`MILL_EXPLORE_MODEL`, `MILL_EXPLORE_REQUEST_LIMIT`); returns just
-    what was asked.
-  - `web_research(query)` — web lookups sub-agent
-    (`MILL_WEB_RESEARCH_MODEL`); conclusion only, never `:online`.
-  - `implement(instructions)` — the **stateless** implement sub-agent
-    (`MILL_IMPLEMENT_MODEL`): fresh context each fix iteration, given
-    precise instructions, edits files, returns a concise summary.
-  - `run_tests()` — the test sub-agent (`MILL_TEST_MODEL`) runs the
-    suite in the sandbox and **distills** failures into actionable
-    feedback (never the raw log).
-  The coordinator loops implement→test (≤`MILL_MAX_FIX_ITERATIONS`)
-  until green or BLOCK-resumable. Refine likewise authors the spec
-  with a `web_research` delegate. Each role has its own model so cheap
-  models can be slotted in per-agent for cost leverage (all default to
-  the capable model). There is no `deep_*` layer.
+- **Implement agent + two lean sub-agents (each its own model).** A
+  capable agent (`MILL_MODEL`) reads and edits the repo **itself**,
+  kept lean by:
+  - `explore(question)` — a cheap **scout** (`MILL_EXPLORE_MODEL`,
+    `MILL_EXPLORE_REQUEST_LIMIT`) that returns concise pointers
+    (paths/symbols/line-ranges), **never whole files**; the main
+    agent then `read_file`s only what it needs.
+  - `run_tests()` — a cheap **test sub-agent** (`MILL_TEST_MODEL`)
+    runs the suite in the sandbox and **distills** failures into
+    actionable feedback (never the raw log in the conversation).
+  - `web_research(query)` — cheap web lookups, conclusion only, never
+    `:online`.
+  It loops read→edit→`run_tests` (≤`MILL_MAX_FIX_ITERATIONS`) until
+  green or BLOCK-resumable. Refine likewise authors the spec with a
+  `web_research` delegate. Each role has its own model so cheap models
+  can be slotted in per-agent for cost leverage (all default to the
+  capable model). No implement sub-agent and no `deep_*` layer — both
+  re-explored everything and never converged.
 - **No-progress safety net.** If a ticket re-enters the same
   model-driven stage `MILL_MAX_STUCK_CYCLES` times (default 3) without
   ever advancing — e.g. a run repeatedly killed before any checkpoint —

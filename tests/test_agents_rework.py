@@ -1,11 +1,12 @@
-"""Coordinator / implement-worker / test sub-agent — the reworked
-delegation architecture (per-agent models, no deep layer)."""
+"""The implement agent + test sub-agent: the main agent reads/edits
+itself, with a concise `explore` scout and a distilling `run_tests`
+sub-agent (no implement sub-agent, no deep layer)."""
 
 import pydantic_ai
 import pydantic_ai.providers.openrouter as orp
 import pytest
 
-from robotsix_mill.agents import coordinating, implement_worker, testing
+from robotsix_mill.agents import coordinating, testing
 from robotsix_mill.agents import openrouter_cost as oc
 from robotsix_mill.config import Settings
 
@@ -40,39 +41,32 @@ def fake_ai(monkeypatch):
     return cap
 
 
-def test_implement_worker_uses_implement_model_and_fs_only(
-    tmp_path, fake_ai
-):
+def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
+    """The main agent uses MILL_MODEL and gets explore (scout) + its
+    OWN fs tools + run_tests + web_research — no implement sub-agent,
+    no raw run_command (tests go via the test sub-agent)."""
     s = _settings(
-        tmp_path, MILL_MODEL="coord/big", MILL_IMPLEMENT_MODEL="impl/cap",
-    )
-    out = implement_worker.run_implement_worker(
-        settings=s, repo_dir=tmp_path, instructions="do X precisely"
-    )
-    assert out == "did it"  # stripped
-    assert fake_ai["model"] == "impl/cap"  # its own model
-    # file tools only — never run_command (no shell/tests/git)
-    assert fake_ai["tools"] == ["list_dir", "read_file", "write_file"]
-
-
-def test_coordinator_uses_coordinator_model_and_delegation_tools(
-    tmp_path, fake_ai
-):
-    s = _settings(
-        tmp_path, MILL_MODEL="coord/big",
+        tmp_path, MILL_MODEL="main/cap",
         MILL_COORDINATOR_REQUEST_LIMIT="9",
     )
     out = coordinating.run_coordinator(
         settings=s, repo_dir=tmp_path, spec="build a thing"
     )
     assert out == "did it"
-    assert fake_ai["model"] == "coord/big"
+    assert fake_ai["model"] == "main/cap"
     assert fake_ai["limit"] == 9
-    # coordinator only orchestrates: explore + delegated impl + tests
-    # + web_research (added by web=True). No raw fs/shell tools.
     assert fake_ai["tools"] == [
-        "explore", "implement", "run_tests", "web_research"
+        "explore", "list_dir", "read_file", "run_tests",
+        "web_research", "write_file",
     ]
+    assert "run_command" not in fake_ai["tools"]
+
+
+def test_explore_scout_prompt_forbids_whole_files():
+    from robotsix_mill.agents.explore import _SYSTEM_PROMPT
+
+    assert "NEVER paste whole files" in _SYSTEM_PROMPT
+    assert "FILE:" not in _SYSTEM_PROMPT  # the old dump-file directive is gone
 
 
 def test_test_agent_pass(tmp_path, monkeypatch):

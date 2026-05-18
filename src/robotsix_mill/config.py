@@ -28,10 +28,9 @@ class Settings(BaseSettings):
     #                     with precise instructions, gets distilled test
     #                     feedback, and loops. Keeps a short history by
     #                     never holding raw files/logs itself.
-    #  - implement_model: the IMPLEMENT sub-agent (capable). Receives
-    #                     precise instructions, edits files, returns a
-    #                     concise summary; FRESH each fix iteration.
-    #  - explore_model  : read-only repo exploration (cheap).
+    #    (it reads + edits the repo itself; uses MILL_MODEL.)
+    #  - explore_model  : the scout sub-agent — returns concise
+    #                     pointers, never whole files (cheap).
     #  - web_research_model : web lookups (cheap).
     #  - test_model     : distills test failures into actionable
     #                     feedback (cheap).
@@ -41,9 +40,6 @@ class Settings(BaseSettings):
     # bounded retry+backoff (see transient_* below).
     model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_MODEL"
-    )
-    implement_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_IMPLEMENT_MODEL"
     )
     # NOTE: cheap candidates (deepseek-v4-flash) for explore/test/
     # web_research are deferred — all default to the capable model for
