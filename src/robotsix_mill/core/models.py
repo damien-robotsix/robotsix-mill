@@ -38,7 +38,8 @@ class Ticket(SQLModel, table=True):
     # enables the BLOCKED → <originating state> resume path so only the
     # failed stage is re-run.
     blocked_from: str | None = Field(default=None)
-    # cumulative LLM spend in USD, updated by CostInstrumentedOpenRouterModel
+    # cumulative LLM spend in USD, synced from Langfuse session totals
+    # by the periodic cost-sync loop. Zero when Langfuse is unconfigured.
     cost_usd: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)

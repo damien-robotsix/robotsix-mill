@@ -8,6 +8,11 @@ it onto the active OTel span so Langfuse's OTLP ingestor populates
 convention attrs are also set so Langfuse classifies the span as a
 *generation* (without them ``totalCost`` stays 0).
 
+Per-ticket cost attribution is handled by a periodic sync loop in the
+worker that reads Langfuse session totals (``session.id = ticket.id``)
+and writes them to ``ticket.cost_usd`` — the real-time contextvar path
+was removed because it leaked across concurrent tickets.
+
 ``opentelemetry`` is imported lazily inside :func:`record_openrouter_cost`
 so this module is usable without the ``[tracing]`` extra (cost recording
 is simply a no-op when OTel isn't installed / no span is recording).
@@ -46,7 +51,8 @@ def _get_cost_from_response(response: Any) -> float | None:
 
 
 class CostInstrumentedOpenRouterModel(OpenAIChatModel):
-    """OpenAIChatModel that emits OpenRouter's ``usage.cost`` on the span.
+    """OpenAIChatModel that emits OpenRouter's ``usage.cost`` on the
+    OTel span so Langfuse can sum it into session totals.
 
     Forces OpenRouter's usage-accounting opt-in
     (``usage: {include: true}``) so the response carries ``usage.cost``.
@@ -56,24 +62,7 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
         _inject_usage_include(args, kwargs)
         response = await super()._completions_create(*args, **kwargs)
         record_openrouter_cost(response)
-        _accumulate_ticket_cost(response)
         return response
-
-
-def _accumulate_ticket_cost(response: Any) -> None:
-    """If an ``active_ticket_id`` contextvar is set (we're inside a
-    ``process_ticket`` scope), atomically add this call's cost to the
-    ticket's cumulative ``cost_usd``."""
-    cost = _get_cost_from_response(response)
-    if cost is None:
-        return
-
-    from .ticket_context import active_ticket_id, active_ticket_service
-
-    tid = active_ticket_id.get()
-    svc = active_ticket_service.get()
-    if tid is not None and svc is not None:
-        svc.add_cost(tid, cost)
 
 
 def _inject_usage_include(args: tuple, kwargs: dict) -> None:

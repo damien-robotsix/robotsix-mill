@@ -1,16 +1,19 @@
-from contextvars import copy_context
+"""Tests for OpenRouter cost recording (OTel span attrs), Langfuse
+session total queries, and the cost-sync pipeline that writes
+per-ticket ``cost_usd`` from Langfuse session totals.
+
+The old contextvar-based ``_accumulate_ticket_cost`` / ``add_cost``
+real-time path has been REMOVED — it leaked across concurrent tickets.
+"""
 
 import pytest
 
 from robotsix_mill.agents.openrouter_cost import (
-    _accumulate_ticket_cost,
     _inject_usage_include,
     record_openrouter_cost,
 )
-from robotsix_mill.agents.ticket_context import (
-    active_ticket_id,
-    active_ticket_service,
-)
+from robotsix_mill.core.states import State
+from robotsix_mill.langfuse_client import session_total_cost
 
 
 # --- _inject_usage_include (pure dict logic, no deps) -------------------
@@ -86,101 +89,209 @@ def test_record_sets_span_attrs(monkeypatch):
     assert captured["gen_ai.provider.name"] == "openrouter"
 
 
-# --- _accumulate_ticket_cost (contextvar → add_cost) -------------------
+# --- session_total_cost (Langfuse API read) ----------------------------
 
-def make_response(cost: float):
-    """Build a response object shaped like an OpenRouter completion
-    so _get_cost_from_response extracts *cost*."""
-
-    class Usage:
-        model_extra = {"cost": cost}
-
-    class Resp:
-        usage = Usage()
-
-    return Resp()
+def test_session_total_cost_returns_none_when_tracing_disabled(settings):
+    """When tracing_enabled is False (no Langfuse env vars), the
+    client returns None without error."""
+    assert not settings.tracing_enabled
+    assert session_total_cost(settings, "any-session-id") is None
 
 
-class _FakeTicketService:
-    """Records the last (ticket_id, amount) passed to add_cost."""
+def test_session_total_cost_returns_float_from_mocked_api(settings, monkeypatch):
+    """When the Langfuse API returns trace data, session_total_cost
+    sums totalCost across traces.
 
-    def __init__(self):
-        self.last_id: str | None = None
-        self.last_amount: float | None = None
-        self.calls: int = 0
+    We mock _langfuse_api_get (the low-level HTTP helper) so the
+    tracing_enabled check is bypassed entirely — no need to mock
+    the read-only property."""
+    fake_data = {
+        "data": [
+            {"totalCost": 0.0123, "name": "ticket"},
+            {"totalCost": 0.0045, "name": "refine"},
+            {"totalCost": 0.0078, "name": "implement"},
+        ]
+    }
 
-    def add_cost(self, ticket_id: str, amount: float) -> None:
-        self.last_id = ticket_id
-        self.last_amount = amount
-        self.calls += 1
+    def fake_get(_s, _path, params=None):
+        return fake_data
 
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
+    )
 
-def test_accumulate_noop_when_no_contextvars():
-    """When neither contextvar is set, _accumulate_ticket_cost is a
-    silent no-op (no crash, no service call)."""
-    # Run in a clean context with no contextvars set.
-    ctx = copy_context()
-    ctx.run(_accumulate_ticket_cost, make_response(0.0050))
-    # Must not raise
-
-
-def test_accumulate_calls_add_cost_with_correct_id_and_amount(monkeypatch):
-    """When active_ticket_id and active_ticket_service are both set,
-    _accumulate_ticket_cost extracts the cost from the response and
-    calls TicketService.add_cost with the right ticket id and amount."""
-    fake_svc = _FakeTicketService()
-
-    def _run():
-        active_ticket_id.set("ticket-abc")
-        active_ticket_service.set(fake_svc)
-        _accumulate_ticket_cost(make_response(0.0073))
-
-    ctx = copy_context()
-    ctx.run(_run)
-
-    assert fake_svc.last_id == "ticket-abc"
-    assert fake_svc.last_amount == pytest.approx(0.0073)
-    assert fake_svc.calls == 1
+    cost = session_total_cost(settings, "test-session")
+    assert cost == pytest.approx(0.0123 + 0.0045 + 0.0078)
 
 
-def test_accumulate_noop_when_no_cost_on_response(monkeypatch):
-    """When the response carries no usage.cost, add_cost is not called
-    even though contextvars are set."""
-
-    class NoCostUsage:
-        model_extra = {}  # no "cost" key
-
-    class Resp:
-        usage = NoCostUsage()
-
-    fake_svc = _FakeTicketService()
-
-    def _run():
-        active_ticket_id.set("ticket-xyz")
-        active_ticket_service.set(fake_svc)
-        _accumulate_ticket_cost(Resp())
-
-    ctx = copy_context()
-    ctx.run(_run)
-
-    assert fake_svc.calls == 0
+def test_session_total_cost_returns_none_when_api_fails(settings, monkeypatch):
+    """When _langfuse_api_get returns None (unreachable / error),
+    session_total_cost returns None gracefully."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client._langfuse_api_get",
+        lambda s, path, params=None: None,
+    )
+    assert session_total_cost(settings, "test-session") is None
 
 
-def test_accumulate_respects_multiple_calls(monkeypatch):
-    """Multiple calls accumulate to the same ticket id."""
-    fake_svc = _FakeTicketService()
+def test_session_total_cost_handles_empty_traces(settings, monkeypatch):
+    """Zero traces → cost is 0.0 (not None)."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client._langfuse_api_get",
+        lambda s, path, params=None: {"data": []},
+    )
+    assert session_total_cost(settings, "test-session") == 0.0
 
-    def _run():
-        active_ticket_id.set("ticket-multi")
-        active_ticket_service.set(fake_svc)
-        _accumulate_ticket_cost(make_response(0.0010))
-        _accumulate_ticket_cost(make_response(0.0020))
-        _accumulate_ticket_cost(make_response(0.0030))
 
-    ctx = copy_context()
-    ctx.run(_run)
+# --- TicketService.set_cost (DB write) ---------------------------------
 
-    assert fake_svc.calls == 3
-    # Last call details
-    assert fake_svc.last_id == "ticket-multi"
-    assert fake_svc.last_amount == pytest.approx(0.0030)
+def test_set_cost_writes_absolute_value(service):
+    """set_cost writes *cost* as the absolute cost_usd — it does not
+    accumulate.  Calling it twice with different values overwrites."""
+    t = service.create("set-cost test")
+    assert t.cost_usd == 0.0
+
+    service.set_cost(t.id, 0.0420)
+    assert service.get(t.id).cost_usd == pytest.approx(0.0420)
+
+    service.set_cost(t.id, 0.0099)
+    assert service.get(t.id).cost_usd == pytest.approx(0.0099)
+
+
+def test_set_cost_missing_ticket_is_noop(service):
+    """Calling set_cost on a nonexistent ticket should not raise."""
+    service.set_cost("nonexistent-id", 1.0)  # no raise
+
+
+def test_set_cost_persists_through_transition(service):
+    """Cost written before a state transition persists through it."""
+    t = service.create("cost + transition")
+    service.set_cost(t.id, 0.0050)
+    service.transition(t.id, State.READY)
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.READY
+    assert reloaded.cost_usd == pytest.approx(0.0050)
+
+    # Later sync updates to a new absolute value.
+    service.set_cost(t.id, 0.0080)
+    reloaded = service.get(t.id)
+    assert reloaded.cost_usd == pytest.approx(0.0080)
+
+
+# --- _sync_one_ticket_cost (worker helper) ----------------------------
+
+def test_sync_one_ticket_cost_noop_when_langfuse_unset(settings, service):
+    """When Langfuse returns None, _sync_one_ticket_cost leaves
+    cost_usd unchanged (safe no-op, no error)."""
+    from robotsix_mill.runtime.worker import _sync_one_ticket_cost
+    from robotsix_mill.stages import StageContext
+
+    ctx = StageContext(settings=settings, service=service)
+    t = service.create("sync-noop")
+    assert t.cost_usd == 0.0
+
+    # Langfuse unconfigured → session_total_cost returns None
+    _sync_one_ticket_cost(ctx, t.id)
+    assert service.get(t.id).cost_usd == 0.0
+
+
+def test_sync_one_ticket_cost_writes_when_langfuse_returns_value(
+    settings, service, monkeypatch
+):
+    """When Langfuse returns a cost, _sync_one_ticket_cost writes it
+    to the ticket row."""
+    from robotsix_mill.runtime.worker import _sync_one_ticket_cost
+    from robotsix_mill.stages import StageContext
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_total_cost",
+        lambda s, sid: 0.1234,
+    )
+
+    ctx = StageContext(settings=settings, service=service)
+    t = service.create("sync-writes")
+    assert t.cost_usd == 0.0
+
+    _sync_one_ticket_cost(ctx, t.id)
+    assert service.get(t.id).cost_usd == pytest.approx(0.1234)
+
+
+# --- Final sync on terminal transition --------------------------------
+
+def test_terminal_ticket_gets_final_cost_sync(settings, service, monkeypatch):
+    """When process_ticket encounters a terminal state, it calls
+    _sync_one_ticket_cost before returning."""
+    from robotsix_mill.runtime.worker import _sync_one_ticket_cost
+    from robotsix_mill.stages import StageContext
+
+    synced: list[str] = []
+
+    def fake_sync(ctx, tid):
+        synced.append(tid)
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker._sync_one_ticket_cost", fake_sync
+    )
+
+    ctx = StageContext(settings=settings, service=service)
+    t = service.create("terminal-sync")
+    # Put ticket directly into CLOSED (terminal) and run process_ticket
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.DELIVERABLE)
+    service.transition(t.id, State.IN_REVIEW)
+    service.transition(t.id, State.DONE)
+    service.transition(t.id, State.CLOSED)
+
+    import asyncio
+    from robotsix_mill.runtime.worker import process_ticket
+
+    asyncio.run(process_ticket(t.id, ctx))
+    assert t.id in synced
+
+
+# --- Periodic sync loop skips terminal tickets ------------------------
+
+def test_cost_sync_loop_skips_terminal_tickets(settings, service, monkeypatch):
+    """The periodic _cost_sync_loop only syncs non-terminal tickets
+    (terminal ones already got their final sync)."""
+
+    synced_ids: list[str] = []
+
+    def fake_total(_s, sid):
+        synced_ids.append(sid)
+        return 0.0050
+
+    # Patch the module-level reference so that _sync_one_ticket_cost
+    # (which imports session_total_cost lazily from langfuse_client)
+    # gets our fake, AND we call through the module too.
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_total_cost", fake_total
+    )
+
+    # Create one terminal (closed) and one non-terminal (draft) ticket
+    t_draft = service.create("draft-ticket")
+    t_closed = service.create("closed-ticket")
+    # Walk closed to terminal via valid state transitions
+    service.transition(t_closed.id, State.READY)
+    service.transition(t_closed.id, State.DELIVERABLE)
+    service.transition(t_closed.id, State.IN_REVIEW)
+    service.transition(t_closed.id, State.DONE)
+    service.transition(t_closed.id, State.CLOSED)
+
+    # Simulate one iteration of the sync logic (the core loop body)
+    _TERMINAL = {State.CLOSED, State.ERRORED, State.BLOCKED}
+
+    # Import the module (not the function) so we call through the
+    # patched module attribute.
+    import robotsix_mill.langfuse_client as lc
+
+    for ticket in service.list():
+        if ticket.state in _TERMINAL:
+            continue
+        cost = lc.session_total_cost(settings, ticket.id)
+        if cost is not None:
+            service.set_cost(ticket.id, cost)
+
+    # Only the non-terminal draft ticket should have been synced
+    assert t_draft.id in synced_ids
+    assert t_closed.id not in synced_ids

@@ -65,7 +65,7 @@ def test_get_tickets_includes_source(client):
 def test_get_tickets_includes_cost_usd(client, service):
     """GET /tickets response includes cost_usd with correct value."""
     t = service.create("Cost API test")
-    service.add_cost(t.id, 0.0420)
+    service.set_cost(t.id, 0.0420)
 
     ts = client.get("/tickets").json()
     # Find our ticket in the list

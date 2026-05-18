@@ -154,18 +154,18 @@ class TicketService:
             s.commit()
             s.refresh(ticket)
             return ticket
-    def add_cost(self, ticket_id: str, amount: float) -> None:
-        """Atomically increment ``cost_usd`` on a ticket by *amount*.
 
-        Called by ``CostInstrumentedOpenRouterModel`` after every LLM
-        completion when an ``active_ticket_id`` contextvar is set, so
-        cost accumulates across all model calls (refine, implement,
-        retrospect, driver, sub-agents, deep calls, resumes)."""
+    def set_cost(self, ticket_id: str, cost: float) -> None:
+        """Write *cost* as the absolute ``cost_usd`` value for a ticket.
+
+        Called by the periodic cost-sync loop after reading the
+        authoritative session total from Langfuse.  No-op when the
+        ticket doesn't exist."""
         with db.session(self.settings) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
-                return  # ticket vanished — silently ignore
-            ticket.cost_usd += amount
+                return
+            ticket.cost_usd = cost
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()

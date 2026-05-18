@@ -2,9 +2,10 @@
 a ticket's session (mill sets ``session.id = ticket.id``), and list all
 traces in a time window for health checks.
 
-Used by the retrospect stage and the trace-health runner. Fully
-graceful: returns ``None`` / ``[]`` when Langfuse isn't configured or
-the API errors.
+Used by the retrospect stage, the trace-health runner, and the
+periodic cost-sync loop. Fully graceful: returns ``None`` / ``[]``
+when Langfuse isn't configured or the API errors — callers degrade
+without failing.
 """
 
 from __future__ import annotations
@@ -17,10 +18,11 @@ from .config import Settings
 log = logging.getLogger("robotsix_mill.langfuse_client")
 
 
-def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
-    """Return a short text summary of the session's traces (count,
-    total cost, total latency, per-trace lines), or ``None`` if Langfuse
-    is unconfigured / unreachable."""
+def _langfuse_api_get(settings: Settings, path: str, params: dict | None = None):
+    """Low-level authenticated GET to the Langfuse public API.
+
+    Returns the JSON-decoded response body, or ``None`` when Langfuse is
+    unconfigured / unreachable / the request fails."""
     if not settings.tracing_enabled:
         return None
     host = (settings.langfuse_base_url or "").rstrip("/")
@@ -33,16 +35,54 @@ def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
 
         with httpx.Client(timeout=20) as c:
             r = c.get(
-                f"{host}/api/public/traces",
-                params={"sessionId": session_id, "limit": 100},
+                f"{host}{path}",
+                params=params or {},
                 headers={"Authorization": f"Basic {auth}"},
             )
         if r.status_code != 200:
-            return f"(Langfuse API {r.status_code} — trace data unavailable)"
-        traces = r.json().get("data", [])
-    except Exception as e:  # noqa: BLE001 — analysis must not fail the stage
-        return f"(Langfuse fetch error: {type(e).__name__} — no trace data)"
+            return None
+        return r.json()
+    except Exception:  # noqa: BLE001 — analysis must not fail the caller
+        return None
 
+
+def session_total_cost(settings: Settings, session_id: str) -> float | None:
+    """Return the total USD cost for a Langfuse session (sum of
+    ``totalCost`` across all its traces), or ``None`` when Langfuse
+    is unconfigured / unreachable / returns no data."""
+    data = _langfuse_api_get(
+        settings,
+        "/api/public/traces",
+        params={"sessionId": session_id, "limit": 100},
+    )
+    if data is None:
+        return None
+    traces = data.get("data", [])
+    total = 0.0
+
+    def _num(x):
+        try:
+            return float(x or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    for t in traces:
+        total += _num(t.get("totalCost"))
+    return total
+
+
+def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
+    """Return a short text summary of the session's traces (count,
+    total cost, total latency, per-trace lines), or ``None`` if Langfuse
+    is unconfigured / unreachable."""
+    data = _langfuse_api_get(
+        settings,
+        "/api/public/traces",
+        params={"sessionId": session_id, "limit": 100},
+    )
+    if data is None:
+        return None
+    traces = data.get("data", [])
     if not traces:
         return "(no Langfuse traces found for this session)"
 
