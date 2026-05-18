@@ -111,4 +111,5 @@ class GitHubForge(Forge):
             "merged": bool(pr.get("merged")),
             "state": pr.get("state", "open"),
             "url": pr.get("html_url", ""),
+            "mergeable": pr.get("mergeable"),  # True/False/None
         }

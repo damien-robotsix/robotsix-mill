@@ -264,6 +264,31 @@ worker-driven transitions trigger notifications — API/CLI transitions
   than silently re-billing the LLM on every requeue. Poll stages
   (`in_review` waiting on an open PR) are exempt.
 
+## Merge stage: auto-rebase of stale PRs
+
+When a PR sits `in_review` while other PRs merge onto the target branch,
+it may become stale and develop merge conflicts. Rather than stranding
+such PRs, the merge stage automatically invokes a **rebase agent**
+(`agents/rebasing.py`) that resolves conflicts using the LLM.
+
+- The forge's PR status now includes a `mergeable` flag.
+- If a PR is open and **mergeable**, the existing no-op (re-poll) path
+  is preserved exactly.
+- If a PR is open and **conflicting**, the merge stage invokes
+  `run_rebase_agent` on the ticket's workspace clone.
+- On success the ticket branch is force-pushed (the ticket stays
+  `in_review` for the next poll to observe the now-mergeable PR).
+- On failure the ticket escalates to `BLOCKED` (resumable) — no
+  half-rebased state is ever pushed.
+
+| Variable | Default | Description |
+|---|---|---|
+| `MILL_REBASE_MAX_ATTEMPTS` | `2` | Max rebase attempts per ticket before escalating to BLOCKED. Each attempt is one LLM invocation. |
+
+The rebase agent uses the same sandboxed shell + file tools as the
+implement agent, scoped to the ticket's clone. It never pushes, opens
+PRs, or interacts with the forge.
+
 ## Retrospect memory
 
 The retrospect agent maintains a single Markdown file — a living ledger
