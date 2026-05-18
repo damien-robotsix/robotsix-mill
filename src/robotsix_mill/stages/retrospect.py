@@ -41,16 +41,34 @@ class RetrospectStage(Stage):
         )
         lf = langfuse_client.fetch_session_summary(s, ticket.id)
 
+        # Read current memory — empty string if missing/unreadable.
+        memory_text = ""
+        memory_file = s.retrospect_memory_file
+        try:
+            if memory_file.exists():
+                memory_text = memory_file.read_text(encoding="utf-8")
+        except OSError:
+            log.warning("%s: could not read memory file %s", ticket.id, memory_file)
+
         try:
             res = retrospecting.run_retrospect_agent(
                 settings=s,
                 ticket_summary=ticket_summary,
                 history_text=history_text,
                 langfuse_summary=lf,
+                memory=memory_text,
             )
         except Exception as e:  # noqa: BLE001 — resumable, never lose the ticket
             log.exception("%s: retrospect agent failed", ticket.id)
             return Outcome(State.BLOCKED, f"retrospect failed — resumable: {e}")
+
+        # Persist the agent's updated memory verbatim.
+        if res.updated_memory:
+            try:
+                memory_file.parent.mkdir(parents=True, exist_ok=True)
+                memory_file.write_text(res.updated_memory, encoding="utf-8")
+            except OSError:
+                log.warning("%s: could not write memory file %s", ticket.id, memory_file)
 
         spawned = None
         if (
@@ -70,9 +88,9 @@ class RetrospectStage(Stage):
             f"spawned draft: {spawned or '—'}\n\n{res.findings}\n",
             encoding="utf-8",
         )
-        note = "closed"
+        note = res.conclusion or "closed"
         if spawned:
-            note = f"closed — improvement draft {spawned}"
+            note = f"{note} — improvement draft {spawned}"
         elif res.propose_draft and not s.retrospect_spawn_drafts:
-            note = "closed — draft proposed (spawning disabled)"
+            note = f"{note} — draft proposed (spawning disabled)"
         return Outcome(State.CLOSED, note)

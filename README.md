@@ -27,6 +27,7 @@ it directly); the DB row only holds the pointer + a content hash.
   workspaces/<ticket-id>/
     description.md              # canonical body (agent-editable)
     artifacts/                 # per-stage output
+  retrospect_memory.md          # agent-maintained issue ledger
 
 emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   draft ─refine▶ awaiting_approval ─approve▶ ready ─implement▶ deliverable
@@ -45,6 +46,10 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
 - **Delivery:** pluggable forge adapter (GitHub / GitLab), invoked only
   by the `deliver` stage.
 - **Tracing:** optional Langfuse; a no-op unless `LANGFUSE_*` is set.
+- **Retrospect memory:** the retrospect agent maintains a Markdown ledger
+  (`MILL_RETROSPECT_MEMORY_PATH`, default `<data_dir>/retrospect_memory.md`)
+  that accumulates evidence across tickets and only files an improvement
+  draft once it judges the evidence sufficient.
 
 ## Run
 
@@ -105,6 +110,23 @@ before the implement stage starts. Approve via:
 
 To run fully autonomous (refine → implement with no pause), set
 `MILL_REQUIRE_APPROVAL=false`.
+
+## Retrospect memory
+
+The retrospect agent maintains a single Markdown file — a living ledger
+of issues observed across tickets. Each retrospect run:
+
+1. Reads the current memory (empty if missing).
+2. Passes it to the agent, which analyses the ticket in light of the
+   memory, updates the ledger, and decides whether any tracked issue now
+   has enough corroboration to file an improvement draft.
+3. Writes the agent's updated memory back verbatim.
+
+Deduplication is the agent's responsibility: it records when it has
+already filed a draft for an issue and does not re-file.
+
+Configure via `MILL_RETROSPECT_MEMORY_PATH` (defaults to
+`<MILL_DATA_DIR>/retrospect_memory.md`).
 
 ## Security model
 
