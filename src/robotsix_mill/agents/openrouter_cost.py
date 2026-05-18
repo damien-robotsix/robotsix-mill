@@ -22,6 +22,29 @@ from typing import Any
 from pydantic_ai.models.openai import OpenAIChatModel
 
 
+def _get_cost_from_response(response: Any) -> float | None:
+    """Extract the USD cost from an OpenRouter completion response.
+
+    Returns ``None`` when the response doesn't carry usage or cost info
+    (e.g. a streaming-only model, or usage accounting not opted in)."""
+    usage_obj = getattr(response, "usage", None)
+    if usage_obj is None:
+        return None
+
+    extras = getattr(usage_obj, "model_extra", None)
+    raw_cost: Any = None
+    if isinstance(extras, dict):
+        raw_cost = extras.get("cost")
+    if raw_cost is None:
+        raw_cost = getattr(usage_obj, "cost", None)
+    if raw_cost is None:
+        return None
+    try:
+        return float(raw_cost)
+    except (TypeError, ValueError):
+        return None
+
+
 class CostInstrumentedOpenRouterModel(OpenAIChatModel):
     """OpenAIChatModel that emits OpenRouter's ``usage.cost`` on the span.
 
@@ -33,7 +56,24 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
         _inject_usage_include(args, kwargs)
         response = await super()._completions_create(*args, **kwargs)
         record_openrouter_cost(response)
+        _accumulate_ticket_cost(response)
         return response
+
+
+def _accumulate_ticket_cost(response: Any) -> None:
+    """If an ``active_ticket_id`` contextvar is set (we're inside a
+    ``process_ticket`` scope), atomically add this call's cost to the
+    ticket's cumulative ``cost_usd``."""
+    cost = _get_cost_from_response(response)
+    if cost is None:
+        return
+
+    from .ticket_context import active_ticket_id, active_ticket_service
+
+    tid = active_ticket_id.get()
+    svc = active_ticket_service.get()
+    if tid is not None and svc is not None:
+        svc.add_cost(tid, cost)
 
 
 def _inject_usage_include(args: tuple, kwargs: dict) -> None:
@@ -59,21 +99,8 @@ def record_openrouter_cost(response: Any) -> None:
     """Copy ``usage.cost`` (+ tokens + gen_ai attrs) onto the current
     OTel span. No-op when there's no usage/cost, no recording span, or
     OpenTelemetry isn't installed."""
-    usage_obj = getattr(response, "usage", None)
-    if usage_obj is None:
-        return
-
-    extras = getattr(usage_obj, "model_extra", None)
-    raw_cost: Any = None
-    if isinstance(extras, dict):
-        raw_cost = extras.get("cost")
-    if raw_cost is None:
-        raw_cost = getattr(usage_obj, "cost", None)
-    if raw_cost is None:
-        return
-    try:
-        cost = float(raw_cost)
-    except (TypeError, ValueError):
+    cost = _get_cost_from_response(response)
+    if cost is None:
         return
 
     try:
@@ -84,6 +111,8 @@ def record_openrouter_cost(response: Any) -> None:
     span = otel_trace.get_current_span()
     if span is None or not span.is_recording():
         return
+
+    usage_obj = getattr(response, "usage", None)
 
     span.set_attribute("gen_ai.usage.cost", cost)
     span.set_attribute(
@@ -96,9 +125,10 @@ def record_openrouter_cost(response: Any) -> None:
     model = getattr(response, "model", None)
     if model:
         span.set_attribute("gen_ai.request.model", model)
-    prompt_tokens = getattr(usage_obj, "prompt_tokens", None)
-    if prompt_tokens is not None:
-        span.set_attribute("gen_ai.usage.input_tokens", prompt_tokens)
-    completion_tokens = getattr(usage_obj, "completion_tokens", None)
-    if completion_tokens is not None:
-        span.set_attribute("gen_ai.usage.output_tokens", completion_tokens)
+    if usage_obj is not None:
+        prompt_tokens = getattr(usage_obj, "prompt_tokens", None)
+        if prompt_tokens is not None:
+            span.set_attribute("gen_ai.usage.input_tokens", prompt_tokens)
+        completion_tokens = getattr(usage_obj, "completion_tokens", None)
+        if completion_tokens is not None:
+            span.set_attribute("gen_ai.usage.output_tokens", completion_tokens)

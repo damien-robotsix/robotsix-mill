@@ -62,6 +62,19 @@ def test_get_tickets_includes_source(client):
         assert t["source"] == "user"
 
 
+def test_get_tickets_includes_cost_usd(client, service):
+    """GET /tickets response includes cost_usd with correct value."""
+    t = service.create("Cost API test")
+    service.add_cost(t.id, 0.0420)
+
+    ts = client.get("/tickets").json()
+    # Find our ticket in the list
+    found = [x for x in ts if x["id"] == t.id]
+    assert len(found) == 1
+    assert "cost_usd" in found[0]
+    assert found[0]["cost_usd"] == pytest.approx(0.0420)
+
+
 def test_board_renders_source_badge(client):
     """The board HTML includes source badge styling and rendering."""
     r = client.get("/")
@@ -69,6 +82,39 @@ def test_board_renders_source_badge(client):
     assert "src-badge" in body
     assert "src-user" in body
     assert "src-retrospect" in body
+
+
+def test_board_renders_cost_snippet(client):
+    """The board HTML includes the JS snippet that renders cost on
+    each card: $(t.cost_usd||0).toFixed(4)."""
+    r = client.get("/")
+    body = r.text
+    assert "cost_usd" in body  # JS references the field
+    assert ".cost" in body     # CSS class for cost display
+    assert "toFixed(4)" in body  # 4 decimal places
+
+
+def test_board_no_langfuse_calls(client, monkeypatch):
+    """Board rendering makes zero HTTP requests (so zero Langfuse API
+    calls). Monkeypatch httpx.Client to guarantee it."""
+    import httpx
+
+    captured = []
+
+    class NoNetworkClient(httpx.Client):
+        def __init__(self, *args, **kwargs):
+            captured.append("Client()")
+            raise AssertionError(
+                "Board rendering must not make HTTP requests"
+            )
+
+    monkeypatch.setattr(httpx, "Client", NoNetworkClient)
+
+    # Must not raise — the board is a static HTML string, no HTTP.
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "robotsix-mill" in r.text
+    assert len(captured) == 0, "httpx.Client was instantiated during board rendering"
 
 
 def test_get_missing_404(client):

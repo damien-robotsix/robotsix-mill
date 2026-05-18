@@ -94,7 +94,9 @@ docker compose up -d --build
 **Ticket board:** http://localhost:8077 — a live Kanban (one column
 per state, click a card for history + description, auto-refreshes).
 It's the same FastAPI service the CLI uses; localhost-only (the API is
-unauthenticated).
+unauthenticated). Each card shows the cumulative LLM spend for that
+ticket (e.g. `$0.0943`), updated automatically as the ticket moves
+through stages.
 
 ```sh
 docker compose exec mill robotsix-mill ticket new --title "Add X" --description-file -

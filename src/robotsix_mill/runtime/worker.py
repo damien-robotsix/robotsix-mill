@@ -19,6 +19,7 @@ from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
 from ..notify import send_notification, _TRIGGER_STATES
 from . import tracing
+from ..agents.ticket_context import active_ticket_id, active_ticket_service
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -30,6 +31,18 @@ _TERMINAL = {State.CLOSED, State.ERRORED, State.BLOCKED}
 async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
     """Drive one ticket through as many stages as possible, in order,
     until it reaches a terminal/waiting state or a stub stops the chain."""
+    # Set contextvars so every LLM completion during this ticket's
+    # pipeline is attributed to the correct ticket for cost tracking.
+    tok_id = active_ticket_id.set(ticket_id)
+    tok_svc = active_ticket_service.set(ctx.service)
+    try:
+        await _process_ticket_inner(ticket_id, ctx)
+    finally:
+        active_ticket_id.reset(tok_id)
+        active_ticket_service.reset(tok_svc)
+
+
+async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
     while True:
         ticket = ctx.service.get(ticket_id)
         if ticket is None:
