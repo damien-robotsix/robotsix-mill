@@ -27,6 +27,7 @@ it directly); the DB row only holds the pointer + a content hash.
   workspaces/<ticket-id>/
     description.md              # canonical body (agent-editable)
     artifacts/                 # per-stage output
+    repo/                      # git clone (removed on close by default)
   retrospect_memory.md          # agent-maintained issue ledger
 
 emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
@@ -197,6 +198,28 @@ already filed a draft for an issue and does not re-file.
 Configure via `MILL_RETROSPECT_MEMORY_PATH` (defaults to
 `<MILL_DATA_DIR>/retrospect_memory.md`).
 
+## Workspace cleanup on close
+
+When a ticket reaches the terminal `closed` state, its workspace's
+`repo/` clone has served its purpose and can be deleted to reclaim
+disk space. This happens automatically by default — configure with:
+
+| Variable | Default | Description |
+|---|---|---|
+| `MILL_PRUNE_CLONE_ON_CLOSE` | `true` | Delete `repo/` when ticket closes |
+
+When `true` (the default), the `repo/` directory is removed right before
+the ticket transitions to `closed`. The `description.md` and the entire
+`artifacts/` tree (including `retrospect.md`, `implement.md`, etc.) are
+left intact.
+
+This is a **best-effort** operation — if deletion fails (e.g. permission
+error), the ticket still reaches `closed` and the error is logged but
+never raised.
+
+Set to `false` if you need to inspect the final repository state after a
+ticket is finished (for post-mortem debugging).
+
 ## Security model
 
 > Full container topology (mill vs. sibling sandbox, the three code
@@ -247,4 +270,4 @@ Full chain `refine → approve → implement → deliver → merge → retrospec
 runs end-to-end. The human approval gate after refine (configurable via
 `MILL_REQUIRE_APPROVAL`) gives you control over when implementation
 begins and bounds the retrospect→draft loop. Remaining: the **GitLab**
-forge adapter (`forge/gitlab.py` is still a stub).
+forge adapter (`forge/gitlab.py` is still a stub`).

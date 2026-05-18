@@ -17,6 +17,7 @@ from .. import langfuse_client
 from ..agents import retrospecting
 from ..core.models import Ticket
 from ..core.states import State
+from ..core.workspace import prune_clone
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
@@ -90,6 +91,10 @@ class RetrospectStage(Stage):
             f"spawned draft: {spawned or '—'}\n\n{res.findings}\n",
             encoding="utf-8",
         )
+
+        if s.prune_clone_on_close:
+            prune_clone(ws)
+
         note = res.conclusion or "closed"
         if spawned:
             note = f"{note} — improvement draft {spawned}"
