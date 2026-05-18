@@ -80,7 +80,9 @@ def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    read_file, write_file, list_dir, run_command = build_fs_tools(tmp_path, s)
+    read_file, write_file, edit_file, list_dir, run_command = build_fs_tools(
+        tmp_path, s
+    )
     assert "wrote" in write_file("a/b.txt", "hi")
     assert read_file("a/b.txt") == "hi"
     assert "a/" in list_dir(".")
@@ -90,6 +92,67 @@ def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     esc = read_file("../escape.txt")
     assert esc.startswith("error:") and "escapes" in esc
     assert read_file("nope.txt").startswith("error:")  # missing file
+
+
+def test_write_file_unchanged(tmp_path, fake_sandbox):
+    """Existing write_file roundtrip still works identically."""
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    read_file, write_file, *_ = build_fs_tools(tmp_path, s)
+    assert "wrote" in write_file("x.txt", "hello world")
+    assert read_file("x.txt") == "hello world"
+
+
+def test_edit_file_replaces_unique_substring_preserves_rest(tmp_path, fake_sandbox):
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    _, _, edit_file, _, _ = build_fs_tools(tmp_path, s)
+    original = "line1\nline2\nline3\nline4\n"
+    (tmp_path / "f.txt").write_text(original)
+    result = edit_file("f.txt", "line2", "REPLACED")
+    assert "replaced 1 occurrence" in result
+    new = (tmp_path / "f.txt").read_text()
+    assert "REPLACED" in new
+    assert "line2" not in new
+    # surrounding lines byte-identical
+    assert new == "line1\nREPLACED\nline3\nline4\n"
+
+
+def test_edit_file_old_string_absent_returns_error_file_unchanged(tmp_path, fake_sandbox):
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    _, _, edit_file, _, _ = build_fs_tools(tmp_path, s)
+    original = "line1\nline2\n"
+    (tmp_path / "f.txt").write_text(original)
+    result = edit_file("f.txt", "nonexistent", "X")
+    assert "not found" in result
+    assert (tmp_path / "f.txt").read_text() == original
+
+
+def test_edit_file_old_string_appears_multiple_returns_error_file_unchanged(
+    tmp_path, fake_sandbox,
+):
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    _, _, edit_file, _, _ = build_fs_tools(tmp_path, s)
+    original = "dup\nmiddle\ndup\n"
+    (tmp_path / "f.txt").write_text(original)
+    result = edit_file("f.txt", "dup", "X")
+    assert "appears 2 times" in result
+    assert (tmp_path / "f.txt").read_text() == original
+
+
+def test_edit_file_path_escape_rejected(tmp_path, fake_sandbox):
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    _, _, edit_file, _, _ = build_fs_tools(tmp_path, s)
+    result = edit_file("../outside.txt", "x", "y")
+    assert "escapes" in result
 
 
 # --- implement stage ----------------------------------------------------
