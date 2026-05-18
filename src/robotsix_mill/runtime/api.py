@@ -7,6 +7,7 @@ picks it up immediately and chains it through the pipeline.
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -35,7 +36,7 @@ _BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 *{box-sizing:border-box}body{margin:0;font:13px/1.4 ui-monospace,monospace;
 background:#0f1115;color:#d6d9df}
 header{padding:10px 14px;border-bottom:1px solid #2a2e37;display:flex;
-gap:14px;align-items:baseline}
+gap:14px;align-items:baseline;flex-wrap:wrap}
 h1{font-size:15px;margin:0;color:#fff}.muted{color:#7d828c}
 #board{display:flex;gap:10px;padding:12px;overflow-x:auto;
 height:calc(100vh - 46px)}
@@ -54,6 +55,7 @@ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-user{background:#1d3a5c;color:#60a5fa}
 .src-retrospect{background:#3b2f1a;color:#f59e0b}
+.src-audit{background:#1a3b2f;color:#34d399}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
@@ -72,14 +74,19 @@ border-radius:6px;padding:10px;overflow-x:auto}
 </style></head><body>
 <header><h1>robotsix-mill</h1>
 <span class="muted" id="meta">loading…</span>
-<span class="muted" style="margin-left:auto">auto-refresh 5s</span></header>
+<span class="muted" style="margin-left:auto">auto-refresh 5s</span>
+<button onclick="runAudit()" style="font-size:11px;padding:3px 10px;
+background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">
+  Run Audit
+</button>
+</header>
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
 <script>
 const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","closed","blocked","errored"];
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const srcClass=s=>(s==="retrospect"?"retrospect":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":"user");
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
 async function refresh(){
  const ts=await jget("/tickets"); if(!ts)return;
@@ -93,13 +100,27 @@ async function refresh(){
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
    (s==="awaiting_approval"?
-    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`:"")+
+    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>":"")+
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
 async function approve(id){
  const r=await fetch("/tickets/"+id+"/approve",{method:"POST"});
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
+}
+async function runAudit(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await fetch("/audit",{method:"POST"});
+   const data=await r.json();
+   alert("Audit complete. Created "+data.tickets_created.length+" draft(s).");
+   refresh();
+ } catch(e) {
+   alert("Audit failed: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Run Audit';
+ }
 }
 async function open_(id){
  sel=id;
@@ -215,5 +236,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(409, str(e)) from None
         _maybe_enqueue(ticket)  # implement picks it up from ready
         return ticket
+
+    @app.post("/audit")
+    def audit_pass() -> dict:
+        """Trigger an audit pass: reads memory, runs audit agent,
+        writes updated memory, creates draft tickets for gaps."""
+        from ..audit_runner import run_audit_pass
+
+        try:
+            result = run_audit_pass()
+            return {
+                "memory_updated": len(result.updated_memory) > 0,
+                "tickets_created": result.drafts_created,
+            }
+        except Exception as e:
+            raise HTTPException(500, f"audit pass failed: {e}") from None
 
     return app

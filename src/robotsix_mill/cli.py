@@ -5,6 +5,7 @@
     robotsix-mill ticket list [--state S]
     robotsix-mill ticket show <id>
     robotsix-mill ticket approve <id>
+    robotsix-mill audit                        # run an audit pass
 
 The same API backs a future web frontend.
 """
@@ -12,6 +13,7 @@ The same API backs a future web frontend.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 import httpx
@@ -50,6 +52,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_approve.add_argument("id")
 
+    # --- audit command ---
+    p_audit = sub.add_parser(
+        "audit", help="run an audit pass and emit gap drafts"
+    )
+    p_audit.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
     args = parser.parse_args(argv)
     settings = Settings()
 
@@ -61,6 +73,36 @@ def main(argv: list[str] | None = None) -> int:
         uvicorn.run(
             create_app(settings), host=settings.api_host, port=settings.api_port
         )
+        return 0
+
+    if args.cmd == "audit":
+        # Run audit pass locally (not via HTTP — the CLI is thin but
+        # audit is a local operation that uses the agent directly).
+        from .audit_runner import run_audit_pass
+
+        try:
+            result = run_audit_pass()
+        except Exception as e:
+            print(f"audit failed: {e}", file=sys.stderr)
+            return 1
+
+        if args.json:
+            print(json.dumps(
+                {
+                    "memory": result.updated_memory,
+                    "tickets_created": result.drafts_created,
+                },
+                indent=2,
+            ))
+        else:
+            print(f"Audit pass complete.")
+            print(f"Memory updated: {len(result.updated_memory)} chars")
+            if result.drafts_created:
+                print(f"Draft tickets created: {len(result.drafts_created)}")
+                for d in result.drafts_created:
+                    print(f"  - {d['id']}: {d['title']}")
+            else:
+                print("No new draft tickets created.")
         return 0
 
     with _client(settings) as c:

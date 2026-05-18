@@ -29,6 +29,7 @@ it directly); the DB row only holds the pointer + a content hash.
     artifacts/                 # per-stage output
     repo/                      # git clone (removed on close by default)
   retrospect_memory.md          # agent-maintained issue ledger
+  audit_memory.md              # audit agent's gap ledger
 
 emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   draft ─refine▶ awaiting_approval ─approve▶ ready ─implement▶ deliverable
@@ -43,7 +44,7 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
 - **Engine:** `pydantic-ai` over OpenRouter.
 - **Event-driven:** ticket emission / state change enqueues; the
   in-process worker picks it up at once and **chains** stages until a
-  terminal state or a stub. No cron, no polling.
+  terminal state or a stub. No cron, no polling (except merge check).
 - **Delivery:** pluggable forge adapter (GitHub / GitLab), invoked only
   by the `deliver` stage.
 - **Tracing:** optional Langfuse; a no-op unless `LANGFUSE_*` is set.
@@ -51,17 +52,22 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   (`MILL_RETROSPECT_MEMORY_PATH`, default `<data_dir>/retrospect_memory.md`)
   that accumulates evidence across tickets and only files an improvement
   draft once it judges the evidence sufficient.
+- **Audit agent:** a meta-audit agent periodically reviews the repo
+  against web-sourced best practices, identifies gaps in quality/security
+  tooling coverage, and emits improvement draft tickets. Uses a
+  Markdown memory ledger (`MILL_AUDIT_MEMORY_PATH`) for dedup.
 
 ## Ticket provenance (`source` field)
 
 Every ticket records which actor created it — a human user, the
-retrospect agent, or a future emitter — in a free-form `source` string
-field (default `"user"`):
+retrospect agent, the audit agent, or a future emitter — in a free-form
+`source` string field (default `"user"`):
 
 | Source value | Set by | Board badge |
 |---|---|---|
 | `"user"` | `POST /tickets` (CLI `ticket new`, API, web) | blue **user** |
 | `"retrospect"` | Retrospect stage when spawning an improvement draft | amber **retrospect** |
+| `"audit"` | Audit agent when emitting a gap improvement draft | green **audit** |
 | (future) | Any future agent or emitter | grey |
 
 The board renders a small coloured badge on every card. Fallback: if
@@ -88,6 +94,8 @@ docker compose exec mill robotsix-mill ticket new --title "Add X" --description-
 docker compose exec mill robotsix-mill ticket list
 docker compose exec mill robotsix-mill ticket show <id>
 docker compose exec mill robotsix-mill ticket approve <id>
+# Run an audit pass to identify tooling gaps:
+docker compose exec mill robotsix-mill audit
 ```
 
 ## Local development (no Docker)
@@ -103,6 +111,8 @@ make dev                    # service with hot-reload on http://127.0.0.1:8077
 .venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
 .venv/bin/robotsix-mill ticket list
 .venv/bin/robotsix-mill ticket approve <id>
+# Run an audit pass:
+.venv/bin/robotsix-mill audit
 make test                   # run the suite
 ```
 
@@ -198,6 +208,79 @@ already filed a draft for an issue and does not re-file.
 Configure via `MILL_RETROSPECT_MEMORY_PATH` (defaults to
 `<MILL_DATA_DIR>/retrospect_memory.md`).
 
+## Audit agent
+
+The audit agent is a **meta-audit** agent that proactively identifies
+gaps in the repository's quality and security tooling coverage. It
+reviews the repo against current web-sourced best practices, compares
+findings against an agent-owned memory ledger, and emits concrete
+improvement draft tickets — one per gap — that flow through the
+existing pipeline.
+
+### How it works
+
+1. **Reads memory:** The agent reads its Markdown memory ledger
+   (`MILL_AUDIT_MEMORY_PATH`, default `<MILL_DATA_DIR>/audit_memory.md`).
+   Missing file → empty ledger, never fail.
+
+2. **Web research:** Uses `web_research` to identify current best
+   practices for repo quality/security coverage.
+
+3. **Gap analysis:** Compares findings against the memory ledger to
+   identify gaps NOT already recorded as proposed or done.
+
+4. **Emits drafts:** For each specific, worthwhile gap, emits one
+   improvement draft ticket (`source="audit"`) via the normal ticket
+   pipeline.
+
+5. **Updates memory:** Returns an updated memory ledger that the runner
+   writes back verbatim.
+
+Deduplication is the agent's responsibility via the memory ledger: it
+will NOT re-emit a draft for a gap already recorded as proposed or done.
+
+### Usage
+
+**CLI:**
+```sh
+robotsix-mill audit              # summary output
+robotsix-mill audit --json      # full JSON result
+```
+
+**API:**
+```sh
+curl -X POST http://localhost:8077/audit
+```
+
+**Web board:** Click the "Run Audit" button on the board page.
+
+**Periodic polling (opt-in):**
+```sh
+# In .env:
+MILL_AUDIT_PERIODIC=true
+MILL_AUDIT_INTERVAL_SECONDS=3600  # 1 hour
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `MILL_AUDIT_PERIODIC` | `false` | Enable periodic audit passes |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `3600` | Seconds between automatic audits |
+| `MILL_AUDIT_MEMORY_PATH` | (empty) | Override path for the audit memory ledger; falls back to `<data_dir>/audit_memory.md` |
+
+### Important notes
+
+- The audit agent does **NOT** scan code itself — it's a meta-coverage
+  agent that proposes tools/agents/checks.
+- The audit agent does **NOT** edit the repo directly — its only output
+  is draft tickets (and its own memory ledger).
+- The agent does **NOT** hard-code a fixed list of dimensions — it
+  chooses targeted scopes dynamically based on web research and repo
+  analysis.
+- All repo-side output is draft tickets that must go through the
+  approval gate (`awaiting_approval` → `ready` → `implement`).
+
 ## Workspace cleanup on close
 
 When a ticket reaches the terminal `closed` state, its workspace's
@@ -251,11 +334,13 @@ execution is isolated from the mill process:
 | `core/models.py` | SQLModel tables + API schemas |
 | `core/db.py` · `core/service.py` | DB lifecycle + management-plane operations |
 | `core/workspace.py` | per-ticket file workspace (file-canonical body) |
-| `runtime/worker.py` | event-driven queue + stage chaining |
-| `runtime/api.py` | FastAPI app (API + worker lifespan) |
+| `runtime/worker.py` | event-driven queue + stage chaining (+ audit poll) |
+| `runtime/api.py` | FastAPI app (API + worker lifespan + audit route) |
 | `runtime/tracing.py` | Langfuse tracing + OpenRouter cost ✅ |
 | `sandbox.py` | isolated command execution (always containerized) |
 | `stages/` refine·implement·deliver·merge·retrospect | ✅ all real |
+| `audit_runner.py` | audit pass orchestration |
+| `agents/auditing.py` | audit agent (meta-audit for gaps) |
 | `forge/github.py` · `forge/auth.py` | GitHub PR/status + PAT/App-bot auth ✅ |
 | `langfuse_client.py` | read-side session summary (for retrospect) |
 | `agents/coding.py` · `fs_tools.py` · `retrospecting.py` | agents + sandboxed tools |
@@ -271,3 +356,9 @@ runs end-to-end. The human approval gate after refine (configurable via
 `MILL_REQUIRE_APPROVAL`) gives you control over when implementation
 begins and bounds the retrospect→draft loop. Remaining: the **GitLab**
 forge adapter (`forge/gitlab.py` is still a stub`).
+
+**New:** The **audit agent** (`agents/auditing.py`) meta-audits the
+repo for quality/security coverage gaps and emits improvement drafts.
+Enable with `MILL_AUDIT_PERIODIC=true` for automatic periodic passes,
+or trigger on-demand via CLI (`robotsix-mill audit`), API (`POST /audit`),
+or the web board button.
