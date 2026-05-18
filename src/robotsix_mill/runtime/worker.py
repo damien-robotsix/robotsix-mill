@@ -107,6 +107,7 @@ class Worker:
         self._tasks: list[asyncio.Task] = []
         self._poll_task: asyncio.Task | None = None
         self._audit_task: asyncio.Task | None = None
+        self._scout_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -207,6 +208,24 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("audit poll failed")
 
+    async def _scout_poll_loop(self) -> None:
+        """Periodic scout pass loop. Only runs when
+        ``MILL_SCOUT_PERIODIC=true``."""
+        settings = self.ctx.settings
+        interval = max(60, settings.scout_interval_seconds)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                log.info("Starting periodic scout pass")
+                from ..scout_runner import run_scout_pass
+                result = run_scout_pass()
+                log.info(
+                    "Scout pass completed, created %d draft(s)",
+                    len(result.drafts_created),
+                )
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("scout poll failed")
+
     def start(self) -> None:
         if not self._tasks:
             n = max(1, self.ctx.settings.max_concurrency)
@@ -223,10 +242,17 @@ class Worker:
                 "Periodic audit enabled: interval %ds",
                 self.ctx.settings.audit_interval_seconds,
             )
+        # Opt-in periodic scout
+        if self.ctx.settings.scout_periodic and self._scout_task is None:
+            self._scout_task = asyncio.create_task(self._scout_poll_loop())
+            log.info(
+                "Periodic scout enabled: interval %ds",
+                self.ctx.settings.scout_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
-        for attr in ("_poll_task", "_audit_task"):
+        for attr in ("_poll_task", "_audit_task", "_scout_task"):
             t = getattr(self, attr)
             if t is not None:
                 tasks.append(t)

@@ -268,6 +268,23 @@ class Settings(BaseSettings):
         default=None, alias="MILL_AUDIT_MEMORY_PATH"
     )
 
+    # --- scout agent (model evaluation against OpenRouter) ---
+    # When True, the worker runs periodic scout passes at the configured
+    # interval. Default False (opt-in).
+    scout_periodic: bool = Field(
+        default=False, alias="MILL_SCOUT_PERIODIC"
+    )
+    # Interval between periodic scout passes (seconds). Only used when
+    # MILL_SCOUT_PERIODIC=true.
+    scout_interval_seconds: int = Field(
+        default=86400, alias="MILL_SCOUT_INTERVAL_SECONDS"
+    )
+    # Path to the scout agent's Markdown memory ledger. Override to pin
+    # a specific path; unset (default) derives <data_dir>/scout_memory.md.
+    scout_memory_path: Path | None = Field(
+        default=None, alias="MILL_SCOUT_MEMORY_PATH"
+    )
+
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
     langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
@@ -310,6 +327,13 @@ class Settings(BaseSettings):
         if self.audit_memory_path is not None:
             return self.audit_memory_path
         return self.data_dir / "audit_memory.md"
+
+    @property
+    def scout_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained scout memory ledger."""
+        if self.scout_memory_path is not None:
+            return self.scout_memory_path
+        return self.data_dir / "scout_memory.md"
 
 
 def load_settings() -> Settings:
