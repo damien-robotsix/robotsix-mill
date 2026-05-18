@@ -75,7 +75,8 @@ pre{white-space:pre-wrap;background:#0c0e13;border:1px solid #262b36;
 border-radius:6px;padding:10px;overflow-x:auto}
 .ev{border-left:2px solid #333a47;padding:2px 0 2px 9px;margin:4px 0}
 .ev b{color:#cfd3db}.s-draft{--c:#6b7280}.s-awaiting_approval{--c:#f59e0b}
-.s-ready{--c:#3b82f6}.s-in_review{--c:#a855f7}.s-deliverable{--c:#eab308}
+.s-ready{--c:#3b82f6}.s-in_review{--c:#a855f7}.s-rebasing{--c:#f59e0b}
+.s-deliverable{--c:#eab308}
 .s-done{--c:#22c55e}.s-closed{--c:#14b8a6}.s-blocked{--c:#f97316}
 .s-errored{--c:#ef4444}
 </style></head><body>
@@ -102,7 +103,7 @@ margin-left:4px">
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
 <script>
-const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","closed","blocked","errored"];
+const ST=["draft","awaiting_approval","ready","deliverable","in_review","rebasing","done","closed","blocked","errored"];
 const LBL={ready:"implementing"};   // display label only; state value stays "ready"
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;

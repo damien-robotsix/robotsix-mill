@@ -151,7 +151,8 @@ class Worker:
         would otherwise be re-billed to the LLM on every requeue,
         silently. After ``max_stuck_cycles`` such cycles, escalate to
         BLOCKED (resumable) and notify. Poll stages (merge/deliver,
-        traced=False) are exempt: in_review legitimately waits on a PR."""
+        traced=False) are exempt: in_review/rebasing legitimately waits
+        on a PR or rebase cycle."""
         if after is None or after != before:
             self._stuck.pop(ticket_id, None)
             return
@@ -180,14 +181,16 @@ class Worker:
 
     async def _poll_loop(self) -> None:
         """Lightweight merge poll: periodically re-enqueue in_review
-        tickets so the merge stage re-checks the PR. mill has no
-        scheduler; this timer exists solely for the external merge event."""
+        and rebasing tickets so the merge stage re-checks the PR / runs
+        the rebase agent. mill has no scheduler; this timer exists
+        solely for the external merge event and rebase cycle."""
         interval = max(15, self.ctx.settings.merge_poll_seconds)
         while True:
             await asyncio.sleep(interval)
             try:
-                for t in self.ctx.service.list(state=State.IN_REVIEW):
-                    self.enqueue(t.id)
+                for state in (State.IN_REVIEW, State.REBASING):
+                    for t in self.ctx.service.list(state=state):
+                        self.enqueue(t.id)
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("merge poll failed")
 

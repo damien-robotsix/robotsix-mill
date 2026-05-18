@@ -56,6 +56,10 @@ def test_state_machine_edges():
     assert can_transition(State.DELIVERABLE, State.IN_REVIEW)
     assert can_transition(State.IN_REVIEW, State.DONE)      # merged
     assert can_transition(State.IN_REVIEW, State.BLOCKED)   # closed unmerged
+    assert can_transition(State.IN_REVIEW, State.REBASING)  # conflicting
+    assert can_transition(State.REBASING, State.IN_REVIEW)  # rebase success
+    assert can_transition(State.REBASING, State.BLOCKED)    # rebase exhausted
+    assert can_transition(State.REBASING, State.ERRORED)    # rebase crash
     assert can_transition(State.DONE, State.CLOSED)       # retrospected
     assert not can_transition(State.CLOSED, State.DONE)   # terminal
     assert not can_transition(State.DELIVERABLE, State.DONE)  # via in_review
@@ -105,6 +109,28 @@ def test_blocked_resume_wrong_state_rejected():
     assert not can_transition(
         State.BLOCKED, State.DELIVERABLE, blocked_from=State.DONE
     )
+
+
+# --- REBASING-specific can_transition tests ---
+
+def test_can_transition_covers_rebasing():
+    """Verify all new edges involving REBASING."""
+    # IN_REVIEW → REBASING
+    assert can_transition(State.IN_REVIEW, State.REBASING)
+    # REBASING → IN_REVIEW
+    assert can_transition(State.REBASING, State.IN_REVIEW)
+    # REBASING → ERRORED
+    assert can_transition(State.REBASING, State.ERRORED)
+    # REBASING → BLOCKED
+    assert can_transition(State.REBASING, State.BLOCKED)
+    # BLOCKED → REBASING with blocked_from=REBASING (resume)
+    assert can_transition(
+        State.BLOCKED, State.REBASING, blocked_from=State.REBASING
+    )
+    # BLOCKED → REBASING without blocked_from → False
+    assert not can_transition(State.BLOCKED, State.REBASING)
+    # REBASING → DONE is NOT allowed (must go through IN_REVIEW)
+    assert not can_transition(State.REBASING, State.DONE)
 
 
 # --- Service-level integration tests ---
@@ -234,7 +260,7 @@ def test_transition_table_consistency():
     # Every active state must be able to reach BLOCKED and ERRORED
     for src in [
         State.DRAFT, State.AWAITING_APPROVAL, State.READY,
-        State.DELIVERABLE, State.IN_REVIEW, State.DONE,
+        State.DELIVERABLE, State.IN_REVIEW, State.REBASING, State.DONE,
     ]:
         assert State.BLOCKED in TRANSITIONS[src], (
             f"{src} missing BLOCKED escalation edge"

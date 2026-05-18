@@ -25,6 +25,13 @@ def _in_review(ctx):
     return ctx.service.get(t.id)
 
 
+def _in_rebasing(ctx):
+    """Create a ticket already in REBASING state."""
+    t = _in_review(ctx)
+    ctx.service.transition(t.id, State.REBASING, note="PR conflicting")
+    return ctx.service.get(t.id)
+
+
 def _gh(tmp_path, **extra):
     return _ctx(
         tmp_path, FORGE_KIND="github", FORGE_TOKEN="t",
@@ -121,10 +128,28 @@ def test_open_mergeable_none_is_noop(tmp_path, monkeypatch):
     assert out.next_state is State.IN_REVIEW
 
 
-# --- conflicting PR → rebase agent ---
+# --- New: mergeable PR never enters REBASING ---
 
-def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
-    """PR open + mergeable=False → invoke rebase agent exactly once."""
+def test_mergeable_pr_never_enters_rebasing(tmp_path, monkeypatch):
+    """mergeable=True/None → OUTCOME(IN_REVIEW), never REBASING."""
+    ctx = _gh(tmp_path)
+    for mergeable in (True, None):
+        monkeypatch.setattr(
+            github.GitHubForge, "pr_status",
+            lambda self, *, source_branch, m=mergeable: {
+                "merged": False, "state": "open", "url": "u",
+                "mergeable": m,
+            },
+        )
+        out = MergeStage().run(_in_review(ctx), ctx)
+        assert out.next_state is State.IN_REVIEW
+        assert "REBASING" not in str(out.next_state.value)
+
+
+# --- New: conflicting PR on IN_REVIEW → REBASING (detection only) ---
+
+def test_conflicting_pr_transitions_to_rebasing(tmp_path, monkeypatch):
+    """IN_REVIEW + mergeable=False → REBASING, no rebase agent called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -133,16 +158,41 @@ def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
             "mergeable": False,
         },
     )
-    calls = {}
+
+    agent_called = []
 
     def fake_rebase(*, settings, repo_dir, branch, target):
-        calls.update(repo_dir=repo_dir, branch=branch, target=target)
-        return True  # success
+        agent_called.append(1)
+        return True
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
     )
-    # Also mock push since we don't have a real remote.
+
+    t = _in_review(ctx)
+    # Even with a valid workspace clone, the rebase agent must NOT be called
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.REBASING
+    assert agent_called == []  # rebase agent NOT invoked
+
+
+# --- New: REBASING path — clean rebase → IN_REVIEW ---
+
+def test_rebasing_clean_rebase_returns_to_in_review(tmp_path, monkeypatch):
+    """Ticket in REBASING → rebase agent succeeds → force-push → IN_REVIEW."""
+    ctx = _gh(tmp_path)
+
+    def fake_rebase(*, settings, repo_dir, branch, target):
+        return True
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+
     push_calls = {}
 
     def fake_push(repo, branch, remote_url, token):
@@ -152,29 +202,21 @@ def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.push", fake_push,
     )
 
-    t = _in_review(ctx)
-    # Create the workspace repo dir so _workspace_repo_dir doesn't return None.
+    t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     out = MergeStage().run(t, ctx)
-
-    # Agent was called with correct args.
-    assert calls["branch"] == f"mill/{t.id}"
-    assert calls["target"] == "main"
-    assert str(repo_dir) in calls["repo_dir"]
-
-    # On success: force-pushed the ticket branch.
+    assert out.next_state is State.IN_REVIEW
     assert push_calls["branch"] == f"mill/{t.id}"
 
-    # Ticket stays in_review.
-    assert out.next_state is State.IN_REVIEW
 
+# --- REBASING: retry stays REBASING ---
 
-def test_conflicting_pr_no_workspace_clone_blocks(tmp_path, monkeypatch):
-    """If the workspace clone is missing, cannot rebase → BLOCKED."""
-    ctx = _gh(tmp_path)
+def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
+    """REBASING, rebase fails, attempt < max → Outcome(REBASING)."""
+    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="3")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -182,89 +224,33 @@ def test_conflicting_pr_no_workspace_clone_blocks(tmp_path, monkeypatch):
             "mergeable": False,
         },
     )
-    t = _in_review(ctx)
-    # No repo dir created — workspace is empty.
-    out = MergeStage().run(t, ctx)
-    assert out.next_state is State.BLOCKED
-    assert "workspace clone is missing" in out.note
-
-
-def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
-    """Agent returns False for every attempt → BLOCKED after max."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="2")
-    monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
-        lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
-            "mergeable": False,
-        },
-    )
-
-    agent_calls = []
 
     def fake_rebase(*, settings, repo_dir, branch, target):
-        agent_calls.append(1)
         return False
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
     )
 
-    t = _in_review(ctx)
-    repo_dir = ctx.service.workspace(t).dir / "repo"
-    repo_dir.mkdir(parents=True, exist_ok=True)
-    (repo_dir / ".git").mkdir(exist_ok=True)
-
-    # Attempt 1: agent returns False → stays IN_REVIEW (retry next poll)
-    out1 = MergeStage().run(t, ctx)
-    assert out1.next_state is State.IN_REVIEW
-    assert len(agent_calls) == 1
-
-    # Attempt 2: agent returns False again → exhausted → BLOCKED
-    out2 = MergeStage().run(t, ctx)
-    assert out2.next_state is State.BLOCKED
-    assert "rebase failed after 2 attempt" in out2.note
-    assert len(agent_calls) == 2
-
-
-def test_rebase_agent_crash_is_treated_as_failure(tmp_path, monkeypatch):
-    """If the agent raises, treat as False — failure path."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
-    monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
-        lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
-            "mergeable": False,
-        },
-    )
-
-    def boom(*, settings, repo_dir, branch, target):
-        raise RuntimeError("LLM timeout")
-
-    monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", boom,
-    )
-
-    t = _in_review(ctx)
+    t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.BLOCKED
-    assert "rebase failed after 1 attempt" in out.note
+    assert out.next_state is State.REBASING  # retry, not IN_REVIEW
 
-
-def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
-    """When agent returns False, no force-push is made."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
-    monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
-        lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
-            "mergeable": False,
-        },
+    counter_path = (
+        ctx.service.workspace(t).artifacts_dir / "rebase_attempts.txt"
     )
+    assert _read_counter(counter_path) == 1
+
+
+# --- REBASING: exhausted → BLOCKED ---
+
+def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
+    """REBASING, rebase fails, attempt == max → Outcome(BLOCKED)."""
+    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
 
     def fake_rebase(*, settings, repo_dir, branch, target):
         return False
@@ -282,7 +268,153 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.push", fake_push,
     )
 
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "rebase failed after 1 attempt" in out.note
+    assert push_called == []  # never force-pushed on failure
+
+
+# --- original conflicting PR tests, now running through REBASING state ---
+
+def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
+    """Full cycle: IN_REVIEW + mergeable=False → REBASING → then rebase on next poll."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": False,
+        },
+    )
+    calls = {}
+
+    def fake_rebase(*, settings, repo_dir, branch, target):
+        calls.update(repo_dir=repo_dir, branch=branch, target=target)
+        return True  # success
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+    push_calls = {}
+
+    def fake_push(repo, branch, remote_url, token):
+        push_calls.update(branch=branch, remote_url=remote_url)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+    )
+
     t = _in_review(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    # Step 1: IN_REVIEW + conflicting → REBASING (detection only).
+    out1 = MergeStage().run(t, ctx)
+    assert out1.next_state is State.REBASING
+    assert calls == {}  # agent not called yet
+
+    # Actually transition the ticket to REBASING.
+    ctx.service.transition(t.id, State.REBASING, note="conflicting")
+    t = ctx.service.get(t.id)
+
+    # Step 2: REBASING → rebase agent runs, succeeds → IN_REVIEW.
+    out2 = MergeStage().run(t, ctx)
+    assert calls["branch"] == f"mill/{t.id}"
+    assert calls["target"] == "main"
+    assert str(repo_dir) in calls["repo_dir"]
+    assert push_calls["branch"] == f"mill/{t.id}"
+    assert out2.next_state is State.IN_REVIEW
+
+
+def test_conflicting_pr_no_workspace_clone_blocks(tmp_path, monkeypatch):
+    """If the workspace clone is missing in REBASING, cannot rebase → BLOCKED."""
+    ctx = _gh(tmp_path)
+    # No repo dir created — workspace is empty.
+    t = _in_rebasing(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "workspace clone is missing" in out.note
+
+
+def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
+    """Agent returns False for every attempt → BLOCKED after max (through REBASING)."""
+    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="2")
+
+    agent_calls = []
+
+    def fake_rebase(*, settings, repo_dir, branch, target):
+        agent_calls.append(1)
+        return False
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    # Attempt 1: agent returns False → stays REBASING (retry next poll)
+    out1 = MergeStage().run(t, ctx)
+    assert out1.next_state is State.REBASING
+    assert len(agent_calls) == 1
+
+    # Attempt 2: agent returns False again → exhausted → BLOCKED
+    out2 = MergeStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "rebase failed after 2 attempt" in out2.note
+    assert len(agent_calls) == 2
+
+
+def test_rebase_agent_crash_is_treated_as_failure(tmp_path, monkeypatch):
+    """If the agent raises, treat as False — failure path (through REBASING)."""
+    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
+
+    def boom(*, settings, repo_dir, branch, target):
+        raise RuntimeError("LLM timeout")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", boom,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "rebase failed after 1 attempt" in out.note
+
+
+def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
+    """When agent returns False, no force-push is made (through REBASING)."""
+    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
+
+    def fake_rebase(*, settings, repo_dir, branch, target):
+        return False
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+
+    push_called = []
+
+    def fake_push(*a, **k):
+        push_called.append(1)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+    )
+
+    t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
@@ -292,15 +424,8 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
 
 
 def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
-    """Rebase succeeds but force-push fails → BLOCKED, no half-state."""
+    """Rebase succeeds but force-push fails → BLOCKED (through REBASING)."""
     ctx = _gh(tmp_path)
-    monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
-        lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
-            "mergeable": False,
-        },
-    )
 
     def fake_rebase(*, settings, repo_dir, branch, target):
         return True
@@ -316,7 +441,7 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.push", boom_push,
     )
 
-    t = _in_review(ctx)
+    t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
@@ -329,13 +454,6 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
 def test_rebase_attempt_counter_resets_on_success(tmp_path, monkeypatch):
     """After a successful rebase+push, the attempt counter resets to 0."""
     ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="3")
-    monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
-        lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
-            "mergeable": False,
-        },
-    )
 
     call_count = [0]
 
@@ -355,7 +473,7 @@ def test_rebase_attempt_counter_resets_on_success(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.push", fake_push,
     )
 
-    t = _in_review(ctx)
+    t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
@@ -364,12 +482,12 @@ def test_rebase_attempt_counter_resets_on_success(tmp_path, monkeypatch):
         ctx.service.workspace(t).artifacts_dir / "rebase_attempts.txt"
     )
 
-    # Attempt 1 fails → counter=1, stays IN_REVIEW
+    # Attempt 1 fails → counter=1, stays REBASING
     out1 = MergeStage().run(t, ctx)
-    assert out1.next_state is State.IN_REVIEW
+    assert out1.next_state is State.REBASING
     assert _read_counter(counter_path) == 1
 
-    # Attempt 2 succeeds → counter reset to 0
+    # Attempt 2 succeeds → counter reset to 0, back to IN_REVIEW
     out2 = MergeStage().run(t, ctx)
     assert out2.next_state is State.IN_REVIEW
     assert _read_counter(counter_path) == 0
@@ -378,13 +496,6 @@ def test_rebase_attempt_counter_resets_on_success(tmp_path, monkeypatch):
 def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     """The force-push must reference only the ticket's own branch."""
     ctx = _gh(tmp_path)
-    monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
-        lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
-            "mergeable": False,
-        },
-    )
 
     def fake_rebase(*, settings, repo_dir, branch, target):
         return True
@@ -402,7 +513,7 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.push", fake_push,
     )
 
-    t = _in_review(ctx)
+    t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
