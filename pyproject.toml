@@ -40,6 +40,8 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.bandit]
+# Run with: pre-commit run bandit --all-files
+# (uses `-c pyproject.toml` via the pre-commit hook args)
 targets = ["src/"]
 exclude_dirs = ["tests/"]
 skips = ["B101"]
