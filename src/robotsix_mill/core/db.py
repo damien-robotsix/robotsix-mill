@@ -60,6 +60,12 @@ def _run_migrations(settings: Settings) -> None:
             )
             conn.commit()
             log.info("migration: added source column to ticket table")
+        if "blocked_from" not in columns:
+            conn.execute(
+                "ALTER TABLE ticket ADD COLUMN blocked_from TEXT DEFAULT NULL"
+            )
+            conn.commit()
+            log.info("migration: added blocked_from column to ticket table")
     finally:
         conn.close()
 

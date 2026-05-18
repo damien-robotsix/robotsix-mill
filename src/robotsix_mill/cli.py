@@ -5,6 +5,7 @@
     robotsix-mill ticket list [--state S]
     robotsix-mill ticket show <id>
     robotsix-mill ticket approve <id>
+    robotsix-mill ticket resume-blocked <id>
     robotsix-mill audit                        # run an audit pass
 
 The same API backs a future web frontend.
@@ -51,6 +52,12 @@ def main(argv: list[str] | None = None) -> int:
         "approve", help="approve a ticket in awaiting_approval state"
     )
     p_approve.add_argument("id")
+
+    p_resume = tsub.add_parser(
+        "resume-blocked",
+        help="resume a blocked ticket back to the state it was blocked from",
+    )
+    p_resume.add_argument("id")
 
     # --- audit command ---
     p_audit = sub.add_parser(
@@ -147,6 +154,19 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception:
                     detail = r.text
                 print(f"approve failed: {detail}", file=sys.stderr)
+                return 1
+        if args.tcmd == "resume-blocked":
+            r = c.post(f"/tickets/{args.id}/resume-blocked")
+            if r.is_success:
+                data = r.json()
+                print(f"ticket {data['id']} resumed — now in {data['state']}")
+                return 0
+            else:
+                try:
+                    detail = r.json().get("detail", r.text)
+                except Exception:
+                    detail = r.text
+                print(f"resume-blocked failed: {detail}", file=sys.stderr)
                 return 1
 
     parser.error("unknown command")

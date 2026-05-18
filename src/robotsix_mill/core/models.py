@@ -34,6 +34,10 @@ class Ticket(SQLModel, table=True):
     # which actor created the ticket — free-form for forward compatibility
     # (e.g. "user", "retrospect", "some-future-agent")
     source: str = Field(default="user")
+    # when blocked, which state the ticket was in before being blocked;
+    # enables the BLOCKED → <originating state> resume path so only the
+    # failed stage is re-run.
+    blocked_from: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 

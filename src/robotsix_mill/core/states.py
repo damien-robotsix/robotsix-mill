@@ -7,6 +7,13 @@ errors or escalates; they require human attention before re-entering the
 pipeline. ``AWAITING_APPROVAL`` is a human-wait state between refine and
 implement — it has no stage owner and pauses the chain until a human
 approves.
+
+When a ticket is blocked, the state it was blocked *from* is recorded
+(``Ticket.blocked_from``). A human can **resume** the blocked ticket
+straight back to that originating state to re-run only the failed stage
+(no need to replay earlier stages). The existing ``BLOCKED → READY`` and
+``BLOCKED → DRAFT`` transitions remain available as explicit human
+overrides that re-run the full downstream chain.
 """
 
 from __future__ import annotations
@@ -44,6 +51,8 @@ TRANSITIONS: dict[State, set[State]] = {
     State.CLOSED: set(),
     # a human moves these back into the pipeline manually
     State.ERRORED: {State.READY, State.DRAFT},
+    # BLOCKED: human can override to READY or DRAFT (re-run downstream),
+    # or resume to the originating state (re-run only the failed stage).
     State.BLOCKED: {State.READY, State.DRAFT},
 }
 
@@ -57,5 +66,17 @@ STAGE_FOR_STATE: dict[State, str] = {
 }
 
 
-def can_transition(src: State, dst: State) -> bool:
-    return dst in TRANSITIONS.get(src, set())
+def can_transition(src: State, dst: State, blocked_from: State | None = None) -> bool:
+    """Return True if ``src → dst`` is a legal transition.
+
+    When *src* is ``BLOCKED``, *dst* is also allowed when it matches
+    the recorded ``blocked_from`` state (the resume path).  The
+    existing ``BLOCKED → READY`` and ``BLOCKED → DRAFT`` overrides are
+    always available regardless of ``blocked_from``.
+    """
+    allowed = TRANSITIONS.get(src, set())
+    if dst in allowed:
+        return True
+    if src is State.BLOCKED and blocked_from is not None and dst is blocked_from:
+        return True
+    return False

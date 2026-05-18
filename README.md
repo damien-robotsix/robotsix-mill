@@ -38,6 +38,10 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   retrospect audits the run + Langfuse and may spawn an improvement draft.
   closed = terminal. errored = a stage threw; blocked = needs a human
   (both resumable: a human transition re-enqueues).
+
+  BLOCKED recovery (no raw-DB editing ever needed):
+    BLOCKED ─resume-blocked▶ <blocked_from>   (re-run only the failed stage)
+    BLOCKED → READY | DRAFT                    (manual override: full re-run)
   awaiting_approval is a human gate (configurable via MILL_REQUIRE_APPROVAL).
 ```
 
@@ -97,6 +101,7 @@ docker compose exec mill robotsix-mill ticket new --title "Add X" --description-
 docker compose exec mill robotsix-mill ticket list
 docker compose exec mill robotsix-mill ticket show <id>
 docker compose exec mill robotsix-mill ticket approve <id>
+docker compose exec mill robotsix-mill ticket resume-blocked <id>
 # Run an audit pass to identify tooling gaps:
 docker compose exec mill robotsix-mill audit
 ```
@@ -114,6 +119,7 @@ make dev                    # service with hot-reload on http://127.0.0.1:8077
 .venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
 .venv/bin/robotsix-mill ticket list
 .venv/bin/robotsix-mill ticket approve <id>
+.venv/bin/robotsix-mill ticket resume-blocked <id>
 # Run an audit pass:
 .venv/bin/robotsix-mill audit
 make test                   # run the suite
@@ -189,6 +195,26 @@ before the implement stage starts. Approve via:
 
 To run fully autonomous (refine → implement with no pause), set
 `MILL_REQUIRE_APPROVAL=false`.
+
+## Blocked ticket recovery
+
+When a ticket is blocked (e.g. a retrospect agent failure), the state
+it was blocked *from* is recorded. You can recover in two ways:
+
+- **Resume to the originating state** (re-runs only the failed stage):
+  ```sh
+  robotsix-mill ticket resume-blocked <id>
+  ```
+  This transitions `BLOCKED → <blocked_from>` (e.g. `BLOCKED → DONE`
+  to re-run retrospect, skipping implement and refine).
+
+- **Manual override** (re-runs the full downstream chain):
+  - `BLOCKED → READY` (re-runs implement → deliver → merge → retrospect)
+  - `BLOCKED → DRAFT` (re-runs refine → implement → ...)
+  
+  Use the generic transition endpoint or the board.
+
+No raw database editing is ever needed to recover a blocked ticket.
 
 ## Notifications
 
