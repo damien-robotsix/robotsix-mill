@@ -26,8 +26,12 @@ class Forge(ABC):
     @abstractmethod
     def pr_status(self, *, source_branch: str) -> dict | None:
         """Status of the PR/MR for ``source_branch``:
-        ``{"merged": bool, "state": "open"|"closed", "url": str}`` or
-        ``None`` if no PR/MR exists yet."""
+        ``{"merged": bool, "state": "open"|"closed", "url": str,
+        "mergeable": bool | None}`` or ``None`` if no PR/MR exists yet.
+
+        ``mergeable`` is ``True`` when the PR has no conflicts with the
+        target branch, ``False`` when it does, and ``None`` when the
+        forge hasn't yet performed the check (treat as mergeable)."""
 
 
 def get_forge(settings: Settings) -> Forge:

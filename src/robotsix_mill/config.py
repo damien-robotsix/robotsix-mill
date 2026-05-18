@@ -251,6 +251,15 @@ class Settings(BaseSettings):
         default=True, alias="MILL_PRUNE_CLONE_ON_CLOSE"
     )
 
+    # --- merge stage: auto-rebase of stale PRs ---
+    # When a PR in in_review becomes conflicting (other PRs merged to
+    # the target branch), the merge stage invokes the rebase agent to
+    # resolve conflicts automatically.  This is the max number of
+    # rebase attempts per ticket before escalating to BLOCKED.
+    rebase_max_attempts: int = Field(
+        default=2, alias="MILL_REBASE_MAX_ATTEMPTS"
+    )
+
     # --- audit agent (meta-audit for quality/security coverage) ---
     # When True, the worker runs periodic audit passes at the configured
     # interval. Default False (opt-in).
