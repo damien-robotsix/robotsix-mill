@@ -3,8 +3,10 @@ import subprocess
 import pytest
 
 from robotsix_mill import sandbox
+from robotsix_mill.agents import web_research as wr
 from robotsix_mill.agents.base import _compose_prompt, _model_name
 from robotsix_mill.agents.skills import load_skills
+from robotsix_mill.agents.web_research import make_web_research_tool
 from robotsix_mill.agents.web_tools import make_web_fetch
 from robotsix_mill.config import Settings
 
@@ -43,13 +45,81 @@ def test_repo_ships_web_skills():
 
 # --- model id / prompt composition (no key, no pydantic_ai needed) ------
 
-def test_model_name_online_only_when_web_and_enabled(tmp_path):
-    # no "openrouter:" prefix — provider is set explicitly (cost model)
+def test_main_model_never_online(tmp_path):
+    # The expensive main agent must never carry ":online" — web search
+    # is delegated to the cheap sub-agent. (No "openrouter:" prefix: the
+    # provider is set explicitly for the cost-instrumented model.)
     s = _settings(tmp_path, MILL_MODEL="x/y")
-    assert _model_name(s, web=False) == "x/y"
-    assert _model_name(s, web=True) == "x/y:online"
-    s2 = _settings(tmp_path, MILL_MODEL="x/y", MILL_WEB_SEARCH="false")
-    assert _model_name(s2, web=True) == "x/y"  # search disabled
+    assert _model_name(s) == "x/y"
+    assert ":online" not in _model_name(s)
+    # even with web search enabled (the default) the main model is plain
+    s2 = _settings(tmp_path, MILL_MODEL="x/y", MILL_WEB_SEARCH="true")
+    assert _model_name(s2) == "x/y"
+
+
+# --- web research sub-agent (the cost fix) ------------------------------
+
+def test_web_research_tool_delegates_to_seam(tmp_path, monkeypatch):
+    """The tool exposed to the main agent must return EXACTLY the
+    sub-agent seam's conclusion string (no raw pages leak through)."""
+    s = _settings(tmp_path)
+    seen = {}
+
+    def fake(*, settings, query):
+        seen["query"] = query
+        return f"CONCLUSION about {query}"
+
+    monkeypatch.setattr(wr, "run_web_research", fake)
+    tool = make_web_research_tool(s)
+    assert tool("python 3.14 release date") == (
+        "CONCLUSION about python 3.14 release date"
+    )
+    assert seen["query"] == "python 3.14 release date"
+
+
+def test_web_research_no_key_degrades(tmp_path):
+    # No OPENROUTER_API_KEY -> a short message, never an exception.
+    s = _settings(tmp_path, OPENROUTER_API_KEY="")
+    out = wr.run_web_research(settings=s, query="anything")
+    assert "unavailable" in out and "OPENROUTER_API_KEY" in out
+
+
+def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
+    """The sub-agent (and only it) builds the cheap model WITH ":online"
+    and bounds itself by web_research_request_limit."""
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        MILL_WEB_RESEARCH_MODEL="cheap/mini",
+        MILL_WEB_RESEARCH_REQUEST_LIMIT="5",
+    )
+    captured = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            captured["model"] = name
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        def run_sync(self, query, *, usage_limits=None):
+            captured["limit"] = usage_limits.request_limit
+            captured["query"] = query
+            return type("R", (), {"output": "ok"})()
+
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    out = wr.run_web_research(settings=s, query="q")
+    assert out == "ok"
+    assert captured["model"] == "cheap/mini:online"
+    assert captured["limit"] == 5
 
 
 def test_compose_prompt_appends_skills(tmp_path):

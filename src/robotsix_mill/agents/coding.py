@@ -1,5 +1,13 @@
-"""The implement agent: an LLM that edits a cloned repo via sandboxed
-tools until the change is done.
+"""The implement agent: a CHEAP driver model that orchestrates, and
+delegates the heavy lifting to context-isolated sub-agents.
+
+The driver (``settings.model``) has a limited context window, so it
+never reads the repo or runs tests directly. It only:
+  - ``explore(question)``     — read the repo (fresh sub-agent context)
+  - ``web_research(query)``   — look things up (cheap sub-agent)
+  - ``deep_implement(ctx)``   — the STRONG model authors the change
+  - ``write_file(path, c)``   — apply what deep_implement returned
+  - ``run_tests()``           — verify (sandbox; trimmed result)
 
 This is the single seam the stage drives — tests monkeypatch
 ``run_implement_agent`` to avoid network/LLM. ``history`` is the running
@@ -16,29 +24,38 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .. import sandbox
 from ..config import Settings
+from .deep import make_deep_implement_tool
+from .explore import make_explore_tool
 from .fs_tools import build_fs_tools
 
 SYSTEM_PROMPT = """\
-You are a senior software engineer working inside a single git repository.
-All file and shell tools operate inside that repo only.
+You are an orchestrator running on a SMALL-context model. You do NOT
+read the repo, write code, or run tests yourself — you have no tools
+for that on purpose. You coordinate sub-agents and keep your own
+context minimal: never paste large file contents into your reasoning;
+pass them straight between tools.
 
-Start by exploring with list_dir — do not assume paths. Spec paths are
-usually relative to the package, not the repo root (e.g. a src/ layout),
-so locate files before reading or editing them.
+Loop:
+1. Use `explore` to learn what you need (structure, where things live,
+   and the FULL content of every file the change will touch). Ask
+   targeted questions; do not hoard — request the next thing when you
+   need it. Use `web_research` for anything not in the repo.
+2. Assemble a COMPLETE, self-contained context (the spec verbatim, the
+   full current content of each file to change, conventions, and on a
+   retry the failing test output) and pass it to `deep_implement`. The
+   strong model returns a plan plus, per file, a `FILE: <path>` block
+   with that file's COMPLETE final content (and maybe a `DELETE:` line).
+3. Apply it exactly with `write_file` for each FILE block (you may need
+   `explore` to fetch a file verbatim first so you forward it intact).
+4. Call `run_tests`. If it fails, go back to step 2 with the trimmed
+   failure output added to the context — do not try to fix it yourself.
 
-You may be RESUMING earlier work: inspect the repo (it may already have
-partial changes) before acting, and continue rather than restart.
-
-Implement the ticket below end to end:
-- Make the smallest change that fully satisfies it, matching the
-  surrounding code's style and conventions.
-- Add or update tests for the behaviour you change.
-- You may run shell commands (tests, linters, build) to verify yourself.
-- Do not commit, push, or touch git — the system handles that.
-
-When you are confident the change is complete and tests pass, stop and
-reply with a short summary of what you changed and why.
+You may be RESUMING: use `explore` to see existing partial changes and
+continue rather than restart. Do not commit/push/touch git — the system
+does that. When `run_tests` passes (or there is no test gate), stop and
+reply with a 1–3 sentence summary of what changed and why.
 """
 
 
@@ -75,7 +92,35 @@ def run_implement_agent(
 
     from .base import build_agent
 
-    tools = build_fs_tools(repo_dir, settings)
+    # Driver toolset only: it must delegate reading (explore) and
+    # verifying (run_tests); the sole repo-mutating tool is write_file
+    # (to apply what deep_implement returns). build_agent adds
+    # web_research when web=True.
+    write_file = next(
+        t for t in build_fs_tools(repo_dir, settings)
+        if t.__name__ == "write_file"
+    )
+
+    def run_tests() -> str:
+        """Run the project's test command in the isolated sandbox and
+        return a trimmed pass/fail result (full logs are NOT returned —
+        keep your context small; the tail is enough to diagnose)."""
+        cmd = settings.test_command.strip()
+        if not cmd:
+            return "no test gate configured (treat as passing)"
+        try:
+            rc, out = sandbox.run(cmd, repo_dir=repo_dir, settings=settings)
+        except sandbox.SandboxError as e:
+            return f"sandbox unavailable: {e}"
+        tail = out[-3000:]
+        return f"{'PASS' if rc == 0 else 'FAIL'} (rc={rc})\n{tail}"
+
+    tools = [
+        make_explore_tool(settings, repo_dir),
+        make_deep_implement_tool(settings),
+        write_file,
+        run_tests,
+    ]
     agent = build_agent(
         settings, system_prompt=SYSTEM_PROMPT, tools=tools, web=True
     )
