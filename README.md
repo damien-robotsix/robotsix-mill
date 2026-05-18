@@ -70,6 +70,11 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   draft tickets when a materially better option exists or a configured
   model regresses. Uses a Markdown memory ledger (`MILL_SCOUT_MEMORY_PATH`)
   for dedup.
+- **Trace-health check:** a deterministic, no-LLM check that scans
+  Langfuse for traces lacking a `sessionId` (unsessioned) in the last
+  24 hours and files a single draft alert ticket when any are found.
+  Deduplicates against existing open trace-health tickets. Runs on-demand
+  or periodically (opt-in).
 
 ## Ticket provenance (`source` field)
 
@@ -83,6 +88,7 @@ retrospect agent, the audit agent, or a future emitter — in a free-form
 | `"retrospect"` | Retrospect stage when spawning an improvement draft | amber **retrospect** |
 | `"audit"` | Audit agent when emitting a gap improvement draft | green **audit** |
 | `"scout"` | Scout agent when emitting a model-switch draft | violet **scout** |
+| `"trace-health"` | Trace-health check when unsessioned traces detected | cyan **trace-health** |
 | (future) | Any future agent or emitter | grey |
 
 The board renders a small coloured badge on every card. Fallback: if
@@ -116,6 +122,8 @@ docker compose exec mill robotsix-mill ticket resume-blocked <id>
 docker compose exec mill robotsix-mill audit
 # Run a scout pass to evaluate models:
 docker compose exec mill robotsix-mill scout
+# Run a trace-health check to detect unsessioned traces:
+docker compose exec mill robotsix-mill trace-health
 ```
 
 ## Local development (no Docker)
@@ -136,6 +144,8 @@ make dev                    # service with hot-reload on http://127.0.0.1:8077
 .venv/bin/robotsix-mill audit
 # Run a scout pass:
 .venv/bin/robotsix-mill scout
+# Run a trace-health check:
+.venv/bin/robotsix-mill trace-health
 make test                   # run the suite
 ```
 
@@ -478,6 +488,81 @@ MILL_SCOUT_INTERVAL_SECONDS=86400  # 1 day
 - All drafts must go through the approval gate
   (`awaiting_approval` → `ready` → `implement`).
 
+## Trace-health check
+
+The trace-health check is a **deterministic, no-LLM** check that scans
+Langfuse for traces in the last 24 hours that are missing a `sessionId`
+(unsessioned). Sub-agent / coordinator traces can fail to inherit the
+ticket root span's `session.id`, and those orphaned traces carry cost
+and latency that cannot be attributed to any ticket. This check surfaces
+them automatically.
+
+### How it works
+
+1. **Short-circuits** when tracing is disabled (`LANGFUSE_*` not set).
+
+2. **Fetches all traces** from the last 24 hours via the Langfuse
+   public API (paginated, with graceful error handling).
+
+3. **Partitions** traces: those with a falsy `sessionId` (missing,
+   `None`, or `""`) are "unsessioned."
+
+4. **Skips silently** when there are zero unsessioned traces or zero
+   total traces.
+
+5. **Deduplicates:** queries the ticket table for any existing
+   `source="trace-health"` ticket not in `CLOSED` state. If one
+   exists, skips — an alert is already live.
+
+6. **Files a single draft ticket** (`source="trace-health"`) with a
+   structured body listing the window, the counts, up to 5 example
+   trace IDs/names, and a note about the likely cause. The ticket
+   flows through the normal pipeline (refine → approval gate →
+   implement → PR → human merge).
+
+The actual fix for session inheritance is a separate ticket the
+pipeline will produce; this check is only the alert.
+
+### Usage
+
+**CLI:**
+```sh
+robotsix-mill trace-health              # summary output
+robotsix-mill trace-health --json      # full JSON result
+```
+
+**API:**
+```sh
+curl -X POST http://localhost:8077/trace-health
+```
+
+**Web board:** Click the "Trace Health" button on the board page.
+
+**Periodic polling (opt-in):**
+```sh
+# In .env:
+MILL_TRACE_HEALTH_PERIODIC=true
+MILL_TRACE_HEALTH_INTERVAL_SECONDS=86400  # 1 day
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `MILL_TRACE_HEALTH_PERIODIC` | `false` | Enable periodic trace-health checks |
+| `MILL_TRACE_HEALTH_INTERVAL_SECONDS` | `86400` | Seconds between automatic checks (minimum 3600) |
+
+### Important notes
+
+- The trace-health check does **NOT** use an LLM — it is pure data
+  inspection (HTTP fetch + SQL query).
+- The check does **NOT** fix the root cause (sub-agent span
+  inheritance) — its only output is a draft alert ticket.
+- The 24-hour lookback window is **hard-coded**, not configurable.
+- The minimum periodic interval is **3600s (1 hour)**, enforced in
+  the worker to avoid hammering Langfuse.
+- When `LANGFUSE_*` is not configured, the check is a zero-cost no-op.
+
 ## Workspace cleanup on close
 
 When a ticket reaches the terminal `closed` state, its workspace's
@@ -531,17 +616,18 @@ execution is isolated from the mill process:
 | `core/models.py` | SQLModel tables + API schemas |
 | `core/db.py` · `core/service.py` | DB lifecycle + management-plane operations |
 | `core/workspace.py` | per-ticket file workspace (file-canonical body) |
-| `runtime/worker.py` | event-driven queue + stage chaining (+ audit/scout poll) |
-| `runtime/api.py` | FastAPI app (API + worker lifespan + audit/scout route) |
+| `runtime/worker.py` | event-driven queue + stage chaining (+ audit/scout/trace-health poll) |
+| `runtime/api.py` | FastAPI app (API + worker lifespan + audit/scout/trace-health route) |
 | `runtime/tracing.py` | Langfuse tracing + OpenRouter cost ✅ |
 | `sandbox.py` | isolated command execution (always containerized) |
 | `stages/` refine·implement·deliver·merge·retrospect | ✅ all real |
 | `audit_runner.py` | audit pass orchestration |
 | `scout_runner.py` | scout pass orchestration |
+| `trace_health_runner.py` | trace-health check orchestration |
 | `agents/auditing.py` | audit agent (meta-audit for gaps) |
 | `agents/scouting.py` | scout agent (model evaluation against OpenRouter) |
 | `forge/github.py` · `forge/auth.py` | GitHub PR/status + PAT/App-bot auth ✅ |
-| `langfuse_client.py` | read-side session summary (for retrospect) |
+| `langfuse_client.py` | read-side session summary + trace listing (for retrospect + trace-health) |
 | `agents/coding.py` · `fs_tools.py` · `retrospecting.py` | agents + sandboxed tools |
 | `vcs/git_ops.py` | clone / branch / commit / push helpers |
 
@@ -567,3 +653,10 @@ OpenRouter models per agent role on provider count, health, stability,
 capability, price, and latency. Enable with `MILL_SCOUT_PERIODIC=true`
 for automatic periodic passes, or trigger on-demand via CLI
 (`robotsix-mill scout`), API (`POST /scout`), or the web board button.
+
+**New:** The **trace-health check** (`trace_health_runner.py`)
+scans Langfuse for unsessioned traces and files an alert draft when
+any are found. Enable with `MILL_TRACE_HEALTH_PERIODIC=true` for
+automatic periodic checks, or trigger on-demand via CLI
+(`robotsix-mill trace-health`), API (`POST /trace-health`), or the
+web board button.
