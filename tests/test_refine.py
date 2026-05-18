@@ -23,7 +23,7 @@ def test_empty_draft_blocks(ctx, service):
 
 
 def test_no_api_key_blocks(ctx, service, monkeypatch):
-    def boom(*, settings, title, draft):
+    def boom(*, settings, title, draft, repo_dir=None):
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     monkeypatch.setattr(refining, "run_refine_agent", boom)
@@ -126,3 +126,77 @@ async def test_awaiting_approval_pauses_chain(ctx, service, monkeypatch):
     # worker didn't advance past awaiting_approval
     history_states = [e.state for e in service.history(t.id)]
     assert State.READY not in history_states
+
+
+def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
+    """With a forge configured, refine clones ONCE and hands the agent
+    a repo_dir (so it explores locally, not via web_fetch). Idempotent:
+    an existing clone is reused, not re-cloned."""
+    from robotsix_mill.vcs import git_ops
+
+    ctx.settings.forge_remote_url = "https://example.test/repo.git"
+    ctx.settings.forge_target_branch = "main"
+    seen = {"clone": 0, "repo_dir": "unset"}
+
+    def fake_clone(url, dest, branch, token):
+        seen["clone"] += 1
+        (dest / ".git").mkdir(parents=True)
+
+    def fake_refine(*, settings, title, draft, repo_dir=None):
+        seen["repo_dir"] = repo_dir
+        return "## Problem\nx\n## Scope\n- y\n"
+
+    monkeypatch.setattr(git_ops, "clone", fake_clone)
+    monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
+
+    t = service.create("x", "do a thing")
+    RefineStage().run(t, ctx)
+    repo = service.workspace(t).dir / "repo"
+    assert seen["clone"] == 1
+    assert seen["repo_dir"] == repo            # agent got the local clone
+
+    # second run: clone already present -> reused, not re-cloned
+    service.create  # noqa - keep ref
+    seen["clone"] = 0
+    t2 = service.get(t.id)
+    RefineStage().run(t2, ctx)
+    assert seen["clone"] == 0
+    assert seen["repo_dir"] == repo
+
+
+def test_refine_clone_failure_falls_back_to_draft_only(ctx, service, monkeypatch):
+    import subprocess
+
+    from robotsix_mill.vcs import git_ops
+
+    ctx.settings.forge_remote_url = "https://example.test/repo.git"
+    got = {}
+
+    def boom_clone(url, dest, branch, token):
+        raise subprocess.CalledProcessError(128, "git", stderr="no access")
+
+    def fake_refine(*, settings, title, draft, repo_dir=None):
+        got["repo_dir"] = repo_dir
+        return "## Problem\nx\n"
+
+    monkeypatch.setattr(git_ops, "clone", boom_clone)
+    monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
+    out = RefineStage().run(service.create("x", "do a thing"), ctx)
+    assert out.next_state in (State.AWAITING_APPROVAL, State.READY)
+    assert got["repo_dir"] is None             # degraded to draft-only
+
+
+def test_web_fetch_confined_to_web_research_subagent():
+    """Invariant lock: raw web_fetch is wired ONLY inside the
+    web_research sub-agent (which summarises); no other agent exposes
+    it. (web_tools.py is the definition module.)"""
+    from pathlib import Path
+
+    import robotsix_mill.agents as ap
+
+    offenders = [
+        f.name for f in Path(ap.__file__).parent.glob("*.py")
+        if "make_web_fetch" in f.read_text()
+        and f.name not in ("web_research.py", "web_tools.py")
+    ]
+    assert offenders == [], f"web_fetch leaked into: {offenders}"

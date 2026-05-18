@@ -1,13 +1,18 @@
-"""The refine agent: a capable model that authors the spec directly,
-delegating only external lookups to the cheap web_research sub-agent.
+"""The refine agent: a capable model that authors the spec, grounded
+in the ACTUAL repo when a local clone is available.
 
-Refine runs before the repo is cloned, so it has no `explore` (no
-repo yet) — it gets `web_research` to resolve anything the draft
-references that it can't from the draft text alone. ``run_refine_agent``
-is the seam tests monkeypatch to avoid the network/LLM.
+When the refine stage has cloned the target repo it passes
+``repo_dir``; the agent then gets the cheap ``explore`` scout +
+read-only ``read_file``/``list_dir`` to ground the spec in real code
+(instead of web-fetching the project's own files — slow & indirect).
+``web_research`` stays for genuinely external lookups only. With no
+repo (no forge configured) it falls back to draft-only as before.
+``run_refine_agent`` is the seam tests monkeypatch.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from ..config import Settings
 
@@ -16,9 +21,13 @@ You turn a rough ticket draft into a precise, self-contained
 engineering spec an autonomous coder can implement without asking
 questions.
 
-- If the draft references something you cannot resolve from its own
-  text (a library/API/standard/best practice), use `web_research` to
-  clarify. Skip it when the draft is self-contained.
+- If a repo is available you have `explore` (a scout returning
+  concise paths/symbols/line-ranges, never whole files) and
+  `read_file`/`list_dir`. USE THEM to ground the spec in the ACTUAL
+  codebase — real file paths, existing patterns/conventions, and
+  constraints. Do NOT web-fetch the project's own files.
+- Use `web_research` ONLY for things not in the repo (a
+  library/API/standard/best practice). Skip it when unneeded.
 - Output Markdown only, with these sections:
   ## Problem — what & why, one short paragraph.
   ## Scope — concrete changes, as bullets.
@@ -29,16 +38,36 @@ questions.
 """
 
 
-def run_refine_agent(*, settings: Settings, title: str, draft: str) -> str:
-    """Return the refined Markdown spec. Raises RuntimeError if no
-    OpenRouter key is configured (build_agent enforces this)."""
+def run_refine_agent(
+    *,
+    settings: Settings,
+    title: str,
+    draft: str,
+    repo_dir: Path | None = None,
+) -> str:
+    """Return the refined Markdown spec. When ``repo_dir`` is given the
+    agent grounds the spec in that local clone via explore/read_file;
+    otherwise it works draft-only. Raises RuntimeError if no OpenRouter
+    key is configured (build_agent enforces this)."""
     from .base import build_agent
     from .retry import call_with_retry
+
+    tools: list = []
+    if repo_dir is not None:
+        from .explore import make_explore_tool
+        from .fs_tools import build_fs_tools
+
+        ro = [
+            t for t in build_fs_tools(repo_dir, settings)
+            if t.__name__ in ("read_file", "list_dir")
+        ]
+        tools = [make_explore_tool(settings, repo_dir), *ro]
 
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
-        web=True,  # cheap web_research sub-agent only
+        tools=tools,
+        web=True,  # cheap web_research sub-agent (external lookups only)
         model_name=settings.refine_model,
     )
     result = call_with_retry(

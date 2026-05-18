@@ -12,10 +12,16 @@ before the implement stage picks it up.
 
 from __future__ import annotations
 
+import logging
+import subprocess
+
 from ..agents import refining
 from ..core.models import Ticket
 from ..core.states import State
+from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
+
+log = logging.getLogger("robotsix_mill.stages.refine")
 
 
 class RefineStage(Stage):
@@ -28,9 +34,33 @@ class RefineStage(Stage):
         if not draft:
             return Outcome(State.BLOCKED, "empty draft — nothing to refine")
 
+        # Ground the spec in the ACTUAL repo: clone it locally so the
+        # refine agent uses explore/read_file instead of web-fetching
+        # the project's own files. Best-effort — a clone failure (or no
+        # forge configured) just falls back to draft-only refinement.
+        s = ctx.settings
+        repo_dir = None
+        if s.forge_remote_url:
+            cand = ws.dir / "repo"
+            if (cand / ".git").exists():
+                repo_dir = cand  # idempotent: reuse an existing clone
+            else:
+                try:
+                    git_ops.clone(
+                        s.forge_remote_url, cand,
+                        s.forge_target_branch, s.forge_token,
+                    )
+                    repo_dir = cand
+                except subprocess.CalledProcessError as e:
+                    log.warning(
+                        "%s: refine clone failed, draft-only: %s",
+                        ticket.id, (e.stderr or "")[:200],
+                    )
+
         try:
             spec = refining.run_refine_agent(
-                settings=ctx.settings, title=ticket.title, draft=draft
+                settings=s, title=ticket.title, draft=draft,
+                repo_dir=repo_dir,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))
