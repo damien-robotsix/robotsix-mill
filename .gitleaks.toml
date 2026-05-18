@@ -1,0 +1,9 @@
+# gitleaks configuration — allowlist false positives from test fixtures.
+# Test files intentionally use fake tokens (ghs_minted, sk-test, tk_secret)
+# that match real secret patterns but are not real credentials.
+
+[allowlist]
+  description = "Test fixtures with intentionally fake secrets"
+  paths = [
+    '''tests/''',
+  ]
