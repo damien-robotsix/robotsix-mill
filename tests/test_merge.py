@@ -424,3 +424,41 @@ def test_counter_read_write(tmp_path):
     assert _read_counter(p) == 5
     _write_counter(p, 0)
     assert _read_counter(p) == 0
+
+
+def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
+    tmp_path, monkeypatch
+):
+    """Regression: merge's post-rebase force-push passed s.forge_token
+    (empty in App mode) instead of github_token() -> unauthenticated
+    push -> git exit 128 -> ticket BLOCKED. It must use the minted
+    token like deliver does."""
+    ctx = _gh(tmp_path)  # FORGE_TOKEN="t" (raw); minted token differs
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": False,
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        lambda **k: True,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.github_token", lambda s: "MINTED-APP-TOK"
+    )
+    seen = {}
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push",
+        lambda repo, branch, remote_url, token: seen.update(token=token),
+    )
+
+    t = _in_review(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    MergeStage().run(t, ctx)
+
+    assert seen.get("token") == "MINTED-APP-TOK"   # not the raw "t"

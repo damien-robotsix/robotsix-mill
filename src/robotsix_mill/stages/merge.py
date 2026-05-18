@@ -127,12 +127,15 @@ class MergeStage(Stage):
 
         if ok:
             # Clean rebase → force-push only the ticket branch.
+            # Use the minted App/PAT token (like deliver) — s.forge_token
+            # is the raw FORGE_TOKEN env, which is empty in App mode, so
+            # the push went unauthenticated -> git exit 128.
             try:
                 git_ops.push(
                     repo_dir,
                     branch=branch,
                     remote_url=s.forge_remote_url,
-                    token=s.forge_token,
+                    token=github_token(s),
                 )
             except Exception as e:  # noqa: BLE001
                 log.exception("%s: force-push after rebase failed: %s", ticket.id, e)
