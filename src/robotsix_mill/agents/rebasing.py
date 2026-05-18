@@ -85,5 +85,7 @@ explanation after FAILED."""
         "Follow the system prompt exactly.",
     )
 
-    output = (result.data or "").strip()
+    # pydantic-ai's AgentRunResult exposes `.output` — the old `.data`
+    # AttributeError'd every rebase, blocking the ticket after 2 tries.
+    output = str(result.output or "").strip()
     return output.upper().startswith("DONE")
