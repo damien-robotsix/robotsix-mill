@@ -18,7 +18,9 @@ from . import tracing
 
 log = logging.getLogger("robotsix_mill.worker")
 
-_TERMINAL = {State.DONE, State.FAILED, State.BLOCKED}
+# DONE is NOT terminal — retrospect owns it (done -> reviewed). Only
+# reviewed/failed/blocked stop the chain.
+_TERMINAL = {State.REVIEWED, State.FAILED, State.BLOCKED}
 
 
 async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
