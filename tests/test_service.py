@@ -41,6 +41,7 @@ def test_illegal_transition_rejected(service):
 
 def test_state_machine_edges():
     assert can_transition(State.DRAFT, State.READY)
+    assert can_transition(State.READY, State.DELIVERABLE)  # implement skips review
     assert can_transition(State.IN_REVIEW, State.READY)  # bounce-back
     assert can_transition(State.DELIVERABLE, State.DONE)
     assert not can_transition(State.DONE, State.READY)

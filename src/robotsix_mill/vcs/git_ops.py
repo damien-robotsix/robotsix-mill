@@ -86,3 +86,18 @@ def create_branch(repo: Path, name: str) -> None:
 def commit_all(repo: Path, message: str) -> None:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", message)
+
+
+def push(repo: Path, branch: str, remote_url: str, token: str | None) -> None:
+    """Push ``branch`` to ``remote_url`` (token-auth for https). Uses
+    ``--force`` so a re-delivery updates the bot-owned branch; pushes to
+    the explicit authed URL rather than the clone's origin (the clone
+    may have been made without a write token, and there is no
+    remote-tracking ref to lease against on an explicit-URL push)."""
+    _git(
+        repo,
+        "push",
+        "--force",
+        _authed_url(remote_url, token),
+        f"{branch}:{branch}",
+    )

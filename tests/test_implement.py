@@ -101,7 +101,7 @@ def test_blocked_without_remote(ctx_factory):
     assert "FORGE_REMOTE_URL" in out.note
 
 
-def test_success_to_in_review(ctx_factory, tmp_path, monkeypatch):
+def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
     monkeypatch.setattr(
@@ -111,7 +111,7 @@ def test_success_to_in_review(ctx_factory, tmp_path, monkeypatch):
 
     out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.DELIVERABLE
     repo = ctx.service.workspace(t).dir / "repo"
     assert (repo / "feature.txt").exists()
     head = subprocess.run(
@@ -225,7 +225,7 @@ def test_resume_continues_from_wip_without_reclone(ctx_factory, tmp_path, monkey
     ctx.service.transition(t.id, State.READY, "retry")
     second = ImplementStage().run(ctx.service.get(t.id), ctx)
 
-    assert second.next_state is State.IN_REVIEW
+    assert second.next_state is State.DELIVERABLE
     assert seen["history"] == ["RESUMED_CTX"]              # transcript replayed
     assert (repo / ".git").stat().st_ino == git_inode      # NOT re-cloned
     assert (repo / "first.txt").exists()                   # prior WIP kept

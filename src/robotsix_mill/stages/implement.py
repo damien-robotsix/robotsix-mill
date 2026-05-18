@@ -118,8 +118,9 @@ class ImplementStage(Stage):
                 if not git_ops.has_changes(repo_dir) and not resuming:
                     return Outcome(State.BLOCKED, "agent produced no changes")
                 self._finalize(ctx, ticket, repo_dir, branch, summary, ok=True)
+                # straight to deliverable — review stage not built yet
                 return Outcome(
-                    State.IN_REVIEW, (summary[:200] or "implemented")
+                    State.DELIVERABLE, (summary[:200] or "implemented")
                 )
             log.info(
                 "%s: tests failed attempt %d/%d",

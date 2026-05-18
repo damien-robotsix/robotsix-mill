@@ -26,7 +26,11 @@ class State(StrEnum):
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {
     State.DRAFT: {State.READY, State.FAILED, State.BLOCKED},
-    State.READY: {State.IN_REVIEW, State.FAILED, State.BLOCKED},
+    # implement currently routes straight to deliverable (review stage
+    # not built yet); IN_REVIEW kept for when review lands.
+    State.READY: {
+        State.DELIVERABLE, State.IN_REVIEW, State.FAILED, State.BLOCKED,
+    },
     # review can pass forward or bounce back for changes
     State.IN_REVIEW: {State.DELIVERABLE, State.READY, State.FAILED, State.BLOCKED},
     State.DELIVERABLE: {State.DONE, State.FAILED, State.BLOCKED},

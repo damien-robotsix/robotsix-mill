@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     forge_remote_url: str | None = Field(default=None, alias="FORGE_REMOTE_URL")
     forge_token: str | None = Field(default=None, alias="FORGE_TOKEN")
     forge_target_branch: str = Field(default="main", alias="FORGE_TARGET_BRANCH")
+    # GitHub API base (override for GitHub Enterprise).
+    github_api_url: str = Field(
+        default="https://api.github.com", alias="MILL_GITHUB_API_URL"
+    )
 
     # --- implement stage ---
     # Command run to verify the implementation; empty string skips the
