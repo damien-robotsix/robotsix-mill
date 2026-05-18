@@ -311,3 +311,24 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
     assert r.json() == {"status": "started"}
     assert ran.wait(5)         # audit really started in the background
     release.set()              # let the daemon thread finish
+
+
+def test_setup_logging_surfaces_app_logs_idempotently(capsys):
+    """Regression: robotsix_mill.* logs were dropped (no handler under
+    uvicorn), masking the silently-failing /audit thread. setup_logging
+    must attach exactly one stdout handler at INFO, idempotently."""
+    import logging
+
+    from robotsix_mill.runtime.api import setup_logging
+
+    root = logging.getLogger("robotsix_mill")
+    root.handlers = [h for h in root.handlers if not getattr(h, "_mill", False)]
+
+    setup_logging()
+    setup_logging()  # idempotent — second call must not add another
+    mill = [h for h in root.handlers if getattr(h, "_mill", False)]
+    assert len(mill) == 1
+    assert root.level == logging.INFO
+
+    logging.getLogger("robotsix_mill.audit").info("audit pass starting xyz")
+    assert "audit pass starting xyz" in capsys.readouterr().out

@@ -176,7 +176,30 @@ refresh();setInterval(()=>{refresh();if(sel)open_(sel)},5000);
 </script></body></html>"""
 
 
+def setup_logging() -> None:
+    """Surface ``robotsix_mill.*`` logs on stdout. Without this, app
+    logs (worker/audit/stages/notify) propagate to a root logger that
+    uvicorn leaves handler-less, so they vanish from docker logs —
+    masking failures (e.g. a silently-crashing /audit background
+    thread). Idempotent."""
+    import sys
+
+    root = logging.getLogger("robotsix_mill")
+    if any(getattr(h, "_mill", False) for h in root.handlers):
+        return
+    h = logging.StreamHandler(sys.stdout)
+    h.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    h._mill = True  # marker for idempotency
+    root.addHandler(h)
+    root.setLevel(logging.INFO)
+    # keep propagate=True: uvicorn leaves the real root handler-less so
+    # there's no double-logging, and pytest's caplog needs propagation.
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
+    setup_logging()
     settings = settings or Settings()
 
     @asynccontextmanager
