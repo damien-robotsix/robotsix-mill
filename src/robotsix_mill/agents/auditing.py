@@ -18,9 +18,11 @@ for code quality, security, and developer-experience tooling, and
 identify specific, worthwhile gaps that could be addressed by new
 tools, agents, checks, or process improvements.
 
-You have access to a web_research tool for looking up current best
-practices. You also have access to the repository context via the
-forge_remote_url provided.
+`web_research` is for EXTERNAL best-practice lookups ONLY — never use
+it to read this project's own files. When a local clone is available
+you have `explore` (a scout returning concise paths/symbols, not whole
+files) and `read_file`/`list_dir`; inspect the ACTUAL repository with
+those. (With no clone, reason from the forge_remote_url + memory.)
 
 You are given the current audit memory ledger — a Markdown document
 that tracks gaps that have been proposed (as draft tickets), declined,
@@ -30,8 +32,8 @@ structure and content.
 Your task:
 1. Use web_research to identify 3-5 current best practices for repo
    quality/security coverage that are relevant to this project.
-2. Compare these against the current repository (infer from context/
-   forge_remote_url) and the memory ledger.
+2. Compare these against the ACTUAL repository — use explore/read_file
+   if available (do NOT web-fetch the repo) — and the memory ledger.
 3. For each specific, worthwhile gap NOT already recorded in the
    memory as proposed or done, emit one improvement draft idea.
 4. Update the memory ledger to record new gaps found, mark ones
@@ -65,16 +67,29 @@ def run_audit_agent(
     *,
     settings: Settings,
     memory: str = "",
+    repo_dir=None,
 ) -> AuditResult:
     from pydantic_ai import PromptedOutput
 
     from .base import build_agent
 
+    tools: list = []
+    if repo_dir is not None:
+        from .explore import make_explore_tool
+        from .fs_tools import build_fs_tools
+
+        ro = [
+            t for t in build_fs_tools(repo_dir, settings)
+            if t.__name__ in ("read_file", "list_dir")
+        ]
+        tools = [make_explore_tool(settings, repo_dir), *ro]
+
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
         output_type=PromptedOutput(AuditResult),
-        web=True,  # gives web_research tool
+        tools=tools,
+        web=True,  # web_research = EXTERNAL best-practice lookups only
         model_name=settings.audit_model,
     )
     forge_url = settings.forge_remote_url or "(not configured)"

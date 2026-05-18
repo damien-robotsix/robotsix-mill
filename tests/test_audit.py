@@ -323,3 +323,56 @@ def test_audit_session_ids_are_unique_per_run(tmp_path, monkeypatch):
     a = run_audit_pass().session_id
     b = run_audit_pass().session_id
     assert a != b and a.startswith("audit-") and b.startswith("audit-")
+
+
+def test_run_audit_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
+    """With a forge configured, the audit run clones the repo locally
+    and hands the agent repo_dir (so it explores instead of
+    web-fetching the project's files). Idempotent + best-effort."""
+    from robotsix_mill.vcs import git_ops
+
+    settings = _make_settings(
+        tmp_path, FORGE_REMOTE_URL="https://example.test/r.git",
+        FORGE_TARGET_BRANCH="main",
+    )
+    seen = {"clone": 0, "repo_dir": "unset"}
+
+    def fake_clone(url, dest, branch, token):
+        seen["clone"] += 1
+        (dest / ".git").mkdir(parents=True)
+
+    def mock_agent(**kwargs):
+        seen["repo_dir"] = kwargs.get("repo_dir")
+        return auditing.AuditResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        )
+
+    monkeypatch.setattr(git_ops, "clone", fake_clone)
+    monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.audit_runner.Settings", lambda: settings
+    )
+
+    run_audit_pass()
+    repo = settings.data_dir / "audit_workspace" / "repo"
+    assert seen["clone"] == 1 and seen["repo_dir"] == repo
+
+    seen["clone"] = 0
+    run_audit_pass()                       # reuse existing clone
+    assert seen["clone"] == 0 and seen["repo_dir"] == repo
+
+
+def test_run_audit_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
+    settings = _make_settings(tmp_path)   # no FORGE_REMOTE_URL
+    got = {}
+    monkeypatch.setattr(
+        auditing, "run_audit_agent",
+        lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or
+        auditing.AuditResult(updated_memory="m", draft_titles=[],
+                             draft_bodies=[], gap_ids=[]),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.audit_runner.Settings", lambda: settings
+    )
+    run_audit_pass()
+    assert got["repo_dir"] is None

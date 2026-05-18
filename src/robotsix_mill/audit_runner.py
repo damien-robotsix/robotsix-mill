@@ -60,6 +60,32 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
     # Import here to allow monkeypatching in tests.
     from .agents import auditing
     from .runtime import tracing
+    from .vcs import git_ops
+
+    # Clone the repo locally so the audit agent inspects it via
+    # explore/read_file instead of web-fetching the project's own
+    # files (slow + spawns untagged web_research sub-agent traces).
+    # Idempotent (reuse an existing clone); best-effort (no forge or
+    # clone failure -> reason from forge_url as before).
+    repo_dir = None
+    if settings.forge_remote_url:
+        import subprocess
+
+        cand = settings.data_dir / "audit_workspace" / "repo"
+        if (cand / ".git").exists():
+            repo_dir = cand
+        else:
+            try:
+                git_ops.clone(
+                    settings.forge_remote_url, cand,
+                    settings.forge_target_branch, settings.forge_token,
+                )
+                repo_dir = cand
+            except subprocess.CalledProcessError as e:
+                log.warning(
+                    "audit clone failed, web/context-only: %s",
+                    (e.stderr or "")[:200],
+                )
 
     # One Langfuse session per audit run, so its model calls are
     # attributed (no untagged traces). No-op if tracing isn't ready.
@@ -74,6 +100,7 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
             res = auditing.run_audit_agent(
                 settings=settings,
                 memory=memory_text,
+                repo_dir=repo_dir,
             )
     except Exception as e:  # noqa: BLE001
         log.exception("audit agent failed")
