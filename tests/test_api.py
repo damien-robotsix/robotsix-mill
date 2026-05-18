@@ -283,3 +283,31 @@ def test_board_script_is_well_formed():
     assert js.count("`") % 2 == 0, "unbalanced template-literal backticks"
     assert '</button>":' not in _BOARD_HTML  # the exact past defect
     assert '</button>`:' in _BOARD_HTML      # correctly-closed literal
+
+
+def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
+    """Regression: POST /audit ran the LLM agent synchronously, so the
+    browser fetch hung for minutes and dropped ('NetworkError'). It
+    must return 202 immediately and run the audit in the background."""
+    import threading
+
+    from robotsix_mill import audit_runner
+
+    ran = threading.Event()
+    release = threading.Event()
+
+    class _R:
+        drafts_created: list = []
+
+    def slow_audit():
+        ran.set()
+        release.wait(5)  # simulate a minutes-long run
+        return _R()
+
+    monkeypatch.setattr(audit_runner, "run_audit_pass", slow_audit)
+
+    r = client.post("/audit")  # must NOT block on slow_audit
+    assert r.status_code == 202
+    assert r.json() == {"status": "started"}
+    assert ran.wait(5)         # audit really started in the background
+    release.set()              # let the daemon thread finish

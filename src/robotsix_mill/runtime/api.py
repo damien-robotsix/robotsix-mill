@@ -8,7 +8,11 @@ picks it up immediately and chains it through the pipeline.
 from __future__ import annotations
 
 import json
+import logging
+import threading
 from contextlib import asynccontextmanager
+
+log = logging.getLogger("robotsix_mill.api")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -114,11 +118,11 @@ async function runAudit(){
  btn.disabled=true; btn.textContent='Running...';
  try {
    const r=await fetch("/audit",{method:"POST"});
-   const data=await r.json();
-   alert("Audit complete. Created "+data.tickets_created.length+" draft(s).");
-   refresh();
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Audit started — it runs for a few minutes; new draft tickets will appear on the board when it finishes.");
+   setTimeout(refresh,4000);
  } catch(e) {
-   alert("Audit failed: "+e);
+   alert("Audit failed to start: "+e);
  } finally {
    btn.disabled=false; btn.textContent='Run Audit';
  }
@@ -251,19 +255,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _maybe_enqueue(ticket)
         return ticket
 
-    @app.post("/audit")
+    @app.post("/audit", status_code=202)
     def audit_pass() -> dict:
-        """Trigger an audit pass: reads memory, runs audit agent,
-        writes updated memory, creates draft tickets for gaps."""
+        """Kick off an audit pass in the BACKGROUND and return at once.
+        The audit runs the LLM agent for minutes — blocking the HTTP
+        response made the browser fetch drop ("NetworkError"). New
+        draft tickets appear on the board when it finishes."""
         from ..audit_runner import run_audit_pass
 
-        try:
-            result = run_audit_pass()
-            return {
-                "memory_updated": len(result.updated_memory) > 0,
-                "tickets_created": result.drafts_created,
-            }
-        except Exception as e:
-            raise HTTPException(500, f"audit pass failed: {e}") from None
+        def _run() -> None:
+            try:
+                r = run_audit_pass()
+                log.info(
+                    "audit pass done: %d draft(s)", len(r.drafts_created)
+                )
+            except Exception:  # noqa: BLE001 — background; just log
+                log.exception("audit pass failed")
+
+        threading.Thread(
+            target=_run, name="audit-pass", daemon=True
+        ).start()
+        return {"status": "started"}
 
     return app
