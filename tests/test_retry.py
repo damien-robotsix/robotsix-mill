@@ -1,5 +1,7 @@
 """Bounded retry+backoff for transient model/network failures."""
 
+import json
+
 import httpx
 import pytest
 from pydantic_ai.exceptions import ModelHTTPError
@@ -44,9 +46,21 @@ def _httpx_status(code):
     (_httpx_status(403), False),
     (_FakeUsageLimitExceeded("cap"), False),
     (ValueError("bug"), False),
+    (json.JSONDecodeError("Expecting value", "x", 0), True),  # bad model JSON
 ])
 def test_is_transient(exc, transient):
     assert is_transient(exc) is transient
+
+
+def test_is_transient_jsondecode_wrapped():
+    """Regression: a model emitting malformed JSON for a tool call
+    raised JSONDecodeError, which hard-ERRORed the ticket (not
+    retried). It must be transient, even wrapped in the cause chain."""
+    inner = json.JSONDecodeError("Expecting value", "doc", 990)
+    wrapped = RuntimeError("agent run failed")
+    wrapped.__cause__ = inner
+    assert is_transient(json.JSONDecodeError("x", "y", 0)) is True
+    assert is_transient(wrapped) is True
 
 
 def test_is_transient_walks_wrapped_timeout():

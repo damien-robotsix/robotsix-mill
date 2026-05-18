@@ -36,7 +36,12 @@ def _status(exc: BaseException) -> int | None:
     return rc if isinstance(rc, int) else None
 
 
-_TRANSIENT_NAMES = {"APITimeoutError", "APIConnectionError"}
+# JSONDecodeError: the model occasionally emits malformed JSON for a
+# tool call / structured output; a re-run almost always yields valid
+# JSON, so treat it as transient instead of hard-ERRORing the ticket.
+_TRANSIENT_NAMES = {
+    "APITimeoutError", "APIConnectionError", "JSONDecodeError",
+}
 
 
 def is_transient(exc: BaseException) -> bool:
