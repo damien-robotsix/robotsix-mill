@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     # and the ntfy POST. Non-transient errors (other 4xx, budget caps)
     # are never retried. Backoff is exponential, jittered, and capped
     # so a worker can't be stalled long.
+    # Hard per-request timeout on EVERY model call. Without it a hung
+    # or pathologically slow provider (hy3's sole provider has served
+    # 10-min+ requests) blocks the single sequential worker forever
+    # with no error. On timeout the call raises -> classified transient
+    # -> the retry/backoff below rides it out (or it BLOCKs visibly).
+    model_request_timeout: float = Field(
+        default=180.0, alias="MILL_MODEL_REQUEST_TIMEOUT"
+    )
     transient_retries: int = Field(
         default=4, alias="MILL_TRANSIENT_RETRIES"
     )

@@ -36,17 +36,32 @@ def _status(exc: BaseException) -> int | None:
     return rc if isinstance(rc, int) else None
 
 
+_TRANSIENT_NAMES = {"APITimeoutError", "APIConnectionError"}
+
+
 def is_transient(exc: BaseException) -> bool:
-    """True only for retryable infrastructure failures."""
-    # never retry usage/budget caps even though some carry no status
-    if type(exc).__name__ == "UsageLimitExceeded":
-        return False
+    """True only for retryable infrastructure failures. Walks the
+    cause/context chain so a timeout wrapped by openai/pydantic-ai
+    (e.g. ModelHTTPError <- APITimeoutError <- httpx.ReadTimeout) is
+    still recognised."""
     import httpx
 
-    if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
-        return True
-    code = _status(exc)
-    return code is not None and (code == 429 or 500 <= code < 600)
+    cur: BaseException | None = exc
+    seen = 0
+    while cur is not None and seen < 10:
+        name = type(cur).__name__
+        if name == "UsageLimitExceeded":
+            return False  # budget cap — never transient
+        if isinstance(cur, (httpx.TimeoutException, httpx.TransportError)):
+            return True
+        if name in _TRANSIENT_NAMES:
+            return True
+        code = _status(cur)
+        if code is not None and (code == 429 or 500 <= code < 600):
+            return True
+        cur = cur.__cause__ or cur.__context__
+        seen += 1
+    return False
 
 
 def call_with_retry(

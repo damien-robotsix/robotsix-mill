@@ -66,11 +66,15 @@ def _run_deep(*, settings: Settings, system_prompt: str, context: str) -> str:
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
+    from .base import timeout_http_client
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
     model = CostInstrumentedOpenRouterModel(
         settings.deep_model,  # never ":online" — no web on the deep agent
-        provider=OpenRouterProvider(api_key=settings.openrouter_api_key),
+        provider=OpenRouterProvider(
+            api_key=settings.openrouter_api_key,
+            http_client=timeout_http_client(settings),
+        ),
     )
     agent = Agent(model=model, system_prompt=system_prompt, output_type=str)
     limits = UsageLimits(request_limit=settings.deep_model_request_limit)

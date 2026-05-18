@@ -53,9 +53,14 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     all_fs = build_fs_tools(repo_dir, settings)
     ro_tools = [t for t in all_fs if t.__name__ in ("read_file", "list_dir")]
 
+    from .base import timeout_http_client
+
     model = CostInstrumentedOpenRouterModel(  # cheap driver model, no :online
         settings.model,
-        provider=OpenRouterProvider(api_key=settings.openrouter_api_key),
+        provider=OpenRouterProvider(
+            api_key=settings.openrouter_api_key,
+            http_client=timeout_http_client(settings),
+        ),
     )
     agent = Agent(
         model=model,

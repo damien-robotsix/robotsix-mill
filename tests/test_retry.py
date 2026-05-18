@@ -49,6 +49,29 @@ def test_is_transient(exc, transient):
     assert is_transient(exc) is transient
 
 
+def test_is_transient_walks_wrapped_timeout():
+    """A hung request surfaces wrapped (openai/pydantic-ai) — the
+    timeout must still be recognised through the cause chain."""
+    inner = httpx.ReadTimeout("read timed out")
+    wrapped = RuntimeError("model request failed")
+    wrapped.__cause__ = inner
+    assert is_transient(wrapped) is True
+
+    class APITimeoutError(Exception):  # mimics openai's class name
+        pass
+
+    assert is_transient(APITimeoutError("deadline exceeded")) is True
+
+
+def test_timeout_http_client_uses_configured_timeout(tmp_path):
+    from robotsix_mill.agents.base import timeout_http_client
+
+    s = _settings(tmp_path, MILL_MODEL_REQUEST_TIMEOUT="42")
+    c = timeout_http_client(s)
+    assert c.timeout.read == 42.0  # hard per-request read timeout kills hangs
+    assert c.timeout.connect == 15.0
+
+
 # --- retry behaviour (injected sleep, no real waiting) ------------------
 
 def test_transient_then_success(tmp_path):

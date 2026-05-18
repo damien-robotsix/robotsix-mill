@@ -20,6 +20,17 @@ from .skills import load_skills
 from .web_research import make_web_research_tool
 
 
+def timeout_http_client(settings: Settings):
+    """A fresh httpx.AsyncClient with a hard per-request timeout, so a
+    hung/glacial provider connection raises instead of blocking the
+    worker forever. Pass to OpenRouterProvider(http_client=...)."""
+    import httpx
+
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(settings.model_request_timeout, connect=15.0)
+    )
+
+
 def _model_name(settings: Settings) -> str:
     # No "openrouter:" prefix — the provider is set explicitly so we can
     # use the cost-instrumented model subclass. The main agent NEVER
@@ -58,7 +69,10 @@ def build_agent(
 
     model = CostInstrumentedOpenRouterModel(
         _model_name(settings),
-        provider=OpenRouterProvider(api_key=settings.openrouter_api_key),
+        provider=OpenRouterProvider(
+            api_key=settings.openrouter_api_key,
+            http_client=timeout_http_client(settings),
+        ),
     )
 
     all_tools = list(tools or [])

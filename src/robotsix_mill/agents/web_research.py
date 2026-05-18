@@ -41,13 +41,17 @@ def run_web_research(*, settings: Settings, query: str) -> str:
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
+    from .base import timeout_http_client
     from .openrouter_cost import CostInstrumentedOpenRouterModel
     from .web_tools import make_web_fetch
 
     online = ":online" if settings.web_search else ""
     model = CostInstrumentedOpenRouterModel(
         f"{settings.web_research_model}{online}",
-        provider=OpenRouterProvider(api_key=settings.openrouter_api_key),
+        provider=OpenRouterProvider(
+            api_key=settings.openrouter_api_key,
+            http_client=timeout_http_client(settings),
+        ),
     )
     agent = Agent(
         model=model,
