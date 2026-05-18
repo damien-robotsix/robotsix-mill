@@ -3,7 +3,7 @@ import subprocess
 import pytest
 
 from robotsix_mill import sandbox
-from robotsix_mill.agents.base import _compose_prompt, _model_id
+from robotsix_mill.agents.base import _compose_prompt, _model_name
 from robotsix_mill.agents.skills import load_skills
 from robotsix_mill.agents.web_tools import make_web_fetch
 from robotsix_mill.config import Settings
@@ -43,12 +43,13 @@ def test_repo_ships_web_skills():
 
 # --- model id / prompt composition (no key, no pydantic_ai needed) ------
 
-def test_model_id_online_only_when_web_and_enabled(tmp_path):
+def test_model_name_online_only_when_web_and_enabled(tmp_path):
+    # no "openrouter:" prefix — provider is set explicitly (cost model)
     s = _settings(tmp_path, MILL_MODEL="x/y")
-    assert _model_id(s, web=False) == "openrouter:x/y"
-    assert _model_id(s, web=True) == "openrouter:x/y:online"
+    assert _model_name(s, web=False) == "x/y"
+    assert _model_name(s, web=True) == "x/y:online"
     s2 = _settings(tmp_path, MILL_MODEL="x/y", MILL_WEB_SEARCH="false")
-    assert _model_id(s2, web=True) == "openrouter:x/y"  # search disabled
+    assert _model_name(s2, web=True) == "x/y"  # search disabled
 
 
 def test_compose_prompt_appends_skills(tmp_path):

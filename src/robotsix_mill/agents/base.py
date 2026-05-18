@@ -17,9 +17,12 @@ from .skills import load_skills
 from .web_tools import make_web_fetch
 
 
-def _model_id(settings: Settings, web: bool) -> str:
+def _model_name(settings: Settings, web: bool) -> str:
+    # No "openrouter:" prefix — the provider is set explicitly so we can
+    # use the cost-instrumented model subclass. ":online" = OpenRouter
+    # server-side web search.
     online = ":online" if (web and settings.web_search) else ""
-    return f"openrouter:{settings.model}{online}"
+    return f"{settings.model}{online}"
 
 
 def _compose_prompt(settings: Settings, system_prompt: str) -> str:
@@ -39,14 +42,23 @@ def build_agent(
     if not settings.openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    from pydantic_ai import Agent  # lazy: keeps core import-light
+    # lazy: keeps core import-light and the test suite hermetic
+    from pydantic_ai import Agent
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from .openrouter_cost import CostInstrumentedOpenRouterModel
+
+    model = CostInstrumentedOpenRouterModel(
+        _model_name(settings, web),
+        provider=OpenRouterProvider(api_key=settings.openrouter_api_key),
+    )
 
     all_tools = list(tools or [])
     if web:
         all_tools.append(make_web_fetch(settings))
 
     return Agent(
-        _model_id(settings, web),
+        model=model,
         system_prompt=_compose_prompt(settings, system_prompt),
         output_type=output_type,
         tools=all_tools,
