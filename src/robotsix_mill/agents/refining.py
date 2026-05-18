@@ -1,28 +1,31 @@
-"""The refine agent: a cheap driver that researches as needed and
-delegates the actual spec authoring to the strong model.
+"""The refine agent: a capable model that authors the spec directly,
+delegating only external lookups to the cheap web_research sub-agent.
 
-The driver (``settings.model``, small context) may ``web_research``
-unknowns, then hands a complete context to ``deep_refine`` (the strong
-model) and returns the spec it produces verbatim. ``run_refine_agent``
+Refine runs before the repo is cloned, so it has no `explore` (no
+repo yet) — it gets `web_research` to resolve anything the draft
+references that it can't from the draft text alone. ``run_refine_agent``
 is the seam tests monkeypatch to avoid the network/LLM.
 """
 
 from __future__ import annotations
 
 from ..config import Settings
-from .deep import make_deep_refine_tool
 
 SYSTEM_PROMPT = """\
-You are an orchestrator on a SMALL-context model. You do NOT write the
-spec yourself. Steps:
-1. If the draft references anything you cannot resolve from its own
-   text (a library, an API, a standard), use `web_research` to clarify.
-   Skip this if the draft is self-contained.
-2. Assemble a COMPLETE context — the ticket title, the full draft
-   verbatim, and any research findings — and pass it to `deep_refine`.
-   The strong model returns the finished Markdown spec.
-3. Reply with that spec EXACTLY as deep_refine returned it — no
-   preamble, no fences, no edits of your own.
+You turn a rough ticket draft into a precise, self-contained
+engineering spec an autonomous coder can implement without asking
+questions.
+
+- If the draft references something you cannot resolve from its own
+  text (a library/API/standard/best practice), use `web_research` to
+  clarify. Skip it when the draft is self-contained.
+- Output Markdown only, with these sections:
+  ## Problem — what & why, one short paragraph.
+  ## Scope — concrete changes, as bullets.
+  ## Acceptance criteria — checklist an automated reviewer can verify.
+  ## Out of scope / constraints — what NOT to do, assumptions.
+- Stay faithful to the draft's intent; invent nothing unrelated. Be
+  concrete and testable. Output the spec only — no preamble, no fences.
 """
 
 
@@ -30,15 +33,14 @@ def run_refine_agent(*, settings: Settings, title: str, draft: str) -> str:
     """Return the refined Markdown spec. Raises RuntimeError if no
     OpenRouter key is configured (build_agent enforces this)."""
     from .base import build_agent
+    from .retry import call_with_retry
 
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
-        tools=[make_deep_refine_tool(settings)],
-        web=True,
+        web=True,  # cheap web_research sub-agent only
+        model_name=settings.refine_model,
     )
-    from .retry import call_with_retry
-
     result = call_with_retry(
         lambda: agent.run_sync(
             f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"

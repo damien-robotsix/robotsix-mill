@@ -55,8 +55,8 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
 
     from .base import timeout_http_client
 
-    model = CostInstrumentedOpenRouterModel(  # cheap driver model, no :online
-        settings.model,
+    model = CostInstrumentedOpenRouterModel(  # dedicated cheap explore model
+        settings.explore_model,
         provider=OpenRouterProvider(
             api_key=settings.openrouter_api_key,
             http_client=timeout_http_client(settings),

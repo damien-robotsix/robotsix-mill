@@ -21,15 +21,58 @@ class Settings(BaseSettings):
 
     # --- core ---
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
-    # The cheap DRIVER model. It runs the agentic loop (explore, gather
-    # complete context, apply, verify) for both refine and implement,
-    # and delegates the actual authoring to the strong `deep_model` via
-    # the deep_refine / deep_implement tools. tencent/hy3-preview has a
-    # single provider (SiliconFlow) that intermittently 429s; rather
-    # than trade down to a weaker model, transient 429/5xx/timeouts are
-    # absorbed by a bounded retry+backoff (see transient_* below).
+    # Per-agent models. Each role gets its own model (env-overridable):
+    #  - `model`        : the COORDINATOR (capable). Explores via the
+    #                     cheap explore sub-agent, drafts a plan,
+    #                     delegates coding to the implement sub-agent
+    #                     with precise instructions, gets distilled test
+    #                     feedback, and loops. Keeps a short history by
+    #                     never holding raw files/logs itself.
+    #  - implement_model: the IMPLEMENT sub-agent (capable). Receives
+    #                     precise instructions, edits files, returns a
+    #                     concise summary; FRESH each fix iteration.
+    #  - explore_model  : read-only repo exploration (cheap).
+    #  - web_research_model : web lookups (cheap).
+    #  - test_model     : distills test failures into actionable
+    #                     feedback (cheap).
+    #  - refine_model   : spec authoring (capable; may web_research).
+    #  - retrospect_model / audit_model : structured analysis (capable).
+    # Transient 429/5xx/timeouts on any of these are absorbed by the
+    # bounded retry+backoff (see transient_* below).
     model: str = Field(
-        default="tencent/hy3-preview", alias="MILL_MODEL"
+        default="deepseek/deepseek-v4-pro", alias="MILL_MODEL"
+    )
+    implement_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_IMPLEMENT_MODEL"
+    )
+    # NOTE: cheap candidates (deepseek-v4-flash) for explore/test/
+    # web_research are deferred — all default to the capable model for
+    # now (best performance); switch per-agent later for cost leverage.
+    explore_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_EXPLORE_MODEL"
+    )
+    test_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_TEST_MODEL"
+    )
+    refine_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_REFINE_MODEL"
+    )
+    retrospect_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_RETROSPECT_MODEL"
+    )
+    audit_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_AUDIT_MODEL"
+    )
+    # Per-call request caps (bound each role's loop).
+    coordinator_request_limit: int = Field(
+        default=60, alias="MILL_COORDINATOR_REQUEST_LIMIT"
+    )
+    test_request_limit: int = Field(
+        default=6, alias="MILL_TEST_REQUEST_LIMIT"
+    )
+    # Max coordinator implement→test fix iterations before BLOCKing.
+    max_fix_iterations: int = Field(
+        default=4, alias="MILL_MAX_FIX_ITERATIONS"
     )
     # Bounded retry for TRANSIENT model/network failures (HTTP 429,
     # HTTP 5xx, connection/read timeouts) — used by every model call
@@ -60,18 +103,8 @@ class Settings(BaseSettings):
     transient_backoff_cap: float = Field(
         default=30.0, alias="MILL_TRANSIENT_BACKOFF_CAP"
     )
-    # The strong AUTHORING model. Called as a tool with a complete,
-    # curated context; returns the precise spec / code change. No tools,
-    # ~one-shot per call — expensive, so it is invoked deliberately by
-    # the cheap driver rather than running the whole loop itself.
-    deep_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_DEEP_MODEL"
-    )
-    deep_model_request_limit: int = Field(
-        default=4, alias="MILL_DEEP_MODEL_REQUEST_LIMIT"
-    )
-    # Per-call cap for the read-only exploration sub-agent the driver
-    # uses instead of reading the repo into its own limited context.
+    # Per-call cap for the read-only exploration sub-agent the
+    # coordinator uses instead of reading the repo into its own context.
     explore_request_limit: int = Field(
         default=20, alias="MILL_EXPLORE_REQUEST_LIMIT"
     )
@@ -162,7 +195,7 @@ class Settings(BaseSettings):
     # pricey model and keeps its context lean (conclusions, not pages).
     web_search: bool = Field(default=True, alias="MILL_WEB_SEARCH")
     web_research_model: str = Field(
-        default="tencent/hy3-preview",
+        default="deepseek/deepseek-v4-pro",
         alias="MILL_WEB_RESEARCH_MODEL",
     )
     web_research_request_limit: int = Field(

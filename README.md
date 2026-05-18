@@ -165,28 +165,26 @@ worker-driven transitions trigger notifications — API/CLI transitions
 
 ## Cost controls & resilience
 
-- **Cheap driver, strong author (refine + implement).** A ~$3 ticket
-  traced to the expensive model running the whole agentic loop. Now a
-  cheap, small-context **driver** (`MILL_MODEL`, default
-  `tencent/hy3-preview`) orchestrates and delegates to bounded,
-  context-isolated sub-agents — it never reads the repo or authors
-  code itself:
-  - `explore(question)` — fresh-context read-only sub-agent on the
-    driver model (`MILL_EXPLORE_REQUEST_LIMIT`) navigates the repo and
-    returns only what was asked, so the driver's context stays small.
-  - `web_research(query)` — cheap sub-agent
-    (`MILL_WEB_RESEARCH_MODEL`, `MILL_WEB_RESEARCH_REQUEST_LIMIT`),
-    returns a conclusion only.
-  - `deep_refine` / `deep_implement` — the **strong** model
-    (`MILL_DEEP_MODEL`, default `deepseek/deepseek-v4-pro`,
-    `MILL_DEEP_MODEL_REQUEST_LIMIT`) is handed one complete curated
-    context and returns the finished spec / the full changed-file
-    contents. No tools, ~one-shot, never `:online` — invoked
-    deliberately, not for the whole loop.
-  The driver applies `deep_implement`'s output with `write_file` and
-  verifies with `run_tests` (trimmed result), re-calling the strong
-  model with failures. The expensive model is thus paid once per
-  authored artifact, on full context — not per exploration step.
+- **Coordinator + delegated sub-agents (each its own model).** The
+  implement stage runs a capable **coordinator** (`MILL_MODEL`) that
+  *orchestrates only* — it never reads the repo, writes code, or runs
+  tests itself, so its history stays short:
+  - `explore(question)` — read-only repo sub-agent
+    (`MILL_EXPLORE_MODEL`, `MILL_EXPLORE_REQUEST_LIMIT`); returns just
+    what was asked.
+  - `web_research(query)` — web lookups sub-agent
+    (`MILL_WEB_RESEARCH_MODEL`); conclusion only, never `:online`.
+  - `implement(instructions)` — the **stateless** implement sub-agent
+    (`MILL_IMPLEMENT_MODEL`): fresh context each fix iteration, given
+    precise instructions, edits files, returns a concise summary.
+  - `run_tests()` — the test sub-agent (`MILL_TEST_MODEL`) runs the
+    suite in the sandbox and **distills** failures into actionable
+    feedback (never the raw log).
+  The coordinator loops implement→test (≤`MILL_MAX_FIX_ITERATIONS`)
+  until green or BLOCK-resumable. Refine likewise authors the spec
+  with a `web_research` delegate. Each role has its own model so cheap
+  models can be slotted in per-agent for cost leverage (all default to
+  the capable model). There is no `deep_*` layer.
 - **No-progress safety net.** If a ticket re-enters the same
   model-driven stage `MILL_MAX_STUCK_CYCLES` times (default 3) without
   ever advancing — e.g. a run repeatedly killed before any checkpoint —

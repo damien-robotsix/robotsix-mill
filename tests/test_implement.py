@@ -132,19 +132,21 @@ def test_no_changes_blocks(ctx_factory, tmp_path, monkeypatch):
     assert "no changes" in out.note
 
 
-def test_test_failure_exhausts_then_blocks(ctx_factory, tmp_path, monkeypatch):
+def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
+    """The coordinator owns the loop; the stage calls it ONCE and the
+    authoritative final gate decides. Gate fails -> BLOCKED-resumable,
+    WIP committed, coordinator invoked exactly once."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote,
-        MILL_TEST_COMMAND="false",  # always fails
-        MILL_MAX_FIX_ATTEMPTS="2",
+        MILL_TEST_COMMAND="false",  # final gate always fails
     )
     calls = []
 
     def _run(*, settings, repo_dir, spec, feedback=None, history=None):
-        del settings, spec, history  # signature must match the seam
-        calls.append(feedback)
-        (Path(repo_dir) / "wip.txt").write_text(f"attempt {len(calls)}")
+        del settings, spec, feedback, history  # seam signature
+        calls.append(1)
+        (Path(repo_dir) / "wip.txt").write_text("did work")
         return ("tried", [])
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
@@ -153,16 +155,14 @@ def test_test_failure_exhausts_then_blocks(ctx_factory, tmp_path, monkeypatch):
     out = ImplementStage().run(t, ctx)
 
     assert out.next_state is State.BLOCKED
-    assert "after 2 attempts" in out.note
-    assert len(calls) == 2  # bounded
-    assert calls[0] is None and calls[1] is not None  # retry got feedback
-    # WIP is committed so a human can pick it up
+    assert "test gate still fails" in out.note and "resumable" in out.note
+    assert len(calls) == 1  # stage calls the coordinator once, not a loop
     repo = ctx.service.workspace(t).dir / "repo"
     log = subprocess.run(
         ["git", "-C", str(repo), "log", "-1", "--pretty=%s"],
         capture_output=True, text=True,
     ).stdout
-    assert "WIP" in log
+    assert "WIP" in log  # WIP committed so a human can pick it up
 
 
 def _commits(repo):
@@ -175,12 +175,11 @@ def _commits(repo):
 def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
-    monkeypatch.setattr(coding, "dump_history", lambda _m: b"TRANSCRIPT")
 
     def _run(*, settings, repo_dir, spec, feedback=None, history=None):
         del settings, spec, feedback, history
         (Path(repo_dir) / "partial.txt").write_text("half done")
-        raise coding.AgentBudgetError("request_limit of 50", ["m1"])
+        raise coding.AgentBudgetError("request_limit of 50", [])
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -189,28 +188,27 @@ def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypat
 
     assert out.next_state is State.BLOCKED
     assert "resumable" in out.note and "budget" in out.note
+    # WIP committed so a human can resume (no transcript now — a resume
+    # re-runs the coordinator fresh).
     ws = ctx.service.workspace(t)
     assert "WIP" in _commits(ws.dir / "repo")[0]
-    assert (ws.artifacts_dir / "implement_messages.json").read_bytes() == b"TRANSCRIPT"
 
 
-def test_resume_continues_from_wip_without_reclone(ctx_factory, tmp_path, monkeypatch):
+def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkeypatch):
+    """Resume = run the coordinator FRESH (no transcript replay), and
+    crucially do NOT re-clone — the prior WIP branch is reused."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
-    monkeypatch.setattr(coding, "dump_history", lambda _m: b"T")
-    monkeypatch.setattr(coding, "load_history", lambda _b: ["RESUMED_CTX"])
-    seen = {}
     n = {"i": 0}
 
     def _run(*, settings, repo_dir, spec, feedback=None, history=None):
-        del settings, spec, feedback
+        del settings, spec, feedback, history
         n["i"] += 1
         if n["i"] == 1:  # first pass: partial work, hit the cap
             (Path(repo_dir) / "first.txt").write_text("1")
-            raise coding.AgentBudgetError("cap", ["m1"])
-        seen["history"] = history  # resume must replay the transcript
+            raise coding.AgentBudgetError("cap", [])
         (Path(repo_dir) / "second.txt").write_text("2")
-        return ("finished on resume", ["m2"])
+        return ("finished on resume", [])
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -226,7 +224,7 @@ def test_resume_continues_from_wip_without_reclone(ctx_factory, tmp_path, monkey
     second = ImplementStage().run(ctx.service.get(t.id), ctx)
 
     assert second.next_state is State.DELIVERABLE
-    assert seen["history"] == ["RESUMED_CTX"]              # transcript replayed
+    assert n["i"] == 2                                      # coordinator re-run
     assert (repo / ".git").stat().st_ino == git_inode      # NOT re-cloned
     assert (repo / "first.txt").exists()                   # prior WIP kept
     assert (repo / "second.txt").exists()
