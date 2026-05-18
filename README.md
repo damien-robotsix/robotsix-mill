@@ -98,6 +98,52 @@ Stored in the `ticket` table as `source TEXT NOT NULL DEFAULT 'user'`.
 An idempotent migration in `db.init_db` adds the column to existing
 databases that lack it.
 
+## Per-ticket cost (`cost_usd`)
+
+Each ticket card on the board shows a cumulative LLM spend (e.g.
+`$0.0943`), stored in the `ticket.cost_usd` DB column. Cost is derived
+from **Langfuse session totals** — not from in-process accumulation.
+
+### How it works
+
+Every traced model call carries `session.id = <ticket id>` (set in
+`runtime/tracing.py`). Langfuse attributes cost per session correctly
+regardless of concurrency. A **periodic sync loop** in the worker
+(`_cost_sync_loop`) reads each non-terminal ticket's session total
+via the Langfuse public API and writes the absolute value to
+`ticket.cost_usd`. Terminal tickets get a final sync on transition so
+the board is accurate as soon as the ticket stops.
+
+The board and `/tickets` API read `cost_usd` directly from the DB —
+**zero Langfuse calls on render**. The ticket detail drawer likewise
+shows the cached value.
+
+| Variable | Default | Description |
+|---|---|---|
+| `MILL_COST_SYNC_SECONDS` | `300` | Interval (seconds) between periodic cost-sync passes |
+
+### Graceful degradation
+
+When Langfuse is unconfigured (`LANGFUSE_*` env vars absent) or
+unreachable, the sync is a **safe no-op**: `cost_usd` stays at `0.0`
+and the board displays `$0.0000`. No errors, no blocked pipeline.
+
+### Accuracy requirement
+
+Accurate per-ticket cost **requires Langfuse configured** with all
+three env vars (`LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`,
+`LANGFUSE_SECRET_KEY`). Session-summed cost is only complete if every
+trace carries the session id — the trace-health system enforces this
+across all agent runs.
+
+### History
+
+An earlier design accumulated cost in real time via a process-global
+`ContextVar` (`agents/ticket_context`), but this leaked across
+concurrently-running tickets. That path has been removed. Existing
+databases with bogus accumulated values are migrated: `cost_usd` is
+reset to `0.0` on first boot after the migration.
+
 ## Run
 
 ```sh
@@ -638,7 +684,7 @@ execution is isolated from the mill process:
 | `core/models.py` | SQLModel tables + API schemas |
 | `core/db.py` · `core/service.py` | DB lifecycle + management-plane operations |
 | `core/workspace.py` | per-ticket file workspace (file-canonical body) |
-| `runtime/worker.py` | event-driven queue + stage chaining (+ audit/scout/trace-health poll) |
+| `runtime/worker.py` | event-driven queue + stage chaining (+ audit/scout/trace-health/cost-sync poll) |
 | `runtime/api.py` | FastAPI app (API + worker lifespan + audit/scout/trace-health route) |
 | `runtime/tracing.py` | Langfuse tracing + OpenRouter cost ✅ |
 | `sandbox.py` | isolated command execution (always containerized) |
@@ -649,7 +695,7 @@ execution is isolated from the mill process:
 | `agents/auditing.py` | audit agent (meta-audit for gaps) |
 | `agents/scouting.py` | scout agent (model evaluation against OpenRouter) |
 | `forge/github.py` · `forge/auth.py` | GitHub PR/status + PAT/App-bot auth ✅ |
-| `langfuse_client.py` | read-side session summary + trace listing (for retrospect + trace-health) |
+| `langfuse_client.py` | read-side session summary + trace listing + session total cost (retrospect + trace-health + cost sync) |
 | `agents/coding.py` · `fs_tools.py` · `retrospecting.py` | agents + sandboxed tools |
 | `vcs/git_ops.py` | clone / branch / commit / push helpers |
 

@@ -74,6 +74,21 @@ def _run_migrations(settings: Settings) -> None:
             )
             conn.commit()
             log.info("migration: added cost_usd column to ticket table")
+        else:
+            # Per-ticket cost was previously accumulated via a
+            # process-global ContextVar that leaked across concurrent
+            # tickets — existing values are bogus.  Zero them so the
+            # Langfuse-based sync loop can populate correct values.
+            cur = conn.execute("SELECT COUNT(*) FROM ticket WHERE cost_usd != 0")
+            bogus = cur.fetchone()[0]
+            if bogus:
+                conn.execute("UPDATE ticket SET cost_usd = 0")
+                conn.commit()
+                log.info(
+                    "migration: zeroed %d bogus cost_usd value(s) "
+                    "(per-ticket cost is now derived from Langfuse session totals)",
+                    bogus,
+                )
     finally:
         conn.close()
 

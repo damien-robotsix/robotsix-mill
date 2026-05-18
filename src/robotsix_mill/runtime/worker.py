@@ -19,7 +19,6 @@ from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
 from ..notify import send_notification, _TRIGGER_STATES
 from . import tracing
-from ..agents.ticket_context import active_ticket_id, active_ticket_service
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -31,15 +30,7 @@ _TERMINAL = {State.CLOSED, State.ERRORED, State.BLOCKED}
 async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
     """Drive one ticket through as many stages as possible, in order,
     until it reaches a terminal/waiting state or a stub stops the chain."""
-    # Set contextvars so every LLM completion during this ticket's
-    # pipeline is attributed to the correct ticket for cost tracking.
-    tok_id = active_ticket_id.set(ticket_id)
-    tok_svc = active_ticket_service.set(ctx.service)
-    try:
-        await _process_ticket_inner(ticket_id, ctx)
-    finally:
-        active_ticket_id.reset(tok_id)
-        active_ticket_service.reset(tok_svc)
+    await _process_ticket_inner(ticket_id, ctx)
 
 
 async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
@@ -49,6 +40,9 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
             log.warning("ticket %s vanished", ticket_id)
             return
         if ticket.state in _TERMINAL:
+            # Final cost sync on terminal transition so the board is
+            # accurate as soon as the ticket stops moving.
+            _sync_one_ticket_cost(ctx, ticket_id)
             return
         stage_name = STAGE_FOR_STATE.get(ticket.state)
         if stage_name is None:
@@ -79,6 +73,8 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
             ticket = ctx.service.get(ticket_id)
             if ticket is not None:
                 send_notification(ticket, State.ERRORED, repr(e)[:200], ctx.settings)
+            # Final cost sync so the error cost is visible.
+            _sync_one_ticket_cost(ctx, ticket_id)
             return
         if outcome.next_state == ticket.state:
             # no-op (e.g. merge: PR still open) — leave it; the poll
@@ -97,6 +93,18 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
                 send_notification(ticket, outcome.next_state, outcome.note, ctx.settings)
 
 
+def _sync_one_ticket_cost(ctx: StageContext, ticket_id: str) -> None:
+    """Sync a single ticket's cost_usd from Langfuse session totals.
+
+    Graceful: when Langfuse is unconfigured or unreachable this is a
+    no-op — cost_usd stays as-is."""
+    from ..langfuse_client import session_total_cost
+
+    cost = session_total_cost(ctx.settings, ticket_id)
+    if cost is not None:
+        ctx.service.set_cost(ticket_id, cost)
+
+
 class Worker:
     """In-process queue + consumer task, owned by the API service."""
 
@@ -109,6 +117,7 @@ class Worker:
         self._audit_task: asyncio.Task | None = None
         self._scout_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
+        self._cost_sync_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -258,6 +267,25 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("trace-health poll failed")
 
+    async def _cost_sync_loop(self) -> None:
+        """Periodic cost-sync loop: reads Langfuse session totals for
+        every non-terminal ticket and writes them to ``ticket.cost_usd``.
+        Graceful no-op when Langfuse is unconfigured."""
+        interval = max(60, self.ctx.settings.cost_sync_seconds)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                from ..langfuse_client import session_total_cost
+
+                for ticket in self.ctx.service.list():
+                    if ticket.state in _TERMINAL:
+                        continue
+                    cost = session_total_cost(self.ctx.settings, ticket.id)
+                    if cost is not None:
+                        self.ctx.service.set_cost(ticket.id, cost)
+            except Exception:  # noqa: BLE001 — never let the sync die
+                log.exception("cost sync failed")
+
     def start(self) -> None:
         if not self._tasks:
             n = max(1, self.ctx.settings.max_concurrency)
@@ -267,6 +295,8 @@ class Worker:
             log.info("worker pool started: concurrency=%d", n)
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
+        if self._cost_sync_task is None:
+            self._cost_sync_task = asyncio.create_task(self._cost_sync_loop())
         # Opt-in periodic audit
         if self.ctx.settings.audit_periodic and self._audit_task is None:
             self._audit_task = asyncio.create_task(self._audit_poll_loop())
@@ -293,7 +323,10 @@ class Worker:
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
-        for attr in ("_poll_task", "_audit_task", "_scout_task", "_trace_health_task"):
+        for attr in (
+            "_poll_task", "_audit_task", "_scout_task",
+            "_trace_health_task", "_cost_sync_task",
+        ):
             t = getattr(self, attr)
             if t is not None:
                 tasks.append(t)

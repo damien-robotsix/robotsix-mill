@@ -268,36 +268,41 @@ def test_transition_table_consistency():
         assert State.ERRORED in TRANSITIONS[src], (
             f"{src} missing ERRORED escalation edge"
         )
-# --- cost_usd accumulation ---
+
+
+# --- cost_usd (Langfuse-synced, absolute) -----------------------------
 
 def test_initial_cost_is_zero(service):
     t = service.create("cost test")
     assert t.cost_usd == 0.0
 
 
-def test_add_cost_accumulates(service):
-    t = service.create("accumulator")
-    service.add_cost(t.id, 0.0042)
-    service.add_cost(t.id, 0.0018)
+def test_set_cost_replaces(service):
+    """set_cost writes *cost* as the absolute cost_usd — it replaces,
+    not accumulates.  Langfuse session totals are authoritative."""
+    t = service.create("set cost test")
+    service.set_cost(t.id, 0.0042)
+    service.set_cost(t.id, 0.0018)
     reloaded = service.get(t.id)
-    assert reloaded.cost_usd == pytest.approx(0.0060)
+    # Absolute replace, not accumulate — last write wins.
+    assert reloaded.cost_usd == pytest.approx(0.0018)
 
 
-def test_add_cost_survives_transition(service):
-    """Cost added before a state transition persists through it."""
+def test_set_cost_persists_through_transition(service):
+    """Cost written before a state transition persists through it."""
     t = service.create("cost + transition")
-    service.add_cost(t.id, 0.0050)
+    service.set_cost(t.id, 0.0050)
     service.transition(t.id, State.READY)
     reloaded = service.get(t.id)
     assert reloaded.state is State.READY
     assert reloaded.cost_usd == pytest.approx(0.0050)
 
-    # Resume adding after transition (simulates resume/retry).
-    service.add_cost(t.id, 0.0030)
+    # Later sync updates to a new absolute value.
+    service.set_cost(t.id, 0.0080)
     reloaded = service.get(t.id)
     assert reloaded.cost_usd == pytest.approx(0.0080)
 
 
-def test_add_cost_missing_ticket_is_noop(service):
-    """Calling add_cost on a nonexistent ticket should not raise."""
-    service.add_cost("nonexistent-id", 1.0)  # no raise
+def test_set_cost_missing_ticket_is_noop(service):
+    """Calling set_cost on a nonexistent ticket should not raise."""
+    service.set_cost("nonexistent-id", 1.0)  # no raise
