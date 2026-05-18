@@ -38,6 +38,8 @@ class Ticket(SQLModel, table=True):
     # enables the BLOCKED → <originating state> resume path so only the
     # failed stage is re-run.
     blocked_from: str | None = Field(default=None)
+    # cumulative LLM spend in USD, updated by CostInstrumentedOpenRouterModel
+    cost_usd: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
@@ -72,5 +74,6 @@ class TicketRead(SQLModel):
     branch: str | None
     parent_id: str | None
     source: str
+    cost_usd: float
     created_at: datetime
     updated_at: datetime
