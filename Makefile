@@ -15,7 +15,7 @@ install: $(BIN)/activate
 	$(BIN)/pip install -q -e ".[dev,tracing]"
 
 test: install
-	$(BIN)/python -m pytest -q
+	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70
 
 # Run the service as it runs in prod/Docker (reads ./.env, data in
 # ./.mill-data). Ctrl-C to stop.

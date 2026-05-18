@@ -38,7 +38,6 @@ packages = ["src/robotsix_mill"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70"
 
 [tool.coverage.report]
 precision = 2
