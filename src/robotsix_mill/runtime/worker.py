@@ -9,6 +9,7 @@ error. One worker, sequential, for v1.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 
 from ..stages import StageContext, get_stage
@@ -23,43 +24,49 @@ _TERMINAL = {State.DONE, State.FAILED, State.BLOCKED}
 async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
     """Drive one ticket through as many stages as possible, in order,
     until it reaches a terminal/waiting state or a stub stops the chain."""
-    with tracing.start_ticket_root_span(ticket_id):
-        while True:
-            ticket = ctx.service.get(ticket_id)
-            if ticket is None:
-                log.warning("ticket %s vanished", ticket_id)
-                return
-            if ticket.state in _TERMINAL:
-                return
-            stage_name = STAGE_FOR_STATE.get(ticket.state)
-            if stage_name is None:
-                log.debug("no stage for state %s; pausing %s", ticket.state, ticket_id)
-                return
-            stage = get_stage(stage_name)
-            try:
-                # stage.run is sync (LLM/tool calls) — keep the loop responsive
-                with tracing.trace_stage(stage_name):
-                    outcome = await asyncio.to_thread(stage.run, ticket, ctx)
-            except NotImplementedError as e:
-                log.warning(
-                    "%s: stub (%s) — chain paused at %s for %s",
-                    stage_name, e, ticket.state, ticket_id,
-                )
-                return
-            except Exception as e:  # noqa: BLE001 — any failure fails the ticket
-                log.exception("%s: %s failed", stage_name, ticket_id)
-                ctx.service.transition(ticket_id, State.FAILED, note=repr(e)[:200])
-                return
-            if outcome.next_state == ticket.state:
-                # no-op (e.g. merge stage: PR still open) — leave the
-                # ticket; the periodic poll re-enqueues it later.
-                log.debug(
-                    "%s: %s no-op at %s (awaiting external event)",
-                    stage_name, ticket_id, ticket.state,
-                )
-                return
-            ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
-            log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
+    while True:
+        ticket = ctx.service.get(ticket_id)
+        if ticket is None:
+            log.warning("ticket %s vanished", ticket_id)
+            return
+        if ticket.state in _TERMINAL:
+            return
+        stage_name = STAGE_FOR_STATE.get(ticket.state)
+        if stage_name is None:
+            log.debug("no stage for %s; pausing %s", ticket.state, ticket_id)
+            return
+        stage = get_stage(stage_name)
+        # Only trace stages that call the model. Poll-driven no-LLM
+        # stages (merge, deliver) would otherwise emit an empty "ticket"
+        # trace into the Langfuse session on every poll.
+        traced = getattr(stage, "traced", True)
+        try:
+            with contextlib.ExitStack() as es:
+                if traced:
+                    es.enter_context(tracing.start_ticket_root_span(ticket_id))
+                    es.enter_context(tracing.trace_stage(stage_name))
+                # stage.run is sync (LLM/tool) — keep the loop responsive
+                outcome = await asyncio.to_thread(stage.run, ticket, ctx)
+        except NotImplementedError as e:
+            log.warning(
+                "%s: stub (%s) — chain paused at %s for %s",
+                stage_name, e, ticket.state, ticket_id,
+            )
+            return
+        except Exception as e:  # noqa: BLE001 — any failure fails the ticket
+            log.exception("%s: %s failed", stage_name, ticket_id)
+            ctx.service.transition(ticket_id, State.FAILED, note=repr(e)[:200])
+            return
+        if outcome.next_state == ticket.state:
+            # no-op (e.g. merge: PR still open) — leave it; the poll
+            # re-enqueues later. No transition, no trace, no spam.
+            log.debug(
+                "%s: %s no-op at %s (awaiting external event)",
+                stage_name, ticket_id, ticket.state,
+            )
+            return
+        ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
+        log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
 
 
 class Worker:

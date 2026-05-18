@@ -39,6 +39,10 @@ class Stage(ABC):
     name: str
     #: the state this stage consumes
     input_state: State
+    #: emit a Langfuse trace for this stage? False for poll-driven,
+    #: no-LLM stages (merge, deliver) so polling doesn't spam empty
+    #: "ticket" traces into the session.
+    traced: bool = True
 
     @abstractmethod
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:

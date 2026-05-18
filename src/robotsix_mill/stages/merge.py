@@ -28,6 +28,7 @@ log = logging.getLogger("robotsix_mill.stages.merge")
 class MergeStage(Stage):
     name = "merge"
     input_state = State.IN_REVIEW
+    traced = False
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         s = ctx.settings

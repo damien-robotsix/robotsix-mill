@@ -89,3 +89,52 @@ async def test_failing_stage_marks_failed(ctx, service, monkeypatch):
     reloaded = service.get(t.id)
     assert reloaded.state is State.FAILED
     assert "boom" in service.history(t.id)[-1].note
+
+
+async def test_untraced_noop_stage_emits_no_trace(ctx, service, monkeypatch):
+    """merge/deliver-style untraced stages (traced=False) returning a
+    no-op must NOT open a Langfuse 'ticket' trace — the merge poll
+    otherwise spams an empty trace per cycle."""
+    import contextlib
+
+    from robotsix_mill.runtime import tracing as tr
+
+    calls = {"root": 0, "stage": 0}
+
+    @contextlib.contextmanager
+    def fake_root(_tid):
+        calls["root"] += 1
+        yield
+
+    @contextlib.contextmanager
+    def fake_stage(_n):
+        calls["stage"] += 1
+        yield
+
+    monkeypatch.setattr(tr, "start_ticket_root_span", fake_root)
+    monkeypatch.setattr(tr, "trace_stage", fake_stage)
+
+    class TracedRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+        traced = True
+
+        def run(self, _t, _c):
+            return Outcome(State.AWAITING_APPROVAL, "refined")
+
+    class UntracedNoop(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+        traced = False
+
+        def run(self, _t, _c):
+            return Outcome(State.DRAFT, "noop")  # same state = no-op
+
+    monkeypatch.setitem(registry.STAGES, "refine", TracedRefine())
+    await process_ticket(service.create("a").id, ctx)
+    assert calls["root"] >= 1 and calls["stage"] >= 1  # traced stage traced
+
+    calls["root"] = calls["stage"] = 0
+    monkeypatch.setitem(registry.STAGES, "refine", UntracedNoop())
+    await process_ticket(service.create("b").id, ctx)
+    assert calls == {"root": 0, "stage": 0}  # untraced no-op: silent

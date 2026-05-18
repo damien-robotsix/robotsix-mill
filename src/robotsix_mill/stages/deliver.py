@@ -28,6 +28,7 @@ log = logging.getLogger("robotsix_mill.stages.deliver")
 class DeliverStage(Stage):
     name = "deliver"
     input_state = State.DELIVERABLE
+    traced = False
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         s = ctx.settings
