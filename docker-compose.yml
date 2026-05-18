@@ -5,7 +5,8 @@
 # immediately. Interact via
 # `docker compose exec mill robotsix-mill ticket ...`.
 #
-# Uncomment the ports mapping to reach the API from the host.
+# The ticket board + API are published on 127.0.0.1:8077 (localhost
+# only — the API is unauthenticated; do not bind it to 0.0.0.0).
 #
 # SECURITY: command execution ALWAYS runs in a disposable
 # `--network none` sibling container (there is no local mode). That
@@ -30,5 +31,5 @@ services:
     volumes:
       - ./.data:/data
       - /var/run/docker.sock:/var/run/docker.sock
-    # ports:
-    #   - "8077:8077"
+    ports:
+      - "127.0.0.1:8077:8077"   # ticket board + API at http://localhost:8077

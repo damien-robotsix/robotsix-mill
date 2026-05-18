@@ -48,6 +48,11 @@ cp .env.example .env      # set OPENROUTER_API_KEY (+ FORGE_* later)
 docker compose up -d --build
 ```
 
+**Ticket board:** http://localhost:8077 — a live Kanban (one column
+per state, click a card for history + description, auto-refreshes).
+It's the same FastAPI service the CLI uses; localhost-only (the API is
+unauthenticated).
+
 ```sh
 docker compose exec mill robotsix-mill ticket new --title "Add X" --description-file -
 docker compose exec mill robotsix-mill ticket list

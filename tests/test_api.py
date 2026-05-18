@@ -15,6 +15,18 @@ def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_board_serves_html(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    body = r.text
+    assert "robotsix-mill" in body
+    # the kanban columns are the pipeline states
+    for s in ("draft", "ready", "deliverable", "done", "blocked"):
+        assert s in body
+    assert "/tickets" in body  # board polls the JSON API
+
+
 def test_create_and_get(client):
     r = client.post("/tickets", json={"title": "T", "description": "body"})
     assert r.status_code == 201
