@@ -79,7 +79,9 @@ border-radius:6px;padding:10px;overflow-x:auto}
 </style></head><body>
 <header><h1>robotsix-mill</h1>
 <span class="muted" id="meta">loading…</span>
-<span class="muted" style="margin-left:auto">auto-refresh 5s</span>
+<label class="muted" style="margin-left:auto">
+  <input type="checkbox" onchange="showClosed=this.checked;refresh()"> show closed</label>
+<span class="muted">auto-refresh 5s</span>
 <button onclick="runAudit()" style="font-size:11px;padding:3px 10px;
 background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">
   Run Audit
@@ -89,6 +91,8 @@ background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
 <script>
 const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","closed","blocked","errored"];
+const LBL={ready:"implementing"};   // display label only; state value stays "ready"
+let showClosed=false;               // CLOSED column hidden by default
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":"user");
@@ -99,8 +103,8 @@ async function refresh(){
  ts.forEach(t=>(by[t.state]=by[t.state]||[]).push(t));
  document.getElementById("meta").textContent=
    ts.length+" tickets · "+new Date().toLocaleTimeString();
- document.getElementById("board").innerHTML=ST.map(s=>`<div class="col">
-  <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
+ document.getElementById("board").innerHTML=ST.filter(s=>s!=="closed"||showClosed).map(s=>`<div class="col">
+  <h2>${LBL[s]||s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
