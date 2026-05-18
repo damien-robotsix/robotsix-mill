@@ -196,3 +196,66 @@ def test_pr_api_error_blocks_resumable(tmp_path, monkeypatch):
     out = DeliverStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "resumable" in out.note and "403" in out.note
+
+
+# --- zero-diff guard ----------------------------------------------------
+
+def test_zero_diff_branch_blocks_without_pr_call(tmp_path, monkeypatch):
+    """When the feature branch has no commits vs origin/main, the guard
+    skips the PR API call and transitions to BLOCKED."""
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path, FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote, FORGE_TOKEN="t",
+    )
+    pr_called = False
+
+    def fake_pr(self, *, source_branch, title, body):
+        nonlocal pr_called
+        pr_called = True
+        return "https://github.com/o/r/pull/99"
+
+    monkeypatch.setattr(github.GitHubForge, "open_merge_request", fake_pr)
+
+    # Create a ticket whose branch is identical to main (no new commits)
+    t = ctx.service.create("noop", "nothing to do")
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    repo = ctx.service.workspace(t).dir / "repo"
+    git_ops.clone(remote, repo, "main", None)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    # Do NOT commit anything — branch HEAD == main, so diff is empty
+    ctx.service.set_branch(t.id, branch)
+    t = ctx.service.get(t.id)
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "no new commits" in out.note
+    assert not pr_called, "PR API must not be called for zero-diff branch"
+
+
+def test_zero_diff_guard_happy_path_unaffected(tmp_path, monkeypatch):
+    """The guard is a no-op when the branch has new commits — PR
+    creation proceeds as before."""
+    remote, bare = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path, FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote, FORGE_TOKEN="t",
+    )
+    seen = {}
+
+    def fake_pr(self, *, source_branch, title, body):
+        seen.update(source_branch=source_branch, title=title)
+        return "https://github.com/o/r/pull/42"
+
+    monkeypatch.setattr(github.GitHubForge, "open_merge_request", fake_pr)
+    t, branch = _ticket_with_branch(ctx, remote)
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.IN_REVIEW
+    assert "https://github.com/o/r/pull/42" in out.note
+    assert seen["source_branch"] == branch
+    assert t.id in seen["title"]
