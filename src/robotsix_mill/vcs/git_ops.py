@@ -101,3 +101,29 @@ def push(repo: Path, branch: str, remote_url: str, token: str | None) -> None:
         _authed_url(remote_url, token),
         f"{branch}:{branch}",
     )
+
+
+def branch_is_ahead_of_main(repo: Path) -> bool:
+    """Return True when HEAD has commits not in origin/main.
+
+    Fetches ``origin main`` first to avoid a stale local ref causing a
+    false negative.  A fetch or diff failure other than "no diff" (exit
+    1) is treated as "ahead" so delivery proceeds — we would rather hit
+    the forge API than block a real change.
+    """
+    try:
+        _git(repo, "fetch", "origin", "main")
+    except subprocess.CalledProcessError:
+        # fetch failed — assume ahead so we don't block a real change
+        return True
+
+    result = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--quiet", "origin/main..HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    # --quiet exits 0 when there is *no* difference, 1 when there is.
+    if result.returncode == 0:
+        return False  # no diff → not ahead
+    # exit 1 = diff exists (ahead); anything else is an error → assume ahead
+    return True

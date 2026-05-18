@@ -60,6 +60,17 @@ class DeliverStage(Stage):
                 f"push failed — resumable: {(e.stderr or '')[:300]}",
             )
 
+        # Guard: skip PR creation when the branch has no new commits
+        # relative to origin/main.  This avoids a 422 "No commits
+        # between main and branch" from GitHub when the implement agent
+        # produced no net diff.
+        if not git_ops.branch_is_ahead_of_main(repo_dir):
+            return Outcome(
+                State.BLOCKED,
+                "branch contains no new commits vs origin/main; "
+                "nothing to deliver (re-run implement)",
+            )
+
         title = f"mill: {ticket.title} ({ticket.id})"
         body = (
             ws.read_description()[:8000]
