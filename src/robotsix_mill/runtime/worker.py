@@ -89,6 +89,8 @@ class Worker:
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self._task: asyncio.Task | None = None
         self._poll_task: asyncio.Task | None = None
+        # ticket_id -> consecutive no-progress cycles in a traced stage
+        self._stuck: dict[str, int] = {}
 
     def enqueue(self, ticket_id: str) -> None:
         self.queue.put_nowait(ticket_id)
@@ -97,11 +99,51 @@ class Worker:
         while True:
             ticket_id = await self.queue.get()
             try:
+                before = self.ctx.service.get(ticket_id)
+                before_state = before.state if before else None
                 await process_ticket(ticket_id, self.ctx)
+                after = self.ctx.service.get(ticket_id)
+                self._check_progress(
+                    ticket_id, before_state,
+                    after.state if after else None,
+                )
             except Exception:  # noqa: BLE001 — never let the consumer die
                 log.exception("processing %s crashed", ticket_id)
             finally:
                 self.queue.task_done()
+
+    def _check_progress(self, ticket_id: str, before, after) -> None:
+        """No-progress safety net. A ticket that keeps re-entering the
+        same *model-driven* (traced) stage without ever advancing —
+        runs interrupted before any checkpoint, or a churning stage —
+        would otherwise be re-billed to the LLM on every requeue,
+        silently. After ``max_stuck_cycles`` such cycles, escalate to
+        BLOCKED (resumable) and notify. Poll stages (merge/deliver,
+        traced=False) are exempt: in_review legitimately waits on a PR."""
+        if after is None or after != before:
+            self._stuck.pop(ticket_id, None)
+            return
+        stage_name = STAGE_FOR_STATE.get(after)
+        if stage_name is None:
+            return  # terminal / human-wait — not our concern
+        if not getattr(get_stage(stage_name), "traced", True):
+            return  # poll stage: same-state is by design, never block
+        n = self._stuck.get(ticket_id, 0) + 1
+        self._stuck[ticket_id] = n
+        if n < self.ctx.settings.max_stuck_cycles:
+            return
+        note = (
+            f"no progress after {n} {stage_name} cycles in {after} — "
+            "likely interrupted mid-run or non-terminating; escalated "
+            "to BLOCKED to stop wasted LLM runs. Move to READY/DRAFT "
+            "to retry."
+        )
+        log.error("%s: %s", ticket_id, note)
+        self.ctx.service.transition(ticket_id, State.BLOCKED, note=note[:200])
+        self._stuck.pop(ticket_id, None)
+        t = self.ctx.service.get(ticket_id)
+        if t is not None:
+            send_notification(t, State.BLOCKED, note[:200], self.ctx.settings)
 
     async def _poll_loop(self) -> None:
         """Lightweight merge poll: periodically re-enqueue in_review

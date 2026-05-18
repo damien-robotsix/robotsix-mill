@@ -4,7 +4,7 @@ from robotsix_mill.stages import Outcome, StageContext
 from robotsix_mill.stages import registry
 from robotsix_mill.stages.base import Stage
 from robotsix_mill.core.states import State
-from robotsix_mill.runtime.worker import process_ticket
+from robotsix_mill.runtime.worker import Worker, process_ticket
 
 
 @pytest.fixture
@@ -157,3 +157,51 @@ async def test_done_is_not_terminal_retrospect_runs(ctx, service, monkeypatch):
         service.transition(t.id, st)
     await process_ticket(t.id, ctx)
     assert service.get(t.id).state is State.CLOSED
+
+
+# --- no-progress safety net (interrupted/churning model stage) ----------
+
+def test_no_progress_guard_blocks_traced_stage(ctx, service):
+    """A ticket that keeps re-entering a model-driven (traced) stage
+    without ever advancing — runs killed before any checkpoint — must
+    escalate to BLOCKED instead of being re-billed forever."""
+    w = Worker(ctx)
+    t = service.create("x")
+    service.transition(t.id, State.READY)  # implement stage (traced)
+    cap = ctx.settings.max_stuck_cycles
+    for _ in range(cap - 1):
+        w._check_progress(t.id, State.READY, State.READY)
+        assert service.get(t.id).state is State.READY  # tolerated so far
+    w._check_progress(t.id, State.READY, State.READY)  # cap reached
+    blocked = service.get(t.id)
+    assert blocked.state is State.BLOCKED
+    assert "no progress" in service.history(t.id)[-1].note
+
+
+def test_no_progress_guard_exempts_poll_stage(ctx, service):
+    """in_review (merge, traced=False) legitimately waits on an open PR
+    across many poll cycles — it must NEVER be auto-blocked."""
+    w = Worker(ctx)
+    t = service.create("x")
+    for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW):
+        service.transition(t.id, st)
+    for _ in range(ctx.settings.max_stuck_cycles + 3):
+        w._check_progress(t.id, State.IN_REVIEW, State.IN_REVIEW)
+    assert service.get(t.id).state is State.IN_REVIEW
+
+
+def test_no_progress_counter_resets_on_advance(ctx, service):
+    """Any real state change clears the strike count — a later stall
+    starts counting from zero, not from stale strikes."""
+    w = Worker(ctx)
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+    w._check_progress(t.id, State.READY, State.READY)  # 1 strike
+    w._check_progress(t.id, State.READY, State.DELIVERABLE)  # progressed
+    assert t.id not in w._stuck
+    service.transition(t.id, State.DELIVERABLE)
+    service.transition(t.id, State.IN_REVIEW)
+    service.transition(t.id, State.DONE)  # retrospect (traced) stage
+    for _ in range(ctx.settings.max_stuck_cycles - 1):
+        w._check_progress(t.id, State.DONE, State.DONE)
+    assert service.get(t.id).state is State.DONE  # not blocked yet

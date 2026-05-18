@@ -21,7 +21,26 @@ class Settings(BaseSettings):
 
     # --- core ---
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
-    model: str = Field(default="anthropic/claude-sonnet-4-6", alias="MILL_MODEL")
+    # The cheap DRIVER model. It runs the agentic loop (explore, gather
+    # complete context, apply, verify) for both refine and implement,
+    # and delegates the actual authoring to the strong `deep_model` via
+    # the deep_refine / deep_implement tools. Keep this one cheap.
+    model: str = Field(default="tencent/hy3-preview", alias="MILL_MODEL")
+    # The strong AUTHORING model. Called as a tool with a complete,
+    # curated context; returns the precise spec / code change. No tools,
+    # ~one-shot per call — expensive, so it is invoked deliberately by
+    # the cheap driver rather than running the whole loop itself.
+    deep_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_DEEP_MODEL"
+    )
+    deep_model_request_limit: int = Field(
+        default=4, alias="MILL_DEEP_MODEL_REQUEST_LIMIT"
+    )
+    # Per-call cap for the read-only exploration sub-agent the driver
+    # uses instead of reading the repo into its own limited context.
+    explore_request_limit: int = Field(
+        default=20, alias="MILL_EXPLORE_REQUEST_LIMIT"
+    )
     # Local-dev default: a repo-local, gitignored dir. The Dockerfile
     # sets MILL_DATA_DIR=/data explicitly, so the container is unaffected.
     data_dir: Path = Field(default=Path(".mill-data"), alias="MILL_DATA_DIR")
@@ -71,6 +90,12 @@ class Settings(BaseSettings):
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.
     command_timeout: int = Field(default=600, alias="MILL_COMMAND_TIMEOUT")
+    # Safety net: if a ticket re-enters the *same* model-driven stage
+    # this many times without ever progressing (e.g. its run keeps being
+    # interrupted, or a stage churns), the worker escalates it to BLOCKED
+    # + notifies instead of silently re-billing the LLM forever. Poll
+    # stages (merge/deliver) are exempt — in_review legitimately waits.
+    max_stuck_cycles: int = Field(default=3, alias="MILL_MAX_STUCK_CYCLES")
 
     # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain
@@ -95,8 +120,20 @@ class Settings(BaseSettings):
     )
 
     # --- agent web access (refine + implement) ---
-    # OpenRouter server-side web search via the ":online" model suffix.
+    # Web search is delegated to a cheap, bounded SUB-agent: the main
+    # (expensive) agent never carries OpenRouter's ":online" suffix, it
+    # only gets a `web_research(query)` tool whose body runs this small
+    # model — with ":online" + web_fetch — and returns just a concise
+    # conclusion. This kills the per-request web-search surcharge on the
+    # pricey model and keeps its context lean (conclusions, not pages).
     web_search: bool = Field(default=True, alias="MILL_WEB_SEARCH")
+    web_research_model: str = Field(
+        default="tencent/hy3-preview",
+        alias="MILL_WEB_RESEARCH_MODEL",
+    )
+    web_research_request_limit: int = Field(
+        default=8, alias="MILL_WEB_RESEARCH_REQUEST_LIMIT"
+    )
     # web_fetch runs in its OWN container: network ON, but NO repo/data
     # mount, non-root, read-only, fixed curl. Trade-off accepted: an
     # agent could encode data into a fetched URL. http(s) only.
