@@ -77,3 +77,40 @@ def test_deep_uses_deep_model_bounded_no_online(tmp_path, monkeypatch):
     assert ":online" not in cap["model"]
     assert cap["limit"] == 3
     assert cap["has_tools"] is False  # the deep agent has no tools
+
+
+def test_retrospect_uses_strong_model_not_cheap_driver(tmp_path, monkeypatch):
+    """Regression: retrospect has a structured output_type, so it must
+    build on deep_model (the cheap driver 404s on forced tool_choice)."""
+    from robotsix_mill.agents import retrospecting
+
+    s = _settings(
+        tmp_path, OPENROUTER_API_KEY="k",
+        MILL_MODEL="cheap/drv", MILL_DEEP_MODEL="strong/v4",
+    )
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            cap["model"] = name
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        def run_sync(self, prompt):
+            return type("R", (), {"output": "x"})()
+
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    retrospecting.run_retrospect_agent(
+        settings=s, ticket_summary="t", history_text="h",
+        langfuse_summary=None, memory="",
+    )
+    assert cap["model"] == "strong/v4"  # NOT cheap/drv

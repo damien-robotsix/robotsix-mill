@@ -39,9 +39,16 @@ def build_agent(
     output_type: Any = str,
     tools: list | None = None,
     web: bool = False,
+    model_name: str | None = None,
 ):
-    """Construct a pydantic-ai Agent bound to the configured OpenRouter
-    model. Raises if no OpenRouter key is configured."""
+    """Construct a pydantic-ai Agent bound to an OpenRouter model.
+    Raises if no OpenRouter key is configured.
+
+    ``model_name`` overrides the default cheap driver model — required
+    for agents with a structured ``output_type``, since pydantic-ai
+    forces that via ``tool_choice`` and the cheap driver model has no
+    OpenRouter endpoint supporting it (404). Such agents pass the
+    strong ``deep_model`` here."""
     if not settings.openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
@@ -52,7 +59,7 @@ def build_agent(
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
     model = CostInstrumentedOpenRouterModel(
-        _model_name(settings),
+        model_name or _model_name(settings),
         provider=OpenRouterProvider(api_key=settings.openrouter_api_key),
     )
 

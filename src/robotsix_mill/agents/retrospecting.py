@@ -68,10 +68,13 @@ def run_retrospect_agent(
 ) -> RetrospectResult:
     from .base import build_agent
 
+    # Structured output_type -> pydantic-ai forces tool_choice, which
+    # the cheap driver model can't serve (404). Use the strong model.
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
         output_type=RetrospectResult,
+        model_name=settings.deep_model,
     )
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (
