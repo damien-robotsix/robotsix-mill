@@ -8,6 +8,7 @@ source of truth; it must cover every value in
 from __future__ import annotations
 
 from .base import Stage
+from .ci_fix import CIFixStage
 from .deliver import DeliverStage
 from .implement import ImplementStage
 from .merge import MergeStage
@@ -19,6 +20,7 @@ _REGISTERED: list[type[Stage]] = [
     ImplementStage,
     DeliverStage,
     MergeStage,
+    CIFixStage,
     RetrospectStage,
 ]
 

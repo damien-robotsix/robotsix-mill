@@ -110,6 +110,10 @@ def test_open_mergeable_true_is_noop(tmp_path, monkeypatch):
             "mergeable": True,
         },
     )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
     out = MergeStage().run(_in_review(ctx), ctx)
     assert out.next_state is State.IN_REVIEW
 
@@ -123,6 +127,10 @@ def test_open_mergeable_none_is_noop(tmp_path, monkeypatch):
             "merged": False, "state": "open", "url": "u",
             "mergeable": None,
         },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     out = MergeStage().run(_in_review(ctx), ctx)
     assert out.next_state is State.IN_REVIEW
@@ -567,3 +575,173 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
     MergeStage().run(t, ctx)
 
     assert seen.get("token") == "MINTED-APP-TOK"   # not the raw "t"
+
+
+# ============================================================
+# D. Merge-stage CI branching (new)
+# ============================================================
+
+def test_mergeable_failing_ci_transitions_to_fixing_ci(tmp_path, monkeypatch):
+    """D.20: Mergeable PR + failing CI → FIXING_CI."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    out = MergeStage().run(_in_review(ctx), ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_mergeable_green_ci_stays_in_review(tmp_path, monkeypatch):
+    """D.21: Mergeable PR + green CI → IN_REVIEW."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    out = MergeStage().run(_in_review(ctx), ctx)
+    assert out.next_state is State.IN_REVIEW
+
+
+def test_mergeable_none_ci_stays_in_review(tmp_path, monkeypatch):
+    """D.21: check_status returns None (no checks) → IN_REVIEW."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: None,
+    )
+    out = MergeStage().run(_in_review(ctx), ctx)
+    assert out.next_state is State.IN_REVIEW
+
+
+def test_mergeable_pending_ci_stays_in_review(tmp_path, monkeypatch):
+    """D.22: Mergeable PR + pending CI → IN_REVIEW."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+    out = MergeStage().run(_in_review(ctx), ctx)
+    assert out.next_state is State.IN_REVIEW
+
+
+def test_check_status_exception_is_noop(tmp_path, monkeypatch):
+    """D.23: check_status raises → transient re-poll."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    out = MergeStage().run(_in_review(ctx), ctx)
+    assert out.next_state is State.IN_REVIEW
+
+
+def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
+    """D.24: Conflicting PR → rebase path; check_status never called."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": False,
+        },
+    )
+    check_calls = []
+
+    def fake_check_status(self, *, source_branch):
+        check_calls.append(1)
+        return {"conclusion": "success", "failing": []}
+
+    monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        lambda **k: False,
+    )
+
+    t = _in_review(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    MergeStage().run(t, ctx)
+    assert check_calls == []  # never called for conflicting PR
+
+
+def test_merged_pr_skips_check_status(tmp_path, monkeypatch):
+    """D.25: Merged PR → DONE; check_status never called."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": True, "state": "closed", "url": "u",
+        },
+    )
+    check_calls = []
+
+    def fake_check_status(self, *, source_branch):
+        check_calls.append(1)
+        return None
+
+    monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
+    out = MergeStage().run(_in_review(ctx), ctx)
+    assert out.next_state is State.DONE
+    assert check_calls == []  # never called
+
+
+def test_closed_pr_skips_check_status(tmp_path, monkeypatch):
+    """D.26: Closed PR → BLOCKED; check_status never called."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "closed", "url": "u",
+        },
+    )
+    check_calls = []
+
+    def fake_check_status(self, *, source_branch):
+        check_calls.append(1)
+        return None
+
+    monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
+    out = MergeStage().run(_in_review(ctx), ctx)
+    assert out.next_state is State.BLOCKED
+    assert check_calls == []

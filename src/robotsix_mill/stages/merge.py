@@ -1,14 +1,21 @@
 """Merge stage: IN_REVIEW -> DONE (merged) | BLOCKED (closed unmerged)
-                                    -> REBASING (conflicting, deferred).
+                                    -> REBASING (conflicting, deferred)
+                                    -> FIXING_CI (failing CI, deferred).
 
 The PR is the review. This stage is re-run by the worker's lightweight
-poll while the ticket sits in IN_REVIEW or REBASING; it checks the forge:
+poll while the ticket sits in IN_REVIEW, REBASING, or FIXING_CI; it
+checks the forge:
 
 IN_REVIEW:
 - merged            -> DONE
 - closed, unmerged  -> BLOCKED (resumable)
-- open, mergeable   -> no-op (return IN_REVIEW; the poll retries later)
-- open, conflicting -> REBASING (no rebase agent run; defers to next poll)
+- open, mergeable   -> check CI status:
+    - failing CI    -> FIXING_CI (auto-fix agent)
+    - green CI      -> IN_REVIEW (no-op; re-poll)
+    - pending CI    -> IN_REVIEW (no-op; re-poll)
+- open, conflicting -> invoke rebase agent; on success force-push the
+                       ticket branch and stay IN_REVIEW; on failure
+                       after MILL_REBASE_MAX_ATTEMPTS → BLOCKED.
 
 REBASING:
 - invokes rebase agent; on success force-pushes the ticket branch and
@@ -99,20 +106,43 @@ class MergeStage(Stage):
 
         # PR is open.  Check mergeability.
         mergeable = pr.get("mergeable")
-        if mergeable is not False:
-            # mergeable=True or None (unchecked) → no conflict; standard wait.
-            return Outcome(State.IN_REVIEW)  # still open — re-poll
+        if mergeable is False:
+            # --- PR is open and conflicting → attempt rebase ---
+            return self._handle_conflict(ticket, ctx, branch)
 
-        # PR is open and conflicting — transition to REBASING.
-        # The rebase agent runs on the next poll (REBASING path).
-        log.info("%s: PR conflicting — deferring to REBASING state", ticket.id)
-        return Outcome(State.REBASING, "PR is conflicting; rebase agent will run next poll")
+        # mergeable=True or None (unchecked) → no conflict.
+        # Check remote CI before returning no-op.
+        try:
+            ci_status = get_forge(s).check_status(source_branch=branch)
+        except Exception as e:  # noqa: BLE001 — transient
+            log.warning(
+                "%s: check_status failed (retry): %s", ticket.id, e
+            )
+            return Outcome(State.IN_REVIEW)
+
+        if ci_status is None:
+            # No PR or no data — standard wait.
+            return Outcome(State.IN_REVIEW)
+
+        conclusion = ci_status.get("conclusion")
+        if conclusion == "failure":
+            log.info("%s: mergeable PR has failing CI → fixing_ci", ticket.id)
+            return Outcome(State.FIXING_CI)
+
+        # success, pending, or None — standard wait.
+        return Outcome(State.IN_REVIEW)
 
     def _run_rebase(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Execute the rebase agent for a ticket already in REBASING."""
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
+        return self._handle_conflict(ticket, ctx, branch)
 
+    def _handle_conflict(
+        self, ticket: Ticket, ctx: StageContext, branch: str
+    ) -> Outcome:
+        """Attempt rebase for a conflicting PR."""
+        s = ctx.settings
         repo_dir = _workspace_repo_dir(ctx, ticket)
         if repo_dir is None:
             return Outcome(
@@ -146,9 +176,6 @@ class MergeStage(Stage):
 
         if ok:
             # Clean rebase → force-push only the ticket branch.
-            # Use the minted App/PAT token (like deliver) — s.forge_token
-            # is the raw FORGE_TOKEN env, which is empty in App mode, so
-            # the push went unauthenticated -> git exit 128.
             try:
                 git_ops.push(
                     repo_dir,

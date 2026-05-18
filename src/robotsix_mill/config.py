@@ -279,6 +279,15 @@ class Settings(BaseSettings):
         default=2, alias="MILL_REBASE_MAX_ATTEMPTS"
     )
 
+    # --- merge stage: auto-fix of failing remote CI ---
+    # When a PR in in_review has failing CI checks, the merge stage
+    # transitions to fixing_ci and invokes the ci-fix agent to resolve
+    # the failures automatically.  This is the max number of ci-fix
+    # attempts per ticket before escalating to BLOCKED.
+    ci_fix_max_attempts: int = Field(
+        default=2, alias="MILL_CI_FIX_MAX_ATTEMPTS"
+    )
+
     # --- audit agent (meta-audit for quality/security coverage) ---
     # When True, the worker runs periodic audit passes at the configured
     # interval. Default False (opt-in).
