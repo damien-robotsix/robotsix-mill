@@ -36,10 +36,49 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     assert a[:3] == ["docker", "run", "--rm"]
     assert "--network" in a and a[a.index("--network") + 1] == "none"
     assert "--read-only" in a
-    assert "-v" in a and "mill_data:/data" in a
+    # named-volume case: ONLY the ticket's repo sub-path, not the root
+    assert (
+        "type=volume,src=mill_data,dst=/data/work/repo,"
+        "volume-subpath=work/repo" in a
+    )
+    assert "mill_data:/data" not in a  # data-dir root NOT exposed
     assert a[a.index("-w") + 1] == "/data/work/repo"
     assert a[a.index("--entrypoint") + 1] == "sh"  # image ENTRYPOINT bypassed
     assert a[-3:] == ["python:3.14-slim", "-lc", "pytest -q"]
+
+
+def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
+    """Regression (production-DB pollution incident): no bind/mount may
+    expose the data-dir root, mill.db, the memory ledgers, or other
+    tickets' workspaces — only THIS ticket's repo."""
+    s = _settings(
+        tmp_path, MILL_DATA_DIR="/data",
+        MILL_SANDBOX_DATA_MOUNT="/host/.data",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("true", repo_dir="/data/workspaces/T-1/repo", settings=s)
+    a = seen["argv"]
+    binds = [a[i + 1] for i, x in enumerate(a) if x in ("-v", "--mount")]
+    assert binds == [
+        "/host/.data/workspaces/T-1/repo:/data/workspaces/T-1/repo"
+    ]
+    # no mount maps the data-dir root, and mill.db is never referenced
+    assert not any(b.endswith(":/data") or "/host/.data:" in b for b in binds)
+    assert "mill.db" not in " ".join(a)
+
+
+def test_sandbox_refuses_repo_outside_data_dir(tmp_path):
+    s = _settings(tmp_path, MILL_DATA_DIR="/data")
+    with pytest.raises(sandbox.SandboxError):
+        sandbox.run("true", repo_dir="/etc", settings=s)
+    with pytest.raises(sandbox.SandboxError):  # the data-dir root itself
+        sandbox.run("true", repo_dir="/data", settings=s)
 
 
 def test_sandbox_data_mount_overrides_volume(tmp_path, monkeypatch):
@@ -58,7 +97,9 @@ def test_sandbox_data_mount_overrides_volume(tmp_path, monkeypatch):
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     sandbox.run("true", repo_dir="/data/work/repo", settings=s)
     a = seen["argv"]
-    assert "/host/abs/.data:/data" in a
+    # bind case: host repo sub-path only — NOT the data-dir root
+    assert "/host/abs/.data/work/repo:/data/work/repo" in a
+    assert "/host/abs/.data:/data" not in a
     assert "mill_data:/data" not in a
 
 
