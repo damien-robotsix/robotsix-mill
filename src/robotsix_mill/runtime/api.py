@@ -62,6 +62,7 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-audit{background:#1a3b2f;color:#34d399}
 .cost{font-size:10px;color:#7d828c;margin-left:6px}
 .src-scout{background:#2a1a3b;color:#c084fc}
+.src-trace-health{background:#1a2a3b;color:#60c0fa}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
@@ -92,6 +93,11 @@ background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Run Scout
 </button>
+<button onclick="runTraceHealth()" style="font-size:11px;padding:3px 10px;
+background:#0ea5e9;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Trace Health
+</button>
 </header>
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
@@ -101,7 +107,7 @@ const LBL={ready:"implementing"};   // display label only; state value stays "re
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":"user");
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
 async function refresh(){
  const ts=await jget("/tickets"); if(!ts)return;
@@ -149,6 +155,20 @@ async function runScout(){
    alert("Scout failed: "+e);
  } finally {
    btn.disabled=false; btn.textContent='Run Scout';
+ }
+}
+async function runTraceHealth(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await fetch("/trace-health",{method:"POST"});
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Trace-health check started — new draft tickets will appear on the board if unsessioned traces are found.");
+   setTimeout(refresh,3000);
+ } catch(e) {
+   alert("Trace-health check failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Trace Health';
  }
 }
 async function open_(id){
@@ -316,5 +336,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             }
         except Exception as e:
             raise HTTPException(500, f"scout pass failed: {e}") from None
+
+    @app.post("/trace-health", status_code=202)
+    def trace_health_check() -> dict:
+        """Kick off a trace-health check in the BACKGROUND and return
+        at once. The check fetches Langfuse traces from the last 24h,
+        detects unsessioned traces, and files a draft ticket if needed.
+        No LLM — deterministic and fast."""
+        from ..trace_health_runner import run_trace_health_check
+
+        def _run() -> None:
+            try:
+                r = run_trace_health_check()
+                if r.draft_created:
+                    log.info(
+                        "trace-health check: draft created — "
+                        "%d/%d traces unsessioned",
+                        r.unsessioned_count,
+                        r.total_traces,
+                    )
+                else:
+                    log.info(
+                        "trace-health check: no alert "
+                        "(%d/%d traces unsessioned)",
+                        r.unsessioned_count,
+                        r.total_traces,
+                    )
+            except Exception:  # noqa: BLE001 — background; just log
+                log.exception("trace-health check failed")
+
+        threading.Thread(
+            target=_run, name="trace-health-check", daemon=True
+        ).start()
+        return {"status": "started"}
 
     return app

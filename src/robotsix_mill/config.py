@@ -294,6 +294,19 @@ class Settings(BaseSettings):
         default=None, alias="MILL_SCOUT_MEMORY_PATH"
     )
 
+    # --- trace-health check ---
+    # When True, the worker runs periodic trace-health checks at the
+    # configured interval. Default False (opt-in).
+    trace_health_periodic: bool = Field(
+        default=False, alias="MILL_TRACE_HEALTH_PERIODIC"
+    )
+    # Interval between automatic trace-health checks (seconds). Only
+    # used when MILL_TRACE_HEALTH_PERIODIC=true. Enforced minimum 3600s
+    # (1h) in the worker to avoid hammering Langfuse.
+    trace_health_interval_seconds: int = Field(
+        default=86400, alias="MILL_TRACE_HEALTH_INTERVAL_SECONDS"
+    )
+
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
     langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")

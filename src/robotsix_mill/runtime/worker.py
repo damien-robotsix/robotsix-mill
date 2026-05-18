@@ -108,6 +108,7 @@ class Worker:
         self._poll_task: asyncio.Task | None = None
         self._audit_task: asyncio.Task | None = None
         self._scout_task: asyncio.Task | None = None
+        self._trace_health_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -226,6 +227,34 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("scout poll failed")
 
+    async def _trace_health_poll_loop(self) -> None:
+        """Periodic trace-health check loop. Only runs when
+        ``MILL_TRACE_HEALTH_PERIODIC=true``."""
+        settings = self.ctx.settings
+        interval = max(3600, settings.trace_health_interval_seconds)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                log.info("Starting periodic trace-health check")
+                from ..trace_health_runner import run_trace_health_check
+                result = run_trace_health_check()
+                if result.draft_created:
+                    log.info(
+                        "Trace-health check: draft created — "
+                        "%d/%d traces unsessioned",
+                        result.unsessioned_count,
+                        result.total_traces,
+                    )
+                else:
+                    log.info(
+                        "Trace-health check: no alert "
+                        "(%d/%d traces unsessioned)",
+                        result.unsessioned_count,
+                        result.total_traces,
+                    )
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("trace-health poll failed")
+
     def start(self) -> None:
         if not self._tasks:
             n = max(1, self.ctx.settings.max_concurrency)
@@ -249,10 +278,19 @@ class Worker:
                 "Periodic scout enabled: interval %ds",
                 self.ctx.settings.scout_interval_seconds,
             )
+        # Opt-in periodic trace-health
+        if self.ctx.settings.trace_health_periodic and self._trace_health_task is None:
+            self._trace_health_task = asyncio.create_task(
+                self._trace_health_poll_loop()
+            )
+            log.info(
+                "Periodic trace-health enabled: interval %ds",
+                self.ctx.settings.trace_health_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
-        for attr in ("_poll_task", "_audit_task", "_scout_task"):
+        for attr in ("_poll_task", "_audit_task", "_scout_task", "_trace_health_task"):
             t = getattr(self, attr)
             if t is not None:
                 tasks.append(t)

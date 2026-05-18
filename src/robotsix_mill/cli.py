@@ -8,6 +8,7 @@
     robotsix-mill ticket resume-blocked <id>
     robotsix-mill audit                        # run an audit pass
     robotsix-mill scout                        # run a scout pass
+    robotsix-mill trace-health                 # run a trace-health check
 
 The same API backs a future web frontend.
 """
@@ -75,6 +76,17 @@ def main(argv: list[str] | None = None) -> int:
         "scout", help="run a scout pass and emit model-improvement drafts"
     )
     p_scout.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- trace-health command ---
+    p_trace_health = sub.add_parser(
+        "trace-health",
+        help="check Langfuse for unsessioned traces and alert if found",
+    )
+    p_trace_health.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
@@ -149,6 +161,39 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  - {d['id']}: {d['title']}")
             else:
                 print("No new draft tickets created.")
+        return 0
+
+    if args.cmd == "trace-health":
+        from .trace_health_runner import run_trace_health_check
+
+        try:
+            result = run_trace_health_check()
+        except Exception as e:
+            print(f"trace-health failed: {e}", file=sys.stderr)
+            return 1
+
+        if args.json:
+            print(json.dumps(
+                {
+                    "draft_created": result.draft_created,
+                    "unsessioned_count": result.unsessioned_count,
+                    "total_traces": result.total_traces,
+                    "window_start": result.window_start,
+                    "window_end": result.window_end,
+                },
+                indent=2,
+            ))
+        else:
+            print("Trace-health check complete.")
+            if result.draft_created:
+                print("Draft ticket created for unsessioned traces.")
+            else:
+                print("No alert needed.")
+            print(
+                f"Unsessoned: {result.unsessioned_count} / "
+                f"{result.total_traces} traces "
+                f"({result.window_start} → {result.window_end})"
+            )
         return 0
 
     with _client(settings) as c:
