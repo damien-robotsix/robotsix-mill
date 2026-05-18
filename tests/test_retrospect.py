@@ -39,7 +39,7 @@ def test_reviewed_no_draft(tmp_path, monkeypatch):
     )
     t = _done(ctx)
     out = RetrospectStage().run(t, ctx)
-    assert out.next_state is State.REVIEWED
+    assert out.next_state is State.CLOSED
     assert len(ctx.service.list()) == 1  # no spawned draft
     assert (ctx.service.workspace(t).artifacts_dir / "retrospect.md").exists()
 
@@ -56,7 +56,7 @@ def test_spawns_linked_draft(tmp_path, monkeypatch):
     )
     t = _done(ctx)
     out = RetrospectStage().run(t, ctx)
-    assert out.next_state is State.REVIEWED and "draft" in out.note
+    assert out.next_state is State.CLOSED and "draft" in out.note
     drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
     assert len(drafts) == 1
     assert drafts[0].parent_id == t.id  # provenance
@@ -74,7 +74,7 @@ def test_spawning_disabled(tmp_path, monkeypatch):
         ),
     )
     out = RetrospectStage().run(_done(ctx), ctx)
-    assert out.next_state is State.REVIEWED
+    assert out.next_state is State.CLOSED
     assert "spawning disabled" in out.note
     assert len(ctx.service.list()) == 1  # nothing spawned
 

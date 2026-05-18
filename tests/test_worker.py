@@ -87,7 +87,7 @@ async def test_failing_stage_marks_failed(ctx, service, monkeypatch):
     t = service.create("x")
     await process_ticket(t.id, ctx)
     reloaded = service.get(t.id)
-    assert reloaded.state is State.FAILED
+    assert reloaded.state is State.ERRORED
     assert "boom" in service.history(t.id)[-1].note
 
 
@@ -149,11 +149,11 @@ async def test_done_is_not_terminal_retrospect_runs(ctx, service, monkeypatch):
         input_state = State.DONE
 
         def run(self, _t, _c):
-            return Outcome(State.REVIEWED, "retrospected")
+            return Outcome(State.CLOSED, "retrospected")
 
     monkeypatch.setitem(registry.STAGES, "retrospect", FakeRetrospect())
     t = service.create("x")
     for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW, State.DONE):
         service.transition(t.id, st)
     await process_ticket(t.id, ctx)
-    assert service.get(t.id).state is State.REVIEWED
+    assert service.get(t.id).state is State.CLOSED

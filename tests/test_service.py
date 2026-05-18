@@ -46,7 +46,7 @@ def test_state_machine_edges():
     assert can_transition(State.DELIVERABLE, State.IN_REVIEW)
     assert can_transition(State.IN_REVIEW, State.DONE)      # merged
     assert can_transition(State.IN_REVIEW, State.BLOCKED)   # closed unmerged
-    assert can_transition(State.DONE, State.REVIEWED)       # retrospected
-    assert not can_transition(State.REVIEWED, State.DONE)   # terminal
+    assert can_transition(State.DONE, State.CLOSED)       # retrospected
+    assert not can_transition(State.CLOSED, State.DONE)   # terminal
     assert not can_transition(State.DELIVERABLE, State.DONE)  # via in_review
     assert not can_transition(State.READY, State.DONE)

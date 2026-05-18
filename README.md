@@ -30,10 +30,11 @@ it directly); the DB row only holds the pointer + a content hash.
 
 emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   draft ─refine▶ awaiting_approval ─approve▶ ready ─implement▶ deliverable
-        ─deliver▶ in_review ─(PR merged; merge-poll)▶ done ─retrospect▶ reviewed
+        ─deliver▶ in_review ─(PR merged; merge-poll)▶ done ─retrospect▶ closed
   in_review = PR open (the PR is the review); merge poll flips it.
   retrospect audits the run + Langfuse and may spawn an improvement draft.
-  (any state ─▶ failed / blocked; a human transition re-enqueues)
+  closed = terminal. errored = a stage threw; blocked = needs a human
+  (both resumable: a human transition re-enqueues).
   awaiting_approval is a human gate (configurable via MILL_REQUIRE_APPROVAL).
 ```
 

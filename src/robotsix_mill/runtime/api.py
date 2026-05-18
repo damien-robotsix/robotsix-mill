@@ -63,8 +63,8 @@ border-radius:6px;padding:10px;overflow-x:auto}
 .ev{border-left:2px solid #333a47;padding:2px 0 2px 9px;margin:4px 0}
 .ev b{color:#cfd3db}.s-draft{--c:#6b7280}.s-awaiting_approval{--c:#f59e0b}
 .s-ready{--c:#3b82f6}.s-in_review{--c:#a855f7}.s-deliverable{--c:#eab308}
-.s-done{--c:#22c55e}.s-reviewed{--c:#14b8a6}.s-blocked{--c:#f97316}
-.s-failed{--c:#ef4444}
+.s-done{--c:#22c55e}.s-closed{--c:#14b8a6}.s-blocked{--c:#f97316}
+.s-errored{--c:#ef4444}
 </style></head><body>
 <header><h1>robotsix-mill</h1>
 <span class="muted" id="meta">loading…</span>
@@ -72,7 +72,7 @@ border-radius:6px;padding:10px;overflow-x:auto}
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
 <script>
-const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","reviewed","blocked","failed"];
+const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","closed","blocked","errored"];
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}

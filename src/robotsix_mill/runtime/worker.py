@@ -18,9 +18,9 @@ from . import tracing
 
 log = logging.getLogger("robotsix_mill.worker")
 
-# DONE is NOT terminal — retrospect owns it (done -> reviewed). Only
-# reviewed/failed/blocked stop the chain.
-_TERMINAL = {State.REVIEWED, State.FAILED, State.BLOCKED}
+# DONE is NOT terminal — retrospect owns it (done -> closed). Only
+# closed/errored/blocked stop the chain.
+_TERMINAL = {State.CLOSED, State.ERRORED, State.BLOCKED}
 
 
 async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
@@ -57,7 +57,7 @@ async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
             return
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
             log.exception("%s: %s failed", stage_name, ticket_id)
-            ctx.service.transition(ticket_id, State.FAILED, note=repr(e)[:200])
+            ctx.service.transition(ticket_id, State.ERRORED, note=repr(e)[:200])
             return
         if outcome.next_state == ticket.state:
             # no-op (e.g. merge: PR still open) — leave it; the poll

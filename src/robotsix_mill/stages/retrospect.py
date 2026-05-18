@@ -1,10 +1,10 @@
-"""Retrospect stage: DONE -> REVIEWED.
+"""Retrospect stage: DONE -> CLOSED.
 
 Post-delivery audit. Analyses the finished ticket's workflow (state
 history + notes) and its Langfuse session (cost/latency/retries/errors,
 workflow-only if Langfuse is unconfigured), records findings, and —
 when MILL_RETROSPECT_SPAWN_DRAFTS is on and the agent proposes one —
-files an improvement DRAFT linked back via parent_id. Then -> REVIEWED.
+files an improvement DRAFT linked back via parent_id. Then -> CLOSED.
 
 Agent/analysis failure is BLOCKED-resumable, never terminal.
 """
@@ -70,9 +70,9 @@ class RetrospectStage(Stage):
             f"spawned draft: {spawned or '—'}\n\n{res.findings}\n",
             encoding="utf-8",
         )
-        note = "reviewed"
+        note = "closed"
         if spawned:
-            note = f"reviewed — improvement draft {spawned}"
+            note = f"closed — improvement draft {spawned}"
         elif res.propose_draft and not s.retrospect_spawn_drafts:
-            note = "reviewed — draft proposed (spawning disabled)"
-        return Outcome(State.REVIEWED, note)
+            note = "closed — draft proposed (spawning disabled)"
+        return Outcome(State.CLOSED, note)
