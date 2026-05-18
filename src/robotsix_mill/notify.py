@@ -44,8 +44,16 @@ def send_notification(
     if not url:
         return
 
+    # HTTP headers must be ASCII/latin-1; an em-dash (or any non-ASCII
+    # in the ticket title) makes httpx raise UnicodeEncodeError and the
+    # whole notification fails. Use a plain hyphen and coerce the title
+    # to ASCII (ntfy shows '?' for stripped chars — far better than no
+    # push). The UTF-8 message body is unaffected.
+    title = f"mill: {dst.value} - {ticket.title}".encode(
+        "ascii", "replace"
+    ).decode("ascii")
     headers: dict[str, str] = {
-        "X-Title": f"mill: {dst.value} — {ticket.title}",
+        "X-Title": title,
         "Content-Type": "text/plain",
     }
     if settings.ntfy_token:

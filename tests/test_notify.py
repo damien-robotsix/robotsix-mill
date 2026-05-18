@@ -77,7 +77,7 @@ def test_posts_to_url(settings, service, monkeypatch):
     assert len(rec.calls) == 1
     c = rec.calls[0]
     assert c["url"] == "https://ntfy.sh/test"
-    assert c["headers"]["X-Title"] == "mill: awaiting_approval — Add feature"
+    assert c["headers"]["X-Title"] == "mill: awaiting_approval - Add feature"
     assert c["headers"]["Content-Type"] == "text/plain"
     assert "Authorization" not in c["headers"]
     assert f"Ticket: {t.id}" in c["content"]
@@ -85,6 +85,25 @@ def test_posts_to_url(settings, service, monkeypatch):
     assert "Note: refined spec" in c["content"]
     assert "Board: http://127.0.0.1:8077" in c["content"]
     assert c["timeout"] is not None
+
+
+def test_xtitle_header_is_ascii_safe(settings, service, monkeypatch):
+    """Regression: an em-dash (or any non-ASCII ticket title) in the
+    X-Title header made httpx raise UnicodeEncodeError, silently
+    breaking EVERY notification. The header must be ASCII-encodable."""
+    settings.ntfy_url = "https://ntfy.sh/test"
+    settings.ntfy_token = None
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("Café — naïve ☕ build")  # non-ASCII title
+    send_notification(t, State.IN_REVIEW, "PR opened", settings)  # must not raise
+
+    assert len(rec.calls) == 1
+    xt = rec.calls[0]["headers"]["X-Title"]
+    xt.encode("ascii")          # the actual failure mode — must not raise
+    assert "—" not in xt        # em-dash gone
+    assert xt.startswith("mill: in_review - ")
 
 
 def test_note_none_renders_placeholder(settings, service, monkeypatch):
