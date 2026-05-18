@@ -265,3 +265,61 @@ def test_audit_cli_json_output(capsys, tmp_path, monkeypatch):
     data = json.loads(captured.out)
     assert "memory" in data
     assert "tickets_created" in data
+
+
+def test_run_audit_pass_opens_langfuse_session(tmp_path, monkeypatch):
+    """Each audit run wraps the agent in a Langfuse session span with a
+    unique per-run id, and returns it (so audit traces aren't
+    untagged). No-op-safe when tracing isn't ready."""
+    import contextlib
+
+    from robotsix_mill.runtime import tracing
+
+    settings = _make_settings(tmp_path)
+    seen = {}
+
+    @contextlib.contextmanager
+    def fake_root(sid):
+        seen["session_id"] = sid
+        yield
+
+    @contextlib.contextmanager
+    def fake_stage(name):
+        seen["stage"] = name
+        yield
+
+    def mock_agent(**kwargs):
+        seen["agent_ran_under"] = seen.get("session_id")  # set before call
+        return auditing.AuditResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        )
+
+    monkeypatch.setattr(tracing, "start_ticket_root_span", fake_root)
+    monkeypatch.setattr(tracing, "trace_stage", fake_stage)
+    monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.audit_runner.Settings", lambda: settings
+    )
+
+    res = run_audit_pass()
+
+    assert res.session_id.startswith("audit-")
+    assert seen["session_id"] == res.session_id          # span uses that id
+    assert seen["stage"] == "audit"
+    assert seen["agent_ran_under"] == res.session_id      # agent inside span
+
+
+def test_audit_session_ids_are_unique_per_run(tmp_path, monkeypatch):
+    settings = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        auditing, "run_audit_agent",
+        lambda **k: auditing.AuditResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.audit_runner.Settings", lambda: settings
+    )
+    a = run_audit_pass().session_id
+    b = run_audit_pass().session_id
+    assert a != b and a.startswith("audit-") and b.startswith("audit-")

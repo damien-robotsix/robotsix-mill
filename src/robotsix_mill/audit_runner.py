@@ -9,7 +9,9 @@ Seam: tests monkeypatch ``run_audit_agent`` from agents.auditing.
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Settings
@@ -25,6 +27,7 @@ class AuditPassResult:
 
     updated_memory: str
     drafts_created: list[dict]  # list of ticket dicts (id, title)
+    session_id: str = ""        # Langfuse session.id for this audit run
 
 
 def run_audit_pass(root: str | None = None) -> AuditPassResult:
@@ -56,12 +59,22 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
 
     # Import here to allow monkeypatching in tests.
     from .agents import auditing
+    from .runtime import tracing
 
+    # One Langfuse session per audit run, so its model calls are
+    # attributed (no untagged traces). No-op if tracing isn't ready.
+    session_id = (
+        f"audit-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-"
+        f"{uuid.uuid4().hex[:6]}"
+    )
+    log.info("audit pass starting (session %s)", session_id)
     try:
-        res = auditing.run_audit_agent(
-            settings=settings,
-            memory=memory_text,
-        )
+        with tracing.start_ticket_root_span(session_id), \
+                tracing.trace_stage("audit"):
+            res = auditing.run_audit_agent(
+                settings=settings,
+                memory=memory_text,
+            )
     except Exception as e:  # noqa: BLE001
         log.exception("audit agent failed")
         raise RuntimeError(f"audit agent failed: {e}") from e
@@ -92,4 +105,5 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
     return AuditPassResult(
         updated_memory=res.updated_memory or memory_text,
         drafts_created=created,
+        session_id=session_id,
     )
