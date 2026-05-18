@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867  # v7.1.6
+        with:
+          enable-cache: true
+          python-version-file: .python-version
+
+      - name: Install project + dev deps
+        run: uv sync --extra dev
+
+      - name: Lint (ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Type-check (mypy)
+        run: uv run mypy src/
+
+      - name: SAST (bandit)
+        run: uv run bandit -c pyproject.toml -r src/
+
+      - name: Tests + coverage (pytest)
+        run: uv run pytest tests/ -v --cov=src --cov-fail-under=80 --cov-report=term --cov-report=html
+
+      - name: Dependency audit (pip-audit)
+        run: uv run pip-audit
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: coverage-html-${{ github.run_id }}
+          path: htmlcov/
+          retention-days: 7
