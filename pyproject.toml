@@ -27,7 +27,7 @@ tracing = [
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-http",
 ]
-dev = ["pytest>=8", "pytest-asyncio>=0.21"]
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "bandit[toml]>=1.8"]
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
@@ -38,3 +38,8 @@ packages = ["src/robotsix_mill"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.bandit]
+targets = ["src/"]
+exclude_dirs = ["tests/"]
+skips = ["B101"]
