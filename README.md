@@ -29,11 +29,12 @@ it directly); the DB row only holds the pointer + a content hash.
     artifacts/                 # per-stage output
 
 emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
-  draft ─refine▶ ready ─implement▶ deliverable ─deliver▶ in_review
-        ─(PR merged; merge-poll)▶ done ─retrospect▶ reviewed
+  draft ─refine▶ awaiting_approval ─approve▶ ready ─implement▶ deliverable
+        ─deliver▶ in_review ─(PR merged; merge-poll)▶ done ─retrospect▶ reviewed
   in_review = PR open (the PR is the review); merge poll flips it.
   retrospect audits the run + Langfuse and may spawn an improvement draft.
   (any state ─▶ failed / blocked; a human transition re-enqueues)
+  awaiting_approval is a human gate (configurable via MILL_REQUIRE_APPROVAL).
 ```
 
 - **Engine:** `pydantic-ai` over OpenRouter.
@@ -60,6 +61,7 @@ unauthenticated).
 docker compose exec mill robotsix-mill ticket new --title "Add X" --description-file -
 docker compose exec mill robotsix-mill ticket list
 docker compose exec mill robotsix-mill ticket show <id>
+docker compose exec mill robotsix-mill ticket approve <id>
 ```
 
 ## Local development (no Docker)
@@ -74,6 +76,7 @@ make dev                    # service with hot-reload on http://127.0.0.1:8077
 # in another shell — the CLI is just an HTTP client to that service:
 .venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
 .venv/bin/robotsix-mill ticket list
+.venv/bin/robotsix-mill ticket approve <id>
 make test                   # run the suite
 ```
 
@@ -86,6 +89,21 @@ Running the pipeline always needs Docker (the agent's commands run in
 disposable containers — there is no in-process mode; see **Security
 model**). The unit test suite does **not** need Docker — it fakes the
 sandbox seam — so `make test` works anywhere.
+
+## Approval gate
+
+By default (`MILL_REQUIRE_APPROVAL=true`), the refine stage transitions
+tickets to `awaiting_approval` instead of `ready`. The pipeline pauses
+until a human approves, giving you a chance to review the refined spec
+before the implement stage starts. Approve via:
+
+- **Web board:** click the "Approve" button on any card in the
+  `awaiting_approval` column.
+- **CLI:** `robotsix-mill ticket approve <id>`
+- **API:** `POST /tickets/{id}/approve`
+
+To run fully autonomous (refine → implement with no pause), set
+`MILL_REQUIRE_APPROVAL=false`.
 
 ## Security model
 
@@ -133,7 +151,8 @@ execution is isolated from the mill process:
 
 ## Next steps
 
-Full chain `refine → implement → deliver → merge → retrospect` runs
-end-to-end. Remaining: a **human gate after refine** (approve a draft
-before implement — also bounds the retrospect→draft loop), and the
-**GitLab** forge adapter (`forge/gitlab.py` is still a stub).
+Full chain `refine → approve → implement → deliver → merge → retrospect`
+runs end-to-end. The human approval gate after refine (configurable via
+`MILL_REQUIRE_APPROVAL`) gives you control over when implementation
+begins and bounds the retrospect→draft loop. Remaining: the **GitLab**
+forge adapter (`forge/gitlab.py` is still a stub).

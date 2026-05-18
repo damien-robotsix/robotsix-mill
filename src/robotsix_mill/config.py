@@ -114,6 +114,14 @@ class Settings(BaseSettings):
     # the container, repo root locally).
     skills_dir: Path = Field(default=Path("skills"), alias="MILL_SKILLS_DIR")
 
+    # --- human approval gate (refine -> implement) ---
+    # When true (default), the refine stage transitions to
+    # awaiting_approval instead of ready — a human must approve before
+    # the implement stage kicks in. Set false for fully-autonomous mode.
+    require_approval: bool = Field(
+        default=True, alias="MILL_REQUIRE_APPROVAL"
+    )
+
     # --- retrospect stage (done -> reviewed) ---
     # When True, retrospect may file an improvement DRAFT. Until the
     # human-gate-after-refine exists, that draft auto-flows to done and

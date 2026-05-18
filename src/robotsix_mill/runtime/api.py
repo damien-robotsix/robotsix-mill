@@ -50,6 +50,9 @@ border-radius:6px;padding:7px 9px;cursor:pointer}
 .card:hover{background:#232836}.card .t{color:#eef0f4}
 .card .id{color:#6b7280;font-size:11px;margin-top:3px;
 overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
+color:#fff;border:none;border-radius:4px;cursor:pointer}
+.approve-btn:hover{background:#2563eb}
 #drawer{position:fixed;top:0;right:0;width:min(560px,92vw);height:100vh;
 background:#11141b;border-left:1px solid #2a2e37;transform:translateX(100%);
 transition:transform .15s;overflow-y:auto;padding:16px}
@@ -58,9 +61,10 @@ transition:transform .15s;overflow-y:auto;padding:16px}
 pre{white-space:pre-wrap;background:#0c0e13;border:1px solid #262b36;
 border-radius:6px;padding:10px;overflow-x:auto}
 .ev{border-left:2px solid #333a47;padding:2px 0 2px 9px;margin:4px 0}
-.ev b{color:#cfd3db}.s-draft{--c:#6b7280}.s-ready{--c:#3b82f6}
-.s-in_review{--c:#a855f7}.s-deliverable{--c:#eab308}.s-done{--c:#22c55e}
-.s-reviewed{--c:#14b8a6}.s-blocked{--c:#f97316}.s-failed{--c:#ef4444}
+.ev b{color:#cfd3db}.s-draft{--c:#6b7280}.s-awaiting_approval{--c:#f59e0b}
+.s-ready{--c:#3b82f6}.s-in_review{--c:#a855f7}.s-deliverable{--c:#eab308}
+.s-done{--c:#22c55e}.s-reviewed{--c:#14b8a6}.s-blocked{--c:#f97316}
+.s-failed{--c:#ef4444}
 </style></head><body>
 <header><h1>robotsix-mill</h1>
 <span class="muted" id="meta">loading…</span>
@@ -68,7 +72,7 @@ border-radius:6px;padding:10px;overflow-x:auto}
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
 <script>
-const ST=["draft","ready","deliverable","in_review","done","reviewed","blocked","failed"];
+const ST=["draft","awaiting_approval","ready","deliverable","in_review","done","reviewed","blocked","failed"];
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
@@ -81,8 +85,15 @@ async function refresh(){
  document.getElementById("board").innerHTML=ST.map(s=>`<div class="col">
   <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
-   <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div></div>`)
+   <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>`+
+   (s==="awaiting_approval"?
+    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`:"")+
+   `</div>`)
   .join("")+`</div></div>`).join("");
+}
+async function approve(id){
+ const r=await fetch("/tickets/"+id+"/approve",{method:"POST"});
+ if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
 }
 async function open_(id){
  sel=id;
@@ -183,6 +194,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except TransitionError as e:
             raise HTTPException(409, str(e)) from None
         _maybe_enqueue(ticket)  # human unblock re-triggers the chain
+        return ticket
+
+    @app.post("/tickets/{ticket_id}/approve", response_model=TicketRead)
+    def approve_ticket(ticket_id: str) -> Ticket:
+        try:
+            ticket = _svc().transition(
+                ticket_id, State.READY, note="approved by human"
+            )
+        except KeyError:
+            raise HTTPException(404, "ticket not found") from None
+        except TransitionError as e:
+            raise HTTPException(409, str(e)) from None
+        _maybe_enqueue(ticket)  # implement picks it up from ready
         return ticket
 
     return app
