@@ -4,8 +4,29 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "automated"
+    groups:
+      patch-dependencies:
+        update-types:
+          - "patch"
+      minor-dependencies:
+        update-types:
+          - "minor"
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    labels:
+      - "dependencies"
+      - "docker"
