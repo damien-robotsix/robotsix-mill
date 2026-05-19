@@ -461,14 +461,15 @@ def test_draft_to_closed_transition_is_legal():
 def test_dedup_guard_survives_preexisting_closed_ticket(
     ctx, service, monkeypatch
 ):
-    """Regression: SQLite returns updated_at tz-naive; the dedup guard
-    compared it to a tz-aware cutoff and raised TypeError, ERRORing
-    every draft once any CLOSED ticket existed. Refine must proceed."""
+    """Regression: SQLite used to return updated_at tz-naive; the dedup
+    guard compared it to a tz-aware cutoff and raised TypeError, ERRORing
+    every draft once any CLOSED ticket existed. After the model fix,
+    updated_at is timezone-aware and comparisons are safe."""
     old = service.create("old done thing", "stuff")
     service.transition(old.id, State.CLOSED)  # now a closed candidate
-    # Re-read via list() the way refine does → updated_at is tz-naive.
+    # Re-read via list() the way refine does.
     closed = [t for t in service.list() if t.id == old.id][0]
-    assert closed.updated_at.tzinfo is None  # reproduces the condition
+    assert closed.updated_at.tzinfo is not None
 
     monkeypatch.setattr(
         refining, "run_refine_agent", lambda **_: "## Problem\nspec\n"
@@ -476,3 +477,59 @@ def test_dedup_guard_survives_preexisting_closed_ticket(
     t = service.create("Add Y", "rough idea")
     out = RefineStage().run(t, ctx)  # must NOT raise TypeError
     assert out.next_state is not State.ERRORED
+
+
+# --- datetime timezone-awareness round-trip tests ---
+
+
+def test_ticket_roundtrip_preserves_tzinfo(service):
+    """AC #1: Ticket.created_at and updated_at are timezone-aware after
+    a create() + get() round-trip."""
+    from datetime import timezone as tz
+
+    t = service.create("roundtrip test", "body")
+    reloaded = service.get(t.id)
+
+    assert reloaded.created_at.tzinfo is not None
+    assert reloaded.created_at.tzinfo == tz.utc
+    assert reloaded.updated_at.tzinfo is not None
+    assert reloaded.updated_at.tzinfo == tz.utc
+
+
+def test_event_roundtrip_preserves_tzinfo(service):
+    """AC #2: TicketEvent.at is timezone-aware after a history() call."""
+    from datetime import timezone as tz
+
+    t = service.create("event tz test", "body")
+    service.transition(t.id, State.READY, "refined")
+    events = service.history(t.id)
+
+    assert len(events) >= 2  # created + refined
+    for ev in events:
+        assert ev.at.tzinfo is not None, f"event {ev.state} at is naive"
+        assert ev.at.tzinfo == tz.utc
+
+
+def test_aware_vs_aware_comparison_no_typeerror(service):
+    """AC #4: Comparing DB-loaded datetimes against aware datetimes
+    must succeed without TypeError."""
+    from datetime import datetime, timedelta, timezone as tz
+
+    t = service.create("compare test", "body")
+    service.transition(t.id, State.CLOSED, "done")
+
+    # Re-read via list() — must support comparison against aware values.
+    tickets = service.list()
+    ticket = [x for x in tickets if x.id == t.id][0]
+
+    # This must not raise TypeError:
+    assert ticket.updated_at >= datetime.now(tz.utc) - timedelta(days=30)
+    assert ticket.created_at >= datetime.now(tz.utc) - timedelta(days=30)
+
+    # Also test fromtimestamp path used by the dedup lookback:
+    now = datetime.now(tz.utc)
+    cutoff = datetime.fromtimestamp(
+        now.timestamp() - 30 * 86400, tz=tz.utc
+    )
+    assert ticket.updated_at >= cutoff  # must not raise TypeError
+    assert ticket.created_at >= cutoff
