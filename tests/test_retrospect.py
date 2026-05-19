@@ -488,6 +488,41 @@ def test_word_number_parsing():
     assert "has 19 distinct" in warnings[0]
 
 
+def test_compound_word_number_parsing():
+    """Compound word numbers like 'twenty-one', 'ninety-nine' are parsed."""
+    from robotsix_mill.stages.retrospect import _check_memory_count_consistency
+
+    # "Twenty-one tickets" claim with exactly 21 IDs → no warning
+    memory = (
+        "## Issue: Slow CI\n"
+        "**Assessment:** Twenty-one tickets now demonstrate…\n"
+        + "\n".join(f"- `TKT-{i}`" for i in range(21))
+        + "\n"
+    )
+    assert _check_memory_count_consistency(memory) == []
+
+    # "Twenty-one tickets" claim with 22 IDs → warning
+    memory2 = (
+        "## Issue: Memory leak\n"
+        "**Assessment:** Twenty-one tickets now demonstrate…\n"
+        + "\n".join(f"- `TKT-{i}`" for i in range(22))
+        + "\n"
+    )
+    warnings = _check_memory_count_consistency(memory2)
+    assert len(warnings) == 1
+    assert "claims 21 ticket" in warnings[0]
+    assert "has 22 distinct" in warnings[0]
+
+    # "ninety-nine tickets" claim with exactly 99 IDs → no warning
+    memory3 = (
+        "## Issue: Big pattern\n"
+        "**Assessment:** ninety-nine tickets show the pattern.\n"
+        + "\n".join(f"- `TKT-{i}`" for i in range(99))
+        + "\n"
+    )
+    assert _check_memory_count_consistency(memory3) == []
+
+
 # ---------------------------------------------------------------------------
 # deep-analysis frequency gate tests
 # ---------------------------------------------------------------------------
