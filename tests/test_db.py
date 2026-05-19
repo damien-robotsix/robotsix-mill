@@ -247,3 +247,77 @@ def test_migration_adds_both_columns_when_both_missing(tmp_path):
     assert "source" in columns
     assert "cost_usd" in columns
     conn.close()
+
+
+# --- origin_session column ---
+
+def test_migration_adds_origin_session_column(tmp_path):
+    """On a DB with a ticket table but no origin_session column,
+    migration adds it with a default of NULL."""
+    db.reset_engine()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    s = Settings(MILL_DATA_DIR=str(data_dir))
+
+    db_path = str(s.db_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute(_PRE_MIGRATION_TICKET_DDL)
+    conn.execute(_EVENT_DDL)
+    conn.execute(_INSERT_DUMMY)
+    conn.commit()
+    conn.close()
+
+    db.reset_engine()
+    db.init_db(s)
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.execute("PRAGMA table_info('ticket')")
+    columns = {row[1] for row in cur.fetchall()}
+    assert "origin_session" in columns
+
+    cur = conn.execute("SELECT origin_session FROM ticket")
+    rows = cur.fetchall()
+    for row in rows:
+        assert row[0] is None  # existing rows get NULL
+    conn.close()
+
+
+def test_migration_origin_session_idempotent(tmp_path):
+    """Running the migration a second time is a no-op for origin_session."""
+    db.reset_engine()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    s = Settings(MILL_DATA_DIR=str(data_dir))
+
+    db.init_db(s)
+
+    conn = sqlite3.connect(str(s.db_path))
+    cur = conn.execute("PRAGMA table_info('ticket')")
+    columns = {row[1] for row in cur.fetchall()}
+    assert "origin_session" in columns
+    conn.close()
+
+    db.reset_engine()
+    db.init_db(s)  # must not raise
+
+    conn = sqlite3.connect(str(s.db_path))
+    cur = conn.execute("PRAGMA table_info('ticket')")
+    columns2 = {row[1] for row in cur.fetchall()}
+    assert "origin_session" in columns2
+    conn.close()
+
+
+def test_fresh_db_has_origin_session_column(tmp_path):
+    """A brand-new DB created from scratch has the origin_session column."""
+    db.reset_engine()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    s = Settings(MILL_DATA_DIR=str(data_dir))
+
+    db.init_db(s)
+
+    conn = sqlite3.connect(str(s.db_path))
+    cur = conn.execute("PRAGMA table_info('ticket')")
+    columns = {row[1] for row in cur.fetchall()}
+    assert "origin_session" in columns
+    conn.close()

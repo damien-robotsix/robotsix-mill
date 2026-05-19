@@ -400,6 +400,7 @@ class Settings(BaseSettings):
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
     langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
     langfuse_secret_key: str | None = Field(default=None, alias="LANGFUSE_SECRET_KEY")
+    langfuse_project_id: str | None = Field(default=None, alias="LANGFUSE_PROJECT_ID")
 
     # --- notifications (optional) ---
     ntfy_url: str | None = Field(default=None, alias="NTFY_URL")

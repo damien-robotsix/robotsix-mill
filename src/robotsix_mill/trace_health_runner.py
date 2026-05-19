@@ -22,6 +22,7 @@ from .core.models import Ticket
 from .core.service import TicketService
 from .core.states import State
 from .langfuse_client import list_all_traces_since
+from .runtime.tracing import current_session
 
 log = logging.getLogger("robotsix_mill.trace_health")
 
@@ -123,7 +124,8 @@ def run_trace_health_check() -> TraceHealthResult:
     )
 
     service = TicketService(settings)
-    ticket = service.create(title, description, source="trace-health")
+    ticket = service.create(title, description, source="trace-health",
+                            origin_session=current_session())
     log.info(
         "trace-health filed draft %s: %d/%d traces unsessioned",
         ticket.id,

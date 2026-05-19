@@ -182,3 +182,31 @@ def test_audit_agent_omits_report_issue(settings, monkeypatch):
 
     names = {getattr(t, "__name__", "") for t in captured["tools"]}
     assert "report_issue" not in names
+
+
+def test_origin_session_captured_from_current_session(settings, monkeypatch):
+    """When current_session() returns a value, the filed ticket gets
+    origin_session set."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: "audit-20250101-abc123",
+    )
+    tool = make_report_issue_tool(settings)
+    out = tool("Some issue", "details", "error")
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    assert t.origin_session == "audit-20250101-abc123"
+
+
+def test_origin_session_none_when_no_session(settings):
+    """When current_session() returns None, origin_session stays None."""
+    # By default _current_session is None (no tracing session in scope).
+    tool = make_report_issue_tool(settings)
+    out = tool("Another issue", "details", "error")
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    assert t.origin_session is None

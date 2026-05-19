@@ -64,6 +64,13 @@ def test_reviewed_no_draft(tmp_path, monkeypatch):
 def test_spawns_linked_draft(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
+    # The retrospect stage runs inside start_ticket_root_span which sets
+    # _current_session to the parent ticket id. Monkeypatch current_session
+    # to simulate this.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "parent-ticket-session-id",
+    )
     monkeypatch.setattr(
         retrospecting, "run_retrospect_agent",
         lambda **kwargs: _default_result(
@@ -82,6 +89,8 @@ def test_spawns_linked_draft(tmp_path, monkeypatch):
     assert len(drafts) == 1
     assert drafts[0].parent_id == t.id  # provenance
     assert drafts[0].title == "Cut retry tokens"
+    # origin_session captured from current_session() (the parent ticket's session).
+    assert drafts[0].origin_session == "parent-ticket-session-id"
 
 
 def test_spawned_draft_has_source_retrospect(tmp_path, monkeypatch):

@@ -65,6 +65,17 @@ def test_get_tickets_includes_source(client):
         assert t["source"] == "user"
 
 
+def test_get_tickets_includes_origin_session(client):
+    """GET /tickets response includes origin_session (None for human-created tickets)."""
+    client.post("/tickets", json={"title": "Origin check"})
+    ts = client.get("/tickets").json()
+    for t in ts:
+        assert "origin_session" in t
+        assert t["origin_session"] is None
+        # origin_session_url is also present but None (no Langfuse config).
+        assert "origin_session_url" in t
+
+
 def test_get_tickets_includes_cost_usd(client, service, monkeypatch):
     """GET /tickets injects cost_usd read on-demand from the Langfuse
     session (not persisted) via langfuse_client.session_cost."""
@@ -297,6 +308,49 @@ def test_board_script_is_well_formed():
     assert js.count("`") % 2 == 0, "unbalanced template-literal backticks"
     assert '</button>":' not in js  # the exact past defect
     assert '</button>`:' in js      # correctly-closed literal
+
+
+def test_board_js_includes_origin_session_rendering(client):
+    """The board JS includes origin_session and origin_session_url
+    rendering logic for the ticket detail drawer."""
+    js = client.get("/static/board.js").text
+    assert "origin_session_url" in js
+    assert "origin_session" in js
+    assert "origin-link" in js
+
+
+def test_board_css_includes_origin_link_style(client):
+    """The board CSS includes the .origin-link style rule."""
+    css = client.get("/static/board.css").text
+    assert ".origin-link" in css
+
+
+def test_origin_session_url_computed_when_config_set(service, settings):
+    """enrich_ticket_read computes origin_session_url when all config
+    ingredients are present."""
+    from robotsix_mill.runtime.deps import enrich_ticket_read
+
+    t = service.create("URL test", origin_session="sess-abc")
+    settings.langfuse_base_url = "https://cloud.langfuse.com"
+    settings.langfuse_project_id = "proj-xyz"
+
+    tr = enrich_ticket_read(t, settings)
+    assert tr.origin_session == "sess-abc"
+    assert tr.origin_session_url == (
+        "https://cloud.langfuse.com/project/proj-xyz/sessions/sess-abc"
+    )
+
+
+def test_origin_session_url_none_when_config_missing(service, settings):
+    """enrich_ticket_read leaves origin_session_url None when any config
+    ingredient is missing."""
+    from robotsix_mill.runtime.deps import enrich_ticket_read
+
+    t = service.create("No URL test", origin_session="sess-abc")
+    # No langfuse_base_url or project_id set.
+    tr = enrich_ticket_read(t, settings)
+    assert tr.origin_session == "sess-abc"
+    assert tr.origin_session_url is None
 
 
 def test_board_html_references_static_assets(client):

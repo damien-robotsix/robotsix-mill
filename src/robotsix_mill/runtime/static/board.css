@@ -27,6 +27,7 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-trace-health{background:#1a2a3b;color:#60c0fa}
 .src-health{background:#1a3b2f;color:#34d399}
 .src-agent{background:#3b1a1a;color:#f87171}
+.origin-link{color:var(--c);text-decoration:underline}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
