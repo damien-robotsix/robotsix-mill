@@ -1,5 +1,6 @@
 ignored:
   - DL3008    # unpinned apt packages (relax initially)
+  - DL3013    # pip install of local project with extras — no version to pin
   - DL3059    # multiple consecutive RUN (relax initially)
 trustedRegistries:
   - docker.io

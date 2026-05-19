@@ -74,12 +74,21 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
+      - name: Show resolved tags
+        run: |
+          echo "Tags to push:"
+          while IFS= read -r tag; do
+            echo "  - $tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
       - name: Push Docker image
         id: push
         run: |
-          for tag in $(echo "${{ steps.meta.outputs.tags }}"); do
+          while IFS= read -r tag; do
+            [[ -z "$tag" ]] && continue
+            echo "Pushing $tag"
             docker push "$tag"
-          done
+          done <<< "${{ steps.meta.outputs.tags }}"
           DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${{ steps.scan-ref.outputs.image }}" | cut -d'@' -f2)
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
 

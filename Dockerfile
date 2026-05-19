@@ -23,8 +23,10 @@ RUN ARCH="$(dpkg --print-architecture)" \
          arm64) DARCH=aarch64 ;; \
          *) DARCH="$ARCH" ;; \
        esac \
-    && curl -fsSL "https://download.docker.com/linux/static/stable/${DARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
-       | tar -xz -C /usr/local/bin --strip-components=1 docker/docker \
+    && curl -fsSL -o /tmp/docker.tgz \
+       "https://download.docker.com/linux/static/stable/${DARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
+    && tar -xz -C /usr/local/bin --strip-components=1 docker/docker -f /tmp/docker.tgz \
+    && rm /tmp/docker.tgz \
     && docker --version
 
 # Non-root user. UID 1000 matches the typical first-host-user UID so the
