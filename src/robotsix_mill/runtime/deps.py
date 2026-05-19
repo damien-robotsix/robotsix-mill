@@ -12,6 +12,7 @@ from ..config import Settings
 from ..core.models import Ticket
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE
+from .run_registry import RunRegistry
 from .worker import Worker
 
 
@@ -28,6 +29,11 @@ def get_worker(request: Request) -> Worker:
 def get_settings(request: Request) -> Settings:
     """Return the ``Settings`` stored on app state during lifespan startup."""
     return request.app.state.settings
+
+
+def get_run_registry(request: Request) -> RunRegistry:
+    """Return the ``RunRegistry`` stored on app state during lifespan startup."""
+    return request.app.state.run_registry
 
 
 def maybe_enqueue(ticket: Ticket, worker: Worker) -> None:
