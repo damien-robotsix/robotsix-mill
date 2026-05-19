@@ -13,9 +13,8 @@ IN_REVIEW:
     - failing CI    -> FIXING_CI (auto-fix agent)
     - green CI      -> IN_REVIEW (no-op; re-poll)
     - pending CI    -> IN_REVIEW (no-op; re-poll)
-- open, conflicting -> invoke rebase agent; on success force-push the
-                       ticket branch and stay IN_REVIEW; on failure
-                       after MILL_REBASE_MAX_ATTEMPTS → BLOCKED.
+- open, conflicting -> REBASING (deferred; the rebase agent runs on
+                       the next poll via the REBASING path, not inline).
 
 REBASING:
 - invokes rebase agent; on success force-pushes the ticket branch and
@@ -107,8 +106,19 @@ class MergeStage(Stage):
         # PR is open.  Check mergeability.
         mergeable = pr.get("mergeable")
         if mergeable is False:
-            # --- PR is open and conflicting → attempt rebase ---
-            return self._handle_conflict(ticket, ctx, branch)
+            # PR is open and conflicting → defer to the REBASING state.
+            # The (expensive, LLM-driven) rebase agent runs on the next
+            # poll via the REBASING path — keeping the IN_REVIEW poll
+            # cheap and the rebase activity visible (#26). Running it
+            # inline here regressed that and starved the worker pool.
+            log.info(
+                "%s: PR conflicting — deferring to REBASING state",
+                ticket.id,
+            )
+            return Outcome(
+                State.REBASING,
+                "PR is conflicting; rebase agent will run next poll",
+            )
 
         # mergeable=True or None (unchecked) → no conflict.
         # Check remote CI before returning no-op.

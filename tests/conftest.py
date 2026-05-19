@@ -9,8 +9,13 @@ from robotsix_mill.core.service import TicketService
 def _no_dotenv(monkeypatch):
     """Hermeticity: never let the developer's ./.env leak into tests
     (it can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
-    the suite hit the network). Disable env_file for every Settings()."""
+    the suite hit the network). Disable env_file for every Settings()
+    AND clear already-exported sensitive vars — pydantic-settings reads
+    os.environ regardless of env_file, so a key exported in the dev
+    shell would still leak in and make tests hit the network."""
     monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for var in ("OPENROUTER_API_KEY", "FORGE_REMOTE_URL", "FORGE_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture
