@@ -12,6 +12,7 @@ from robotsix_mill.forge.github import (
     GitHubForge,
     _build_headers,
     _parse_owner_repo,
+    _ANSI_RE,
 )
 
 
@@ -327,3 +328,166 @@ def test_check_status_happy_path(tmp_path, monkeypatch):
     assert "failing" in result
     assert result["conclusion"] == "success"
     assert result["failing"] == []
+
+
+# ---------------------------------------------------------------------------
+# list_workflow_runs
+# ---------------------------------------------------------------------------
+
+def test_list_workflow_runs_by_branch(tmp_path, monkeypatch):
+    """Mock GET .../actions/runs?branch=main&status=completed&per_page=30."""
+    runs_data = {
+        "workflow_runs": [
+            {
+                "id": 1, "name": "CI", "workflow_id": 100,
+                "head_sha": "abc", "conclusion": "failure",
+                "html_url": "http://x", "created_at": "2025-01-01T00:00:00Z",
+            }
+        ]
+    }
+    get_map = {"actions/runs": _make_response(200, runs_data)}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_workflow_runs(branch="main")
+    assert len(result) == 1
+    assert result[0]["id"] == 1
+    assert result[0]["conclusion"] == "failure"
+    assert result[0]["head_sha"] == "abc"
+
+
+def test_list_workflow_runs_by_head_sha(tmp_path, monkeypatch):
+    """Mock with ?head_sha=abc123 param."""
+    runs_data = {"workflow_runs": []}
+    captured_params = {}
+
+    class ParamsClient:
+        def __init__(self, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def post(self, url, headers=None, json=None):
+            return _make_response(500, {}, "")
+        def get(self, url, headers=None, params=None):
+            captured_params.update(params or {})
+            if "actions/runs" in url:
+                return _make_response(200, runs_data)
+            return _make_response(200, [])
+
+    monkeypatch.setattr(real_httpx, "Client", ParamsClient)
+
+    forge = _forge(tmp_path)
+    forge.list_workflow_runs(head_sha="abc123")
+    assert captured_params.get("head_sha") == "abc123"
+
+
+def test_list_workflow_runs_empty(tmp_path, monkeypatch):
+    """No runs → empty list."""
+    get_map = {"actions/runs": _make_response(200, {"workflow_runs": []})}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.list_workflow_runs(branch="main") == []
+
+
+# ---------------------------------------------------------------------------
+# fetch_workflow_job_logs
+# ---------------------------------------------------------------------------
+
+_ANSI_LOG = "\x1b[1mBOLD\x1b[0m normal \x1b[31mRED\x1b[0m\n"
+_ANSI_CLEAN = "BOLD normal RED\n"
+
+
+def test_fetch_workflow_job_logs_single_failed_job(tmp_path, monkeypatch):
+    """Mock runs/jobs + jobs/logs; verify ANSI stripped, job-name header."""
+    jobs_data = {
+        "jobs": [
+            {"id": 201, "name": "build", "conclusion": "failure"},
+        ]
+    }
+    get_map = {
+        "actions/runs/1/jobs": _make_response(200, jobs_data),
+        "actions/jobs/201/logs": _make_response(200, {}, _ANSI_LOG),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.fetch_workflow_job_logs(run_id=1)
+    assert "### Job: build (id=201)" in result
+    assert _ANSI_CLEAN in result
+
+
+def test_fetch_workflow_job_logs_multiple_failed_jobs(tmp_path, monkeypatch):
+    """Two failed jobs → both logs concatenated."""
+    jobs_data = {
+        "jobs": [
+            {"id": 1, "name": "lint", "conclusion": "failure"},
+            {"id": 2, "name": "test", "conclusion": "failure"},
+        ]
+    }
+    get_map = {
+        "actions/runs/1/jobs": _make_response(200, jobs_data),
+        "actions/jobs/1/logs": _make_response(200, {}, "lint log\n"),
+        "actions/jobs/2/logs": _make_response(200, {}, "test log\n"),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.fetch_workflow_job_logs(run_id=1)
+    assert "### Job: lint" in result
+    assert "lint log" in result
+    assert "### Job: test" in result
+    assert "test log" in result
+
+
+def test_fetch_workflow_job_logs_all_jobs_pass(tmp_path, monkeypatch):
+    """No failed jobs → returns empty string."""
+    jobs_data = {
+        "jobs": [
+            {"id": 1, "name": "lint", "conclusion": "success"},
+            {"id": 2, "name": "test", "conclusion": "success"},
+        ]
+    }
+    get_map = {"actions/runs/1/jobs": _make_response(200, jobs_data)}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.fetch_workflow_job_logs(run_id=1)
+    assert result == ""
+
+
+def test_fetch_workflow_job_logs_capped(tmp_path, monkeypatch):
+    """Log exceeds MILL_CI_LOG_MAX_BYTES → only last N bytes kept."""
+    # Create a log longer than the default 65536 cap.
+    big_log = "x" * 100_000
+    jobs_data = {
+        "jobs": [
+            {"id": 1, "name": "big-job", "conclusion": "failure"},
+        ]
+    }
+    get_map = {
+        "actions/runs/1/jobs": _make_response(200, jobs_data),
+        "actions/jobs/1/logs": _make_response(200, {}, big_log),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.fetch_workflow_job_logs(run_id=1)
+    # The job log part (after the header) should be capped.
+    log_section = result.split("\n", 1)[1] if "\n" in result else result
+    assert len(log_section) <= 65536 + 100  # allow header overhead
+
+
+# ---------------------------------------------------------------------------
+# ANSI stripping regex
+# ---------------------------------------------------------------------------
+
+def test_ansi_regex_strips_sgr():
+    assert _ANSI_RE.sub("", "\x1b[1mBOLD\x1b[0m") == "BOLD"
+
+
+def test_ansi_regex_strips_color():
+    assert _ANSI_RE.sub("", "\x1b[31mRED\x1b[0m") == "RED"
+
+
+def test_ansi_regex_plain_text_unchanged():
+    assert _ANSI_RE.sub("", "hello world") == "hello world"

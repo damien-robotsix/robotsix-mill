@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
+import re
+import time
 
 from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
@@ -101,6 +104,7 @@ class Worker:
         self._scout_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
+        self._ci_monitor_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -281,6 +285,118 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("health poll failed")
 
+    async def _ci_monitor_poll_loop(self) -> None:
+        """Periodic CI monitor poll: watch the forge target branch for
+        completed workflow-run failures and file a ``source="ci"`` draft
+        for each new one.  Only runs when ``MILL_CI_MONITOR_PERIODIC=true``."""
+        settings = self.ctx.settings
+        interval = max(60, settings.ci_monitor_interval_seconds)
+        state_path = settings.ci_monitor_memory_path
+        ttl_seconds = 30 * 86400  # 30 days
+
+        # ANSI strip for log text (same pattern as forge/github.py).
+        _ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+        while True:
+            try:
+                log.info("CI monitor poll starting")
+                # 1. Load dedup state.
+                state: dict = {"seen": {}}
+                if state_path.exists():
+                    try:
+                        state = json.loads(state_path.read_text("utf-8"))
+                    except (json.JSONDecodeError, OSError):
+                        state = {"seen": {}}
+                seen = state.setdefault("seen", {})
+
+                # 2. Prune entries older than TTL.
+                now = int(time.time())
+                stale = [
+                    key for key, val in seen.items()
+                    if isinstance(val, (int, float)) and (now - val) > ttl_seconds
+                ]
+                for key in stale:
+                    del seen[key]
+
+                # 3. List completed workflow runs on the target branch.
+                from ..forge import get_forge
+                forge = get_forge(settings)
+                runs = forge.list_workflow_runs(
+                    branch=settings.forge_target_branch,
+                )
+
+                # 4. Process each failing, unseen run.
+                for run in runs:
+                    if run.get("conclusion") != "failure":
+                        continue
+                    key = f"{run.get('workflow_id')}:{run.get('head_sha')}"
+                    if key in seen:
+                        continue
+
+                    wf_name = run.get("name", "unknown")
+                    run_id_val = run.get("id")
+                    log.info(
+                        "CI monitor: new failure — %s (run %s) on %s",
+                        wf_name, run_id_val, settings.forge_target_branch,
+                    )
+
+                    # Fetch job logs.
+                    logs = ""
+                    try:
+                        logs = forge.fetch_workflow_job_logs(
+                            run_id=run_id_val
+                        )
+                    except Exception:
+                        log.warning(
+                            "CI monitor: failed to fetch logs for run %s",
+                            run_id_val,
+                        )
+
+                    # Build draft body.
+                    body_parts = [
+                        f"**Workflow:** {wf_name}",
+                        f"**Branch:** {settings.forge_target_branch}",
+                        f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
+                        f"**Commit:** `{run.get('head_sha', '')}`",
+                        f"**Created:** {run.get('created_at', '')}",
+                        "",
+                    ]
+                    if logs:
+                        stripped = _ansi_re.sub("", logs)
+                        # Cap total body log text at ~200 KB for the
+                        # draft description (sanity limit).
+                        if len(stripped) > 200_000:
+                            stripped = stripped[-200_000:]
+                        body_parts.append("```")
+                        body_parts.append(stripped)
+                        body_parts.append("```")
+
+                    title = f"CI failure: {wf_name} on {settings.forge_target_branch}"
+                    body = "\n".join(body_parts)
+
+                    try:
+                        self.ctx.service.create(
+                            title=title, description=body, source="ci",
+                        )
+                    except Exception:
+                        log.exception(
+                            "CI monitor: failed to create draft for run %s",
+                            run_id_val,
+                        )
+                        continue
+
+                    # Mark as seen.
+                    seen[key] = now
+
+                # 5. Persist state.
+                state_path.parent.mkdir(parents=True, exist_ok=True)
+                state_path.write_text(json.dumps(state), "utf-8")
+
+                log.info("CI monitor poll completed")
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("CI monitor poll failed")
+            await asyncio.sleep(interval)
+
     def start(self) -> None:
         if not self._tasks:
             n = max(1, self.ctx.settings.max_concurrency)
@@ -320,12 +436,21 @@ class Worker:
                 "Periodic health enabled: interval %ds",
                 self.ctx.settings.health_interval_seconds,
             )
+        # Opt-in CI monitor
+        if self.ctx.settings.ci_monitor_periodic and self._ci_monitor_task is None:
+            self._ci_monitor_task = asyncio.create_task(
+                self._ci_monitor_poll_loop()
+            )
+            log.info(
+                "CI monitor enabled: interval %ds",
+                self.ctx.settings.ci_monitor_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
         for attr in (
             "_poll_task", "_audit_task", "_scout_task",
-            "_trace_health_task", "_health_task",
+            "_trace_health_task", "_health_task", "_ci_monitor_task",
         ):
             t = getattr(self, attr)
             if t is not None:

@@ -16,3 +16,11 @@ class GitLabForge(Forge):
 
     def check_status(self, *, source_branch: str) -> dict | None:
         raise NotImplementedError("GitLab forge adapter not implemented yet")
+
+    def list_workflow_runs(
+        self, *, branch: str | None = None, head_sha: str | None = None
+    ) -> list[dict]:
+        raise NotImplementedError("GitLab forge adapter not implemented yet")
+
+    def fetch_workflow_job_logs(self, *, run_id: int) -> str:
+        raise NotImplementedError("GitLab forge adapter not implemented yet")

@@ -48,8 +48,12 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
     return str(repo)
 
 
-def _build_failing_summary(failing: list[dict]) -> str:
-    """Build a markdown summary from the failing check list."""
+def _build_failing_summary(failing: list[dict], log_text: str = "") -> str:
+    """Build a markdown summary from the failing check list.
+
+    When *log_text* is provided (non-empty), it is included under a
+    **Job logs:** heading after the annotations.
+    """
     parts = []
     for i, chk in enumerate(failing):
         parts.append(f"## Failing check #{i + 1}: {chk['name']}")
@@ -65,6 +69,12 @@ def _build_failing_summary(failing: list[dict]) -> str:
                 if a.get("start_line"):
                     loc += f":{a['start_line']}"
                 parts.append(f"- [{a['level']}] {loc}: {a['message']}")
+        parts.append("")
+    if log_text:
+        parts.append("**Job logs:**")
+        parts.append("```")
+        parts.append(log_text)
+        parts.append("```")
         parts.append("")
     return "\n".join(parts)
 
@@ -123,7 +133,30 @@ class CIFixStage(Stage):
 
         # --- CI is failing → attempt fix ---
         failing = status.get("failing", [])
-        failing_summary = _build_failing_summary(failing)
+
+        # Fetch job logs for richer context (only on failure, not on
+        # every PR poll — this stage runs infrequently).
+        log_text = ""
+        try:
+            forge = get_forge(s)
+            pr = forge.pr_status(source_branch=branch)
+            head_sha = (pr or {}).get("sha", "")
+            if head_sha:
+                runs = forge.list_workflow_runs(head_sha=head_sha)
+                for run in runs:
+                    if run.get("conclusion") == "failure":
+                        logs = forge.fetch_workflow_job_logs(
+                            run_id=run["id"]
+                        )
+                        if logs:
+                            log_text += (
+                                f"\n--- {run.get('name', 'workflow')} "
+                                f"(run {run['id']}) ---\n{logs}"
+                            )
+        except Exception:  # noqa: BLE001 — best-effort enrichment
+            log.warning("%s: failed to fetch job logs", ticket.id)
+
+        failing_summary = _build_failing_summary(failing, log_text)
 
         counter_path = (
             ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER

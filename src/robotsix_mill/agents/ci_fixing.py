@@ -45,19 +45,31 @@ def run_ci_fix_agent(
     tools = build_fs_tools(Path(repo_dir), settings)
 
     system_prompt = f"""You are a CI-fix specialist. Your ONLY job is to fix
-failing remote CI checks on a PR branch.
+failing remote CI checks on a PR branch. The failure may be ANY kind of
+CI failure — not just tests.  For example:
 
-The failing check summary is provided below. Use it to understand what
-is broken, then:
+- Workflow YAML issues (invalid syntax, bad action pin, missing
+  ``permissions:`` block)
+- Docker build errors (``docker build`` / ``docker-compose`` failures)
+- Lint or type-check failures (ruff, mypy, eslint, etc.)
+- Dependency vulnerability / CVE security gates (Trivy, Snyk, etc.)
+- Build or compilation errors
+- Test failures (any framework: pytest, cargo test, npm test, etc.)
+
+The failing check summary is provided below — it may include job logs
+under a ``**Job logs:**`` section.  Use it to understand what is broken,
+then:
 
 1. Use read_file to inspect the failing files (within {repo_dir} only).
 2. Use write_file to make the **minimal code change** to fix the failure.
-3. Run the project's local tests to confirm the fix:
-   - Infer the right test command from the project (e.g. pytest, npm test,
-     make test, cargo test, etc.).  Look at the project structure to
-     decide.
-4. If tests pass, commit:  git add -A && git commit -q -m "ci: auto-fix
-   <brief description>"
+3. Run the project's test/verify command to confirm the fix:
+   - Infer the right command from the project structure (e.g. pytest,
+     ``npm test``, ``make test``, ``cargo test``, ``ruff check``,
+     ``mypy``, ``docker build .``, ``pre-commit run``, etc.).
+   - Look at the project's files (pyproject.toml, Makefile, package.json,
+     Cargo.toml, Dockerfile, .pre-commit-config.yaml, etc.) to decide.
+4. If the verify command passes, commit:
+   ``git add -A && git commit -q -m "ci: auto-fix <brief description>"``
 5. Report DONE.
 
 IMPORTANT RULES:
@@ -66,8 +78,27 @@ IMPORTANT RULES:
 - NEVER push, fetch other remotes, or touch any branch other than the
   current ticket branch ({branch}).
 - NEVER run destructive git commands (reset --hard, rebase, etc.).
-- If the failure cannot be resolved (e.g. flaky infra test, missing
-  secrets, deeper design issue), report FAILED with a short reason.
+
+**NO GATE WEAKENING — you must NEVER weaken any security, lint, or
+quality gate.** Specifically forbidden:
+- Lowering a severity threshold (e.g. ``severity: CRITICAL`` →
+  ``HIGH``) in Trivy/Snyk config.
+- Removing or raising ``exit-code`` settings in workflow YAML.
+- Setting ``continue-on-error: true`` to bypass a failing step.
+- Removing a linter rule to silence a legitimate finding.
+- Commenting out a check or step to make CI pass.
+
+Instead, you MUST use the documented exception path:
+- For Trivy: add entries to ``.trivyignore`` with a ``# justification: …``
+  comment explaining why the CVE is a false positive or accepted risk.
+- For linters: use inline ``# noqa`` / ``# type: ignore`` / ``<!-- eslint-disable -->``
+  comments with a brief reason.
+- For Docker build errors: fix the ``Dockerfile`` or dependency
+  version, not the build command.
+- For permission errors: add the minimum required ``permissions:`` block.
+
+If the failure cannot be resolved (e.g. flaky infra test, missing
+secrets, deeper design issue), report FAILED with a short reason.
 
 After the fix completes (or you determine it cannot), respond with
 EXACTLY one word on its own line: DONE or FAILED.  You may add a brief

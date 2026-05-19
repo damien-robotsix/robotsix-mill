@@ -391,3 +391,79 @@ def test_ci_fix_counter_read_write(tmp_path):
     assert _read_counter(p) == 5
     _write_counter(p, 0)
     assert _read_counter(p) == 0
+
+
+# ---------------------------------------------------------------------------
+# _build_failing_summary with log_text
+# ---------------------------------------------------------------------------
+
+def test_build_failing_summary_includes_job_logs():
+    """_build_failing_summary includes **Job logs:** section when log_text provided."""
+    failing = [
+        {"name": "docker-build", "summary": None, "text": None, "annotations": []},
+    ]
+    result = _build_failing_summary(failing, log_text="ERROR: build failed\n")
+    assert "**Job logs:**" in result
+    assert "ERROR: build failed" in result
+
+
+def test_build_failing_summary_no_logs_still_works():
+    """Existing path unchanged when log_text is None/empty."""
+    failing = [
+        {"name": "lint", "summary": "err", "text": None, "annotations": []},
+    ]
+    result = _build_failing_summary(failing)
+    assert "**Job logs:**" not in result
+    assert "## Failing check #1: lint" in result
+
+
+def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
+    """Mock list_workflow_runs + fetch_workflow_job_logs; verify
+    _build_failing_summary receives the log text."""
+    ctx = _gh(tmp_path)
+    # PR status returns a sha.
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "http://pr",
+            "mergeable": True, "sha": "abc123",
+        },
+    )
+    # check_status returns failure.
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "build", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    # list_workflow_runs returns one failed run.
+    monkeypatch.setattr(
+        github.GitHubForge, "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: [
+            {"id": 42, "name": "CI", "workflow_id": 100,
+             "head_sha": "abc123", "conclusion": "failure",
+             "html_url": "http://x", "created_at": "2025-01-01T00:00:00Z"},
+        ],
+    )
+    # fetch_workflow_job_logs returns log text.
+    monkeypatch.setattr(
+        github.GitHubForge, "fetch_workflow_job_logs",
+        lambda self, *, run_id: "docker build error\n",
+    )
+    # ci-fix agent succeeds.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: True,
+    )
+    # push succeeds.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IN_REVIEW

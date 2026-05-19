@@ -66,6 +66,26 @@ class Forge(ABC):
         20 per failing check (adapter-enforced truncation).
         """
 
+    @abstractmethod
+    def list_workflow_runs(
+        self, *, branch: str | None = None, head_sha: str | None = None
+    ) -> list[dict]:
+        """List completed workflow runs, optionally filtered by branch or head SHA.
+
+        Returns a list of dicts, each with keys:
+        ``id``, ``name``, ``workflow_id``, ``head_sha``, ``conclusion``,
+        ``html_url``, ``created_at``.
+        """
+
+    @abstractmethod
+    def fetch_workflow_job_logs(self, *, run_id: int) -> str:
+        """Fetch the logs of all failed jobs in a workflow run.
+
+        Returns concatenated, ANSI-stripped, size-capped log text with
+        job-name headers.  Returns an empty string when no failed jobs
+        are found.
+        """
+
 
 def get_forge(settings: Settings) -> Forge:
     """Resolve the configured forge adapter."""

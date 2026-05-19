@@ -292,6 +292,29 @@ class Settings(BaseSettings):
         default=2, alias="MILL_CI_FIX_MAX_ATTEMPTS"
     )
 
+    # --- target-branch CI monitor ---
+    # When True, the worker runs a periodic poll that watches the forge
+    # target branch for completed workflow-run failures and files a
+    # source="ci" draft for each new one. Default False (opt-in).
+    ci_monitor_periodic: bool = Field(
+        default=False, alias="MILL_CI_MONITOR_PERIODIC"
+    )
+    # Interval between CI monitor polls (seconds). Only used when
+    # MILL_CI_MONITOR_PERIODIC=true.
+    ci_monitor_interval_seconds: int = Field(
+        default=3600, alias="MILL_CI_MONITOR_INTERVAL_SECONDS"
+    )
+    # Per-job log tail cap (bytes) when fetching workflow job logs for
+    # CI-fix context and the CI monitor draft body.
+    ci_log_max_bytes: int = Field(
+        default=65536, alias="MILL_CI_LOG_MAX_BYTES"
+    )
+
+    @property
+    def ci_monitor_memory_path(self) -> Path:
+        """Resolved path to the CI monitor dedup state file."""
+        return self.data_dir / "ci_monitor_state.json"
+
     # --- audit agent (meta-audit for quality/security coverage) ---
     # When True, the worker runs periodic audit passes at the configured
     # interval. Default False (opt-in).
