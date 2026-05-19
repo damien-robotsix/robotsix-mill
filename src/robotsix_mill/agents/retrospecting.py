@@ -40,6 +40,15 @@ across past tickets), do the following:
 4. Once you have filed a draft for an issue, record that fact in the
    memory and do **not** re-file the same issue on later tickets.
 
+5. Issues can also be *resolved externally* — another ticket or PR
+   (visible in this ticket's workflow, history, or evidence) already
+   fixed the underlying problem.  When you discover this, record the
+   resolution in the memory (include the ticket ID or PR that resolved
+   it) and mark the issue as resolved.  Set propose_draft=false for
+   that issue and do **not** re-propose it on future tickets.  An
+   externally-resolved issue is just as resolved as one where you
+   filed the draft yourself.
+
 HARD RULE — a clean run is NOT a ticket. If there is no specific,
 actionable improvement with enough corroboration, you MUST return
 propose_draft=false and leave draft_title and draft_body null/empty.
