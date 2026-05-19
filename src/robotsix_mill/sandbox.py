@@ -59,9 +59,21 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
     target = str(repo_dir)
     if settings.sandbox_data_mount:
         # bind case: resolve the repo's host path (data_mount + rel)
-        host_src = str(Path(settings.sandbox_data_mount) / rel)
+        host_src = Path(settings.sandbox_data_mount) / rel
+        if not host_src.exists():
+            raise SandboxError(
+                f"repo mount source does not exist: {host_src} — "
+                "the repository has not been cloned yet"
+            )
         return ["-v", f"{host_src}:{target}"]
-    # named-volume case: bind just the sub-path of the volume
+    # named-volume case: the volume exists, but the repo subdirectory
+    # on the host must also exist so that Docker can bind-mount the
+    # volume subpath (otherwise Docker fails with a generic error).
+    if not repo_dir.exists():
+        raise SandboxError(
+            f"repo directory does not exist: {repo_dir} — "
+            "the repository has not been cloned yet"
+        )
     return [
         "--mount",
         f"type=volume,src={settings.data_volume},dst={target},"

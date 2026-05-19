@@ -155,6 +155,27 @@ def test_edit_file_path_escape_rejected(tmp_path, fake_sandbox):
     assert "escapes" in result
 
 
+def test_fs_tools_non_existent_root_returns_clear_error(tmp_path, fake_sandbox):
+    """Every tool returns a stable error string (not a raw exception)
+    when the workspace repo directory hasn't been cloned yet."""
+    from robotsix_mill.config import Settings
+
+    fake_root = tmp_path / "does-not-exist"
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    read_file, write_file, edit_file, list_dir, run_command = build_fs_tools(
+        fake_root, s
+    )
+    msg = "workspace repo directory does not exist"
+
+    assert msg in read_file("anything.txt")
+    assert msg in write_file("x.txt", "content")
+    assert msg in edit_file("x.txt", "a", "b")
+    assert msg in list_dir(".")
+    # run_command does NOT go through _safe — it calls sandbox.run()
+    # directly. When the repo_dir doesn't exist, _repo_mount rejects it.
+    assert "repo" in run_command("true").lower()
+
+
 # --- implement stage ----------------------------------------------------
 
 def test_blocked_without_remote(ctx_factory):

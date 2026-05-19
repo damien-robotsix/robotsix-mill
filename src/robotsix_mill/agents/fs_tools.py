@@ -20,6 +20,11 @@ def _safe(root: Path, rel: str) -> Path:
     root = root.resolve()
     if p != root and not p.is_relative_to(root):
         raise ValueError(f"path {rel!r} escapes the repository")
+    if not root.exists():
+        raise ValueError(
+            "workspace repo directory does not exist — "
+            "the repository has not been cloned yet"
+        )
     return p
 
 
@@ -94,6 +99,11 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
         build steps, generators, ...). Returns exit code + combined
         stdout/stderr (truncated). Runs in an isolated, network-less
         sandbox — no internet, nothing outside the repo is reachable."""
+        if not root.exists():
+            return (
+                "error: workspace repo directory does not exist — "
+                "the repository has not been cloned yet"
+            )
         try:
             rc, out = sandbox.run(command, repo_dir=root, settings=settings)
         except sandbox.SandboxError as e:
