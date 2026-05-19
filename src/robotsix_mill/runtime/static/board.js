@@ -3,6 +3,7 @@ const LBL={ready:"implementing"};   // display label only; state value stays "re
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
 let runsOpen=false;
+let refreshSeq=0;                    // serialize concurrent refresh() calls
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":"user");
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
@@ -10,13 +11,21 @@ async function refresh(){
  // Skip loading reviewed (closed/done) tickets by default — they dominate
  // the row count and each costs a session_cost lookup. Fetch them only
  // when the user toggles "show closed".
- const url=showClosed?"/tickets":"/tickets?include_closed=false";
+ // Race guard: each refresh() captures a seq token and the showClosed
+ // it was started with; a later call bumps refreshSeq, so when this
+ // call's await resolves it can tell it's stale and skip rendering.
+ // (The auto-5s tick + the toggle's onchange refresh otherwise race,
+ // and the last response to land wins — making "show closed" flicker.)
+ const wantClosed=showClosed;
+ const tok=++refreshSeq;
+ const url=wantClosed?"/tickets":"/tickets?include_closed=false";
  const ts=await jget(url); if(!ts)return;
+ if(tok!==refreshSeq)return;        // a newer refresh started — drop stale
  const by={}; ST.forEach(s=>by[s]=[]);
  ts.forEach(t=>(by[t.state]=by[t.state]||[]).push(t));
  document.getElementById("meta").textContent=
    ts.length+" tickets · "+new Date().toLocaleTimeString();
- document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"||showClosed)).map(s=>`<div class="col">
+ document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"||wantClosed)).map(s=>`<div class="col">
   <h2>${LBL[s]||s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <button class="del-btn" title="Delete ticket" onclick="event.stopPropagation();del_('${t.id}')">✕</button>
