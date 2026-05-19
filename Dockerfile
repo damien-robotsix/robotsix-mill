@@ -54,7 +54,7 @@ ARG INSTALL_EXTRAS=tracing
 WORKDIR /build
 # Copy only what pip needs to install the package (avoids baking the full
 # source tree into the production image).
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir --root-user-action=ignore ".[${INSTALL_EXTRAS}]"
 
