@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from secrets import token_hex
 
@@ -53,8 +54,13 @@ class TicketService:
         with db.session(self.settings) as s:
             return s.get(Ticket, ticket_id)
 
-    def list(self, state: State | None = None) -> list[Ticket]:
-        """List tickets, optionally filtered by *state*.
+    def list(
+        self,
+        state: State | None = None,
+        exclude_states: Iterable[State] | None = None,
+    ) -> list[Ticket]:
+        """List tickets, optionally filtered by *state* or excluding
+        *exclude_states* (e.g. terminal CLOSED/DONE for a fast board).
 
         Results are ordered by ``created_at`` ascending.
         """
@@ -62,6 +68,8 @@ class TicketService:
             stmt = select(Ticket).order_by(Ticket.created_at)
             if state is not None:
                 stmt = stmt.where(Ticket.state == state)
+            if exclude_states:
+                stmt = stmt.where(Ticket.state.notin_(list(exclude_states)))
             return list(s.exec(stmt).all())
 
     def history(self, ticket_id: str) -> list[TicketEvent]:

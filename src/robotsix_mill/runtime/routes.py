@@ -65,10 +65,21 @@ def create_ticket(
 @router.get("/tickets", response_model=list[TicketRead])
 def list_tickets(
     state: State | None = None,
+    include_closed: bool = True,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
-    return [enrich_ticket_read(t, settings) for t in svc.list(state=state)]
+    # The board polls this every 5s. With many CLOSED/DONE tickets,
+    # returning all of them each refresh is wasted bytes + a session_cost
+    # call per ticket (Langfuse cache miss). The board passes
+    # include_closed=false; default stays True for API/back-compat.
+    exclude = None
+    if not include_closed:
+        exclude = {State.CLOSED, State.DONE}
+    return [
+        enrich_ticket_read(t, settings)
+        for t in svc.list(state=state, exclude_states=exclude)
+    ]
 
 
 @router.get("/tickets/{ticket_id}", response_model=TicketRead)

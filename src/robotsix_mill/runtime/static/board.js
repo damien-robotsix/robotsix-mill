@@ -7,7 +7,11 @@ const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":"user");
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
 async function refresh(){
- const ts=await jget("/tickets"); if(!ts)return;
+ // Skip loading reviewed (closed/done) tickets by default — they dominate
+ // the row count and each costs a session_cost lookup. Fetch them only
+ // when the user toggles "show closed".
+ const url=showClosed?"/tickets":"/tickets?include_closed=false";
+ const ts=await jget(url); if(!ts)return;
  const by={}; ST.forEach(s=>by[s]=[]);
  ts.forEach(t=>(by[t.state]=by[t.state]||[]).push(t));
  document.getElementById("meta").textContent=
