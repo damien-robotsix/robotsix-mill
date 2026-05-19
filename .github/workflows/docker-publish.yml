@@ -17,6 +17,7 @@ jobs:
       packages: write
       attestations: write
       contents: read
+      security-events: write  # required to upload the Trivy SARIF
     steps:
       - uses: actions/checkout@v4
 
