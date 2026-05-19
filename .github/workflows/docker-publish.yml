@@ -39,22 +39,54 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Resolve scan image tag
+        id: scan-ref
+        run: echo "image=$(echo "${{ steps.meta.outputs.tags }}" | head -1)" >> $GITHUB_OUTPUT
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: ${{ steps.scan-ref.outputs.image }}
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: "1"
+          # Initial gate: only CRITICAL, fixable CVEs block the pipeline.
+          # Once the CRITICAL backlog is addressed, tighten to CRITICAL,HIGH.
+          severity: CRITICAL
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Push Docker image
+        id: push
+        run: |
+          for tag in $(echo "${{ steps.meta.outputs.tags }}"); do
+            docker push "$tag"
+          done
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${{ steps.scan-ref.outputs.image }}" | cut -d'@' -f2)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+
       - uses: anchore/sbom-action@v0.21.0
         with:
-          image: docker.io/robotsix/mill@${{ steps.build.outputs.digest }}
+          image: docker.io/robotsix/mill@${{ steps.push.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.cdx.json
 
       - uses: actions/attest@v4
         with:
           subject-name: docker.io/robotsix/mill
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: sbom.cdx.json
           push-to-registry: true
 

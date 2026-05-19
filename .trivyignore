@@ -1,0 +1,4 @@
+# .trivyignore — CVE suppression list for Trivy scans
+# Format: one CVE ID per line (e.g., CVE-2024-XXXXX)
+# Optional expiry annotation:
+#   CVE-2024-XXXXX  # expires: YYYY-MM-DD
