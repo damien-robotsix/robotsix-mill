@@ -162,8 +162,11 @@ def test_repo_mount_rejects_non_existent_source(tmp_path):
         MILL_DATA_DIR="/data",
         MILL_SANDBOX_DATA_MOUNT="/host/.data",
     )
-    # bind case: the resolved host source path doesn't exist
-    with pytest.raises(sandbox.SandboxError, match="repo mount source does not exist"):
+    # bind case: the (container-visible) repo dir doesn't exist.
+    # We deliberately check repo_dir, NOT the host path string — the
+    # host path isn't visible in the mill container's filesystem
+    # (false negative -> "every sandbox call fails as not cloned").
+    with pytest.raises(sandbox.SandboxError, match="repo directory does not exist"):
         sandbox._repo_mount(Path("/data/work/repo"), s)
 
     # named-volume case: the repo dir doesn't exist

@@ -58,11 +58,19 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
         raise SandboxError("refusing to mount the data-dir root as repo")
     target = str(repo_dir)
     if settings.sandbox_data_mount:
-        # bind case: resolve the repo's host path (data_mount + rel)
+        # bind case: resolve the repo's host path (data_mount + rel).
+        # The host path is meaningful to DOCKER (which runs on the
+        # host) for the bind mount — checking its existence from
+        # INSIDE the mill container is broken: the container's fs only
+        # has the data dir at the container path (e.g. /data), not at
+        # the host's absolute path, so Path(host_src).exists() is
+        # ALWAYS False here (false negative -> every sandbox call
+        # fails with "repo not cloned"). Verify the container-visible
+        # path instead — same as the named-volume branch below.
         host_src = Path(settings.sandbox_data_mount) / rel
-        if not host_src.exists():
+        if not repo_dir.exists():
             raise SandboxError(
-                f"repo mount source does not exist: {host_src} — "
+                f"repo directory does not exist: {repo_dir} — "
                 "the repository has not been cloned yet"
             )
         return ["-v", f"{host_src}:{target}"]
