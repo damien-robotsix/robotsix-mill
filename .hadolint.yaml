@@ -1,0 +1,6 @@
+ignored:
+  - DL3008    # unpinned apt packages (relax initially)
+  - DL3059    # multiple consecutive RUN (relax initially)
+  - DL4006    # SHELL pipefail not set (relax initially)
+trustedRegistries:
+  - docker.io
