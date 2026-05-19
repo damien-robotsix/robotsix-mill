@@ -4,6 +4,7 @@ FROM python:3.14-slim
 # Acquire::Retries lets apt recover from transient mirror glitches.
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && apt-get update \
+    && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
         git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
@@ -15,7 +16,7 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 # static client binary (deterministic, release-independent). The
 # `docker --version` line FAILS THE BUILD if the binary is missing, so
 # an image can never again silently ship without it.
-ARG DOCKER_CLI_VERSION=27.3.1
+ARG DOCKER_CLI_VERSION=27.5.1
 RUN ARCH="$(dpkg --print-architecture)" \
     && case "$ARCH" in \
          amd64) DARCH=x86_64 ;; \
