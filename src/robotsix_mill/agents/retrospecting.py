@@ -69,6 +69,23 @@ across past tickets), do the following:
    use a consistent Markdown bullet format — each ticket on its own
    `- \`<ticket-id>\`` line — so they remain machine-parseable.
 
+7. The memory ledger is a **cross-ticket artifact** — it will be read
+   in the context of *other* tickets, not just the current one.
+   Therefore, when you write to the memory ledger you MUST use stable,
+   absolute references.  Deictic language — "this run", "this ticket",
+   "this retrospect", "here", "now" — is FORBIDDEN in memory entries
+   because it becomes stale and misleading when a different ticket's
+   run reads the ledger.  Instead, qualify every reference with the
+   relevant ticket ID.  Use patterns like:
+   - "Filed in retrospect run for `<ticket-id>`"
+   - "Draft proposed in retrospect for `<ticket-id>`"
+   - "Observed in `<ticket-id>`"
+   Additionally, when you receive existing memory that contains stale
+   deictic references (from earlier runs that predate this rule), you
+   MUST repair them — rewrite the offending phrases to use the
+   ticket-ID-qualified patterns above — so the ledger stays coherent
+   for all future readers.
+
 HARD RULE — a clean run is NOT a ticket. If there is no specific,
 actionable improvement with enough corroboration, you MUST return
 propose_draft=false and leave draft_title and draft_body null/empty.
