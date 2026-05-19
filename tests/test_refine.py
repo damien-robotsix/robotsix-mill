@@ -456,3 +456,23 @@ def test_draft_to_closed_transition_is_legal():
     from robotsix_mill.core.states import State as S
 
     assert can_transition(S.DRAFT, S.CLOSED) is True
+
+
+def test_dedup_guard_survives_preexisting_closed_ticket(
+    ctx, service, monkeypatch
+):
+    """Regression: SQLite returns updated_at tz-naive; the dedup guard
+    compared it to a tz-aware cutoff and raised TypeError, ERRORing
+    every draft once any CLOSED ticket existed. Refine must proceed."""
+    old = service.create("old done thing", "stuff")
+    service.transition(old.id, State.CLOSED)  # now a closed candidate
+    # Re-read via list() the way refine does → updated_at is tz-naive.
+    closed = [t for t in service.list() if t.id == old.id][0]
+    assert closed.updated_at.tzinfo is None  # reproduces the condition
+
+    monkeypatch.setattr(
+        refining, "run_refine_agent", lambda **_: "## Problem\nspec\n"
+    )
+    t = service.create("Add Y", "rough idea")
+    out = RefineStage().run(t, ctx)  # must NOT raise TypeError
+    assert out.next_state is not State.ERRORED

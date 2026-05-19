@@ -33,6 +33,19 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.refine")
 
 
+def _as_utc(dt: datetime) -> datetime:
+    """Coerce a possibly tz-naive datetime to aware UTC.
+
+    SQLite/SQLModel round-trips ``updated_at``/``created_at`` WITHOUT
+    tzinfo even though we store them from ``datetime.now(timezone.utc)``.
+    Comparing such a naive value against an aware cutoff raises
+    ``TypeError: can't compare offset-naive and offset-aware datetimes``
+    — which broke the dedup guard (hence refine) for every draft as soon
+    as any CLOSED ticket existed. Treat naive DB datetimes as UTC.
+    """
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 class RefineStage(Stage):
     name = "refine"
     input_state = State.DRAFT
@@ -78,7 +91,10 @@ class RefineStage(Stage):
             t for t in all_tickets
             if t.id != ticket.id and (
                 t.state not in non_terminal
-                or (t.state == State.CLOSED and t.updated_at >= lookback_cutoff)
+                or (
+                    t.state == State.CLOSED
+                    and _as_utc(t.updated_at) >= lookback_cutoff
+                )
             )
         ]
         candidates_json = json.dumps(
