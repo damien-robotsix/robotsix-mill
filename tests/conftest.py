@@ -27,6 +27,11 @@ def _no_dotenv(monkeypatch):
         "GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY",
         "GITHUB_APP_PRIVATE_KEY_PATH",
         "NTFY_URL", "NTFY_TOKEN",
+        # Deployment/DinD-only knob: the container sets this so the
+        # sandbox bind-mounts the host ./data. Leaking it flips
+        # _repo_mount from the named-volume branch to the bind branch,
+        # breaking test_sandbox argv assertions in-container.
+        "MILL_SANDBOX_DATA_MOUNT",
     ):
         monkeypatch.delenv(var, raising=False)
 
