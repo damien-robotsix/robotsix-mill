@@ -53,6 +53,7 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
     class FakeAgent:
         def __init__(self, **kw):
             cap["tools"] = sorted(t.__name__ for t in kw.get("tools", []))
+            cap["name"] = kw.get("name")
 
         def run_sync(self, q, *, usage_limits=None):
             cap["limit"] = usage_limits.request_limit
@@ -71,3 +72,4 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
     assert cap["model"] == "explore/cheap"  # its own model, not coordinator
     assert cap["tools"] == ["list_dir", "read_file"]  # NO write/run
     assert cap["limit"] == 7
+    assert cap["name"] == "explore"

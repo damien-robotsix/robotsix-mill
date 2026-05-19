@@ -66,6 +66,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
         system_prompt=_SYSTEM_PROMPT,
         output_type=str,
         tools=ro_tools,
+        name="explore",
     )
     limits = UsageLimits(request_limit=settings.explore_request_limit)
     try:

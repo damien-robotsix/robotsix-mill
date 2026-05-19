@@ -162,7 +162,7 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
 
     class FakeAgent:
         def __init__(self, **kw):
-            pass
+            captured["name"] = kw.get("name")
 
         def run_sync(self, query, *, usage_limits=None):
             captured["limit"] = usage_limits.request_limit
@@ -181,6 +181,7 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
     assert out == "ok"
     assert captured["model"] == "cheap/mini:online"
     assert captured["limit"] == 5
+    assert captured["name"] == "web_research"
 
 
 def test_compose_prompt_appends_skills(tmp_path):

@@ -76,6 +76,7 @@ def run_refine_agent(
         tools=tools,
         web=True,  # cheap web_research sub-agent (external lookups only)
         model_name=settings.refine_model,
+        name="refine",
     )
     result = call_with_retry(
         lambda: agent.run_sync(

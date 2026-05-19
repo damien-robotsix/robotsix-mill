@@ -78,6 +78,7 @@ explanation after FAILED."""
         output_type=str,
         tools=tools,
         web=False,
+        name="rebase",
     )
 
     result = agent.run_sync(

@@ -58,6 +58,7 @@ def run_web_research(*, settings: Settings, query: str) -> str:
         system_prompt=_SYSTEM_PROMPT,
         output_type=str,
         tools=[make_web_fetch(settings)],
+        name="web_research",
     )
     limits = UsageLimits(request_limit=settings.web_research_request_limit)
     try:

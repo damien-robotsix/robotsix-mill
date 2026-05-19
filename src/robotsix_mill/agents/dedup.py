@@ -96,6 +96,7 @@ def run_dedup_check(
         system_prompt=SYSTEM_PROMPT,
         output_type=dict,
         model_name=settings.dedup_model,
+        name="dedup",
     )
     # request_limit must be passed via usage_limits=UsageLimits(...),
     # NOT as a bare run_sync kwarg — the bare kwarg raises
