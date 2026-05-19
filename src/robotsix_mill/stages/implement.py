@@ -52,9 +52,25 @@ class ImplementStage(Stage):
             repo_dir, branch
         )
         if resuming:
-            log.info("%s: resuming from existing WIP branch", ticket.id)
             git_ops.checkout(repo_dir, branch)
-        else:
+            # Refresh the WIP branch onto current target before running:
+            # a branch pinned to an OLD base runs the in-sandbox test
+            # gate against stale code (e.g. a pre-fix conftest) and
+            # re-BLOCKS forever even after main is fixed. If it can't
+            # rebase cleanly, discard the stale WIP and re-clone fresh
+            # (a gate-blocked WIP was against a broken gate anyway).
+            if git_ops.try_rebase_onto(repo_dir, s.forge_target_branch):
+                log.info(
+                    "%s: resuming WIP branch (rebased onto %s)",
+                    ticket.id, s.forge_target_branch,
+                )
+            else:
+                log.warning(
+                    "%s: WIP rebase onto %s failed — re-cloning fresh",
+                    ticket.id, s.forge_target_branch,
+                )
+                resuming = False
+        if not resuming:
             if repo_dir.exists():
                 shutil.rmtree(repo_dir)
             try:

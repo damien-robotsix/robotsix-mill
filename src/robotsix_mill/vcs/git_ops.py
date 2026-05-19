@@ -84,6 +84,30 @@ def current_branch(repo: Path) -> str:
     return _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
 
 
+def try_rebase_onto(repo: Path, target: str) -> bool:
+    """Fetch ``origin/<target>`` and rebase the current branch onto it.
+
+    Deterministic (no agent). Returns ``True`` on a clean rebase;
+    on any fetch/rebase failure it aborts a half-applied rebase and
+    returns ``False`` so the caller can fall back to a fresh clone.
+    Used by the implement resume path so a WIP branch pinned to an old
+    base picks up current ``main`` (e.g. a fixed test-gate conftest)
+    instead of failing the gate forever."""
+    try:
+        _git(repo, "fetch", "origin", target)
+    except subprocess.CalledProcessError:
+        return False
+    try:
+        _git(repo, "rebase", f"origin/{target}")
+        return True
+    except subprocess.CalledProcessError:
+        try:
+            _git(repo, "rebase", "--abort")
+        except subprocess.CalledProcessError:
+            pass
+        return False
+
+
 def head_sha(repo: Path) -> str:
     """Current HEAD commit SHA. Used to detect a no-op rebase so the
     merge stage can skip a pointless force-push (an unchanged push still
