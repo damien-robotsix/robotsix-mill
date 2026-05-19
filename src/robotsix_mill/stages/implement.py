@@ -85,6 +85,33 @@ class ImplementStage(Stage):
                     State.BLOCKED, f"clone failed: {e.stderr[:300]}"
                 )
             git_ops.create_branch(repo_dir, branch)
+
+        # Hard invariant: NEVER run the agent / sandbox without a
+        # materialized clone. A repo that was pruned after a prior
+        # delivery, rmtree'd by the resume path, or never created
+        # would otherwise blow up deep in the test sandbox with a
+        # confusing "repo not cloned" — *after* burning the expensive
+        # coordinator. Re-clone here; if that fails it's a clean,
+        # resumable BLOCK (next run re-clones) instead.
+        if not (repo_dir / ".git").exists():
+            log.warning(
+                "%s: clone missing before agent run — re-cloning",
+                ticket.id,
+            )
+            if repo_dir.exists():
+                shutil.rmtree(repo_dir, ignore_errors=True)
+            try:
+                git_ops.clone(
+                    s.forge_remote_url, repo_dir,
+                    s.forge_target_branch, s.forge_token,
+                )
+                git_ops.create_branch(repo_dir, branch)
+            except subprocess.CalledProcessError as e:
+                return Outcome(
+                    State.BLOCKED,
+                    "repo clone missing and re-clone failed — "
+                    f"resumable: {(e.stderr or '')[:200]}",
+                )
         ctx.service.set_branch(ticket.id, branch)
 
         spec = ws.read_description()
