@@ -4,6 +4,7 @@ from robotsix_mill.agents import retrospecting
 from robotsix_mill.agents.retrospecting import RetrospectResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.text_utils import truncate_at_boundary
 from robotsix_mill import langfuse_client
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
@@ -327,3 +328,44 @@ def test_is_noop_draft_helper():
     assert not _is_noop_draft(
         "Cap transient retries at 2 in agents/retry.py", real_body
     )
+
+
+# --- truncate_at_boundary tests ---
+
+
+def test_truncate_noop_when_within_limit():
+    """Text ≤ max_chars is returned unchanged with no indicator."""
+    text = "Short description."
+    assert truncate_at_boundary(text, 6000) == text
+
+
+def test_truncate_at_sentence_boundary():
+    """A ~6100-char description with a sentence boundary at ~5950
+    truncates at the boundary, not at the hard 6000 limit."""
+    # Build a description where the last ". " before 6000 is at ~5950.
+    prefix = "A" * 5948 + ". "  # sentence boundary ends at position 5950
+    suffix = "B" * 200           # pushes total well past 6000
+    text = prefix + suffix       # len ≈ 6150
+    result = truncate_at_boundary(text, 6000)
+    # Should have truncated at the ". " boundary (position 5950).
+    assert result.startswith("A" * 5948 + ".")
+    assert "[... description truncated;" in result
+    assert "chars omitted]" in result
+    # Hard truncation at 6000 would have included some B's; verify none appear.
+    assert "B" not in result
+
+
+def test_truncation_indicator_appended():
+    """When truncation occurs, the indicator with the correct count is appended."""
+    text = "Sentence one. Sentence two." + "X" * 6100
+    result = truncate_at_boundary(text, 6000)
+    assert "[... description truncated;" in result
+    # The omitted count should equal len(text) minus the cut position.
+    # Extract the number from the indicator.
+    import re
+    m = re.search(r"\[\.\.\. description truncated; (\d+) chars omitted\]", result)
+    assert m is not None
+    omitted = int(m.group(1))
+    # The truncated portion (before indicator) should be shorter than original.
+    truncated_body = result[: result.index("[... description truncated;")]
+    assert omitted == len(text) - len(truncated_body.rstrip("\n"))

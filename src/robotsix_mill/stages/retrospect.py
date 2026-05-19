@@ -17,6 +17,7 @@ from .. import langfuse_client
 from ..agents import retrospecting
 from ..core.models import Ticket
 from ..core.states import State
+from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
 from .base import Outcome, Stage, StageContext
 
@@ -63,9 +64,12 @@ class RetrospectStage(Stage):
             f"{e.at:%Y-%m-%d %H:%M} {e.state} {e.note or ''}".rstrip()
             for e in history
         )
+        desc = ws.read_description()
+        if desc:
+            desc = truncate_at_boundary(desc, 6000)
         ticket_summary = (
             f"id: {ticket.id}\ntitle: {ticket.title}\n"
-            f"branch: {ticket.branch}\n\n{ws.read_description()[:6000]}"
+            f"branch: {ticket.branch}\n\n{desc}"
         )
         lf = langfuse_client.fetch_session_summary(s, ticket.id)
 
