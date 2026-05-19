@@ -1,9 +1,11 @@
 import hashlib
+from pathlib import Path
 
 import pytest
 
 from robotsix_mill.agents import dedup
 from robotsix_mill.agents import refining
+from robotsix_mill.agents.kb import load_kb
 from robotsix_mill.config import Settings
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -533,3 +535,73 @@ def test_aware_vs_aware_comparison_no_typeerror(service):
     )
     assert ticket.updated_at >= cutoff  # must not raise TypeError
     assert ticket.created_at >= cutoff
+
+
+# --- KB injection into refine agent ---
+
+
+def test_refine_agent_sees_kb_content(monkeypatch, tmp_path):
+    """When kb_dir contains entries, the refine agent's system prompt
+    includes the KB content."""
+    from robotsix_mill.agents import base as base_mod
+
+    kb_dir = tmp_path / "kb"
+    kb_dir.mkdir()
+    (kb_dir / "gotcha.md").write_text("# Test Gotcha\n\nA known limitation.\n")
+
+    seen_system_prompt: list[str] = []
+
+    def fake_build_agent(settings, system_prompt, tools, web, model_name):
+        seen_system_prompt.append(system_prompt)
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": "## Problem\nok\n"})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_KB_DIR=str(kb_dir))
+    result = refining.run_refine_agent(
+        settings=s, title="Test", draft="draft",
+    )
+
+    assert result == "## Problem\nok"
+    assert len(seen_system_prompt) == 1
+    prompt = seen_system_prompt[0]
+    assert "# Technology Constraints" in prompt
+    assert "Test Gotcha" in prompt
+    assert "A known limitation" in prompt
+
+
+def test_refine_agent_no_kb_when_dir_missing(monkeypatch, tmp_path):
+    """When kb_dir doesn't exist, the system prompt is unchanged
+    (no KB section injected)."""
+    from robotsix_mill.agents import base as base_mod
+
+    seen_system_prompt: list[str] = []
+
+    def fake_build_agent(settings, system_prompt, tools, web, model_name):
+        seen_system_prompt.append(system_prompt)
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": "## Problem\nok\n"})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    missing = tmp_path / "nonexistent_kb"
+    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_KB_DIR=str(missing))
+    result = refining.run_refine_agent(
+        settings=s, title="Test", draft="draft",
+    )
+
+    assert result == "## Problem\nok"
+    assert len(seen_system_prompt) == 1
+    prompt = seen_system_prompt[0]
+    assert "# Technology Constraints" not in prompt
+
+
+def test_refine_agent_kb_dir_default(tmp_path):
+    """settings.kb_dir defaults to Path('kb')."""
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    assert s.kb_dir == Path("kb")
