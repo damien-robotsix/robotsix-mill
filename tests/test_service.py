@@ -277,6 +277,21 @@ def test_initial_cost_is_zero(service):
     assert t.cost_usd == 0.0
 
 
+def test_origin_session_stored_when_provided(service):
+    t = service.create("origin test", origin_session="audit-20250101-abc123")
+    assert t.origin_session == "audit-20250101-abc123"
+    # Verify it's persisted in the DB.
+    reloaded = service.get(t.id)
+    assert reloaded.origin_session == "audit-20250101-abc123"
+
+
+def test_origin_session_is_none_by_default(service):
+    t = service.create("no origin")
+    assert t.origin_session is None
+    reloaded = service.get(t.id)
+    assert reloaded.origin_session is None
+
+
 
 def test_delete_removes_row_events_and_workspace(service, settings):
     t = service.create("junk: no notable issues clean run", "noise")

@@ -104,7 +104,8 @@ class TicketService:
         return True
 
     def create(
-        self, title: str, description: str = "", source: str = "user"
+        self, title: str, description: str = "", source: str = "user",
+        origin_session: str | None = None,
     ) -> Ticket:
         """Create a new ticket with the given *title*.
 
@@ -127,6 +128,7 @@ class TicketService:
                 workspace_path=str(ws.dir),
                 content_hash=content_hash,
                 source=source,
+                origin_session=origin_session,
             )
             s.add(ticket)
             s.add(

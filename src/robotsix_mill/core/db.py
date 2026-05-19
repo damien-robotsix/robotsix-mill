@@ -68,6 +68,13 @@ def _run_migrations(settings: Settings) -> None:
             conn.commit()
             log.info("migration: added blocked_from column to ticket table")
 
+        if "origin_session" not in columns:
+            conn.execute(
+                "ALTER TABLE ticket ADD COLUMN origin_session TEXT DEFAULT NULL"
+            )
+            conn.commit()
+            log.info("migration: added origin_session column to ticket table")
+
         # cost_usd is no longer persisted — per-ticket cost is read
         # on-demand from the Langfuse session at API render time (see
         # langfuse_client.session_cost). The column may still exist on

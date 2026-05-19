@@ -108,7 +108,10 @@ async function open_(id){
    <div class="muted">${t.id}</div>
    <p>state <b class="s-${t.state}" style="border-left:3px solid var(--c);
       padding-left:6px">${t.state}</b> · branch ${esc(t.branch)||"—"}<br>
-   source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>
+   source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
+   (t.origin_session_url?` · origin <a href="${esc(t.origin_session_url)}" target="_blank" rel="noopener" class="origin-link">${esc(t.origin_session)}</a>`:
+    t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
+   `<br>
    · cost <b>$${(t.cost_usd||0).toFixed(4)}</b><br>
    created ${t.created_at} · updated ${t.updated_at}</p>
    <h3>History</h3>`+

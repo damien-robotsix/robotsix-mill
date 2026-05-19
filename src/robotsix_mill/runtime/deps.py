@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from ..config import Settings
-from ..core.models import Ticket
+from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE
 from .run_registry import RunRegistry
@@ -42,6 +42,19 @@ def maybe_enqueue(ticket: Ticket, worker: Worker) -> None:
         worker.enqueue(ticket.id)
 
 
+def _origin_session_url(ticket: Ticket, settings: Settings) -> str | None:
+    """Return a Langfuse web-UI session URL for *ticket*'s origin session.
+
+    Returns ``None`` when any ingredient is missing — no broken links.
+    """
+    origin = ticket.origin_session
+    base = settings.langfuse_base_url
+    project_id = settings.langfuse_project_id
+    if origin and base and project_id:
+        return f"{base.rstrip('/')}/project/{project_id}/sessions/{origin}"
+    return None
+
+
 def with_cost(ticket: Ticket, settings: Settings) -> Ticket:
     """Populate ``cost_usd`` on *ticket* (in-place) from the Langfuse session.
 
@@ -52,3 +65,22 @@ def with_cost(ticket: Ticket, settings: Settings) -> Ticket:
 
     ticket.cost_usd = session_cost(settings, ticket.id)
     return ticket
+
+
+def enrich_ticket_read(ticket: Ticket, settings: Settings) -> TicketRead:
+    """Convert a :class:`Ticket` into a :class:`TicketRead`, populating
+    ``cost_usd`` from Langfuse and computing ``origin_session_url``."""
+    with_cost(ticket, settings)
+    return TicketRead(
+        id=ticket.id,
+        title=ticket.title,
+        state=ticket.state,
+        branch=ticket.branch,
+        parent_id=ticket.parent_id,
+        source=ticket.source,
+        origin_session=ticket.origin_session,
+        origin_session_url=_origin_session_url(ticket, settings),
+        cost_usd=ticket.cost_usd,
+        created_at=ticket.created_at,
+        updated_at=ticket.updated_at,
+    )

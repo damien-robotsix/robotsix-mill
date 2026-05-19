@@ -75,6 +75,7 @@ def make_report_issue_tool(settings: Settings):
             cat = category if category in _CATEGORIES else "other"
 
             from ..core.service import TicketService
+            from ..runtime.tracing import current_session
 
             service = TicketService(settings)
 
@@ -95,7 +96,8 @@ def make_report_issue_tool(settings: Settings):
                 f"**Reported by an agent** (category: {cat})\n\n"
                 f"{(body or '').strip()}\n"
             )
-            ticket = service.create(title, full_body, source="agent")
+            ticket = service.create(title, full_body, source="agent",
+                                     origin_session=current_session())
             return f"report_issue: filed draft {ticket.id}"
         except Exception as e:  # noqa: BLE001 — never abort the agent run
             return f"report_issue: could not file ticket ({e!r})"

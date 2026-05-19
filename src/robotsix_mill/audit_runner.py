@@ -122,7 +122,8 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
         if not title or not body:
             continue
         try:
-            ticket = service.create(title, body, source="audit")
+            ticket = service.create(title, body, source="audit",
+                                     origin_session=session_id)
             # ticket is already in DRAFT state after create()
             created.append({"id": ticket.id, "title": ticket.title})
             log.info("audit spawned draft %s: %s", ticket.id, title)

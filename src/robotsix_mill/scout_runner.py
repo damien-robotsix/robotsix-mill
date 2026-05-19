@@ -55,6 +55,7 @@ def run_scout_pass(root: str | None = None) -> ScoutPassResult:
 
     # Import here to allow monkeypatching in tests.
     from .agents import scouting
+    from .runtime.tracing import current_session
 
     try:
         res = scouting.run_scout_agent(
@@ -81,7 +82,8 @@ def run_scout_pass(root: str | None = None) -> ScoutPassResult:
         if not title or not body:
             continue
         try:
-            ticket = service.create(title, body, source="scout")
+            ticket = service.create(title, body, source="scout",
+                                     origin_session=current_session())
             created.append({"id": ticket.id, "title": ticket.title})
             log.info("scout spawned draft %s: %s", ticket.id, title)
         except Exception:

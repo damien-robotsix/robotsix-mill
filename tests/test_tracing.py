@@ -142,3 +142,19 @@ def test_no_otel_imports_at_module_level():
         [sys.executable, "-c", code], capture_output=True, text=True, env=env
     )
     assert r.returncode == 0, f"eagerly imported: {r.stdout.strip()}"
+
+
+# --- current_session() public getter ---
+
+def test_current_session_returns_none_when_not_set():
+    """current_session() returns None when no session is in scope."""
+    assert tracing.current_session() is None
+
+
+def test_current_session_returns_contextvar_value():
+    """current_session() returns the _current_session context-var value."""
+    token = tracing._current_session.set("ticket-42")
+    try:
+        assert tracing.current_session() == "ticket-42"
+    finally:
+        tracing._current_session.reset(token)

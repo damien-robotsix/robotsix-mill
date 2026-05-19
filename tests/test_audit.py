@@ -158,6 +158,10 @@ def test_run_audit_pass_creates_draft_tickets(tmp_path, monkeypatch):
     audit_tickets = [t for t in tickets if t.source == "audit"]
     assert len(audit_tickets) == 2
     assert audit_tickets[0].state == State.DRAFT
+    # Each draft should have origin_session == the audit run's session_id.
+    for t in audit_tickets:
+        assert t.origin_session == result.session_id
+        assert t.origin_session.startswith("audit-")
 
 
 def test_run_audit_pass_no_drafts_when_empty(tmp_path, monkeypatch):

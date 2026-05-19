@@ -40,6 +40,9 @@ class Ticket(SQLModel, table=True):
     # enables the BLOCKED → <originating state> resume path so only the
     # failed stage is re-run.
     blocked_from: str | None = Field(default=None)
+    # Langfuse session id that produced this ticket (set at creation by
+    # agent emission sites; None for human/API-created tickets).
+    origin_session: str | None = Field(default=None)
     # cumulative LLM spend in USD, synced from Langfuse session totals
     # by the periodic cost-sync loop. Zero when Langfuse is unconfigured.
     cost_usd: float = Field(default=0.0)
@@ -98,6 +101,8 @@ class TicketRead(SQLModel):
     branch: str | None
     parent_id: str | None
     source: str
+    origin_session: str | None
+    origin_session_url: str | None
     cost_usd: float
     created_at: datetime
     updated_at: datetime

@@ -18,7 +18,6 @@ from fastapi.responses import HTMLResponse
 from ..core.models import (
     Comment,
     CommentCreate,
-    Ticket,
     TicketCreate,
     TicketEvent,
     TicketRead,
@@ -28,12 +27,12 @@ from ..core.service import TransitionError
 from ..core.states import State
 from .board_html import BOARD_HTML
 from .deps import (
+    enrich_ticket_read,
     get_run_registry,
     get_service,
     get_settings,
     get_worker,
     maybe_enqueue,
-    with_cost,
 )
 
 log = logging.getLogger(__name__)
@@ -56,10 +55,11 @@ def create_ticket(
     body: TicketCreate,
     svc=Depends(get_service),
     worker=Depends(get_worker),
-) -> Ticket:
+    settings=Depends(get_settings),
+) -> TicketRead:
     ticket = svc.create(body.title, body.description)
     maybe_enqueue(ticket, worker)  # "directly taken in charge"
-    return ticket
+    return enrich_ticket_read(ticket, settings)
 
 
 @router.get("/tickets", response_model=list[TicketRead])
@@ -67,8 +67,8 @@ def list_tickets(
     state: State | None = None,
     svc=Depends(get_service),
     settings=Depends(get_settings),
-) -> list[Ticket]:
-    return [with_cost(t, settings) for t in svc.list(state=state)]
+) -> list[TicketRead]:
+    return [enrich_ticket_read(t, settings) for t in svc.list(state=state)]
 
 
 @router.get("/tickets/{ticket_id}", response_model=TicketRead)
@@ -76,11 +76,11 @@ def get_ticket(
     ticket_id: str,
     svc=Depends(get_service),
     settings=Depends(get_settings),
-) -> Ticket:
+) -> TicketRead:
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    return with_cost(ticket, settings)
+    return enrich_ticket_read(ticket, settings)
 
 
 @router.get("/tickets/{ticket_id}/history", response_model=list[TicketEvent])
@@ -121,7 +121,8 @@ def transition(
     body: TicketTransition,
     svc=Depends(get_service),
     worker=Depends(get_worker),
-) -> Ticket:
+    settings=Depends(get_settings),
+) -> TicketRead:
     try:
         ticket = svc.transition(ticket_id, body.state, body.note)
     except KeyError:
@@ -129,7 +130,7 @@ def transition(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)  # human unblock re-triggers the chain
-    return ticket
+    return enrich_ticket_read(ticket, settings)
 
 
 @router.post("/tickets/{ticket_id}/approve", response_model=TicketRead)
@@ -137,7 +138,8 @@ def approve_ticket(
     ticket_id: str,
     svc=Depends(get_service),
     worker=Depends(get_worker),
-) -> Ticket:
+    settings=Depends(get_settings),
+) -> TicketRead:
     try:
         ticket = svc.transition(
             ticket_id, State.READY, note="approved by human"
@@ -147,7 +149,7 @@ def approve_ticket(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)  # implement picks it up from ready
-    return ticket
+    return enrich_ticket_read(ticket, settings)
 
 
 @router.post(
@@ -199,7 +201,7 @@ def request_changes(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
-    return {"comment": comment, "ticket": with_cost(ticket, settings)}
+    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings)}
 
 
 @router.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)
@@ -207,7 +209,8 @@ def resume_blocked(
     ticket_id: str,
     svc=Depends(get_service),
     worker=Depends(get_worker),
-) -> Ticket:
+    settings=Depends(get_settings),
+) -> TicketRead:
     """Resume a blocked ticket back to the state it was blocked from."""
     try:
         ticket = svc.resume_blocked(ticket_id)
@@ -216,7 +219,7 @@ def resume_blocked(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
-    return ticket
+    return enrich_ticket_read(ticket, settings)
 
 
 @router.post("/audit", status_code=202)

@@ -132,6 +132,15 @@ def init(settings: Settings) -> None:
     pass
 
 
+def current_session() -> str | None:
+    """Return the Langfuse session id currently in scope, or ``None``.
+
+    This is the single public access point for the session context-var.
+    No other module imports ``_current_session`` directly.
+    """
+    return _current_session.get()
+
+
 def flush_tracing() -> None:
     """Force-flush any pending spans.  Call at worker shutdown.
 

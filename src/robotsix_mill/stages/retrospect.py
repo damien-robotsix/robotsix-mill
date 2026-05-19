@@ -21,6 +21,7 @@ from ..core.states import State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
+from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
@@ -290,7 +291,8 @@ class RetrospectStage(Stage):
                 )
             else:
                 draft = ctx.service.create(
-                    res.draft_title, res.draft_body, source="retrospect"
+                    res.draft_title, res.draft_body, source="retrospect",
+                    origin_session=current_session(),
                 )
                 ctx.service.set_parent(draft.id, ticket.id)
                 spawned = draft.id
