@@ -170,6 +170,7 @@ def run_retrospect_agent(
         output_type=PromptedOutput(RetrospectResult),
         model_name=settings.retrospect_model,
         tools=extra_tools,
+        report_issue=False,
         name="retrospect",
     )
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"

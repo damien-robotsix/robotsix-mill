@@ -147,6 +147,7 @@ def run_audit_agent(
         output_type=PromptedOutput(AuditResult),
         tools=tools,
         web=True,  # web_research = EXTERNAL best-practice lookups only
+        report_issue=False,
         model_name=settings.audit_model,
         name="audit",
     )

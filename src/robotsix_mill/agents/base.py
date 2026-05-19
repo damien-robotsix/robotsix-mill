@@ -51,12 +51,16 @@ def build_agent(
     output_type: Any = str,
     tools: list | None = None,
     web: bool = False,
+    report_issue: bool = True,
     model_name: str | None = None,
     name: str | None = None,
 ):
     """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
     role passes its own ``model_name`` (see Settings per-agent models);
     falls back to the coordinator ``model``. Raises if no key.
+
+    Set ``report_issue=False`` for agents that already emit draft
+    tickets through their structured output (audit, retrospect).
 
     Note: for a structured ``output_type`` on a model whose provider
     rejects forced ``tool_choice``, wrap it in ``PromptedOutput`` at
@@ -79,10 +83,11 @@ def build_agent(
     )
 
     all_tools = list(tools or [])
-    # Every agent can self-report a blocking/degrading issue (missing
-    # tool, error, workflow gap, missing input) as a draft ticket.
-    # Dedup-guarded so a looping agent can't spam identical tickets.
-    all_tools.append(make_report_issue_tool(settings))
+    if report_issue:
+        # Every agent can self-report a blocking/degrading issue (missing
+        # tool, error, workflow gap, missing input) as a draft ticket.
+        # Dedup-guarded so a looping agent can't spam identical tickets.
+        all_tools.append(make_report_issue_tool(settings))
     if web:
         # Not ":online", not web_fetch on the main agent — a cheap
         # sub-agent does the searching and hands back only a conclusion.
