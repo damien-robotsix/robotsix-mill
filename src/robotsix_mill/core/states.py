@@ -48,9 +48,9 @@ class State(StrEnum):
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {
     State.DRAFT: {State.READY, State.AWAITING_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED},
-    # awaiting_approval is a human-wait state; the human approves → ready
-    # or escalates → blocked/failed.
-    State.AWAITING_APPROVAL: {State.READY, State.ERRORED, State.BLOCKED},
+    # awaiting_approval is a human-wait state; the human approves → ready,
+    # rejects back to draft with comments, or escalates → blocked/failed.
+    State.AWAITING_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},
     # implement routes straight to deliverable (the PR itself is the
     # review — no separate pre-deliver code-review state).
     State.READY: {State.DELIVERABLE, State.ERRORED, State.BLOCKED},

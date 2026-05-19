@@ -66,6 +66,18 @@ class TicketEvent(SQLModel, table=True):
     )
 
 
+class Comment(SQLModel, table=True):
+    """Reviewer comment on a ticket — append-only, single-level."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    ticket_id: str = Field(foreign_key="ticket.id", index=True)
+    body: str
+    created_at: datetime = Field(
+        default_factory=_now,
+        sa_column=Column(TZDateTime()),
+    )
+
+
 # --- API request/response shapes ---
 
 
@@ -89,3 +101,14 @@ class TicketRead(SQLModel):
     cost_usd: float
     created_at: datetime
     updated_at: datetime
+
+
+class CommentCreate(SQLModel):
+    body: str
+
+
+class CommentRead(SQLModel):
+    id: int
+    ticket_id: str
+    body: str
+    created_at: datetime

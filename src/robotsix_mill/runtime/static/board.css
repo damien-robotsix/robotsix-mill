@@ -30,6 +30,9 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
+.reject-btn{font-size:11px;margin-top:5px;margin-left:4px;padding:3px 8px;
+background:#d97706;color:#fff;border:none;border-radius:4px;cursor:pointer}
+.reject-btn:hover{background:#b45309}
 .del-btn{position:absolute;top:4px;right:4px;font-size:11px;line-height:1;
 padding:2px 5px;background:#3a1f1f;color:#f87171;border:1px solid #5b2a2a;
 border-radius:4px;cursor:pointer;opacity:0;transition:opacity .1s}

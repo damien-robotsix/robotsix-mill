@@ -17,7 +17,7 @@ from sqlmodel import select
 
 from . import db
 from ..config import Settings
-from .models import Ticket, TicketEvent
+from .models import Ticket, TicketEvent, Comment
 from .states import State, can_transition
 from .workspace import Workspace
 
@@ -253,3 +253,66 @@ class TicketService:
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()
+
+    # --- comments ---
+    def add_comment(self, ticket_id: str, body: str) -> Comment:
+        """Add a reviewer comment to a ticket. Raises ``KeyError`` if
+        the ticket does not exist."""
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            comment = Comment(ticket_id=ticket_id, body=body)
+            s.add(comment)
+            s.commit()
+            s.refresh(comment)
+            return comment
+
+    def list_comments(self, ticket_id: str) -> list[Comment]:
+        """Return all comments for *ticket_id*, ordered oldest-first.
+        Raises ``KeyError`` if the ticket does not exist."""
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            stmt = (
+                select(Comment)
+                .where(Comment.ticket_id == ticket_id)
+                .order_by(Comment.created_at)
+            )
+            return list(s.exec(stmt).all())
+
+    def request_changes(
+        self, ticket_id: str, body: str
+    ) -> tuple[Comment, Ticket]:
+        """Add a comment AND transition from ``awaiting_approval`` to
+        ``draft`` in one atomic operation.
+
+        Returns the new ``(Comment, Ticket)`` pair. Raises ``KeyError``
+        if the ticket does not exist, ``TransitionError`` if it is not
+        in ``awaiting_approval``.
+        """
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            if ticket.state is not State.AWAITING_APPROVAL:
+                raise TransitionError(
+                    f"{ticket_id}: cannot request changes — "
+                    f"not awaiting_approval (currently {ticket.state})"
+                )
+            comment = Comment(ticket_id=ticket_id, body=body)
+            s.add(comment)
+            note = f"changes requested: {body}"
+            ticket.state = State.DRAFT
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.add(
+                TicketEvent(
+                    ticket_id=ticket_id, state=State.DRAFT, note=note
+                )
+            )
+            s.commit()
+            s.refresh(comment)
+            s.refresh(ticket)
+            return comment, ticket
