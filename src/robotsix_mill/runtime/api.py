@@ -7,14 +7,17 @@ picks it up immediately and chains it through the pipeline.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from ..config import Settings
 from .lifespan import create_lifespan, setup_logging  # noqa: F401 — re-exported
 from . import routes
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:  # noqa: C901  # TODO: extract route registration and lifespan into separate functions
+def create_app(settings: Settings | None = None) -> FastAPI:
     """Build and return a fully-wired FastAPI application.
 
     *settings* may be ``None``, in which case ``Settings()`` (from env)
@@ -24,5 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:  # noqa: C901  # TO
     setup_logging()
     settings = settings or Settings()
     app = FastAPI(title="robotsix-mill", lifespan=create_lifespan(settings))
+    static_dir = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     app.include_router(routes.router)
     return app
