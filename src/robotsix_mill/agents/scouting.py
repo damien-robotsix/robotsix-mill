@@ -488,6 +488,69 @@ def _build_draft_body(
 # ── main seam ─────────────────────────────────────────────────────────
 
 
+def _evaluate_role(
+    *,
+    env_var: str,
+    attr: str,
+    tier: str,
+    label: str,
+    configured_id: str,
+    enriched: dict[str, ModelInfo],
+    candidate_ids: list[str],
+    already: set[str],
+    settings: Settings,
+) -> list[tuple[str, str, str]]:
+    current_info = enriched.get(configured_id)
+    if current_info is None:
+        return []
+    current_eval = _evaluate_model(configured_id, label, env_var, tier, current_info)
+    candidates: list[EvalResult] = []
+    for cid in candidate_ids:
+        if cid == configured_id:
+            continue
+        info = enriched.get(cid)
+        if info is None:
+            continue
+        candidates.append(_evaluate_model(cid, label, env_var, tier, info))
+
+    regression_reason: str | None = None
+    if current_info.provider_count == 0:
+        regression_reason = (
+            f"`{configured_id}` has **zero providers** listed on OpenRouter — "
+            "it may have been delisted or is unavailable.")
+    elif current_eval.is_preview:
+        regression_reason = (
+            f"`{configured_id}` is a **preview** model — its id may change or "
+            "it may leave preview without notice, causing silent breakage.")
+    elif current_info.provider_count == 1:
+        regression_reason = (
+            f"`{configured_id}` has only **{current_info.provider_count} provider** "
+            f"({_providers_text(current_info.endpoints)}). A single-provider model "
+            "has no fallback when that provider 429s or has latency spikes — "
+            "the pipeline can stall repeatedly.")
+    if regression_reason:
+        best = _best_candidate(candidates)
+        if best is None or best.model_id in already:
+            return []
+        title = f"scout: switch {env_var} from `{configured_id}` to `{best.model_id}`"
+        body = _build_draft_body(
+            reason_kind="regression", reason_text=regression_reason,
+            env_var=env_var, configured_id=configured_id,
+            best=best, current_eval=current_eval, label=label, settings=settings)
+        return [(title, body, best.model_id)]
+
+    best = _best_candidate(candidates)
+    if best and best.score > current_eval.score + 10.0 and best.model_id not in already:
+        title = f"scout: switch {env_var} from `{configured_id}` to `{best.model_id}`"
+        body = _build_draft_body(
+            reason_kind="improvement",
+            reason_text=f"A materially better model is available for the `{label}` role.",
+            env_var=env_var, configured_id=configured_id,
+            best=best, current_eval=current_eval, label=label, settings=settings)
+        return [(title, body, best.model_id)]
+    return []
+
+
 def run_scout_agent(
     *,
     settings: Settings,
@@ -509,22 +572,19 @@ def run_scout_agent(
         if configured:
             needed_ids.add(configured)
             role_configs[env_var] = (attr, "", label)
-
-    for attr, env_var, label in CAPABLE_ROLES:
-        if env_var in role_configs:
-            role_configs[env_var] = (attr, "capable", label)
-    for attr, env_var, label in STRUCTURED_ROLES:
-        if env_var in role_configs:
-            role_configs[env_var] = (attr, "structured", label)
-    for attr, env_var, label in CHEAP_ROLES:
-        if env_var in role_configs:
-            role_configs[env_var] = (attr, "cheap", label)
-
-    for _attr, _env_var, _label in CAPABLE_ROLES + STRUCTURED_ROLES:
-        for cid in CAPABLE_CANDIDATES:
-            needed_ids.add(cid)
-    for _attr, _env_var, _label in CHEAP_ROLES:
-        for cid in CHEAP_CANDIDATES:
+    for roles, tier in [
+        (CAPABLE_ROLES, "capable"),
+        (STRUCTURED_ROLES, "structured"),
+        (CHEAP_ROLES, "cheap"),
+    ]:
+        for attr, env_var, label in roles:
+            if env_var in role_configs:
+                role_configs[env_var] = (attr, tier, label)
+    for roles, cands in [
+        (CAPABLE_ROLES + STRUCTURED_ROLES, CAPABLE_CANDIDATES),
+        (CHEAP_ROLES, CHEAP_CANDIDATES),
+    ]:
+        for cid in cands:
             needed_ids.add(cid)
 
     enriched: dict[str, ModelInfo] = {}
@@ -550,94 +610,17 @@ def run_scout_agent(
         configured_id = getattr(settings, attr, "")
         if not configured_id:
             continue
-        current_info = enriched.get(configured_id)
-        if current_info is None:
-            continue
-
-        current_eval = _evaluate_model(configured_id, label, env_var, tier, current_info)
-
-        if tier == "cheap":
-            candidate_ids = CHEAP_CANDIDATES
-        else:
-            candidate_ids = CAPABLE_CANDIDATES
-
-        candidates: list[EvalResult] = []
-        for cid in candidate_ids:
-            if cid == configured_id:
-                continue
-            info = enriched.get(cid)
-            if info is None:
-                continue
-            candidates.append(_evaluate_model(cid, label, env_var, tier, info))
-
+        candidate_ids = CHEAP_CANDIDATES if tier == "cheap" else CAPABLE_CANDIDATES
         already = proposed_set.get(env_var, set())
-
-        # Regression checks
-        regression_reason: str | None = None
-        if current_info.provider_count == 0:
-            regression_reason = (
-                f"`{configured_id}` has **zero providers** listed on OpenRouter — "
-                "it may have been delisted or is unavailable."
-            )
-        elif current_eval.is_preview:
-            regression_reason = (
-                f"`{configured_id}` is a **preview** model — its id may change or "
-                "it may leave preview without notice, causing silent breakage."
-            )
-        elif current_info.provider_count == 1:
-            regression_reason = (
-                f"`{configured_id}` has only **{current_info.provider_count} provider** "
-                f"({_providers_text(current_info.endpoints)}). A single-provider model "
-                "has no fallback when that provider 429s or has latency spikes — "
-                "the pipeline can stall repeatedly."
-            )
-
-        if regression_reason:
-            best = _best_candidate(candidates)
-            if best is None:
-                continue
-            if best.model_id in already:
-                continue
-
-            title = f"scout: switch {env_var} from `{configured_id}` to `{best.model_id}`"
-            body = _build_draft_body(
-                reason_kind="regression",
-                reason_text=regression_reason,
-                env_var=env_var,
-                configured_id=configured_id,
-                best=best,
-                current_eval=current_eval,
-                label=label,
-                settings=settings,
-            )
+        results = _evaluate_role(
+            env_var=env_var, attr=attr, tier=tier, label=label,
+            configured_id=configured_id, enriched=enriched,
+            candidate_ids=candidate_ids, already=already, settings=settings,
+        )
+        for title, body, model_id in results:
             drafts_titles.append(title)
             drafts_bodies.append(body)
-            new_proposals.append((env_var, best.model_id, label))
-            continue
-
-        # Improvement check
-        best = _best_candidate(candidates)
-        if best and best.score > current_eval.score + 10.0:
-            if best.model_id in already:
-                continue
-
-            title = f"scout: switch {env_var} from `{configured_id}` to `{best.model_id}`"
-            body = _build_draft_body(
-                reason_kind="improvement",
-                reason_text=(
-                    f"A materially better model is available for the "
-                    f"`{label}` role."
-                ),
-                env_var=env_var,
-                configured_id=configured_id,
-                best=best,
-                current_eval=current_eval,
-                label=label,
-                settings=settings,
-            )
-            drafts_titles.append(title)
-            drafts_bodies.append(body)
-            new_proposals.append((env_var, best.model_id, label))
+            new_proposals.append((env_var, model_id, label))
 
     updated_memory = _build_updated_memory(memory, new_proposals)
     return ScoutResult(
