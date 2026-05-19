@@ -40,6 +40,13 @@ def test_audit_prompt_covers_codebase_health_and_agent_generation():
     )
     # Equal-weight framing, not tooling-only.
     assert "two complementary lenses" in p
+    # Default mechanism: recurring dimensions -> a dedicated standing
+    # agent that OWNS the dimension; the audit must NOT enumerate
+    # per-instance remediation tickets itself. Guard that intent.
+    assert "default mechanism rule" in p
+    assert "per-instance" in p
+    assert "recurring" in p
+    assert "one-off" in p  # direct tickets reserved for one-time fixes
 
 
 def test_audit_agent_result_model():
