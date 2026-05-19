@@ -25,25 +25,13 @@ from datetime import datetime, timezone
 
 from ..agents import dedup
 from ..agents import refining
+from ..core.datetime_utils import _as_utc
 from ..core.models import Ticket
 from ..core.states import State
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.refine")
-
-
-def _as_utc(dt: datetime) -> datetime:
-    """Coerce a possibly tz-naive datetime to aware UTC.
-
-    SQLite/SQLModel round-trips ``updated_at``/``created_at`` WITHOUT
-    tzinfo even though we store them from ``datetime.now(timezone.utc)``.
-    Comparing such a naive value against an aware cutoff raises
-    ``TypeError: can't compare offset-naive and offset-aware datetimes``
-    — which broke the dedup guard (hence refine) for every draft as soon
-    as any CLOSED ticket existed. Treat naive DB datetimes as UTC.
-    """
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 class RefineStage(Stage):

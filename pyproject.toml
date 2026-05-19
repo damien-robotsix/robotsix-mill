@@ -50,6 +50,9 @@ targets = ["src/"]
 exclude_dirs = ["tests/"]
 skips = ["B101"]
 
+[tool.ruff.lint]
+select = ["DTZ001", "DTZ002", "DTZ003"]
+
 [tool.mypy]
 strict = true
 python_version = "3.14"
