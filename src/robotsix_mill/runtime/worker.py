@@ -278,10 +278,16 @@ class Worker:
                 from ..langfuse_client import session_total_cost
 
                 for ticket in self.ctx.service.list():
-                    if ticket.state in _TERMINAL:
+                    # Active tickets: keep syncing (cost still growing).
+                    # Terminal tickets: cost is frozen — normally the
+                    # terminal-transition does a final sync, but tickets
+                    # closed out-of-band (direct DB, migrations) can be
+                    # left at $0. Self-heal those once, then leave them
+                    # alone (don't re-query frozen history every cycle).
+                    if ticket.state in _TERMINAL and (ticket.cost_usd or 0) > 0:
                         continue
                     cost = session_total_cost(self.ctx.settings, ticket.id)
-                    if cost is not None:
+                    if cost is not None and cost > 0:
                         self.ctx.service.set_cost(ticket.id, cost)
             except Exception:  # noqa: BLE001 — never let the sync die
                 log.exception("cost sync failed")
