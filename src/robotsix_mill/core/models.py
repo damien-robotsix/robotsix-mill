@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from sqlalchemy import Column
 from sqlmodel import Field, SQLModel
 
+from .datetime_utils import TZDateTime
 from .states import State
 
 
@@ -41,8 +43,14 @@ class Ticket(SQLModel, table=True):
     # cumulative LLM spend in USD, synced from Langfuse session totals
     # by the periodic cost-sync loop. Zero when Langfuse is unconfigured.
     cost_usd: float = Field(default=0.0)
-    created_at: datetime = Field(default_factory=_now)
-    updated_at: datetime = Field(default_factory=_now)
+    created_at: datetime = Field(
+        default_factory=_now,
+        sa_column=Column(TZDateTime()),
+    )
+    updated_at: datetime = Field(
+        default_factory=_now,
+        sa_column=Column(TZDateTime()),
+    )
 
 
 class TicketEvent(SQLModel, table=True):
@@ -52,7 +60,10 @@ class TicketEvent(SQLModel, table=True):
     ticket_id: str = Field(foreign_key="ticket.id", index=True)
     state: State
     note: str | None = None
-    at: datetime = Field(default_factory=_now)
+    at: datetime = Field(
+        default_factory=_now,
+        sa_column=Column(TZDateTime()),
+    )
 
 
 # --- API request/response shapes ---
