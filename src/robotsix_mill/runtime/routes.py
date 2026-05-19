@@ -25,7 +25,14 @@ from ..core.models import (
 from ..core.service import TransitionError
 from ..core.states import State
 from .board_html import BOARD_HTML
-from .deps import get_service, get_settings, get_worker, maybe_enqueue, with_cost
+from .deps import (
+    get_run_registry,
+    get_service,
+    get_settings,
+    get_worker,
+    maybe_enqueue,
+    with_cost,
+)
 
 log = logging.getLogger(__name__)
 
@@ -159,7 +166,9 @@ def resume_blocked(
 
 
 @router.post("/audit", status_code=202)
-def audit_pass() -> dict:
+def audit_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
     """Kick off an audit pass in the BACKGROUND and return at once.
 
     The audit runs the LLM agent for minutes — blocking the HTTP
@@ -168,14 +177,24 @@ def audit_pass() -> dict:
     """
     from ..audit_runner import run_audit_pass
 
+    run_id = registry.start("audit")
+
     def _run() -> None:
         try:
             r = run_audit_pass()
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
             log.info(
                 "audit pass done: %d draft(s)", len(r.drafts_created)
             )
-        except Exception:  # noqa: BLE001 — background; just log
+        except Exception as e:  # noqa: BLE001 — background; just log
             log.exception("audit pass failed")
+            registry.finish_error(run_id, str(e))
 
     threading.Thread(
         target=_run, name="audit-pass", daemon=True
@@ -183,26 +202,46 @@ def audit_pass() -> dict:
     return {"status": "started"}
 
 
-@router.post("/scout")
-def scout_pass() -> dict:
-    """Trigger a scout pass: reads memory, evaluates OpenRouter
-    models, writes updated memory, creates draft tickets for model
-    improvements.
+@router.post("/scout", status_code=202)
+def scout_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Trigger a scout pass in the BACKGROUND: reads memory, evaluates
+    OpenRouter models, writes updated memory, creates draft tickets for
+    model improvements.
     """
     from ..scout_runner import run_scout_pass
 
-    try:
-        result = run_scout_pass()
-        return {
-            "memory_updated": len(result.updated_memory) > 0,
-            "tickets_created": result.drafts_created,
-        }
-    except Exception as e:
-        raise HTTPException(500, f"scout pass failed: {e}") from None
+    run_id = registry.start("scout")
+
+    def _run() -> None:
+        try:
+            result = run_scout_pass()
+            draft_ids = [d["id"] for d in result.drafts_created[:5]]
+            summary = (
+                f"Created {len(result.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(result.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "scout pass done: %d draft(s)",
+                len(result.drafts_created),
+            )
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("scout pass failed")
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="scout-pass", daemon=True
+    ).start()
+    return {"status": "started"}
 
 
 @router.post("/trace-health", status_code=202)
-def trace_health_check() -> dict:
+def trace_health_check(
+    registry=Depends(get_run_registry),
+) -> dict:
     """Kick off a trace-health check in the BACKGROUND and return at
     once.  The check fetches Langfuse traces from the last 24h,
     detects unsessioned traces, and files a draft ticket if needed.
@@ -210,9 +249,18 @@ def trace_health_check() -> dict:
     """
     from ..trace_health_runner import run_trace_health_check
 
+    run_id = registry.start("trace-health")
+
     def _run() -> None:
         try:
             r = run_trace_health_check()
+            summary = (
+                f"{r.unsessioned_count}/{r.total_traces} "
+                f"traces unsessioned ({r.window_start} to "
+                f"{r.window_end}) — "
+                f"{'draft created' if r.draft_created else 'no alert'}"
+            )
+            registry.finish_ok(run_id, summary)
             if r.draft_created:
                 log.info(
                     "trace-health check: draft created — "
@@ -227,13 +275,22 @@ def trace_health_check() -> dict:
                     r.unsessioned_count,
                     r.total_traces,
                 )
-        except Exception:  # noqa: BLE001 — background; just log
+        except Exception as e:  # noqa: BLE001 — background; just log
             log.exception("trace-health check failed")
+            registry.finish_error(run_id, str(e))
 
     threading.Thread(
         target=_run, name="trace-health-check", daemon=True
     ).start()
     return {"status": "started"}
+
+
+@router.get("/runs")
+def list_runs(
+    registry=Depends(get_run_registry),
+) -> list[dict]:
+    """Return recent background-run entries (newest first)."""
+    return registry.list_all()
 
 
 @router.post("/health-check", status_code=202)

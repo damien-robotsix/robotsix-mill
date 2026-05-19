@@ -19,6 +19,7 @@ from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
 from ..notify import send_notification, _TRIGGER_STATES
 from . import tracing
+from .run_registry import RunRegistry
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -91,8 +92,9 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
 class Worker:
     """In-process queue + consumer task, owned by the API service."""
 
-    def __init__(self, ctx: StageContext) -> None:
+    def __init__(self, ctx: StageContext, run_registry: "RunRegistry | None" = None) -> None:
         self.ctx = ctx
+        self.run_registry = run_registry
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         # pool of consumer tasks — tickets run concurrently, not serially
         self._tasks: list[asyncio.Task] = []
@@ -209,13 +211,26 @@ class Worker:
             try:
                 log.info("Starting periodic audit pass")
                 from ..audit_runner import run_audit_pass
+                run_id = None
+                if self.run_registry:
+                    run_id = self.run_registry.start("audit")
                 result = run_audit_pass()
                 log.info(
                     "Audit pass completed, created %d draft(s)",
                     len(result.drafts_created),
                 )
-            except Exception:  # noqa: BLE001 — never let the poll die
+                if self.run_registry and run_id:
+                    draft_ids = [d["id"] for d in result.drafts_created[:5]]
+                    summary = (
+                        f"Created {len(result.drafts_created)} drafts: "
+                        f"{', '.join(draft_ids)}"
+                        f"{'…' if len(result.drafts_created) > 5 else ''}"
+                    )
+                    self.run_registry.finish_ok(run_id, summary)
+            except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("audit poll failed")
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
 
     async def _scout_poll_loop(self) -> None:
         """Periodic scout pass loop. Only runs when
@@ -227,13 +242,26 @@ class Worker:
             try:
                 log.info("Starting periodic scout pass")
                 from ..scout_runner import run_scout_pass
+                run_id = None
+                if self.run_registry:
+                    run_id = self.run_registry.start("scout")
                 result = run_scout_pass()
                 log.info(
                     "Scout pass completed, created %d draft(s)",
                     len(result.drafts_created),
                 )
-            except Exception:  # noqa: BLE001 — never let the poll die
+                if self.run_registry and run_id:
+                    draft_ids = [d["id"] for d in result.drafts_created[:5]]
+                    summary = (
+                        f"Created {len(result.drafts_created)} drafts: "
+                        f"{', '.join(draft_ids)}"
+                        f"{'…' if len(result.drafts_created) > 5 else ''}"
+                    )
+                    self.run_registry.finish_ok(run_id, summary)
+            except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("scout poll failed")
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
 
     async def _trace_health_poll_loop(self) -> None:
         """Periodic trace-health check loop. Only runs when
@@ -245,6 +273,9 @@ class Worker:
             try:
                 log.info("Starting periodic trace-health check")
                 from ..trace_health_runner import run_trace_health_check
+                run_id = None
+                if self.run_registry:
+                    run_id = self.run_registry.start("trace-health")
                 result = run_trace_health_check()
                 if result.draft_created:
                     log.info(
@@ -260,8 +291,18 @@ class Worker:
                         result.unsessioned_count,
                         result.total_traces,
                     )
-            except Exception:  # noqa: BLE001 — never let the poll die
+                if self.run_registry and run_id:
+                    summary = (
+                        f"{result.unsessioned_count}/{result.total_traces} "
+                        f"traces unsessioned ({result.window_start} to "
+                        f"{result.window_end}) — "
+                        f"{'draft created' if result.draft_created else 'no alert'}"
+                    )
+                    self.run_registry.finish_ok(run_id, summary)
+            except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("trace-health poll failed")
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
 
     async def _health_poll_loop(self) -> None:
         """Periodic health pass loop. Only runs when

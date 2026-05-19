@@ -19,6 +19,7 @@ from ..core import db
 from ..core.service import TicketService
 from ..stages import StageContext
 from . import tracing
+from .run_registry import RunRegistry
 from .worker import Worker
 
 
@@ -68,10 +69,12 @@ def create_lifespan(
         tracing.init(settings)
         service = TicketService(settings)
         ctx = StageContext(settings=settings, service=service)
-        worker = Worker(ctx)
+        run_registry = RunRegistry(settings.data_dir / "runs.json")
+        worker = Worker(ctx, run_registry)
         app.state.settings = settings
         app.state.service = service
         app.state.worker = worker
+        app.state.run_registry = run_registry
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
         try:
