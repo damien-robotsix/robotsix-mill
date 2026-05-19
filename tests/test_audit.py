@@ -21,6 +21,27 @@ def _make_settings(tmp_path, **overrides):
 # --- Agent tests ---
 
 
+def test_audit_prompt_covers_codebase_health_and_agent_generation():
+    """The audit must weigh intrinsic codebase-health (big files, root
+    clutter, readability, docs) equally with external tooling, and be
+    allowed to propose new targeted quality-checking AGENTS — not just
+    CI checks. Guard against silently reverting to tooling-only."""
+    p = auditing.SYSTEM_PROMPT.lower()
+    # Lens A: maintainability dimensions the user called out.
+    for kw in (
+        "maintainability", "oversized", "root", "readability",
+        "docstring", "duplication", "list_dir",
+    ):
+        assert kw in p, f"audit prompt missing maintainability cue: {kw}"
+    # Must explicitly allow proposing a new dedicated checking agent.
+    assert "agent" in p
+    assert "new dedicated quality-checking agent" in p or (
+        "quality-checking agent" in p
+    )
+    # Equal-weight framing, not tooling-only.
+    assert "two complementary lenses" in p
+
+
 def test_audit_agent_result_model():
     """AuditResult has the expected fields."""
     result = auditing.AuditResult(
