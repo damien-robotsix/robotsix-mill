@@ -68,17 +68,25 @@ def _run_migrations(settings: Settings) -> None:
             conn.commit()
             log.info("migration: added blocked_from column to ticket table")
 
+        # Schema/data-migration version. The cost-zeroing below is a
+        # ONE-TIME data cleanup; without this guard it re-ran on every
+        # startup (UPDATE ... SET cost_usd = 0 whenever any cost was
+        # non-zero), wiping the board back to $0.00 after every restart.
+        user_version = conn.execute("PRAGMA user_version").fetchone()[0]
+
         if "cost_usd" not in columns:
             conn.execute(
                 "ALTER TABLE ticket ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0"
             )
             conn.commit()
             log.info("migration: added cost_usd column to ticket table")
-        else:
+        elif user_version < 1:
             # Per-ticket cost was previously accumulated via a
             # process-global ContextVar that leaked across concurrent
-            # tickets — existing values are bogus.  Zero them so the
-            # Langfuse-based sync loop can populate correct values.
+            # tickets — those pre-existing values are bogus. Zero them
+            # ONCE so the Langfuse-based sync loop can repopulate
+            # correct values. Guarded by user_version so a restart
+            # never wipes legitimately-synced costs again.
             cur = conn.execute("SELECT COUNT(*) FROM ticket WHERE cost_usd != 0")
             bogus = cur.fetchone()[0]
             if bogus:
@@ -89,6 +97,11 @@ def _run_migrations(settings: Settings) -> None:
                     "(per-ticket cost is now derived from Langfuse session totals)",
                     bogus,
                 )
+
+        # Mark the one-time cost cleanup as done (idempotent).
+        if user_version < 1:
+            conn.execute("PRAGMA user_version = 1")
+            conn.commit()
     finally:
         conn.close()
 
