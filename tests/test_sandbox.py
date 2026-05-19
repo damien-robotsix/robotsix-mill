@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +29,16 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
         seen["argv"] = argv
         return subprocess.CompletedProcess(argv, 0, stdout="ok", stderr="")
 
+    # _repo_mount now checks repo_dir.exists(); mock it so the test
+    # focuses on argv construction, not filesystem existence.
+    monkeypatch.setattr(
+        sandbox, "_repo_mount",
+        lambda repo_dir, settings: [
+            "--mount",
+            f"type=volume,src=mill_data,dst=/data/work/repo,"
+            f"volume-subpath=work/repo",
+        ],
+    )
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     rc, out = sandbox.run("pytest -q", repo_dir="/data/work/repo", settings=s)
 
@@ -61,6 +72,15 @@ def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
         seen["argv"] = argv
         return subprocess.CompletedProcess(argv, 0, "", "")
 
+    # _repo_mount now checks host_src.exists(); mock it so the test
+    # focuses on isolation semantics, not filesystem existence.
+    monkeypatch.setattr(
+        sandbox, "_repo_mount",
+        lambda repo_dir, settings: [
+            "-v",
+            "/host/.data/workspaces/T-1/repo:/data/workspaces/T-1/repo",
+        ],
+    )
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     sandbox.run("true", repo_dir="/data/workspaces/T-1/repo", settings=s)
     a = seen["argv"]
@@ -94,6 +114,15 @@ def test_sandbox_data_mount_overrides_volume(tmp_path, monkeypatch):
         seen["argv"] = argv
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
+    # _repo_mount now checks host_src.exists(); mock it so the test
+    # focuses on argv construction, not filesystem existence.
+    monkeypatch.setattr(
+        sandbox, "_repo_mount",
+        lambda repo_dir, settings: [
+            "-v",
+            "/host/abs/.data/work/repo:/data/work/repo",
+        ],
+    )
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     sandbox.run("true", repo_dir="/data/work/repo", settings=s)
     a = seen["argv"]
@@ -123,3 +152,25 @@ def test_docker_daemon_error_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     with pytest.raises(sandbox.SandboxError):
         sandbox.run("true", repo_dir=tmp_path, settings=s)
+
+
+def test_repo_mount_rejects_non_existent_source(tmp_path):
+    """When the repo directory doesn't exist (not yet cloned), _repo_mount
+    raises SandboxError before Docker ever sees the mount spec."""
+    s = _settings(
+        tmp_path,
+        MILL_DATA_DIR="/data",
+        MILL_SANDBOX_DATA_MOUNT="/host/.data",
+    )
+    # bind case: the resolved host source path doesn't exist
+    with pytest.raises(sandbox.SandboxError, match="repo mount source does not exist"):
+        sandbox._repo_mount(Path("/data/work/repo"), s)
+
+    # named-volume case: the repo dir doesn't exist
+    s2 = _settings(
+        tmp_path,
+        MILL_DATA_DIR="/data",
+        MILL_DATA_VOLUME="mill_data",
+    )
+    with pytest.raises(sandbox.SandboxError, match="repo directory does not exist"):
+        sandbox._repo_mount(Path("/data/work/repo"), s2)
