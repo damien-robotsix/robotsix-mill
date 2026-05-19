@@ -1,0 +1,725 @@
+"""Tests for the health agent and runner."""
+
+import json
+import threading
+import time
+
+import pytest
+from pathlib import Path
+
+from robotsix_mill.agents import health as health_agent
+from robotsix_mill.health_runner import run_health_pass, HealthPassResult
+from robotsix_mill.config import Settings
+from robotsix_mill.core import db
+from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
+
+
+def _make_settings(tmp_path, **overrides):
+    """Create Settings with data_dir pointing to tmp_path."""
+    overrides.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    return Settings(**overrides)
+
+
+# --- Agent tests ---
+
+
+def test_health_system_prompt_covers_all_six_dimensions():
+    """The health agent prompt must cover all six inspection dimensions:
+    module size, function length, documentation coverage, test gaps,
+    complexity, and dead code."""
+    p = health_agent.SYSTEM_PROMPT.lower()
+    for kw in (
+        "module size", "function length", "documentation coverage",
+        "test gaps", "complexity", "dead code",
+    ):
+        assert kw in p, f"health prompt missing dimension cue: {kw}"
+    # Must exercise judgement, not just thresholds.
+    assert "judgement" in p or "judgment" in p
+    assert "not a static linter" in p or "static linter" in p
+    # Must use the memory ledger to avoid re-nagging.
+    assert "memory" in p
+    # Must use explore/read_file/list_dir tools.
+    assert "explore" in p
+    assert "read_file" in p
+    assert "list_dir" in p
+
+
+def test_health_result_model():
+    """HealthResult has the expected fields and defaults."""
+    result = health_agent.HealthResult(
+        updated_memory="memory",
+        draft_titles=["title1"],
+        draft_bodies=["body1"],
+        gap_ids=["gap1"],
+    )
+    assert result.updated_memory == "memory"
+    assert len(result.draft_titles) == 1
+    assert len(result.draft_bodies) == 1
+    assert len(result.gap_ids) == 1
+
+    # Defaults
+    default_result = health_agent.HealthResult()
+    assert default_result.updated_memory == ""
+    assert default_result.draft_titles == []
+    assert default_result.draft_bodies == []
+    assert default_result.gap_ids == []
+
+
+def test_health_result_field_types():
+    """HealthResult fields have correct types."""
+    result = health_agent.HealthResult(
+        updated_memory="# Health Memory\n",
+        draft_titles=["Fix module X"],
+        draft_bodies=["Module X is too large..."],
+        gap_ids=["oversized_module_x"],
+    )
+    assert isinstance(result.updated_memory, str)
+    assert isinstance(result.draft_titles, list)
+    assert isinstance(result.draft_bodies, list)
+    assert isinstance(result.gap_ids, list)
+    assert all(isinstance(t, str) for t in result.draft_titles)
+    assert all(isinstance(b, str) for b in result.draft_bodies)
+    assert all(isinstance(g, str) for g in result.gap_ids)
+
+
+# --- Runner tests ---
+
+
+def test_run_health_pass_empty_memory(tmp_path, monkeypatch):
+    """With no memory file, runner passes empty string to agent."""
+    settings = _make_settings(tmp_path)
+    captured_memory = []
+
+    def mock_agent(**kwargs):
+        captured_memory.append(kwargs.get("memory", ""))
+        return health_agent.HealthResult(
+            updated_memory="new memory",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    run_health_pass()
+    assert captured_memory == [""]
+
+
+def test_run_health_pass_reads_existing_memory(tmp_path, monkeypatch):
+    """Runner passes existing memory to agent."""
+    settings = _make_settings(tmp_path)
+    memory_file = settings.health_memory_file
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    memory_file.write_text("# Existing memory\n## Proposed\n- gap1\n", encoding="utf-8")
+
+    captured_memory = []
+
+    def mock_agent(**kwargs):
+        captured_memory.append(kwargs.get("memory", ""))
+        return health_agent.HealthResult(
+            updated_memory="# Updated memory\n",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    run_health_pass()
+    assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
+
+
+def test_run_health_pass_writes_memory_verbatim(tmp_path, monkeypatch):
+    """Runner writes agent's updated_memory verbatim."""
+    settings = _make_settings(tmp_path)
+    updated = "# Updated memory\n## Proposed\n- gap1\n"
+
+    def mock_agent(**kwargs):
+        return health_agent.HealthResult(
+            updated_memory=updated,
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    run_health_pass()
+    memory_file = settings.health_memory_file
+    assert memory_file.exists()
+    assert memory_file.read_text(encoding="utf-8") == updated
+
+
+def test_run_health_pass_creates_draft_tickets(tmp_path, monkeypatch):
+    """Runner creates draft tickets for each proposed gap with
+    source='health'."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+    service = TicketService(settings)
+
+    def mock_agent(**kwargs):
+        return health_agent.HealthResult(
+            updated_memory="# Memory\n",
+            draft_titles=["Fix gap1", "Fix gap2"],
+            draft_bodies=["Body1", "Body2"],
+            gap_ids=["gap1", "gap2"],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    result = run_health_pass()
+    assert len(result.drafts_created) == 2
+    # Verify tickets are in DB with source="health"
+    tickets = service.list()
+    health_tickets = [t for t in tickets if t.source == "health"]
+    assert len(health_tickets) == 2
+    assert health_tickets[0].state == State.DRAFT
+
+
+def test_run_health_pass_no_drafts_when_empty(tmp_path, monkeypatch):
+    """When agent returns no drafts, none are created."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+
+    def mock_agent(**kwargs):
+        return health_agent.HealthResult(
+            updated_memory="# Memory\n",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    result = run_health_pass()
+    assert len(result.drafts_created) == 0
+
+
+def test_run_health_pass_missing_memory_file(tmp_path, monkeypatch):
+    """Missing memory file -> empty string passed, no error."""
+    settings = _make_settings(tmp_path)
+    memory_file = settings.health_memory_file
+    if memory_file.exists():
+        memory_file.unlink()
+
+    captured_memory = []
+
+    def mock_agent(**kwargs):
+        captured_memory.append(kwargs.get("memory", ""))
+        return health_agent.HealthResult(
+            updated_memory="# Memory\n",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    result = run_health_pass()
+    assert captured_memory == [""]
+
+
+def test_run_health_pass_unreadable_memory(tmp_path, monkeypatch):
+    """Unreadable memory file -> empty string, no error."""
+    settings = _make_settings(tmp_path)
+
+    def mock_agent(**kwargs):
+        memory_val = kwargs.get("memory", "")
+        return health_agent.HealthResult(
+            updated_memory="mem",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+
+    # Patch the Settings call in health_runner to return a settings
+    # object whose memory_file.read_text() raises OSError.
+    class UnreadableSettings(settings.__class__):
+        @property
+        def health_memory_file(self):
+            from unittest.mock import MagicMock
+            m = MagicMock()
+            m.exists.return_value = True
+            m.read_text.side_effect = OSError("permission denied")
+            return m
+
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings",
+        lambda: UnreadableSettings(**{k: v for k, v in settings.__dict__.items()
+                                       if not k.startswith("_")}),
+    )
+
+    result = run_health_pass()
+    # Should not raise; agent gets empty memory
+    assert result.updated_memory == "mem"
+
+
+def test_health_pass_result_structure(tmp_path, monkeypatch):
+    """HealthPassResult has correct structure."""
+    settings = _make_settings(tmp_path)
+
+    def mock_agent(**kwargs):
+        return health_agent.HealthResult(
+            updated_memory="mem",
+            draft_titles=["t1"],
+            draft_bodies=["b1"],
+            gap_ids=["g1"],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    result = run_health_pass()
+    assert isinstance(result, HealthPassResult)
+    assert result.updated_memory == "mem"
+    assert len(result.drafts_created) == 1
+    assert result.drafts_created[0]["title"] == "t1"
+
+
+def test_run_health_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
+    """Runner skips draft entries with empty title or body."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+
+    def mock_agent(**kwargs):
+        return health_agent.HealthResult(
+            updated_memory="mem",
+            draft_titles=["Valid", "", "Also Valid"],
+            draft_bodies=["Body", "Body2", ""],
+            gap_ids=["g1", "g2", "g3"],
+        )
+
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    result = run_health_pass()
+    assert len(result.drafts_created) == 1  # only first has both title + body
+
+
+# --- Config tests ---
+
+
+def test_health_config_defaults():
+    """Health config has correct defaults."""
+    s = Settings()
+    assert s.health_model == "deepseek/deepseek-v4-pro"
+    assert s.health_periodic is False
+    assert s.health_interval_seconds == 86400
+    assert s.health_memory_path is None
+
+
+def test_health_config_custom_model():
+    """Health model can be overridden via env."""
+    s = Settings(MILL_HEALTH_MODEL="anthropic/claude-sonnet-4")
+    assert s.health_model == "anthropic/claude-sonnet-4"
+
+
+def test_health_memory_file_default(tmp_path):
+    """When health_memory_path is None, falls back to
+    data_dir/health_memory.md."""
+    s = _make_settings(tmp_path)
+    expected = s.data_dir / "health_memory.md"
+    assert s.health_memory_file == expected
+
+
+def test_health_memory_file_override(tmp_path):
+    """When health_memory_path is set, uses that path."""
+    custom_path = tmp_path / "custom_health.md"
+    s = _make_settings(tmp_path, MILL_HEALTH_MEMORY_PATH=str(custom_path))
+    assert s.health_memory_file == custom_path
+
+
+def test_health_periodic_config():
+    """Health periodic can be enabled."""
+    s = Settings(MILL_HEALTH_PERIODIC="true", MILL_HEALTH_INTERVAL_SECONDS="43200")
+    assert s.health_periodic is True
+    assert s.health_interval_seconds == 43200
+
+
+# --- CLI tests ---
+
+
+def test_health_cli_command(capsys, tmp_path, monkeypatch):
+    """Test that CLI health command works."""
+    from robotsix_mill.cli import main
+
+    def mock_run(root=None):
+        return HealthPassResult(
+            updated_memory="mem",
+            drafts_created=[{"id": "123", "title": "Fix gap"}],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.run_health_pass", mock_run
+    )
+
+    result = main(["health"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "Health pass complete" in captured.out
+    assert "Fix gap" in captured.out
+
+
+def test_health_cli_json_output(capsys, tmp_path, monkeypatch):
+    """Test JSON output flag for health CLI."""
+    from robotsix_mill.cli import main
+
+    def mock_run(root=None):
+        return HealthPassResult(
+            updated_memory="mem",
+            drafts_created=[{"id": "123", "title": "Fix gap"}],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.run_health_pass", mock_run
+    )
+
+    result = main(["health", "--json"])
+    assert result == 0
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert "memory" in data
+    assert "tickets_created" in data
+    assert data["tickets_created"] == [{"id": "123", "title": "Fix gap"}]
+
+
+def test_health_cli_no_drafts(capsys, tmp_path, monkeypatch):
+    """CLI health command when no drafts created."""
+    from robotsix_mill.cli import main
+
+    def mock_run(root=None):
+        return HealthPassResult(
+            updated_memory="mem",
+            drafts_created=[],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.run_health_pass", mock_run
+    )
+
+    result = main(["health"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "No new draft tickets created" in captured.out
+
+
+def test_health_cli_failure(capsys, monkeypatch):
+    """CLI health exits 1 on failure."""
+    from robotsix_mill.cli import main
+
+    def mock_run(root=None):
+        raise RuntimeError("agent exploded")
+
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.run_health_pass", mock_run
+    )
+
+    result = main(["health"])
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "health failed" in captured.err
+
+
+# --- Langfuse session tests ---
+
+
+def test_run_health_pass_opens_langfuse_session(tmp_path, monkeypatch):
+    """Each health run wraps the agent in a Langfuse session span with a
+    unique per-run id, and returns it (so health traces aren't
+    untagged). No-op-safe when tracing isn't ready."""
+    import contextlib
+
+    from robotsix_mill.runtime import tracing
+
+    settings = _make_settings(tmp_path)
+    seen = {}
+
+    @contextlib.contextmanager
+    def fake_root(sid):
+        seen["session_id"] = sid
+        yield
+
+    @contextlib.contextmanager
+    def fake_stage(name):
+        seen["stage"] = name
+        yield
+
+    def mock_agent(**kwargs):
+        seen["agent_ran_under"] = seen.get("session_id")
+        return health_agent.HealthResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        )
+
+    monkeypatch.setattr(tracing, "start_ticket_root_span", fake_root)
+    monkeypatch.setattr(tracing, "trace_stage", fake_stage)
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    res = run_health_pass()
+
+    assert res.session_id.startswith("health-")
+    assert seen["session_id"] == res.session_id
+    assert seen["stage"] == "health"
+    assert seen["agent_ran_under"] == res.session_id
+
+
+def test_health_session_ids_are_unique_per_run(tmp_path, monkeypatch):
+    settings = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        health_agent, "run_health_agent",
+        lambda **k: health_agent.HealthResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+    a = run_health_pass().session_id
+    b = run_health_pass().session_id
+    assert a != b and a.startswith("health-") and b.startswith("health-")
+
+
+# --- Clone tests ---
+
+
+def test_run_health_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
+    """With a forge configured, the health run clones the repo locally
+    and hands the agent repo_dir. Idempotent + best-effort."""
+    from robotsix_mill.vcs import git_ops
+
+    settings = _make_settings(
+        tmp_path, FORGE_REMOTE_URL="https://example.test/r.git",
+        FORGE_TARGET_BRANCH="main",
+    )
+    seen = {"clone": 0, "repo_dir": "unset"}
+
+    def fake_clone(url, dest, branch, token):
+        seen["clone"] += 1
+        (dest / ".git").mkdir(parents=True)
+
+    def mock_agent(**kwargs):
+        seen["repo_dir"] = kwargs.get("repo_dir")
+        return health_agent.HealthResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        )
+
+    monkeypatch.setattr(git_ops, "clone", fake_clone)
+    monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+
+    run_health_pass()
+    repo = settings.data_dir / "health_workspace" / "repo"
+    assert seen["clone"] == 1 and seen["repo_dir"] == repo
+
+    seen["clone"] = 0
+    run_health_pass()
+    assert seen["clone"] == 0 and seen["repo_dir"] == repo
+
+
+def test_run_health_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
+    settings = _make_settings(tmp_path)   # no FORGE_REMOTE_URL
+    got = {}
+    monkeypatch.setattr(
+        health_agent, "run_health_agent",
+        lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or
+        health_agent.HealthResult(updated_memory="m", draft_titles=[],
+                                  draft_bodies=[], gap_ids=[]),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+    run_health_pass()
+    assert got["repo_dir"] is None
+
+
+# --- Worker periodic tests ---
+
+
+@pytest.mark.asyncio
+async def test_worker_health_task_created_when_periodic(tmp_path, monkeypatch):
+    """Worker._health_task is created when MILL_HEALTH_PERIODIC=true."""
+    from robotsix_mill.stages import StageContext
+    from robotsix_mill.runtime.worker import Worker
+
+    settings = _make_settings(
+        tmp_path,
+        MILL_HEALTH_PERIODIC="true",
+        MILL_HEALTH_INTERVAL_SECONDS="1",
+    )
+    db.reset_engine()
+    db.init_db(settings)
+    service = TicketService(settings)
+    ctx = StageContext(settings=settings, service=service)
+
+    # Patch _health_poll_loop to be a no-op (avoid running immediately)
+    async def noop_poll(self):
+        await asyncio_sleep_forever()
+
+    monkeypatch.setattr(Worker, "_health_poll_loop", noop_poll)
+
+    import asyncio as asyncio_mod
+    async def asyncio_sleep_forever():
+        await asyncio_mod.sleep(3600)
+
+    worker = Worker(ctx)
+    worker.start()
+
+    assert worker._health_task is not None
+    assert not worker._health_task.done()
+
+    await worker.stop()
+
+
+@pytest.mark.asyncio
+async def test_worker_health_task_not_created_when_periodic_false(tmp_path, monkeypatch):
+    """Worker._health_task is NOT created when MILL_HEALTH_PERIODIC=false."""
+    from robotsix_mill.stages import StageContext
+    from robotsix_mill.runtime.worker import Worker
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+    service = TicketService(settings)
+    ctx = StageContext(settings=settings, service=service)
+
+    worker = Worker(ctx)
+    worker.start()
+
+    assert worker._health_task is None
+
+    await worker.stop()
+
+
+# --- API endpoint tests ---
+
+
+def test_post_health_check_returns_202(tmp_path, monkeypatch):
+    """POST /health-check returns 202 immediately, runs in background."""
+    from fastapi.testclient import TestClient
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+
+    started = threading.Event()
+    finished = threading.Event()
+
+    def slow_run(root=None):
+        started.set()
+        finished.wait(timeout=5)
+        return HealthPassResult(
+            updated_memory="mem",
+            drafts_created=[],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.run_health_pass", slow_run
+    )
+
+    from robotsix_mill.runtime.api import create_app
+
+    app = create_app(settings)
+    client = TestClient(app)
+
+    response = client.post("/health-check")
+    assert response.status_code == 202
+    assert response.json() == {"status": "started"}
+
+    # Background thread should have started
+    assert started.wait(timeout=3), "Background thread did not start"
+
+    # Clean up
+    finished.set()
+
+
+def test_post_health_check_runs_in_background(tmp_path, monkeypatch):
+    """POST /health-check runs in background thread, drafts appear."""
+    from fastapi.testclient import TestClient
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+
+    run_event = threading.Event()
+
+    def mock_run(root=None):
+        # Create a ticket directly in DB to simulate the runner
+        svc = TicketService(settings)
+        svc.create("Health draft", "Health body", source="health")
+        run_event.set()
+        return HealthPassResult(
+            updated_memory="mem",
+            drafts_created=[{"id": "test-id", "title": "Health draft"}],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.health_runner.run_health_pass", mock_run
+    )
+
+    from robotsix_mill.runtime.api import create_app
+
+    app = create_app(settings)
+    client = TestClient(app)
+
+    response = client.post("/health-check")
+    assert response.status_code == 202
+
+    # Wait for background thread to complete
+    assert run_event.wait(timeout=5), "Background thread did not complete"
+
+    # Verify the draft ticket was created
+    svc = TicketService(settings)
+    tickets = svc.list()
+    health_tickets = [t for t in tickets if t.source == "health"]
+    assert len(health_tickets) == 1
+    assert health_tickets[0].title == "Health draft"
+
+
+# --- Board HTML tests ---
+
+
+def test_board_html_contains_health_button():
+    """Board HTML contains the 'Run Health Check' button."""
+    from robotsix_mill.runtime.board_html import BOARD_HTML
+    assert "Run Health Check" in BOARD_HTML
+    assert "runHealth()" in BOARD_HTML
+    assert "/health-check" in BOARD_HTML
+
+
+def test_board_html_contains_health_css_class():
+    """Board HTML contains .src-health CSS class."""
+    from robotsix_mill.runtime.board_html import BOARD_HTML
+    assert ".src-health" in BOARD_HTML
+    assert "src-health" in BOARD_HTML  # also used in JS srcClass()

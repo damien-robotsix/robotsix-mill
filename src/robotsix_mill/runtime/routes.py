@@ -234,3 +234,29 @@ def trace_health_check() -> dict:
         target=_run, name="trace-health-check", daemon=True
     ).start()
     return {"status": "started"}
+
+
+@router.post("/health-check", status_code=202)
+def health_check_pass() -> dict:
+    """Kick off a codebase-health pass in the BACKGROUND and return at
+    once.
+
+    The health pass runs the LLM agent for minutes — blocking the HTTP
+    response made the browser fetch drop ("NetworkError"). New draft
+    tickets appear on the board when it finishes.
+    """
+    from ..health_runner import run_health_pass
+
+    def _run() -> None:
+        try:
+            r = run_health_pass()
+            log.info(
+                "health pass done: %d draft(s)", len(r.drafts_created)
+            )
+        except Exception:  # noqa: BLE001 — background; just log
+            log.exception("health pass failed")
+
+    threading.Thread(
+        target=_run, name="health-pass", daemon=True
+    ).start()
+    return {"status": "started"}
