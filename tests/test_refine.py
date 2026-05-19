@@ -656,3 +656,64 @@ def test_refine_agent_kb_dir_default(tmp_path):
     """settings.kb_dir defaults to Path('kb')."""
     s = Settings(MILL_DATA_DIR=str(tmp_path))
     assert s.kb_dir == Path("kb")
+
+
+# --- run_command tool presence ---
+
+
+def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
+    """When repo_dir is provided, run_command is among the tools
+    passed to the agent."""
+    from robotsix_mill.agents import base as base_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    seen_tools: list = []
+
+    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+        seen_tools.extend(t.__name__ for t in tools)
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": "## Problem\nok\n"})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    result = refining.run_refine_agent(
+        settings=s, title="Test", draft="draft", repo_dir=repo,
+    )
+
+    assert result == "## Problem\nok"
+    assert "run_command" in seen_tools
+    # read_file and list_dir must also be present (not regressed)
+    assert "read_file" in seen_tools
+    assert "list_dir" in seen_tools
+    # write_file and edit_file must NOT leak in
+    assert "write_file" not in seen_tools
+    assert "edit_file" not in seen_tools
+
+
+def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
+    """When repo_dir is None, no fs tools at all are passed to the agent
+    (including run_command)."""
+    from robotsix_mill.agents import base as base_mod
+
+    seen_tools: list = []
+
+    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+        seen_tools.extend(t.__name__ for t in tools)
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": "## Problem\nok\n"})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    result = refining.run_refine_agent(
+        settings=s, title="Test", draft="draft", repo_dir=None,
+    )
+
+    assert result == "## Problem\nok"
+    assert seen_tools == []  # no fs tools when no repo

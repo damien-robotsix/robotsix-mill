@@ -3,8 +3,10 @@ in the ACTUAL repo when a local clone is available.
 
 When the refine stage has cloned the target repo it passes
 ``repo_dir``; the agent then gets the cheap ``explore`` scout +
-read-only ``read_file``/``list_dir`` to ground the spec in real code
-(instead of web-fetching the project's own files — slow & indirect).
+read-only ``read_file``/``list_dir``/``run_command`` to ground the
+spec in real code (instead of web-fetching the project's own files —
+slow & indirect). ``run_command`` runs sandboxed, read-only commands
+(e.g. re-run failing tests when error output is truncated).
 ``web_research`` stays for genuinely external lookups only. With no
 repo (no forge configured) it falls back to draft-only as before.
 ``run_refine_agent`` is the seam tests monkeypatch.
@@ -22,10 +24,15 @@ engineering spec an autonomous coder can implement without asking
 questions.
 
 - If a repo is available you have `explore` (a scout returning
-  concise paths/symbols/line-ranges, never whole files) and
-  `read_file`/`list_dir`. USE THEM to ground the spec in the ACTUAL
-  codebase — real file paths, existing patterns/conventions, and
-  constraints. Do NOT web-fetch the project's own files.
+  concise paths/symbols/line-ranges, never whole files),
+  `read_file`/`list_dir`, and `run_command`. USE THEM to ground the
+  spec in the ACTUAL codebase — real file paths, existing
+  patterns/conventions, and constraints. Do NOT web-fetch the
+  project's own files.
+- Use `run_command` to re-run failing tests when a traceback is
+  truncated or to inspect runtime behaviour (e.g. `pytest
+  tests/test_foo.py -x --tb=long`, `python -c "import module; …"`,
+  linters).  The sandbox is read-only; you cannot mutate the repo.
 - Use `web_research` ONLY for things not in the repo (a
   library/API/standard/best practice). Skip it when unneeded.
 - Output Markdown only, with these sections:
@@ -49,11 +56,11 @@ def run_refine_agent(
     reviewer_comments: str | None = None,
 ) -> str:
     """Return the refined Markdown spec. When ``repo_dir`` is given the
-    agent grounds the spec in that local clone via explore/read_file;
-    otherwise it works draft-only. When ``reviewer_comments`` is given
-    the agent incorporates the feedback into the refined spec. Raises
-    RuntimeError if no OpenRouter key is configured (build_agent
-    enforces this)."""
+    agent grounds the spec in that local clone via explore/read_file/
+    list_dir/run_command; otherwise it works draft-only. When
+    ``reviewer_comments`` is given the agent incorporates the feedback
+    into the refined spec. Raises RuntimeError if no OpenRouter key is
+    configured (build_agent enforces this)."""
     from .base import build_agent
     from .kb import load_kb
     from .retry import call_with_retry
@@ -65,7 +72,7 @@ def run_refine_agent(
 
         ro = [
             t for t in build_fs_tools(repo_dir, settings)
-            if t.__name__ in ("read_file", "list_dir")
+            if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
