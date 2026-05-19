@@ -50,7 +50,9 @@ def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
     spec = "## Problem\nAdd dark mode toggle\n## Acceptance criteria\n- [ ] works\n"
     refine_called = False
 
-    def fake_refine(*, settings, title, draft, repo_dir=None):
+    def fake_refine(
+        *, settings, title, draft, repo_dir=None, reviewer_comments=None
+    ):
         nonlocal refine_called
         refine_called = True
         assert title == "Add dark mode toggle"
