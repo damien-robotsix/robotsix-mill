@@ -138,6 +138,7 @@ All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
 | Ruff (lint + format) | v0.11.0 | `ruff --fix` + `ruff format` |
 | mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` |
 | Bandit | 1.8.3 | Config from `pyproject.toml`; targets `src/`, skips `B101` (assert) |
+| hadolint | v2.14.0 | `--failure-threshold warning`; config from `.hadolint.yaml` |
 
 Install with `.venv/bin/pre-commit install`. Run manually:
 `pre-commit run --all-files`.
@@ -154,7 +155,10 @@ Install with `.venv/bin/pre-commit install`. Run manually:
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | Builds Docker image, Trivy CRITICAL scan, pushes to Docker Hub with SBOM + SLSA attestation |
+| [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | hadolint lint → build Docker image → Trivy CRITICAL scan → push to Docker Hub with SBOM + SLSA attestation |
+| hadolint gate (in `docker-publish.yml`) | (within `docker-publish.yml` push) | `hadolint/hadolint-action@v3.3.0` with `failure-threshold: warning` |
 | [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` on installed dependencies |
+
+Dependabot (weekly) keeps pip and Docker dependencies current.
 
 Dependabot (weekly) keeps pip and Docker dependencies current.

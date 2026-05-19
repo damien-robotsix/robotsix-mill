@@ -1,0 +1,5 @@
+ignored:
+  - DL3008    # unpinned apt packages (relax initially)
+  - DL3059    # multiple consecutive RUN (relax initially)
+trustedRegistries:
+  - docker.io
