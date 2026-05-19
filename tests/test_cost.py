@@ -192,3 +192,166 @@ def test_session_cost_serves_stale_on_transient_failure(settings, monkeypatch):
     state["v"] = None  # Langfuse now failing
     t[0] += lc._COST_TTL_SECONDS + 1  # force past cache
     assert lc.session_cost(settings, "sid-d") == 0.42  # last known
+
+
+# --- fetch_session_summary: grouped summary with warnings/errors -------
+
+
+def test_fetch_session_summary_returns_none_when_tracing_disabled(settings):
+    from robotsix_mill.langfuse_client import fetch_session_summary
+    assert not settings.tracing_enabled
+    assert fetch_session_summary(settings, "any-session-id") is None
+
+
+def test_fetch_session_summary_empty_traces(settings, monkeypatch):
+    from robotsix_mill.langfuse_client import fetch_session_summary
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client._langfuse_api_get",
+        lambda s, path, params=None: {"data": []},
+    )
+    result = fetch_session_summary(settings, "sid")
+    assert result == "(no Langfuse traces found for this session)"
+
+
+def test_fetch_session_summary_groups_by_stage(settings, monkeypatch):
+    """3 traces across 2 stages → ``## By stage`` with correct subtotals."""
+    from robotsix_mill.langfuse_client import fetch_session_summary
+
+    trace_list = {
+        "data": [
+            {"id": "t1", "name": "ticket", "totalCost": 0.01, "latency": 1.0, "observations": [{}]},
+            {"id": "t2", "name": "implement", "totalCost": 0.03, "latency": 3.0, "observations": [{}, {}]},
+            {"id": "t3", "name": "implement", "totalCost": 0.02, "latency": 2.0, "observations": []},
+        ]
+    }
+
+    # Per-trace detail calls return empty observations (no errors)
+    def fake_get(_s, path, params=None):
+        if "/api/public/traces/" in path and path != "/api/public/traces":
+            return {"observations": []}
+        return trace_list
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
+    )
+
+    result = fetch_session_summary(settings, "sid")
+    assert result is not None
+    assert "traces=3  total_cost=$0.0600  total_latency=6.0s" in result
+    assert "## By stage" in result
+    assert "- implement: $0.0500  5.0s  obs=2" in result
+    assert "- ticket: $0.0100  1.0s  obs=1" in result
+    # No errors → no Warnings/Errors section
+    assert "## Warnings/Errors" not in result
+
+
+def test_fetch_session_summary_warnings_errors(settings, monkeypatch):
+    """Trace detail has ERROR-level observations → ``## Warnings/Errors``."""
+    from robotsix_mill.langfuse_client import fetch_session_summary
+
+    trace_list = {
+        "data": [
+            {"id": "t1", "name": "ticket", "totalCost": 0.01, "latency": 1.0, "observations": []},
+            {"id": "t2", "name": "implement", "totalCost": 0.03, "latency": 3.0, "observations": []},
+        ]
+    }
+
+    detail_map = {
+        "t1": {"observations": []},
+        "t2": {
+            "observations": [
+                {"level": "ERROR", "statusMessage": "tool call failed: EOF"},
+                {"level": "WARNING", "statusMessage": "retry 1/3"},
+            ]
+        },
+    }
+
+    def fake_get(_s, path, params=None):
+        # Per-trace detail
+        for tid in detail_map:
+            if path == f"/api/public/traces/{tid}":
+                return detail_map[tid]
+        return trace_list
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
+    )
+
+    result = fetch_session_summary(settings, "sid")
+    assert result is not None
+    assert "## By stage" in result
+    assert "## Warnings/Errors" in result
+    assert "- implement [ERROR] tool call failed: EOF" in result
+    assert "- implement [WARNING] retry 1/3" in result
+
+
+def test_fetch_session_summary_per_trace_fetch_fails_gracefully(settings, monkeypatch):
+    """When _fetch_single_trace returns None, the trace still appears in
+    ``## By stage`` but contributes no warnings/errors."""
+    from robotsix_mill.langfuse_client import fetch_session_summary
+
+    trace_list = {
+        "data": [
+            {"id": "t1", "name": "ticket", "totalCost": 0.01, "latency": 1.0, "observations": []},
+            {"id": "t2", "name": "implement", "totalCost": 0.03, "latency": 3.0, "observations": []},
+        ]
+    }
+
+    def fake_get(_s, path, params=None):
+        # t1 detail succeeds, t2 detail fails
+        if path == "/api/public/traces/t1":
+            return {"observations": [{"level": "ERROR", "statusMessage": "boom"}]}
+        if path == "/api/public/traces/t2":
+            return None  # simulates HTTP failure
+        return trace_list
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
+    )
+
+    result = fetch_session_summary(settings, "sid")
+    assert result is not None
+    # Both stages still appear
+    assert "- ticket:" in result
+    assert "- implement:" in result
+    # Only t1's error shows up
+    assert "## Warnings/Errors" in result
+    assert "ticket [ERROR] boom" in result
+    # t2's error should NOT appear (its detail fetch failed)
+    assert "implement [ERROR]" not in result
+
+
+def test_fetch_session_summary_warnings_capped_at_20(settings, monkeypatch):
+    """More than 20 warnings/errors → truncated with a note."""
+    from robotsix_mill.langfuse_client import fetch_session_summary
+
+    # One trace with 25 ERROR observations
+    many_obs = [
+        {"level": "ERROR", "statusMessage": f"err {i}"} for i in range(25)
+    ]
+
+    trace_list = {
+        "data": [
+            {"id": "t1", "name": "implement", "totalCost": 1.0, "latency": 10.0, "observations": []},
+        ]
+    }
+
+    def fake_get(_s, path, params=None):
+        if path == "/api/public/traces/t1":
+            return {"observations": many_obs}
+        return trace_list
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
+    )
+
+    result = fetch_session_summary(settings, "sid")
+    assert result is not None
+    assert "## Warnings/Errors" in result
+    # Should have exactly 20 error lines + 1 truncation note
+    warning_lines = [
+        line for line in result.split("\n")
+        if line.startswith("- implement [ERROR]")
+    ]
+    assert len(warning_lines) == 20
+    assert "(+5 more warnings/errors not shown)" in result
