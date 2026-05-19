@@ -280,12 +280,12 @@ def test_board_script_is_well_formed():
     structural invariants."""
     import re
 
-    from robotsix_mill.runtime.api import _BOARD_HTML
+    from robotsix_mill.runtime.board_html import BOARD_HTML
 
-    js = re.search(r"<script>(.*?)</script>", _BOARD_HTML, re.S).group(1)
+    js = re.search(r"<script>(.*?)</script>", BOARD_HTML, re.S).group(1)
     assert js.count("`") % 2 == 0, "unbalanced template-literal backticks"
-    assert '</button>":' not in _BOARD_HTML  # the exact past defect
-    assert '</button>`:' in _BOARD_HTML      # correctly-closed literal
+    assert '</button>":' not in BOARD_HTML  # the exact past defect
+    assert '</button>`:' in BOARD_HTML      # correctly-closed literal
 
 
 def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
