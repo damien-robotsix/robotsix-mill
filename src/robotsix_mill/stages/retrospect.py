@@ -18,6 +18,7 @@ from .. import langfuse_client
 from ..agents import retrospecting
 from ..core.models import Ticket
 from ..core.states import State
+from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
 from .base import Outcome, Stage, StageContext
@@ -118,32 +119,16 @@ def _check_memory_count_consistency(memory_text: str) -> list[str]:
 
     return warnings
 
-# Phrases that mark a "draft" as a non-actionable "nothing to do"
-# report. The retrospect model sometimes sets propose_draft=true with a
-# title like "No notable issues - clean run" — that is noise, not a
-# ticket. A genuine improvement ticket's title never contains these, so
-# the false-positive risk is negligible.
-_NOOP_DRAFT_MARKERS = (
-    "no notable issue", "no issues", "no issue ", "clean run",
-    "nothing to flag", "nothing to report", "no improvement",
-    "no action needed", "no concerns", "no notable finding",
-    "all good", "no changes needed", "clean ticket", "nothing notable",
-)
-
-
-def _is_noop_draft(title: str | None, body: str | None) -> bool:
-    """True if the proposed draft is an empty 'everything is fine'
-    report rather than an actionable improvement.
-
-    Keyed on the TITLE only: the noise the model emits is distinctively
-    titled ("No notable issues - clean run"), whereas a genuine
-    improvement title never contains these phrases. Deliberately does
-    NOT use body/title length — legitimate tickets can be terse, and
-    length heuristics cause false positives."""
-    t = (title or "").strip().lower()
-    if not t:
-        return True
-    return any(m in t for m in _NOOP_DRAFT_MARKERS)
+# No-op detection (markers + logic) lives in core.text_noop — a single
+# source of truth shared with the report_issue tool so the two can't
+# drift. Kept as a thin title-only shim here (the spawn guard and the
+# existing test call it as _is_noop_draft(title, body); body is and was
+# ignored — title-only by design, no length heuristics).
+def _is_noop_draft(title: str | None, body: str | None = None) -> bool:
+    """The retrospect model sometimes sets propose_draft=true with a
+    "No notable issues - clean run" title — noise, not a ticket. Defers
+    to the shared :func:`is_noop_report` (title-only)."""
+    return is_noop_report(title)
 
 
 class RetrospectStage(Stage):

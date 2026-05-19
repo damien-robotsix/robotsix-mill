@@ -91,3 +91,23 @@ def test_build_agent_attaches_report_issue_by_default(settings, monkeypatch):
     build_agent(settings, system_prompt="x", tools=[])
     names = {getattr(t, "__name__", "") for t in captured["tools"]}
     assert "report_issue" in names
+
+
+def test_noop_title_not_filed(settings):
+    """A 'nothing to report' self-report is dropped (no ticket), with a
+    friendly non-error string — shares the retrospect no-op detector."""
+    tool = make_report_issue_tool(settings)
+    for t in ("No notable issues - clean run",
+              "Nothing to report",
+              "Clean ticket, no issues to flag"):
+        out = tool(t, "agent had nothing to flag")
+        assert "not filed" in out and "no-op" in out
+    assert TicketService(settings).list() == []  # zero tickets created
+
+
+def test_genuine_terse_title_still_filed(settings):
+    """A real (terse) issue is still filed — no over-filtering."""
+    tool = make_report_issue_tool(settings)
+    out = tool("Fix timeout in rebase loop", "details")
+    assert out.startswith("report_issue: filed draft ")
+    assert len(TicketService(settings).list()) == 1

@@ -61,6 +61,17 @@ def make_report_issue_tool(settings: Settings):
             title = (title or "").strip()
             if not title:
                 return "report_issue: a non-empty title is required"
+
+            # No-op guard: agents (esp. on a clean run) sometimes call
+            # this to say "nothing to report" — that is noise, not a
+            # ticket. Same shared detector the retrospect stage uses.
+            from ..core.text_noop import is_noop_report
+
+            if is_noop_report(title):
+                return (
+                    "report_issue: no actionable issue — not filed "
+                    "(clean/no-op report)"
+                )
             cat = category if category in _CATEGORIES else "other"
 
             from ..core.service import TicketService
