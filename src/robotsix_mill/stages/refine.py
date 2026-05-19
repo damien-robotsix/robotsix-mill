@@ -38,7 +38,7 @@ class RefineStage(Stage):
     name = "refine"
     input_state = State.DRAFT
 
-    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:  # noqa: C901  # TODO: split dedup, clone, refine into sub-functions (ticket: split_refine_stage)
         ws = ctx.service.workspace(ticket)
         draft = ws.read_description().strip()
         if not draft:

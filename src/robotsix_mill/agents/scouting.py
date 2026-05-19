@@ -271,7 +271,7 @@ class EvalResult:
     score: float = 0.0
 
 
-def _evaluate_model(
+def _evaluate_model(  # noqa: C901  # TODO: split scoring/flagging into sub-functions (ticket: split_run_scout_agent)
     model_id: str,
     role_name: str,
     env_var: str,
@@ -516,7 +516,7 @@ def _build_draft_body(
 # ── main seam ─────────────────────────────────────────────────────────
 
 
-def _evaluate_role(
+def _evaluate_role(  # noqa: C901  # TODO: split into smaller functions (ticket: split_run_scout_agent)
     *,
     env_var: str,
     attr: str,
@@ -579,7 +579,7 @@ def _evaluate_role(
     return []
 
 
-def run_scout_agent(
+def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket: split_run_scout_agent)
     *,
     settings: Settings,
     memory: str = "",
