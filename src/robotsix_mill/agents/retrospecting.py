@@ -60,6 +60,15 @@ across past tickets), do the following:
    externally-resolved issue is just as resolved as one where you
    filed the draft yourself.
 
+6. When you write an Assessment for an issue that states a numeric
+   ticket count (e.g. "Eleven tickets now demonstrate…" or "3 tickets
+   show…"), that count MUST equal the number of distinct ticket IDs in
+   that issue's Evidence list.  If you cannot guarantee this, prefer
+   non-numeric language ("Multiple tickets", "Several tickets") or
+   count the evidence entries explicitly.  Evidence-ticket lists MUST
+   use a consistent Markdown bullet format — each ticket on its own
+   `- \`<ticket-id>\`` line — so they remain machine-parseable.
+
 HARD RULE — a clean run is NOT a ticket. If there is no specific,
 actionable improvement with enough corroboration, you MUST return
 propose_draft=false and leave draft_title and draft_body null/empty.

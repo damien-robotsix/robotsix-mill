@@ -369,3 +369,120 @@ def test_truncation_indicator_appended():
     # The truncated portion (before indicator) should be shorter than original.
     truncated_body = result[: result.index("[... description truncated;")]
     assert omitted == len(text) - len(truncated_body.rstrip("\n"))
+
+
+# --- _check_memory_count_consistency unit tests ---
+
+
+def test_count_drift_detected():
+    """Assessment says 'Eleven tickets' but only 10 distinct IDs → warning."""
+    from robotsix_mill.stages.retrospect import _check_memory_count_consistency
+
+    memory = (
+        "## Issue: Slow test suite\n"
+        "**Assessment:** Eleven tickets now demonstrate this pattern.\n"
+        "**Evidence:**\n"
+        + "\n".join(f"- `TKT-{i:03d}`" for i in range(1, 11))
+        + "\n"
+    )
+    warnings = _check_memory_count_consistency(memory)
+    assert len(warnings) == 1
+    assert "Slow test suite" in warnings[0]
+    assert "claims 11 ticket" in warnings[0]
+    assert "has 10 distinct" in warnings[0]
+
+
+def test_count_match_no_warning():
+    """Assessment says '3 tickets' and exactly 3 IDs → empty list."""
+    from robotsix_mill.stages.retrospect import _check_memory_count_consistency
+
+    memory = (
+        "## Issue: Fragile retry logic\n"
+        "**Assessment:** 3 tickets now demonstrate this.\n"
+        "**Evidence:**\n"
+        "- `TKT-AAA`\n"
+        "- `TKT-BBB`\n"
+        "- `TKT-CCC`\n"
+    )
+    warnings = _check_memory_count_consistency(memory)
+    assert warnings == []
+
+
+def test_no_numeric_count_no_warning():
+    """Assessment with no numeric count → empty list (no false positive)."""
+    from robotsix_mill.stages.retrospect import _check_memory_count_consistency
+
+    memory = (
+        "## Issue: Token waste\n"
+        "**Assessment:** Multiple tickets show this pattern.\n"
+        "**Evidence:**\n"
+        "- `TKT-A`\n"
+        "- `TKT-B`\n"
+    )
+    warnings = _check_memory_count_consistency(memory)
+    assert warnings == []
+
+
+def test_empty_memory_no_crash():
+    """Empty or near-empty memory → empty list, no crash."""
+    from robotsix_mill.stages.retrospect import _check_memory_count_consistency
+
+    assert _check_memory_count_consistency("") == []
+    assert _check_memory_count_consistency("   \n  ") == []
+    assert _check_memory_count_consistency("just some notes, no structure") == []
+
+
+def test_multiple_issues_mixed():
+    """Memory with multiple issues: one drifted, one consistent, one no-count."""
+    from robotsix_mill.stages.retrospect import _check_memory_count_consistency
+
+    memory = (
+        "## Issue: Slow tests\n"
+        "**Assessment:** 5 tickets show this.\n"
+        "- `TKT-1`\n"
+        "- `TKT-2`\n"
+        "- `TKT-3`\n"
+        "\n"
+        "## Issue: Token waste\n"
+        "**Assessment:** Four tickets now demonstrate.\n"
+        "- `TKT-A`\n"
+        "- `TKT-B`\n"
+        "- `TKT-C`\n"
+        "\n"
+        "## Issue: Flaky lint\n"
+        "**Assessment:** Several tickets affected.\n"
+        "- `TKT-X`\n"
+    )
+    warnings = _check_memory_count_consistency(memory)
+    # Both "Slow tests" (claims 5, has 3) and "Token waste" (claims 4, has 3) drifted.
+    assert len(warnings) == 2
+    assert any("Slow tests" in w and "claims 5 ticket" in w and "has 3 distinct" in w
+               for w in warnings)
+    assert any("Token waste" in w and "claims 4 ticket" in w and "has 3 distinct" in w
+               for w in warnings)
+
+
+def test_word_number_parsing():
+    """Word numbers like 'ten', 'Twenty' are parsed correctly."""
+    from robotsix_mill.stages.retrospect import _check_memory_count_consistency
+
+    # "Ten tickets" claim with exactly 10 IDs → no warning
+    memory = (
+        "## Issue: Slow CI\n"
+        "**Assessment:** Ten tickets demonstrate this.\n"
+        + "\n".join(f"- `TKT-{i}`" for i in range(10))
+        + "\n"
+    )
+    assert _check_memory_count_consistency(memory) == []
+
+    # "twenty tickets" claim with 19 IDs → warning
+    memory2 = (
+        "## Issue: Memory leak\n"
+        "**Assessment:** Twenty tickets show the leak.\n"
+        + "\n".join(f"- `TKT-{i}`" for i in range(19))
+        + "\n"
+    )
+    warnings = _check_memory_count_consistency(memory2)
+    assert len(warnings) == 1
+    assert "claims 20 ticket" in warnings[0]
+    assert "has 19 distinct" in warnings[0]
