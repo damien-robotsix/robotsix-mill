@@ -41,8 +41,9 @@ class RefineStage(Stage):
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:  # noqa: C901  # TODO: split dedup, clone, refine into sub-functions (ticket: split_refine_stage)
         ws = ctx.service.workspace(ticket)
         draft = ws.read_description().strip()
-        if not draft:
-            return Outcome(State.BLOCKED, "empty draft — nothing to refine")
+        title = ticket.title.strip()
+        if not title and not draft:
+            return Outcome(State.BLOCKED, "empty title and draft — nothing to refine")
 
         # Ground the spec in the ACTUAL repo: clone it locally so the
         # refine agent uses explore/read_file instead of web-fetching
@@ -146,7 +147,8 @@ class RefineStage(Stage):
 
         # preserve the raw draft, then make the refined spec canonical
         (ws.artifacts_dir / "draft-original.md").write_text(
-            draft, encoding="utf-8"
+            draft if draft else "(title-only ticket, no body provided)",
+            encoding="utf-8",
         )
         new_hash = ws.write_description(spec)
         ctx.service.set_content_hash(ticket.id, new_hash)

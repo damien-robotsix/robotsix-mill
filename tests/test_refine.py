@@ -28,11 +28,11 @@ def ctx(settings, service):
     return StageContext(settings=settings, service=service)
 
 
-def test_empty_draft_blocks(ctx, service):
-    t = service.create("x", "   ")
+def test_empty_title_and_draft_blocks(ctx, service):
+    t = service.create("   ", "   ")
     out = RefineStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
-    assert "empty draft" in out.note
+    assert "empty title and draft" in out.note
 
 
 def test_no_api_key_blocks(ctx, service, monkeypatch):
@@ -43,6 +43,30 @@ def test_no_api_key_blocks(ctx, service, monkeypatch):
     out = RefineStage().run(service.create("x", "do a thing"), ctx)
     assert out.next_state is State.BLOCKED
     assert "OPENROUTER_API_KEY" in out.note
+
+
+def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
+    """A ticket with only a title (empty body) refines successfully."""
+    spec = "## Problem\nAdd dark mode toggle\n## Acceptance criteria\n- [ ] works\n"
+    refine_called = False
+
+    def fake_refine(*, settings, title, draft, repo_dir=None):
+        nonlocal refine_called
+        refine_called = True
+        assert title == "Add dark mode toggle"
+        assert draft == ""
+        return spec
+
+    monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
+    t = service.create("Add dark mode toggle", "")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_called
+    # draft-original.md should contain a sentinel, not an empty file
+    ws = service.workspace(t)
+    original = (ws.artifacts_dir / "draft-original.md").read_text()
+    assert "title-only" in original
 
 
 def test_success_rewrites_description(ctx, service, monkeypatch):
@@ -322,8 +346,8 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
     assert refine_called
 
 
-def test_dedup_skipped_for_empty_draft(ctx, service, monkeypatch):
-    """Empty draft blocks BEFORE dedup check — no wasted model call."""
+def test_dedup_skipped_for_empty_title_and_draft(ctx, service, monkeypatch):
+    """When both title and draft are empty, blocks BEFORE dedup check."""
     dedup_called = False
 
     def fake_dedup(*, settings, draft_title, draft_body,
@@ -334,10 +358,32 @@ def test_dedup_skipped_for_empty_draft(ctx, service, monkeypatch):
 
     monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
 
-    out = RefineStage().run(service.create("x", "   "), ctx)
+    out = RefineStage().run(service.create("", "   "), ctx)
     assert out.next_state is State.BLOCKED
-    assert "empty draft" in out.note
+    assert "empty title and draft" in out.note
     assert not dedup_called
+
+
+def test_dedup_runs_for_title_only(ctx, service, monkeypatch):
+    """When title is set but body is empty, dedup IS called (not skipped)."""
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: spec)
+
+    dedup_called = False
+
+    def fake_dedup(*, settings, draft_title, draft_body,
+                   candidates_json, recent_commits_json):
+        nonlocal dedup_called
+        dedup_called = True
+        assert draft_title == "Add dark mode toggle"
+        assert draft_body == ""
+        return {"duplicate_of": None, "already_done": None, "reason": "no match"}
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    out = RefineStage().run(service.create("Add dark mode toggle", ""), ctx)
+    assert out.next_state is State.READY
+    assert dedup_called
 
 
 def test_dedup_never_flags_self(ctx, service, monkeypatch):
