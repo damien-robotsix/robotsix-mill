@@ -1,5 +1,7 @@
 """run_rebase_agent result handling (regression: it used the removed
-pydantic-ai `.data` attr → AttributeError → every rebase BLOCKED)."""
+pydantic-ai `.data` attr → AttributeError → every rebase BLOCKED),
+plus API-key guard, agent construction, system prompt, and output
+edge cases."""
 
 import pydantic_ai
 import pydantic_ai.providers.openrouter as orp
@@ -10,12 +12,19 @@ from robotsix_mill.agents.rebasing import run_rebase_agent
 from robotsix_mill.config import Settings
 
 
-def _s(tmp_path):
-    return Settings(MILL_DATA_DIR=str(tmp_path), OPENROUTER_API_KEY="k")
+def _s(tmp_path, **kw):
+    kw.setdefault("OPENROUTER_API_KEY", "k")
+    kw.setdefault("MILL_DATA_DIR", str(tmp_path))
+    return Settings(**kw)
 
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def fake_ai(monkeypatch):
+    """Monkeypatch the pydantic-ai layer so no real LLM is called."""
     box = {}
 
     class FakeModel:
@@ -25,7 +34,6 @@ def fake_ai(monkeypatch):
         def __init__(self, **kw): pass
 
         def run_sync(self, *a, **k):
-            # AgentRunResult has `.output` and NO `.data` (the old API).
             return type("R", (), {"output": box["out"]})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
@@ -34,16 +42,136 @@ def fake_ai(monkeypatch):
     return box
 
 
+# ---------------------------------------------------------------------------
+# Existing parametrized test (output parsing)
+# ---------------------------------------------------------------------------
+
 @pytest.mark.parametrize("out,expected", [
     ("DONE", True),
     ("done — rebased cleanly", True),
     ("FAILED: unresolvable conflict", False),
     ("", False),
+    # Edge-case outputs (extended)
+    (None, False),
+    ("done", True),               # .upper() handles lowercase
+    ("DONE with caveats", True),  # startswith("DONE")
 ])
 def test_run_rebase_agent_reads_output_not_data(tmp_path, fake_ai, out, expected):
     fake_ai["out"] = out
-    # must NOT raise AttributeError('.data'); must read .output
     assert run_rebase_agent(
         settings=_s(tmp_path), repo_dir=tmp_path,
         branch="mill/x", target="main",
     ) is expected
+
+
+# ---------------------------------------------------------------------------
+# API-key guard
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("key", [None, ""])
+def test_run_rebase_agent_raises_when_api_key_falsy(tmp_path, key):
+    """Must raise BEFORE any agent is built."""
+    s = _s(tmp_path, OPENROUTER_API_KEY=key)
+    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY is not set"):
+        run_rebase_agent(
+            settings=s, repo_dir=tmp_path,
+            branch="mill/x", target="main",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Agent construction: verify args passed to build_agent
+# ---------------------------------------------------------------------------
+
+def test_build_agent_called_with_web_false_and_settings(tmp_path, monkeypatch):
+    """build_agent is called with web=False, a Settings, and shell tools."""
+    captured = {}
+
+    def fake_build_agent(settings, *, system_prompt, output_type, tools, web, **kw):
+        captured["settings"] = settings
+        captured["system_prompt"] = system_prompt
+        captured["output_type"] = output_type
+        captured["tools"] = tools
+        captured["web"] = web
+        # Return a fake agent whose run_sync returns DONE.
+        class FakeAgent:
+            def run_sync(self, *a, **k):
+                return type("R", (), {"output": "DONE"})()
+        return FakeAgent()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent", fake_build_agent
+    )
+
+    s = _s(tmp_path)
+    result = run_rebase_agent(
+        settings=s, repo_dir=tmp_path,
+        branch="mill/x", target="main",
+    )
+    assert result is True
+    assert captured["web"] is False
+    assert isinstance(captured["settings"], Settings)
+    assert captured["output_type"] is str
+
+
+def test_tools_include_shell_tools(tmp_path, monkeypatch):
+    """The tools list passed to build_agent includes run_command and friends."""
+    captured_tools = []
+
+    def fake_build_agent(settings, *, system_prompt, output_type, tools, web, **kw):
+        captured_tools.extend(tools or [])
+        class FakeAgent:
+            def run_sync(self, *a, **k):
+                return type("R", (), {"output": "DONE"})()
+        return FakeAgent()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent", fake_build_agent
+    )
+
+    s = _s(tmp_path)
+    run_rebase_agent(
+        settings=s, repo_dir=tmp_path, branch="mill/x", target="main",
+    )
+
+    tool_names = {getattr(t, "__name__", str(t)) for t in captured_tools}
+    assert "run_command" in tool_names, f"shell tool missing; got {tool_names}"
+    assert "read_file" in tool_names
+    assert "write_file" in tool_names
+    assert "edit_file" in tool_names
+    assert "list_dir" in tool_names
+
+
+# ---------------------------------------------------------------------------
+# System prompt content
+# ---------------------------------------------------------------------------
+
+def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
+    """The system_prompt captures the rebase workflow."""
+    captured_prompt = []
+
+    def fake_build_agent(settings, *, system_prompt, output_type, tools, web, **kw):
+        captured_prompt.append(system_prompt)
+        class FakeAgent:
+            def run_sync(self, *a, **k):
+                return type("R", (), {"output": "DONE"})()
+        return FakeAgent()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent", fake_build_agent
+    )
+
+    s = _s(tmp_path)
+    run_rebase_agent(
+        settings=s, repo_dir=tmp_path, branch="mill/x", target="main",
+    )
+
+    prompt = captured_prompt[0]
+    assert "git fetch origin" in prompt
+    assert "git rebase origin/" in prompt
+    assert "git rebase --continue" in prompt
+    # "respond with" and "EXACTLY one word" may be on different lines.
+    assert "respond with" in prompt
+    assert "EXACTLY one word" in prompt
+    assert "DONE" in prompt
+    assert "FAILED" in prompt
