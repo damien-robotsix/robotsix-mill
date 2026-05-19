@@ -486,3 +486,211 @@ def test_word_number_parsing():
     assert len(warnings) == 1
     assert "claims 20 ticket" in warnings[0]
     assert "has 19 distinct" in warnings[0]
+
+
+# ---------------------------------------------------------------------------
+# deep-analysis frequency gate tests
+# ---------------------------------------------------------------------------
+
+
+def test_deep_counter_missing_treated_as_zero(tmp_path):
+    """Missing counter file → read returns 0."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    settings = Settings(MILL_DATA_DIR=str(tmp_path / "data"))
+    # Ensure the counter file does not exist.
+    counter_path = RetrospectStage._deep_counter_path(settings)
+    assert not counter_path.exists()
+    assert RetrospectStage._read_deep_counter(settings) == 0
+
+
+def test_deep_counter_corrupted_resets_to_zero(tmp_path):
+    """Corrupted (non-integer) counter resets to 0."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    settings = Settings(MILL_DATA_DIR=str(tmp_path / "data"))
+    counter_path = RetrospectStage._deep_counter_path(settings)
+    counter_path.parent.mkdir(parents=True, exist_ok=True)
+    counter_path.write_text("garbage", encoding="utf-8")
+    assert RetrospectStage._read_deep_counter(settings) == 0
+
+
+def test_deep_counter_normal_read_write(tmp_path):
+    """Write then read returns the expected value."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    settings = Settings(MILL_DATA_DIR=str(tmp_path / "data"))
+    RetrospectStage._write_deep_counter(settings, 7)
+    assert RetrospectStage._read_deep_counter(settings) == 7
+
+
+def test_frequency_gate_light_runs_increment(tmp_path):
+    """With frequency=3: runs 1,2,3 are light (counter increments)."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    settings = Settings(
+        MILL_DATA_DIR=str(tmp_path / "data"),
+        MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="3",
+    )
+    # Counter starts at 0.
+    assert RetrospectStage._read_deep_counter(settings) == 0
+
+    # Simulate three light runs.
+    for expected_counter in (0, 1, 2):
+        counter = RetrospectStage._read_deep_counter(settings)
+        assert counter < 3  # still light
+        RetrospectStage._write_deep_counter(settings, counter + 1)
+
+    # After third light run, counter reaches 3.
+    assert RetrospectStage._read_deep_counter(settings) == 3
+
+
+def test_frequency_gate_deep_run_resets(tmp_path):
+    """When counter >= frequency, deep analysis triggered and counter resets."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    settings = Settings(
+        MILL_DATA_DIR=str(tmp_path / "data"),
+        MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="3",
+    )
+    RetrospectStage._write_deep_counter(settings, 3)
+    counter = RetrospectStage._read_deep_counter(settings)
+    assert counter >= 3
+    # Reset for deep run.
+    RetrospectStage._write_deep_counter(settings, 0)
+    assert RetrospectStage._read_deep_counter(settings) == 0
+
+
+def test_deep_analysis_passes_trace_ids_to_agent(tmp_path, monkeypatch):
+    """In deep mode, trace_ids are passed to run_retrospect_agent."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    ctx = _ctx(tmp_path, MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="1")
+    _no_langfuse(monkeypatch)
+
+    # Force deep analysis: set counter >= frequency
+    RetrospectStage._write_deep_counter(ctx.settings, 5)
+
+    # Mock the Langfuse trace list to return trace IDs.
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda s, path, params: {
+            "data": [
+                {"id": "trace-a", "name": "implement"},
+                {"id": "trace-b", "name": "test"},
+            ]
+        },
+    )
+
+    captured_kwargs = {}
+
+    def capture(**kwargs):
+        captured_kwargs.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    assert captured_kwargs.get("deep_analysis") is True
+    assert captured_kwargs.get("trace_ids") == ["trace-a", "trace-b"]
+
+
+def test_light_analysis_unchanged(tmp_path, monkeypatch):
+    """When deep_analysis=False, the retrospect agent receives no
+    trace_ids and behaves exactly as today."""
+    ctx = _ctx(tmp_path, MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="10")
+    _no_langfuse(monkeypatch)
+
+    # Counter=0 → light analysis (not deep).
+    RetrospectStage._write_deep_counter(ctx.settings, 0)
+
+    captured_kwargs = {}
+
+    def capture(**kwargs):
+        captured_kwargs.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    assert captured_kwargs.get("deep_analysis") is False
+    assert captured_kwargs.get("trace_ids") == []
+
+
+def test_light_analysis_increments_counter(tmp_path, monkeypatch):
+    """After a light analysis run, the counter is incremented by 1."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    ctx = _ctx(tmp_path, MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="10")
+    _no_langfuse(monkeypatch)
+
+    RetrospectStage._write_deep_counter(ctx.settings, 3)
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(),
+    )
+
+    RetrospectStage().run(_done(ctx), ctx)
+    assert RetrospectStage._read_deep_counter(ctx.settings) == 4
+
+
+def test_deep_analysis_resets_counter(tmp_path, monkeypatch):
+    """After a deep analysis run, the counter is reset to 0."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    ctx = _ctx(tmp_path, MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="3")
+    _no_langfuse(monkeypatch)
+
+    # Set counter to trigger deep analysis.
+    RetrospectStage._write_deep_counter(ctx.settings, 3)
+
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda s, path, params: {"data": []},
+    )
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(),
+    )
+
+    RetrospectStage().run(_done(ctx), ctx)
+    assert RetrospectStage._read_deep_counter(ctx.settings) == 0
+
+
+def test_deep_analysis_handles_missing_langfuse_traces(tmp_path, monkeypatch):
+    """When Langfuse returns None for trace list in deep mode, trace_ids
+    is empty and the agent still runs (degraded)."""
+    from robotsix_mill.stages.retrospect import RetrospectStage
+
+    ctx = _ctx(tmp_path, MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="1")
+    _no_langfuse(monkeypatch)
+
+    RetrospectStage._write_deep_counter(ctx.settings, 5)
+
+    # Langfuse trace list returns None (unconfigured / error).
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda s, path, params: None,
+    )
+
+    captured_kwargs = {}
+
+    def capture(**kwargs):
+        captured_kwargs.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    assert captured_kwargs.get("deep_analysis") is True
+    assert captured_kwargs.get("trace_ids") == []

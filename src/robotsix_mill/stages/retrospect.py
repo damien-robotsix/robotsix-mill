@@ -150,6 +150,41 @@ class RetrospectStage(Stage):
     name = "retrospect"
     input_state = State.DONE
 
+    # ------------------------------------------------------------------
+    # deep-analysis frequency gate
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _deep_counter_path(settings: Settings) -> Path:
+        return settings.data_dir / "retrospect_deep_counter"
+
+    @staticmethod
+    def _read_deep_counter(settings: Settings) -> int:
+        """Read the deep-analysis counter file. Returns 0 if missing
+        or corrupted (logs a warning for the corrupted case)."""
+        path = RetrospectStage._deep_counter_path(settings)
+        try:
+            if path.exists():
+                raw = path.read_text(encoding="utf-8").strip()
+                return int(raw)
+        except (ValueError, OSError) as e:
+            log.warning(
+                "retrospect deep counter corrupted (%s) — resetting to 0", e
+            )
+        return 0
+
+    @staticmethod
+    def _write_deep_counter(settings: Settings, value: int) -> None:
+        """Write the deep-analysis counter file."""
+        path = RetrospectStage._deep_counter_path(settings)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(str(value), encoding="utf-8")
+        except OSError:
+            log.warning("could not write deep counter to %s", path)
+
+    # ------------------------------------------------------------------
+
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         s = ctx.settings
         ws = ctx.service.workspace(ticket)
@@ -168,6 +203,29 @@ class RetrospectStage(Stage):
         )
         lf = langfuse_client.fetch_session_summary(s, ticket.id)
 
+        # --- deep-analysis frequency gate ------------------------------
+        deep_analysis = False
+        trace_ids: list[str] = []
+        counter = self._read_deep_counter(s)
+        frequency = s.retrospect_deep_analysis_frequency
+        if counter >= frequency:
+            deep_analysis = True
+            self._write_deep_counter(s, 0)
+            # Fetch the session trace list to extract trace IDs.
+            traces_data = langfuse_client._langfuse_api_get(
+                s,
+                "/api/public/traces",
+                params={"sessionId": ticket.id, "limit": 100},
+            )
+            if traces_data:
+                for t in traces_data.get("data", []):
+                    tid = t.get("id")
+                    if tid:
+                        trace_ids.append(tid)
+        else:
+            self._write_deep_counter(s, counter + 1)
+        # ---------------------------------------------------------------
+
         # Read current memory — empty string if missing/unreadable.
         memory_text = ""
         memory_file = s.retrospect_memory_file
@@ -184,6 +242,8 @@ class RetrospectStage(Stage):
                 history_text=history_text,
                 langfuse_summary=lf,
                 memory=memory_text,
+                deep_analysis=deep_analysis,
+                trace_ids=trace_ids,
             )
         except Exception as e:  # noqa: BLE001 — resumable, never lose the ticket
             log.exception("%s: retrospect agent failed", ticket.id)
