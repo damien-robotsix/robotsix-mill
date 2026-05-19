@@ -30,6 +30,7 @@ def fake_ai(monkeypatch):
             cap["tools"] = sorted(
                 t.__name__ for t in (kw.get("tools") or [])
             )
+            cap["name"] = kw.get("name")
 
         def run_sync(self, prompt, *, usage_limits=None, **kw):
             cap["limit"] = getattr(usage_limits, "request_limit", None)
@@ -60,6 +61,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
         "run_tests", "web_research", "write_file",
     ]
     assert "run_command" not in fake_ai["tools"]
+    assert fake_ai["name"] == "implement"
 
 
 def test_explore_scout_prompt_forbids_whole_files():
@@ -98,7 +100,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
 
     class FakeAgent:
         def __init__(self, **kw):
-            pass
+            cap["name"] = kw.get("name")
 
         def run_sync(self, prompt, *, usage_limits=None, **kw):
             cap["got_output"] = "assert 1 == 2" in prompt
@@ -112,9 +114,67 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     assert passed is False
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
     assert cap["model"] == "test/cheap" and cap["got_output"]
+    assert cap["name"] == "run_tests"
 
 
 def test_test_agent_no_command_is_pass(tmp_path):
     s = _settings(tmp_path, MILL_TEST_COMMAND="")
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is True
+
+
+def test_build_agent_forwards_name(tmp_path, monkeypatch):
+    """AC1: build_agent(..., name='test-agent') passes name= to Agent."""
+    from robotsix_mill.agents import base as base_mod
+
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            cap["name"] = kw.get("name")
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            return type("R", (), {"output": "ok"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    s = _settings(tmp_path)
+    base_mod.build_agent(
+        s, system_prompt="test", name="test-agent",
+    )
+    assert cap["name"] == "test-agent"
+
+
+def test_build_agent_without_name_is_compatible(tmp_path, monkeypatch):
+    """AC2: build_agent(...) without name= still works; Agent receives
+    no name kwarg (or None)."""
+    from robotsix_mill.agents import base as base_mod
+
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            cap["name"] = kw.get("name")
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            return type("R", (), {"output": "ok"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    s = _settings(tmp_path)
+    base_mod.build_agent(
+        s, system_prompt="test",
+    )
+    assert cap["name"] is None

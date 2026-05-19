@@ -104,6 +104,7 @@ def run_coordinator(
         ],
         web=True,  # adds the cheap web_research tool
         model_name=settings.model,  # the capable implement model
+        name="implement",
     )
     limits = UsageLimits(request_limit=settings.coordinator_request_limit)
     result = call_with_retry(

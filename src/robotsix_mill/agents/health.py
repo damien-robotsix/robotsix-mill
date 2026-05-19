@@ -123,6 +123,7 @@ def run_health_agent(
         tools=tools,
         web=True,  # web_research = EXTERNAL best-practice lookups only
         model_name=settings.health_model,
+        name="health",
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (

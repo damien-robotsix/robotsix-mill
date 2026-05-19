@@ -596,9 +596,11 @@ def test_refine_agent_sees_kb_content(monkeypatch, tmp_path):
     (kb_dir / "gotcha.md").write_text("# Test Gotcha\n\nA known limitation.\n")
 
     seen_system_prompt: list[str] = []
+    seen_name: list = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name):
+    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
+        seen_name.append(kwargs.get("name"))
         class FakeAgent:
             def run_sync(self, msg):
                 return type("R", (), {"output": "## Problem\nok\n"})()
@@ -617,6 +619,7 @@ def test_refine_agent_sees_kb_content(monkeypatch, tmp_path):
     assert "# Technology Constraints" in prompt
     assert "Test Gotcha" in prompt
     assert "A known limitation" in prompt
+    assert seen_name == ["refine"]
 
 
 def test_refine_agent_no_kb_when_dir_missing(monkeypatch, tmp_path):
@@ -626,7 +629,7 @@ def test_refine_agent_no_kb_when_dir_missing(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name):
+    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
         class FakeAgent:
             def run_sync(self, msg):

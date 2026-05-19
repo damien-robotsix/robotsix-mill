@@ -110,6 +110,7 @@ explanation after FAILED."""
         output_type=str,
         tools=tools,
         web=False,
+        name="ci_fix",
     )
 
     result = agent.run_sync(

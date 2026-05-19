@@ -148,6 +148,7 @@ def run_audit_agent(
         tools=tools,
         web=True,  # web_research = EXTERNAL best-practice lookups only
         model_name=settings.audit_model,
+        name="audit",
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (

@@ -52,6 +52,7 @@ def build_agent(
     tools: list | None = None,
     web: bool = False,
     model_name: str | None = None,
+    name: str | None = None,
 ):
     """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
     role passes its own ``model_name`` (see Settings per-agent models);
@@ -87,9 +88,12 @@ def build_agent(
         # sub-agent does the searching and hands back only a conclusion.
         all_tools.append(make_web_research_tool(settings))
 
-    return Agent(
+    agent_kwargs: dict[str, Any] = dict(
         model=model,
         system_prompt=_compose_prompt(settings, system_prompt),
         output_type=output_type,
         tools=all_tools,
     )
+    if name is not None:
+        agent_kwargs["name"] = name
+    return Agent(**agent_kwargs)
