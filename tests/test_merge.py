@@ -528,8 +528,13 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
     assert "force-push failed" in out.note
 
 
-def test_rebase_attempt_counter_resets_on_success(tmp_path, monkeypatch):
-    """After a successful rebase+push, the attempt counter resets to 0."""
+def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
+    tmp_path, monkeypatch
+):
+    """A push is NOT proof the conflict is resolved (git rebase rewrites
+    SHAs every run). The attempt counter must persist across rebase+push
+    cycles and only reset to 0 when the IN_REVIEW poll sees a mergeable
+    PR — otherwise the loop is unbounded."""
     ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="3")
 
     call_count = [0]
@@ -564,9 +569,28 @@ def test_rebase_attempt_counter_resets_on_success(tmp_path, monkeypatch):
     assert out1.next_state is State.REBASING
     assert _read_counter(counter_path) == 1
 
-    # Attempt 2 succeeds → counter reset to 0, back to IN_REVIEW
+    # Attempt 2 succeeds+pushes → back to IN_REVIEW, but counter is
+    # PERSISTED (==2), NOT reset — a push doesn't prove resolution.
     out2 = MergeStage().run(t, ctx)
     assert out2.next_state is State.IN_REVIEW
+    assert _read_counter(counter_path) == 2
+
+    # Now the IN_REVIEW poll sees a genuinely mergeable PR → the
+    # conflict is really gone → counter resets to 0.
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success"},
+    )
+    ctx.service.transition(t.id, State.IN_REVIEW, note="rebased")
+    out3 = MergeStage().run(ctx.service.get(t.id), ctx)
+    assert out3.next_state is State.IN_REVIEW
     assert _read_counter(counter_path) == 0
 
 

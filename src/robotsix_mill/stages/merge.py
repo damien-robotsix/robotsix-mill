@@ -120,7 +120,16 @@ class MergeStage(Stage):
                 "PR is conflicting; rebase agent will run next poll",
             )
 
-        # mergeable=True or None (unchecked) → no conflict.
+        # mergeable=True or None (unchecked) → no conflict. This is the
+        # only true "rebase made progress" signal — clear the rebase
+        # attempt counter so a *later* genuine conflict gets a fresh
+        # budget (and so the counter can't accumulate across unrelated
+        # conflicts).
+        _write_counter(
+            ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER,
+            0,
+        )
+
         # Check remote CI before returning no-op.
         try:
             ci_status = get_forge(s).check_status(source_branch=branch)
@@ -243,10 +252,24 @@ class MergeStage(Stage):
                     State.BLOCKED,
                     f"rebase succeeded but force-push failed: {e}",
                 )
-            # Reset counter on real progress.
-            _write_counter(counter_path, 0)
+            # Pushed — but a push is NOT proof the conflict is resolved
+            # (git rebase rewrites SHAs every run, so "pushed" happens
+            # even when the rebase keeps failing to truly resolve and
+            # GitHub still reports the PR conflicting). Only an actually
+            # mergeable PR clears the counter (in the IN_REVIEW path).
+            # So persist the attempt and bound the loop here too.
             log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
-            return Outcome(State.IN_REVIEW)  # back to in_review; next poll re-checks
+            if attempt < max_attempts:
+                _write_counter(counter_path, attempt)
+                return Outcome(State.IN_REVIEW)  # re-check; may now merge
+            _write_counter(counter_path, 0)  # reset for a future resume
+            return Outcome(
+                State.BLOCKED,
+                f"rebased and force-pushed {max_attempts}x but GitHub "
+                "still reports the PR conflicting — the local clone's "
+                "base is likely stale or the conflict is unresolvable "
+                "automatically. Resume-blocked to retry from in_review.",
+            )
 
         # Agent failed.
         if attempt < max_attempts:
