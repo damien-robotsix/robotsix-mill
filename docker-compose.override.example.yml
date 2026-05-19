@@ -24,7 +24,9 @@
 
 services:
   mill:
-    build: .
+    build:
+      context: .
+      target: dev
     image: robotsix/mill:dev
     environment:
       - MILL_SANDBOX_IMAGE=robotsix/mill:dev
