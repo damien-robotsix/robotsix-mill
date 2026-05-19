@@ -34,6 +34,7 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .cost{font-size:10px;color:#7d828c;margin-left:6px}
 .src-scout{background:#2a1a3b;color:#c084fc}
 .src-trace-health{background:#1a2a3b;color:#60c0fa}
+.src-health{background:#1a3b2f;color:#34d399}
 .src-agent{background:#3b1a1a;color:#f87171}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
@@ -67,6 +68,11 @@ border-radius:6px;padding:10px;overflow-x:auto}
 background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">
   Run Audit
 </button>
+<button onclick="runHealth()" style="font-size:11px;padding:3px 10px;
+background:#0d9488;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Run Health Check
+</button>
 <button onclick="runScout()" style="font-size:11px;padding:3px 10px;
 background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
@@ -91,7 +97,7 @@ const LBL={ready:"implementing"};   // display label only; state value stays "re
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="agent"?"agent":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":"user");
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
 async function refresh(){
  const ts=await jget("/tickets"); if(!ts)return;
@@ -169,6 +175,20 @@ async function runTraceHealth(){
    alert("Trace-health check failed to start: "+e);
  } finally {
    btn.disabled=false; btn.textContent='Trace Health';
+ }
+}
+async function runHealth(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await fetch("/health-check",{method:"POST"});
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Health check started — new draft tickets will appear on the board if issues are found.");
+   setTimeout(refresh,3000);
+ } catch(e) {
+   alert("Health check failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Run Health Check';
  }
 }
 async function open_(id){

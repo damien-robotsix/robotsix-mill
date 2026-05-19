@@ -9,6 +9,7 @@
     robotsix-mill audit                        # run an audit pass
     robotsix-mill scout                        # run a scout pass
     robotsix-mill trace-health                 # run a trace-health check
+    robotsix-mill health                        # run a health pass
 
 The same API backs a future web frontend.
 """
@@ -87,6 +88,16 @@ def main(argv: list[str] | None = None) -> int:
         help="check Langfuse for unsessioned traces and alert if found",
     )
     p_trace_health.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- health command ---
+    p_health = sub.add_parser(
+        "health", help="run a health pass and emit gap drafts"
+    )
+    p_health.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
@@ -194,6 +205,34 @@ def main(argv: list[str] | None = None) -> int:
                 f"{result.total_traces} traces "
                 f"({result.window_start} → {result.window_end})"
             )
+        return 0
+
+    if args.cmd == "health":
+        from .health_runner import run_health_pass
+
+        try:
+            result = run_health_pass()
+        except Exception as e:
+            print(f"health failed: {e}", file=sys.stderr)
+            return 1
+
+        if args.json:
+            print(json.dumps(
+                {
+                    "memory": result.updated_memory,
+                    "tickets_created": result.drafts_created,
+                },
+                indent=2,
+            ))
+        else:
+            print("Health pass complete.")
+            print(f"Memory updated: {len(result.updated_memory)} chars")
+            if result.drafts_created:
+                print(f"Draft tickets created: {len(result.drafts_created)}")
+                for d in result.drafts_created:
+                    print(f"  - {d['id']}: {d['title']}")
+            else:
+                print("No new draft tickets created.")
         return 0
 
     with _client(settings) as c:

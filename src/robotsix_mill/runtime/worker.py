@@ -100,6 +100,7 @@ class Worker:
         self._audit_task: asyncio.Task | None = None
         self._scout_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
+        self._health_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -262,6 +263,24 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("trace-health poll failed")
 
+    async def _health_poll_loop(self) -> None:
+        """Periodic health pass loop. Only runs when
+        ``MILL_HEALTH_PERIODIC=true``."""
+        settings = self.ctx.settings
+        interval = max(60, settings.health_interval_seconds)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                log.info("Starting periodic health pass")
+                from ..health_runner import run_health_pass
+                result = run_health_pass()
+                log.info(
+                    "Health pass completed, created %d draft(s)",
+                    len(result.drafts_created),
+                )
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("health poll failed")
+
     def start(self) -> None:
         if not self._tasks:
             n = max(1, self.ctx.settings.max_concurrency)
@@ -294,12 +313,19 @@ class Worker:
                 "Periodic trace-health enabled: interval %ds",
                 self.ctx.settings.trace_health_interval_seconds,
             )
+        # Opt-in periodic health
+        if self.ctx.settings.health_periodic and self._health_task is None:
+            self._health_task = asyncio.create_task(self._health_poll_loop())
+            log.info(
+                "Periodic health enabled: interval %ds",
+                self.ctx.settings.health_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
         for attr in (
             "_poll_task", "_audit_task", "_scout_task",
-            "_trace_health_task",
+            "_trace_health_task", "_health_task",
         ):
             t = getattr(self, attr)
             if t is not None:
