@@ -270,3 +270,31 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
     assert all(
         service.get(i).state is State.AWAITING_APPROVAL for i in ids
     )
+
+
+async def test_reconcile_sweep_enqueues_out_of_band_drafts(
+    ctx, service, monkeypatch
+):
+    """Regression: drafts created directly via service.create() (audit
+    runner / retrospect / report_issue) — NOT via the API enqueue path —
+    must still get picked up by the periodic reconcile sweep, not sit in
+    DRAFT until a process restart."""
+    t = service.create("audit-spawned thing", "body", source="audit")
+    assert t.state is State.DRAFT
+    w = Worker(ctx)
+
+    # Let the loop body run exactly once, then break out.
+    calls = [0]
+
+    async def fake_sleep(_):
+        calls[0] += 1
+        if calls[0] >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.asyncio.sleep", fake_sleep
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await w._poll_loop()
+
+    assert t.id in w._pending  # swept in despite never being enqueued

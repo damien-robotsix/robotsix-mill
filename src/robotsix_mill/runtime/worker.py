@@ -171,19 +171,32 @@ class Worker:
             send_notification(t, State.BLOCKED, note[:200], self.ctx.settings)
 
     async def _poll_loop(self) -> None:
-        """Lightweight merge poll: periodically re-enqueue in_review
-        and rebasing tickets so the merge stage re-checks the PR / runs
-        the rebase agent. mill has no scheduler; this timer exists
-        solely for the external merge event and rebase cycle."""
+        """Periodic reconcile sweep: re-enqueue EVERY non-terminal
+        ticket that has an automated stage (STAGE_FOR_STATE) and isn't
+        already in flight.
+
+        Originally this only re-enqueued in_review/rebasing for the
+        merge/rebase cycle. But drafts created out-of-band — by the
+        audit runner, the retrospect stage, and the report_issue tool
+        (they call service.create() directly, not the API endpoint that
+        enqueues) — were NEVER picked up until a process restart ran
+        requeue_unfinished(). The mill's whole self-improvement loop
+        (audit/agent → draft → refine → …) silently stalled between
+        restarts. This is periodic requeue_unfinished: idempotent
+        (enqueue() dedupes via _pending), cheap (the process_ticket
+        chain carries each ticket as far as it can in one pass), and
+        robust to any current/future draft-creating path. States with
+        no automated stage (e.g. awaiting_approval) are untouched —
+        they correctly wait for a human."""
         interval = max(15, self.ctx.settings.merge_poll_seconds)
         while True:
             await asyncio.sleep(interval)
             try:
-                for state in (State.IN_REVIEW, State.REBASING):
-                    for t in self.ctx.service.list(state=state):
+                for t in self.ctx.service.list():
+                    if t.state in STAGE_FOR_STATE:
                         self.enqueue(t.id)
             except Exception:  # noqa: BLE001 — never let the poll die
-                log.exception("merge poll failed")
+                log.exception("reconcile sweep failed")
 
     async def _audit_poll_loop(self) -> None:
         """Periodic audit pass loop. Only runs when
