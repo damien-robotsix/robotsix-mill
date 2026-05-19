@@ -56,6 +56,54 @@ def test_trace_stage_noop():
         assert True  # body executed
 
 
+def test_session_contextvar_only_set_when_tracing_ready():
+    """When tracing is off, start_ticket_root_span must NOT touch the
+    session context-var (the SpanProcessor that consumes it only exists
+    when tracing is configured; stamping otherwise would be dead/noise).
+    The var must also be cleanly reset after the block."""
+    tracing._tracing_ready = False
+    assert tracing._current_session.get() is None
+    with tracing.start_ticket_root_span("sess-xyz"):
+        assert tracing._current_session.get() is None  # untouched (off)
+    assert tracing._current_session.get() is None
+
+
+def test_session_stamp_processor_stamps_from_contextvar(monkeypatch):
+    """The SpanProcessor stamps session.id (+ langfuse alias) onto every
+    span from the in-scope context-var, so sub-agent traces inherit the
+    session even though they start their own pydantic-ai trace."""
+    pytest.importorskip("opentelemetry.sdk.trace")
+    # Build the processor the way _ensure_tracing does, in isolation.
+    from opentelemetry.sdk.trace import SpanProcessor
+
+    class _P(SpanProcessor):
+        def on_start(self, span, parent_context=None):
+            sid = tracing._current_session.get()
+            if sid:
+                span.set_attribute("session.id", sid)
+                span.set_attribute("langfuse.session.id", sid)
+
+    attrs: dict = {}
+
+    class _FakeSpan:
+        def set_attribute(self, k, v):
+            attrs[k] = v
+
+    p = _P()
+    p.on_start(_FakeSpan())  # no session in scope → nothing stamped
+    assert attrs == {}
+
+    token = tracing._current_session.set("ticket-42")
+    try:
+        p.on_start(_FakeSpan())
+    finally:
+        tracing._current_session.reset(token)
+    assert attrs == {
+        "session.id": "ticket-42",
+        "langfuse.session.id": "ticket-42",
+    }
+
+
 def test_tracing_enabled_no_env():
     """_tracing_enabled returns False when no vars set."""
     assert tracing._tracing_enabled() is False

@@ -14,6 +14,7 @@ When the env vars are absent, every function is a cheap no-op.
 
 from __future__ import annotations
 
+import contextvars
 import os
 from contextlib import contextmanager, nullcontext
 from typing import Iterator
@@ -21,6 +22,18 @@ from typing import Iterator
 from ..config import Settings
 
 _tracing_ready: bool | None = None  # tri-state: None=unchecked, True/False
+
+# The session id (ticket id / audit id) currently in scope. A
+# context-var, not a parent span: pydantic-ai sub-agent runs (explore,
+# web_research, test, rebase) start their OWN pydantic-ai trace, so the
+# parent "ticket" span doesn't reliably propagate `session.id` to them.
+# A SpanProcessor stamps this onto EVERY span at creation instead, so
+# every trace — main or sub-agent — carries the session from the start.
+# contextvars are copied into asyncio tasks and asyncio.to_thread, so
+# this survives the agents' internal threading.
+_current_session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "mill_session_id", default=None
+)
 
 
 def _tracing_enabled() -> bool:
@@ -69,9 +82,37 @@ def _ensure_tracing() -> None:
         },
     )
 
+    from opentelemetry.sdk.trace import SpanProcessor
+
+    class _SessionStampProcessor(SpanProcessor):
+        """Stamp ``session.id`` (+ Langfuse's alias) onto every span at
+        creation from the in-scope context-var. This makes the session
+        association independent of span nesting, so pydantic-ai
+        sub-agent runs (which open their own trace) are attributed to
+        the same Langfuse session as the ticket/audit that spawned
+        them — instead of appearing as orphan, untagged traces."""
+
+        def on_start(self, span, parent_context=None):  # noqa: ANN001
+            sid = _current_session.get()
+            if sid:
+                span.set_attribute("session.id", sid)
+                # Langfuse also accepts this explicit alias.
+                span.set_attribute("langfuse.session.id", sid)
+
+        def on_end(self, span):  # noqa: ANN001
+            pass
+
+        def shutdown(self):
+            pass
+
+        def force_flush(self, timeout_millis: int = 30000):
+            return True
+
     provider = TracerProvider(
         resource=Resource.create({SERVICE_NAME: "robotsix-mill"}),
     )
+    # on_start stamp first, then the batch exporter.
+    provider.add_span_processor(_SessionStampProcessor())
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
 
@@ -122,12 +163,19 @@ def start_ticket_root_span(ticket_id: str) -> Iterator[None]:
 
     from opentelemetry import trace
 
-    tracer = trace.get_tracer("robotsix-mill")
-    with tracer.start_as_current_span(
-        "ticket",
-        attributes={"session.id": ticket_id},
-    ):
-        yield
+    # Set the session context-var FIRST so the SpanProcessor stamps it
+    # on the "ticket" span and every (sub-agent) span opened within —
+    # even ones that start their own pydantic-ai trace.
+    token = _current_session.set(ticket_id)
+    try:
+        tracer = trace.get_tracer("robotsix-mill")
+        with tracer.start_as_current_span(
+            "ticket",
+            attributes={"session.id": ticket_id},
+        ):
+            yield
+    finally:
+        _current_session.reset(token)
 
 
 @contextmanager
