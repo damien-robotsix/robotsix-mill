@@ -22,10 +22,10 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 # default).  For a locked-down production build, set both:
 #   docker build --build-arg DOCKER_CLI_SHA256_amd64=<sha> ...
 #
-# NOTE: Docker does NOT publish checksums for these tarballs.  Compute
-# them yourself:
-#   curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-29.5.1.tgz | sha256sum
-#   curl -sL https://download.docker.com/linux/static/stable/aarch64/docker-29.5.1.tgz | sha256sum
+# NOTE: Docker does NOT publish checksums for the docker binary.
+# Compute the SHA256 of the extracted binary yourself:
+#   curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-29.5.1.tgz | tar -xzO docker/docker | sha256sum
+#   curl -sL https://download.docker.com/linux/static/stable/aarch64/docker-29.5.1.tgz | tar -xzO docker/docker | sha256sum
 ARG DOCKER_CLI_VERSION=29.5.1
 ARG DOCKER_CLI_SHA256_amd64
 ARG DOCKER_CLI_SHA256_arm64
@@ -37,12 +37,12 @@ RUN ARCH="$(dpkg --print-architecture)" \
        esac \
     && URL="https://download.docker.com/linux/static/stable/${DARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
     && curl -fsSL "$URL" -o /tmp/docker.tgz \
+    && tar -xz -C /usr/local/bin --strip-components=1 -f /tmp/docker.tgz docker/docker \
     && if [ -n "$EXPECTED" ]; then \
-           echo "${EXPECTED}  /tmp/docker.tgz" | sha256sum -c -; \
+           echo "${EXPECTED}  /usr/local/bin/docker" | sha256sum -c -; \
        else \
            echo "WARNING: Docker CLI checksum not verified — supply DOCKER_CLI_SHA256_${ARCH} build-arg to verify"; \
        fi \
-    && tar -xz -C /usr/local/bin --strip-components=1 -f /tmp/docker.tgz docker/docker \
     && docker --version \
     && rm /tmp/docker.tgz
 
@@ -120,8 +120,8 @@ USER root
 # Copy the full source tree for sandbox test runs.
 COPY . /app
 
-# Layer dev tooling (pytest, mypy, ruff, bandit) on top of the base
-# site-packages.
+# Layer dev tooling (pytest, mypy, ruff, bandit) on top of the
+# site-packages inherited from base.
 ARG INSTALL_EXTRAS=dev,tracing
 RUN pip install --no-cache-dir --root-user-action=ignore ".[${INSTALL_EXTRAS}]" \
     && chown -R mill:mill /app
