@@ -9,6 +9,7 @@ from its coroutine (never from the stage threadpool).
 from __future__ import annotations
 
 import re
+import shutil
 from datetime import datetime, timezone
 from secrets import token_hex
 
@@ -74,6 +75,34 @@ class TicketService:
             return list(s.exec(stmt).all())
 
     # --- writes ---
+    def delete(self, ticket_id: str) -> bool:
+        """Hard-delete a ticket: its row, its history events, and its
+        workspace directory. Returns ``False`` if no such ticket.
+
+        Irreversible — for purging junk / no-op tickets (e.g. a
+        retrospect "no notable issues, clean run" draft). Safe even if
+        the worker is mid-processing it: the next ``get()`` returns
+        None and the worker treats it as a vanished ticket and stops.
+        """
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                return False
+            for ev in s.exec(
+                select(TicketEvent).where(
+                    TicketEvent.ticket_id == ticket_id
+                )
+            ).all():
+                s.delete(ev)
+            s.delete(ticket)
+            s.commit()
+        # Remove the workspace dir directly (don't construct Workspace —
+        # its __init__ would recreate the directory).
+        shutil.rmtree(
+            self.settings.workspaces_dir / ticket_id, ignore_errors=True
+        )
+        return True
+
     def create(
         self, title: str, description: str = "", source: str = "user"
     ) -> Ticket:

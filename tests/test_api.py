@@ -335,3 +335,13 @@ def test_setup_logging_surfaces_app_logs_idempotently(capsys):
 
     logging.getLogger("robotsix_mill.audit").info("audit pass starting xyz")
     assert "audit pass starting xyz" in capsys.readouterr().out
+
+
+def test_delete_ticket_endpoint(client, service):
+    t = service.create("deletable")
+    r = client.delete("/tickets/" + t.id)
+    assert r.status_code == 204
+    assert service.get(t.id) is None
+    # second delete → 404
+    assert client.delete("/tickets/" + t.id).status_code == 404
+    assert client.delete("/tickets/nope").status_code == 404

@@ -38,6 +38,12 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
+.del-btn{position:absolute;top:4px;right:4px;font-size:11px;line-height:1;
+padding:2px 5px;background:#3a1f1f;color:#f87171;border:1px solid #5b2a2a;
+border-radius:4px;cursor:pointer;opacity:0;transition:opacity .1s}
+.card{position:relative}
+.card:hover .del-btn{opacity:1}
+.del-btn:hover{background:#7f1d1d;color:#fff}
 #drawer{position:fixed;top:0;right:0;width:min(560px,92vw);height:100vh;
 background:#11141b;border-left:1px solid #2a2e37;transform:translateX(100%);
 transition:transform .15s;overflow-y:auto;padding:16px}
@@ -91,6 +97,7 @@ async function refresh(){
  document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"||showClosed)).map(s=>`<div class="col">
   <h2>${LBL[s]||s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
+   <button class="del-btn" title="Delete ticket" onclick="event.stopPropagation();del_('${t.id}')">✕</button>
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
    (s==="awaiting_approval"?
@@ -101,6 +108,11 @@ async function refresh(){
 async function approve(id){
  const r=await fetch("/tickets/"+id+"/approve",{method:"POST"});
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
+}
+async function del_(id){
+ if(!confirm("Delete ticket "+id+"?\nThis is irreversible (row, history, workspace)."))return;
+ const r=await fetch("/tickets/"+id,{method:"DELETE"});
+ if(!r.ok&&r.status!==204){const e=await r.text();alert("delete failed: "+e)}else refresh()
 }
 async function runAudit(){
  const btn=event.target;

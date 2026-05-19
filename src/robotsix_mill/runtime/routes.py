@@ -95,6 +95,17 @@ def get_description(
     return {"description": svc.workspace(ticket).read_description()}
 
 
+@router.delete("/tickets/{ticket_id}", status_code=204)
+def delete_ticket(
+    ticket_id: str,
+    svc=Depends(get_service),
+) -> None:
+    """Hard-delete a ticket (row + history + workspace). Irreversible.
+    404 if it doesn't exist."""
+    if not svc.delete(ticket_id):
+        raise HTTPException(404, "ticket not found")
+
+
 @router.post("/tickets/{ticket_id}/transition", response_model=TicketRead)
 def transition(
     ticket_id: str,

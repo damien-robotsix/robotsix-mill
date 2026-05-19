@@ -22,6 +22,33 @@ from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
 
+# Phrases that mark a "draft" as a non-actionable "nothing to do"
+# report. The retrospect model sometimes sets propose_draft=true with a
+# title like "No notable issues - clean run" — that is noise, not a
+# ticket. A genuine improvement ticket's title never contains these, so
+# the false-positive risk is negligible.
+_NOOP_DRAFT_MARKERS = (
+    "no notable issue", "no issues", "no issue ", "clean run",
+    "nothing to flag", "nothing to report", "no improvement",
+    "no action needed", "no concerns", "no notable finding",
+    "all good", "no changes needed", "clean ticket", "nothing notable",
+)
+
+
+def _is_noop_draft(title: str | None, body: str | None) -> bool:
+    """True if the proposed draft is an empty 'everything is fine'
+    report rather than an actionable improvement.
+
+    Keyed on the TITLE only: the noise the model emits is distinctively
+    titled ("No notable issues - clean run"), whereas a genuine
+    improvement title never contains these phrases. Deliberately does
+    NOT use body/title length — legitimate tickets can be terse, and
+    length heuristics cause false positives."""
+    t = (title or "").strip().lower()
+    if not t:
+        return True
+    return any(m in t for m in _NOOP_DRAFT_MARKERS)
+
 
 class RetrospectStage(Stage):
     name = "retrospect"
@@ -78,12 +105,24 @@ class RetrospectStage(Stage):
             and res.draft_title
             and res.draft_body
         ):
-            draft = ctx.service.create(
-                res.draft_title, res.draft_body, source="retrospect"
-            )
-            ctx.service.set_parent(draft.id, ticket.id)
-            spawned = draft.id
-            log.info("%s: retrospect spawned draft %s", ticket.id, spawned)
+            if _is_noop_draft(res.draft_title, res.draft_body):
+                # Model set propose_draft=true on a clean/no-issue run.
+                # Don't pollute the board with "no notable issues"
+                # tickets — drop it (the analysis is still in findings
+                # and the memory ledger).
+                log.info(
+                    "%s: retrospect proposed a no-op draft %r — skipped",
+                    ticket.id, res.draft_title,
+                )
+            else:
+                draft = ctx.service.create(
+                    res.draft_title, res.draft_body, source="retrospect"
+                )
+                ctx.service.set_parent(draft.id, ticket.id)
+                spawned = draft.id
+                log.info(
+                    "%s: retrospect spawned draft %s", ticket.id, spawned
+                )
 
         (ws.artifacts_dir / "retrospect.md").write_text(
             f"# Retrospect\nlangfuse: "

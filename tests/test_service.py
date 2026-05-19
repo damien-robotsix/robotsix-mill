@@ -276,3 +276,21 @@ def test_initial_cost_is_zero(service):
     t = service.create("cost test")
     assert t.cost_usd == 0.0
 
+
+
+def test_delete_removes_row_events_and_workspace(service, settings):
+    t = service.create("junk: no notable issues clean run", "noise")
+    service.transition(t.id, State.READY)  # creates a TicketEvent too
+    ws_dir = settings.workspaces_dir / t.id
+    assert ws_dir.exists()
+    assert service.get(t.id) is not None
+    assert service.history(t.id)  # has events
+
+    assert service.delete(t.id) is True
+    assert service.get(t.id) is None
+    assert service.history(t.id) == []   # events gone
+    assert not ws_dir.exists()           # workspace dir gone
+
+
+def test_delete_missing_ticket_returns_false(service):
+    assert service.delete("does-not-exist") is False

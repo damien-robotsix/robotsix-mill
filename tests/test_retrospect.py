@@ -290,3 +290,40 @@ def test_memory_default_path_derives_from_data_dir(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     expected = ctx.settings.data_dir / "retrospect_memory.md"
     assert ctx.settings.retrospect_memory_file == expected
+
+
+def test_noop_draft_is_not_spawned(tmp_path, monkeypatch):
+    """Regression: the model sometimes sets propose_draft=true with a
+    'No notable issues - clean run' title. That must NOT create a
+    ticket — the board stays clean; analysis lives in findings."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="clean run, nothing notable",
+            conclusion="clean",
+            propose_draft=True,
+            draft_title="No notable issues - clean run",
+            draft_body="Everything looks fine, no action needed.",
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    assert len(ctx.service.list()) == 1  # the no-op draft was dropped
+
+
+def test_is_noop_draft_helper():
+    from robotsix_mill.stages.retrospect import _is_noop_draft
+    real_body = "Problem: X retries 5x. Fix: cap at 2 in retry.py."
+    assert _is_noop_draft("No notable issues - clean run", real_body)
+    assert _is_noop_draft("Clean ticket, no issues to flag", real_body)
+    assert _is_noop_draft("Nothing to report", real_body)
+    assert _is_noop_draft("", real_body)   # empty title
+    assert _is_noop_draft(None, real_body)
+    # Title-only: legitimately terse tickets are NOT flagged.
+    assert not _is_noop_draft("Cut retry tokens", "do the thing")
+    assert not _is_noop_draft(
+        "Cap transient retries at 2 in agents/retry.py", real_body
+    )

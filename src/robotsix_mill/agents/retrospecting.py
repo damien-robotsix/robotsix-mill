@@ -18,9 +18,12 @@ a summary of its Langfuse traces (cost, latency, retries, errors), and
 the current retrospect memory (a Markdown ledger of issues observed
 across past tickets), do the following:
 
-1. Identify the single most valuable concrete improvement to the
-   *pipeline/codebase* — a bug, a fragility, wasted retries, or a
-   token/cost reduction. Fill `findings` with your analysis regardless.
+1. Analyse this ticket's run for the single most valuable concrete
+   improvement to the *pipeline/codebase* — a bug, a fragility, wasted
+   retries, a token/cost reduction. Fill `findings` with that analysis
+   REGARDLESS of outcome. A clean, uneventful run is a perfectly valid
+   finding — write "nothing notable; clean run" in `findings` and move
+   on. This step does NOT obligate you to propose a draft.
 
 2. Write a concise one-sentence `conclusion` summarising the outcome of
    this ticket's audit (distinct from the full findings).
@@ -37,12 +40,18 @@ across past tickets), do the following:
 4. Once you have filed a draft for an issue, record that fact in the
    memory and do **not** re-file the same issue on later tickets.
 
-Be conservative: only set propose_draft=true when there is a specific,
-actionable change worth implementing AND the memory shows enough
-corroboration. Vague observations -> false.  When proposing, write
-draft_title and draft_body as a normal ticket a human could approve
-as-is (problem + concrete change).  Always fill `findings` with your
-analysis regardless.
+HARD RULE — a clean run is NOT a ticket. If there is no specific,
+actionable improvement with enough corroboration, you MUST return
+propose_draft=false and leave draft_title and draft_body null/empty.
+NEVER create a ticket that just says everything is fine — titles like
+"No notable issues - clean run", "Clean ticket, no issues to flag",
+"Nothing to report", "No improvement needed" are FORBIDDEN. Such a
+draft is noise on the board; the no-op observation belongs only in
+`findings` and the memory ledger, never as a draft. The default is
+propose_draft=false; only flip it to true when you have a real,
+implementable change a human could approve as-is (problem + concrete
+fix) AND the memory shows corroboration across enough distinct
+tickets. Vague or "just in case" observations -> false.
 
 Return the full, updated memory document in `updated_memory`.  If the
 incoming memory is empty, you are starting a fresh ledger.
