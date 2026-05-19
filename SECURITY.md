@@ -17,7 +17,7 @@ This project does not have versioned releases. Only the tip of the
 
 ## Reporting a Vulnerability
 
-**Please do not open a public issue.** Instead, report vulnerabilities
+Do **not** open a public issue. Instead, report vulnerabilities
 privately through GitHub Security Advisories:
 
 > [Report a vulnerability](https://github.com/damien-robotsix/robotsix-mill/security/advisories/new)
