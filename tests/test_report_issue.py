@@ -111,3 +111,74 @@ def test_genuine_terse_title_still_filed(settings):
     out = tool("Fix timeout in rebase loop", "details")
     assert out.startswith("report_issue: filed draft ")
     assert len(TicketService(settings).list()) == 1
+
+
+def test_build_agent_without_report_issue(settings, monkeypatch):
+    """build_agent(report_issue=False) omits the report_issue tool."""
+    captured = {}
+
+    class _FakeAgent:
+        def __init__(self, *, model, system_prompt, output_type, tools):
+            captured["tools"] = tools
+
+    monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
+    monkeypatch.setattr(
+        "pydantic_ai.providers.openrouter.OpenRouterProvider",
+        lambda *a, **k: object(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.agents.openrouter_cost."
+        "CostInstrumentedOpenRouterModel",
+        lambda *a, **k: object(),
+    )
+    settings.openrouter_api_key = "k"
+
+    from robotsix_mill.agents.base import build_agent
+
+    build_agent(settings, system_prompt="x", tools=[], report_issue=False)
+    names = {getattr(t, "__name__", "") for t in captured["tools"]}
+    assert "report_issue" not in names
+
+
+def test_audit_agent_omits_report_issue(settings, monkeypatch):
+    """The audit agent (which emits drafts via structured output) must
+    not also get the report_issue tool."""
+    captured = {}
+
+    class _FakeAgent:
+        def __init__(self, *, model, system_prompt, output_type, tools, name=None):
+            captured["tools"] = tools
+            captured["name"] = name
+
+    monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
+    monkeypatch.setattr(
+        "pydantic_ai.providers.openrouter.OpenRouterProvider",
+        lambda *a, **k: object(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.agents.openrouter_cost."
+        "CostInstrumentedOpenRouterModel",
+        lambda *a, **k: object(),
+    )
+    # Also stub PromptedOutput so we don't need a real model
+    monkeypatch.setattr(
+        "pydantic_ai.PromptedOutput",
+        lambda x: x,
+    )
+    # Stub call_with_retry to avoid executing the agent
+    monkeypatch.setattr(
+        "robotsix_mill.agents.retry.call_with_retry",
+        lambda fn, *a, **k: None,
+    )
+    settings.openrouter_api_key = "k"
+
+    from robotsix_mill.agents.auditing import run_audit_agent
+
+    # Call without a repo_dir to keep tools list minimal
+    try:
+        run_audit_agent(settings=settings)
+    except Exception:
+        pass  # call_with_retry stubbed so we may hit None.output
+
+    names = {getattr(t, "__name__", "") for t in captured["tools"]}
+    assert "report_issue" not in names
