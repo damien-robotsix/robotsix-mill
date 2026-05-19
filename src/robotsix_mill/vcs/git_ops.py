@@ -80,6 +80,13 @@ def current_branch(repo: Path) -> str:
     return _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
 
 
+def head_sha(repo: Path) -> str:
+    """Current HEAD commit SHA. Used to detect a no-op rebase so the
+    merge stage can skip a pointless force-push (an unchanged push still
+    re-triggers CI and a GitHub mergeable recompute → state churn)."""
+    return _git(repo, "rev-parse", "HEAD")
+
+
 def create_branch(repo: Path, name: str) -> None:
     _git(repo, "checkout", "-q", "-B", name)
 

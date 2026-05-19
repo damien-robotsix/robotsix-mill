@@ -220,6 +220,39 @@ def test_rebasing_clean_rebase_returns_to_in_review(tmp_path, monkeypatch):
     assert push_calls["branch"] == f"mill/{t.id}"
 
 
+# --- REBASING: no-op rebase (branch already current) skips force-push ---
+
+def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
+    """A transient GitHub mergeable=False sent a *healthy* PR into
+    REBASING; the rebase agent runs but the branch is already current
+    (HEAD unchanged). We must NOT force-push (that re-triggers CI + a
+    mergeable recompute → endless ping-pong) — just return IN_REVIEW."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        lambda **k: True,
+    )
+    # Same SHA before and after → rebase produced no new commits.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.head_sha",
+        lambda repo: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    )
+    pushed = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push",
+        lambda repo, branch, remote_url, token: pushed.append(branch),
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IN_REVIEW
+    assert pushed == []  # the no-op force-push was skipped
+
+
 # --- REBASING: retry stays REBASING ---
 
 def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
