@@ -99,12 +99,17 @@ def session_cost(settings: Settings, session_id: str) -> float:
     return cost
 
 
-def _fetch_single_trace(settings: Settings, trace_id: str) -> dict | None:
+def fetch_trace_detail(settings: Settings, trace_id: str) -> dict | None:
     """Fetch a single trace by ID from the Langfuse API.
 
-    Returns the JSON-decoded response body, or ``None`` on failure.
+    Returns the JSON-decoded response body, or ``None`` on failure
+    (including when Langfuse is unconfigured).
     """
     return _langfuse_api_get(settings, f"/api/public/traces/{trace_id}")
+
+
+# Backward-compatible alias used internally by fetch_session_summary.
+_fetch_single_trace = fetch_trace_detail
 
 
 def fetch_session_summary(settings: Settings, session_id: str) -> str | None:

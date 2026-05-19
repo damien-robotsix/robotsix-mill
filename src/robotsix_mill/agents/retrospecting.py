@@ -103,6 +103,28 @@ Return the full, updated memory document in `updated_memory`.  If the
 incoming memory is empty, you are starting a fresh ledger.
 """
 
+_DEEP_ANALYSIS_ADDENDUM = """\
+
+## DEEP ANALYSIS MODE
+
+You have a `trace_inspect(trace_id)` tool available.  You MUST call it
+for EVERY trace in this session to inspect its full observation tree.
+The tool returns a text summary of tool errors, agent limitations, and
+optimisation opportunities found in that trace.
+
+After inspecting all traces, synthesise the findings across traces:
+- Patterns that appear in *multiple* traces are stronger evidence and
+  should be recorded in the memory ledger with higher weight.
+- A single-trace anomaly may still be worth recording, but note that it
+  has only one data point so far.
+- Incorporate the deep findings into your `findings`, `conclusion`,
+  `updated_memory`, and draft decision just as you would with the
+  summary-based analysis.
+
+The trace IDs to inspect are listed in the prompt below.  Call
+`trace_inspect` for each one.
+"""
+
 
 class RetrospectResult(BaseModel):
     findings: str
@@ -120,10 +142,22 @@ def run_retrospect_agent(
     history_text: str,
     langfuse_summary: str | None,
     memory: str = "",
+    deep_analysis: bool = False,
+    trace_ids: list[str] | None = None,
 ) -> RetrospectResult:
     from pydantic_ai import PromptedOutput
 
     from .base import build_agent
+
+    extra_tools = []
+    if deep_analysis:
+        from .trace_inspector import make_trace_inspect_tool
+
+        extra_tools.append(make_trace_inspect_tool(settings))
+
+    system_prompt = SYSTEM_PROMPT
+    if deep_analysis:
+        system_prompt += _DEEP_ANALYSIS_ADDENDUM
 
     # PromptedOutput (not the default ToolOutput): the cheap driver
     # model has no OpenRouter endpoint for the forced `tool_choice`
@@ -132,9 +166,10 @@ def run_retrospect_agent(
     # This keeps retrospect on the cheap model (no deepseek cost).
     agent = build_agent(
         settings,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         output_type=PromptedOutput(RetrospectResult),
         model_name=settings.retrospect_model,
+        tools=extra_tools,
     )
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (
@@ -143,6 +178,12 @@ def run_retrospect_agent(
         f"<langfuse>\n{lf}\n</langfuse>\n\n"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
     )
+    if deep_analysis and trace_ids:
+        ids_text = "\n".join(f"- {tid}" for tid in trace_ids)
+        prompt += (
+            f"\n\n<trace_ids>\n{ids_text}\n</trace_ids>\n\n"
+            "Inspect each trace above with trace_inspect()."
+        )
     from .retry import call_with_retry
 
     result = call_with_retry(
