@@ -9,6 +9,12 @@ import re
 
 from .base import Forge
 
+# Regex for stripping ANSI escape sequences (CSI / SGR).
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+# Maximum number of failed jobs whose logs are fetched per run.
+_MAX_FAILED_JOBS = 10
+
 _REMOTE_RE = re.compile(
     r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
 )
@@ -98,6 +104,22 @@ class GitHubForge(Forge):
         owner, repo = _parse_owner_repo(s.forge_remote_url or "")
         return self._check_status(owner=owner, repo=repo, head=source_branch)
 
+    def list_workflow_runs(
+        self, *, branch: str | None = None, head_sha: str | None = None
+    ) -> list[dict]:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        return self._list_workflow_runs(
+            owner=owner, repo=repo, branch=branch, head_sha=head_sha,
+        )
+
+    def fetch_workflow_job_logs(self, *, run_id: int) -> str:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        return self._fetch_workflow_job_logs(
+            owner=owner, repo=repo, run_id=run_id,
+        )
+
     # --- HTTP seamm (monkeypatched in tests) ---
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
         import httpx
@@ -174,6 +196,107 @@ class GitHubForge(Forge):
             return _derive_check_conclusion(
                 c, api, owner, repo, headers, check_runs
             )
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _list_workflow_runs(
+        self, *, owner: str, repo: str,
+        branch: str | None, head_sha: str | None,
+    ) -> list[dict]:
+        import httpx
+
+        from .auth import github_token
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s))
+        params: dict = {"status": "completed", "per_page": 30}
+        if branch is not None:
+            params["branch"] = branch
+        if head_sha is not None:
+            params["head_sha"] = head_sha
+
+        with httpx.Client(timeout=30) as c:
+            r = c.get(
+                f"{api}/repos/{owner}/{repo}/actions/runs",
+                headers=headers, params=params,
+            )
+            r.raise_for_status()
+            raw = r.json().get("workflow_runs", [])
+        return [
+            {
+                "id": run["id"],
+                "name": run.get("name", ""),
+                "workflow_id": run.get("workflow_id"),
+                "head_sha": run.get("head_sha", ""),
+                "conclusion": run.get("conclusion"),
+                "html_url": run.get("html_url", ""),
+                "created_at": run.get("created_at", ""),
+            }
+            for run in raw
+        ]
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _fetch_workflow_job_logs(
+        self, *, owner: str, repo: str, run_id: int,
+    ) -> str:
+        import httpx
+
+        from .auth import github_token
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s))
+
+        with httpx.Client(timeout=30) as c:
+            # 1. List jobs for the run.
+            jobs_resp = c.get(
+                f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+                headers=headers,
+                params={"status": "completed"},
+            )
+            jobs_resp.raise_for_status()
+            jobs = jobs_resp.json().get("jobs", [])
+
+        # 2. Filter to failed-like jobs.
+        failed_conclusions = frozenset({
+            "failure", "cancelled", "timed_out", "action_required",
+        })
+        failed_jobs = [
+            j for j in jobs
+            if j.get("conclusion") in failed_conclusions
+        ][:_MAX_FAILED_JOBS]
+
+        if not failed_jobs:
+            return ""
+
+        parts: list[str] = []
+        log_max = s.ci_log_max_bytes
+
+        with httpx.Client(timeout=30) as c:
+            for j in failed_jobs:
+                job_id = j["id"]
+                job_name = j.get("name", f"job-{job_id}")
+                try:
+                    log_resp = c.get(
+                        f"{api}/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
+                        headers=headers,
+                    )
+                    log_resp.raise_for_status()
+                    raw = log_resp.text
+                except Exception:
+                    raw = f"[log fetch failed for job {job_id}]"
+
+                # Strip ANSI.
+                clean = _ANSI_RE.sub("", raw)
+                # Tail-cap: keep the last N bytes.
+                if len(clean) > log_max:
+                    clean = clean[-log_max:]
+
+                parts.append(f"### Job: {job_name} (id={job_id})\n")
+                parts.append(clean)
+                parts.append("\n")
+
+        return "\n".join(parts)
 
 
 def _statuses_to_check_runs(statuses_data: dict) -> list[dict]:
