@@ -1,0 +1,160 @@
+# Contributing
+
+## Development quickstart
+
+Python **3.14** is required (see [`.python-version`](.python-version)).
+
+```bash
+cp .env.example .env          # fill in OPENROUTER_API_KEY at minimum
+make install                  # editable install into .venv with dev+tracing extras
+make dev                      # hot-reload server on http://127.0.0.1:8077
+make test                     # pytest with coverage (fail-under 70%)
+```
+
+Other `make` targets:
+
+| Target   | Description |
+|----------|-------------|
+| `serve`  | Production-style server (reads `.env`, data in `.mill-data`) |
+| `docker` | `docker compose up -d --build` |
+| `clean`  | Remove `.venv`, `.mill-data`, `.pytest_cache`, and all `__pycache__` dirs |
+
+Install pre-commit hooks (Ruff, mypy, Bandit):
+
+```bash
+.venv/bin/pre-commit install
+```
+
+## Project structure
+
+The [Layout table in README.md](README.md#layout) is the canonical map.
+Here's how the key directories relate:
+
+- **`agents/`** — LLM-driven logic. Each agent is built by
+  `agents/base.py:build_agent()` with a system prompt, tools, and a
+  per-role model. Agent modules are pure logic (no I/O orchestration).
+- **`stages/`** — Pipeline steps (refine → implement → deliver →
+  merge → retrospect). Stages call agents and handle workspace I/O.
+- **`*_runner.py`** — Periodic pass orchestration (audit, scout,
+  trace-health). Each runner reads a memory ledger, invokes an agent,
+  writes back, and emits draft tickets.
+- **`core/`** — DB models, state machine, ticket service, workspace.
+- **`runtime/`** — FastAPI app, worker pool, poll loops, tracing.
+
+The full architecture is covered in [README.md](README.md). For Docker
+setup and GitHub App delivery identity, see
+[docs/docker-architecture.md](docs/docker-architecture.md) and
+[docs/github-app.md](docs/github-app.md).
+
+## How the agent pattern works
+
+Every agent is constructed through a single factory:
+
+```python
+from robotsix_mill.agents.base import build_agent
+
+agent = build_agent(
+    settings,
+    system_prompt="You are a ...",
+    output_type=str,
+    tools=[...],           # optional role-specific tools
+    web=False,             # set True to add the web_research sub-agent tool
+    model_name=settings.audit_model,  # per-agent model override
+)
+```
+
+`build_agent()` lazily imports `pydantic_ai`, wires a
+`CostInstrumentedOpenRouterModel` via `OpenRouterProvider`, injects
+skills into the system prompt, and **always** attaches the
+`report_issue` tool (so every agent can file a draft ticket when it
+hits a problem). When `web=True`, it also attaches a `web_research`
+tool backed by a cheap sub-agent — the main model never uses
+OpenRouter's `:online` surcharge.
+
+Each agent role (coordinator, refiner, auditor, scout, etc.) gets its
+own model name from `Settings` — only the prompt, tools, and model
+differ. See [`agents/`](src/robotsix_mill/agents/) for the full set.
+
+## Adding a new periodic agent
+
+Three artifacts are needed. Use **audit** and **scout** as reference
+implementations (they are the simplest end-to-end examples):
+
+1. **Agent module** — `agents/<name>.py`
+   - Call `build_agent()` with the role's system prompt, tools, and model.
+   - Export a single `run_<name>_pass(settings, memory, ...)` async function.
+
+2. **Runner module** — `<name>_runner.py` at the package root
+   - Read the memory ledger → run the agent → write back → emit draft
+     tickets via `TicketService`.
+   - See [`audit_runner.py`](src/robotsix_mill/audit_runner.py) and
+     [`scout_runner.py`](src/robotsix_mill/scout_runner.py).
+
+3. **Wiring** — three touchpoints:
+   - **CLI**: add a subcommand in [`cli.py`](src/robotsix_mill/cli.py)
+     (e.g. `robotsix-mill audit`).
+   - **API**: add a route in [`runtime/api.py`](src/robotsix_mill/runtime/api.py)
+     (e.g. `POST /audit`).
+   - **Worker**: add an opt-in poll loop in
+     [`runtime/worker.py`](src/robotsix_mill/runtime/worker.py)
+     (gated by a `MILL_<NAME>_PERIODIC` setting).
+
+## Testing guide
+
+Tests live in `tests/` and mirror the source tree
+(`test_implement.py`, `test_audit.py`, etc.).
+
+**Configuration** ([`pyproject.toml`](pyproject.toml)):
+- `asyncio_mode = "auto"` — no `@pytest.mark.asyncio` needed.
+- Coverage fail-under 70% (via `pytest-cov`).
+- Run with `make test`.
+
+**Key fixtures** ([`tests/conftest.py`](tests/conftest.py)):
+- `fake_sandbox` — monkeypatches `sandbox.run` and `sandbox.fetch` with
+  a tiny shell interpreter (supports `echo`, `false`, `true`). No
+  Docker needed for tests.
+- `_no_dotenv` (autouse) — blocks `.env` leakage into tests.
+- `settings` — inits an isolated SQLite DB in `tmp_path` with
+  `MILL_REQUIRE_APPROVAL=false`.
+- `service` — a `TicketService` bound to the test settings.
+
+**Fake-agent closures** ([`tests/test_implement.py`](tests/test_implement.py)):
+- `_fake_agent(write)` returns a callable matching
+  `run_implement_agent`'s keyword-only signature.
+- `write=None` → agent returns `("did the thing", [])` without writing
+  files.
+- `write={"file.txt": "content"}` → agent writes the given files into
+  the repo dir.
+- For budget/error scenarios, test authors inline a custom `_run` that
+  raises the relevant exception.
+- Patch with `monkeypatch.setattr(coding, "run_implement_agent", ...)`.
+
+## Code style
+
+All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
+
+| Tool   | Version | Configuration |
+|--------|---------|---------------|
+| Ruff (lint + format) | v0.11.0 | `ruff --fix` + `ruff format` |
+| mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` |
+| Bandit | 1.8.3 | Config from `pyproject.toml`; targets `src/`, skips `B101` (assert) |
+
+Install with `.venv/bin/pre-commit install`. Run manually:
+`pre-commit run --all-files`.
+
+## PR checklist
+
+- [ ] Tests pass: `make test`
+- [ ] Pre-commit clean: `pre-commit run --all-files`
+- [ ] New modules have tests in `tests/`
+- [ ] New public functions have docstrings
+- [ ] No new Bandit findings (existing `B101` skip is expected)
+
+## CI overview
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | Builds Docker image, Trivy CRITICAL scan, pushes to Docker Hub with SBOM + SLSA attestation |
+| [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` on installed dependencies |
+
+Dependabot (weekly) keeps pip and Docker dependencies current.
