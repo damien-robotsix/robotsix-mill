@@ -87,6 +87,8 @@ def run_dedup_check(
     reason — the guard is best-effort and never blocks the pipeline.
     """
     from .base import build_agent
+    from pydantic_ai.usage import UsageLimits
+
     from .retry import call_with_retry
 
     agent = build_agent(
@@ -95,6 +97,13 @@ def run_dedup_check(
         output_type=dict,
         model_name=settings.dedup_model,
     )
+    # request_limit must be passed via usage_limits=UsageLimits(...),
+    # NOT as a bare run_sync kwarg — the bare kwarg raises
+    # UserError("Unknown keyword arguments: request_limit"), which made
+    # the dedup check ALWAYS fail (caught best-effort), so dd73 never
+    # actually deduped — hence the overlapping-PR churn it was meant to
+    # stop. Mirrors coordinating/explore/testing.
+    limits = UsageLimits(request_limit=settings.dedup_request_limit)
     try:
         result = call_with_retry(
             lambda: agent.run_sync(
@@ -104,7 +113,7 @@ def run_dedup_check(
                     candidates_json=candidates_json,
                     recent_commits_json=recent_commits_json,
                 ),
-                request_limit=settings.dedup_request_limit,
+                usage_limits=limits,
             ),
             settings=settings,
             what="dedup check",
