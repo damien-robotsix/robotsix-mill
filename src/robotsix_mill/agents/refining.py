@@ -33,6 +33,8 @@ questions.
   ## Scope — concrete changes, as bullets.
   ## Acceptance criteria — checklist an automated reviewer can verify.
   ## Out of scope / constraints — what NOT to do, assumptions.
+- The <draft> section may be empty (the user may have only provided a
+  title). In that case, derive the spec from the title's intent alone.
 - Stay faithful to the draft's intent; invent nothing unrelated. Be
   concrete and testable. Output the spec only — no preamble, no fences.
 """
