@@ -711,15 +711,30 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch):
 
 
 def test_board_html_contains_health_button():
-    """Board HTML contains the 'Run Health Check' button."""
+    """Board HTML contains the 'Run Health Check' button; the JS file
+    references the /health-check endpoint."""
     from robotsix_mill.runtime.board_html import BOARD_HTML
     assert "Run Health Check" in BOARD_HTML
     assert "runHealth()" in BOARD_HTML
-    assert "/health-check" in BOARD_HTML
+
+    from pathlib import Path
+    import robotsix_mill.runtime.board_html
+    js = (
+        Path(robotsix_mill.runtime.board_html.__file__).parent
+        / "static" / "board.js"
+    ).read_text()
+    assert "/health-check" in js
 
 
 def test_board_html_contains_health_css_class():
-    """Board HTML contains .src-health CSS class."""
-    from robotsix_mill.runtime.board_html import BOARD_HTML
-    assert ".src-health" in BOARD_HTML
-    assert "src-health" in BOARD_HTML  # also used in JS srcClass()
+    """The static CSS file contains .src-health class; the JS file
+    maps the 'health' source in srcClass()."""
+    from pathlib import Path
+    import robotsix_mill.runtime.board_html
+
+    base = Path(robotsix_mill.runtime.board_html.__file__).parent / "static"
+    css = (base / "board.css").read_text()
+    js = (base / "board.js").read_text()
+    assert ".src-health" in css
+    assert "src-health" in css  # substring within .src-health rule
+    assert '"health"' in js     # mapped in srcClass()

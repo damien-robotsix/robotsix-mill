@@ -22,10 +22,13 @@ def test_board_serves_html(client):
     assert r.headers["content-type"].startswith("text/html")
     body = r.text
     assert "robotsix-mill" in body
-    # the kanban columns are the pipeline states
+    assert '<div id="board">' in body
+    assert '<div id="drawer">' in body
+    # state labels live in the external JS; verify they're served there
+    js = client.get("/static/board.js").text
     for s in ("draft", "awaiting_approval", "ready", "deliverable", "done", "blocked"):
-        assert s in body
-    assert "/tickets" in body  # board polls the JSON API
+        assert s in js
+    assert "/tickets" in js  # board polls the JSON API
 
 
 def test_create_and_get(client):
@@ -79,22 +82,25 @@ def test_get_tickets_includes_cost_usd(client, service, monkeypatch):
 
 
 def test_board_renders_source_badge(client):
-    """The board HTML includes source badge styling and rendering."""
+    """The board CSS includes source badge styling classes, and the
+    HTML shell references the static CSS file."""
     r = client.get("/")
     body = r.text
-    assert "src-badge" in body
-    assert "src-user" in body
-    assert "src-retrospect" in body
+    assert '<link rel="stylesheet" href="/static/board.css">' in body
+    css = client.get("/static/board.css").text
+    assert "src-badge" in css
+    assert "src-user" in css
+    assert "src-retrospect" in css
 
 
 def test_board_renders_cost_snippet(client):
-    """The board HTML includes the JS snippet that renders cost on
-    each card: $(t.cost_usd||0).toFixed(4)."""
-    r = client.get("/")
-    body = r.text
-    assert "cost_usd" in body  # JS references the field
-    assert ".cost" in body     # CSS class for cost display
-    assert "toFixed(4)" in body  # 4 decimal places
+    """The board JS includes the JS snippet that renders cost on each
+    card: $(t.cost_usd||0).toFixed(4), and the CSS has .cost class."""
+    js = client.get("/static/board.js").text
+    assert "cost_usd" in js   # JS references the field
+    assert "toFixed(4)" in js  # 4 decimal places
+    css = client.get("/static/board.css").text
+    assert ".cost" in css      # CSS class for cost display
 
 
 def test_board_no_langfuse_calls(client, monkeypatch):
@@ -274,18 +280,45 @@ def test_blocked_override_to_draft_via_api(client, service):
 
 
 def test_board_script_is_well_formed():
-    """Regression: a malformed template literal in _BOARD_HTML (a
-    missing closing backtick on the Approve button) was a JS syntax
-    error that wedged the whole board on 'loading…'. Guard the
-    structural invariants."""
-    import re
+    """Regression: a malformed template literal in board.js (a missing
+    closing backtick on the Approve button) was a JS syntax error that
+    wedged the whole board on 'loading…'. Guard the structural
+    invariants."""
+    from pathlib import Path
 
-    from robotsix_mill.runtime.board_html import BOARD_HTML
+    import robotsix_mill.runtime.board_html
 
-    js = re.search(r"<script>(.*?)</script>", BOARD_HTML, re.S).group(1)
+    js_path = (
+        Path(robotsix_mill.runtime.board_html.__file__).parent
+        / "static"
+        / "board.js"
+    )
+    js = js_path.read_text()
     assert js.count("`") % 2 == 0, "unbalanced template-literal backticks"
-    assert '</button>":' not in BOARD_HTML  # the exact past defect
-    assert '</button>`:' in BOARD_HTML      # correctly-closed literal
+    assert '</button>":' not in js  # the exact past defect
+    assert '</button>`:' in js      # correctly-closed literal
+
+
+def test_board_html_references_static_assets(client):
+    """GET / returns HTML that references the static CSS and JS files
+    rather than embedding them inline."""
+    body = client.get("/").text
+    assert '<link rel="stylesheet" href="/static/board.css">' in body
+    assert '<script src="/static/board.js"></script>' in body
+
+
+def test_static_assets_served(client):
+    """GET /static/board.css returns 200 text/css; GET /static/board.js
+    returns 200 and contains key JS identifiers."""
+    css = client.get("/static/board.css")
+    assert css.status_code == 200
+    assert css.headers["content-type"].startswith("text/css")
+
+    js = client.get("/static/board.js")
+    assert js.status_code == 200
+    assert "refresh" in js.text
+    assert "open_" in js.text
+    assert "newTicket" in js.text
 
 
 def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
@@ -353,7 +386,9 @@ def test_board_has_new_ticket_affordance(client):
     body = client.get("/").text
     assert "newTicket()" in body
     assert "+ New Ticket" in body
-    assert 'fetch("/tickets",{method:"POST"' in body
+    # fetch("/tickets",{method:"POST" is in the external JS
+    js = client.get("/static/board.js").text
+    assert 'fetch("/tickets",{method:"POST"' in js
 
 
 def test_post_tickets_creates_user_draft(client):
