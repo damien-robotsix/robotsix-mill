@@ -27,6 +27,11 @@ services:
       # sibling sandbox containers must bind the host path of ./.data
       # (the docker daemon resolves -v on the host, not in this container)
       - MILL_SANDBOX_DATA_MOUNT=${PWD}/.data
+      # Enable the post-merge CI monitor so the mill detects failing
+      # target-branch workflows (e.g. Docker Publish) and self-files a
+      # source=ci ticket to fix them. Short interval for fast reaction.
+      - MILL_CI_MONITOR_PERIODIC=true
+      - MILL_CI_MONITOR_INTERVAL_SECONDS=600
     group_add:
       - "${DOCKER_GID:-999}"   # host docker socket group, so non-root mill can use it
     volumes:
