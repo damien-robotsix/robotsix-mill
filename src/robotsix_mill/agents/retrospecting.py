@@ -37,7 +37,18 @@ across past tickets), do the following:
    draft_title/draft_body.  There is no hard numeric threshold; you
    judge sufficiency and explain your reasoning in the memory.
 
-4. Once you have filed a draft for an issue, record that fact in the
+4. When a ticket **resolves** an issue already recorded in the memory
+   ledger (e.g. the ticket's implementation directly addresses the root
+   cause), update that memory entry with a **resolution marker** —
+   record the fixing ticket ID and a brief note that the issue is now
+   resolved.  A resolved issue must **not** accumulate further evidence
+   toward a draft on any subsequent ticket, and must **not** trigger
+   `propose_draft=true`.  The format is up to you (e.g. appending
+   `✅ resolved by <ticket-id>` or a `**Resolved:** <ticket-id>` line
+   under the issue heading); what matters is that the issue is clearly
+   marked as closed.
+
+5. Once you have filed a draft for an issue, record that fact in the
    memory and do **not** re-file the same issue on later tickets.
 
 HARD RULE — a clean run is NOT a ticket. If there is no specific,
