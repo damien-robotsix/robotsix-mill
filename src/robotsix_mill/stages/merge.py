@@ -174,11 +174,6 @@ class MergeStage(Stage):
         )
 
         try:
-            head_before = git_ops.head_sha(repo_dir)
-        except Exception:  # noqa: BLE001 — best-effort; fall back to push
-            head_before = None
-
-        try:
             ok = run_rebase_agent(
                 settings=s,
                 repo_dir=repo_dir,
@@ -190,28 +185,50 @@ class MergeStage(Stage):
             ok = False
 
         if ok:
-            # No-op rebase guard: GitHub reports mergeable=False
-            # transiently right after *any* push while it recomputes.
-            # If the branch is already current the rebase produces no
-            # new commits — force-pushing it anyway re-triggers CI and
-            # yet another mergeable recompute, flipping us back into
-            # REBASING: an endless ping-pong on a healthy PR (and an
-            # IN_REVIEW ntfy every cycle). If HEAD is unchanged, the
-            # remote already has this exact commit — skip the push.
+            # Only force-push when the remote doesn't already have this
+            # exact commit. GitHub reports mergeable=False transiently
+            # right after any push (while it recomputes); pushing an
+            # unchanged branch re-triggers CI + another recompute →
+            # endless REBASING↔IN_REVIEW ping-pong on a healthy PR (and
+            # an ntfy every cycle). The agent ran `git fetch origin`, so
+            # origin/<branch> is fresh.
             try:
-                head_after = git_ops.head_sha(repo_dir)
-            except Exception:  # noqa: BLE001
-                head_after = None
-            if head_before and head_after and head_after == head_before:
-                _write_counter(counter_path, 0)
-                log.info(
-                    "%s: rebase was a no-op (branch already current) — "
-                    "skipping force-push, staying IN_REVIEW",
-                    ticket.id,
-                )
-                return Outcome(State.IN_REVIEW)
+                local = git_ops.head_sha(repo_dir)
+                remote = git_ops.remote_branch_sha(repo_dir, branch)
+            except Exception:  # noqa: BLE001 — be safe: fall back to push
+                local, remote = None, "force-push"
 
-            # Real rebase → force-push only the ticket branch.
+            if local is not None and remote == local:
+                # Nothing to push. The rebase made no change yet GitHub
+                # still flags the PR — either GitHub is still recomputing
+                # (it will clear on a later poll → merge) or the local
+                # base is stale / the conflict is genuinely unresolvable.
+                # This is NOT progress: count it (don't reset) and bound
+                # the loop. Stay REBASING — a same-state no-op the worker
+                # leaves alone (no transition, no ntfy) — until the
+                # attempt budget is spent, then BLOCKED once.
+                if attempt < max_attempts:
+                    _write_counter(counter_path, attempt)
+                    log.info(
+                        "%s: rebase no-op (remote already current) — "
+                        "GitHub still flags conflict; re-poll %d/%d",
+                        ticket.id, attempt, max_attempts,
+                    )
+                    return Outcome(State.REBASING)  # silent re-poll
+                _write_counter(counter_path, 0)
+                log.warning(
+                    "%s: rebase keeps being a no-op but the PR is still "
+                    "conflicting after %d attempts", ticket.id, max_attempts,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    "rebase is a no-op yet GitHub still reports the PR "
+                    "conflicting — the local clone's base is likely stale "
+                    "or the conflict needs manual resolution. "
+                    "Resume-blocked to retry from in_review.",
+                )
+
+            # Remote is behind / missing → genuine push needed.
             try:
                 git_ops.push(
                     repo_dir,
@@ -226,7 +243,7 @@ class MergeStage(Stage):
                     State.BLOCKED,
                     f"rebase succeeded but force-push failed: {e}",
                 )
-            # Reset counter on success.
+            # Reset counter on real progress.
             _write_counter(counter_path, 0)
             log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
             return Outcome(State.IN_REVIEW)  # back to in_review; next poll re-checks

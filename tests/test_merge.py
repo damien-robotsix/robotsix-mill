@@ -223,19 +223,22 @@ def test_rebasing_clean_rebase_returns_to_in_review(tmp_path, monkeypatch):
 # --- REBASING: no-op rebase (branch already current) skips force-push ---
 
 def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
-    """A transient GitHub mergeable=False sent a *healthy* PR into
-    REBASING; the rebase agent runs but the branch is already current
-    (HEAD unchanged). We must NOT force-push (that re-triggers CI + a
-    mergeable recompute → endless ping-pong) — just return IN_REVIEW."""
+    """Rebase agent succeeds but the remote already has this exact
+    commit (no-op). We must NOT force-push (that re-triggers CI + a
+    mergeable recompute → endless ping-pong). Stay REBASING as a silent
+    same-state re-poll (no ntfy), bounded by the attempt counter."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
         lambda **k: True,
     )
-    # Same SHA before and after → rebase produced no new commits.
+    sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.head_sha",
-        lambda repo: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        "robotsix_mill.stages.merge.git_ops.head_sha", lambda repo: sha,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.remote_branch_sha",
+        lambda repo, branch: sha,  # remote already has it
     )
     pushed = []
     monkeypatch.setattr(
@@ -249,8 +252,41 @@ def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.REBASING  # silent re-poll, not pushed
     assert pushed == []  # the no-op force-push was skipped
+
+
+def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
+    """A no-op rebase that never resolves the conflict is bounded: once
+    the attempt budget is spent the ticket goes BLOCKED (once), instead
+    of ping-ponging forever."""
+    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="2")
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", lambda **k: True,
+    )
+    sha = "cafebabecafebabecafebabecafebabecafebabe"
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.head_sha", lambda repo: sha,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.remote_branch_sha",
+        lambda repo, branch: sha,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not push")),
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    # attempt 1 → REBASING (re-poll), attempt 2 (== max) → BLOCKED
+    o1 = MergeStage().run(t, ctx)
+    assert o1.next_state is State.REBASING
+    o2 = MergeStage().run(ctx.service.get(t.id), ctx)
+    assert o2.next_state is State.BLOCKED
 
 
 # --- REBASING: retry stays REBASING ---

@@ -87,6 +87,18 @@ def head_sha(repo: Path) -> str:
     return _git(repo, "rev-parse", "HEAD")
 
 
+def remote_branch_sha(repo: Path, branch: str) -> str | None:
+    """SHA the remote currently has for *branch* (the rebase agent runs
+    ``git fetch origin`` first, so ``origin/<branch>`` is fresh). Returns
+    None if the remote has no such branch yet. The merge stage skips the
+    force-push only when this equals local HEAD — i.e. the remote truly
+    already has this exact commit (not merely a local-rebase no-op)."""
+    try:
+        return _git(repo, "rev-parse", f"refs/remotes/origin/{branch}")
+    except subprocess.CalledProcessError:
+        return None
+
+
 def create_branch(repo: Path, name: str) -> None:
     _git(repo, "checkout", "-q", "-B", name)
 
