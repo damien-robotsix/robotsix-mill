@@ -14,7 +14,7 @@ from .lifespan import create_lifespan, setup_logging  # noqa: F401 — re-export
 from . import routes
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:  # noqa: C901  # TODO: extract route registration and lifespan into separate functions
     """Build and return a fully-wired FastAPI application.
 
     *settings* may be ``None``, in which case ``Settings()`` (from env)

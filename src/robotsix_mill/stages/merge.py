@@ -158,7 +158,7 @@ class MergeStage(Stage):
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         return self._handle_conflict(ticket, ctx, branch)
 
-    def _handle_conflict(
+    def _handle_conflict(  # noqa: C901  # TODO: split into smaller functions (ticket: split_merge_stage)
         self, ticket: Ticket, ctx: StageContext, branch: str
     ) -> Outcome:
         """Attempt rebase for a conflicting PR."""

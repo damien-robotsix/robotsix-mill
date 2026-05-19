@@ -27,7 +27,7 @@ tracing = [
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-http",
 ]
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15"]
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "bandit[toml]>=1.8", "mypy>=1.15", "ruff>=0.11"]
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
@@ -51,7 +51,10 @@ exclude_dirs = ["tests/"]
 skips = ["B101"]
 
 [tool.ruff.lint]
-select = ["DTZ001", "DTZ002", "DTZ003"]
+extend-select = ["DTZ001", "DTZ002", "DTZ003", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.mypy]
 strict = true
