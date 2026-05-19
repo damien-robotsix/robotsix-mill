@@ -110,7 +110,7 @@ async function approve(id){
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
 }
 async function del_(id){
- if(!confirm("Delete ticket "+id+"?\nThis is irreversible (row, history, workspace)."))return;
+ if(!confirm("Delete ticket "+id+"? This is irreversible (row, history, workspace)."))return;
  const r=await fetch("/tickets/"+id,{method:"DELETE"});
  if(!r.ok&&r.status!==204){const e=await r.text();alert("delete failed: "+e)}else refresh()
 }
