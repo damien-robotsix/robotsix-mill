@@ -1,5 +1,7 @@
 ignored:
   - DL3008    # unpinned apt packages (relax initially)
   - DL3059    # multiple consecutive RUN (relax initially)
+  - DL3013    # `pip install ".[extras]"` is a LOCAL project install — no
+              # external package version to pin; the version is this repo.
 trustedRegistries:
   - docker.io

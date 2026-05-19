@@ -5,6 +5,11 @@
 # =============================================================================
 FROM python:3.14-slim AS builder
 
+# pipefail-aware shell so a failure on the LHS of a pipe (e.g. the
+# sha256 verification `echo … | sha256sum -c -`) propagates and the
+# whole RUN aborts. Also satisfies hadolint DL4006.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Acquire::Retries lets apt recover from transient mirror glitches.
 # Apt version pin validated against Debian Trixie (13) — see same note in
 # the base stage.  curl is only needed in the builder for the Docker CLI
