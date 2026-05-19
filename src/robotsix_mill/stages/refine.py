@@ -134,9 +134,18 @@ class RefineStage(Stage):
         # --- end dedup guard ---
 
         try:
+            # Gather reviewer comments (if the ticket was sent back to draft).
+            comments = ctx.service.list_comments(ticket.id)
+            reviewer_comments: str | None = None
+            if comments:
+                reviewer_comments = "\n".join(
+                    f"[{c.created_at.isoformat()}] {c.body}" for c in comments
+                )
+
             spec = refining.run_refine_agent(
                 settings=s, title=ticket.title, draft=draft,
                 repo_dir=repo_dir,
+                reviewer_comments=reviewer_comments,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))

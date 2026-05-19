@@ -18,13 +18,24 @@ async function refresh(){
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
    (s==="awaiting_approval"?
-    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`:"")+
+    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
+    `<button class="reject-btn" onclick="event.stopPropagation();reject('${t.id}')">Request Changes</button>`:"")+
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
 async function approve(id){
  const r=await fetch("/tickets/"+id+"/approve",{method:"POST"});
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
+}
+async function reject(id){
+ const body=prompt("What needs changing?");
+ if(body===null)return;
+ if(!body.trim()){alert("Please enter some feedback");return}
+ const r=await fetch("/tickets/"+id+"/request-changes",{
+  method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({body:body.trim()})});
+ if(!r.ok){const e=await r.text();alert("request-changes failed: "+e)}else refresh()
 }
 async function newTicket(){
  const title=prompt("New ticket title:");
@@ -99,8 +110,9 @@ async function runHealth(){
 }
 async function open_(id){
  sel=id;
- const [t,h,d]=await Promise.all([jget("/tickets/"+id),
-   jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description")]);
+ const [t,h,d,c]=await Promise.all([jget("/tickets/"+id),
+   jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
+   jget("/tickets/"+id+"/comments")]);
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
@@ -113,6 +125,8 @@ async function open_(id){
    <h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+esc(e.note):""}</div>`).join("")+
+   ((c&&c.length)?`<h3>Comments</h3>`+
+     c.map(cmt=>`<div class="ev"><b>Comment</b> ${cmt.created_at}<br>${esc(cmt.body)}</div>`).join(""):"")+
    `<h3>description.md</h3><pre>${esc((d&&d.description)||"")}</pre>`;
  document.getElementById("drawer").classList.add("open");
 }

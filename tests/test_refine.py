@@ -36,7 +36,7 @@ def test_empty_draft_blocks(ctx, service):
 
 
 def test_no_api_key_blocks(ctx, service, monkeypatch):
-    def boom(*, settings, title, draft, repo_dir=None):
+    def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     monkeypatch.setattr(refining, "run_refine_agent", boom)
@@ -155,7 +155,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
         seen["clone"] += 1
         (dest / ".git").mkdir(parents=True)
 
-    def fake_refine(*, settings, title, draft, repo_dir=None):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
         seen["repo_dir"] = repo_dir
         return "## Problem\nx\n## Scope\n- y\n"
 
@@ -188,7 +188,7 @@ def test_refine_clone_failure_falls_back_to_draft_only(ctx, service, monkeypatch
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
-    def fake_refine(*, settings, title, draft, repo_dir=None):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
         got["repo_dir"] = repo_dir
         return "## Problem\nx\n"
 
@@ -239,7 +239,7 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -274,7 +274,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -309,7 +309,7 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -383,7 +383,7 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)

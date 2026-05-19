@@ -16,6 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 
 from ..core.models import (
+    Comment,
+    CommentCreate,
     Ticket,
     TicketCreate,
     TicketEvent,
@@ -139,6 +141,58 @@ def approve_ticket(
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)  # implement picks it up from ready
     return ticket
+
+
+@router.post(
+    "/tickets/{ticket_id}/comments",
+    response_model=Comment,
+    status_code=201,
+)
+def add_comment(
+    ticket_id: str,
+    body: CommentCreate,
+    svc=Depends(get_service),
+) -> Comment:
+    """Add a comment to a ticket (any state). Does NOT change state."""
+    try:
+        return svc.add_comment(ticket_id, body.body)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+
+
+@router.get(
+    "/tickets/{ticket_id}/comments",
+    response_model=list[Comment],
+)
+def list_comments(
+    ticket_id: str,
+    svc=Depends(get_service),
+) -> list[Comment]:
+    """List all comments for a ticket, ordered oldest-first."""
+    try:
+        return svc.list_comments(ticket_id)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+
+
+@router.post("/tickets/{ticket_id}/request-changes")
+def request_changes(
+    ticket_id: str,
+    body: CommentCreate,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> dict:
+    """Add a comment AND transition from awaiting_approval back to draft
+    in one atomic operation."""
+    try:
+        comment, ticket = svc.request_changes(ticket_id, body.body)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    except TransitionError as e:
+        raise HTTPException(409, str(e)) from None
+    maybe_enqueue(ticket, worker)
+    return {"comment": comment, "ticket": with_cost(ticket, settings)}
 
 
 @router.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)

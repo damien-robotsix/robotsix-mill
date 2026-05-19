@@ -44,11 +44,14 @@ def run_refine_agent(
     title: str,
     draft: str,
     repo_dir: Path | None = None,
+    reviewer_comments: str | None = None,
 ) -> str:
     """Return the refined Markdown spec. When ``repo_dir`` is given the
     agent grounds the spec in that local clone via explore/read_file;
-    otherwise it works draft-only. Raises RuntimeError if no OpenRouter
-    key is configured (build_agent enforces this)."""
+    otherwise it works draft-only. When ``reviewer_comments`` is given
+    the agent incorporates the feedback into the refined spec. Raises
+    RuntimeError if no OpenRouter key is configured (build_agent
+    enforces this)."""
     from .base import build_agent
     from .kb import load_kb
     from .retry import call_with_retry
@@ -77,10 +80,19 @@ def run_refine_agent(
         web=True,  # cheap web_research sub-agent (external lookups only)
         model_name=settings.refine_model,
     )
+
+    # Build user prompt: title, draft, and optionally reviewer feedback.
+    user_prompt = f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
+    if reviewer_comments:
+        user_prompt += (
+            "\n<reviewer_feedback>The reviewer sent this spec back "
+            "with the following comments. Address each one in the "
+            "revised spec:\n\n"
+            f"{reviewer_comments}\n</reviewer_feedback>"
+        )
+
     result = call_with_retry(
-        lambda: agent.run_sync(
-            f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
-        ),
+        lambda: agent.run_sync(user_prompt),
         settings=settings, what="refine",
     )
     return str(result.output).strip()
