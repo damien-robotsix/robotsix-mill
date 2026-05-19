@@ -6,6 +6,31 @@ from robotsix_mill.core.service import TicketService
 
 
 @pytest.fixture(autouse=True)
+def _no_real_http(monkeypatch):
+    """Hard guarantee: the suite NEVER makes a real outbound HTTP
+    request, so it can never consume OpenRouter / Langfuse / forge
+    quota or tokens. Any test that forgot to mock the model/HTTP seam
+    fails LOUDLY here instead of silently billing the account.
+
+    Only real httpx transports are blocked. The FastAPI TestClient
+    uses an in-process ASGI transport (not HTTPTransport), so API
+    tests keep working untouched."""
+    import httpx
+
+    def _blocked(self, request, *a, **k):
+        raise RuntimeError(
+            f"Blocked real HTTP {request.method} {request.url} during "
+            "tests. Tests must mock the model/HTTP seam — they must "
+            "never hit OpenRouter/Langfuse/the forge or consume tokens."
+        )
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _blocked)
+    monkeypatch.setattr(
+        httpx.AsyncHTTPTransport, "handle_async_request", _blocked
+    )
+
+
+@pytest.fixture(autouse=True)
 def _no_dotenv(monkeypatch):
     """Hermeticity: never let the developer's ./.env leak into tests
     (it can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
