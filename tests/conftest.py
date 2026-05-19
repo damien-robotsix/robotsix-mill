@@ -10,11 +10,24 @@ def _no_dotenv(monkeypatch):
     """Hermeticity: never let the developer's ./.env leak into tests
     (it can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
     the suite hit the network). Disable env_file for every Settings()
-    AND clear already-exported sensitive vars — pydantic-settings reads
-    os.environ regardless of env_file, so a key exported in the dev
-    shell would still leak in and make tests hit the network."""
+    AND clear EVERY ambient credential/endpoint var — pydantic-settings
+    reads os.environ regardless of env_file, so anything exported in the
+    shell *or in the running mill container* (where the implement stage
+    runs the suite as its gate) leaks in. An unstripped LANGFUSE_*/
+    FORGE_*/NTFY_* flips tracing_enabled / forge-config on and makes
+    hermetic tests assert wrong or hit the network — which made the
+    full-suite implement gate fail in-container (76 env-driven
+    failures) and BLOCK essentially every ticket. The suite must be
+    identical green on a clean machine and inside the container."""
     monkeypatch.setitem(Settings.model_config, "env_file", None)
-    for var in ("OPENROUTER_API_KEY", "FORGE_REMOTE_URL", "FORGE_TOKEN"):
+    for var in (
+        "OPENROUTER_API_KEY",
+        "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL",
+        "FORGE_KIND", "FORGE_REMOTE_URL", "FORGE_TOKEN", "FORGE_AUTH",
+        "GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY",
+        "GITHUB_APP_PRIVATE_KEY_PATH",
+        "NTFY_URL", "NTFY_TOKEN",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
