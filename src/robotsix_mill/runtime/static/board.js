@@ -126,8 +126,10 @@ async function open_(id){
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
    `<br>
    · cost <b>$${(t.cost_usd||0).toFixed(4)}</b><br>
-   created ${t.created_at} · updated ${t.updated_at}</p>
-   <h3>History</h3>`+
+   created ${t.created_at} · updated ${t.updated_at}</p>`+
+   (t.depends_on?`<p><b>depends on:</b> ${esc(t.depends_on)}</p>`:"")+
+   (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
+   `<h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+esc(e.note):""}</div>`).join("")+
    `<h3>description.md</h3><pre>${esc((d&&d.description)||"")}</pre>`;

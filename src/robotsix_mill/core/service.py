@@ -8,6 +8,8 @@ from its coroutine (never from the stage threadpool).
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 import shutil
 from collections.abc import Iterable
@@ -22,11 +24,27 @@ from .models import Ticket, TicketEvent, Comment
 from .states import State, can_transition
 from .workspace import Workspace
 
+log = logging.getLogger("robotsix_mill.service")
+
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
 def _slug(text: str) -> str:
     return _SLUG_RE.sub("-", text.lower()).strip("-")[:40] or "ticket"
+
+
+def _parse_depends_on_str(raw: str | None) -> list[str]:
+    """Parse a JSON-encoded list of ticket IDs from the depends_on
+    column. Returns an empty list for ``None`` or malformed input."""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return []
 
 
 class TransitionError(RuntimeError):
@@ -114,6 +132,7 @@ class TicketService:
     def create(
         self, title: str, description: str = "", source: str = "user",
         origin_session: str | None = None,
+        depends_on: str | None = None,
     ) -> Ticket:
         """Create a new ticket with the given *title*.
 
@@ -123,9 +142,21 @@ class TicketService:
 
         The ticket id is constructed from the UTC timestamp, a slug of
         the title, and a short random hex suffix.
+
+        Raises :class:`ValueError` if *depends_on* includes the ticket's
+        own ID (self-dependency).
         """
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         ticket_id = f"{stamp}-{_slug(title)}-{token_hex(2)}"
+
+        # Reject self-dependency before persisting.
+        if depends_on:
+            dep_ids = _parse_depends_on_str(depends_on)
+            if ticket_id in dep_ids:
+                raise ValueError(
+                    f"Ticket cannot depend on itself: {ticket_id}"
+                )
+
         ws = Workspace(self.settings.workspaces_dir, ticket_id)
         content_hash = ws.write_description(description)
         with db.session(self.settings) as s:
@@ -137,6 +168,7 @@ class TicketService:
                 content_hash=content_hash,
                 source=source,
                 origin_session=origin_session,
+                depends_on=depends_on,
             )
             s.add(ticket)
             s.add(
@@ -263,6 +295,51 @@ class TicketService:
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()
+
+    # --- dependency helpers ---
+
+    @staticmethod
+    def _parse_depends_on(ticket: Ticket) -> list[str]:
+        """Parse the JSON list of dependency IDs from *ticket*."""
+        return _parse_depends_on_str(ticket.depends_on)
+
+    def unmet_dependencies(self, ticket: Ticket) -> list[str]:
+        """Return the subset of *ticket*'s ``depends_on`` IDs that are
+        NOT in a terminal state (CLOSED or DONE).
+
+        * A missing/deleted dep ID is treated as satisfied (warning).
+        * A dep that itself directly depends on *ticket* (cycle A↔B) is
+          treated as satisfied (warning).
+        """
+        dep_ids = self._parse_depends_on(ticket)
+        if not dep_ids:
+            return []
+
+        unmet: list[str] = []
+        for dep_id in dep_ids:
+            dep_ticket = self.get(dep_id)
+            if dep_ticket is None:
+                log.debug(
+                    "ticket %s: dependency %s not found — treating as satisfied",
+                    ticket.id, dep_id,
+                )
+                continue
+
+            # Direct cycle: A → B, B → A
+            dep_deps = self._parse_depends_on(dep_ticket)
+            if ticket.id in dep_deps:
+                log.debug(
+                    "ticket %s: direct cycle with dependency %s — treating as satisfied",
+                    ticket.id, dep_id,
+                )
+                continue
+
+            if dep_ticket.state in (State.CLOSED, State.DONE):
+                continue
+
+            unmet.append(dep_id)
+
+        return unmet
 
     # --- comments ---
     def add_comment(self, ticket_id: str, body: str) -> Comment:

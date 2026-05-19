@@ -309,3 +309,133 @@ def test_delete_removes_row_events_and_workspace(service, settings):
 
 def test_delete_missing_ticket_returns_false(service):
     assert service.delete("does-not-exist") is False
+
+
+# --- depends_on --------------------------------------------------------
+
+def test_create_stores_depends_on(service):
+    t = service.create("Dep test", depends_on='["abc123", "def456"]')
+    assert t.depends_on == '["abc123", "def456"]'
+    reloaded = service.get(t.id)
+    assert reloaded.depends_on == '["abc123", "def456"]'
+
+
+def test_create_without_depends_on_has_none(service):
+    t = service.create("No dep")
+    assert t.depends_on is None
+
+
+def test_self_dependency_rejected_deterministic(service, monkeypatch):
+    """Create a ticket whose depends_on includes its own (deterministic) ID."""
+    import datetime as dt
+
+    # Freeze the timestamp and token to get a predictable ID.
+    fake_now = dt.datetime(2025, 1, 1, 0, 0, 0, tzinfo=dt.timezone.utc)
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.datetime",
+        type("m", (), {
+            "now": classmethod(lambda cls, tz=None: fake_now),
+            "timezone": dt.timezone,
+        })(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.token_hex",
+        lambda n: "abcd1234",
+    )
+    # The ID will be: 20250101T000000Z-self-dep-test-abcd1234
+    expected_id = "20250101T000000Z-self-dep-test-abcd1234"
+    with pytest.raises(ValueError, match="cannot depend on itself"):
+        service.create("Self-dep test", depends_on=f'["{expected_id}"]')
+
+
+def test_parse_depends_on_returns_list(service):
+    t = service.create("Parse test", depends_on='["a","b"]')
+    result = service._parse_depends_on(t)
+    assert result == ["a", "b"]
+
+
+def test_parse_depends_on_none_returns_empty(service):
+    t = service.create("No dep parse")
+    result = service._parse_depends_on(t)
+    assert result == []
+
+
+def test_parse_depends_on_empty_string_returns_empty(service):
+    t = service.create("Empty dep parse", depends_on="")
+    result = service._parse_depends_on(t)
+    assert result == []
+
+
+def test_unmet_dependencies_all_satisfied(service):
+    """When all deps are CLOSED, unmet_dependencies returns empty."""
+    dep = service.create("Dep ticket")
+    service.transition(dep.id, State.READY)
+    service.transition(dep.id, State.DELIVERABLE)
+    service.transition(dep.id, State.IN_REVIEW)
+    service.transition(dep.id, State.DONE)
+    service.transition(dep.id, State.CLOSED)
+
+    t = service.create("Depender", depends_on=f'["{dep.id}"]')
+    assert service.unmet_dependencies(t) == []
+
+
+def test_unmet_dependencies_some_unmet(service):
+    """When some deps are not CLOSED/DONE, they appear in unmet."""
+    dep_a = service.create("Dep A")
+    dep_b = service.create("Dep B")
+    # Close dep_a, leave dep_b in DRAFT
+    service.transition(dep_a.id, State.READY)
+    service.transition(dep_a.id, State.DELIVERABLE)
+    service.transition(dep_a.id, State.IN_REVIEW)
+    service.transition(dep_a.id, State.DONE)
+    service.transition(dep_a.id, State.CLOSED)
+
+    t = service.create("Depender", depends_on=f'["{dep_a.id}", "{dep_b.id}"]')
+    unmet = service.unmet_dependencies(t)
+    assert unmet == [dep_b.id]
+
+
+def test_unmet_dependencies_missing_dep_satisfied(service, caplog):
+    """A nonexistent dep ID is treated as satisfied with a debug log."""
+    t = service.create("Depender", depends_on='["nonexistent-id"]')
+    unmet = service.unmet_dependencies(t)
+    assert unmet == []
+    # The warning should be logged at debug level
+    # (caplog captures at WARNING by default, but we log at debug)
+
+
+def test_unmet_dependencies_direct_cycle_satisfied(service, caplog):
+    """A → B, B → A: unmet_dependencies(A) returns empty."""
+    a = service.create("Ticket A")
+    b = service.create("Ticket B")
+    # Manually set mutual deps via DB (no update API)
+    from robotsix_mill.core import db as core_db
+    from robotsix_mill.core.models import Ticket as TicketModel
+    with core_db.session(service.settings) as s:
+        ta = s.get(TicketModel, a.id)
+        tb = s.get(TicketModel, b.id)
+        ta.depends_on = f'["{b.id}"]'
+        tb.depends_on = f'["{a.id}"]'
+        s.add(ta)
+        s.add(tb)
+        s.commit()
+
+    # Re-read both
+    a = service.get(a.id)
+    b = service.get(b.id)
+
+    # Both should see no unmet deps (cycle treated as satisfied)
+    assert service.unmet_dependencies(a) == []
+    assert service.unmet_dependencies(b) == []
+
+
+def test_unmet_dependencies_no_deps_returns_empty(service):
+    t = service.create("No deps at all")
+    assert service.unmet_dependencies(t) == []
+
+
+def test_migration_idempotent(settings):
+    """Calling _run_migrations twice should not crash."""
+    from robotsix_mill.core.db import _run_migrations
+    _run_migrations(settings)
+    _run_migrations(settings)  # second call must not raise

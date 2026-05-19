@@ -88,6 +88,12 @@ def _run_migrations(settings: Settings) -> None:
             )
             conn.commit()
             log.info("migration: added cost_usd column to ticket table")
+        if "depends_on" not in columns:
+            conn.execute(
+                "ALTER TABLE ticket ADD COLUMN depends_on TEXT DEFAULT NULL"
+            )
+            conn.commit()
+            log.info("migration: added depends_on column to ticket table")
     finally:
         conn.close()
 

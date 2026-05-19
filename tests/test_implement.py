@@ -314,3 +314,97 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     assert (repo / "second.txt").exists()
     msgs = _commits(repo)
     assert any("WIP" in m for m in msgs) and len(msgs) >= 2
+
+
+# --- dependency gating -------------------------------------------------
+
+def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
+    """Implement stage returns READY (no-op) when deps are unmet."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+
+    # Create the dependency ticket (in DRAFT — not terminal)
+    dep = ctx.service.create("Dep ticket")
+    assert dep.state is State.DRAFT
+
+    # Create the depender ticket
+    t = ctx.service.create("Depender", depends_on=f'["{dep.id}"]')
+    ctx.service.transition(t.id, State.READY)
+    t = ctx.service.get(t.id)
+
+    agent_called = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None):
+        del settings, spec, feedback, history
+        agent_called.append(1)
+        (Path(repo_dir) / "out.txt").write_text("done")
+        return ("done", [])
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.READY  # same-state no-op
+    assert len(agent_called) == 0          # agent NOT called
+    assert out.note is None                # no note for no-op
+
+
+def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
+    """Implement stage proceeds to DELIVERABLE when dep is CLOSED."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+
+    # Create and close the dependency
+    dep = ctx.service.create("Dep ticket")
+    ctx.service.transition(dep.id, State.READY)
+    ctx.service.transition(dep.id, State.DELIVERABLE)
+    ctx.service.transition(dep.id, State.IN_REVIEW)
+    ctx.service.transition(dep.id, State.DONE)
+    ctx.service.transition(dep.id, State.CLOSED)
+
+    t = ctx.service.create("Depender", depends_on=f'["{dep.id}"]')
+    ctx.service.transition(t.id, State.READY)
+    t = ctx.service.get(t.id)
+
+    monkeypatch.setattr(
+        coding, "run_implement_agent",
+        _fake_agent({"feature.txt": "done"}),
+    )
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DELIVERABLE
+
+
+def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
+    """Implement stage proceeds when a dep ID doesn't exist (treated satisfied)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+
+    t = ctx.service.create("Depender", depends_on='["nonexistent-12345"]')
+    ctx.service.transition(t.id, State.READY)
+    t = ctx.service.get(t.id)
+
+    monkeypatch.setattr(
+        coding, "run_implement_agent",
+        _fake_agent({"feature.txt": "done"}),
+    )
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+
+
+def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch):
+    """Tickets without depends_on have zero behavioral change."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+
+    t = _ticket(ctx)  # creates ticket without depends_on
+
+    monkeypatch.setattr(
+        coding, "run_implement_agent",
+        _fake_agent({"feature.txt": "done"}),
+    )
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
