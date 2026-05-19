@@ -1,22 +1,25 @@
 ---
 name: Web Fetch
-description: Fetch the exact text of a known http(s) URL — official docs, a raw source file, package metadata, an API JSON response.
-when_to_use: Use when you need the precise content of a specific page or file (e.g. the Langfuse OpenTelemetry docs, a library's source on raw.githubusercontent.com, a PyPI/npm metadata JSON). For open-ended "what is the current best way to..." questions, prefer web search instead (you have it natively).
+description: Retrieve the content of a known URL by delegating to a research sub-agent that can fetch pages.
+when_to_use: Use when you need the precise content of a specific page or file (e.g. the Langfuse OpenTelemetry docs, a library's source on raw.githubusercontent.com, a PyPI/npm metadata JSON). For open-ended "what is the current best way to..." questions, prefer web search instead (see the Web Search skill).
 ---
 
 # Web Fetch
 
-You have a `web_fetch(url)` tool. Call it with a single http(s) URL; it
-returns the page/file body as text (size-capped).
+You do **not** have a direct `web_fetch(url)` tool. Instead, use
+`web_research(query)` — it delegates to a cheap, bounded sub-agent
+(the only place where `web_fetch` and live web search live) and
+returns a concise factual conclusion.
 
-- **Do not** try to `curl`/`wget` via `run_command` — your command
-  sandbox has **no network**. Only `web_fetch` can reach the internet.
-- Fetch authoritative sources directly: official documentation pages,
+- Include the exact URL(s) you want fetched in your query, plus the
+  specific information to extract from them.
+- The sub-agent can fetch from any http(s) URL — official docs,
   `raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>` for source,
   `https://pypi.org/pypi/<pkg>/json` for package info.
+- **Do not** try to `curl`/`wget` via `run_command` — your command
+  sandbox has **no network**. Only the sub-agent can reach the internet.
 - Read before you code: when integrating a library (e.g. Langfuse,
-  OpenTelemetry, pydantic-ai instrumentation), fetch its current docs
-  and mirror the documented API rather than guessing.
-- One URL per call. Follow links by fetching them in turn.
-- It returns an error string (never raises) — on failure, try a
-  different URL or fall back to web search.
+  OpenTelemetry, pydantic-ai instrumentation), use `web_research` to
+  fetch its current docs rather than guessing.
+- The sub-agent returns an error string on failure (never raises) —
+  on failure, try a different URL or rephrase your query.
