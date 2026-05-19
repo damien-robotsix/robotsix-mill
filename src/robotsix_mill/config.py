@@ -292,7 +292,7 @@ class Settings(BaseSettings):
     # resolve conflicts automatically.  This is the max number of
     # rebase attempts per ticket before escalating to BLOCKED.
     rebase_max_attempts: int = Field(
-        default=2, alias="MILL_REBASE_MAX_ATTEMPTS"
+        default=5, alias="MILL_REBASE_MAX_ATTEMPTS"
     )
 
     # --- merge stage: auto-fix of failing remote CI ---
