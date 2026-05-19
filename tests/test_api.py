@@ -345,3 +345,21 @@ def test_delete_ticket_endpoint(client, service):
     # second delete → 404
     assert client.delete("/tickets/" + t.id).status_code == 404
     assert client.delete("/tickets/nope").status_code == 404
+
+
+def test_board_has_new_ticket_affordance(client):
+    """The board exposes a user-facing 'create draft' control wired to
+    POST /tickets (so a human can file a ticket from the UI)."""
+    body = client.get("/").text
+    assert "newTicket()" in body
+    assert "+ New Ticket" in body
+    assert 'fetch("/tickets",{method:"POST"' in body
+
+
+def test_post_tickets_creates_user_draft(client):
+    """The control's backend: POST /tickets -> a DRAFT, source=user."""
+    r = client.post("/tickets", json={"title": "From the board", "description": "idea"})
+    assert r.status_code == 201
+    d = r.json()
+    assert d["state"] == "draft"
+    assert d["source"] == "user"

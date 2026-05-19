@@ -77,6 +77,11 @@ background:#0ea5e9;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Trace Health
 </button>
+<button onclick="newTicket()" style="font-size:11px;padding:3px 10px;
+background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  + New Ticket
+</button>
 </header>
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
@@ -108,6 +113,16 @@ async function refresh(){
 async function approve(id){
  const r=await fetch("/tickets/"+id+"/approve",{method:"POST"});
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
+}
+async function newTicket(){
+ const title=prompt("New ticket title:");
+ if(title===null)return;
+ if(!title.trim()){alert("Title is required");return}
+ const description=prompt("Description / rough idea (optional):")||"";
+ const r=await fetch("/tickets",{method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({title:title.trim(),description:description})});
+ if(!r.ok){const e=await r.text();alert("create failed: "+e)}else refresh()
 }
 async function del_(id){
  if(!confirm("Delete ticket "+id+"? This is irreversible (row, history, workspace)."))return;
