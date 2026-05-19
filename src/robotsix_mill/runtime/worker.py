@@ -366,16 +366,48 @@ class Worker:
                     branch=settings.forge_target_branch,
                 )
 
-                # 4. Process each failing, unseen run.
+                # 4. Only the LATEST run per workflow reflects current
+                # state (the GitHub API returns runs newest-first). Take
+                # one run per workflow_id and act only on that — never
+                # backfill every historical failed run (that filed one
+                # ticket per commit -> board flood).
+                latest_by_wf: dict = {}
                 for run in runs:
+                    wf = run.get("workflow_id")
+                    if wf is not None and wf not in latest_by_wf:
+                        latest_by_wf[wf] = run
+
+                existing = self.ctx.service.list()
+
+                for wf, run in latest_by_wf.items():
                     if run.get("conclusion") != "failure":
-                        continue
-                    key = f"{run.get('workflow_id')}:{run.get('head_sha')}"
-                    if key in seen:
                         continue
 
                     wf_name = run.get("name", "unknown")
                     run_id_val = run.get("id")
+                    title = (
+                        f"CI failure: {wf_name} on "
+                        f"{settings.forge_target_branch}"
+                    )
+
+                    # One OPEN ci ticket per workflow: if a non-terminal
+                    # source=ci ticket with this title already exists,
+                    # don't duplicate (the recurring failure is already
+                    # being worked).
+                    if any(
+                        t.source == "ci"
+                        and t.title == title
+                        and t.state.value not in ("closed", "done")
+                        for t in existing
+                    ):
+                        continue
+
+                    # Also avoid re-filing for the exact same failing
+                    # commit (e.g. a prior ticket was closed but CI is
+                    # still red at that sha).
+                    key = f"{wf}:{run.get('head_sha')}"
+                    if key in seen:
+                        continue
                     log.info(
                         "CI monitor: new failure — %s (run %s) on %s",
                         wf_name, run_id_val, settings.forge_target_branch,
