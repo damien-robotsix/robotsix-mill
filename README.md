@@ -180,6 +180,7 @@ repo-local `./.mill-data/` (gitignored); config is read from `./.env`.
 ```sh
 cp .env.example .env        # set OPENROUTER_API_KEY
 make install                # venv + editable install (.[dev,tracing])
+.venv/bin/pre-commit install  # enable pre-commit hooks locally
 make dev                    # service with hot-reload on http://127.0.0.1:8077
 # in another shell — the CLI is just an HTTP client to that service:
 .venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
