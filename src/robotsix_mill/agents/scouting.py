@@ -58,6 +58,7 @@ THROUGHPUT_P50_WARN_TPS = 20
 
 
 class PercentileStats(BaseModel):
+    """Percentile latency/throughput statistics from an OpenRouter endpoint."""
     p50: float | None = None
     p75: float | None = None
     p90: float | None = None
@@ -65,6 +66,7 @@ class PercentileStats(BaseModel):
 
 
 class EndpointInfo(BaseModel):
+    """A single provider endpoint for a model, including pricing, latency, and throughput data."""
     provider_name: str = ""
     status: str = ""
     uptime_last_30m: float | None = None
@@ -77,6 +79,11 @@ class EndpointInfo(BaseModel):
 
 
 class ModelInfo(BaseModel):
+    """Aggregated model metadata and its list of provider endpoints.
+
+    Provides derived properties for provider counts, uptime, latency,
+    throughput, and estimated generation time.
+    """
     id: str = ""
     name: str = ""
     context_length: int = 0
@@ -86,27 +93,33 @@ class ModelInfo(BaseModel):
 
     @property
     def provider_count(self) -> int:
+        """Total number of provider endpoints."""
         return len(self.endpoints)
 
     @property
     def active_provider_count(self) -> int:
+        """Number of endpoints with ``status == "active"``."""
         return sum(1 for e in self.endpoints if e.status == "active")
 
     @property
     def has_tool_calls(self) -> bool:
+        """Whether any endpoint supports tool calls."""
         return any(e.supports_tool_calls is True for e in self.endpoints)
 
     @property
     def is_preview(self) -> bool:
+        """Whether the model id indicates a preview release."""
         return "-preview" in self.id.lower()
 
     @property
     def max_uptime(self) -> float | None:
+        """Best uptime across all endpoints, or ``None`` if no data."""
         ups = [e.uptime_last_30m for e in self.endpoints if e.uptime_last_30m is not None]
         return max(ups) if ups else None
 
     @property
     def max_latency_p99_ms(self) -> float | None:
+        """Worst-case P99 time-to-first-token in milliseconds across endpoints."""
         vals = [
             e.latency_last_30m.p99
             for e in self.endpoints
@@ -116,6 +129,7 @@ class ModelInfo(BaseModel):
 
     @property
     def min_throughput_p50_tps(self) -> float | None:
+        """Worst-case P50 throughput in tokens per second across endpoints."""
         vals = [
             e.throughput_last_30m.p50
             for e in self.endpoints
@@ -125,6 +139,10 @@ class ModelInfo(BaseModel):
 
     @property
     def estimated_slow_generation_seconds(self) -> float | None:
+        """Estimated time in seconds to generate 4000 tokens at worst-case P50 throughput.
+
+        Returns ``None`` when throughput data is unavailable.
+        """
         tps = self.min_throughput_p50_tps
         if tps is not None and tps > 0:
             return 4000.0 / tps
@@ -132,6 +150,11 @@ class ModelInfo(BaseModel):
 
 
 class ScoutResult(BaseModel):
+    """Return value of :func:`run_scout_agent`.
+
+    Contains the updated memory ledger and any draft improvement proposals
+    generated during the scouting run.
+    """
     updated_memory: str = ""
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
@@ -226,6 +249,11 @@ def _float(v: object) -> float | None:
 
 @dataclass
 class EvalResult:
+    """Scored evaluation of one model for one agent role.
+
+    Captures provider counts, uptime, pricing, latency, throughput,
+    flags, and a composite score used to compare candidates.
+    """
     model_id: str
     role_name: str
     env_var: str
@@ -556,6 +584,17 @@ def run_scout_agent(
     settings: Settings,
     memory: str = "",
 ) -> ScoutResult:
+    """Fetch OpenRouter models, enrich them with endpoint data, and evaluate
+    each configured role against its candidate pool.
+
+    Detects regressions (zero providers, preview models, single-provider
+    fragility) and material score improvements, then builds draft
+    proposals for any findings. The returned :class:`ScoutResult`
+    captures the updated memory ledger and draft titles/bodies.
+
+    This is the main seam for testing: tests monkeypatch this function so
+    no real network calls are made during test runs.
+    """
     proposed_set = _parse_memory(memory)
     client = httpx.Client()
 

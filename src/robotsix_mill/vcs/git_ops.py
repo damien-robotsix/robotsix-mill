@@ -57,10 +57,12 @@ def clone(
 
 
 def has_changes(repo: Path) -> bool:
+    """Return ``True`` if the repo has uncommitted changes."""
     return bool(_git(repo, "status", "--porcelain"))
 
 
 def branch_exists(repo: Path, name: str) -> bool:
+    """Return ``True`` if the local branch *name* exists."""
     return (
         subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "--verify", "--quiet",
@@ -73,10 +75,12 @@ def branch_exists(repo: Path, name: str) -> bool:
 
 
 def checkout(repo: Path, name: str) -> None:
+    """Quiet checkout of branch *name*."""
     _git(repo, "checkout", "-q", name)
 
 
 def current_branch(repo: Path) -> str:
+    """Return the abbreviated current branch name."""
     return _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
 
 
@@ -100,10 +104,12 @@ def remote_branch_sha(repo: Path, branch: str) -> str | None:
 
 
 def create_branch(repo: Path, name: str) -> None:
+    """Create or reset a branch (``git checkout -B``)."""
     _git(repo, "checkout", "-q", "-B", name)
 
 
 def commit_all(repo: Path, message: str) -> None:
+    """Stage all changes and commit (``git add -A`` + ``git commit -q -m``)."""
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", message)
 

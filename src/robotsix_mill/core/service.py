@@ -33,17 +33,30 @@ class TransitionError(RuntimeError):
 
 class TicketService:
     def __init__(self, settings: Settings) -> None:
+        """Create a service backed by the given :class:`Settings`.
+
+        The settings provide the database path and workspace root directory.
+        """
         self.settings = settings
 
     def workspace(self, ticket: Ticket) -> Workspace:
+        """Return the :class:`Workspace` for *ticket*.
+
+        Resolved from :attr:`Settings.workspaces_dir` and the ticket's ``id``.
+        """
         return Workspace(self.settings.workspaces_dir, ticket.id)
 
     # --- reads ---
     def get(self, ticket_id: str) -> Ticket | None:
+        """Look up a :class:`Ticket` by id, or return ``None``."""
         with db.session(self.settings) as s:
             return s.get(Ticket, ticket_id)
 
     def list(self, state: State | None = None) -> list[Ticket]:
+        """List tickets, optionally filtered by *state*.
+
+        Results are ordered by ``created_at`` ascending.
+        """
         with db.session(self.settings) as s:
             stmt = select(Ticket).order_by(Ticket.created_at)
             if state is not None:
@@ -51,6 +64,7 @@ class TicketService:
             return list(s.exec(stmt).all())
 
     def history(self, ticket_id: str) -> list[TicketEvent]:
+        """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``."""
         with db.session(self.settings) as s:
             stmt = (
                 select(TicketEvent)
@@ -63,6 +77,15 @@ class TicketService:
     def create(
         self, title: str, description: str = "", source: str = "user"
     ) -> Ticket:
+        """Create a new ticket with the given *title*.
+
+        Side effects: creates a :class:`Workspace`, writes the optional
+        *description* file, persists the :class:`Ticket` and a
+        ``"created"`` :class:`TicketEvent`.
+
+        The ticket id is constructed from the UTC timestamp, a slug of
+        the title, and a short random hex suffix.
+        """
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         ticket_id = f"{stamp}-{_slug(title)}-{token_hex(2)}"
         ws = Workspace(self.settings.workspaces_dir, ticket_id)
@@ -89,6 +112,15 @@ class TicketService:
     def transition(
         self, ticket_id: str, dst: State, note: str | None = None
     ) -> Ticket:
+        """Move a ticket to *dst* state.
+
+        Returns the updated :class:`Ticket`. Raises :class:`KeyError` if
+        the ticket does not exist and :class:`TransitionError` if the
+        transition is not allowed by the state machine.
+
+        When transitioning to :class:`State.BLOCKED`, the originating
+        state is recorded in ``blocked_from`` so it can be resumed later.
+        """
         with db.session(self.settings) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
@@ -156,6 +188,10 @@ class TicketService:
             return ticket
 
     def set_branch(self, ticket_id: str, branch: str) -> None:
+        """Record the git branch name for a ticket.
+
+        Raises :class:`KeyError` if the ticket does not exist.
+        """
         with db.session(self.settings) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
