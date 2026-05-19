@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..config import Settings
+from .report_issue import make_report_issue_tool
 from .skills import load_skills
 from .web_research import make_web_research_tool
 
@@ -77,6 +78,10 @@ def build_agent(
     )
 
     all_tools = list(tools or [])
+    # Every agent can self-report a blocking/degrading issue (missing
+    # tool, error, workflow gap, missing input) as a draft ticket.
+    # Dedup-guarded so a looping agent can't spam identical tickets.
+    all_tools.append(make_report_issue_tool(settings))
     if web:
         # Not ":online", not web_fetch on the main agent — a cheap
         # sub-agent does the searching and hands back only a conclusion.

@@ -342,6 +342,11 @@ worker-driven transitions trigger notifications — API/CLI transitions
     actionable feedback (never the raw log in the conversation).
   - `web_research(query)` — cheap web lookups, conclusion only, never
     `:online`.
+  - `report_issue(title, body, category)` — **every** agent (built via
+    `build_agent`) gets this by default: file a `source="agent"` DRAFT
+    ticket when it hits a system issue (missing tool, error, workflow
+    gap, missing input). Dedup-guarded — a looping agent can't spam the
+    same ticket while a non-terminal one with that title exists.
   - `edit_file(path, old, new)` — preferred surgical-edit tool that
     replaces a unique substring; `write_file` is the fallback for
     new files or when `edit_file` can't apply.

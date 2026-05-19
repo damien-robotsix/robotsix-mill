@@ -56,8 +56,8 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["model"] == "main/cap"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
-        "edit_file", "explore", "list_dir", "read_file", "run_tests",
-        "web_research", "write_file",
+        "edit_file", "explore", "list_dir", "read_file", "report_issue",
+        "run_tests", "web_research", "write_file",
     ]
     assert "run_command" not in fake_ai["tools"]
 

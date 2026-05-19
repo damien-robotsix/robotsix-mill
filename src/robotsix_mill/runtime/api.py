@@ -63,6 +63,7 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .cost{font-size:10px;color:#7d828c;margin-left:6px}
 .src-scout{background:#2a1a3b;color:#c084fc}
 .src-trace-health{background:#1a2a3b;color:#60c0fa}
+.src-agent{background:#3b1a1a;color:#f87171}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}
 .approve-btn:hover{background:#2563eb}
@@ -108,7 +109,7 @@ const LBL={ready:"implementing"};   // display label only; state value stays "re
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="agent"?"agent":"user");
 async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
 async function refresh(){
  const ts=await jget("/tickets"); if(!ts)return;
