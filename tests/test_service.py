@@ -276,33 +276,3 @@ def test_initial_cost_is_zero(service):
     t = service.create("cost test")
     assert t.cost_usd == 0.0
 
-
-def test_set_cost_replaces(service):
-    """set_cost writes *cost* as the absolute cost_usd — it replaces,
-    not accumulates.  Langfuse session totals are authoritative."""
-    t = service.create("set cost test")
-    service.set_cost(t.id, 0.0042)
-    service.set_cost(t.id, 0.0018)
-    reloaded = service.get(t.id)
-    # Absolute replace, not accumulate — last write wins.
-    assert reloaded.cost_usd == pytest.approx(0.0018)
-
-
-def test_set_cost_persists_through_transition(service):
-    """Cost written before a state transition persists through it."""
-    t = service.create("cost + transition")
-    service.set_cost(t.id, 0.0050)
-    service.transition(t.id, State.READY)
-    reloaded = service.get(t.id)
-    assert reloaded.state is State.READY
-    assert reloaded.cost_usd == pytest.approx(0.0050)
-
-    # Later sync updates to a new absolute value.
-    service.set_cost(t.id, 0.0080)
-    reloaded = service.get(t.id)
-    assert reloaded.cost_usd == pytest.approx(0.0080)
-
-
-def test_set_cost_missing_ticket_is_noop(service):
-    """Calling set_cost on a nonexistent ticket should not raise."""
-    service.set_cost("nonexistent-id", 1.0)  # no raise

@@ -249,6 +249,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if ticket.state in STAGE_FOR_STATE:
             app.state.worker.enqueue(ticket.id)
 
+    def _with_cost(ticket: Ticket) -> Ticket:
+        """Populate cost_usd on the way out from the Langfuse session
+        (cached). Cost is NOT persisted — it lives in Langfuse; this is
+        read-time only. In-memory set; never committed."""
+        from ..langfuse_client import session_cost
+
+        ticket.cost_usd = session_cost(app.state.settings, ticket.id)
+        return ticket
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
@@ -265,14 +274,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/tickets", response_model=list[TicketRead])
     def list_tickets(state: State | None = None) -> list[Ticket]:
-        return _svc().list(state=state)
+        return [_with_cost(t) for t in _svc().list(state=state)]
 
     @app.get("/tickets/{ticket_id}", response_model=TicketRead)
     def get_ticket(ticket_id: str) -> Ticket:
         ticket = _svc().get(ticket_id)
         if ticket is None:
             raise HTTPException(404, "ticket not found")
-        return ticket
+        return _with_cost(ticket)
 
     @app.get("/tickets/{ticket_id}/history", response_model=list[TicketEvent])
     def get_history(ticket_id: str) -> list[TicketEvent]:

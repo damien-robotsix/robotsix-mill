@@ -334,14 +334,6 @@ class Settings(BaseSettings):
     trace_health_interval_seconds: int = Field(
         default=86400, alias="MILL_TRACE_HEALTH_INTERVAL_SECONDS"
     )
-    # --- cost sync (Langfuse session totals → ticket.cost_usd) ---
-    # Interval (seconds) between periodic cost-sync passes. Workers poll
-    # Langfuse for each non-terminal ticket's session total and write it
-    # to the ticket.cost_usd DB column. When Langfuse is unconfigured the
-    # sync is a safe no-op (cost stays 0).
-    cost_sync_seconds: int = Field(
-        default=300, alias="MILL_COST_SYNC_SECONDS"
-    )
 
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")

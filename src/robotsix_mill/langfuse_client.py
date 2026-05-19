@@ -12,10 +12,18 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 
 from .config import Settings
 
 log = logging.getLogger("robotsix_mill.langfuse_client")
+
+# Short in-memory cache for read-time cost lookups. Per-ticket cost is
+# read straight from the Langfuse session on demand (the board polls
+# often); this TTL keeps that to one Langfuse call per ticket per
+# minute instead of one per render. Process-local, best-effort.
+_COST_TTL_SECONDS = 60.0
+_cost_cache: dict[str, tuple[float, float]] = {}  # id -> (cost, monotonic)
 
 
 def _langfuse_api_get(settings: Settings, path: str, params: dict | None = None):
@@ -69,6 +77,26 @@ def session_total_cost(settings: Settings, session_id: str) -> float | None:
     for t in traces:
         total += _num(t.get("totalCost"))
     return total
+
+
+def session_cost(settings: Settings, session_id: str) -> float:
+    """Read-time per-ticket cost: the Langfuse session total, cached for
+    ``_COST_TTL_SECONDS``. Always returns a number (0.0 when Langfuse is
+    unconfigured / unreachable / has no data) so callers never special-
+    case None. This replaces the old persisted ``cost_usd`` + sync loop:
+    cost lives in Langfuse; we just read and briefly cache it."""
+    now = time.monotonic()
+    hit = _cost_cache.get(session_id)
+    if hit is not None and (now - hit[1]) < _COST_TTL_SECONDS:
+        return hit[0]
+    cost = session_total_cost(settings, session_id)
+    if cost is None:
+        # Don't poison the cache with a transient failure — serve the
+        # last known value if we have one, else 0.0 (uncached so the
+        # next read retries Langfuse).
+        return hit[0] if hit is not None else 0.0
+    _cost_cache[session_id] = (cost, now)
+    return cost
 
 
 def fetch_session_summary(settings: Settings, session_id: str) -> str | None:

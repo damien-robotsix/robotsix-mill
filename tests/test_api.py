@@ -62,13 +62,16 @@ def test_get_tickets_includes_source(client):
         assert t["source"] == "user"
 
 
-def test_get_tickets_includes_cost_usd(client, service):
-    """GET /tickets response includes cost_usd with correct value."""
+def test_get_tickets_includes_cost_usd(client, service, monkeypatch):
+    """GET /tickets injects cost_usd read on-demand from the Langfuse
+    session (not persisted) via langfuse_client.session_cost."""
     t = service.create("Cost API test")
-    service.set_cost(t.id, 0.0420)
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_cost",
+        lambda settings, sid: 0.0420 if sid == t.id else 0.0,
+    )
 
     ts = client.get("/tickets").json()
-    # Find our ticket in the list
     found = [x for x in ts if x["id"] == t.id]
     assert len(found) == 1
     assert "cost_usd" in found[0]

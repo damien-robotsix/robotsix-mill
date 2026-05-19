@@ -155,21 +155,6 @@ class TicketService:
             s.refresh(ticket)
             return ticket
 
-    def set_cost(self, ticket_id: str, cost: float) -> None:
-        """Write *cost* as the absolute ``cost_usd`` value for a ticket.
-
-        Called by the periodic cost-sync loop after reading the
-        authoritative session total from Langfuse.  No-op when the
-        ticket doesn't exist."""
-        with db.session(self.settings) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                return
-            ticket.cost_usd = cost
-            ticket.updated_at = datetime.now(timezone.utc)
-            s.add(ticket)
-            s.commit()
-
     def set_branch(self, ticket_id: str, branch: str) -> None:
         with db.session(self.settings) as s:
             ticket = s.get(Ticket, ticket_id)

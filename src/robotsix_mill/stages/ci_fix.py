@@ -18,6 +18,7 @@ from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
 from ..forge.auth import github_token
+from ..runtime import tracing
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -136,12 +137,18 @@ class CIFixStage(Stage):
         )
 
         try:
-            ok = run_ci_fix_agent(
-                settings=s,
-                repo_dir=repo_dir,
-                branch=branch,
-                failing_summary=failing_summary,
-            )
+            # ci_fix is traced=False, so wrap the LLM agent in the
+            # ticket's Langfuse session (session.id = ticket.id) — same
+            # reason as the rebase agent: keep its cost/traces attributed
+            # to the ticket instead of an orphan root trace.
+            with tracing.start_ticket_root_span(ticket.id), \
+                    tracing.trace_stage("ci_fix"):
+                ok = run_ci_fix_agent(
+                    settings=s,
+                    repo_dir=repo_dir,
+                    branch=branch,
+                    failing_summary=failing_summary,
+                )
         except Exception as e:  # noqa: BLE001
             log.exception("%s: ci-fix agent crashed: %s", ticket.id, e)
             ok = False

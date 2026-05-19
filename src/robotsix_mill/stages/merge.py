@@ -34,6 +34,7 @@ from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
 from ..forge.auth import github_token
+from ..runtime import tracing
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -183,12 +184,21 @@ class MergeStage(Stage):
         )
 
         try:
-            ok = run_rebase_agent(
-                settings=s,
-                repo_dir=repo_dir,
-                branch=branch,
-                target=target,
-            )
+            # The merge stage is traced=False (poll-driven, normally no
+            # LLM), so the worker does NOT open the ticket's root span.
+            # The rebase agent IS an LLM run — wrap it in the ticket's
+            # Langfuse session (session.id = ticket.id) so its cost and
+            # traces are attributed to the ticket, not an orphan root
+            # trace. (This is what made the overnight rebase cost
+            # invisible in the per-ticket session total.)
+            with tracing.start_ticket_root_span(ticket.id), \
+                    tracing.trace_stage("rebase"):
+                ok = run_rebase_agent(
+                    settings=s,
+                    repo_dir=repo_dir,
+                    branch=branch,
+                    target=target,
+                )
         except Exception as e:  # noqa: BLE001
             log.exception("%s: rebase agent crashed: %s", ticket.id, e)
             ok = False
