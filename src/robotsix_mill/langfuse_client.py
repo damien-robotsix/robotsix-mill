@@ -99,10 +99,21 @@ def session_cost(settings: Settings, session_id: str) -> float:
     return cost
 
 
+def _fetch_single_trace(settings: Settings, trace_id: str) -> dict | None:
+    """Fetch a single trace by ID from the Langfuse API.
+
+    Returns the JSON-decoded response body, or ``None`` on failure.
+    """
+    return _langfuse_api_get(settings, f"/api/public/traces/{trace_id}")
+
+
 def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
-    """Return a short text summary of the session's traces (count,
-    total cost, total latency, per-trace lines), or ``None`` if Langfuse
-    is unconfigured / unreachable."""
+    """Return a short text summary of the session's traces grouped by
+    stage, with per-stage cost/latency/observation subtotals and a
+    ``## Warnings/Errors`` section sourced from per-trace detail calls.
+
+    Returns ``None`` if Langfuse is unconfigured / unreachable.
+    """
     data = _langfuse_api_get(
         settings,
         "/api/public/traces",
@@ -126,13 +137,59 @@ def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
         f"traces={len(traces)}  total_cost=${total_cost:.4f}  "
         f"total_latency={total_lat:.1f}s",
     ]
-    for t in traces[:40]:
-        lines.append(
-            f"- {t.get('name', '?')}  "
-            f"${num(t.get('totalCost')):.4f}  "
-            f"{num(t.get('latency')):.1f}s  "
-            f"obs={len(t.get('observations') or [])}"
+
+    # --- group by stage name -------------------------------------------
+    from collections import defaultdict
+
+    stages: dict[str, list[dict]] = defaultdict(list)
+    for t in traces:
+        stages[t.get("name", "?")].append(t)
+
+    lines.append("")
+    lines.append("## By stage")
+    for stage_name in sorted(stages):
+        stage_traces = stages[stage_name]
+        stage_cost = sum(num(t.get("totalCost")) for t in stage_traces)
+        stage_lat = sum(num(t.get("latency")) for t in stage_traces)
+        stage_obs = sum(
+            len(t.get("observations") or []) for t in stage_traces
         )
+        lines.append(
+            f"- {stage_name}: "
+            f"${stage_cost:.4f}  "
+            f"{stage_lat:.1f}s  "
+            f"obs={stage_obs}"
+        )
+
+    # --- per-trace detail: collect warnings / errors -------------------
+    MAX_WARNINGS = 20
+    warnings_errors: list[str] = []
+    for t in traces:
+        trace_id = t.get("id")
+        if not trace_id:
+            continue
+        detail = _fetch_single_trace(settings, trace_id)
+        if detail is None:
+            continue
+        observations = detail.get("observations") or []
+        for obs in observations:
+            level = obs.get("level")
+            if level in ("WARNING", "ERROR"):
+                msg = obs.get("statusMessage", "")
+                warnings_errors.append(
+                    f"- {t.get('name', '?')} [{level}] {msg}"
+                )
+
+    if len(warnings_errors) > MAX_WARNINGS:
+        omitted = len(warnings_errors) - MAX_WARNINGS
+        warnings_errors = warnings_errors[:MAX_WARNINGS]
+        warnings_errors.append(f"(+{omitted} more warnings/errors not shown)")
+
+    if warnings_errors:
+        lines.append("")
+        lines.append("## Warnings/Errors")
+        lines.extend(warnings_errors)
+
     return "\n".join(lines)
 
 
