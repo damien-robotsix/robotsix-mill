@@ -3,9 +3,9 @@
 A skill is ``skills/<name>/SKILL.md``: YAML-ish frontmatter
 (``name`` / ``description`` / ``when_to_use``) + a Markdown how-to body.
 Skills are *instructional* — they teach the agent to use existing tools
-(web_fetch, run_command, …), they are not new code paths. The loader
-concatenates them into a prompt section so the refine/implement agents
-know what they can do and when.
+(``web_research``, ``explore``, ``run_tests``, …), they are not new code
+paths. The loader concatenates them into a prompt section so the
+refine/implement agents know what they can do and when.
 """
 
 from __future__ import annotations
