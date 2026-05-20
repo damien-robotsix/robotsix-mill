@@ -97,7 +97,8 @@ def test_board_renders_source_badge(client):
     HTML shell references the static CSS file."""
     r = client.get("/")
     body = r.text
-    assert '<link rel="stylesheet" href="/static/board.css">' in body
+    # board.css is referenced (with a content-hash cache-buster query).
+    assert '<link rel="stylesheet" href="/static/board.css?v=' in body
     css = client.get("/static/board.css").text
     assert "src-badge" in css
     assert "src-user" in css
@@ -358,10 +359,12 @@ def test_origin_session_url_none_when_config_missing(service, settings):
 
 def test_board_html_references_static_assets(client):
     """GET / returns HTML that references the static CSS and JS files
-    rather than embedding them inline."""
+    rather than embedding them inline. Each reference carries a
+    ``?v=<hash>`` cache-buster so a deploy with new JS/CSS bypasses
+    browser caches without a hard-reload."""
     body = client.get("/").text
-    assert '<link rel="stylesheet" href="/static/board.css">' in body
-    assert '<script src="/static/board.js"></script>' in body
+    assert '<link rel="stylesheet" href="/static/board.css?v=' in body
+    assert '<script src="/static/board.js?v=' in body
 
 
 def test_static_assets_served(client):
