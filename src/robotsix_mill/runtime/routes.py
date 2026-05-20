@@ -362,24 +362,42 @@ def list_runs(
 
 
 @router.post("/health-check", status_code=202)
-def health_check_pass() -> dict:
+def health_check_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
     """Kick off a codebase-health pass in the BACKGROUND and return at
     once.
 
     The health pass runs the LLM agent for minutes — blocking the HTTP
     response made the browser fetch drop ("NetworkError"). New draft
     tickets appear on the board when it finishes.
+
+    Mirrors the audit/scout/trace-health pattern: registers the run on
+    start so the /runs panel shows it in-flight, and on finish so it
+    flips to ok/error with a summary. Without this the run is silently
+    happening behind the scenes — the Langfuse trace exists but the
+    board reports nothing.
     """
     from ..health_runner import run_health_pass
+
+    run_id = registry.start("health")
 
     def _run() -> None:
         try:
             r = run_health_pass()
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
             log.info(
                 "health pass done: %d draft(s)", len(r.drafts_created)
             )
-        except Exception:  # noqa: BLE001 — background; just log
+        except Exception as e:  # noqa: BLE001 — background; just log
             log.exception("health pass failed")
+            registry.finish_error(run_id, str(e))
 
     threading.Thread(
         target=_run, name="health-pass", daemon=True
