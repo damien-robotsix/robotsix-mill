@@ -6,8 +6,7 @@ bounded fix loop. Pass -> IN_REVIEW.
 
 Resume: if the ticket workspace already has the clone + its branch (a
 prior BLOCKED run), do NOT re-clone — check the branch out and continue
-from the committed WIP, replaying the persisted agent transcript so the
-agent picks up where it stopped instead of restarting.
+from the committed WIP.
 
 Everything that isn't success is BLOCKED-resumable with WIP committed:
 no remote, clone failure, no changes, sandbox down, agent error/budget
@@ -30,8 +29,6 @@ from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.implement")
-
-_TRANSCRIPT = "implement_messages.json"
 
 
 class ImplementStage(Stage):
@@ -174,28 +171,6 @@ class ImplementStage(Stage):
         return Outcome(State.DELIVERABLE, summary[:200] or "implemented")
 
     # --- helpers ---
-    @staticmethod
-    def _load_transcript(ws) -> list | None:
-        p = ws.artifacts_dir / _TRANSCRIPT
-        if not p.exists():
-            return None
-        try:
-            return coding.load_history(p.read_bytes())
-        except Exception:  # noqa: BLE001 — corrupt transcript: start fresh
-            log.warning("could not load transcript; starting agent fresh")
-            return None
-
-    @staticmethod
-    def _save_transcript(ws, messages) -> None:
-        if not messages:
-            return
-        try:
-            (ws.artifacts_dir / _TRANSCRIPT).write_bytes(
-                coding.dump_history(messages)
-            )
-        except Exception:  # noqa: BLE001 — never fail the stage on this
-            log.warning("could not persist agent transcript")
-
     @staticmethod
     def _run_tests(repo_dir, settings) -> tuple[int, str]:
         cmd = settings.test_command.strip()
