@@ -115,6 +115,27 @@ def get_description(
     return {"description": svc.workspace(ticket).read_description()}
 
 
+@router.get("/tickets/{ticket_id}/retrospect")
+def get_retrospect(
+    ticket_id: str,
+    svc=Depends(get_service),
+) -> dict:
+    """Return the retrospect.md artifact for a ticket, or empty if
+    retrospect has not run yet (or the artifact was lost). Lets the
+    board surface what retrospect actually wrote — without this the
+    DONE -> CLOSED transition looks like it happened with no
+    reflection, even when retrospect did run and write meaningful
+    analysis."""
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    ws = svc.workspace(ticket)
+    p = ws.artifacts_dir / "retrospect.md"
+    if not p.exists():
+        return {"retrospect": ""}
+    return {"retrospect": p.read_text(encoding="utf-8")}
+
+
 @router.delete("/tickets/{ticket_id}", status_code=204)
 def delete_ticket(
     ticket_id: str,

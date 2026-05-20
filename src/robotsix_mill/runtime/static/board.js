@@ -132,9 +132,9 @@ async function runHealth(){
 }
 async function open_(id){
  sel=id;
- const [t,h,d,cs]=await Promise.all([jget("/tickets/"+id),
+ const [t,h,d,cs,rt]=await Promise.all([jget("/tickets/"+id),
    jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
-   jget("/tickets/"+id+"/comments")]);
+   jget("/tickets/"+id+"/comments"),jget("/tickets/"+id+"/retrospect")]);
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
@@ -156,6 +156,7 @@ async function open_(id){
    `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
    ((cs&&cs.length)?cs.map(c=>`<div class="ev"><b class="muted">${c.created_at}</b><br>${esc(c.body)}</div>`).join("")
                    :`<div class="muted" style="font-size:11px">No comments yet.</div>`)+
+   ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><pre>${esc(rt.retrospect)}</pre>`:"")+
    `<h3>description.md</h3><pre>${esc((d&&d.description)||"")}</pre>`;
  document.getElementById("drawer").classList.add("open");
 }
