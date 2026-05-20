@@ -144,6 +144,7 @@ async function open_(id){
    source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
    (t.origin_session_url?` · origin <a href="${esc(t.origin_session_url)}" target="_blank" rel="noopener" class="origin-link">${esc(t.origin_session)}</a>`:
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
+   (t.pr_url?` · <a href="${esc(t.pr_url)}" target="_blank" rel="noopener" class="pr-link">🔗 PR</a>`:"")+
    `<br>
    · cost <b>$${(t.cost_usd||0).toFixed(4)}</b><br>
    created ${t.created_at} · updated ${t.updated_at}</p>`+
