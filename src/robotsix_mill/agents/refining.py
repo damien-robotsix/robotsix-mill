@@ -33,6 +33,10 @@ questions.
   truncated or to inspect runtime behaviour (e.g. `pytest
   tests/test_foo.py -x --tb=long`, `python -c "import module; …"`,
   linters).  The sandbox is read-only; you cannot mutate the repo.
+- When the ticket has ``artifacts/evidence.txt`` (check with
+  ``read_file``), incorporate its contents (e.g. the exact failing
+  command, stdout/stderr, traceback) into the refined spec so the
+  implement agent has the raw evidence to cross-check.
 - Use `web_research` ONLY for things not in the repo (a
   library/API/standard/best practice). Skip it when unneeded.
 - The <draft> section may be empty (the user may have only provided a
