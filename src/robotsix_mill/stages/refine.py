@@ -122,14 +122,18 @@ class RefineStage(Stage):
                 "reason": "dedup check failed",
             }
 
+        # Discarded drafts go to DONE (not directly CLOSED) so retrospect
+        # still analyses them — sanity-check the dedup verdict, capture
+        # any lesson in the memory ledger, and keep the audit trail
+        # consistent with every other terminal-ish ticket.
         if verdict.get("duplicate_of"):
             return Outcome(
-                State.CLOSED,
+                State.DONE,
                 f"duplicate of {verdict['duplicate_of']}: {verdict.get('reason', 'no reason')}",
             )
         if verdict.get("already_done"):
             return Outcome(
-                State.CLOSED,
+                State.DONE,
                 f"already implemented in {verdict['already_done']}: {verdict.get('reason', 'no reason')}",
             )
         # --- end dedup guard ---

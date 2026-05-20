@@ -274,7 +274,8 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
 
     out = RefineStage().run(t_b, ctx)
 
-    assert out.next_state is State.CLOSED
+    # Discarded drafts go to DONE so retrospect still analyses them.
+    assert out.next_state is State.DONE
     assert f"duplicate of {t_a.id}" in out.note
     assert "same change" in out.note
     assert not refine_called
@@ -309,7 +310,8 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state is State.CLOSED
+    # Discarded drafts go to DONE so retrospect still analyses them.
+    assert out.next_state is State.DONE
     assert "already implemented in abc1234" in out.note
     assert "change in commit" in out.note
     assert not refine_called

@@ -47,7 +47,7 @@ class State(StrEnum):
 #: state -> the set of states it may transition to (the "happy path"
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {
-    State.DRAFT: {State.READY, State.AWAITING_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED},
+    State.DRAFT: {State.READY, State.AWAITING_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED, State.DONE},
     # awaiting_approval is a human-wait state; the human approves → ready,
     # rejects back to draft with comments, or escalates → blocked/failed.
     State.AWAITING_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},
