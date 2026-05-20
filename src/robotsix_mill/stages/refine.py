@@ -143,28 +143,38 @@ class RefineStage(Stage):
         # spec in its description.md.  Detect this by checking whether
         # the parent is CLOSED with a "split into" note — the canonical
         # signal that this ticket's description is already the refined
-        # output.
+        # output.  We must NOT short-circuit for retrospect-spawned
+        # drafts (whose parent is also CLOSED but for a different
+        # reason and whose description is a raw draft, not a spec).
         if ticket.parent_id is not None:
             parent = ctx.service.get(ticket.parent_id)
             if parent is not None and parent.state == State.CLOSED:
-                # The parent was closed by a split — this is a child.
-                # Use the existing description as the canonical spec
-                # (it was written by the split logic, not a raw draft).
-                spec = draft
-                if not spec.strip():
-                    return Outcome(State.BLOCKED, "split child has empty description")
-                # Preserve the raw draft if not already preserved.
-                draft_original = ws.artifacts_dir / "draft-original.md"
-                if not draft_original.exists():
-                    draft_original.write_text(
-                        "(split child — spec written by parent's refine agent)",
-                        encoding="utf-8",
-                    )
-                next_state = (
-                    State.AWAITING_APPROVAL if ctx.settings.require_approval
-                    else State.READY
+                # Only short-circuit if the parent was closed by a
+                # split — otherwise (e.g. retrospect spawn) the
+                # draft still needs refinement.
+                parent_history = ctx.service.history(parent.id)
+                is_split_child = any(
+                    ev.state == State.CLOSED
+                    and ev.note
+                    and ev.note.startswith("split into")
+                    for ev in parent_history
                 )
-                return Outcome(next_state, "split child — spec already refined")
+                if is_split_child:
+                    spec = draft
+                    if not spec.strip():
+                        return Outcome(State.BLOCKED, "split child has empty description")
+                    # Preserve the raw draft if not already preserved.
+                    draft_original = ws.artifacts_dir / "draft-original.md"
+                    if not draft_original.exists():
+                        draft_original.write_text(
+                            "(split child — spec written by parent's refine agent)",
+                            encoding="utf-8",
+                        )
+                    next_state = (
+                        State.AWAITING_APPROVAL if ctx.settings.require_approval
+                        else State.READY
+                    )
+                    return Outcome(next_state, "split child — spec already refined")
 
         # --- run the refine agent ---
         try:

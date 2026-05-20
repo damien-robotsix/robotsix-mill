@@ -970,6 +970,47 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     assert service.workspace(child).read_description().rstrip("\n") == child_a_spec.rstrip("\n")
 
 
+def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
+    """A retrospect-spawned draft (parent CLOSED but NOT by a split)
+    must still go through the refine agent — it is NOT a split child
+    with an already-refined spec."""
+    raw_draft = "retrospect agent's raw improvement idea — not a spec"
+
+    # Simulate a retrospect-spawned draft: create a parent, close it
+    # (as retrospect does), then create a child with parent_id set.
+    parent = service.create("Reviewed ticket", "original work")
+    service.transition(
+        parent.id, State.CLOSED,
+        "all good — improvement draft <child_id>",
+    )
+
+    child = service.create("Improvement idea", raw_draft)
+    service.set_parent(child.id, parent.id)
+
+    # Reset child to DRAFT (it was created as DRAFT, but set_parent
+    # doesn't change state — verify it's DRAFT).
+    assert service.get(child.id).state is State.DRAFT
+
+    # Now run RefineStage on the child — it must call the agent.
+    refine_called = False
+    expected_spec = "## Problem\nrefined improvement\n## Scope\n- do it\n"
+
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+        nonlocal refine_called
+        refine_called = True
+        assert draft == raw_draft
+        return {"split": False, "spec": expected_spec}
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    out = RefineStage().run(child, ctx)
+
+    # Must NOT short-circuit: agent should have been called.
+    assert refine_called
+    assert out.next_state is State.READY
+    assert service.workspace(child).read_description().rstrip("\n") == expected_spec.rstrip("\n")
+
+
 def test_split_preserves_parent_draft_original(ctx, service, monkeypatch):
     """Parent's draft-original.md is preserved when splitting."""
     monkeypatch.setattr(
