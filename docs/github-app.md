@@ -49,16 +49,26 @@ GitHub → **Settings → Developer settings → GitHub Apps → New GitHub App*
 | **Webhook → Active** | **uncheck** (mill doesn't use webhooks) |
 | **Where can this App be installed?** | Only on this account |
 
-**Repository permissions** (least privilege — only what `deliver`
-needs):
+**Repository permissions** (least privilege — covers the full
+default feature set: `deliver` + merge gate + CI monitor):
 
-| Permission | Access |
-|---|---|
-| Contents | Read and write *(push the branch)* |
-| Pull requests | Read and write *(open the PR)* |
-| Metadata | Read-only *(auto)* |
+| Permission | Access | Why |
+|---|---|---|
+| Contents | Read and write | `deliver` pushes the ticket branch |
+| Pull requests | Read and write | `deliver` opens the PR; `merge` reads/merges it |
+| Checks | Read-only | merge gate reads PR check-runs to decide mergeability |
+| Commit statuses | Read-only | fallback for legacy CI that uses commit statuses instead of check-runs |
+| Actions | Read-only | CI monitor lists workflow runs and fetches job logs to file CI-failure tickets |
+| Metadata | Read-only *(auto)* | required by GitHub for any App |
 
 Leave everything else **No access**. Click **Create GitHub App**.
+
+> If you intentionally disable the CI monitor (`MILL_CI_MONITOR_PERIODIC=false`
+> and never call `POST /ci-fix`), you can drop **Actions** to *No access*.
+> Without `Actions: Read`, mill cannot fetch workflow-run statuses or job
+> logs, and the CI monitor silently files tickets with empty logs — refine
+> then has nothing concrete to work from and may confabulate root causes.
+> Skip it deliberately, not accidentally.
 
 ### 2. Get the credentials
 
