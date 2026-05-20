@@ -11,7 +11,8 @@ from fastapi import Request
 from ..config import Settings
 from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
-from ..core.states import STAGE_FOR_STATE
+from ..core.states import STAGE_FOR_STATE, State
+from ..forge import get_forge
 from .run_registry import RunRegistry
 from .worker import Worker
 
@@ -67,6 +68,39 @@ def with_cost(ticket: Ticket, settings: Settings) -> Ticket:
     return ticket
 
 
+_REVIEW_STATES: frozenset[State] = frozenset({
+    State.IN_REVIEW,
+    State.AWAITING_APPROVAL,
+    State.FIXING_CI,
+    State.REBASING,
+    State.READY,
+    State.DONE,
+})
+
+
+def _pr_url(ticket: Ticket, settings: Settings) -> str | None:
+    """Return the PR/merge-request URL for *ticket* from the forge, or ``None``.
+
+    Only calls the forge when the ticket is in a review-relevant state
+    and has (or can infer) a branch name.  Failures are silent — the
+    enrichment must never crash the read path.
+    """
+    if ticket.state not in _REVIEW_STATES:
+        return None
+    branch = ticket.branch or f"{settings.branch_prefix}{ticket.id}"
+    if not branch:
+        return None
+    try:
+        pr = get_forge(settings).pr_status(source_branch=branch)
+    except RuntimeError:
+        return None  # forge not configured
+    except Exception:
+        return None  # transient — no crash
+    if pr and pr.get("url"):
+        return str(pr["url"])
+    return None
+
+
 def enrich_ticket_read(ticket: Ticket, settings: Settings, service: TicketService) -> TicketRead:
     """Convert a :class:`Ticket` into a :class:`TicketRead`, populating
     ``cost_usd`` from Langfuse, computing ``origin_session_url``, and
@@ -84,6 +118,7 @@ def enrich_ticket_read(ticket: Ticket, settings: Settings, service: TicketServic
         cost_usd=ticket.cost_usd,
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
+        pr_url=_pr_url(ticket, settings),
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )

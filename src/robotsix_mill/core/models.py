@@ -110,6 +110,7 @@ class TicketRead(SQLModel):
     cost_usd: float
     depends_on: str | None
     unmet_deps: list[str]
+    pr_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
