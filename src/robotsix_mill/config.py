@@ -382,6 +382,20 @@ class Settings(BaseSettings):
         default=86400, alias="MILL_TRACE_HEALTH_INTERVAL_SECONDS"
     )
 
+    # --- agent-check agent (agent-definition coherence) ---
+    # Model for the agent-check meta-agent. Defaults to the same cheap
+    # model as other read-only periodic agents. Override with
+    # MILL_AGENT_CHECK_MODEL.
+    agent_check_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_AGENT_CHECK_MODEL"
+    )
+    # Path to the agent-check agent's Markdown memory ledger. Override
+    # to pin a specific path; unset (default) derives
+    # <data_dir>/agent_check_memory.md.
+    agent_check_memory_path: Path | None = Field(
+        default=None, alias="MILL_AGENT_CHECK_MEMORY_PATH"
+    )
+
     # --- health agent (codebase-health inspection) ---
     # Model for the health agent. Defaults to the same capable model as
     # audit. Override with MILL_HEALTH_MODEL.
@@ -454,6 +468,13 @@ class Settings(BaseSettings):
         if self.scout_memory_path is not None:
             return self.scout_memory_path
         return self.data_dir / "scout_memory.md"
+
+    @property
+    def agent_check_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained agent-check memory ledger."""
+        if self.agent_check_memory_path is not None:
+            return self.agent_check_memory_path
+        return self.data_dir / "agent_check_memory.md"
 
     @property
     def health_memory_file(self) -> Path:

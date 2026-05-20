@@ -34,6 +34,7 @@ CHEAP_ROLES = [
     ("explore_model", "MILL_EXPLORE_MODEL", "explore scout"),
     ("test_model", "MILL_TEST_MODEL", "test distiller"),
     ("web_research_model", "MILL_WEB_RESEARCH_MODEL", "web research"),
+    ("agent_check_model", "MILL_AGENT_CHECK_MODEL", "agent definition checker"),
 ]
 
 ALL_ROLES = CAPABLE_ROLES + STRUCTURED_ROLES + CHEAP_ROLES
