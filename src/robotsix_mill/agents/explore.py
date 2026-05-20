@@ -72,9 +72,30 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     try:
         from .retry import call_with_retry
 
+        # Build fallback agent if a fallback model is configured
+        fallback_fn = None
+        if settings.rate_limit_fallback_model:
+            fallback_model = CostInstrumentedOpenRouterModel(
+                settings.rate_limit_fallback_model,
+                provider=OpenRouterProvider(
+                    api_key=settings.openrouter_api_key,
+                    http_client=timeout_http_client(settings),
+                ),
+            )
+            fallback_agent = Agent(
+                model=fallback_model,
+                system_prompt=_SYSTEM_PROMPT,
+                output_type=str,
+                tools=ro_tools,
+                name="explore-fallback",
+            )
+            fallback_fn = lambda: fallback_agent.run_sync(  # noqa: E731
+                question, usage_limits=limits
+            )
+
         result = call_with_retry(
             lambda: agent.run_sync(question, usage_limits=limits),
-            settings=settings, what="explore",
+            settings=settings, what="explore", fallback_fn=fallback_fn,
         )
     except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
         return f"explore failed: {e}"
