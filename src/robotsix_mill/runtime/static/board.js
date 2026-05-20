@@ -1,4 +1,4 @@
-const ST=["draft","awaiting_approval","ready","deliverable","in_review","rebasing","done","closed","blocked","errored"];
+const ST=["draft","awaiting_approval","ready","deliverable","in_review","rebasing","fixing_ci","done","closed","blocked","errored"];
 const LBL={ready:"implementing"};   // display label only; state value stays "ready"
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;

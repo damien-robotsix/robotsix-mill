@@ -280,11 +280,21 @@ class GitHubForge(Forge):
                     log_resp = c.get(
                         f"{api}/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
                         headers=headers,
+                        follow_redirects=True,
                     )
                     log_resp.raise_for_status()
                     raw = log_resp.text
-                except Exception:
-                    raw = f"[log fetch failed for job {job_id}]"
+                except httpx.HTTPStatusError:
+                    sc = log_resp.status_code
+                    if sc == 403:
+                        raw = f"[log fetch failed for job {job_id}: HTTP 403 — App likely missing Actions:Read permission]"
+                    else:
+                        raw = f"[log fetch failed for job {job_id}: HTTP {sc}]"
+                except Exception as exc:
+                    raw = f"[log fetch failed for job {job_id}: {type(exc).__name__}]"
+                else:
+                    if not raw:
+                        raw = f"[log fetch returned empty body for job {job_id}]"
 
                 # Strip ANSI.
                 clean = _ANSI_RE.sub("", raw)
