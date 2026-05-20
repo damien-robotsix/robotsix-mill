@@ -205,57 +205,33 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("reconcile sweep failed")
 
-    async def _audit_poll_loop(self) -> None:
-        """Periodic audit pass loop. Only runs when
-        ``MILL_AUDIT_PERIODIC=true``."""
-        settings = self.ctx.settings
-        interval = max(60, settings.audit_interval_seconds)
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                log.info("Starting periodic audit pass")
-                from ..audit_runner import run_audit_pass
-                run_id = None
-                if self.run_registry:
-                    run_id = self.run_registry.start("audit")
-                result = run_audit_pass()
-                log.info(
-                    "Audit pass completed, created %d draft(s)",
-                    len(result.drafts_created),
-                )
-                if self.run_registry and run_id:
-                    draft_ids = [d["id"] for d in result.drafts_created[:5]]
-                    summary = (
-                        f"Created {len(result.drafts_created)} drafts: "
-                        f"{', '.join(draft_ids)}"
-                        f"{'…' if len(result.drafts_created) > 5 else ''}"
-                    )
-                    self.run_registry.finish_ok(run_id, summary)
-            except Exception as e:  # noqa: BLE001 — never let the poll die
-                log.exception("audit poll failed")
-                if self.run_registry and run_id:
-                    self.run_registry.finish_error(run_id, str(e))
+    async def _run_periodic_pass(
+        self, label: str, runner_fn, interval: int,
+    ) -> None:
+        """Shared periodic pass loop for audit, scout, etc.
 
-    async def _scout_poll_loop(self) -> None:
-        """Periodic scout pass loop. Only runs when
-        ``MILL_SCOUT_PERIODIC=true``."""
-        settings = self.ctx.settings
-        interval = max(60, settings.scout_interval_seconds)
+        Args:
+            label: Pass identifier (``"audit"``, ``"scout"``).
+            runner_fn: Zero-arg callable that returns a result with a
+                       ``drafts_created`` field.
+            interval: Seconds between passes.
+        """
         while True:
             await asyncio.sleep(interval)
+            run_id = None
             try:
-                log.info("Starting periodic scout pass")
-                from ..scout_runner import run_scout_pass
-                run_id = None
+                log.info("Starting periodic %s pass", label)
                 if self.run_registry:
-                    run_id = self.run_registry.start("scout")
-                result = run_scout_pass()
+                    run_id = self.run_registry.start(label)
+                result = runner_fn()
                 log.info(
-                    "Scout pass completed, created %d draft(s)",
-                    len(result.drafts_created),
+                    "%s pass completed, created %d draft(s)",
+                    label.capitalize(), len(result.drafts_created),
                 )
                 if self.run_registry and run_id:
-                    draft_ids = [d["id"] for d in result.drafts_created[:5]]
+                    draft_ids = [
+                        d["id"] for d in result.drafts_created[:5]
+                    ]
                     summary = (
                         f"Created {len(result.drafts_created)} drafts: "
                         f"{', '.join(draft_ids)}"
@@ -263,7 +239,7 @@ class Worker:
                     )
                     self.run_registry.finish_ok(run_id, summary)
             except Exception as e:  # noqa: BLE001 — never let the poll die
-                log.exception("scout poll failed")
+                log.exception("%s poll failed", label)
                 if self.run_registry and run_id:
                     self.run_registry.finish_error(run_id, str(e))
 
@@ -481,14 +457,26 @@ class Worker:
             self._poll_task = asyncio.create_task(self._poll_loop())
         # Opt-in periodic audit
         if self.ctx.settings.audit_periodic and self._audit_task is None:
-            self._audit_task = asyncio.create_task(self._audit_poll_loop())
+            from ..audit_runner import run_audit_pass
+            self._audit_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "audit", run_audit_pass,
+                    max(60, self.ctx.settings.audit_interval_seconds),
+                )
+            )
             log.info(
                 "Periodic audit enabled: interval %ds",
                 self.ctx.settings.audit_interval_seconds,
             )
         # Opt-in periodic scout
         if self.ctx.settings.scout_periodic and self._scout_task is None:
-            self._scout_task = asyncio.create_task(self._scout_poll_loop())
+            from ..scout_runner import run_scout_pass
+            self._scout_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "scout", run_scout_pass,
+                    max(60, self.ctx.settings.scout_interval_seconds),
+                )
+            )
             log.info(
                 "Periodic scout enabled: interval %ds",
                 self.ctx.settings.scout_interval_seconds,
