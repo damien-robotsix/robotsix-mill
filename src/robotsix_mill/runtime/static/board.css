@@ -34,6 +34,9 @@ color:#fff;border:none;border-radius:4px;cursor:pointer}
 .reject-btn{font-size:11px;margin-top:5px;margin-left:4px;padding:3px 8px;
 background:#d97706;color:#fff;border:none;border-radius:4px;cursor:pointer}
 .reject-btn:hover{background:#b45309}
+.add-comment-btn{font-size:10px;margin-left:8px;padding:1px 6px;background:#2a2f3a;
+color:#aab0bd;border:1px solid #3a3f4a;border-radius:3px;cursor:pointer;vertical-align:middle}
+.add-comment-btn:hover{background:#3a3f4a;color:#fff}
 .del-btn{position:absolute;top:4px;right:4px;font-size:11px;line-height:1;
 padding:2px 5px;background:#3a1f1f;color:#f87171;border:1px solid #5b2a2a;
 border-radius:4px;cursor:pointer;opacity:0;transition:opacity .1s}

@@ -32,13 +32,32 @@ async function refresh(){
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
    (s==="awaiting_approval"?
-    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`:"")+
+    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
+    `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
 async function approve(id){
  const r=await fetch("/tickets/"+id+"/approve",{method:"POST"});
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
+}
+async function requestChanges(id){
+ const body=prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
+ if(body===null)return;
+ if(!body.trim()){alert("A comment is required when requesting changes");return}
+ const r=await fetch("/tickets/"+id+"/request-changes",{method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({body:body.trim()})});
+ if(!r.ok){const e=await r.text();alert("request-changes failed: "+e)}else{refresh();if(sel===id)open_(id)}
+}
+async function addComment(id){
+ const body=prompt("Add a comment to this ticket:");
+ if(body===null)return;
+ if(!body.trim())return;
+ const r=await fetch("/tickets/"+id+"/comments",{method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({body:body.trim()})});
+ if(!r.ok){const e=await r.text();alert("add comment failed: "+e)}else if(sel===id)open_(id)
 }
 async function newTicket(){
  const title=prompt("New ticket title:");
@@ -113,8 +132,9 @@ async function runHealth(){
 }
 async function open_(id){
  sel=id;
- const [t,h,d]=await Promise.all([jget("/tickets/"+id),
-   jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description")]);
+ const [t,h,d,cs]=await Promise.all([jget("/tickets/"+id),
+   jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
+   jget("/tickets/"+id+"/comments")]);
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
@@ -132,6 +152,9 @@ async function open_(id){
    `<h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+esc(e.note):""}</div>`).join("")+
+   `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
+   ((cs&&cs.length)?cs.map(c=>`<div class="ev"><b class="muted">${c.created_at}</b><br>${esc(c.body)}</div>`).join("")
+                   :`<div class="muted" style="font-size:11px">No comments yet.</div>`)+
    `<h3>description.md</h3><pre>${esc((d&&d.description)||"")}</pre>`;
  document.getElementById("drawer").classList.add("open");
 }
