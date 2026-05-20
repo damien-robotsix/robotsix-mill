@@ -71,11 +71,11 @@ def _mock_httpx(monkeypatch, *, post_response=None, get_map=None):
         def __exit__(self, *a):
             pass
 
-        def post(self, url, headers=None, json=None):
+        def post(self, url, headers=None, json=None, **kwargs):
             captured["post_payload"] = json
             return post_response or _make_response(500, {}, "error")
 
-        def get(self, url, headers=None, params=None):
+        def get(self, url, headers=None, params=None, **kwargs):
             if get_map:
                 for key, resp in get_map.items():
                     if key in url:
@@ -480,6 +480,117 @@ def test_fetch_workflow_job_logs_capped(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # ANSI stripping regex
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# fetch_workflow_job_logs — redirect & error-mode coverage
+# ---------------------------------------------------------------------------
+
+def test_fetch_workflow_job_logs_follows_redirect(tmp_path, monkeypatch):
+    """Verify follow_redirects=True is passed on the per-job log GET."""
+    jobs_data = {
+        "jobs": [{"id": 201, "name": "build", "conclusion": "failure"}]
+    }
+    log_kwargs_captured = {}
+
+    class RedirectCaptureClient:
+        def __init__(self, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def post(self, url, headers=None, json=None):
+            return _make_response(500, {}, "")
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "/jobs/" in url and "/logs" in url:
+                log_kwargs_captured.update(kwargs)
+                return _make_response(200, {}, "log body after redirect\n")
+            if "/jobs" in url:
+                return _make_response(200, jobs_data)
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", RedirectCaptureClient)
+
+    forge = _forge(tmp_path)
+    result = forge.fetch_workflow_job_logs(run_id=1)
+    assert "log body after redirect" in result
+    assert log_kwargs_captured.get("follow_redirects") is True
+
+
+def test_fetch_workflow_job_logs_403_on_logs_endpoint(tmp_path, monkeypatch):
+    """403 from the logs endpoint → permission hint placeholder."""
+    jobs_data = {
+        "jobs": [{"id": 201, "name": "build", "conclusion": "failure"}]
+    }
+
+    class ErrorClient:
+        def __init__(self, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def post(self, url, headers=None, json=None):
+            return _make_response(500, {}, "")
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "/jobs/" in url and "/logs" in url:
+                return _make_response(403, {})
+            if "/jobs" in url:
+                return _make_response(200, jobs_data)
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", ErrorClient)
+
+    forge = _forge(tmp_path)
+    result = forge.fetch_workflow_job_logs(run_id=1)
+    assert "[log fetch failed for job 201: HTTP 403 — App likely missing Actions:Read permission]" in result
+
+
+def test_fetch_workflow_job_logs_404_on_logs_endpoint(tmp_path, monkeypatch):
+    """404 from the logs endpoint → generic HTTP placeholder."""
+    jobs_data = {
+        "jobs": [{"id": 202, "name": "lint", "conclusion": "failure"}]
+    }
+
+    class ErrorClient:
+        def __init__(self, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def post(self, url, headers=None, json=None):
+            return _make_response(500, {}, "")
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "/jobs/" in url and "/logs" in url:
+                return _make_response(404, {})
+            if "/jobs" in url:
+                return _make_response(200, jobs_data)
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", ErrorClient)
+
+    forge = _forge(tmp_path)
+    result = forge.fetch_workflow_job_logs(run_id=1)
+    assert "[log fetch failed for job 202: HTTP 404]" in result
+
+
+def test_fetch_workflow_job_logs_empty_body_after_success(tmp_path, monkeypatch):
+    """200 with empty body → empty-body placeholder."""
+    jobs_data = {
+        "jobs": [{"id": 303, "name": "test", "conclusion": "failure"}]
+    }
+
+    class EmptyBodyClient:
+        def __init__(self, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def post(self, url, headers=None, json=None):
+            return _make_response(500, {}, "")
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "/jobs/" in url and "/logs" in url:
+                return _make_response(200, {}, "")  # text="" default
+            if "/jobs" in url:
+                return _make_response(200, jobs_data)
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx, "Client", EmptyBodyClient)
+
+    forge = _forge(tmp_path)
+    result = forge.fetch_workflow_job_logs(run_id=1)
+    assert "[log fetch returned empty body for job 303]" in result
+
 
 def test_ansi_regex_strips_sgr():
     assert _ANSI_RE.sub("", "\x1b[1mBOLD\x1b[0m") == "BOLD"
