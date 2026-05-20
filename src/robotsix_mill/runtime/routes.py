@@ -46,8 +46,19 @@ def health() -> dict:
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
-def board() -> str:
-    return BOARD_HTML
+def board() -> HTMLResponse:
+    # `no-cache` (revalidate every load), not `no-store`: the browser may
+    # keep a copy, but must check with the server before reusing it. The
+    # body itself is tiny (~1.5 KB); the win is that the *script src* —
+    # which carries a content-hash cache-buster on board.js/css — is
+    # always read fresh from a redeploy, instead of being pinned by a
+    # stale cached HTML that still references the un-hashed asset URL.
+    # Without this, a normal browser reload after a deploy stays stuck
+    # on "loading…" because the cached HTML loads a cached old JS.
+    return HTMLResponse(
+        BOARD_HTML,
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @router.post("/tickets", response_model=TicketRead, status_code=201)
