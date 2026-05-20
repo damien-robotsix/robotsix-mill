@@ -103,6 +103,16 @@ def main(argv: list[str] | None = None) -> int:
         help="output full JSON result (default: summary)",
     )
 
+    # --- agent-check command ---
+    p_agent_check = sub.add_parser(
+        "agent-check", help="run an agent definition coherence check"
+    )
+    p_agent_check.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
     args = parser.parse_args(argv)
     settings = Settings()
 
@@ -226,6 +236,34 @@ def main(argv: list[str] | None = None) -> int:
             ))
         else:
             print("Health pass complete.")
+            print(f"Memory updated: {len(result.updated_memory)} chars")
+            if result.drafts_created:
+                print(f"Draft tickets created: {len(result.drafts_created)}")
+                for d in result.drafts_created:
+                    print(f"  - {d['id']}: {d['title']}")
+            else:
+                print("No new draft tickets created.")
+        return 0
+
+    if args.cmd == "agent-check":
+        from .agent_check_runner import run_agent_check_pass
+
+        try:
+            result = run_agent_check_pass()
+        except Exception as e:
+            print(f"agent-check failed: {e}", file=sys.stderr)
+            return 1
+
+        if args.json:
+            print(json.dumps(
+                {
+                    "memory": result.updated_memory,
+                    "tickets_created": result.drafts_created,
+                },
+                indent=2,
+            ))
+        else:
+            print("Agent-check pass complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
             if result.drafts_created:
                 print(f"Draft tickets created: {len(result.drafts_created)}")

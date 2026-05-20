@@ -147,6 +147,7 @@ def test_clearly_better_candidate_produces_draft(tmp_path, monkeypatch):
         MILL_REFINE_MODEL="anthropic/claude-sonnet-4-20250514",
         MILL_RETROSPECT_MODEL="anthropic/claude-sonnet-4-20250514",
         MILL_AUDIT_MODEL="anthropic/claude-sonnet-4-20250514",
+        MILL_AGENT_CHECK_MODEL="anthropic/claude-sonnet-4-20250514",
     )
 
     # Current model: deepseek-v4-pro — single provider, so lower score
@@ -189,6 +190,7 @@ def test_single_provider_candidate_flagged_fragile(tmp_path, monkeypatch):
         MILL_REFINE_MODEL="meta-llama/llama-4-maverick",
         MILL_RETROSPECT_MODEL="meta-llama/llama-4-maverick",
         MILL_AUDIT_MODEL="meta-llama/llama-4-maverick",
+        MILL_AGENT_CHECK_MODEL="meta-llama/llama-4-maverick",
     )
 
     # Current: deepseek-v4-pro single-provider (for explore role)
@@ -229,6 +231,7 @@ def test_all_configured_models_optimal_produces_no_draft(tmp_path, monkeypatch):
         MILL_REFINE_MODEL=model_id,
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
     )
 
     current = _model_info(model_id)
@@ -252,6 +255,7 @@ def test_preview_model_regression_draft(tmp_path, monkeypatch):
         MILL_REFINE_MODEL=model_id,
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
     )
 
     current = _model_info("openai/gpt-4o-preview")
@@ -282,6 +286,7 @@ def test_dropped_to_one_provider_regression_draft(tmp_path, monkeypatch):
         MILL_REFINE_MODEL=model_id,
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
     )
 
     current = _model_info(
@@ -314,6 +319,7 @@ def test_dedup_already_proposed_not_reproposed(tmp_path, monkeypatch):
         MILL_REFINE_MODEL=model_id,
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
     )
 
     current = _model_info(
@@ -351,6 +357,7 @@ def test_empty_memory_parsed_as_empty(tmp_path, monkeypatch):
         MILL_REFINE_MODEL=model_id,
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
     )
 
     current = _model_info(
@@ -382,6 +389,7 @@ def test_memory_updated_includes_new_proposals(tmp_path, monkeypatch):
         MILL_REFINE_MODEL=model_id,
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
     )
 
     current = _model_info(
@@ -610,6 +618,7 @@ def test_latency_timeout_note_slow_candidate(tmp_path, monkeypatch):
         MILL_REFINE_MODEL=model_id,
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
         MILL_MODEL_REQUEST_TIMEOUT="120",
     )
 
@@ -667,6 +676,7 @@ def test_latency_timeout_note_fast_candidate_no_advisory(tmp_path, monkeypatch):
         MILL_REFINE_MODEL=model_id,
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
     )
 
     current = _model_info(
