@@ -5,7 +5,6 @@ import pytest
 
 from robotsix_mill.agents import dedup
 from robotsix_mill.agents import refining
-from robotsix_mill.agents.kb import load_kb
 from robotsix_mill.config import Settings
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -587,48 +586,15 @@ def test_aware_vs_aware_comparison_no_typeerror(service):
     assert ticket.created_at >= cutoff
 
 
-# --- KB injection into refine agent ---
+# --- refine no longer auto-injects tech-reference content ---
 
 
-def test_refine_agent_sees_kb_content(monkeypatch, tmp_path):
-    """When kb_dir contains entries, the refine agent's system prompt
-    includes the KB content."""
-    from robotsix_mill.agents import base as base_mod
-
-    kb_dir = tmp_path / "kb"
-    kb_dir.mkdir()
-    (kb_dir / "gotcha.md").write_text("# Test Gotcha\n\nA known limitation.\n")
-
-    seen_system_prompt: list[str] = []
-    seen_name: list = []
-
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
-        seen_system_prompt.append(system_prompt)
-        seen_name.append(kwargs.get("name"))
-        class FakeAgent:
-            def run_sync(self, msg):
-                return type("R", (), {"output": "## Problem\nok\n"})()
-        return FakeAgent()
-
-    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
-
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_KB_DIR=str(kb_dir))
-    result = refining.run_refine_agent(
-        settings=s, title="Test", draft="draft",
-    )
-
-    assert result == {"split": False, "spec": "## Problem\nok"}
-    assert len(seen_system_prompt) == 1
-    prompt = seen_system_prompt[0]
-    assert "# Technology Constraints" in prompt
-    assert "Test Gotcha" in prompt
-    assert "A known limitation" in prompt
-    assert seen_name == ["refine"]
-
-
-def test_refine_agent_no_kb_when_dir_missing(monkeypatch, tmp_path):
-    """When kb_dir doesn't exist, the system prompt is unchanged
-    (no KB section injected)."""
+def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
+    """Refine's system prompt must stay narrow — no auto-injected
+    technology constraints. Reference docs live under
+    agent_references/ and are pulled on-demand by the implement
+    agent via the pointer in AGENT.md. This test guards against a
+    regression that re-introduces refine-time push of those docs."""
     from robotsix_mill.agents import base as base_mod
 
     seen_system_prompt: list[str] = []
@@ -642,22 +608,15 @@ def test_refine_agent_no_kb_when_dir_missing(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    missing = tmp_path / "nonexistent_kb"
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_KB_DIR=str(missing))
-    result = refining.run_refine_agent(
-        settings=s, title="Test", draft="draft",
-    )
-
-    assert result == {"split": False, "spec": "## Problem\nok"}
-    assert len(seen_system_prompt) == 1
-    prompt = seen_system_prompt[0]
-    assert "# Technology Constraints" not in prompt
-
-
-def test_refine_agent_kb_dir_default(tmp_path):
-    """settings.kb_dir defaults to Path('kb')."""
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    assert s.kb_dir == Path("kb")
+    refining.run_refine_agent(settings=s, title="Test", draft="draft")
+
+    assert len(seen_system_prompt) == 1
+    prompt = seen_system_prompt[0]
+    assert "Technology Constraints" not in prompt
+    assert "agent_references" not in prompt
+    assert "TZDateTime" not in prompt
+    assert "DateTime(timezone=True)" not in prompt
 
 
 # --- run_command tool presence ---

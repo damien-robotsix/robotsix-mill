@@ -6,7 +6,6 @@ from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
 from robotsix_mill.agents.base import _compose_prompt, _model_name
 from robotsix_mill.agents.skills import load_skills
-from robotsix_mill.agents.kb import load_kb
 from robotsix_mill.agents.web_research import make_web_research_tool
 from robotsix_mill.agents.web_tools import make_web_fetch
 from robotsix_mill.config import Settings
@@ -44,64 +43,17 @@ def test_repo_ships_web_skills():
     assert "Web Fetch" in out and "Web Search" in out
 
 
-# --- KB loader -----------------------------------------------------------
+# --- agent_references/ folder shipped with the repo ---------------------
 
-def test_load_kb_from_flat_dir(tmp_path):
-    kb_dir = tmp_path / "kb"
-    kb_dir.mkdir()
-    (kb_dir / "sqlalchemy-sqlite.md").write_text(
-        "# SQLite DateTime\n\nSQLite strips tzinfo.\n"
-    )
-    (kb_dir / "another.md").write_text(
-        "# Another Constraint\n\nSome other gotcha.\n"
-    )
-    out = load_kb(kb_dir)
-    assert "# Technology Constraints" in out
-    assert "SQLite DateTime" in out
-    assert "SQLite strips tzinfo" in out
-    assert "Another Constraint" in out
-    assert "Some other gotcha" in out
-
-
-def test_load_kb_from_nested_kb_md(tmp_path):
-    kb_dir = tmp_path / "kb"
-    kb_dir.mkdir()
-    nested = kb_dir / "sqlalchemy-sqlite"
-    nested.mkdir()
-    (nested / "KB.md").write_text("# Nested KB\n\nNested content.\n")
-    out = load_kb(kb_dir)
-    assert "Nested KB" in out
-    assert "Nested content" in out
-
-
-def test_load_kb_mixed_flat_and_nested(tmp_path):
-    kb_dir = tmp_path / "kb"
-    kb_dir.mkdir()
-    (kb_dir / "flat.md").write_text("# Flat\n\nFlat content.\n")
-    nested = kb_dir / "topic"
-    nested.mkdir()
-    (nested / "KB.md").write_text("# Nested\n\nNested content.\n")
-    out = load_kb(kb_dir)
-    assert "Flat" in out
-    assert "Nested" in out
-
-
-def test_load_kb_missing_dir_is_empty(tmp_path):
-    assert load_kb(tmp_path / "nope") == ""
-
-
-def test_load_kb_empty_dir_is_empty(tmp_path):
-    kb_dir = tmp_path / "kb"
-    kb_dir.mkdir()
-    assert load_kb(kb_dir) == ""
-
-
-def test_repo_ships_kb_entry():
-    """The real kb/ dir in the repo has the SQLite gotcha entry."""
-    out = load_kb("kb")
-    assert "SQLite" in out
-    assert "TZDateTime" in out
-    assert "DateTime(timezone=True)" in out
+def test_repo_ships_agent_references():
+    """The real agent_references/ dir is committed and discoverable, so
+    the implement agent can read entries when AGENT.md points it there.
+    No auto-loading — agents pull on demand."""
+    from pathlib import Path
+    p = Path("agent_references")
+    assert p.is_dir(), "agent_references/ folder is missing from the repo"
+    files = sorted(x.name for x in p.glob("*.md"))
+    assert "sqlalchemy-sqlite.md" in files, files
 
 
 # --- model id / prompt composition (no key, no pydantic_ai needed) ------

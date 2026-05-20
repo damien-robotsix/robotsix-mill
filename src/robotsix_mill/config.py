@@ -250,10 +250,6 @@ class Settings(BaseSettings):
     # refine + implement agents' system prompt. Relative to CWD (/app in
     # the container, repo root locally).
     skills_dir: Path = Field(default=Path("skills"), alias="MILL_SKILLS_DIR")
-    # Directory of technology-constraint knowledge base files (kb/*.md)
-    # injected into the refine agent's prompt so it avoids writing specs
-    # that prescribe impossible things for the project's stack.
-    kb_dir: Path = Field(default=Path("kb"), alias="MILL_KB_DIR")
 
     # --- human approval gate (refine -> implement) ---
     # When true (default), the refine stage transitions to

@@ -54,3 +54,18 @@ enterprise process. These are hard rules, learned the hard way.
   localhost-only by design.
 - If something is genuinely underspecified or a tool is missing, say
   so (or `report_issue`) — don't guess and gold-plate.
+
+## Reference docs: `agent_references/`
+
+Stack-specific gotchas live under `agent_references/` — one Markdown
+file per topic (e.g. `agent_references/sqlalchemy-sqlite.md`). They
+are **not** auto-injected into any agent's prompt; an agent that is
+about to touch a stack covered there is expected to `read_file` the
+matching entry first. Spec writers (refine) should NOT pre-prescribe
+the workaround — let the implement agent consult the reference when
+it has the actual code in front of it.
+
+When you discover a new stack-level trap that another agent will hit:
+add a new `agent_references/<topic>.md` describing it in the same
+shape as the existing entry (limitation → consequence → canonical
+workaround). Keep entries narrow and verifiable in the repo.

@@ -99,7 +99,6 @@ def run_refine_agent(
         "spec_markdown": "...", "depends_on": [0]}, ...]}``
     """
     from .base import build_agent
-    from .kb import load_kb
     from .retry import call_with_retry
 
     tools: list = []
@@ -113,15 +112,14 @@ def run_refine_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
-    # Inject technology constraints KB so the refiner avoids prescribing
-    # things that are impossible for the project's stack (e.g.
-    # DateTime(timezone=True) on SQLite).
-    kb_section = load_kb(settings.kb_dir)
-    system_prompt = SYSTEM_PROMPT + kb_section
-
+    # Tech-specific gotchas are NOT injected into refine — they live
+    # under agent_references/ and the implement agent consults them
+    # on-demand via the pointer in AGENT.md when it actually touches
+    # the relevant stack. Keeps refine's prompt small and prevents the
+    # spec writer from prescribing fixes for traps it can't verify.
     agent = build_agent(
         settings,
-        system_prompt=system_prompt,
+        system_prompt=SYSTEM_PROMPT,
         tools=tools,
         web=True,  # cheap web_research sub-agent (external lookups only)
         model_name=settings.refine_model,

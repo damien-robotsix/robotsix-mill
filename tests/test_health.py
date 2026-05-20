@@ -651,17 +651,19 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch):
     from robotsix_mill.runtime.api import create_app
 
     app = create_app(settings)
-    client = TestClient(app)
+    # `with TestClient(app)` triggers FastAPI lifespan startup, which
+    # populates app.state.run_registry — required now that /health-check
+    # registers its in-flight run there for the board's Runs panel.
+    with TestClient(app) as client:
+        response = client.post("/health-check")
+        assert response.status_code == 202
+        assert response.json() == {"status": "started"}
 
-    response = client.post("/health-check")
-    assert response.status_code == 202
-    assert response.json() == {"status": "started"}
+        # Background thread should have started
+        assert started.wait(timeout=3), "Background thread did not start"
 
-    # Background thread should have started
-    assert started.wait(timeout=3), "Background thread did not start"
-
-    # Clean up
-    finished.set()
+        # Clean up
+        finished.set()
 
 
 def test_post_health_check_runs_in_background(tmp_path, monkeypatch):
@@ -691,20 +693,21 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch):
     from robotsix_mill.runtime.api import create_app
 
     app = create_app(settings)
-    client = TestClient(app)
+    # Lifespan-aware client so app.state.run_registry is initialised
+    # (the /health-check route now records the in-flight run there).
+    with TestClient(app) as client:
+        response = client.post("/health-check")
+        assert response.status_code == 202
 
-    response = client.post("/health-check")
-    assert response.status_code == 202
+        # Wait for background thread to complete
+        assert run_event.wait(timeout=5), "Background thread did not complete"
 
-    # Wait for background thread to complete
-    assert run_event.wait(timeout=5), "Background thread did not complete"
-
-    # Verify the draft ticket was created
-    svc = TicketService(settings)
-    tickets = svc.list()
-    health_tickets = [t for t in tickets if t.source == "health"]
-    assert len(health_tickets) == 1
-    assert health_tickets[0].title == "Health draft"
+        # Verify the draft ticket was created
+        svc = TicketService(settings)
+        tickets = svc.list()
+        health_tickets = [t for t in tickets if t.source == "health"]
+        assert len(health_tickets) == 1
+        assert health_tickets[0].title == "Health draft"
 
 
 # --- Board HTML tests ---
