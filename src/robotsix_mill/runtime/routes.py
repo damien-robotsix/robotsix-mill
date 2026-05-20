@@ -69,13 +69,16 @@ def list_tickets(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
-    # The board polls this every 5s. With many CLOSED/DONE tickets,
-    # returning all of them each refresh is wasted bytes + a session_cost
-    # call per ticket (Langfuse cache miss). The board passes
-    # include_closed=false; default stays True for API/back-compat.
+    # The board polls this every 5s. CLOSED is the volume case
+    # (hundreds; dominates the row count and the session_cost lookup
+    # cost), so hide it behind include_closed=false. DONE is the
+    # transient retrospect-in-flight state — always returned so the
+    # board can show retrospect-in-progress and just-retrospected
+    # tickets without forcing the user to toggle "Show closed." Default
+    # include_closed=True stays for API/back-compat.
     exclude = None
     if not include_closed:
-        exclude = {State.CLOSED, State.DONE}
+        exclude = {State.CLOSED}
     return [
         enrich_ticket_read(t, settings, svc)
         for t in svc.list(state=state, exclude_states=exclude)
