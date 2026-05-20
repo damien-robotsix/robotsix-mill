@@ -130,6 +130,42 @@ class TestRunRegistry:
         registry = RunRegistry(path)
         assert registry.list_all() == []
 
+    def test_load_reconciles_orphan_running_entries(self, tmp_path: Path):
+        """A run that was 'running' when the previous process died must
+        not stay 'running' forever after the next startup — the
+        background thread that would have called finish_ok/error is
+        dead. _load reclaims those as errored so the board doesn't lie
+        about an in-flight pass that ended ages ago."""
+        path = tmp_path / "runs.json"
+        # Simulate a prior process that started a run and never
+        # finished (status="running", finished_at=None).
+        prior = [{
+            "id": "orphan-1", "kind": "health",
+            "started_at": "2026-05-20T21:17:14+00:00",
+            "finished_at": None, "status": "running",
+            "summary": "", "error": None,
+        }, {
+            "id": "completed-1", "kind": "audit",
+            "started_at": "2026-05-20T12:58:30+00:00",
+            "finished_at": "2026-05-20T13:00:00+00:00",
+            "status": "ok", "summary": "5 drafts", "error": None,
+        }]
+        path.write_text(__import__("json").dumps(prior))
+
+        registry = RunRegistry(path)
+        entries = {e["id"]: e for e in registry.list_all()}
+        # Orphan reclaimed as error with the standard message.
+        assert entries["orphan-1"]["status"] == "error"
+        assert entries["orphan-1"]["error"] == "interrupted by process restart"
+        assert entries["orphan-1"]["finished_at"] is not None
+        # Completed runs are untouched.
+        assert entries["completed-1"]["status"] == "ok"
+        assert entries["completed-1"]["summary"] == "5 drafts"
+        # Reconciliation persisted (next load sees them already-fixed,
+        # not running anymore).
+        registry2 = RunRegistry(path)
+        assert registry2.list_all()[1]["status"] == "error"  # newest-first, orphan is older
+
     def test_multiple_running_entries(self, tmp_path: Path):
         registry = RunRegistry(tmp_path / "runs.json")
         a = registry.start("audit")

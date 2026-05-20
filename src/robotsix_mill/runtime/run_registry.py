@@ -16,7 +16,7 @@ MAX_ENTRIES = 50
 @dataclass
 class RunEntry:
     id: str
-    kind: Literal["audit", "scout", "trace-health"]
+    kind: Literal["audit", "scout", "trace-health", "health"]
     started_at: str  # ISO-8601 UTC
     finished_at: str | None = None
     status: Literal["running", "ok", "error"] = "running"
@@ -59,6 +59,25 @@ class RunRegistry:
             ]
         except (json.JSONDecodeError, KeyError):
             self._entries = []
+            return
+
+        # Reconcile orphaned "running" entries: any pass that was
+        # in-flight when the process previously stopped (container
+        # restart, crash, OOM, kill) is now permanently dead — the
+        # background thread that would have called finish_ok/error
+        # died with the process. Mark them errored so they don't
+        # hang as "running" in the board forever. Persist so we
+        # only do this once per restart.
+        now = datetime.now(timezone.utc).isoformat()
+        reconciled = False
+        for e in self._entries:
+            if e.status == "running":
+                e.status = "error"
+                e.finished_at = now
+                e.error = "interrupted by process restart"
+                reconciled = True
+        if reconciled:
+            self.flush()
 
     def flush(self) -> None:
         self._file.parent.mkdir(parents=True, exist_ok=True)
