@@ -67,9 +67,10 @@ def with_cost(ticket: Ticket, settings: Settings) -> Ticket:
     return ticket
 
 
-def enrich_ticket_read(ticket: Ticket, settings: Settings) -> TicketRead:
+def enrich_ticket_read(ticket: Ticket, settings: Settings, service: TicketService) -> TicketRead:
     """Convert a :class:`Ticket` into a :class:`TicketRead`, populating
-    ``cost_usd`` from Langfuse and computing ``origin_session_url``."""
+    ``cost_usd`` from Langfuse, computing ``origin_session_url``, and
+    resolving unmet dependencies."""
     with_cost(ticket, settings)
     return TicketRead(
         id=ticket.id,
@@ -81,6 +82,8 @@ def enrich_ticket_read(ticket: Ticket, settings: Settings) -> TicketRead:
         origin_session=ticket.origin_session,
         origin_session_url=_origin_session_url(ticket, settings),
         cost_usd=ticket.cost_usd,
+        depends_on=ticket.depends_on,
+        unmet_deps=service.unmet_dependencies(ticket),
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )

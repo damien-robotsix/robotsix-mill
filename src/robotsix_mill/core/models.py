@@ -46,6 +46,9 @@ class Ticket(SQLModel, table=True):
     # cumulative LLM spend in USD, synced from Langfuse session totals
     # by the periodic cost-sync loop. Zero when Langfuse is unconfigured.
     cost_usd: float = Field(default=0.0)
+    # optional JSON list of ticket IDs that must reach CLOSED/DONE before
+    # this ticket can leave READY (implement-stage gate).
+    depends_on: str | None = Field(default=None)
     created_at: datetime = Field(
         default_factory=_now,
         sa_column=Column(TZDateTime()),
@@ -87,6 +90,7 @@ class Comment(SQLModel, table=True):
 class TicketCreate(SQLModel):
     title: str
     description: str = ""
+    depends_on: str | None = None
 
 
 class TicketTransition(SQLModel):
@@ -104,6 +108,8 @@ class TicketRead(SQLModel):
     origin_session: str | None
     origin_session_url: str | None
     cost_usd: float
+    depends_on: str | None
+    unmet_deps: list[str]
     created_at: datetime
     updated_at: datetime
 

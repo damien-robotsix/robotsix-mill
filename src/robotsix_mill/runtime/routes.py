@@ -57,9 +57,9 @@ def create_ticket(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
-    ticket = svc.create(body.title, body.description)
+    ticket = svc.create(body.title, body.description, depends_on=body.depends_on)
     maybe_enqueue(ticket, worker)  # "directly taken in charge"
-    return enrich_ticket_read(ticket, settings)
+    return enrich_ticket_read(ticket, settings, svc)
 
 
 @router.get("/tickets", response_model=list[TicketRead])
@@ -77,7 +77,7 @@ def list_tickets(
     if not include_closed:
         exclude = {State.CLOSED, State.DONE}
     return [
-        enrich_ticket_read(t, settings)
+        enrich_ticket_read(t, settings, svc)
         for t in svc.list(state=state, exclude_states=exclude)
     ]
 
@@ -91,7 +91,7 @@ def get_ticket(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    return enrich_ticket_read(ticket, settings)
+    return enrich_ticket_read(ticket, settings, svc)
 
 
 @router.get("/tickets/{ticket_id}/history", response_model=list[TicketEvent])
@@ -141,7 +141,7 @@ def transition(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)  # human unblock re-triggers the chain
-    return enrich_ticket_read(ticket, settings)
+    return enrich_ticket_read(ticket, settings, svc)
 
 
 @router.post("/tickets/{ticket_id}/approve", response_model=TicketRead)
@@ -160,7 +160,7 @@ def approve_ticket(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)  # implement picks it up from ready
-    return enrich_ticket_read(ticket, settings)
+    return enrich_ticket_read(ticket, settings, svc)
 
 
 @router.post(
@@ -212,7 +212,7 @@ def request_changes(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
-    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings)}
+    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc)}
 
 
 @router.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)
@@ -230,7 +230,7 @@ def resume_blocked(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
-    return enrich_ticket_read(ticket, settings)
+    return enrich_ticket_read(ticket, settings, svc)
 
 
 @router.post("/audit", status_code=202)

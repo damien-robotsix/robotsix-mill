@@ -334,7 +334,7 @@ def test_origin_session_url_computed_when_config_set(service, settings):
     settings.langfuse_base_url = "https://cloud.langfuse.com"
     settings.langfuse_project_id = "proj-xyz"
 
-    tr = enrich_ticket_read(t, settings)
+    tr = enrich_ticket_read(t, settings, service)
     assert tr.origin_session == "sess-abc"
     assert tr.origin_session_url == (
         "https://cloud.langfuse.com/project/proj-xyz/sessions/sess-abc"
@@ -348,7 +348,7 @@ def test_origin_session_url_none_when_config_missing(service, settings):
 
     t = service.create("No URL test", origin_session="sess-abc")
     # No langfuse_base_url or project_id set.
-    tr = enrich_ticket_read(t, settings)
+    tr = enrich_ticket_read(t, settings, service)
     assert tr.origin_session == "sess-abc"
     assert tr.origin_session_url is None
 
@@ -452,3 +452,68 @@ def test_post_tickets_creates_user_draft(client):
     d = r.json()
     assert d["state"] == "draft"
     assert d["source"] == "user"
+
+
+# --- depends_on API ----------------------------------------------------
+
+def test_create_ticket_with_depends_on(client):
+    """POST /tickets accepts depends_on and the field is present in the response."""
+    r = client.post("/tickets", json={
+        "title": "Dep ticket API",
+        "depends_on": '["ticket-aaa", "ticket-bbb"]',
+    })
+    assert r.status_code == 201
+    data = r.json()
+    assert data["depends_on"] == '["ticket-aaa", "ticket-bbb"]'
+    assert "unmet_deps" in data
+
+
+def test_get_ticket_includes_depends_on_and_unmet_deps(client):
+    """GET /tickets/{id} includes depends_on and unmet_deps fields."""
+    r = client.post("/tickets", json={
+        "title": "With dep",
+        "depends_on": '["some-other-ticket"]',
+    })
+    assert r.status_code == 201
+    tid = r.json()["id"]
+
+    got = client.get(f"/tickets/{tid}")
+    assert got.status_code == 200
+    data = got.json()
+    assert "depends_on" in data
+    assert data["depends_on"] == '["some-other-ticket"]'
+    assert "unmet_deps" in data
+    # The dep doesn't exist → treated satisfied → unmet_deps empty
+    assert data["unmet_deps"] == []
+
+
+def test_list_tickets_includes_depends_on_and_unmet_deps(client):
+    """GET /tickets includes depends_on and unmet_deps for all tickets."""
+    r = client.post("/tickets", json={
+        "title": "List dep test",
+        "depends_on": '["x", "y"]',
+    })
+    assert r.status_code == 201
+
+    ts = client.get("/tickets").json()
+    found = [t for t in ts if t["title"] == "List dep test"]
+    assert len(found) == 1
+    assert found[0]["depends_on"] == '["x", "y"]'
+    assert "unmet_deps" in found[0]
+
+
+def test_create_ticket_without_depends_on_has_none(client):
+    """POST /tickets without depends_on → field is None."""
+    r = client.post("/tickets", json={"title": "No dep"})
+    assert r.status_code == 201
+    data = r.json()
+    assert data["depends_on"] is None
+    assert data["unmet_deps"] == []
+
+
+def test_board_js_includes_depends_on_rendering(client):
+    """The board JS includes depends_on and unmet_deps rendering logic."""
+    js = client.get("/static/board.js").text
+    assert "depends_on" in js
+    assert "unmet_deps" in js
+    assert "⏳ waiting on" in js

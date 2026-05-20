@@ -40,6 +40,18 @@ class ImplementStage(Stage):
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         s = ctx.settings
+
+        # --- dependency gate: refuse to implement until all deps are
+        # terminal (CLOSED/DONE). Same-state no-op → the reconcile
+        # sweep re-enqueues this ticket each poll cycle.
+        unmet = ctx.service.unmet_dependencies(ticket)
+        if unmet:
+            log.debug(
+                "%s: unmet dependencies — deferring implement: %s",
+                ticket.id, unmet,
+            )
+            return Outcome(State.READY)
+
         if not s.forge_remote_url:
             return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
 
