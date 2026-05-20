@@ -210,3 +210,84 @@ def test_origin_session_none_when_no_session(settings):
     svc = TicketService(settings)
     t = svc.list()[0]
     assert t.origin_session is None
+
+
+def test_evidence_persisted_to_artifacts_dir(settings):
+    """When evidence is supplied, it's written to artifacts/evidence.txt
+    and description.md ends with the pointer line."""
+    tool = make_report_issue_tool(settings)
+    out = tool(
+        "Flaky test failure",
+        "test_foo fails intermittently",
+        "error",
+        evidence="$ pytest tests/test_foo.py\nFAILED tests/test_foo.py::test_case - AssertionError: ...",
+    )
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    workspace = svc.workspace(t)
+    evidence_path = workspace.artifacts_dir / "evidence.txt"
+    assert evidence_path.exists()
+    assert "pytest tests/test_foo.py" in evidence_path.read_text(encoding="utf-8")
+
+    desc = workspace.read_description()
+    assert "> Raw evidence attached at artifacts/evidence.txt" in desc
+
+
+def test_no_evidence_creates_no_file_and_no_pointer(settings):
+    """When evidence is empty/not passed, no evidence.txt is created
+    and description.md has no pointer line."""
+    tool = make_report_issue_tool(settings)
+    out = tool("Missing tool", "need a force-push tool", "missing-tool")
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    workspace = svc.workspace(t)
+    evidence_path = workspace.artifacts_dir / "evidence.txt"
+    assert not evidence_path.exists()
+
+    desc = workspace.read_description()
+    assert "Raw evidence attached at artifacts/evidence.txt" not in desc
+
+
+def test_evidence_truncated_at_8kb(settings):
+    """Evidence longer than 8192 bytes is truncated to exactly 8192
+    bytes before writing."""
+    tool = make_report_issue_tool(settings)
+    # Build exactly 8192 bytes of evidence content.
+    chunk = "line "  # 5 bytes
+    evidence = chunk * 1639  # 5 * 1639 = 8195 bytes
+    # Ensure it's > 8192 bytes but not huge.
+    assert len(evidence.encode("utf-8")) > 8192
+
+    out = tool("Truncation test", "body", "error", evidence=evidence)
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    workspace = svc.workspace(t)
+    evidence_path = workspace.artifacts_dir / "evidence.txt"
+    written = evidence_path.read_bytes()
+    assert len(written) == 8192
+
+    # Description must still have the pointer line.
+    desc = workspace.read_description()
+    assert "> Raw evidence attached at artifacts/evidence.txt" in desc
+
+
+def test_empty_evidence_whitespace_only_treated_as_no_evidence(settings):
+    """Whitespace-only evidence is treated as if no evidence was given."""
+    tool = make_report_issue_tool(settings)
+    out = tool("Whitespace evidence", "body", "error", evidence="   \n  ")
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    workspace = svc.workspace(t)
+    evidence_path = workspace.artifacts_dir / "evidence.txt"
+    assert not evidence_path.exists()
+
+    desc = workspace.read_description()
+    assert "Raw evidence attached at artifacts/evidence.txt" not in desc

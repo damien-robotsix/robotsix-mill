@@ -36,7 +36,10 @@ def make_report_issue_tool(settings: Settings):
     to attach to every agent and hermetic for tests."""
 
     def report_issue(
-        title: str, body: str = "", category: str = "other"
+        title: str,
+        body: str = "",
+        category: str = "other",
+        evidence: str = "",
     ) -> str:
         """File a draft ticket about a problem you hit while working.
 
@@ -53,6 +56,10 @@ def make_report_issue_tool(settings: Settings):
                 suggestion if you have one.
             category: one of missing-tool, error, workflow-improvement,
                 missing-input, other.
+            evidence: (optional) raw output from the failing operation
+                — e.g. the command line + last ~50 lines of
+                stdout/stderr, or a traceback.  Will be written to
+                artifacts/evidence.txt in the ticket workspace.
 
         Returns a short status string (never raises — a failure here
         must not abort your run).
@@ -96,8 +103,31 @@ def make_report_issue_tool(settings: Settings):
                 f"**Reported by an agent** (category: {cat})\n\n"
                 f"{(body or '').strip()}\n"
             )
+
+            evidence = (evidence or "").strip()
+            if evidence:
+                # Truncate at 8 KB to keep the workspace lean.
+                evidence_bytes = evidence.encode("utf-8")
+                if len(evidence_bytes) > 8192:
+                    evidence_bytes = evidence_bytes[:8192]
+                    # Decode back, replacing any trailing partial multi-byte char.
+                    evidence = evidence_bytes.decode("utf-8", errors="ignore")
+                else:
+                    evidence = evidence_bytes.decode("utf-8")
+
             ticket = service.create(title, full_body, source="agent",
                                      origin_session=current_session())
+
+            if evidence:
+                workspace = service.workspace(ticket)
+                artifacts = workspace.artifacts_dir
+                (artifacts / "evidence.txt").write_text(evidence, encoding="utf-8")
+
+                # Append a pointer line to the description so anyone
+                # reading description.md knows to check the evidence file.
+                full_body += "\n> Raw evidence attached at artifacts/evidence.txt\n"
+                workspace.write_description(full_body)
+
             return f"report_issue: filed draft {ticket.id}"
         except Exception as e:  # noqa: BLE001 — never abort the agent run
             return f"report_issue: could not file ticket ({e!r})"
