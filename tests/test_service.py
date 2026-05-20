@@ -46,7 +46,9 @@ def test_transition_records_history(service):
 def test_illegal_transition_rejected(service):
     t = service.create("x")
     with pytest.raises(TransitionError):
-        service.transition(t.id, State.DONE)  # draft -> done not allowed
+        # draft -> in_review is not allowed (drafts can't jump onto a PR).
+        # draft -> done IS allowed (refine's dedup-discard path uses it).
+        service.transition(t.id, State.IN_REVIEW)
 
 
 def test_state_machine_edges():

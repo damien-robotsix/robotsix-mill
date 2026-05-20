@@ -143,7 +143,10 @@ def test_get_missing_404(client):
 
 def test_illegal_transition_409(client):
     tid = client.post("/tickets", json={"title": "T"}).json()["id"]
-    r = client.post(f"/tickets/{tid}/transition", json={"state": "done"})
+    # draft -> in_review is not a legal edge (drafts can't jump onto a PR).
+    # NOTE: draft -> done IS legal — refine's dedup-discard path uses it so
+    # the discarded draft still passes through retrospect.
+    r = client.post(f"/tickets/{tid}/transition", json={"state": "in_review"})
     assert r.status_code == 409
 
 
