@@ -284,6 +284,18 @@ class TicketService:
             s.add(ticket)
             s.commit()
 
+    def set_title(self, ticket_id: str, title: str) -> None:
+        """Update the title of a ticket. Raises :class:`KeyError` if
+        the ticket does not exist."""
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.title = title
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def set_content_hash(self, ticket_id: str, content_hash: str) -> None:
         """Keep the DB pointer in sync after a stage rewrites the
         file-canonical description (so it isn't seen as an external edit)."""
@@ -292,6 +304,24 @@ class TicketService:
             if ticket is None:
                 raise KeyError(ticket_id)
             ticket.content_hash = content_hash
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
+    def set_depends_on(self, ticket_id: str, depends_on_ids: list[str]) -> None:
+        """Set the ``depends_on`` field for *ticket_id* to a JSON-encoded
+        list of ticket IDs.  Raises :class:`ValueError` if *ticket_id*
+        appears in *depends_on_ids* (self-dependency)."""
+        if ticket_id in depends_on_ids:
+            raise ValueError(
+                f"Ticket cannot depend on itself: {ticket_id}"
+            )
+        raw = json.dumps(depends_on_ids) if depends_on_ids else None
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.depends_on = raw
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()

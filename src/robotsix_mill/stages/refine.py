@@ -138,6 +138,35 @@ class RefineStage(Stage):
             )
         # --- end dedup guard ---
 
+        # --- skip re-refinement for split children ---
+        # A child ticket created from a split already has a refined
+        # spec in its description.md.  Detect this by checking whether
+        # the parent is CLOSED with a "split into" note — the canonical
+        # signal that this ticket's description is already the refined
+        # output.
+        if ticket.parent_id is not None:
+            parent = ctx.service.get(ticket.parent_id)
+            if parent is not None and parent.state == State.CLOSED:
+                # The parent was closed by a split — this is a child.
+                # Use the existing description as the canonical spec
+                # (it was written by the split logic, not a raw draft).
+                spec = draft
+                if not spec.strip():
+                    return Outcome(State.BLOCKED, "split child has empty description")
+                # Preserve the raw draft if not already preserved.
+                draft_original = ws.artifacts_dir / "draft-original.md"
+                if not draft_original.exists():
+                    draft_original.write_text(
+                        "(split child — spec written by parent's refine agent)",
+                        encoding="utf-8",
+                    )
+                next_state = (
+                    State.AWAITING_APPROVAL if ctx.settings.require_approval
+                    else State.READY
+                )
+                return Outcome(next_state, "split child — spec already refined")
+
+        # --- run the refine agent ---
         try:
             # Gather reviewer comments (if the ticket was sent back to draft).
             comments = ctx.service.list_comments(ticket.id)
@@ -147,7 +176,7 @@ class RefineStage(Stage):
                     f"[{c.created_at.isoformat()}] {c.body}" for c in comments
                 )
 
-            spec = refining.run_refine_agent(
+            result = refining.run_refine_agent(
                 settings=s, title=ticket.title, draft=draft,
                 repo_dir=repo_dir,
                 reviewer_comments=reviewer_comments,
@@ -155,19 +184,112 @@ class RefineStage(Stage):
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))
 
-        if not spec.strip():
-            return Outcome(State.BLOCKED, "refiner produced an empty spec")
-
-        # preserve the raw draft, then make the refined spec canonical
+        # --- preserve the raw draft (always, for traceability) ---
         (ws.artifacts_dir / "draft-original.md").write_text(
             draft if draft else "(title-only ticket, no body provided)",
             encoding="utf-8",
         )
-        new_hash = ws.write_description(spec)
-        ctx.service.set_content_hash(ticket.id, new_hash)
 
-        next_state = (
+        # --- normal single-scope path ---
+        if not result.get("split"):
+            spec = result.get("spec", "")
+            if not spec or not spec.strip():
+                return Outcome(State.BLOCKED, "refiner produced an empty spec")
+
+            new_hash = ws.write_description(spec)
+            ctx.service.set_content_hash(ticket.id, new_hash)
+
+            next_state = (
+                State.AWAITING_APPROVAL if ctx.settings.require_approval
+                else State.READY
+            )
+            return Outcome(next_state, "refined")
+
+        # --- multi-scope split path ---
+        children_raw: list = result.get("children", [])
+        if not isinstance(children_raw, list) or len(children_raw) == 0:
+            # Degrade gracefully: treat as single-spec with whatever we got.
+            spec = result.get("spec", "")
+            if not spec or not spec.strip():
+                return Outcome(State.BLOCKED, "refiner produced an empty spec (split with no children)")
+            new_hash = ws.write_description(spec)
+            ctx.service.set_content_hash(ticket.id, new_hash)
+            next_state = (
+                State.AWAITING_APPROVAL if ctx.settings.require_approval
+                else State.READY
+            )
+            return Outcome(next_state, "refined (split degraded — no valid children)")
+
+        # Validate and collect valid children.
+        valid_children: list[dict] = []
+        for child in children_raw:
+            if not isinstance(child, dict):
+                continue
+            title = (child.get("title") or "").strip()
+            spec_md = (child.get("spec_markdown") or "").strip()
+            if not title or not spec_md:
+                continue
+            deps = child.get("depends_on", [])
+            if not isinstance(deps, list):
+                deps = []
+            # Keep only non-negative integer indices.
+            deps = [d for d in deps if isinstance(d, int) and d >= 0]
+            valid_children.append({
+                "title": title,
+                "spec_markdown": spec_md,
+                "depends_on": deps,
+            })
+
+        if len(valid_children) == 0:
+            return Outcome(State.BLOCKED, "refiner produced no valid split children")
+        if len(valid_children) == 1:
+            # Only one valid child — fall back to single-spec path.
+            child = valid_children[0]
+            new_hash = ws.write_description(child["spec_markdown"])
+            ctx.service.set_content_hash(ticket.id, new_hash)
+            # Also update the ticket title to the child's title.
+            ctx.service.set_title(ticket.id, child["title"])
+            next_state = (
+                State.AWAITING_APPROVAL if ctx.settings.require_approval
+                else State.READY
+            )
+            return Outcome(next_state, "refined (single child, no split)")
+
+        # Create child tickets.
+        child_ids: list[str] = []
+        for i, child in enumerate(valid_children):
+            child_ticket = ctx.service.create(
+                title=child["title"],
+                description=child["spec_markdown"],
+                source=ticket.source,
+            )
+            child_ids.append(child_ticket.id)
+            ctx.service.set_parent(child_ticket.id, ticket.id)
+
+        # Resolve depends_on indices → real ticket IDs.
+        for i, child in enumerate(valid_children):
+            if child["depends_on"]:
+                resolved = []
+                for idx in child["depends_on"]:
+                    if 0 <= idx < i and idx < len(child_ids):
+                        resolved.append(child_ids[idx])
+                if resolved:
+                    ctx.service.set_depends_on(child_ids[i], resolved)
+
+        # Transition each child to AWAITING_APPROVAL or READY.
+        child_next_state = (
             State.AWAITING_APPROVAL if ctx.settings.require_approval
             else State.READY
         )
-        return Outcome(next_state, "refined")
+        for cid in child_ids:
+            ctx.service.transition(
+                cid, child_next_state,
+                note=f"split from {ticket.id}",
+            )
+
+        # Close the original ticket.
+        ids_note = ", ".join(child_ids)
+        return Outcome(
+            State.CLOSED,
+            f"split into {ids_note}",
+        )
