@@ -186,13 +186,7 @@ class Settings(BaseSettings):
     # Command run to verify the implementation; empty string skips the
     # test gate. Failures feed back into the bounded fix loop.
     test_command: str = Field(default="pytest -q", alias="MILL_TEST_COMMAND")
-    max_fix_attempts: int = Field(default=3, alias="MILL_MAX_FIX_ATTEMPTS")
     branch_prefix: str = Field(default="mill/", alias="MILL_BRANCH_PREFIX")
-    # Max model requests per implement agent pass (pydantic-ai default is
-    # 50 — far too low for an agentic coding loop on a real repo).
-    agent_request_limit: int = Field(
-        default=200, alias="MILL_AGENT_REQUEST_LIMIT"
-    )
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.
     command_timeout: int = Field(default=900, alias="MILL_COMMAND_TIMEOUT")
