@@ -110,6 +110,24 @@ class Settings(BaseSettings):
     transient_backoff_cap: float = Field(
         default=30.0, alias="MILL_TRANSIENT_BACKOFF_CAP"
     )
+    # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
+    # are longer than transient backoff because OpenRouter/provider
+    # rate-limit windows are typically ~60s.  When
+    # rate_limit_fallback_model is set, call_with_retry switches to
+    # that model after rate_limit_fallback_retries consecutive
+    # UsageLimitExceeded failures.
+    rate_limit_backoff_base: float = Field(
+        default=30.0, alias="MILL_RATE_LIMIT_BACKOFF_BASE"
+    )
+    rate_limit_backoff_cap: float = Field(
+        default=120.0, alias="MILL_RATE_LIMIT_BACKOFF_CAP"
+    )
+    rate_limit_fallback_retries: int = Field(
+        default=3, alias="MILL_RATE_LIMIT_FALLBACK_RETRIES"
+    )
+    rate_limit_fallback_model: str = Field(
+        default="", alias="MILL_RATE_LIMIT_FALLBACK_MODEL"
+    )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     explore_request_limit: int = Field(

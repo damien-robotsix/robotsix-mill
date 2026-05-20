@@ -6,7 +6,7 @@ import httpx
 import pytest
 from pydantic_ai.exceptions import ModelHTTPError
 
-from robotsix_mill.agents.retry import call_with_retry, is_transient
+from robotsix_mill.agents.retry import call_with_retry, is_transient, is_rate_limited
 from robotsix_mill.config import Settings
 
 
@@ -119,7 +119,7 @@ def test_persistent_transient_exhausts_then_raises(tmp_path):
 
 
 @pytest.mark.parametrize("exc", [
-    ModelHTTPError(404, "m"), _FakeUsageLimitExceeded("cap"), ValueError("x"),
+    ModelHTTPError(404, "m"), ValueError("x"),
 ])
 def test_non_transient_not_retried(tmp_path, exc):
     s = _settings(tmp_path)
@@ -145,3 +145,160 @@ def test_zero_retries_means_single_attempt(tmp_path):
     with pytest.raises(ModelHTTPError):
         call_with_retry(fn, settings=s, sleep=lambda _: None)
     assert calls["n"] == 1
+
+
+# --- is_rate_limited classification -------------------------------------
+
+@pytest.mark.parametrize("exc,expected", [
+    (_FakeUsageLimitExceeded("cap"), True),
+    (ModelHTTPError(429, "m"), False),
+    (ModelHTTPError(503, "m"), False),
+    (ModelHTTPError(404, "m"), False),
+    (httpx.ReadTimeout("t"), False),
+    (httpx.ConnectError("c"), False),
+    (_httpx_status(429), False),
+    (ValueError("bug"), False),
+    (json.JSONDecodeError("Expecting value", "x", 0), False),
+])
+def test_is_rate_limited(exc, expected):
+    assert is_rate_limited(exc) is expected
+
+
+def test_is_rate_limited_walks_chain():
+    """UsageLimitExceeded wrapped in a RuntimeError must still be
+    recognised through the cause chain."""
+    inner = _FakeUsageLimitExceeded("cap")
+    wrapped = RuntimeError("agent run failed")
+    wrapped.__cause__ = inner
+    assert is_rate_limited(wrapped) is True
+
+
+# --- rate-limit retry behaviour ------------------------------------------
+
+def test_rate_limit_backoff_then_success(tmp_path):
+    """UsageLimitExceeded on attempts 1-2, then success on attempt 3.
+    Backoff delays must respect the rate-limit schedule (≥30s base,
+    jitter-tolerant; ≤120s cap)."""
+    s = _settings(
+        tmp_path,
+        MILL_RATE_LIMIT_BACKOFF_BASE="30.0",
+        MILL_RATE_LIMIT_BACKOFF_CAP="120.0",
+    )
+    slept, calls = [], {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise _FakeUsageLimitExceeded("cap")
+        return "ok"
+
+    out = call_with_retry(fn, settings=s, sleep=slept.append)
+    assert out == "ok" and calls["n"] == 3
+    assert len(slept) == 2  # two backoffs before the 3rd, successful call
+    # First backoff: 30 * 2^0 = 30, with jitter up to 15 → [30, 45]
+    # Second backoff: 30 * 2^1 = 60, with jitter up to 30 → [60, 90]
+    assert slept[0] >= 30.0
+    assert slept[0] <= 120.0
+    assert slept[1] >= 60.0
+    assert slept[1] <= 120.0
+
+
+def test_rate_limit_exhausts_then_raises(tmp_path):
+    """Persistent UsageLimitExceeded with no fallback — must retry
+    transient_retries times then raise."""
+    s = _settings(tmp_path, MILL_TRANSIENT_RETRIES="2")
+    slept, calls = [], {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        raise _FakeUsageLimitExceeded("cap")
+
+    with pytest.raises(_FakeUsageLimitExceeded):
+        call_with_retry(fn, settings=s, sleep=slept.append)
+    assert calls["n"] == 3          # 1 try + 2 retries
+    assert len(slept) == 2
+    # Backoff still respects rate-limit cap
+    assert all(d <= s.rate_limit_backoff_cap * 1.5 for d in slept)
+
+
+def test_rate_limit_fallback_activates(tmp_path):
+    """UsageLimitExceeded on attempts 1-3, then fallback_fn is invoked
+    and succeeds on attempt 4."""
+    s = _settings(
+        tmp_path,
+        MILL_TRANSIENT_RETRIES="4",
+        MILL_RATE_LIMIT_FALLBACK_RETRIES="3",
+    )
+    primary_calls = {"n": 0}
+    fallback_calls = {"n": 0}
+
+    def primary():
+        primary_calls["n"] += 1
+        raise _FakeUsageLimitExceeded("cap")
+
+    def fallback():
+        fallback_calls["n"] += 1
+        return "fallback-ok"
+
+    out = call_with_retry(
+        primary, settings=s, sleep=lambda _: None, fallback_fn=fallback,
+    )
+    assert out == "fallback-ok"
+    assert primary_calls["n"] == 3   # 3 rate-limited attempts before fallback
+    assert fallback_calls["n"] == 1  # fallback succeeds on first try
+
+
+def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
+    """Fallback also fails with UsageLimitExceeded — retries exhausted,
+    last error raised."""
+    s = _settings(
+        tmp_path,
+        MILL_TRANSIENT_RETRIES="4",
+        MILL_RATE_LIMIT_FALLBACK_RETRIES="3",
+    )
+    primary_calls = {"n": 0}
+    fallback_calls = {"n": 0}
+
+    def primary():
+        primary_calls["n"] += 1
+        raise _FakeUsageLimitExceeded("cap")
+
+    def fallback():
+        fallback_calls["n"] += 1
+        raise _FakeUsageLimitExceeded("fallback-cap")
+
+    with pytest.raises(_FakeUsageLimitExceeded):
+        call_with_retry(
+            primary, settings=s, sleep=lambda _: None, fallback_fn=fallback,
+        )
+    assert primary_calls["n"] == 3
+    # Remaining retries after fallback activation: 4 - 3 = 1 more attempt
+    # But fallback starts on attempt 4 (0-indexed attempt=3), and there are
+    # 5 total attempts (0..4). So fallback gets called for attempt 3 and 4.
+    # That's 2 fallback calls, both fail → raises.
+    assert fallback_calls["n"] == 2
+
+
+def test_rate_limit_fallback_not_called_for_transient(tmp_path):
+    """429 (transient) errors must NOT activate fallback — only
+    UsageLimitExceeded does."""
+    s = _settings(
+        tmp_path,
+        MILL_TRANSIENT_RETRIES="2",
+        MILL_RATE_LIMIT_FALLBACK_RETRIES="1",
+    )
+    calls = {"n": 0}
+    fallback_calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        raise ModelHTTPError(429, "m")
+
+    def fallback():
+        fallback_calls["n"] += 1
+        return "fallback"
+
+    with pytest.raises(ModelHTTPError):
+        call_with_retry(fn, settings=s, sleep=lambda _: None, fallback_fn=fallback)
+    assert calls["n"] == 3  # 1 try + 2 retries (transient, not rate-limit)
+    assert fallback_calls["n"] == 0
