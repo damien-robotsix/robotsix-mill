@@ -69,7 +69,12 @@ class PercentileStats(BaseModel):
 class EndpointInfo(BaseModel):
     """A single provider endpoint for a model, including pricing, latency, and throughput data."""
     provider_name: str = ""
-    status: str = ""
+    # OpenRouter sends ``status`` as an *integer* code now (observed:
+    # 0 for normal, -2 for degraded). Older response shapes used a
+    # string like "active". Accept either so a server-side schema
+    # change can't crash the scout pass. ``active_provider_count``
+    # below treats 0 and "active" as equivalent.
+    status: int | str = ""
     uptime_last_30m: float | None = None
     supports_tool_calls: bool | None = None
     context_length: int = 0
@@ -99,8 +104,14 @@ class ModelInfo(BaseModel):
 
     @property
     def active_provider_count(self) -> int:
-        """Number of endpoints with ``status == "active"``."""
-        return sum(1 for e in self.endpoints if e.status == "active")
+        """Number of endpoints currently treated as active. OpenRouter
+        used to return a ``"active"`` string for status; today it sends
+        an integer code where 0 means the endpoint is healthy. Count
+        either shape so a schema change can't silently zero this out."""
+        return sum(
+            1 for e in self.endpoints
+            if e.status == "active" or e.status == 0
+        )
 
     @property
     def has_tool_calls(self) -> bool:

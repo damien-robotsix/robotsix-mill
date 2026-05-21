@@ -494,6 +494,38 @@ def test_fetch_endpoints_unexpected_shape_returns_empty(tmp_path):
     assert eps == []
 
 
+def test_fetch_endpoints_status_as_int_does_not_crash(tmp_path):
+    """OpenRouter currently returns ``status`` as an int (observed: 0
+    for healthy, -2 for degraded). Older code typed it as ``str``,
+    which made pydantic reject the record entirely
+    ('Input should be a valid string [type=string_type, input_value=0]').
+    EndpointInfo accepts int|str now; assert both."""
+    s = _make_settings(tmp_path)
+    payload = {"data": {"endpoints": [
+        {"provider_name": "DeepInfra", "status": 0},
+        {"provider_name": "Novita", "status": -2},
+        {"provider_name": "Legacy", "status": "active"},
+    ]}}
+    eps = scouting._fetch_endpoints(_FakeClient(payload), s, "x/y")
+    assert [(e.provider_name, e.status) for e in eps] == [
+        ("DeepInfra", 0), ("Novita", -2), ("Legacy", "active"),
+    ]
+
+
+def test_active_provider_count_int_zero_means_active():
+    """active_provider_count must treat both legacy ``"active"`` and
+    new integer ``0`` as healthy. Otherwise every model evaluated
+    after the OpenRouter schema change reports zero active providers
+    and the scout heuristics break."""
+    mi = scouting.ModelInfo(id="x/y", endpoints=[
+        scouting.EndpointInfo(provider_name="A", status=0),
+        scouting.EndpointInfo(provider_name="B", status=-2),
+        scouting.EndpointInfo(provider_name="C", status="active"),
+        scouting.EndpointInfo(provider_name="D", status="disabled"),
+    ])
+    assert mi.active_provider_count == 2  # A (int 0) + C ("active")
+
+
 # ── ModelInfo properties ──────────────────────────────────────────────
 
 
