@@ -141,13 +141,13 @@ def test_clearly_better_candidate_produces_draft(tmp_path, monkeypatch):
     settings = _make_settings(
         tmp_path,
         MILL_MODEL="deepseek/deepseek-v4-pro",
-        MILL_EXPLORE_MODEL="anthropic/claude-sonnet-4-20250514",
-        MILL_WEB_RESEARCH_MODEL="anthropic/claude-sonnet-4-20250514",
-        MILL_TEST_MODEL="anthropic/claude-sonnet-4-20250514",
-        MILL_REFINE_MODEL="anthropic/claude-sonnet-4-20250514",
-        MILL_RETROSPECT_MODEL="anthropic/claude-sonnet-4-20250514",
-        MILL_AUDIT_MODEL="anthropic/claude-sonnet-4-20250514",
-        MILL_AGENT_CHECK_MODEL="anthropic/claude-sonnet-4-20250514",
+        MILL_EXPLORE_MODEL="anthropic/claude-sonnet-4-5",
+        MILL_WEB_RESEARCH_MODEL="anthropic/claude-sonnet-4-5",
+        MILL_TEST_MODEL="anthropic/claude-sonnet-4-5",
+        MILL_REFINE_MODEL="anthropic/claude-sonnet-4-5",
+        MILL_RETROSPECT_MODEL="anthropic/claude-sonnet-4-5",
+        MILL_AUDIT_MODEL="anthropic/claude-sonnet-4-5",
+        MILL_AGENT_CHECK_MODEL="anthropic/claude-sonnet-4-5",
     )
 
     # Current model: deepseek-v4-pro — single provider, so lower score
@@ -158,7 +158,7 @@ def test_clearly_better_candidate_produces_draft(tmp_path, monkeypatch):
     )
     # Candidate: claude sonnet — multi-provider, higher score
     candidate = _model_info(
-        "anthropic/claude-sonnet-4-20250514",
+        "anthropic/claude-sonnet-4-5",
         prompt_price=3.0, completion_price=15.0,
     )
 
@@ -172,10 +172,10 @@ def test_clearly_better_candidate_produces_draft(tmp_path, monkeypatch):
     # At least one draft for MILL_MODEL (the coordinator role)
     model_drafts = [t for t in result.draft_titles if "MILL_MODEL" in t]
     assert len(model_drafts) == 1
-    assert "anthropic/claude-sonnet-4-20250514" in model_drafts[0]
+    assert "anthropic/claude-sonnet-4-5" in model_drafts[0]
     # Concrete diff in body
     body = result.draft_bodies[result.draft_titles.index(model_drafts[0])]
-    assert "MILL_MODEL=anthropic/claude-sonnet-4-20250514" in body
+    assert "MILL_MODEL=anthropic/claude-sonnet-4-5" in body
 
 
 def test_single_provider_candidate_flagged_fragile(tmp_path, monkeypatch):
@@ -221,7 +221,7 @@ def test_single_provider_candidate_flagged_fragile(tmp_path, monkeypatch):
 def test_all_configured_models_optimal_produces_no_draft(tmp_path, monkeypatch):
     """When all configured models are the best option, NO draft is produced."""
     # Set ALL model slots to the same model (which is also a candidate)
-    model_id = "anthropic/claude-sonnet-4-20250514"
+    model_id = "anthropic/claude-sonnet-4-5"
     settings = _make_settings(
         tmp_path,
         MILL_MODEL=model_id,
@@ -245,7 +245,7 @@ def test_all_configured_models_optimal_produces_no_draft(tmp_path, monkeypatch):
 
 def test_preview_model_regression_draft(tmp_path, monkeypatch):
     """A configured model that is a preview model produces a regression draft."""
-    model_id = "anthropic/claude-sonnet-4-20250514"
+    model_id = "anthropic/claude-sonnet-4-5"
     settings = _make_settings(
         tmp_path,
         MILL_MODEL="openai/gpt-4o-preview",
@@ -276,7 +276,7 @@ def test_preview_model_regression_draft(tmp_path, monkeypatch):
 
 def test_dropped_to_one_provider_regression_draft(tmp_path, monkeypatch):
     """A configured model that has only one provider produces a regression draft."""
-    model_id = "anthropic/claude-sonnet-4-20250514"
+    model_id = "anthropic/claude-sonnet-4-5"
     settings = _make_settings(
         tmp_path,
         MILL_MODEL="deepseek/deepseek-v4-pro",
@@ -309,7 +309,7 @@ def test_dropped_to_one_provider_regression_draft(tmp_path, monkeypatch):
 
 def test_dedup_already_proposed_not_reproposed(tmp_path, monkeypatch):
     """A recommendation already in scout memory is NOT re-proposed."""
-    model_id = "anthropic/claude-sonnet-4-20250514"
+    model_id = "anthropic/claude-sonnet-4-5"
     settings = _make_settings(
         tmp_path,
         MILL_MODEL="deepseek/deepseek-v4-pro",
@@ -347,7 +347,7 @@ def test_dedup_already_proposed_not_reproposed(tmp_path, monkeypatch):
 
 def test_empty_memory_parsed_as_empty(tmp_path, monkeypatch):
     """Missing/empty memory is parsed as empty set — no crash."""
-    model_id = "anthropic/claude-sonnet-4-20250514"
+    model_id = "anthropic/claude-sonnet-4-5"
     settings = _make_settings(
         tmp_path,
         MILL_MODEL="deepseek/deepseek-v4-pro",
@@ -379,7 +379,7 @@ def test_empty_memory_parsed_as_empty(tmp_path, monkeypatch):
 
 def test_memory_updated_includes_new_proposals(tmp_path, monkeypatch):
     """The returned memory includes new proposals."""
-    model_id = "anthropic/claude-sonnet-4-20250514"
+    model_id = "anthropic/claude-sonnet-4-5"
     settings = _make_settings(
         tmp_path,
         MILL_MODEL="deepseek/deepseek-v4-pro",
@@ -404,7 +404,7 @@ def test_memory_updated_includes_new_proposals(tmp_path, monkeypatch):
     })
 
     result = scouting.run_scout_agent(settings=settings, memory="")
-    assert "anthropic/claude-sonnet-4-20250514" in result.updated_memory
+    assert "anthropic/claude-sonnet-4-5" in result.updated_memory
     assert "MILL_MODEL" in result.updated_memory
 
 
@@ -726,7 +726,7 @@ def test_evaluate_zero_providers():
 
 def test_latency_timeout_note_slow_candidate(tmp_path, monkeypatch):
     """A slow candidate gets a timeout advisory in the draft body."""
-    model_id = "anthropic/claude-sonnet-4-20250514"
+    model_id = "anthropic/claude-sonnet-4-5"
     settings = _make_settings(
         tmp_path,
         MILL_MODEL="deepseek/deepseek-v4-pro",
@@ -994,7 +994,7 @@ def test_parse_memory_proposed_extracts_model_ids():
     memory = """# Scout Memory
 
 ## Proposed
-- `anthropic/claude-sonnet-4-20250514` for MILL_MODEL (2025-01-15)
+- `anthropic/claude-sonnet-4-5` for MILL_MODEL (2025-01-15)
 - `google/gemini-2.5-pro` for MILL_REFINE_MODEL (2025-01-15)
 
 ## Declined
@@ -1002,7 +1002,7 @@ def test_parse_memory_proposed_extracts_model_ids():
 """
     result = scouting._parse_memory(memory)
     assert "MILL_MODEL" in result
-    assert "anthropic/claude-sonnet-4-20250514" in result["MILL_MODEL"]
+    assert "anthropic/claude-sonnet-4-5" in result["MILL_MODEL"]
     assert "MILL_REFINE_MODEL" in result
     assert "google/gemini-2.5-pro" in result["MILL_REFINE_MODEL"]
 
@@ -1010,11 +1010,11 @@ def test_parse_memory_proposed_extracts_model_ids():
 def test_build_updated_memory_empty():
     result = scouting._build_updated_memory(
         "",
-        [("MILL_MODEL", "anthropic/claude-sonnet-4-20250514", "coordinator")],
+        [("MILL_MODEL", "anthropic/claude-sonnet-4-5", "coordinator")],
     )
     assert "# Scout Memory" in result
     assert "## Proposed" in result
-    assert "anthropic/claude-sonnet-4-20250514" in result
+    assert "anthropic/claude-sonnet-4-5" in result
 
 
 def test_build_updated_memory_appends():
