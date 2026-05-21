@@ -261,6 +261,19 @@ def test_web_fetch_confined_to_web_research_subagent():
     assert offenders == [], f"web_fetch leaked into: {offenders}"
 
 
+def test_system_prompt_forbids_guessing_line_numbers():
+    """Invariant lock: the refine agent's SYSTEM_PROMPT must forbid
+    guessing line numbers or byte offsets and prescribe asking explore
+    for exact locations first."""
+    from robotsix_mill.agents.refining import SYSTEM_PROMPT
+
+    sentinel = "Never guess line numbers"
+    assert sentinel in SYSTEM_PROMPT, (
+        f"SYSTEM_PROMPT must contain anti-guessing guidance ({sentinel!r}); "
+        "found no match."
+    )
+
+
 # --- dedup guard tests ---
 
 

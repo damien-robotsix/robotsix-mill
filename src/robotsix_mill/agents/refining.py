@@ -86,6 +86,11 @@ questions.
   behaviour (e.g. `pytest tests/test_foo.py -x --tb=long`,
   `python -c "import module; …"`, linters), re-run with
   `run_command`. The sandbox is read-only; you cannot mutate the repo.
+- Never guess line numbers or byte offsets. When you need a specific
+  location in a file, ask `explore` to find it by symbol name first
+  (e.g. "what line is function X defined at in path/to/file.py?").
+  Only then use `read_file` with the confirmed offset. Guessing
+  wastes calls and adds latency with zero upside.
 - When the ticket has ``artifacts/evidence.txt``, incorporate its
   contents (e.g. the exact failing command, stdout/stderr, traceback)
   into the refined spec so the implement agent has the raw evidence
