@@ -234,16 +234,26 @@ def list_recent_traces(
     """
     cost_filter_active = min_cost is not None or max_cost is not None
 
-    # No cost filter: single fetch, return as-is (no pagination cost).
+    def _named(t: dict) -> bool:
+        """A trace is 'ready for review' iff its root span has closed
+        and propagated a name. In-flight traces show as unnamed/null
+        until completion — they shouldn't appear in the picker since
+        deep review can't analyse a partial observation tree anyway."""
+        n = t.get("name")
+        return isinstance(n, str) and n.strip() != ""
+
+    # No cost filter: single fetch, drop unnamed.
     if not cost_filter_active:
+        # Over-fetch a bit so dropping unnamed still gives us ``limit``
+        # named ones in the common case (named traces are dominant).
         data = _langfuse_api_get(
             settings,
             "/api/public/traces",
-            params={"orderBy": "timestamp.desc", "limit": min(limit, 100)},
+            params={"orderBy": "timestamp.desc", "limit": min(limit * 2, 100)},
         )
         if data is None:
             return []
-        return data.get("data", [])[:limit]
+        return [t for t in data.get("data", []) if _named(t)][:limit]
 
     # Cost filter active: paginate so the cost filter is applied to ALL
     # recent traces (in chronological order) until we have ``limit``
@@ -285,6 +295,8 @@ def list_recent_traces(
             break  # exhausted Langfuse's history
         for t in traces:
             examined += 1
+            if not _named(t):
+                continue  # in-flight trace — skip
             c = _cost(t)
             if min_cost is not None and c < min_cost:
                 continue

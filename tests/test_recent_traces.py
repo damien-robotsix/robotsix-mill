@@ -32,8 +32,10 @@ def _settings(tmp_path):
     )
 
 
-def _trace(tid: str, cost: float = 0.0) -> dict:
-    return {"id": tid, "name": "n", "timestamp": "2026-05-21T00:00:00Z",
+def _trace(tid: str, cost: float = 0.0, name: str = "n") -> dict:
+    """Build a fake trace. Default name='n' (a named/completed trace).
+    Pass name=None or "" to simulate an in-flight unnamed trace."""
+    return {"id": tid, "name": name, "timestamp": "2026-05-21T00:00:00Z",
             "sessionId": "s", "totalCost": cost, "userId": None}
 
 
@@ -137,6 +139,45 @@ def test_examine_cap_bounds_pagination(tmp_path, monkeypatch):
     assert out == []
     # examine_cap = max(10*20, 500) = 500, page size 100 → at most 5 pages.
     assert len(calls) <= 5, f"unbounded pagination: {len(calls)} pages"
+
+
+def test_unnamed_traces_filtered_out_no_cost_filter(tmp_path, monkeypatch):
+    """In-flight traces show as unnamed (root span hasn't closed +
+    propagated a name yet). They can't be deep-reviewed (partial
+    observation tree), so the picker excludes them."""
+    def fake_get(settings, path, params=None):
+        # Mix of named and unnamed (None/empty) traces.
+        return {"data": [
+            _trace("t1", 0.01, name="refine"),
+            _trace("t2", 0.02, name=None),       # in-flight
+            _trace("t3", 0.03, name=""),         # in-flight
+            _trace("t4", 0.04, name="implement"),
+            _trace("t5", 0.05, name="retrospect"),
+        ]}
+
+    from robotsix_mill import langfuse_client
+    monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
+
+    out = langfuse_client.list_recent_traces(_settings(tmp_path), limit=10)
+    assert [t["id"] for t in out] == ["t1", "t4", "t5"]
+
+
+def test_unnamed_traces_filtered_out_with_cost_filter(tmp_path, monkeypatch):
+    """Same filter applies under the paginated cost-filter path."""
+    def fake_get(settings, path, params=None):
+        return {"data": [
+            _trace("t1", 0.05, name="refine"),
+            _trace("t2", 0.06, name=None),       # in-flight, excluded
+            _trace("t3", 0.07, name="implement"),
+        ]}
+
+    from robotsix_mill import langfuse_client
+    monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
+
+    out = langfuse_client.list_recent_traces(
+        _settings(tmp_path), limit=10, min_cost=0.01,
+    )
+    assert [t["id"] for t in out] == ["t1", "t3"]
 
 
 def test_cost_filter_handles_empty_page(tmp_path, monkeypatch):
