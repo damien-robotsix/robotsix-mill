@@ -232,6 +232,8 @@ def test_all_configured_models_optimal_produces_no_draft(tmp_path, monkeypatch):
         MILL_RETROSPECT_MODEL=model_id,
         MILL_AUDIT_MODEL=model_id,
         MILL_AGENT_CHECK_MODEL=model_id,
+        MILL_DEDUP_MODEL=model_id,
+        MILL_TRACE_INSPECTOR_MODEL=model_id,
     )
 
     current = _model_info(model_id)
