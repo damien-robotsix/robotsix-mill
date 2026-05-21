@@ -500,11 +500,17 @@ def deep_review_trace(
         try:
             detail = fetch_trace_detail(settings, trace_id)
             if detail is None:
-                state.deep_review_results[trace_id] = {
+                data = {
                     "status": "error",
                     "error": "trace unavailable — could not fetch from Langfuse",
                     "findings": [],
+                    "source_trace_name": "(unnamed)",
+                    "tool_errors": [],
+                    "agent_limitations": [],
+                    "optimizations": [],
                 }
+                state.deep_review_results[trace_id] = data
+                state.deep_review_store.put(trace_id, data)
                 registry.finish_error(
                     run_id, f"deep review of trace {trace_id}: trace unavailable"
                 )
@@ -587,8 +593,13 @@ def deep_review_trace(
                 "trace_id": trace_id,
                 "findings": [f.model_dump() for f in result.findings],
                 "error": result.error,
+                "tool_errors": result.tool_errors,
+                "agent_limitations": result.agent_limitations,
+                "optimizations": result.optimizations,
             }
+            data["source_trace_name"] = detail.get("name", "(unnamed)")
             state.deep_review_results[trace_id] = data
+            state.deep_review_store.put(trace_id, data)
 
             n_findings = len(result.findings)
             n_te = len(result.tool_errors)
@@ -606,11 +617,17 @@ def deep_review_trace(
             log.info("deep review of trace %s complete", trace_id)
         except Exception as e:  # noqa: BLE001 — background; just log
             log.exception("deep review of trace %s failed", trace_id)
-            state.deep_review_results[trace_id] = {
+            data = {
                 "status": "error",
                 "error": str(e),
                 "findings": [],
+                "source_trace_name": "(unnamed)",
+                "tool_errors": [],
+                "agent_limitations": [],
+                "optimizations": [],
             }
+            state.deep_review_results[trace_id] = data
+            state.deep_review_store.put(trace_id, data)
             registry.finish_error(run_id, str(e))
 
     # Mark as running before thread starts.
@@ -628,13 +645,29 @@ def get_deep_review_result(
 ) -> dict:
     """Return the stored deep-review result for *trace_id*."""
     state = request.app.state
+    # Check in-memory first (catches running + recently completed).
     results = getattr(state, "deep_review_results", None)
-    if not results or trace_id not in results:
-        raise HTTPException(404, "no review found for this trace")
-    entry = results[trace_id]
-    if isinstance(entry, dict) and entry.get("status") == "running":
-        return entry  # no explicit status_code=202 needed; body signals it
-    return entry
+    if results and trace_id in results:
+        entry = results[trace_id]
+        if isinstance(entry, dict) and entry.get("status") == "running":
+            return entry
+        return entry
+    # Fall back to disk store.
+    store = getattr(state, "deep_review_store", None)
+    if store is not None:
+        entry = store.get(trace_id)
+        if entry is not None:
+            return entry
+    raise HTTPException(404, "no review found for this trace")
+
+
+@router.get("/deep-review")
+def list_deep_reviews(request: Request) -> list[dict]:
+    """Return all stored deep reviews, newest first. Empty list if none."""
+    store = getattr(request.app.state, "deep_review_store", None)
+    if store is None:
+        return []
+    return store.list_all()
 
 
 @router.post("/health-check", status_code=202)

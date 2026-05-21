@@ -749,3 +749,189 @@ def test_board_js_includes_depends_on_rendering(client):
     assert "depends_on" in js
     assert "unmet_deps" in js
     assert "⏳ waiting on" in js
+
+
+# -- DeepReviewStore unit tests -----------------------------------------
+
+
+def test_deep_review_store_round_trip(tmp_path):
+    from robotsix_mill.runtime.deep_review_store import DeepReviewStore
+
+    store = DeepReviewStore(tmp_path / "reviews.json")
+    store.put("a", {"status": "ok", "trace_id": "a"})
+    store.put("b", {"status": "error", "trace_id": "b", "error": "boom"})
+    store.put("c", {"status": "ok", "trace_id": "c"})
+
+    entries = store.list_all()
+    assert len(entries) == 3
+    # Newest first — "c" should be first, then "b", then "a".
+    assert entries[0]["trace_id"] == "c"
+    assert entries[1]["trace_id"] == "b"
+    assert entries[2]["trace_id"] == "a"
+
+    # All entries have finished_at.
+    for e in entries:
+        assert "finished_at" in e
+
+    # get by trace_id
+    assert store.get("a")["trace_id"] == "a"
+    assert store.get("b")["status"] == "error"
+    assert store.get("c")["status"] == "ok"
+    assert store.get("nonexistent") is None
+
+
+def test_deep_review_store_cap_enforcement(tmp_path):
+    from robotsix_mill.runtime.deep_review_store import DeepReviewStore
+
+    store = DeepReviewStore(tmp_path / "reviews.json")
+    for i in range(25):
+        store.put(f"trace-{i:03d}", {"status": "ok", "trace_id": f"trace-{i:03d}", "idx": i})
+
+    entries = store.list_all()
+    assert len(entries) == 20
+    # The 20 newest — these are the ones with highest "idx" (since put later).
+    kept_ids = {e["trace_id"] for e in entries}
+    for i in range(5):
+        assert f"trace-{i:03d}" not in kept_ids  # oldest 5 evicted
+    for i in range(5, 25):
+        assert f"trace-{i:03d}" in kept_ids
+
+
+def test_deep_review_store_atomic_write_integrity(tmp_path):
+    """After each put(), the file on disk is always valid JSON."""
+    import json
+    from robotsix_mill.runtime.deep_review_store import DeepReviewStore
+
+    store = DeepReviewStore(tmp_path / "reviews.json")
+    for i in range(5):
+        store.put(f"trace-{i}", {"status": "ok", "trace_id": f"trace-{i}"})
+        raw = (tmp_path / "reviews.json").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert isinstance(data, list)
+        # No tmp file left behind.
+        assert not (tmp_path / "reviews.json.tmp").exists()
+
+
+def test_deep_review_store_corrupt_file_recovery(tmp_path):
+    from robotsix_mill.runtime.deep_review_store import DeepReviewStore
+
+    # Write invalid JSON to the file.
+    (tmp_path / "reviews.json").write_text("this is not json", encoding="utf-8")
+
+    store = DeepReviewStore(tmp_path / "reviews.json")
+    # Should not crash, should return empty.
+    assert store.list_all() == []
+    assert store.get("anything") is None
+
+    # A put() should replace the corrupt file with valid JSON.
+    store.put("recovered", {"status": "ok", "trace_id": "recovered"})
+    entries = store.list_all()
+    assert len(entries) == 1
+    assert entries[0]["trace_id"] == "recovered"
+
+    # File on disk should now be valid JSON.
+    import json
+    raw = (tmp_path / "reviews.json").read_text(encoding="utf-8")
+    assert json.loads(raw) == entries
+
+
+def test_deep_review_store_overwrite(tmp_path):
+    from robotsix_mill.runtime.deep_review_store import DeepReviewStore
+
+    store = DeepReviewStore(tmp_path / "reviews.json")
+    store.put("x", {"status": "ok", "trace_id": "x", "msg": "first"})
+    store.put("x", {"status": "error", "trace_id": "x", "msg": "second"})
+
+    entries = store.list_all()
+    assert len(entries) == 1
+    assert entries[0]["msg"] == "second"
+    assert entries[0]["status"] == "error"
+
+
+# -- Deep review API integration tests ---------------------------------
+
+
+def test_list_deep_reviews_returns_array(client):
+    """GET /deep-review returns a JSON array, 200."""
+    r = client.get("/deep-review")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+def test_list_deep_reviews_empty(client):
+    """GET /deep-review on a fresh store returns []."""
+    assert client.get("/deep-review").json() == []
+
+
+def test_list_deep_reviews_ordering(client):
+    """GET /deep-review returns entries newest-first."""
+    from robotsix_mill.runtime.deep_review_store import DeepReviewStore
+
+    store = DeepReviewStore(client.app.state.settings.data_dir / "deep_review_results.json")
+    store.put("a", {"status": "ok", "trace_id": "a", "source_trace_name": "test"})
+    store.put("b", {"status": "ok", "trace_id": "b", "source_trace_name": "test"})
+    store.put("c", {"status": "ok", "trace_id": "c", "source_trace_name": "test"})
+
+    r = client.get("/deep-review")
+    entries = r.json()
+    assert len(entries) == 3
+    assert entries[0]["trace_id"] == "c"
+    assert entries[1]["trace_id"] == "b"
+    assert entries[2]["trace_id"] == "a"
+
+
+def test_get_deep_review_falls_back_to_store(client):
+    """GET /deep-review/{trace_id} returns 200 for a store-only entry."""
+    from robotsix_mill.runtime.deep_review_store import DeepReviewStore
+
+    store = DeepReviewStore(client.app.state.settings.data_dir / "deep_review_results.json")
+    store.put("stored-trace", {
+        "status": "ok",
+        "trace_id": "stored-trace",
+        "source_trace_name": "test",
+        "tool_errors": [],
+        "agent_limitations": [],
+        "optimizations": [],
+        "error": "",
+        "findings": [],
+    })
+
+    # Entry is NOT in in-memory results.
+    assert "stored-trace" not in client.app.state.deep_review_results
+
+    r = client.get("/deep-review/stored-trace")
+    assert r.status_code == 200
+    assert r.json()["trace_id"] == "stored-trace"
+    assert r.json()["status"] == "ok"
+
+
+def test_get_deep_review_prefers_in_memory(client):
+    """GET /deep-review/{trace_id} prefers in-memory over store."""
+    from robotsix_mill.runtime.deep_review_store import DeepReviewStore
+
+    store = DeepReviewStore(client.app.state.settings.data_dir / "deep_review_results.json")
+    store.put("dual-trace", {
+        "status": "ok", "trace_id": "dual-trace",
+        "source_trace_name": "store_version",
+        "tool_errors": [], "agent_limitations": [], "optimizations": [],
+        "error": "", "findings": [],
+    })
+
+    # Put a different version in memory.
+    client.app.state.deep_review_results["dual-trace"] = {
+        "status": "error",
+        "trace_id": "dual-trace",
+        "error": "in-memory version",
+        "findings": [],
+    }
+
+    r = client.get("/deep-review/dual-trace")
+    assert r.status_code == 200
+    assert r.json()["status"] == "error"
+    assert r.json()["error"] == "in-memory version"
+
+
+def test_get_deep_review_404_when_not_found(client):
+    """GET /deep-review/{trace_id} returns 404 when not in memory or store."""
+    r = client.get("/deep-review/no-such-trace")
+    assert r.status_code == 404
