@@ -52,102 +52,17 @@ class ImplementStage(Stage):
         if not s.forge_remote_url:
             return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
 
-        ws = ctx.service.workspace(ticket)
-        repo_dir = ws.dir / "repo"
-        branch = f"{s.branch_prefix}{ticket.id}"
+        # Phase 1: clone and branch (or resume)
+        result = ImplementStage._clone_and_branch(ctx, ticket, s)
+        if isinstance(result, Outcome):
+            return result
+        repo_dir, branch, resuming = result
 
-        # Resume iff a prior run left this ticket's clone + branch behind.
-        resuming = (repo_dir / ".git").exists() and git_ops.branch_exists(
-            repo_dir, branch
-        )
-        if resuming:
-            git_ops.checkout(repo_dir, branch)
-            # Refresh the WIP branch onto current target before running:
-            # a branch pinned to an OLD base runs the in-sandbox test
-            # gate against stale code (e.g. a pre-fix conftest) and
-            # re-BLOCKS forever even after main is fixed. If it can't
-            # rebase cleanly, discard the stale WIP and re-clone fresh
-            # (a gate-blocked WIP was against a broken gate anyway).
-            if git_ops.try_rebase_onto(repo_dir, s.forge_target_branch):
-                log.info(
-                    "%s: resuming WIP branch (rebased onto %s)",
-                    ticket.id, s.forge_target_branch,
-                )
-            else:
-                log.warning(
-                    "%s: WIP rebase onto %s failed — re-cloning fresh",
-                    ticket.id, s.forge_target_branch,
-                )
-                resuming = False
-        if not resuming:
-            if repo_dir.exists():
-                shutil.rmtree(repo_dir)
-            try:
-                git_ops.clone(
-                    s.forge_remote_url,
-                    repo_dir,
-                    s.forge_target_branch,
-                    s.forge_token,
-                )
-            except subprocess.CalledProcessError as e:
-                return Outcome(
-                    State.BLOCKED, f"clone failed: {e.stderr[:300]}"
-                )
-            git_ops.create_branch(repo_dir, branch)
-
-        # Hard invariant: NEVER run the agent / sandbox without a
-        # materialized clone. A repo that was pruned after a prior
-        # delivery, rmtree'd by the resume path, or never created
-        # would otherwise blow up deep in the test sandbox with a
-        # confusing "repo not cloned" — *after* burning the expensive
-        # coordinator. Re-clone here; if that fails it's a clean,
-        # resumable BLOCK (next run re-clones) instead.
-        if not (repo_dir / ".git").exists():
-            log.warning(
-                "%s: clone missing before agent run — re-cloning",
-                ticket.id,
-            )
-            if repo_dir.exists():
-                shutil.rmtree(repo_dir, ignore_errors=True)
-            try:
-                git_ops.clone(
-                    s.forge_remote_url, repo_dir,
-                    s.forge_target_branch, s.forge_token,
-                )
-                git_ops.create_branch(repo_dir, branch)
-            except subprocess.CalledProcessError as e:
-                return Outcome(
-                    State.BLOCKED,
-                    "repo clone missing and re-clone failed — "
-                    f"resumable: {(e.stderr or '')[:200]}",
-                )
-        ctx.service.set_branch(ticket.id, branch)
-
-        spec = ws.read_description()
-
-        # The coordinator owns the explore→plan→implement→test loop
-        # (it re-explores fresh on a resume — no transcript needed).
-        try:
-            summary, _ = coding.run_implement_agent(
-                settings=s, repo_dir=repo_dir, spec=spec,
-            )
-        except AgentBudgetError as e:
-            self._finalize(
-                ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
-                ok=False,
-            )
-            return Outcome(
-                State.BLOCKED,
-                f"agent budget cap — resumable (move to READY): {e}",
-            )
-        except AgentRunError as e:
-            self._finalize(
-                ctx, ticket, repo_dir, branch, f"agent error: {e}",
-                ok=False,
-            )
-            return Outcome(
-                State.BLOCKED, f"agent error — resumable: {e}"
-            )
+        # Phase 2: run implement agent
+        result = ImplementStage._run_implement_agent(ctx, ticket, repo_dir, branch, s)
+        if isinstance(result, Outcome):
+            return result
+        summary = result
 
         # Authoritative final gate: the coordinator already looped via
         # the test sub-agent, but the stage re-verifies once as the
@@ -193,3 +108,100 @@ class ImplementStage(Stage):
                 f"mill: {ticket.title} ({ticket.id})"
                 + ("" if ok else " [WIP]"),
             )
+
+    @staticmethod
+    def _clone_and_branch(ctx, ticket, settings):
+        ws = ctx.service.workspace(ticket)
+        repo_dir = ws.dir / "repo"
+        branch = f"{settings.branch_prefix}{ticket.id}"
+
+        # Resume iff a prior run left this ticket's clone + branch behind.
+        resuming = (repo_dir / ".git").exists() and git_ops.branch_exists(
+            repo_dir, branch
+        )
+        if resuming:
+            git_ops.checkout(repo_dir, branch)
+            # Refresh the WIP branch onto current target before running:
+            # a branch pinned to an OLD base runs the in-sandbox test
+            # gate against stale code (e.g. a pre-fix conftest) and
+            # re-BLOCKS forever even after main is fixed. If it can't
+            # rebase cleanly, discard the stale WIP and re-clone fresh
+            # (a gate-blocked WIP was against a broken gate anyway).
+            if git_ops.try_rebase_onto(repo_dir, settings.forge_target_branch):
+                log.info(
+                    "%s: resuming WIP branch (rebased onto %s)",
+                    ticket.id, settings.forge_target_branch,
+                )
+            else:
+                log.warning(
+                    "%s: WIP rebase onto %s failed — re-cloning fresh",
+                    ticket.id, settings.forge_target_branch,
+                )
+                resuming = False
+        if not resuming:
+            if repo_dir.exists():
+                shutil.rmtree(repo_dir)
+            try:
+                git_ops.clone(
+                    settings.forge_remote_url,
+                    repo_dir,
+                    settings.forge_target_branch,
+                    settings.forge_token,
+                )
+            except subprocess.CalledProcessError as e:
+                return Outcome(
+                    State.BLOCKED, f"clone failed: {e.stderr[:300]}"
+                )
+            git_ops.create_branch(repo_dir, branch)
+
+        # Hard invariant: NEVER run the agent / sandbox without a
+        # materialized clone.
+        if not (repo_dir / ".git").exists():
+            log.warning(
+                "%s: clone missing before agent run — re-cloning",
+                ticket.id,
+            )
+            if repo_dir.exists():
+                shutil.rmtree(repo_dir, ignore_errors=True)
+            try:
+                git_ops.clone(
+                    settings.forge_remote_url, repo_dir,
+                    settings.forge_target_branch, settings.forge_token,
+                )
+                git_ops.create_branch(repo_dir, branch)
+            except subprocess.CalledProcessError as e:
+                return Outcome(
+                    State.BLOCKED,
+                    "repo clone missing and re-clone failed — "
+                    f"resumable: {(e.stderr or '')[:200]}",
+                )
+        ctx.service.set_branch(ticket.id, branch)
+        return (repo_dir, branch, resuming)
+
+    @staticmethod
+    def _run_implement_agent(ctx, ticket, repo_dir, branch, settings):
+        ws = ctx.service.workspace(ticket)
+        spec = ws.read_description()
+
+        try:
+            summary, _ = coding.run_implement_agent(
+                settings=settings, repo_dir=repo_dir, spec=spec,
+            )
+        except AgentBudgetError as e:
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
+                ok=False,
+            )
+            return Outcome(
+                State.BLOCKED,
+                f"agent budget cap — resumable (move to READY): {e}",
+            )
+        except AgentRunError as e:
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, f"agent error: {e}",
+                ok=False,
+            )
+            return Outcome(
+                State.BLOCKED, f"agent error — resumable: {e}"
+            )
+        return summary
