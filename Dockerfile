@@ -3,7 +3,7 @@
 # production.  Nothing from this stage (except copied artifacts) lands in
 # the final image.
 # =============================================================================
-FROM python:3.14-slim AS builder
+FROM python:3.14-slim@sha256:7d8de339aa8619f9b25e7d474d687ae4f6ef9704adad90a136af0f485adeccb7 AS builder
 
 # pipefail-aware shell so a failure on the LHS of a pipe (e.g. the
 # sha256 verification `echo … | sha256sum -c -`) propagates and the
@@ -67,7 +67,7 @@ RUN pip install --no-cache-dir --root-user-action=ignore ".[${INSTALL_EXTRAS}]"
 # Stage 2: base — shared runtime setup (not built directly; extended by
 # production and dev).
 # =============================================================================
-FROM python:3.14-slim AS base
+FROM python:3.14-slim@sha256:7d8de339aa8619f9b25e7d474d687ae4f6ef9704adad90a136af0f485adeccb7 AS base
 
 # Acquire::Retries lets apt recover from transient mirror glitches.
 # Apt version pins validated against Debian Trixie (13) as shipped in
