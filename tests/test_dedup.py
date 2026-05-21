@@ -4,6 +4,7 @@ UserError every time -> dedup silently dead). These lock the contract.
 """
 
 from robotsix_mill.agents import dedup
+from robotsix_mill.agents.dedup import DedupResult
 
 
 class _Result:
@@ -18,7 +19,7 @@ class _FakeAgent:
     def run_sync(self, prompt, **kwargs):
         self.calls.append((prompt, kwargs))
         return _Result(
-            {"duplicate_of": "T-1", "already_done": None, "reason": "dup"}
+            DedupResult(duplicate_of="T-1", already_done=None, reason="dup")
         )
 
 
@@ -66,10 +67,10 @@ def test_graceful_on_agent_error(settings, monkeypatch):
     }
 
 
-def test_non_dict_output_is_handled(settings, monkeypatch):
+def test_non_dedup_result_output_is_handled(settings, monkeypatch):
     class _Weird:
         def run_sync(self, *a, **k):
-            return _Result("not a dict")
+            return _Result("not a DedupResult")
 
     _patch_agent(monkeypatch, _Weird())
     out = dedup.run_dedup_check(
