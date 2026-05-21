@@ -99,6 +99,20 @@ def session_cost(settings: Settings, session_id: str) -> float:
     return cost
 
 
+def session_cost_cached(session_id: str) -> float:
+    """Non-blocking cost lookup: return the cached value if any, else
+    0.0. NEVER hits the network. Use this in hot paths like the board's
+    /tickets list, which polls every 5s; with N tickets cold the full
+    ``session_cost`` would issue N Langfuse HTTP calls and block the
+    response for seconds, long enough that the next poll tick cancels
+    its predecessor. Per-ticket detail GETs still use the full
+    ``session_cost`` to keep the drawer authoritative."""
+    hit = _cost_cache.get(session_id)
+    if hit is None:
+        return 0.0
+    return hit[0]
+
+
 def fetch_trace_detail(settings: Settings, trace_id: str) -> dict | None:
     """Fetch a single trace by ID from the Langfuse API.
 

@@ -69,15 +69,17 @@ def list_tickets(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
-    # The board polls this every 5s. With many CLOSED/DONE tickets,
-    # returning all of them each refresh is wasted bytes + a session_cost
-    # call per ticket (Langfuse cache miss). The board passes
-    # include_closed=false; default stays True for API/back-compat.
+    # The board polls this every 5s. Cost lookups go cache-only here
+    # (blocking_cost=False): on a cold cache, N serial Langfuse HTTP
+    # calls would make the response take seconds, longer than the poll
+    # interval, so each tick would cancel its predecessor and the board
+    # would never paint. Per-ticket detail GETs still do the full
+    # lookup, so opening the drawer always shows the authoritative cost.
     exclude = None
     if not include_closed:
         exclude = {State.CLOSED, State.DONE}
     return [
-        enrich_ticket_read(t, settings, svc)
+        enrich_ticket_read(t, settings, svc, blocking_cost=False)
         for t in svc.list(state=state, exclude_states=exclude)
     ]
 

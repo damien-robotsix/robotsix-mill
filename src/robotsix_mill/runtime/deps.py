@@ -56,15 +56,24 @@ def _origin_session_url(ticket: Ticket, settings: Settings) -> str | None:
     return None
 
 
-def with_cost(ticket: Ticket, settings: Settings) -> Ticket:
+def with_cost(ticket: Ticket, settings: Settings, *, blocking: bool = True) -> Ticket:
     """Populate ``cost_usd`` on *ticket* (in-place) from the Langfuse session.
 
     Cost is NOT persisted — it lives in Langfuse; this is read-time
     only.  Mutates and returns the same object.
-    """
-    from ..langfuse_client import session_cost
 
-    ticket.cost_usd = session_cost(settings, ticket.id)
+    When ``blocking=False`` the lookup is cache-only — returns the
+    cached value if present, else 0.0, and never hits the network. Use
+    this for list endpoints like /tickets which the board polls every
+    5s; otherwise N cold-cache tickets would issue N serial Langfuse
+    HTTP calls and the response would take seconds.
+    """
+    from ..langfuse_client import session_cost, session_cost_cached
+
+    if blocking:
+        ticket.cost_usd = session_cost(settings, ticket.id)
+    else:
+        ticket.cost_usd = session_cost_cached(ticket.id)
     return ticket
 
 
@@ -101,11 +110,22 @@ def _pr_url(ticket: Ticket, settings: Settings) -> str | None:
     return None
 
 
-def enrich_ticket_read(ticket: Ticket, settings: Settings, service: TicketService) -> TicketRead:
+def enrich_ticket_read(
+    ticket: Ticket,
+    settings: Settings,
+    service: TicketService,
+    *,
+    blocking_cost: bool = True,
+) -> TicketRead:
     """Convert a :class:`Ticket` into a :class:`TicketRead`, populating
     ``cost_usd`` from Langfuse, computing ``origin_session_url``, and
-    resolving unmet dependencies."""
-    with_cost(ticket, settings)
+    resolving unmet dependencies.
+
+    ``blocking_cost=False`` makes the cost lookup cache-only — used by
+    the polled /tickets list endpoint to avoid N serial Langfuse calls
+    on a cold cache stalling the response past the next poll tick.
+    """
+    with_cost(ticket, settings, blocking=blocking_cost)
     return TicketRead(
         id=ticket.id,
         title=ticket.title,
