@@ -492,6 +492,7 @@ def deep_review_trace(
 
     from ..langfuse_client import fetch_trace_detail
     from ..agents.trace_inspector import run_trace_inspector
+    from . import tracing
 
     run_id = registry.start("deep-review")
 
@@ -514,9 +515,21 @@ def deep_review_trace(
             import json as _json
 
             trace_data = _json.dumps(detail, default=str)
-            result = run_trace_inspector(
-                settings=settings, trace_data=trace_data
-            )
+            # Wrap the LLM call in an OTel root span so its pydantic-ai
+            # spans get exported as a properly-named, session-grouped
+            # Langfuse trace. Without this the inspector's spans are
+            # orphans (no session.id stamped) and the user has no way
+            # to find the analysis afterwards — even a "no issues"
+            # result should be inspectable.
+            #   session.id = "deep-review:<source_trace_id>"  groups all
+            #     deep reviews of the SAME source trace under one session.
+            #   trace name = "deep-review"  matches the run-registry kind.
+            with tracing.start_ticket_root_span(
+                f"deep-review:{trace_id}", "deep-review"
+            ):
+                result = run_trace_inspector(
+                    settings=settings, trace_data=trace_data
+                )
             data = {
                 "status": "ok",
                 "trace_id": trace_id,
