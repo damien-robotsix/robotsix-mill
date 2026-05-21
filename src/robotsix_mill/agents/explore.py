@@ -125,12 +125,13 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
 
 def make_explore_tool(settings: Settings, repo_dir: Path):
     def explore(question: str) -> str:
-        """Ask a fresh, context-isolated sub-agent a specific question
-        about the repository (structure, where something lives, or the
-        full content of named files). It reads the repo so you don't
-        have to — keep YOUR context lean by delegating all reading
-        here. Returns concise paths/symbols/line-ranges, never whole
-        files. Ask for exactly what you need next."""
+        """Ask a fresh, context-isolated sub-agent a complex, multi-step
+        question about the repository — questions that would require
+        navigating several files to answer. For simple, single-step
+        lookups (one file path, one symbol name), use read_file or
+        list_dir directly instead. Returns concise paths/symbols/
+        line-ranges, never whole files. Batch related questions into a
+        single call where possible."""
         return run_explore(
             settings=settings, repo_dir=repo_dir, question=question
         )
