@@ -19,6 +19,7 @@ from ..core import db
 from ..core.service import TicketService
 from ..stages import StageContext
 from . import tracing
+from .deep_review_store import DeepReviewStore
 from .run_registry import RunRegistry
 from .worker import Worker
 
@@ -76,6 +77,9 @@ def create_lifespan(
         app.state.worker = worker
         app.state.run_registry = run_registry
         app.state.deep_review_results = {}
+        app.state.deep_review_store = DeepReviewStore(
+            settings.data_dir / "deep_review_results.json"
+        )
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
         try:
