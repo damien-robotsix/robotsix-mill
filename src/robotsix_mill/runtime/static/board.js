@@ -52,6 +52,15 @@ async function refresh(){
  if(tok!==refreshSeq)return;        // a newer refresh started — drop stale
  const by={}; ST.forEach(s=>by[s]=[]);
  ts.forEach(t=>(by[t.state]=by[t.state]||[]).push(t));
+ // Terminal-ish columns get reverse-chronological ordering so the
+ // most recently closed/done ticket is on top — useful when scanning
+ // "what just finished" without scrolling past stale items. CLOSED is
+ // terminal, so its updated_at IS its closed_at; DONE is the
+ // retrospect-in-flight window. Active columns keep creation-order
+ // (oldest queued at top — natural FIFO of work).
+ ["closed","done"].forEach(s=>{
+  if(by[s]) by[s].sort((a,b)=>(b.updated_at||"").localeCompare(a.updated_at||""));
+ });
  document.getElementById("meta").textContent=
    ts.length+" tickets · "+new Date().toLocaleTimeString();
  document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"||wantClosed)).map(s=>`<div class="col">
