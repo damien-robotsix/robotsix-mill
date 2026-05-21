@@ -61,6 +61,9 @@ B. TOOLING / SECURITY COVERAGE (use `web_research` for EXTERNAL
    security scanning, supply-chain, dependency hygiene, etc. The same
    rule applies: a static linter rule is fine as a direct proposal,
    but a dimension needing judgement -> propose a dedicated agent.
+   Use `run_command` to run local tooling (linters, scanners,
+   dependency checkers) and gather empirical evidence before
+   proposing gaps.
 
 Model every proposed agent on the project's existing periodic/
 sandboxed agent pattern. Prefer a focused new agent over an
@@ -195,7 +198,7 @@ def run_audit_agent(
 
         ro = [
             t for t in build_fs_tools(repo_dir, settings)
-            if t.__name__ in ("read_file", "list_dir")
+            if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 

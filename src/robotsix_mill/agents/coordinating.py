@@ -78,9 +78,11 @@ Procedure:
 2. Make the smallest change that fully satisfies the spec (prefer
    `edit_file` over `write_file`); add/adjust tests for the behaviour.
 3. `run_tests`. On PASS, stop and reply with a 1–3 sentence summary.
-4. On FAIL, fix using the diagnosis and `run_tests` again — at most
-   {max_iters} test cycles; if still failing, stop and reply starting
-   with "UNRESOLVED:" and a short reason.
+4. On FAIL, use `run_command` to narrow the problem — re-run just
+   the failing test, check with a linter, inspect `git diff` — then
+   fix and `run_tests` again; at most {max_iters} test cycles. If
+   still failing, stop and reply starting with "UNRESOLVED:" and a
+   short reason.
 
 Keep your context lean: prefer `explore` over wide reading; never
 paste whole files into your reasoning. Do not commit/push/touch git.
@@ -137,11 +139,12 @@ def run_coordinator(
     from .retry import call_with_retry
 
     fs = build_fs_tools(repo_dir, settings)
-    # the main agent reads + writes itself; tests go through the test
-    # sub-agent (run_tests), so no raw run_command here.
+    # the main agent reads + writes itself and includes run_command
+    # for focused diagnosis between run_tests cycles (re-run a single
+    # failing test, run a linter, inspect git diff, etc.).
     fs_tools = [
         t for t in fs if t.__name__ in
-        ("read_file", "write_file", "list_dir", "edit_file", "delete_file")
+        ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
     ]
     agent = build_agent(
         settings,
