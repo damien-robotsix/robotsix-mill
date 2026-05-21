@@ -821,11 +821,18 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
     proposed_set = _parse_memory(memory)
     capable_cands, cheap_cands = _load_candidates(memory)
     client = httpx.Client()
+    # NOTE: this function has two top-level return paths. Both close the
+    # client explicitly to release the connection pool — the bare
+    # `client = httpx.Client()` without close() used to leak sockets
+    # under high churn (audit ticket 6617). A `with` block would be
+    # cleaner but would require re-indenting ~130 lines of body
+    # (including several nested helpers), inflating the diff.
 
     try:
         all_models = _fetch_models(client, settings)
     except httpx.HTTPError as exc:
         log.warning("Failed to fetch /models: %s", exc)
+        client.close()
         return ScoutResult(updated_memory=memory)
 
     needed_ids: set[str] = set()
@@ -893,6 +900,7 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
 
     memory = _rebuild_candidates_section(memory, capable_cands, cheap_cands, dead_ids)
     updated_memory = _build_updated_memory(memory, new_proposals)
+    client.close()  # release the httpx connection pool (audit 6617)
     return ScoutResult(
         updated_memory=updated_memory,
         draft_titles=drafts_titles,
