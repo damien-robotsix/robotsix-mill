@@ -41,20 +41,19 @@ CHEAP_ROLES = [
 
 ALL_ROLES = CAPABLE_ROLES + STRUCTURED_ROLES + CHEAP_ROLES
 
-CAPABLE_CANDIDATES = [
-    # ``claude-sonnet-4-20250514`` was retired by OpenRouter (404 on
-    # /endpoints) — the current id is ``claude-sonnet-4-5``. The old
-    # one polluted scout logs and silently shrank the candidate pool.
-    "anthropic/claude-sonnet-4-5",
-    "openai/gpt-4o",
-    "google/gemini-2.5-pro",
-]
-CHEAP_CANDIDATES = [
-    "deepseek/deepseek-v4-flash",
-    "meta-llama/llama-4-maverick",
-    "google/gemini-2.0-flash-001",
-    "anthropic/claude-3.5-haiku",
-]
+_SEED_CANDIDATES: dict[str, list[str]] = {
+    "capable": [
+        "anthropic/claude-sonnet-4-5",
+        "openai/gpt-4o",
+        "google/gemini-2.5-pro",
+    ],
+    "cheap": [
+        "deepseek/deepseek-v4-flash",
+        "meta-llama/llama-4-maverick",
+        "google/gemini-2.0-flash-001",
+        "anthropic/claude-3.5-haiku",
+    ],
+}
 
 LATENCY_P99_WARN_MS = 10_000  # 10 seconds
 THROUGHPUT_P50_WARN_TPS = 20
@@ -228,10 +227,10 @@ def _parse_percentile_stats(raw: dict | None) -> PercentileStats | None:
 
 def _fetch_endpoints(
     client: httpx.Client, settings: Settings, model_id: str
-) -> list[EndpointInfo]:
+) -> list[EndpointInfo] | None:
     """Fetch endpoint/availability data for a single model from OpenRouter.
-    Returns a list of :class:`EndpointInfo` objects, or an empty list on
-    HTTP errors."""
+    Returns a list of :class:`EndpointInfo` objects, ``None`` when the
+    model returns 404 (retired), or an empty list on transient HTTP errors."""
     headers = _auth_headers(settings)
     try:
         r = client.get(
@@ -240,6 +239,12 @@ def _fetch_endpoints(
             timeout=30.0,
         )
         r.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            log.info("Model %s returned 404 — may have been retired", model_id)
+            return None
+        log.warning("Failed to fetch endpoints for %s (HTTP %s)", model_id, exc.response.status_code)
+        return []
     except httpx.HTTPError:
         log.warning("Failed to fetch endpoints for %s", model_id)
         return []
@@ -444,6 +449,159 @@ def _parse_memory(memory: str) -> dict[str, set[str]]:
                 env_var = m.group(2)
                 proposed.setdefault(env_var, set()).add(model_id)
     return proposed
+
+
+def _load_candidates(memory_text: str) -> tuple[list[str], list[str]]:
+    """Parse a ``## Candidates`` section from the memory ledger.
+
+    Returns ``(capable_list, cheap_list)``.  Each tier falls back to
+    :data:`_SEED_CANDIDATES` when its list is absent or empty, or when
+    the section itself is missing / malformed.
+    """
+    capable: list[str] = []
+    cheap: list[str] = []
+    section: str | None = None
+    for line in memory_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## Candidates"):
+            section = "candidates"
+            continue
+        if stripped.startswith("## "):
+            if section == "candidates":
+                break
+            section = None
+            continue
+        if section != "candidates":
+            continue
+        if stripped.startswith("- capable:"):
+            continue
+        if stripped.startswith("- cheap:"):
+            continue
+        if stripped.startswith("  - "):
+            model_id = stripped[4:].strip()
+            if model_id:
+                # Assign to whichever tier was most recently seen.
+                # The section format interleaves tier markers:
+                #   - capable:
+                #     - id1
+                #     - id2
+                #   - cheap:
+                #     - id3
+                # We record which tier is "current" by scanning
+                # backwards for the nearest tier marker.
+                tier = _find_nearest_tier(memory_text, line)
+                if tier == "cheap":
+                    cheap.append(model_id)
+                else:
+                    capable.append(model_id)
+    # Fall back to seed per-tier when empty after parsing.
+    if not capable:
+        capable = list(_SEED_CANDIDATES["capable"])
+    if not cheap:
+        cheap = list(_SEED_CANDIDATES["cheap"])
+    return capable, cheap
+
+
+def _find_nearest_tier(memory_text: str, target_line: str) -> str | None:
+    """Find the nearest ``- capable:`` / ``- cheap:`` marker *above*
+    *target_line* in *memory_text*.  Returns ``"capable"``, ``"cheap"``,
+    or ``None``."""
+    lines = memory_text.splitlines()
+    try:
+        idx = lines.index(target_line)
+    except ValueError:
+        return None
+    for i in range(idx - 1, -1, -1):
+        stripped = lines[i].strip()
+        if stripped.startswith("- capable:"):
+            return "capable"
+        if stripped.startswith("- cheap:"):
+            return "cheap"
+    return None
+
+
+def _rebuild_candidates_section(
+    memory: str,
+    capable: list[str],
+    cheap: list[str],
+    dead_ids: set[str],
+) -> str:
+    """Rewrite the ``## Candidates`` section of *memory*, removing any
+    model id present in *dead_ids* from both *capable* and *cheap* lists.
+
+    Preserves all other sections unchanged.  When *memory* is empty or
+    whitespace-only, seeds the entire file from :data:`_SEED_CANDIDATES`
+    (minus *dead_ids*).
+    """
+    if not memory or memory.strip() == "":
+        return _seed_full_memory(capable, cheap, dead_ids)
+
+    filtered_capable = [c for c in capable if c not in dead_ids]
+    filtered_cheap = [c for c in cheap if c not in dead_ids]
+
+    lines = memory.splitlines(keepends=True)
+    section_start: int | None = None
+    section_end: int | None = None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("## Candidates"):
+            section_start = i
+            continue
+        if section_start is not None and stripped.startswith("## "):
+            section_end = i
+            break
+
+    candidate_block = _build_candidate_block(filtered_capable, filtered_cheap)
+
+    if section_start is not None:
+        if section_end is not None:
+            new_lines = lines[:section_start] + [candidate_block] + lines[section_end:]
+        else:
+            new_lines = lines[:section_start] + [candidate_block]
+        return "".join(new_lines)
+
+    # Section doesn't exist — insert before ## Proposed
+    proposed_idx = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith("## Proposed"):
+            proposed_idx = i
+            break
+    if proposed_idx is not None:
+        new_lines = lines[:proposed_idx] + [candidate_block] + lines[proposed_idx:]
+    else:
+        new_lines = lines + [candidate_block]
+    return "".join(new_lines)
+
+
+def _build_candidate_block(capable: list[str], cheap: list[str]) -> str:
+    """Build the ``## Candidates`` Markdown block from two model-id lists."""
+    block = "## Candidates\n"
+    block += "<!-- Edit the lists below to add or remove models the scout should evaluate.\n"
+    block += "     The scout will automatically remove models that return 404 from OpenRouter. -->\n"
+    block += "- capable:\n"
+    for cid in capable:
+        block += f"  - {cid}\n"
+    block += "- cheap:\n"
+    for cid in cheap:
+        block += f"  - {cid}\n"
+    return block
+
+
+def _seed_full_memory(
+    capable: list[str],
+    cheap: list[str],
+    dead_ids: set[str],
+) -> str:
+    """Return a fully-seeded memory ledger with header, candidates,
+    and empty Proposed / Declined sections."""
+    filtered_capable = [c for c in capable if c not in dead_ids]
+    filtered_cheap = [c for c in cheap if c not in dead_ids]
+    return (
+        "# Scout Memory\n\n"
+        + _build_candidate_block(filtered_capable, filtered_cheap)
+        + "\n## Proposed\n\n## Declined\n"
+    )
 
 
 def _build_updated_memory(
@@ -661,6 +819,7 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
     no real network calls are made during test runs.
     """
     proposed_set = _parse_memory(memory)
+    capable_cands, cheap_cands = _load_candidates(memory)
     client = httpx.Client()
 
     try:
@@ -685,18 +844,24 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
             if env_var in role_configs:
                 role_configs[env_var] = (attr, tier, label)
     for roles, cands in [
-        (CAPABLE_ROLES + STRUCTURED_ROLES, CAPABLE_CANDIDATES),
-        (CHEAP_ROLES, CHEAP_CANDIDATES),
+        (CAPABLE_ROLES + STRUCTURED_ROLES, capable_cands),
+        (CHEAP_ROLES, cheap_cands),
     ]:
         for cid in cands:
             needed_ids.add(cid)
 
     enriched: dict[str, ModelInfo] = {}
+    dead_ids: set[str] = set()
     for mid in needed_ids:
         base = all_models.get(mid)
         if base is None:
             base = ModelInfo(id=mid, name=mid)
-        endpoints = _fetch_endpoints(client, settings, mid)
+        endpoints_result = _fetch_endpoints(client, settings, mid)
+        if endpoints_result is None:
+            dead_ids.add(mid)
+            endpoints = []
+        else:
+            endpoints = endpoints_result
         enriched[mid] = ModelInfo(
             id=base.id,
             name=base.name,
@@ -714,7 +879,7 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
         configured_id = getattr(settings, attr, "")
         if not configured_id:
             continue
-        candidate_ids = CHEAP_CANDIDATES if tier == "cheap" else CAPABLE_CANDIDATES
+        candidate_ids = cheap_cands if tier == "cheap" else capable_cands
         already = proposed_set.get(env_var, set())
         results = _evaluate_role(
             env_var=env_var, attr=attr, tier=tier, label=label,
@@ -726,6 +891,7 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
             drafts_bodies.append(body)
             new_proposals.append((env_var, model_id, label))
 
+    memory = _rebuild_candidates_section(memory, capable_cands, cheap_cands, dead_ids)
     updated_memory = _build_updated_memory(memory, new_proposals)
     return ScoutResult(
         updated_memory=updated_memory,
