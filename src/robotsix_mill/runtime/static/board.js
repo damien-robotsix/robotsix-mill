@@ -366,6 +366,7 @@ let deepReviewOpen=false;
 let deepReviewTraceId=null;
 let deepReviewPollTimer=null;
 let deepReviewPollCount=0;
+let deepReviewPollStart=0;
 let deepReviewFindings=[];  // [{category, text}] for ticket creation
 async function openDeepReview(){
  if(deepReviewOpen){close_();return}
@@ -463,23 +464,64 @@ async function startDeepReview(){
   return;
  }
  deepReviewPollCount=0;
- deepReviewPollTimer=setInterval(pollDeepReviewResult,2000);
- pollDeepReviewResult(); // immediate first poll
+ // Backoff scheduling rather than fixed 2s interval. A real deep
+ // review on a long implement-run trace can take 60-120s; the old
+ // 30s hard cutoff was both wrong and operator-hostile (gave up
+ // before the answer arrived, then the user had no way to recover
+ // because the result is in-process state only).
+ //   first 60s: poll every 2s (catches quick results)
+ //   60-300s:  poll every 5s
+ //   >300s:    show "still running" but stop polling (5 min ceiling)
+ deepReviewPollStart=Date.now();
+ schedulePollDeepReview(2000);
+ pollDeepReviewResult();  // immediate first poll
+}
+function schedulePollDeepReview(ms){
+ if(deepReviewPollTimer){clearTimeout(deepReviewPollTimer)}
+ deepReviewPollTimer=setTimeout(pollDeepReviewResult, ms);
 }
 async function pollDeepReviewResult(){
  deepReviewPollCount++;
- if(deepReviewPollCount>15){ // ~30s
-  clearInterval(deepReviewPollTimer); deepReviewPollTimer=null;
-  document.getElementById("d").innerHTML=
-   '<h3>Deep Review</h3><div class="muted" style="color:#f87171;padding:12px 0">Review timed out — the trace may be too large or the agent is busy.</div>';
+ const elapsed=Math.round((Date.now()-deepReviewPollStart)/1000);
+ const HARD_CAP_S=300; // 5 min
+ const res=await jget("/deep-review/"+deepReviewTraceId);
+ if(res && res.status && res.status!=="running"){
+  // Result ready (ok OR error)
+  if(deepReviewPollTimer){clearTimeout(deepReviewPollTimer);deepReviewPollTimer=null}
+  renderDeepReviewResult(res);
   return;
  }
- const res=await jget("/deep-review/"+deepReviewTraceId);
- if(!res){return}
- if(res.status==="running"){return} // still going
- clearInterval(deepReviewPollTimer); deepReviewPollTimer=null;
- // result ready
- renderDeepReviewResult(res);
+ // Still running — update the UI with elapsed time and keep polling
+ // unless we've hit the hard cap.
+ const stillRunningHtml=
+  '<h3>Deep Review</h3>'+
+  '<div class="muted" style="padding:12px 0">'+
+  '⏳ Still analysing… <span style="color:#aab0bd">('+elapsed+'s elapsed)</span>'+
+  '<div style="font-size:11px;margin-top:6px">Deep reviews can take 1-3 minutes on large traces; this window will update when the result arrives.</div>'+
+  '</div>';
+ document.getElementById("d").innerHTML=stillRunningHtml;
+ if(elapsed >= HARD_CAP_S){
+  // Stop polling but DON'T claim failure — the backend may still
+  // finish. The result will land in app.state.deep_review_results
+  // and can be re-fetched later (e.g. via a "Last Deep Review"
+  // panel — separate ticket).
+  if(deepReviewPollTimer){clearTimeout(deepReviewPollTimer);deepReviewPollTimer=null}
+  document.getElementById("d").innerHTML=
+   '<h3>Deep Review</h3>'+
+   '<div class="muted" style="color:#eab308;padding:12px 0">'+
+   '⏱ Still running after '+Math.floor(elapsed/60)+'m '+(elapsed%60)+'s — stopped polling but the analysis may still complete in the background.'+
+   '<div style="font-size:11px;margin-top:6px">Click below to keep waiting.</div>'+
+   '<button onclick="resumeDeepReviewPolling()" style="font-size:11px;margin-top:8px;padding:3px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer">Keep polling</button>'+
+   '</div>';
+  return;
+ }
+ // Backoff: first 60s every 2s, after that every 5s.
+ schedulePollDeepReview(elapsed<60 ? 2000 : 5000);
+}
+function resumeDeepReviewPolling(){
+ deepReviewPollStart=Date.now()-300000; // reset elapsed window
+ schedulePollDeepReview(2000);
+ pollDeepReviewResult();
 }
 function renderDeepReviewResult(res){
  const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
