@@ -192,6 +192,34 @@ def test_no_progress_guard_exempts_poll_stage(ctx, service):
     assert service.get(t.id).state is State.IN_REVIEW
 
 
+def test_no_progress_guard_exempts_dependency_gated_ticket(ctx, service):
+    """A ticket with unmet ``depends_on`` legitimately doesn't advance
+    — implement.py returns Outcome(READY) until the dep is merged. The
+    watchdog must NOT count those cycles as 'stuck', otherwise any
+    dependent ticket gets BLOCKED within max_stuck_cycles poll ticks
+    of approval, regardless of how the dep is actually doing."""
+    w = Worker(ctx)
+    parent = service.create("parent dep")
+    dependent = service.create("waits on parent")
+    service.set_depends_on(dependent.id, [parent.id])
+    service.transition(dependent.id, State.READY)
+    # Hammer the dependent ticket past the cap: it must stay READY
+    # (not BLOCKED) because the parent is non-terminal.
+    for _ in range(ctx.settings.max_stuck_cycles + 3):
+        w._check_progress(dependent.id, State.READY, State.READY)
+    assert service.get(dependent.id).state is State.READY
+    assert dependent.id not in w._stuck
+
+    # Once the parent reaches a terminal state, the dependent is no
+    # longer "waiting" — the watchdog kicks in normally if the
+    # ticket still doesn't advance (e.g. coordinator never starts).
+    service.transition(parent.id, State.DONE)
+    service.transition(parent.id, State.CLOSED)
+    for _ in range(ctx.settings.max_stuck_cycles):
+        w._check_progress(dependent.id, State.READY, State.READY)
+    assert service.get(dependent.id).state is State.BLOCKED
+
+
 def test_no_progress_counter_resets_on_advance(ctx, service):
     """Any real state change clears the strike count — a later stall
     starts counting from zero, not from stale strikes."""

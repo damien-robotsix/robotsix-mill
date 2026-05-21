@@ -160,6 +160,16 @@ class Worker:
             return  # terminal / human-wait — not our concern
         if not getattr(get_stage(stage_name), "traced", True):
             return  # poll stage: same-state is by design, never block
+        # Dependency-gated ticket: implement.py returns Outcome(READY)
+        # when ``unmet_dependencies`` is non-empty — that is the contract,
+        # not a stuck state. The ticket is legitimately waiting for
+        # another ticket to merge. Counting these toward stuck-cycles
+        # would block ANY dependent ticket within ``max_stuck_cycles``
+        # poll ticks of being approved, even though nothing is wrong.
+        ticket = self.ctx.service.get(ticket_id)
+        if ticket is not None and self.ctx.service.unmet_dependencies(ticket):
+            self._stuck.pop(ticket_id, None)
+            return
         n = self._stuck.get(ticket_id, 0) + 1
         self._stuck[ticket_id] = n
         if n < self.ctx.settings.max_stuck_cycles:
