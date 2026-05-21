@@ -1085,3 +1085,48 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
 
     # Falls back to raw-as-spec.
     assert result == {"split": False, "spec": raw}
+
+
+def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
+    """The refine system prompt must contain the surface-based split
+    heuristic with its three concrete signals."""
+    from robotsix_mill.agents import base as base_mod
+
+    seen_system_prompt: list[str] = []
+
+    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+        seen_system_prompt.append(system_prompt)
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": "## Problem\nok\n"})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    refining.run_refine_agent(settings=s, title="Test", draft="draft")
+
+    assert len(seen_system_prompt) == 1
+    prompt = seen_system_prompt[0]
+    assert "≥4 distinct source files" in prompt
+    assert "≥3 new endpoints" in prompt
+    assert "backend↔frontend boundary" in prompt
+    assert "Escape clause" in prompt
+    assert "Borderline drafts stay as one spec" in prompt
+
+
+def test_borderline_draft_not_split(ctx, service, monkeypatch):
+    """A borderline draft (single endpoint, two files, same layer)
+    must NOT be split — the new prompt must not trigger aggressive
+    splitting. This is a pin test for the escape clause."""
+    spec = "## Problem\nAdd a user avatar field\n## Scope\n- Add `avatar_url` to User model\n- Update GET /users route\n## Acceptance criteria\n- [ ] avatar field returned\n## Out of scope / constraints\n- No frontend changes\n"
+    monkeypatch.setattr(
+        refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec}
+    )
+
+    t = service.create("Add user avatar field", "add avatar_url to user")
+    out = RefineStage().run(t, ctx)
+
+    # Must transition to READY (not CLOSED from a split).
+    assert out.next_state is State.READY
+    assert "split" not in out.note.lower()

@@ -61,9 +61,23 @@ that can each ship alone, split into focused children:
 ]}
 
 Rules for splitting:
-- **Conservative splitting**: only split when the draft genuinely
-  contains multiple independently-shippable changes.  A borderline
-  draft MUST stay as one spec.  Over-splitting is as bad as
+- **Split by spec surface, not by user framing.** A draft that sounds
+  like "one feature" may still touch many independent layers.
+  Default to splitting when the spec body exhibits any of these
+  signals:
+  * Lists **≥4 distinct source files** to modify, OR
+  * Introduces **≥3 new endpoints / routes**, OR
+  * Crosses the **backend↔frontend boundary** (e.g. Python files +
+    JS/CSS/HTML files in the same spec).
+  When splitting, build a ``depends_on`` graph across the focused
+  children.
+- **Escape clause:** do NOT split when the layers truly cannot ship
+  independently — e.g. a single new column is read by every consumer
+  and there is nothing useful to land in stages. In that case, note
+  the inseparability reason in the single spec.
+- **Borderline drafts stay as one spec.** A draft with one new
+  endpoint touching two files in the same layer (e.g. model + route
+  in the same backend) is NOT split. Over-splitting is as bad as
   over-bundling.
 - Each child's ``spec_markdown`` must be a complete, self-contained
   spec with ## Problem, ## Scope, ## Acceptance criteria, and
