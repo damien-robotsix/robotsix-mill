@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from ..config import Settings
 
@@ -36,6 +36,43 @@ class RefineResult(BaseModel):
     spec_markdown: str | None = None
     children: list[ChildSpec] | None = None
     updated_memory: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _absorb_spec_markdown_typos(cls, data):
+        """deepseek-v4-pro consistently mis-types ``spec_markdown`` as
+        ``spec_markmark`` (observed three times in production today on
+        tickets 5061, efd4, f93f). pydantic-ai silently drops the
+        unknown key, ``spec_markdown`` stays None, refine stage blocks
+        with "refiner produced an empty spec." Each occurrence cost an
+        operator-time intervention to investigate + resume.
+
+        Absorb the typo class here: any unknown key whose name starts
+        with ``spec_`` and ends with markdown-ish letters gets folded
+        into ``spec_markdown`` when that field is missing/empty. Only
+        kicks in for typos — a correctly-keyed call passes straight
+        through. Same logic for ``spec`` (no underscore).
+        """
+        if not isinstance(data, dict):
+            return data
+        if data.get("spec_markdown"):
+            return data
+        # Look for typo-class keys: spec, spec_*, especially anything
+        # like spec_markmark, spec_markdwn, spec_md.
+        for k in list(data.keys()):
+            if k == "spec_markdown":
+                continue
+            kl = k.lower()
+            if kl == "spec" or (
+                kl.startswith("spec_") and any(
+                    fragment in kl for fragment in ("mark", "md", "down")
+                )
+            ):
+                v = data.pop(k)
+                if isinstance(v, str) and v.strip():
+                    data["spec_markdown"] = v
+                    break
+        return data
 
 SYSTEM_PROMPT = """\
 You turn a rough ticket draft into a precise, self-contained

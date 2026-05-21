@@ -1137,3 +1137,58 @@ def test_borderline_draft_not_split(ctx, service, monkeypatch):
     # Must transition to READY (not CLOSED from a split).
     assert out.next_state is State.READY
     assert "split" not in out.note.lower()
+
+
+# --- typo-tolerant RefineResult validator ---
+
+
+def test_refine_result_absorbs_spec_markmark_typo():
+    """deepseek-v4-pro consistently mis-types ``spec_markdown`` as
+    ``spec_markmark`` on the refine output. Observed three times in
+    production today (tickets 5061, efd4, f93f) — each time pydantic-ai
+    silently dropped the unknown key, ``spec_markdown`` stayed None, and
+    the refine stage blocked with "refiner produced an empty spec."
+
+    The pre-validator on ``RefineResult`` folds this typo class (and
+    the bare ``spec`` near-miss) into ``spec_markdown`` so the typo
+    can't block tickets anymore."""
+    # The exact production typo.
+    r = RefineResult.model_validate({
+        "split": False,
+        "spec_markmark": "## Problem\n\nThe spec content.\n",
+    })
+    assert r.spec_markdown == "## Problem\n\nThe spec content.\n"
+    assert r.split is False
+
+
+def test_refine_result_absorbs_bare_spec_key():
+    """Some refine retries emit ``"spec"`` (no underscore) instead of
+    ``"spec_markdown"``. Same absorption path."""
+    r = RefineResult.model_validate({"split": False, "spec": "hello"})
+    assert r.spec_markdown == "hello"
+
+
+def test_refine_result_absorbs_spec_md_short_typo():
+    """Also tolerate ``spec_md`` (another observed short-form near-miss)."""
+    r = RefineResult.model_validate({"split": False, "spec_md": "content"})
+    assert r.spec_markdown == "content"
+
+
+def test_refine_result_canonical_spec_markdown_passes_through():
+    """The validator must not interfere with correctly-keyed output."""
+    r = RefineResult.model_validate({
+        "split": False,
+        "spec_markdown": "canonical content",
+    })
+    assert r.spec_markdown == "canonical content"
+
+
+def test_refine_result_empty_typo_value_not_absorbed():
+    """If the typo key has an empty / whitespace-only value, do NOT
+    absorb it — that would mask a genuinely-empty refine output as
+    'present', producing a downstream confusion."""
+    r = RefineResult.model_validate({
+        "split": False,
+        "spec_markmark": "",
+    })
+    assert r.spec_markdown is None  # genuinely empty → blocks downstream
