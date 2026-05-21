@@ -156,13 +156,25 @@ def flush_tracing() -> None:
 
 
 @contextmanager
-def start_ticket_root_span(ticket_id: str) -> Iterator[None]:
-    """Open a root OTel span named ``"ticket"`` with ``session.id`` attribute.
+def start_ticket_root_span(ticket_id: str, stage_name: str | None = None) -> Iterator[None]:
+    """Open a root OTel span for one stage of a ticket, named after the
+    stage (e.g. ``"refine"``, ``"implement"``) with ``session.id``
+    attribute set to the ticket id.
+
+    Langfuse uses the OTel root span's name as the trace's display name.
+    Before this took a stage_name, every trace was just titled ``ticket``
+    in the Langfuse UI, which made the deep-review trace picker show a
+    long list of identically-named rows. Naming the root span after the
+    stage makes traces self-describing at a glance.
+
+    The optional ``stage_name=None`` path keeps the legacy ``"ticket"``
+    name as a back-compat shim — call sites that need explicit stage
+    naming pass it; anything else still works.
 
     Usage::
 
-        with start_ticket_root_span(ticket_id):
-            ...  # pipeline stages run here as children
+        with start_ticket_root_span(ticket_id, "refine"):
+            ...  # the refine stage runs here as the root span itself
     """
     _ensure_tracing()
     if not _tracing_ready:
@@ -173,13 +185,13 @@ def start_ticket_root_span(ticket_id: str) -> Iterator[None]:
     from opentelemetry import trace
 
     # Set the session context-var FIRST so the SpanProcessor stamps it
-    # on the "ticket" span and every (sub-agent) span opened within —
-    # even ones that start their own pydantic-ai trace.
+    # on the root span and every (sub-agent) span opened within — even
+    # ones that start their own pydantic-ai trace.
     token = _current_session.set(ticket_id)
     try:
         tracer = trace.get_tracer("robotsix-mill")
         with tracer.start_as_current_span(
-            "ticket",
+            stage_name or "ticket",
             attributes={"session.id": ticket_id},
         ):
             yield

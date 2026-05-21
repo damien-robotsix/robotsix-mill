@@ -233,36 +233,67 @@ def list_recent_traces(
     "no data available."
     """
     cost_filter_active = min_cost is not None or max_cost is not None
-    fetch_limit = max(limit * 5, 50) if cost_filter_active else limit
 
-    data = _langfuse_api_get(
-        settings,
-        "/api/public/traces",
-        params={"orderBy": "timestamp.desc", "limit": fetch_limit},
-    )
-    if data is None:
-        return []
-    traces = data.get("data", [])
-
+    # No cost filter: single fetch, return as-is (no pagination cost).
     if not cost_filter_active:
-        return traces[:limit]
+        data = _langfuse_api_get(
+            settings,
+            "/api/public/traces",
+            params={"orderBy": "timestamp.desc", "limit": min(limit, 100)},
+        )
+        if data is None:
+            return []
+        return data.get("data", [])[:limit]
 
+    # Cost filter active: paginate so the cost filter is applied to ALL
+    # recent traces (in chronological order) until we have ``limit``
+    # matches, instead of being applied AFTER a single capped fetch.
+    # Two bugs the previous single-shot logic had:
+    #   1. Asking Langfuse for limit*5 traces sent >100 once limit≥21,
+    #      and Langfuse's /api/public/traces caps limit at 100 — request
+    #      returned HTTP 400, the function returned [], the UI showed
+    #      "no traces" the moment the user set Show > 20 with a filter.
+    #   2. Filter was applied AFTER the capped fetch, so matches further
+    #      back in time were never even examined.
+    # Paginate in pages of 100 (Langfuse's max), bounded by
+    # ``examine_cap`` so a too-strict filter can't paginate forever.
     def _cost(t: dict) -> float:
         try:
             return float(t.get("totalCost") or 0)
         except (TypeError, ValueError):
             return 0.0
 
+    PAGE_SIZE = 100
+    examine_cap = max(limit * 20, 500)  # don't scan more than this
     filtered: list[dict] = []
-    for t in traces:
-        c = _cost(t)
-        if min_cost is not None and c < min_cost:
-            continue
-        if max_cost is not None and c > max_cost:
-            continue
-        filtered.append(t)
-        if len(filtered) >= limit:
-            break
+    examined = 0
+    page = 1
+    while len(filtered) < limit and examined < examine_cap:
+        data = _langfuse_api_get(
+            settings,
+            "/api/public/traces",
+            params={
+                "orderBy": "timestamp.desc",
+                "limit": PAGE_SIZE,
+                "page": page,
+            },
+        )
+        if data is None:
+            break  # API failed — return what we have
+        traces = data.get("data", [])
+        if not traces:
+            break  # exhausted Langfuse's history
+        for t in traces:
+            examined += 1
+            c = _cost(t)
+            if min_cost is not None and c < min_cost:
+                continue
+            if max_cost is not None and c > max_cost:
+                continue
+            filtered.append(t)
+            if len(filtered) >= limit:
+                break
+        page += 1
 
     return filtered
 

@@ -70,8 +70,14 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
         try:
             with contextlib.ExitStack() as es:
                 if traced:
-                    es.enter_context(tracing.start_ticket_root_span(ticket_id))
-                    es.enter_context(tracing.trace_stage(stage_name))
+                    # One root span per stage call, named after the stage
+                    # so Langfuse trace listings read "refine" / "implement"
+                    # / "retrospect" instead of a generic "ticket". The
+                    # session.id attribute still groups all of a ticket's
+                    # stage traces together via Langfuse's session view.
+                    es.enter_context(
+                        tracing.start_ticket_root_span(ticket_id, stage_name)
+                    )
                 # stage.run is sync (LLM/tool) — keep the loop responsive
                 outcome = await asyncio.to_thread(stage.run, ticket, ctx)
         except NotImplementedError as e:

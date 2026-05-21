@@ -95,26 +95,25 @@ async def test_failing_stage_marks_failed(ctx, service, monkeypatch):
 
 async def test_untraced_noop_stage_emits_no_trace(ctx, service, monkeypatch):
     """merge/deliver-style untraced stages (traced=False) returning a
-    no-op must NOT open a Langfuse 'ticket' trace — the merge poll
-    otherwise spams an empty trace per cycle."""
+    no-op must NOT open a Langfuse trace — the merge poll otherwise
+    spams an empty trace per cycle.
+
+    Also covers: the root span is named after the *stage* (not generic
+    'ticket') so Langfuse trace listings read 'refine'/'implement'/
+    'retrospect' instead of identical 'ticket' rows."""
     import contextlib
 
     from robotsix_mill.runtime import tracing as tr
 
-    calls = {"root": 0, "stage": 0}
+    calls = {"root": 0, "stage_names": []}
 
     @contextlib.contextmanager
-    def fake_root(_tid):
+    def fake_root(_tid, stage_name=None):
         calls["root"] += 1
-        yield
-
-    @contextlib.contextmanager
-    def fake_stage(_n):
-        calls["stage"] += 1
+        calls["stage_names"].append(stage_name)
         yield
 
     monkeypatch.setattr(tr, "start_ticket_root_span", fake_root)
-    monkeypatch.setattr(tr, "trace_stage", fake_stage)
 
     class TracedRefine(Stage):
         name = "refine"
@@ -134,12 +133,18 @@ async def test_untraced_noop_stage_emits_no_trace(ctx, service, monkeypatch):
 
     monkeypatch.setitem(registry.STAGES, "refine", TracedRefine())
     await process_ticket(service.create("a").id, ctx)
-    assert calls["root"] >= 1 and calls["stage"] >= 1  # traced stage traced
+    assert calls["root"] >= 1  # traced stage opened a trace
+    assert "refine" in calls["stage_names"], (
+        "the root span must be named after the stage so Langfuse "
+        "shows useful trace names; got: " + repr(calls["stage_names"])
+    )
 
-    calls["root"] = calls["stage"] = 0
+    calls["root"] = 0
+    calls["stage_names"] = []
     monkeypatch.setitem(registry.STAGES, "refine", UntracedNoop())
     await process_ticket(service.create("b").id, ctx)
-    assert calls == {"root": 0, "stage": 0}  # untraced no-op: silent
+    assert calls["root"] == 0  # untraced no-op: silent
+    assert calls["stage_names"] == []
 
 
 async def test_done_is_not_terminal_retrospect_runs(ctx, service, monkeypatch):

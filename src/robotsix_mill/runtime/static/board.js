@@ -375,15 +375,25 @@ async function startDeepReview(){
  if(!deepReviewTraceId)return;
  const btn=document.getElementById("start-dr-btn");
  btn.disabled=true; btn.textContent='Reviewing…'; btn.style.cursor='default';
+ // jpost returns a fetch-shaped wrapper {ok, status, text(), json()}.
+ // ``r.status`` is the HTTP status code (number), NOT the response
+ // body's "status" string. We have to parse the JSON body to read
+ // the route's signal of "started" vs "unavailable" vs an error.
  const r=await jpost("/traces/"+deepReviewTraceId+"/deep-review");
- if(!r||r.status==="unavailable"){
+ if(!r||!r.ok){
+  btn.disabled=false; btn.textContent='Start Deep Review'; btn.style.cursor='pointer';
+  alert("Failed to start deep review (HTTP "+(r?r.status:"unreachable")+")");
+  return;
+ }
+ const body=await r.json();
+ if(body&&body.status==="unavailable"){
   document.getElementById("trace-list").innerHTML=
    '<div class="muted" style="color:#f87171;padding:12px 0">Langfuse is not configured — cannot start deep review.</div>';
   return;
  }
- if(!r||r.status!=="started"){
+ if(!body||body.status!=="started"){
   btn.disabled=false; btn.textContent='Start Deep Review'; btn.style.cursor='pointer';
-  alert("Failed to start deep review");
+  alert("Failed to start deep review (unexpected body: "+JSON.stringify(body)+")");
   return;
  }
  deepReviewPollCount=0;
