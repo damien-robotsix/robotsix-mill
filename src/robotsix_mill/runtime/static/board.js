@@ -5,7 +5,7 @@ let sel=null;
 let runsOpen=false;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
 // HTTP helpers built on XMLHttpRequest, not fetch().
 // `fetch` is wrapped by SES / hardened-JS extensions (MetaMask, some
 // privacy/wallet add-ons) and can fail with "NetworkError when
@@ -198,6 +198,8 @@ async function open_(id){
  document.getElementById("drawer").classList.add("open");
 }
 function close_(){sel=null;runsOpen=false;
+ if(deepReviewPollTimer){clearInterval(deepReviewPollTimer);deepReviewPollTimer=null}
+ deepReviewOpen=false;deepReviewTraceId=null;deepReviewFindings=[];
  document.getElementById("drawer").classList.remove("open")}
 async function renderRuns(){
  const rs=await jget("/runs");
@@ -211,7 +213,7 @@ async function renderRuns(){
    const min=Math.floor(sec/60);
    const sss=sec%60;
    const elapsed=f?(min+'m '+sss+'s'):'running…';
-   const kc=r.kind==='audit'?'#059669':r.kind==='scout'?'#7c3aed':'#0ea5e9';
+   const kc=r.kind==='audit'?'#059669':r.kind==='scout'?'#7c3aed':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':'#6b7280';
    const sc=r.status==='running'?'#eab308':r.status==='ok'?'#22c55e':'#ef4444';
    const st=r.status==='running'?'running…':r.status;
    return `<div style="padding:8px 0;border-bottom:1px solid #262b36">
@@ -234,4 +236,140 @@ async function toggleRuns(){
  runsOpen=true;
  document.getElementById("drawer").classList.add("open");
 }
-refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel)},5000);
+// -- deep review --------------------------------------------------------
+let deepReviewOpen=false;
+let deepReviewTraceId=null;
+let deepReviewPollTimer=null;
+let deepReviewPollCount=0;
+let deepReviewFindings=[];  // [{category, text}] for ticket creation
+async function openDeepReview(){
+ if(deepReviewOpen){close_();return}
+ if(sel){close_()}
+ deepReviewOpen=true; deepReviewTraceId=null; deepReviewPollCount=0;
+ deepReviewFindings=[];
+ document.getElementById("drawer").classList.add("open");
+ await renderTraceList();
+}
+async function renderTraceList(){
+ document.getElementById("d").innerHTML='<h3>Deep Review</h3><div id="trace-list">loading traces…</div>';
+ const traces=await jget("/traces/recent");
+ if(!traces||!traces.length){
+  document.getElementById("trace-list").innerHTML=
+   '<div class="muted" style="padding:12px 0">No recent traces available — check Langfuse connectivity.</div>';
+  return;
+ }
+ const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
+ let html='';
+ traces.forEach(t=>{
+  const cost=t.totalCost!=null?'$'+Number(t.totalCost).toFixed(4):'—';
+  const ts=t.timestamp?new Date(t.timestamp).toLocaleString():'—';
+  const sid=t.sessionId||'—';
+  html+=`<div class="trace-row${deepReviewTraceId===t.id?' sel':''}" onclick="selectTrace('${escT(t.id)}')" id="tr-${escT(t.id)}">
+   <div class="trace-name">${escT(t.name||'(unnamed)')}</div>
+   <div class="trace-meta">session: ${escT(sid)} · cost: ${cost} · ${ts}</div>
+  </div>`;
+ });
+ html+=`<div style="margin-top:12px"><button id="start-dr-btn" class="dr-btn"${deepReviewTraceId?'':' disabled'}`+
+   ` onclick="startDeepReview()" style="font-size:11px;padding:5px 14px;background:#1a2a3b;color:#60c0fa;border:1px solid #2a3a4b;border-radius:4px;cursor:pointer">`+
+   `Start Deep Review</button></div>`;
+ document.getElementById("trace-list").innerHTML=html;
+}
+function selectTrace(tid){
+ deepReviewTraceId=tid;
+ // highlight
+ document.querySelectorAll(".trace-row").forEach(r=>r.classList.remove("sel"));
+ const row=document.getElementById("tr-"+tid);
+ if(row)row.classList.add("sel");
+ // enable button
+ const btn=document.getElementById("start-dr-btn");
+ if(btn){btn.disabled=false;btn.style.cursor="pointer"}
+}
+async function startDeepReview(){
+ if(!deepReviewTraceId)return;
+ const btn=document.getElementById("start-dr-btn");
+ btn.disabled=true; btn.textContent='Reviewing…'; btn.style.cursor='default';
+ const r=await jpost("/traces/"+deepReviewTraceId+"/deep-review");
+ if(!r||r.status==="unavailable"){
+  document.getElementById("trace-list").innerHTML=
+   '<div class="muted" style="color:#f87171;padding:12px 0">Langfuse is not configured — cannot start deep review.</div>';
+  return;
+ }
+ if(!r||r.status!=="started"){
+  btn.disabled=false; btn.textContent='Start Deep Review'; btn.style.cursor='pointer';
+  alert("Failed to start deep review");
+  return;
+ }
+ deepReviewPollCount=0;
+ deepReviewPollTimer=setInterval(pollDeepReviewResult,2000);
+ pollDeepReviewResult(); // immediate first poll
+}
+async function pollDeepReviewResult(){
+ deepReviewPollCount++;
+ if(deepReviewPollCount>15){ // ~30s
+  clearInterval(deepReviewPollTimer); deepReviewPollTimer=null;
+  document.getElementById("d").innerHTML=
+   '<h3>Deep Review</h3><div class="muted" style="color:#f87171;padding:12px 0">Review timed out — the trace may be too large or the agent is busy.</div>';
+  return;
+ }
+ const res=await jget("/deep-review/"+deepReviewTraceId);
+ if(!res){return}
+ if(res.status==="running"){return} // still going
+ clearInterval(deepReviewPollTimer); deepReviewPollTimer=null;
+ // result ready
+ renderDeepReviewResult(res);
+}
+function renderDeepReviewResult(res){
+ const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
+ let html=`<h3>Deep Review: ${escT(deepReviewTraceId)}</h3>`;
+ if(res.status==="error"){
+  html+=`<div class="muted" style="color:#f87171;padding:12px 0">${escT(res.error||'Unknown error')}</div>`;
+  document.getElementById("d").innerHTML=html;
+  return;
+ }
+ const toolErrors=res.tool_errors||[];
+ const limitations=res.agent_limitations||[];
+ const optimizations=res.optimizations||[];
+ deepReviewFindings=[];
+ if(!toolErrors.length&&!limitations.length&&!optimizations.length){
+  html+=`<div class="muted" style="padding:12px 0">(no issues found in this trace)</div>`;
+  document.getElementById("d").innerHTML=html;
+  return;
+ }
+ function renderSection(title,items,cls){
+  if(!items.length)return'';
+  let h=`<div class="dr-section ${cls}"><h4>${title} (${items.length})</h4>`;
+  items.forEach((item,i)=>{
+   const idx=deepReviewFindings.length;
+   deepReviewFindings.push({category:title,text:item});
+   h+=`<div class="dr-finding"><span>${escT(item)}</span>`+
+    `<button class="dr-ticket-btn" onclick="createTicketFromFinding(${idx},event)"`+
+    ` style="font-size:10px;padding:2px 8px;background:#2563eb;color:#fff;border:none;border-radius:3px;cursor:pointer;margin-left:8px;flex-shrink:0">+ Ticket</button></div>`;
+  });
+  h+=`</div>`;
+  return h;
+ }
+ html+=renderSection("Tool Errors",toolErrors,"dr-tool-errors");
+ html+=renderSection("Agent Limitations",limitations,"dr-limitations");
+ html+=renderSection("Optimizations",optimizations,"dr-optimizations");
+ html+=`<div style="margin-top:16px"><button onclick="openDeepReview()"`+
+   ` style="font-size:11px;padding:3px 10px;background:#2a2f3a;color:#aab0bd;border:1px solid #3a3f4a;border-radius:4px;cursor:pointer">← Back to traces</button></div>`;
+ document.getElementById("d").innerHTML=html;
+}
+function createTicketFromFinding(idx,event){
+ if(event)event.stopPropagation();
+ const finding=deepReviewFindings[idx];
+ if(!finding)return;
+ const itemText=finding.text;
+ const title=prompt("Ticket title:","Deep review: "+itemText.substring(0,80));
+ if(title===null)return;
+ if(!title.trim()){alert("Title is required");return}
+ const desc=prompt("Description:",
+  "Finding from deep review of trace "+deepReviewTraceId+":\n\n["+finding.category+"] "+itemText);
+ if(desc===null)return;
+ (async()=>{
+  const r=await jpost("/tickets",{title:title.trim(),description:desc,source:"deep-review"});
+  if(!r.ok){const e=await r.text();alert("create ticket failed: "+e)}else refresh()
+ })();
+}
+// -- end deep review ----------------------------------------------------
+refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);

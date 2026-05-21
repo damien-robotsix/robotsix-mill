@@ -212,6 +212,26 @@ def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
     return "\n".join(lines)
 
 
+def list_recent_traces(
+    settings: Settings, limit: int = 10
+) -> list[dict]:
+    """Return the *limit* most-recent traces from Langfuse, ordered by
+    timestamp descending.
+
+    Returns an empty list (never crashes) when Langfuse is unconfigured
+    or any HTTP / JSON error occurs — the caller must treat ``[]`` as
+    "no data available."
+    """
+    data = _langfuse_api_get(
+        settings,
+        "/api/public/traces",
+        params={"orderBy": "timestamp.desc", "limit": limit},
+    )
+    if data is None:
+        return []
+    return data.get("data", [])
+
+
 def list_all_traces_since(
     settings: Settings, from_timestamp: str
 ) -> list[dict]:

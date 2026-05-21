@@ -75,6 +75,7 @@ def create_lifespan(
         app.state.service = service
         app.state.worker = worker
         app.state.run_registry = run_registry
+        app.state.deep_review_results = {}
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
         try:
