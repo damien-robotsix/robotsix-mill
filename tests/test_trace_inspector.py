@@ -141,13 +141,19 @@ def _fake_trace_loop() -> str:
 class TestRunTraceInspector:
     """Unit tests for run_trace_inspector — mock the pydantic-ai agent."""
 
-    def test_no_api_key_returns_empty(self, monkeypatch):
-        """When OPENROUTER_API_KEY is unset, returns an empty result."""
+    def test_no_api_key_returns_error(self, monkeypatch):
+        """When OPENROUTER_API_KEY is unset, return a result with the
+        cause surfaced in ``error`` (rather than indistinguishable empty
+        findings — the user couldn't tell 'no key configured' from 'no
+        issues found' before this change)."""
         settings = Settings(openrouter_api_key=None)
         result = trace_inspector_mod.run_trace_inspector(
             settings=settings, trace_data=_fake_trace_with_errors()
         )
-        assert result == TraceInspectResult()
+        assert result.tool_errors == []
+        assert result.agent_limitations == []
+        assert result.optimizations == []
+        assert "OPENROUTER_API_KEY" in result.error
 
     def test_returns_result_with_errors_found(self, monkeypatch):
         """When the sub-agent identifies tool errors, they appear in the result."""
