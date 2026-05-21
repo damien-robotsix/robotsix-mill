@@ -8,7 +8,7 @@ import pydantic_ai.providers.openrouter as orp
 import pytest
 
 from robotsix_mill.agents import openrouter_cost as oc
-from robotsix_mill.agents.rebasing import run_rebase_agent
+from robotsix_mill.agents.rebasing import RebaseResult, run_rebase_agent
 from robotsix_mill.config import Settings
 
 
@@ -34,7 +34,10 @@ def fake_ai(monkeypatch):
         def __init__(self, **kw): pass
 
         def run_sync(self, *a, **k):
-            return type("R", (), {"output": box["out"]})()
+            return type("R", (), {"output": RebaseResult(
+                status=box["status"],
+                summary=box.get("summary", ""),
+            )})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
@@ -46,22 +49,17 @@ def fake_ai(monkeypatch):
 # Existing parametrized test (output parsing)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("out,expected", [
+@pytest.mark.parametrize("status,expected", [
     ("DONE", True),
-    ("done — rebased cleanly", True),
-    ("FAILED: unresolvable conflict", False),
-    ("", False),
-    # Edge-case outputs (extended)
-    (None, False),
-    ("done", True),               # .upper() handles lowercase
-    ("DONE with caveats", True),  # startswith("DONE")
+    ("FAILED", False),
 ])
-def test_run_rebase_agent_reads_output_not_data(tmp_path, fake_ai, out, expected):
-    fake_ai["out"] = out
-    assert run_rebase_agent(
+def test_run_rebase_agent_reads_output_not_data(tmp_path, fake_ai, status, expected):
+    fake_ai["status"] = status
+    result = run_rebase_agent(
         settings=_s(tmp_path), repo_dir=tmp_path,
         branch="mill/x", target="main",
-    ) is expected
+    )
+    assert (result.status == "DONE") is expected
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +94,7 @@ def test_build_agent_called_with_web_false_and_settings(tmp_path, monkeypatch):
         # Return a fake agent whose run_sync returns DONE.
         class FakeAgent:
             def run_sync(self, *a, **k):
-                return type("R", (), {"output": "DONE"})()
+                return type("R", (), {"output": RebaseResult(status="DONE", summary="ok")})()
         return FakeAgent()
 
     monkeypatch.setattr(
@@ -108,10 +106,12 @@ def test_build_agent_called_with_web_false_and_settings(tmp_path, monkeypatch):
         settings=s, repo_dir=tmp_path,
         branch="mill/x", target="main",
     )
-    assert result is True
+    assert result.status == "DONE"
     assert captured["web"] is False
     assert isinstance(captured["settings"], Settings)
-    assert captured["output_type"] is str
+    # output_type is now PromptedOutput(RebaseResult), not str
+    from pydantic_ai import PromptedOutput
+    assert isinstance(captured["output_type"], PromptedOutput)
 
 
 def test_tools_include_shell_tools(tmp_path, monkeypatch):
@@ -122,7 +122,7 @@ def test_tools_include_shell_tools(tmp_path, monkeypatch):
         captured_tools.extend(tools or [])
         class FakeAgent:
             def run_sync(self, *a, **k):
-                return type("R", (), {"output": "DONE"})()
+                return type("R", (), {"output": RebaseResult(status="DONE", summary="ok")})()
         return FakeAgent()
 
     monkeypatch.setattr(
@@ -154,7 +154,7 @@ def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
         captured_prompt.append(system_prompt)
         class FakeAgent:
             def run_sync(self, *a, **k):
-                return type("R", (), {"output": "DONE"})()
+                return type("R", (), {"output": RebaseResult(status="DONE", summary="ok")})()
         return FakeAgent()
 
     monkeypatch.setattr(
@@ -170,8 +170,5 @@ def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
     assert "git fetch origin" in prompt
     assert "git rebase origin/" in prompt
     assert "git rebase --continue" in prompt
-    # "respond with" and "EXACTLY one word" may be on different lines.
-    assert "respond with" in prompt
-    assert "EXACTLY one word" in prompt
     assert "DONE" in prompt
     assert "FAILED" in prompt

@@ -1,5 +1,6 @@
 import pytest
 
+from robotsix_mill.agents.rebasing import RebaseResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -169,9 +170,9 @@ def test_conflicting_pr_transitions_to_rebasing(tmp_path, monkeypatch):
 
     agent_called = []
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
         agent_called.append(1)
-        return True
+        return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -194,8 +195,8 @@ def test_rebasing_clean_rebase_returns_to_in_review(tmp_path, monkeypatch):
     """Ticket in REBASING → rebase agent succeeds → force-push → IN_REVIEW."""
     ctx = _gh(tmp_path)
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
-        return True
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -230,7 +231,7 @@ def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
-        lambda **k: True,
+        lambda **k: RebaseResult(status="DONE", summary="ok"),
     )
     sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     monkeypatch.setattr(
@@ -262,7 +263,8 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
     of ping-ponging forever."""
     ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="2")
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", lambda **k: True,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        lambda **k: RebaseResult(status="DONE", summary="ok"),
     )
     sha = "cafebabecafebabecafebabecafebabecafebabe"
     monkeypatch.setattr(
@@ -302,8 +304,8 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
         },
     )
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
-        return False
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -329,8 +331,8 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
     """REBASING, rebase fails, attempt == max → Outcome(BLOCKED)."""
     ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
-        return False
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -370,9 +372,9 @@ def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
     )
     calls = {}
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
         calls.update(repo_dir=repo_dir, branch=branch, target=target)
-        return True  # success
+        return RebaseResult(status="DONE", summary="ok")  # success
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -425,9 +427,9 @@ def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
 
     agent_calls = []
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
         agent_calls.append(1)
-        return False
+        return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -475,8 +477,8 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
     """When agent returns False, no force-push is made (through REBASING)."""
     ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
-        return False
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -504,8 +506,8 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
     """Rebase succeeds but force-push fails → BLOCKED (through REBASING)."""
     ctx = _gh(tmp_path)
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
-        return True
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -539,10 +541,12 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
 
     call_count = [0]
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
         call_count[0] += 1
         # First call fails, second succeeds.
-        return call_count[0] == 2
+        if call_count[0] == 2:
+            return RebaseResult(status="DONE", summary="ok")
+        return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -598,8 +602,8 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     """The force-push must reference only the ticket's own branch."""
     ctx = _gh(tmp_path)
 
-    def fake_rebase(*, settings, repo_dir, branch, target):
-        return True
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
@@ -649,7 +653,7 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
     ctx = _gh(tmp_path)  # FORGE_TOKEN="t" (raw); minted token differs
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
-        lambda **k: True,
+        lambda **k: RebaseResult(status="DONE", summary="ok"),
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.github_token", lambda s: "MINTED-APP-TOK"
@@ -786,7 +790,7 @@ def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
     monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
-        lambda **k: False,
+        lambda **k: RebaseResult(status="FAILED", summary="nope"),
     )
 
     t = _in_review(ctx)

@@ -64,12 +64,12 @@ def _ticket(ctx, title="Add feature", body="Please add feature.txt"):
 
 
 def _fake_agent(write: dict | None):
-    def _run(*, settings, repo_dir, spec, feedback=None, history=None):
-        del settings, spec, feedback, history  # signature must match the seam
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, spec, feedback, history, memory  # signature must match the seam
         if write:
             for name, content in write.items():
                 (Path(repo_dir) / name).write_text(content)
-        return ("did the thing", [])
+        return ("did the thing", [], "")
 
     return _run
 
@@ -273,11 +273,11 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     )
     calls = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, history=None):
-        del settings, spec, feedback, history  # seam signature
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, spec, feedback, history, memory  # seam signature
         calls.append(1)
         (Path(repo_dir) / "wip.txt").write_text("did work")
-        return ("tried", [])
+        return ("tried", [], "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -306,8 +306,8 @@ def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypat
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
 
-    def _run(*, settings, repo_dir, spec, feedback=None, history=None):
-        del settings, spec, feedback, history
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, spec, feedback, history, memory
         (Path(repo_dir) / "partial.txt").write_text("half done")
         raise coding.AgentBudgetError("request_limit of 50", [])
 
@@ -331,14 +331,14 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
     n = {"i": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, history=None):
-        del settings, spec, feedback, history
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, spec, feedback, history, memory
         n["i"] += 1
         if n["i"] == 1:  # first pass: partial work, hit the cap
             (Path(repo_dir) / "first.txt").write_text("1")
             raise coding.AgentBudgetError("cap", [])
         (Path(repo_dir) / "second.txt").write_text("2")
-        return ("finished on resume", [])
+        return ("finished on resume", [], "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -380,11 +380,11 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, history=None):
-        del settings, spec, feedback, history
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, spec, feedback, history, memory
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
-        return ("done", [])
+        return ("done", [], "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 

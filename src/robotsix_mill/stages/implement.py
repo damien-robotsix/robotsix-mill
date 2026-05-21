@@ -25,6 +25,7 @@ from ..agents import coding
 from ..agents.coding import AgentBudgetError, AgentRunError
 from ..core.models import Ticket
 from ..core.states import State
+from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -183,9 +184,13 @@ class ImplementStage(Stage):
         ws = ctx.service.workspace(ticket)
         spec = ws.read_description()
 
+        # Load the implement agent's memory ledger.
+        memory_text = load_memory(settings.implement_memory_file)
+
         try:
-            summary, _ = coding.run_implement_agent(
+            summary, _, updated_memory = coding.run_implement_agent(
                 settings=settings, repo_dir=repo_dir, spec=spec,
+                memory=memory_text,
             )
         except AgentBudgetError as e:
             ImplementStage._finalize(
@@ -204,4 +209,9 @@ class ImplementStage(Stage):
             return Outcome(
                 State.BLOCKED, f"agent error — resumable: {e}"
             )
+
+        # Persist the agent's updated memory.
+        if updated_memory:
+            persist_memory(settings.implement_memory_file, updated_memory)
+
         return summary

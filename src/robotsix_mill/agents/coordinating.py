@@ -21,7 +21,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from ..config import Settings
+
+
+class ImplementResult(BaseModel):
+    """Structured output from the implement (coordinator) agent."""
+
+    summary: str
+    updated_memory: str = ""
+
 
 _SYSTEM_PROMPT = """\
 You are a senior engineer implementing ONE ticket in a git repo.
@@ -51,6 +61,23 @@ Procedure:
 
 Keep your context lean: prefer `explore` over wide reading; never
 paste whole files into your reasoning. Do not commit/push/touch git.
+
+## Memory
+
+You are given a `<memory>` block containing a Markdown ledger of
+observations from your past runs in this deployment. It records:
+- Repo architecture and file-layout conventions
+- Testing patterns and build-system quirks
+- Notable gotchas and successful strategies
+
+Reference the memory to avoid re-discovering what you already know.
+After the run, update the memory in your `updated_memory` field:
+- Add new architecture/file-layout observations
+- Record any gotcha you encountered
+- Note successful strategies that saved time
+- Keep entries concise and ticket-ID-qualified (e.g. "Observed in
+  `<ticket-id>`: ...") so the ledger stays coherent across runs
+- If nothing new was learned, return the incoming memory unchanged
 """
 
 
@@ -74,10 +101,11 @@ def run_coordinator(
     settings: Settings,
     repo_dir: Path,
     spec: str,
-) -> str:
+    memory: str = "",
+) -> ImplementResult:
     """Drive explore → read → implement → test → loop. Returns the
-    final summary (starts with 'UNRESOLVED:' if it gave up). The seam
-    tests monkeypatch this."""
+    structured result. The seam tests monkeypatch this."""
+    from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
     from .base import build_agent
@@ -97,6 +125,7 @@ def run_coordinator(
         system_prompt=_SYSTEM_PROMPT.format(
             max_iters=settings.max_fix_iterations
         ),
+        output_type=PromptedOutput(ImplementResult),
         tools=[
             make_explore_tool(settings, repo_dir),
             *fs_tools,
@@ -107,10 +136,12 @@ def run_coordinator(
         name="implement",
     )
     limits = UsageLimits(request_limit=settings.coordinator_request_limit)
+    user_prompt = (
+        f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
+        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
+    )
     result = call_with_retry(
-        lambda: agent.run_sync(
-            f"<ticket_spec>\n{spec}\n</ticket_spec>", usage_limits=limits
-        ),
+        lambda: agent.run_sync(user_prompt, usage_limits=limits),
         settings=settings, what="implement",
     )
-    return str(result.output).strip()
+    return result.output

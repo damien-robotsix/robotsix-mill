@@ -5,7 +5,7 @@ import pydantic_ai.providers.openrouter as orp
 import pytest
 
 from robotsix_mill.agents import openrouter_cost as oc
-from robotsix_mill.agents.ci_fixing import run_ci_fix_agent
+from robotsix_mill.agents.ci_fixing import CiFixResult, run_ci_fix_agent
 from robotsix_mill.config import Settings
 
 
@@ -24,7 +24,10 @@ def fake_ai(monkeypatch):
         def __init__(self, **kw): pass
 
         def run_sync(self, *a, **k):
-            return type("R", (), {"output": box["out"]})()
+            return type("R", (), {"output": CiFixResult(
+                status=box["status"],
+                summary=box.get("summary", ""),
+            )})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
@@ -32,19 +35,18 @@ def fake_ai(monkeypatch):
     return box
 
 
-@pytest.mark.parametrize("out,expected", [
+@pytest.mark.parametrize("status,expected", [
     ("DONE", True),
-    ("done — fixed lint errors", True),
-    ("FAILED: flaky test", False),
-    ("", False),
+    ("FAILED", False),
 ])
-def test_run_ci_fix_agent_reads_output(tmp_path, fake_ai, out, expected):
+def test_run_ci_fix_agent_reads_output(tmp_path, fake_ai, status, expected):
     """B.9/B.10: Agent returns True on DONE, False otherwise."""
-    fake_ai["out"] = out
-    assert run_ci_fix_agent(
+    fake_ai["status"] = status
+    result = run_ci_fix_agent(
         settings=_s(tmp_path), repo_dir=tmp_path,
         branch="mill/x", failing_summary="lint failed",
-    ) is expected
+    )
+    assert (result.status == "DONE") is expected
 
 
 def test_missing_api_key_raises(tmp_path):
@@ -65,7 +67,7 @@ def test_uses_build_fs_tools(tmp_path, monkeypatch):
     class FakeAgent:
         def __init__(self, **kw): pass
         def run_sync(self, *a, **k):
-            return type("R", (), {"output": "DONE"})()
+            return type("R", (), {"output": CiFixResult(status="DONE", summary="ok")})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
@@ -100,7 +102,7 @@ def test_agent_prompt_forbids_push_and_branch_switching(tmp_path, monkeypatch):
         def __init__(self, **kw):
             captured_prompt["system_prompt"] = kw.get("system_prompt", "")
         def run_sync(self, *a, **k):
-            return type("R", (), {"output": "DONE"})()
+            return type("R", (), {"output": CiFixResult(status="DONE", summary="ok")})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())

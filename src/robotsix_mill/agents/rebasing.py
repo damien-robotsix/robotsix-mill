@@ -13,8 +13,19 @@ whether to force-push the result.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel
 
 from ..config import Settings
+
+
+class RebaseResult(BaseModel):
+    """Structured output from the rebase agent."""
+
+    status: Literal["DONE", "FAILED"]
+    summary: str
+    updated_memory: str = ""
 
 
 def run_rebase_agent(
@@ -23,19 +34,22 @@ def run_rebase_agent(
     repo_dir: Path,
     branch: str,
     target: str,
-) -> bool:
+    memory: str = "",
+) -> RebaseResult:
     """Run one rebase attempt of *branch* onto ``origin/<target>``.
 
     Uses the LLM (pydantic-ai agent) with sandboxed file + shell tools
     scoped to *repo_dir*.  The agent loops internally to resolve every
-    conflict the rebase encounters; it returns ``True`` only when the
-    entire rebase finishes cleanly.  One invocation = one attempt.
+    conflict the rebase encounters; it returns a ``RebaseResult``
+    with status, summary, and updated memory.
 
     This is the mockable seam — tests monkeypatch it to avoid real LLM
     and Docker calls.
     """
     if not settings.openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
+
+    from pydantic_ai import PromptedOutput
 
     from .base import build_agent
     from .fs_tools import build_fs_tools
@@ -47,7 +61,7 @@ def run_rebase_agent(
 
 1. Run:  git fetch origin
 2. Run:  git rebase origin/{target}
-3. If the rebase applies cleanly, report DONE.
+3. If the rebase applies cleanly, report DONE with a brief summary.
 4. If there are conflicts:
    - Use read_file to inspect EVERY conflicted file (git will list them).
    - Edit each conflicted file IN PLACE with write_file to resolve the
@@ -68,25 +82,40 @@ IMPORTANT RULES:
 - If the rebase cannot be resolved (e.g. unresolvable conflict,
   unexpected git state), report FAILED with a short reason.
 
-After the rebase completes (or you determine it cannot), respond with
-EXACTLY one word on its own line: DONE or FAILED.  You may add a brief
-explanation after FAILED."""
+## Memory
+
+You are given a `<memory>` block containing a Markdown ledger of
+observations from your past rebase runs. It records:
+- Common conflict types in this repo
+- File-specific merge strategies
+- Known brittle areas that frequently conflict
+
+Reference the memory to avoid re-discovering known patterns. After
+the rebase, update the memory in your `updated_memory` field:
+- Record any new conflict pattern and its resolution strategy
+- Note brittle files that frequently conflict
+- Record successful merge strategies for specific file types
+- Keep entries concise and ticket-ID-qualified
+- If nothing new was learned, return the incoming memory unchanged
+
+After the rebase completes (or you determine it cannot), set status to
+DONE or FAILED and provide a brief summary."""
 
     agent = build_agent(
         settings,
         system_prompt=system_prompt,
-        output_type=str,
+        output_type=PromptedOutput(RebaseResult),
         tools=tools,
         web=False,
         name="rebase",
     )
 
-    result = agent.run_sync(
+    user_prompt = (
         f"Rebase branch '{branch}' onto origin/{target} in {repo_dir}. "
-        "Follow the system prompt exactly.",
+        "Follow the system prompt exactly.\n\n"
+        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
     )
 
-    # pydantic-ai's AgentRunResult exposes `.output` — the old `.data`
-    # AttributeError'd every rebase, blocking the ticket after 2 tries.
-    output = str(result.output or "").strip()
-    return output.upper().startswith("DONE")
+    result = agent.run_sync(user_prompt)
+
+    return result.output
