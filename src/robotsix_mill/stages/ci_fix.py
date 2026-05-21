@@ -84,7 +84,7 @@ class CIFixStage(Stage):
     input_state = State.FIXING_CI
     traced = False
 
-    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:  # noqa: C901  # TODO: split counter, clone, and agent phases (ticket: split_ci_fix_stage)
         s = ctx.settings
 
         # Guard: forge configured.
