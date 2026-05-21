@@ -30,6 +30,19 @@ Reply with a TIGHT answer:
 NEVER paste whole files or large blocks — that is explicitly not your
 job and wastes the caller's context. No speculation, no preamble.
 Return the minimum that orients the caller.
+
+SCOPE DISCIPLINE — always follow these limits:
+- FILE BUDGET: read at most 5 files per answer. If you need more, stop
+  and return the most relevant files found so far, with a note that
+  more exist.
+- NO CALL-CHAIN TRACING: do NOT trace full call chains through base
+  classes, abstractions, or transitive dependencies unless the
+  question explicitly asks for a complete trace (e.g. "what is the
+  full call chain for X?"). When the question is about where to make a
+  change, identify the most likely files directly.
+- PREFER SPECIFICITY: when choosing which files to read, prefer config
+  files, the most specific implementation files, and test files — over
+  general abstractions, base classes, and framework-level plumbing.
 """
 
 

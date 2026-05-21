@@ -71,6 +71,10 @@ def test_explore_scout_prompt_forbids_whole_files():
     assert "NEVER paste whole files" in _SYSTEM_PROMPT
     assert "FILE:" not in _SYSTEM_PROMPT  # the old dump-file directive is gone
 
+    # scope-discipline guardrails (ticket: explore-scope-guardrails)
+    assert "at most 5 files" in _SYSTEM_PROMPT.lower()
+    assert "do not trace full call chains" in _SYSTEM_PROMPT.lower()
+
 
 def test_test_agent_pass(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
