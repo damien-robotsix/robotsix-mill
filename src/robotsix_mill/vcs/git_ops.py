@@ -29,15 +29,6 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def ensure_repo(repo: Path) -> None:
-    """Init the work repo if it doesn't exist yet."""
-    repo.mkdir(parents=True, exist_ok=True)
-    if not (repo / ".git").exists():
-        _git(repo, "init", "-q")
-        _git(repo, "config", "user.email", "mill@robotsix.local")
-        _git(repo, "config", "user.name", "robotsix-mill")
-
-
 def clone(
     remote_url: str, dest: Path, branch: str, token: str | None = None
 ) -> None:
@@ -76,11 +67,6 @@ def branch_exists(repo: Path, name: str) -> bool:
 def checkout(repo: Path, name: str) -> None:
     """Quiet checkout of branch *name*."""
     _git(repo, "checkout", "-q", name)
-
-
-def current_branch(repo: Path) -> str:
-    """Return the abbreviated current branch name."""
-    return _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
 
 
 def try_rebase_onto(repo: Path, target: str) -> bool:
