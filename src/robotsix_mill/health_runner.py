@@ -9,9 +9,7 @@ Seam: tests monkeypatch ``run_health_agent`` from agents.health.
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from .config import Settings
 from .core.service import TicketService
@@ -79,10 +77,9 @@ def run_health_pass(root: str | None = None) -> HealthPassResult:
 
     # One Langfuse session per health run, so its model calls are
     # attributed (no untagged traces). No-op if tracing isn't ready.
-    session_id = (
-        f"health-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-"
-        f"{uuid.uuid4().hex[:6]}"
-    )
+    from .runtime.tracing import make_session_id
+
+    session_id = make_session_id("health")
     log.info("health pass starting (session %s)", session_id)
     try:
         with tracing.start_ticket_root_span(session_id), \

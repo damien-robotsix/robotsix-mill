@@ -557,7 +557,8 @@ def deep_review_trace(
             # spans get exported as a properly-named, session-grouped
             # Langfuse trace.
             with tracing.start_ticket_root_span(
-                f"deep-review:{trace_id}", "deep-review"
+                tracing.make_session_id("deep-review"), "deep-review",
+                extra_attributes={"source_trace_id": trace_id},
             ):
                 result = run_trace_inspector(
                     settings=settings,

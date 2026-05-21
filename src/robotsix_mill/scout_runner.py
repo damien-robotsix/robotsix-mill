@@ -24,6 +24,7 @@ class ScoutPassResult:
 
     updated_memory: str
     drafts_created: list[dict]  # list of ticket dicts (id, title)
+    session_id: str = ""        # Langfuse session.id for this scout run
 
 
 def run_scout_pass(root: str | None = None) -> ScoutPassResult:
@@ -46,17 +47,19 @@ def run_scout_pass(root: str | None = None) -> ScoutPassResult:
 
     # Import here to allow monkeypatching in tests.
     from .agents import scouting
-    from .runtime.tracing import current_session
+    from .runtime.tracing import make_session_id, start_ticket_root_span
 
+    session_id = make_session_id("scout")
     try:
-        result = run_agent_pass(
-            agent_fn=scouting.run_scout_agent,
-            memory_file=memory_file,
-            source_label="scout",
-            service=service,
-            settings=settings,
-            origin_session=current_session(),
-        )
+        with start_ticket_root_span(session_id, "scout"):
+            result = run_agent_pass(
+                agent_fn=scouting.run_scout_agent,
+                memory_file=memory_file,
+                source_label="scout",
+                service=service,
+                settings=settings,
+                origin_session=session_id,
+            )
     except Exception as e:  # noqa: BLE001
         log.exception("scout agent failed")
         raise RuntimeError(f"scout agent failed: {e}") from e
@@ -64,4 +67,5 @@ def run_scout_pass(root: str | None = None) -> ScoutPassResult:
     return ScoutPassResult(
         updated_memory=result.updated_memory,
         drafts_created=result.drafts_created,
+        session_id=session_id,
     )

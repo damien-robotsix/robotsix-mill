@@ -9,9 +9,7 @@ Seam: tests monkeypatch ``run_agent_check_agent`` from agents.agent_check.
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 
@@ -82,10 +80,9 @@ def run_agent_check_pass(root: str | None = None) -> AgentCheckPassResult:
 
     # One Langfuse session per agent-check run, so its model calls are
     # attributed (no untagged traces). No-op if tracing isn't ready.
-    session_id = (
-        f"agent-check-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-"
-        f"{uuid.uuid4().hex[:6]}"
-    )
+    from .runtime.tracing import make_session_id
+
+    session_id = make_session_id("agent-check")
     log.info("agent-check pass starting (session %s)", session_id)
     try:
         with tracing.start_ticket_root_span(session_id), \
