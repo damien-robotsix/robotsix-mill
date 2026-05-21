@@ -49,29 +49,12 @@ def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None)
         category: str = "other",
         evidence: str = "",
     ) -> str:
-        """File a draft ticket about a problem you hit while working.
+        """File a draft when something blocks or degrades your run.
 
-        Use this when something blocks or degrades your execution and
-        is worth fixing in the system itself — e.g. a tool you needed
-        is missing, an unrecoverable error, a workflow that should be
-        improved, or detail missing from your inputs. Do NOT use it for
-        the normal task outcome; only for meta issues about the system.
-
-        Args:
-            title: short, specific, stable summary (used for dedup —
-                keep it the same for the same underlying issue).
-            body: what happened, what you expected, and a concrete
-                suggestion if you have one.
-            category: one of missing-tool, error, workflow-improvement,
-                missing-input, other.
-            evidence: (optional) raw output from the failing operation
-                — e.g. the command line + last ~50 lines of
-                stdout/stderr, or a traceback.  Will be written to
-                artifacts/evidence.txt in the ticket workspace.
-
-        Returns a short status string (never raises — a failure here
-        must not abort your run).
-        """
+        Use for meta issues: missing tools, unrecoverable errors, workflow
+        improvements, or missing inputs. Never for normal task output.
+        category: missing-tool|error|workflow-improvement|missing-input|other.
+        Never raises."""
         try:
             title = (title or "").strip()
             if not title:

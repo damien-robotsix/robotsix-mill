@@ -5,7 +5,6 @@ import pytest
 from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
 from robotsix_mill.agents.base import _compose_prompt, _model_name
-from robotsix_mill.agents.skills import load_skills
 from robotsix_mill.agents.web_research import make_web_research_tool
 from robotsix_mill.agents.web_tools import make_web_fetch
 from robotsix_mill.config import Settings
@@ -14,33 +13,6 @@ from robotsix_mill.config import Settings
 def _settings(tmp_path, **env):
     env.setdefault("MILL_DATA_DIR", str(tmp_path))
     return Settings(**env)
-
-
-# --- skills loader ------------------------------------------------------
-
-def test_load_skills_from_dir(tmp_path):
-    sk = tmp_path / "skills" / "demo"
-    sk.mkdir(parents=True)
-    (sk / "SKILL.md").write_text(
-        "---\nname: Demo\ndescription: does demo things\n"
-        "when_to_use: when demoing\n---\n# Body\nstep one\n"
-    )
-    out = load_skills(tmp_path / "skills")
-    assert "# Skills" in out
-    assert "Skill: Demo" in out
-    assert "does demo things" in out
-    assert "When to use:" in out and "when demoing" in out
-    assert "step one" in out
-
-
-def test_load_skills_missing_dir_is_empty(tmp_path):
-    assert load_skills(tmp_path / "nope") == ""
-
-
-def test_repo_ships_web_skills():
-    # the real skills/ dir in the repo has the two web skills
-    out = load_skills("skills")
-    assert "Web Fetch" in out and "Web Search" in out
 
 
 # --- agent_references/ folder shipped with the repo ---------------------
@@ -136,11 +108,11 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
     assert captured["name"] == "web_research"
 
 
-def test_compose_prompt_appends_skills(tmp_path):
+def test_compose_prompt_no_longer_appends_skills(tmp_path):
     s = _settings(tmp_path, MILL_SKILLS_DIR="skills")
     p = _compose_prompt(s, "BASE PROMPT")
-    assert p.startswith("BASE PROMPT")
-    assert "Web Fetch" in p
+    assert p == "BASE PROMPT"
+    assert "Web Fetch" not in p
 
 
 # --- web_fetch tool -----------------------------------------------------
