@@ -126,6 +126,60 @@ def run_audit_agent(
     memory: str = "",
     repo_dir=None,
 ) -> AuditResult:
+    """Run the meta-audit pass.
+
+    Audits the repository through two complementary lenses —
+    codebase health / maintainability (lens A, by reading the actual
+    code) and tooling / security coverage (lens B, using
+    ``web_research`` for external best practices) — and returns a
+    structured ``AuditResult`` with draft tickets.  For recurring
+    quality dimensions the agent proposes dedicated standing
+    checkers rather than emitting per-instance remediation tickets.
+
+    When ``repo_dir`` is provided, the agent gets filesystem tools
+    (``read_file``, ``list_dir``) and the ``explore`` scout tool so
+    it can inspect the actual codebase.  Without ``repo_dir`` the
+    agent runs in a read-only reasoning mode (no repo access).
+
+    The agent is constructed via :func:`~.base.build_agent` with the
+    role-specific ``SYSTEM_PROMPT``, structured output type
+    ``PromptedOutput(AuditResult)`` (for provider compatibility),
+    ``web=True`` (for the ``web_research`` sub-agent tool),
+    ``report_issue=False`` (the agent emits drafts through its
+    structured output instead), and
+    ``model_name=settings.audit_model``.
+
+    Execution is wrapped in :func:`~.retry.call_with_retry`, which
+    handles transient network/model failures (exponential backoff:
+    2s base, 30s cap) and ``UsageLimitExceeded`` rate-limit errors
+    (30s base, 120s cap with provider fallback after
+    ``settings.rate_limit_fallback_retries`` consecutive failures).
+
+    .. note::
+
+        The tool-building pipeline (``make_explore_tool`` + filtered
+        ``build_fs_tools`` → ``build_agent``) is duplicated verbatim
+        in :func:`~.health.run_health_agent`.  This is tracked under
+        the ``audit_health_duplication`` hotspot (see
+        :mod:`~.agent_check`).  Both agents inspect overlapping
+        codebase-health dimensions; changes to the pipeline should
+        be made in both places until a shared builder is extracted.
+
+    Args:
+        settings: Application configuration — model names
+            (``audit_model``), retry parameters, forge URL, and
+            tool paths.
+        memory: The agent's memory ledger as a Markdown string.
+            Defaults to ``""`` (the agent starts a fresh ledger).
+        repo_dir: Optional path to the local repository clone.
+            When not ``None``, enables the ``explore``,
+            ``read_file``, and ``list_dir`` tools.
+
+    Returns:
+        An ``AuditResult`` with draft titles, bodies, and gap IDs
+        clipped to ``MAX_GAPS`` (5) entries, plus the updated memory
+        ledger.
+    """
     from pydantic_ai import PromptedOutput
 
     from .base import build_agent
