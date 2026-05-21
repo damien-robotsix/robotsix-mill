@@ -408,6 +408,92 @@ def test_memory_updated_includes_new_proposals(tmp_path, monkeypatch):
     assert "MILL_MODEL" in result.updated_memory
 
 
+# ── _fetch_endpoints response-shape robustness ───────────────────────
+
+
+class _FakeResp:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+class _FakeClient:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def get(self, *_args, **_kwargs):
+        return _FakeResp(self._payload)
+
+
+def test_fetch_endpoints_nested_dict_shape(tmp_path):
+    """OpenRouter's actual /models/{id}/endpoints response wraps the
+    list inside data["data"]["endpoints"]. The old code iterated
+    data["data"] directly as if it were the list, which yielded the
+    dict's KEYS (strings) and crashed with 'str object has no
+    attribute get' on the next .get() call. Regression guard."""
+    s = _make_settings(tmp_path)
+    payload = {
+        "data": {
+            "id": "x/y",
+            "name": "X / Y",
+            "endpoints": [{
+                "provider_name": "ProviderA",
+                "status": "active",
+                "uptime_last_30m": 0.99,
+                "supports_tool_calls": True,
+                "context_length": 200000,
+                "pricing": {"prompt": "0.0001", "completion": "0.0002"},
+                "latency_last_30m": {"p50": 0.5, "p95": 1.2},
+                "throughput_last_30m": {"p50": 60.0, "p95": 80.0},
+            }],
+        }
+    }
+    eps = scouting._fetch_endpoints(_FakeClient(payload), s, "x/y")
+    assert len(eps) == 1
+    assert eps[0].provider_name == "ProviderA"
+    assert eps[0].status == "active"
+    assert eps[0].prompt_price == pytest.approx(0.0001)
+
+
+def test_fetch_endpoints_legacy_list_shape(tmp_path):
+    """Tolerate the legacy shape where data["data"] is the endpoints
+    list directly — used to be the case in older OpenRouter responses;
+    the defensive branch keeps it working if the API ever reverts."""
+    s = _make_settings(tmp_path)
+    payload = {
+        "data": [{
+            "provider_name": "ProviderLegacy",
+            "status": "active",
+            "context_length": 100000,
+            "pricing": {"prompt": "0.001"},
+        }]
+    }
+    eps = scouting._fetch_endpoints(_FakeClient(payload), s, "x/y")
+    assert len(eps) == 1
+    assert eps[0].provider_name == "ProviderLegacy"
+
+
+def test_fetch_endpoints_malformed_entries_are_skipped(tmp_path):
+    """Non-dict items inside the endpoints list must be skipped, not
+    crash the run."""
+    s = _make_settings(tmp_path)
+    payload = {"data": {"endpoints": ["junk", None, {"provider_name": "ok"}]}}
+    eps = scouting._fetch_endpoints(_FakeClient(payload), s, "x/y")
+    assert [e.provider_name for e in eps] == ["ok"]
+
+
+def test_fetch_endpoints_unexpected_shape_returns_empty(tmp_path):
+    """A wholly unexpected top-level shape returns [] cleanly."""
+    s = _make_settings(tmp_path)
+    eps = scouting._fetch_endpoints(_FakeClient({"data": 42}), s, "x/y")
+    assert eps == []
+
+
 # ── ModelInfo properties ──────────────────────────────────────────────
 
 

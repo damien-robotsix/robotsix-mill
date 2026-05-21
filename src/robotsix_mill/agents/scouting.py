@@ -228,8 +228,24 @@ def _fetch_endpoints(
         log.warning("Failed to fetch endpoints for %s", model_id)
         return []
     data = r.json()
+    # OpenRouter's /models/{id}/endpoints returns:
+    #   {"data": {"id": ..., "name": ..., "endpoints": [ … ]}}
+    # Older code assumed data["data"] was the endpoints list directly
+    # (iterating a dict yields its KEYS — bare strings — and the next
+    # `raw.get(...)` blew up with `'str' object has no attribute 'get'`).
+    # Read the nested .endpoints, while tolerating the legacy list
+    # shape in case the API ever flips back.
+    container = data.get("data", {})
+    if isinstance(container, dict):
+        items = container.get("endpoints", []) or []
+    elif isinstance(container, list):
+        items = container
+    else:
+        items = []
     eps: list[EndpointInfo] = []
-    for raw in data.get("data", []):
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue  # defensive: malformed entry
         pricing = raw.get("pricing", {}) or {}
         eps.append(EndpointInfo(
             provider_name=raw.get("provider_name", ""),
