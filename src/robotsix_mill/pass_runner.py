@@ -8,14 +8,103 @@ Agent modules are NOT imported here — the caller provides a callable.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
 from .config import Settings
 from .core.service import TicketService
+from .core.states import State
+from .core.workspace import Workspace
 
 log = logging.getLogger("robotsix_mill.pass_runner")
+
+# Matches <!-- audit-gap-id: foo_bar --> style markers in ticket descriptions.
+_GAP_ID_RE = re.compile(
+    r'<!--\s*(audit|health|agent_check|retrospect)-gap-id:\s*(\S+)\s*-->'
+)
+
+
+def _verify_prior_proposals(
+    service: TicketService,
+    settings: Settings,
+    source_label: str,
+) -> dict[str, dict]:
+    """Query the ticket store for drafts previously spawned by the
+    agent identified by *source_label*, check their state, and return a
+    mapping from ``gap_id`` → ``{ticket_id, state, resolution, branch}``.
+
+    Only tickets whose description contains a ``<!-- {label}-gap-id:
+    ... -->`` marker matching *source_label* are included.  Pre-rollout
+    drafts without markers are silently skipped.
+    """
+    result: dict[str, dict] = {}
+
+    # 1. List all tickets; filter client-side to matching source.
+    try:
+        all_tickets = service.list()
+    except Exception:
+        log.debug("_verify_prior_proposals: service.list() failed — "
+                  "returning empty mapping (DB may not be initialised)")
+        return result
+    for ticket in all_tickets:
+        if ticket.source != source_label:
+            continue
+
+        # 2. Read description and parse marker.
+        desc = Workspace(settings.workspaces_dir, ticket.id).read_description()
+        for m in _GAP_ID_RE.finditer(desc):
+            marker_label, gap_id = m.group(1), m.group(2)
+            if marker_label != source_label:
+                continue
+
+            # 3. Determine resolution.
+            state_str = ticket.state.name if hasattr(ticket.state, 'name') else str(ticket.state)
+            if ticket.state == State.CLOSED:
+                history = service.history(ticket.id)
+                if any(ev.state == State.DONE for ev in history):
+                    resolution = "merged"
+                else:
+                    resolution = "declined"
+            elif ticket.state == State.DONE:
+                resolution = "merged"
+            else:
+                resolution = "in-flight"
+
+            result[gap_id] = {
+                "ticket_id": ticket.id,
+                "state": state_str,
+                "resolution": resolution,
+                "branch": ticket.branch,
+            }
+
+    return result
+
+
+def _render_verified_table(verified: dict[str, dict]) -> str:
+    """Render a Markdown table from the verified mapping for agent input."""
+    lines = [
+        "## Prior proposals — verified state",
+        "",
+        "| gap_id | ticket_id | state | resolution |",
+        "|--------|-----------|-------|------------|",
+    ]
+    for gap_id, info in verified.items():
+        tid = info["ticket_id"]
+        if info.get("branch"):
+            tid = f"{tid} (branch: {info['branch']})"
+        resolution = info["resolution"]
+        if resolution == "merged":
+            resolution_str = "merged (via DONE)"
+        elif resolution == "declined":
+            resolution_str = "declined (closed directly)"
+        else:
+            resolution_str = "in-flight"
+        lines.append(
+            f"| {gap_id} | {tid} | {info['state']} | {resolution_str} |"
+        )
+    return "\n".join(lines)
 
 
 def load_memory(memory_file: Path) -> str:
@@ -75,20 +164,30 @@ def run_agent_pass(
     # 1. Read current memory — empty string if missing/unreadable.
     memory_text = load_memory(memory_file)
 
-    # 2. Invoke the agent callable.
+    # 2. Verify prior proposals and prepend verified-state table.
+    verified = _verify_prior_proposals(service, settings, source_label)
+    if verified:
+        table = _render_verified_table(verified)
+        memory_text = table + "\n\n" + memory_text
+
+    # 3. Invoke the agent callable.
     res = agent_fn(settings=settings, memory=memory_text)
 
-    # 3. Persist the agent's updated memory verbatim.
+    # 4. Persist the agent's updated memory verbatim.
     if res.updated_memory:
         persist_memory(memory_file, res.updated_memory)
 
-    # 4. Create draft tickets for each proposal.
+    # 5. Create draft tickets for each proposal.
+    gap_ids = getattr(res, 'gap_ids', [])
     created: list[dict] = []
     for i in range(min(len(res.draft_titles), len(res.draft_bodies))):
         title = res.draft_titles[i]
         body = res.draft_bodies[i]
         if not title or not body:
             continue
+        # Append gap-id marker if available.
+        if i < len(gap_ids) and gap_ids[i]:
+            body += f"\n\n<!-- {source_label}-gap-id: {gap_ids[i]} -->"
         try:
             ticket = service.create(
                 title,

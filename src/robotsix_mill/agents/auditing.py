@@ -79,22 +79,27 @@ or already addressed (done). The memory is *yours* — you own its
 structure and content.
 
 Your task:
-1. Inspect the ACTUAL repository for lens-A maintainability findings
+1. **BEFORE proposing new gaps**, reconcile your memory ledger against the `## Prior proposals — verified state` block in your input:
+   - Items whose ticket reached CLOSED with resolution `merged` → move to `## Done` (or equivalent), include the ticket_id.
+   - Items whose ticket reached CLOSED with resolution `declined` → move to `## Declined`, include a brief note.
+   - Items with resolution `in-flight` → leave in `## Proposals`.
+   - Do **not** re-propose anything that appears as Done or Declined.
+2. Inspect the ACTUAL repository for lens-A maintainability findings
    (list_dir/explore/read_file). This needs NO web_research.
-2. Use web_research for 2-4 current best practices relevant to
+3. Use web_research for 2-4 current best practices relevant to
    lens-B tooling/security coverage.
-3. Compare both against the repo and the memory ledger. Aim for a
+4. Compare both against the repo and the memory ledger. Aim for a
    MIX of A and B proposals across a pass — not only B.
-4. For each gap NOT already recorded in the memory: apply the DEFAULT
+5. For each gap NOT already recorded in the memory: apply the DEFAULT
    MECHANISM RULE. Recurring dimension with no standing owner ->
    propose ONE dedicated quality-checking agent for it (and record
    that dimension as owned in the memory so you don't re-enumerate
    its instances later). Genuinely one-off structural change ->
    a direct ticket. Never both for the same dimension.
-5. Update the memory ledger to record new gaps found, mark ones
+6. Update the memory ledger to record new gaps found, mark ones
    that are now addressed, and track which gaps have been proposed
    (to avoid duplicates).
-6. Return the updated memory ledger verbatim in `updated_memory`.
+7. Return the updated memory ledger verbatim in `updated_memory`.
 
 For each gap you decide to propose as a draft ticket, provide:
 - `draft_title`: concise, actionable title
