@@ -42,6 +42,8 @@ class State(StrEnum):
     CLOSED = "closed"        # retrospected; pipeline complete (terminal)
     ERRORED = "errored"       # a stage threw an unhandled exception
     BLOCKED = "blocked"       # escalated; needs a human
+    ASKED = "asked"           # inquiry submitted; awaiting answer
+    ANSWERED = "answered"     # inquiry answered (terminal)
 
 
 #: state -> the set of states it may transition to (the "happy path"
@@ -72,10 +74,14 @@ TRANSITIONS: dict[State, set[State]] = {
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED},
     State.CLOSED: set(),
+    # inquiry states: asked -> answered (terminal), or errored/blocked
+    State.ASKED: {State.ANSWERED, State.ERRORED, State.BLOCKED},
+    State.ANSWERED: set(),
     # a human moves these back into the pipeline manually
     State.ERRORED: {State.READY, State.DRAFT},
     # BLOCKED: human can override to READY or DRAFT (re-run downstream),
     # or resume to the originating state (re-run only the failed stage).
+    # ASKED is included so a blocked inquiry can resume to ASKED.
     State.BLOCKED: {State.READY, State.DRAFT},
 }
 
@@ -88,6 +94,7 @@ STAGE_FOR_STATE: dict[State, str] = {
     State.REBASING: "merge",
     State.FIXING_CI: "ci_fix",
     State.DONE: "retrospect",
+    State.ASKED: "answer",
 }
 
 
@@ -98,6 +105,8 @@ def can_transition(src: State, dst: State, blocked_from: State | None = None) ->
     the recorded ``blocked_from`` state (the resume path).  The
     existing ``BLOCKED → READY`` and ``BLOCKED → DRAFT`` overrides are
     always available regardless of ``blocked_from``.
+    Additionally, ``BLOCKED → ASKED`` is allowed when resuming a
+    blocked inquiry.
     """
     allowed = TRANSITIONS.get(src, set())
     if dst in allowed:

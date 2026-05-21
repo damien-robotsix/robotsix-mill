@@ -137,6 +137,7 @@ def enrich_ticket_read(
         id=ticket.id,
         title=ticket.title,
         state=ticket.state,
+        kind=ticket.kind,
         branch=ticket.branch,
         parent_id=ticket.parent_id,
         source=ticket.source,

@@ -6,6 +6,7 @@
     robotsix-mill ticket show <id>
     robotsix-mill ticket approve <id>
     robotsix-mill ticket resume-blocked <id>
+    robotsix-mill inquire --title T [--description-file F | -]
     robotsix-mill audit                        # run an audit pass
     robotsix-mill scout                        # run a scout pass
     robotsix-mill trace-health                 # run a trace-health check
@@ -213,6 +214,15 @@ def main(argv: list[str] | None = None) -> int:
         help="output full JSON result (default: summary)",
     )
 
+    # --- inquire command ---
+    p_inquire = sub.add_parser(
+        "inquire", help="ask a one-shot question (no code-change lifecycle)"
+    )
+    p_inquire.add_argument("--title", required=True)
+    p_inquire.add_argument(
+        "--description-file", help="file with the question body; '-' reads stdin"
+    )
+
     args = parser.parse_args(argv)
     settings = Settings()
 
@@ -228,6 +238,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd in _RUNNERS:
         return _run_and_print(args.cmd, args)
+
+    if args.cmd == "inquire":
+        body = ""
+        if args.description_file == "-":
+            body = sys.stdin.read()
+        elif args.description_file:
+            with open(args.description_file, encoding="utf-8") as f:
+                body = f.read()
+        r = c.post(
+            "/tickets",
+            json={"title": args.title, "description": body, "kind": "inquiry"},
+        )
+        r.raise_for_status()
+        print(r.json()["id"])
+        return 0
 
     with _client(settings) as c:
         if args.tcmd == "new":

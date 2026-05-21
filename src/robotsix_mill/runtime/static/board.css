@@ -77,3 +77,6 @@ padding:4px 0;font-size:12px;color:#cfd3db;border-bottom:1px solid rgba(255,255,
 .dr-finding:last-child{border-bottom:none}
 .dr-ticket-btn:hover{background:#3b82f6!important}
 .dr-btn:hover{background:#2a3a4b!important}
+.s-asked{--c:#38bdf8}.s-answered{--c:#34d399}
+.inquiry-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
+margin-top:3px;background:#1e2a3a;color:#38bdf8;text-transform:uppercase;letter-spacing:.04em}

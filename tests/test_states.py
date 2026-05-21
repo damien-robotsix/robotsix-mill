@@ -12,10 +12,10 @@ from robotsix_mill.core.states import (
 )
 
 # Known stage names that STAGE_FOR_STATE values must belong to.
-VALID_STAGE_NAMES = {"refine", "implement", "deliver", "merge", "ci_fix", "retrospect"}
+VALID_STAGE_NAMES = {"refine", "implement", "deliver", "merge", "ci_fix", "retrospect", "answer"}
 
 # States that should NOT appear as keys in STAGE_FOR_STATE.
-NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.AWAITING_APPROVAL}
+NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.AWAITING_APPROVAL, State.ANSWERED}
 
 # All states for iteration.
 ALL_STATES = list(State)
@@ -92,10 +92,13 @@ def test_blocked_without_blocked_from_fails_for_non_declared():
 # ---------------------------------------------------------------------------
 
 def test_closed_is_terminal():
-    """From CLOSED, no transition to any state is allowed."""
+    """From CLOSED or ANSWERED, no transition to any state is allowed."""
     for dst in ALL_STATES:
         assert can_transition(State.CLOSED, dst) is False, (
             f"CLOSED → {dst.value} should be forbidden"
+        )
+        assert can_transition(State.ANSWERED, dst) is False, (
+            f"ANSWERED → {dst.value} should be forbidden"
         )
 
 
@@ -127,8 +130,31 @@ def test_stage_for_state_values():
 
 
 # ---------------------------------------------------------------------------
-# Transition edge-case spot-checks
+# Inquiry edge-case spot-checks
 # ---------------------------------------------------------------------------
+
+def test_asked_to_answered():
+    assert can_transition(State.ASKED, State.ANSWERED) is True
+
+
+def test_asked_to_blocked():
+    assert can_transition(State.ASKED, State.BLOCKED) is True
+
+
+def test_asked_to_errored():
+    assert can_transition(State.ASKED, State.ERRORED) is True
+
+
+def test_blocked_resume_to_asked():
+    assert can_transition(State.BLOCKED, State.ASKED, blocked_from=State.ASKED) is True
+
+
+def test_stage_for_state_asked():
+    assert STAGE_FOR_STATE[State.ASKED] == "answer"
+
+
+def test_answered_not_in_stage_for_state():
+    assert State.ANSWERED not in STAGE_FOR_STATE
 
 def test_draft_to_awaiting_approval():
     assert can_transition(State.DRAFT, State.AWAITING_APPROVAL) is True
@@ -150,7 +176,7 @@ def test_errored_as_destination():
     """States that declare ERRORED in TRANSITIONS can reach it."""
     for src in (State.DRAFT, State.AWAITING_APPROVAL, State.READY,
                 State.DELIVERABLE, State.IN_REVIEW, State.REBASING,
-                State.FIXING_CI, State.DONE):
+                State.FIXING_CI, State.DONE, State.ASKED):
         assert can_transition(src, State.ERRORED) is True, (
             f"{src.value} → ERRORED should be valid"
         )
