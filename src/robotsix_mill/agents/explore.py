@@ -108,7 +108,8 @@ def make_explore_tool(settings: Settings, repo_dir: Path):
         about the repository (structure, where something lives, or the
         full content of named files). It reads the repo so you don't
         have to — keep YOUR context lean by delegating all reading
-        here. Ask for exactly what you need next."""
+        here. Returns concise paths/symbols/line-ranges, never whole
+        files. Ask for exactly what you need next."""
         return run_explore(
             settings=settings, repo_dir=repo_dir, question=question
         )

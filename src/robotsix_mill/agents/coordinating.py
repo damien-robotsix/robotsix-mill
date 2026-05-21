@@ -1,17 +1,8 @@
 """The implement agent.
 
-A capable model that reads and edits the repo ITSELF — but keeps its
-context lean via two cheap sub-agents:
-
-- ``explore`` — a scout that returns concise pointers (paths, symbols,
-  line ranges), NEVER whole files. The main agent then reads only the
-  specific files it needs with ``read_file``.
-- ``run_tests`` — the test sub-agent runs the suite in the sandbox and
-  returns a distilled PASS/FAIL diagnosis, never the raw log.
-
-It implements directly (``read_file``/``write_file``/``edit_file``/``list_dir``),
-runs tests, and loops on failure. No separate implement sub-agent —
-that layer just re-explored everything and never converged.
+A capable model that reads and edits the repo ITSELF. It implements
+directly, runs tests, and loops on failure. No separate implement
+sub-agent — that layer just re-explored everything and never converged.
 
 ``run_coordinator`` is the seam ``coding.run_implement_agent`` drives
 (name kept for the stage/tests).
@@ -25,20 +16,6 @@ from ..config import Settings
 
 _SYSTEM_PROMPT = """\
 You are a senior engineer implementing ONE ticket in a git repo.
-
-Tools:
-- `explore(question)` — a fast scout: it returns the paths/symbols/
-  line-ranges relevant to your question, NOT file contents. Use it to
-  locate things instead of scanning the tree yourself.
-- `read_file`/`list_dir` — read exactly the files explore pointed you
-  to (only what you need; don't bulk-read).
-- `edit_file(path, old_string, new_string)` — replace a unique string
-  in a file; **prefer this for changes**.
-- `write_file` — create a new file, or overwrite when `edit_file`
-  reports it can't apply.
-- `web_research(query)` — anything not in the repo.
-- `run_tests()` — runs the suite in the sandbox; returns PASS or FAIL
-  plus a short, actionable diagnosis (never the raw log).
 
 Procedure:
 1. `explore` to orient; `read_file` the specific files you'll change.

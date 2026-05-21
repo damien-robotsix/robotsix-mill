@@ -69,10 +69,9 @@ a static rule. This keeps the audit a thin meta-layer that builds the
 right standing checkers — it does not itself become the checker.
 
 `web_research` is for EXTERNAL best-practice lookups ONLY — never use
-it to read this project's own files. When a local clone is available
-you have `explore` (a scout returning concise paths/symbols, not whole
-files) and `read_file`/`list_dir`; inspect the ACTUAL repository with
-those. (With no clone, reason from the forge_remote_url + memory.)
+it to read this project's own files. When a local clone is available,
+inspect the ACTUAL repository with `explore`, `read_file`, and
+`list_dir`. (With no clone, reason from the forge_remote_url + memory.)
 
 You are given the current audit memory ledger — a Markdown document
 that tracks gaps that have been proposed (as draft tickets), declined,
