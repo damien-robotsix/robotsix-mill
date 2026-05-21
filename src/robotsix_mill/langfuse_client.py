@@ -213,23 +213,58 @@ def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
 
 
 def list_recent_traces(
-    settings: Settings, limit: int = 10
+    settings: Settings,
+    limit: int = 10,
+    min_cost: float | None = None,
+    max_cost: float | None = None,
 ) -> list[dict]:
-    """Return the *limit* most-recent traces from Langfuse, ordered by
-    timestamp descending.
+    """Return up to *limit* most-recent traces from Langfuse, ordered by
+    timestamp descending. Optionally filter by totalCost (inclusive).
+
+    When neither *min_cost* nor *max_cost* is provided, fetches exactly
+    *limit* traces (no extra API cost — current behaviour preserved).
+
+    When a cost filter is active, fetches ``max(limit * 5, 50)`` traces
+    to increase the chance of finding matches after filtering, then
+    applies the cost filter in Python and returns at most *limit*.
 
     Returns an empty list (never crashes) when Langfuse is unconfigured
     or any HTTP / JSON error occurs — the caller must treat ``[]`` as
     "no data available."
     """
+    cost_filter_active = min_cost is not None or max_cost is not None
+    fetch_limit = max(limit * 5, 50) if cost_filter_active else limit
+
     data = _langfuse_api_get(
         settings,
         "/api/public/traces",
-        params={"orderBy": "timestamp.desc", "limit": limit},
+        params={"orderBy": "timestamp.desc", "limit": fetch_limit},
     )
     if data is None:
         return []
-    return data.get("data", [])
+    traces = data.get("data", [])
+
+    if not cost_filter_active:
+        return traces[:limit]
+
+    def _cost(t: dict) -> float:
+        try:
+            return float(t.get("totalCost") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    filtered: list[dict] = []
+    for t in traces:
+        c = _cost(t)
+        if min_cost is not None and c < min_cost:
+            continue
+        if max_cost is not None and c > max_cost:
+            continue
+        filtered.append(t)
+        if len(filtered) >= limit:
+            break
+
+    return filtered
 
 
 def list_all_traces_since(

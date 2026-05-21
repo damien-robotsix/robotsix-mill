@@ -58,6 +58,9 @@ border-radius:6px;padding:10px;overflow-x:auto}
 .s-done{--c:#22c55e}.s-closed{--c:#14b8a6}.s-blocked{--c:#f97316}
 .s-errored{--c:#ef4444}
 /* deep-review elements */
+.dr-filters{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.dr-filters input{font-size:11px;background:#1d212c;border:1px solid #262b36;color:#cfd3db;border-radius:4px;padding:3px 6px}
+.dr-filters label{font-size:11px;color:#7d828c}
 .trace-row{padding:8px 10px;margin:4px 0;border:1px solid #262b36;
 border-radius:6px;cursor:pointer;background:#1d212c}
 .trace-row:hover{background:#232836}
