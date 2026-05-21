@@ -28,6 +28,7 @@ from ..agents import refining
 from ..core.datetime_utils import _as_utc
 from ..core.models import Ticket
 from ..core.states import State
+from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -186,11 +187,17 @@ class RefineStage(Stage):
                     f"[{c.created_at.isoformat()}] {c.body}" for c in comments
                 )
 
+            memory_text = load_memory(s.refine_memory_file)
+
             result = refining.run_refine_agent(
                 settings=s, title=ticket.title, draft=draft,
                 repo_dir=repo_dir,
                 reviewer_comments=reviewer_comments,
+                memory=memory_text,
             )
+
+            if result.updated_memory:
+                persist_memory(s.refine_memory_file, result.updated_memory)
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))
 
@@ -201,8 +208,8 @@ class RefineStage(Stage):
         )
 
         # --- normal single-scope path ---
-        if not result.get("split"):
-            spec = result.get("spec", "")
+        if not result.split:
+            spec = result.spec_markdown or ""
             if not spec or not spec.strip():
                 return Outcome(State.BLOCKED, "refiner produced an empty spec")
 
@@ -216,10 +223,10 @@ class RefineStage(Stage):
             return Outcome(next_state, "refined")
 
         # --- multi-scope split path ---
-        children_raw: list = result.get("children", [])
-        if not isinstance(children_raw, list) or len(children_raw) == 0:
+        children_raw = result.children
+        if not children_raw or len(children_raw) == 0:
             # Degrade gracefully: treat as single-spec with whatever we got.
-            spec = result.get("spec", "")
+            spec = result.spec_markdown or ""
             if not spec or not spec.strip():
                 return Outcome(State.BLOCKED, "refiner produced an empty spec (split with no children)")
             new_hash = ws.write_description(spec)
@@ -233,19 +240,17 @@ class RefineStage(Stage):
         # Validate and collect valid children.
         valid_children: list[dict] = []
         for child in children_raw:
-            if not isinstance(child, dict):
+            child_title = (child.title or "").strip()
+            spec_md = (child.spec_markdown or "").strip()
+            if not child_title or not spec_md:
                 continue
-            title = (child.get("title") or "").strip()
-            spec_md = (child.get("spec_markdown") or "").strip()
-            if not title or not spec_md:
-                continue
-            deps = child.get("depends_on", [])
+            deps = child.depends_on or []
             if not isinstance(deps, list):
                 deps = []
             # Keep only non-negative integer indices.
             deps = [d for d in deps if isinstance(d, int) and d >= 0]
             valid_children.append({
-                "title": title,
+                "title": child_title,
                 "spec_markdown": spec_md,
                 "depends_on": deps,
             })

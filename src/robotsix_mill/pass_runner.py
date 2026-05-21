@@ -18,6 +18,26 @@ from .core.service import TicketService
 log = logging.getLogger("robotsix_mill.pass_runner")
 
 
+def load_memory(memory_file: Path) -> str:
+    """Read a memory ledger file; returns ``""`` if missing/unreadable."""
+    try:
+        if memory_file.exists():
+            return memory_file.read_text(encoding="utf-8")
+    except OSError:
+        log.warning("could not read memory file %s", memory_file)
+    return ""
+
+
+def persist_memory(memory_file: Path, text: str) -> None:
+    """Write *text* to *memory_file*, creating parent dirs as needed."""
+    if text or not memory_file.exists():
+        try:
+            memory_file.parent.mkdir(parents=True, exist_ok=True)
+            memory_file.write_text(text, encoding="utf-8")
+        except OSError:
+            log.warning("could not write memory file %s", memory_file)
+
+
 @dataclass
 class AgentPassResult:
     """Internal result of running an agent pass."""
@@ -53,23 +73,14 @@ def run_agent_pass(
         ``AgentPassResult`` with updated memory and created draft info.
     """
     # 1. Read current memory — empty string if missing/unreadable.
-    memory_text = ""
-    try:
-        if memory_file.exists():
-            memory_text = memory_file.read_text(encoding="utf-8")
-    except OSError:
-        log.warning("could not read memory file %s", memory_file)
+    memory_text = load_memory(memory_file)
 
     # 2. Invoke the agent callable.
     res = agent_fn(settings=settings, memory=memory_text)
 
     # 3. Persist the agent's updated memory verbatim.
     if res.updated_memory:
-        try:
-            memory_file.parent.mkdir(parents=True, exist_ok=True)
-            memory_file.write_text(res.updated_memory, encoding="utf-8")
-        except OSError:
-            log.warning("could not write memory file %s", memory_file)
+        persist_memory(memory_file, res.updated_memory)
 
     # 4. Create draft tickets for each proposal.
     created: list[dict] = []

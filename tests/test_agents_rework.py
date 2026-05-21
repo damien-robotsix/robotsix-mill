@@ -8,6 +8,7 @@ import pytest
 
 from robotsix_mill.agents import coordinating, testing
 from robotsix_mill.agents import openrouter_cost as oc
+from robotsix_mill.agents.coordinating import ImplementResult
 from robotsix_mill.config import Settings
 
 
@@ -34,7 +35,7 @@ def fake_ai(monkeypatch):
 
         def run_sync(self, prompt, *, usage_limits=None, **kw):
             cap["limit"] = getattr(usage_limits, "request_limit", None)
-            return type("R", (), {"output": "  did it  "})()
+            return type("R", (), {"output": ImplementResult(summary="did it")})()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
@@ -53,7 +54,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     out = coordinating.run_coordinator(
         settings=s, repo_dir=tmp_path, spec="build a thing"
     )
-    assert out == "did it"
+    assert out.summary == "did it"
     assert fake_ai["model"] == "main/cap"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [

@@ -34,6 +34,7 @@ from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
 from ..forge.auth import github_token
+from ..pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
@@ -193,12 +194,17 @@ class MergeStage(Stage):
             # invisible in the per-ticket session total.)
             with tracing.start_ticket_root_span(ticket.id), \
                     tracing.trace_stage("rebase"):
-                ok = run_rebase_agent(
+                memory_text = load_memory(s.rebase_memory_file)
+                result = run_rebase_agent(
                     settings=s,
                     repo_dir=repo_dir,
                     branch=branch,
                     target=target,
+                    memory=memory_text,
                 )
+                ok = result.status == "DONE"
+                if result.updated_memory:
+                    persist_memory(s.rebase_memory_file, result.updated_memory)
         except Exception as e:  # noqa: BLE001
             log.exception("%s: rebase agent crashed: %s", ticket.id, e)
             ok = False

@@ -14,6 +14,7 @@ from robotsix_mill.stages.ci_fix import (
     _write_counter,
     _build_failing_summary,
 )
+from robotsix_mill.agents.ci_fixing import CiFixResult
 
 
 def _ctx(tmp_path, **env):
@@ -58,9 +59,14 @@ def test_fix_success_push_success_returns_in_review(tmp_path, monkeypatch):
             "failing": [{"name": "lint", "summary": "err", "text": None, "annotations": []}],
         },
     )
+    # pr_status is called to get head_sha for job-log fetching.
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
-        lambda **k: True,
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     push_seen = {}
 
@@ -95,8 +101,12 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
-        lambda **k: True,
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.push",
@@ -123,8 +133,12 @@ def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
-        lambda **k: False,
+        lambda **k: CiFixResult(status="FAILED", summary="nope"),
     )
 
     push_calls = []
@@ -157,8 +171,12 @@ def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
-        lambda **k: False,
+        lambda **k: CiFixResult(status="FAILED", summary="nope"),
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.push",
@@ -192,6 +210,10 @@ def test_agent_crash_treated_as_failure(tmp_path, monkeypatch):
             "conclusion": "failure",
             "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
         },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
@@ -239,8 +261,12 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
-        lambda **k: True,
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     push_args = {}
 
@@ -331,8 +357,12 @@ def test_counter_location_is_artifacts_dir(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
-        lambda **k: False,
+        lambda **k: CiFixResult(status="FAILED", summary="nope"),
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.push",
@@ -454,7 +484,7 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
     # ci-fix agent succeeds.
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
-        lambda **k: True,
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     # push succeeds.
     monkeypatch.setattr(

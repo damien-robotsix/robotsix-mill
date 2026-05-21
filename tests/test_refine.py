@@ -5,11 +5,32 @@ import pytest
 
 from robotsix_mill.agents import dedup
 from robotsix_mill.agents import refining
+from robotsix_mill.agents.refining import ChildSpec, RefineResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import RefineStage
 from robotsix_mill.runtime.worker import process_ticket
+
+
+def _single(spec: str) -> RefineResult:
+    """Shorthand for a single-scope refine result."""
+    return RefineResult(split=False, spec_markdown=spec)
+
+
+def _split(*children: dict) -> RefineResult:
+    """Shorthand for a split refine result."""
+    return RefineResult(
+        split=True,
+        children=[
+            ChildSpec(
+                title=c["title"],
+                spec_markdown=c["spec_markdown"],
+                depends_on=c.get("depends_on", []),
+            )
+            for c in children
+        ],
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +56,7 @@ def test_empty_title_and_draft_blocks(ctx, service):
 
 
 def test_no_api_key_blocks(ctx, service, monkeypatch):
-    def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     monkeypatch.setattr(refining, "run_refine_agent", boom)
@@ -50,13 +71,13 @@ def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
     refine_called = False
 
     def fake_refine(
-        *, settings, title, draft, repo_dir=None, reviewer_comments=None
+        *, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""
     ):
         nonlocal refine_called
         refine_called = True
         assert title == "Add dark mode toggle"
         assert draft == ""
-        return {"split": False, "spec": spec}
+        return _single(spec)
 
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
     t = service.create("Add dark mode toggle", "")
@@ -73,7 +94,7 @@ def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
 def test_success_rewrites_description(ctx, service, monkeypatch):
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec}
+        refining, "run_refine_agent", lambda **_: _single(spec)
     )
     t = service.create("Add X", "make x happen")
 
@@ -89,7 +110,7 @@ def test_success_rewrites_description(ctx, service, monkeypatch):
 
 
 def test_empty_spec_blocks(ctx, service, monkeypatch):
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": "  \n "})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
     out = RefineStage().run(service.create("x", "draft"), ctx)
     assert out.next_state is State.BLOCKED
 
@@ -99,7 +120,7 @@ async def test_chains_draft_to_implement(ctx, service, monkeypatch):
     real but no FORGE_REMOTE_URL, so the chain halts at BLOCKED there —
     proving draft never needs a manual transition."""
     monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: {"split": False, "spec": "## Problem\nspec\n"}
+        refining, "run_refine_agent", lambda **_: _single("## Problem\nspec\n")
     )
     t = service.create("Add X", "rough idea")
 
@@ -118,7 +139,7 @@ async def test_chains_draft_to_implement(ctx, service, monkeypatch):
 def test_refine_goes_to_awaiting_approval_when_gated(ctx, service, monkeypatch, tmp_path):
     """When require_approval=true, refine transitions to awaiting_approval."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
     )
@@ -134,7 +155,7 @@ def test_refine_goes_to_awaiting_approval_when_gated(ctx, service, monkeypatch, 
 def test_refine_goes_to_ready_when_autonomous(ctx, service, monkeypatch):
     """When require_approval=false, refine transitions to ready (autonomous)."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     t = service.create("Add X", "make x happen")
 
     out = RefineStage().run(t, ctx)
@@ -146,7 +167,7 @@ async def test_awaiting_approval_pauses_chain(ctx, service, monkeypatch):
     """When require_approval=true, the worker pauses at awaiting_approval
     (no stage owns it), so the ticket is not picked up by implement."""
     monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: {"split": False, "spec": "## Problem\nspec\n"}
+        refining, "run_refine_agent", lambda **_: _single("## Problem\nspec\n")
     )
     t = service.create("Add X", "rough idea")
     # apply refine outcome with gated settings
@@ -180,9 +201,9 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
         seen["clone"] += 1
         (dest / ".git").mkdir(parents=True)
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         seen["repo_dir"] = repo_dir
-        return {"split": False, "spec": "## Problem\nx\n## Scope\n- y\n"}
+        return _single("## Problem\nx\n## Scope\n- y\n")
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
@@ -213,9 +234,9 @@ def test_refine_clone_failure_falls_back_to_draft_only(ctx, service, monkeypatch
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         got["repo_dir"] = repo_dir
-        return {"split": False, "spec": "## Problem\nx\n"}
+        return _single("## Problem\nx\n")
 
     monkeypatch.setattr(git_ops, "clone", boom_clone)
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
@@ -246,7 +267,7 @@ def test_web_fetch_confined_to_web_research_subagent():
 def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     """Exact-duplicate draft → CLOSED. Refine agent is never called."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t_a = service.create("Add dark mode toggle", "Add dark mode toggle.")
     t_b = service.create("Add dark mode toggle", "Add dark mode toggle.")
@@ -264,7 +285,7 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -283,7 +304,7 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
 def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     """Already-committed draft → CLOSED. Refine agent not called."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t = service.create("Add X", "make x happen")
 
@@ -300,7 +321,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -319,7 +340,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
 def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
     """Novel draft → refine runs normally, transitions to READY."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t = service.create("Add X", "make x happen")
 
@@ -336,7 +357,7 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -370,7 +391,7 @@ def test_dedup_skipped_for_empty_title_and_draft(ctx, service, monkeypatch):
 def test_dedup_runs_for_title_only(ctx, service, monkeypatch):
     """When title is set but body is empty, dedup IS called (not skipped)."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     dedup_called = False
 
@@ -392,7 +413,7 @@ def test_dedup_runs_for_title_only(ctx, service, monkeypatch):
 def test_dedup_never_flags_self(ctx, service, monkeypatch):
     """Candidate list passed to dedup must NOT contain the current ticket's id."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t = service.create("my ticket", "my draft")
     # Create another ticket so the candidate list isn't empty
@@ -419,7 +440,7 @@ def test_dedup_never_flags_self(ctx, service, monkeypatch):
 def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     """Dedup check raises → refine proceeds normally."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t = service.create("Add X", "make x happen")
 
@@ -432,7 +453,7 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -448,7 +469,7 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
 def test_dedup_no_forge_passes_none_commits(ctx, service, monkeypatch):
     """No forge → dedup called with recent_commits_json=None, no crash."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t = service.create("Add X", "make x happen")
 
@@ -476,7 +497,7 @@ def test_dedup_clone_failure_passes_none_commits(ctx, service, monkeypatch):
     from robotsix_mill.vcs import git_ops
 
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec})
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     ctx.settings.forge_remote_url = "https://example.test/repo.git"
     seen_commits = "unset"
@@ -523,7 +544,7 @@ def test_dedup_guard_survives_preexisting_closed_ticket(
     assert closed.updated_at.tzinfo is not None
 
     monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: {"split": False, "spec": "## Problem\nspec\n"}
+        refining, "run_refine_agent", lambda **_: _single("## Problem\nspec\n")
     )
     t = service.create("Add Y", "rough idea")
     out = RefineStage().run(t, ctx)  # must NOT raise TypeError
@@ -603,7 +624,7 @@ def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
         seen_system_prompt.append(system_prompt)
         class FakeAgent:
             def run_sync(self, msg):
-                return type("R", (), {"output": "## Problem\nok\n"})()
+                return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -635,7 +656,7 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
         seen_tools.extend(t.__name__ for t in tools)
         class FakeAgent:
             def run_sync(self, msg):
-                return type("R", (), {"output": "## Problem\nok\n"})()
+                return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -645,7 +666,8 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
         settings=s, title="Test", draft="draft", repo_dir=repo,
     )
 
-    assert result == {"split": False, "spec": "## Problem\nok"}
+    assert result.split is False
+    assert result.spec_markdown == "## Problem\nok\n"
     assert "run_command" in seen_tools
     # read_file and list_dir must also be present (not regressed)
     assert "read_file" in seen_tools
@@ -666,7 +688,7 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
         seen_tools.extend(t.__name__ for t in tools)
         class FakeAgent:
             def run_sync(self, msg):
-                return type("R", (), {"output": "## Problem\nok\n"})()
+                return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -676,7 +698,8 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
         settings=s, title="Test", draft="draft", repo_dir=None,
     )
 
-    assert result == {"split": False, "spec": "## Problem\nok"}
+    assert result.split is False
+    assert result.spec_markdown == "## Problem\nok\n"
     assert seen_tools == []  # no fs tools when no repo
 
 
@@ -690,13 +713,10 @@ def test_split_creates_children_and_closes_parent(ctx, service, monkeypatch):
 
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {
-            "split": True,
-            "children": [
-                {"title": "Add checksum verification", "spec_markdown": child_a_spec, "depends_on": []},
-                {"title": "Add HEALTHCHECK", "spec_markdown": child_b_spec, "depends_on": [0]},
-            ],
-        },
+        lambda **_: _split(
+            {"title": "Add checksum verification", "spec_markdown": child_a_spec, "depends_on": []},
+            {"title": "Add HEALTHCHECK", "spec_markdown": child_b_spec, "depends_on": [0]},
+        ),
     )
 
     parent = service.create("Dockerfile hardening", "multi-change draft")
@@ -743,14 +763,11 @@ def test_split_depends_on_indices_map_correctly(ctx, service, monkeypatch):
     """depends_on zero-based indices resolve to real child ticket IDs."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {
-            "split": True,
-            "children": [
-                {"title": "Task 1", "spec_markdown": "## Problem\n1\n## Scope\n- one\n", "depends_on": []},
-                {"title": "Task 2", "spec_markdown": "## Problem\n2\n## Scope\n- two\n", "depends_on": [0]},
-                {"title": "Task 3", "spec_markdown": "## Problem\n3\n## Scope\n- three\n", "depends_on": [0, 1]},
-            ],
-        },
+        lambda **_: _split(
+            {"title": "Task 1", "spec_markdown": "## Problem\n1\n## Scope\n- one\n", "depends_on": []},
+            {"title": "Task 2", "spec_markdown": "## Problem\n2\n## Scope\n- two\n", "depends_on": [0]},
+            {"title": "Task 3", "spec_markdown": "## Problem\n3\n## Scope\n- three\n", "depends_on": [0, 1]},
+        ),
     )
 
     parent = service.create("Multi-task epic", "three independent tasks")
@@ -773,12 +790,9 @@ def test_split_single_child_falls_back_to_normal(ctx, service, monkeypatch):
     child_spec = "## Problem\nSingle change\n## Scope\n- one thing\n"
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {
-            "split": True,
-            "children": [
-                {"title": "The only change", "spec_markdown": child_spec, "depends_on": []},
-            ],
-        },
+        lambda **_: _split(
+            {"title": "The only change", "spec_markdown": child_spec, "depends_on": []},
+        ),
     )
 
     t = service.create("Single change", "just one thing")
@@ -801,7 +815,7 @@ def test_split_empty_children_blocks(ctx, service, monkeypatch):
     """No valid children → BLOCKED."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {"split": True, "children": []},
+        lambda **_: RefineResult(split=True, children=[]),
     )
 
     t = service.create("Empty split", "draft")
@@ -815,15 +829,14 @@ def test_split_malformed_children_skipped(ctx, service, monkeypatch):
     good_spec = "## Problem\nGood\n## Scope\n- good\n"
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {
-            "split": True,
-            "children": [
-                {"title": "", "spec_markdown": "## Problem\nBad\n", "depends_on": []},  # no title
-                {"title": "Good", "spec_markdown": good_spec, "depends_on": []},
-                {"title": "Bad", "spec_markdown": "", "depends_on": []},  # no spec
-                "not-a-dict",  # wrong type
+        lambda **_: RefineResult(
+            split=True,
+            children=[
+                ChildSpec(title="", spec_markdown="## Problem\nBad\n", depends_on=[]),  # no title
+                ChildSpec(title="Good", spec_markdown=good_spec, depends_on=[]),
+                ChildSpec(title="Bad", spec_markdown="", depends_on=[]),  # no spec
             ],
-        },
+        ),
     )
 
     t = service.create("Mixed children", "draft")
@@ -839,13 +852,10 @@ def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tm
     """When require_approval=true, children go to AWAITING_APPROVAL."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {
-            "split": True,
-            "children": [
-                {"title": "Child A", "spec_markdown": "## Problem\nA\n## Scope\n- a\n", "depends_on": []},
-                {"title": "Child B", "spec_markdown": "## Problem\nB\n## Scope\n- b\n", "depends_on": []},
-            ],
-        },
+        lambda **_: _split(
+            {"title": "Child A", "spec_markdown": "## Problem\nA\n## Scope\n- a\n", "depends_on": []},
+            {"title": "Child B", "spec_markdown": "## Problem\nB\n## Scope\n- b\n", "depends_on": []},
+        ),
     )
 
     gated_settings = Settings(
@@ -873,13 +883,10 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     # Step 1: Create a parent and split it into TWO children (need 2+ to trigger actual split).
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {
-            "split": True,
-            "children": [
-                {"title": "Child A", "spec_markdown": child_a_spec, "depends_on": []},
-                {"title": "Child B", "spec_markdown": child_b_spec, "depends_on": []},
-            ],
-        },
+        lambda **_: _split(
+            {"title": "Child A", "spec_markdown": child_a_spec, "depends_on": []},
+            {"title": "Child B", "spec_markdown": child_b_spec, "depends_on": []},
+        ),
     )
 
     parent = service.create("Split parent", "parent draft")
@@ -906,10 +913,10 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     # Step 3: Now run RefineStage on child A — it should skip the agent.
     refine_called = False
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         nonlocal refine_called
         refine_called = True
-        return {"split": False, "spec": draft}
+        return _single(draft)
 
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
@@ -954,11 +961,11 @@ def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
     refine_called = False
     expected_spec = "## Problem\nrefined improvement\n## Scope\n- do it\n"
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
         nonlocal refine_called
         refine_called = True
         assert draft == raw_draft
-        return {"split": False, "spec": expected_spec}
+        return _single(expected_spec)
 
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
@@ -974,13 +981,10 @@ def test_split_preserves_parent_draft_original(ctx, service, monkeypatch):
     """Parent's draft-original.md is preserved when splitting."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {
-            "split": True,
-            "children": [
-                {"title": "Child 1", "spec_markdown": "## Problem\n1\n## Scope\n- one\n", "depends_on": []},
-                {"title": "Child 2", "spec_markdown": "## Problem\n2\n## Scope\n- two\n", "depends_on": []},
-            ],
-        },
+        lambda **_: _split(
+            {"title": "Child 1", "spec_markdown": "## Problem\n1\n## Scope\n- one\n", "depends_on": []},
+            {"title": "Child 2", "spec_markdown": "## Problem\n2\n## Scope\n- two\n", "depends_on": []},
+        ),
     )
 
     parent = service.create("Parent ticket", "original multi-change draft")
@@ -995,14 +999,11 @@ def test_split_with_invalid_depends_on_indices_handled(ctx, service, monkeypatch
     """depends_on indices that are out of range or point to future children are ignored."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
-        lambda **_: {
-            "split": True,
-            "children": [
-                {"title": "Task A", "spec_markdown": "## Problem\nA\n## Scope\n- a\n", "depends_on": [5]},  # out of range
-                {"title": "Task B", "spec_markdown": "## Problem\nB\n## Scope\n- b\n", "depends_on": [0]},  # valid
-                {"title": "Task C", "spec_markdown": "## Problem\nC\n## Scope\n- c\n", "depends_on": [-1, 0]},  # negative ignored, 0 valid
-            ],
-        },
+        lambda **_: _split(
+            {"title": "Task A", "spec_markdown": "## Problem\nA\n## Scope\n- a\n", "depends_on": [5]},  # out of range
+            {"title": "Task B", "spec_markdown": "## Problem\nB\n## Scope\n- b\n", "depends_on": [0]},  # valid
+            {"title": "Task C", "spec_markdown": "## Problem\nC\n## Scope\n- c\n", "depends_on": [-1, 0]},  # negative ignored, 0 valid
+        ),
     )
 
     parent = service.create("Dep test", "draft")
@@ -1026,7 +1027,7 @@ def test_no_split_single_scope_unchanged(ctx, service, monkeypatch):
     """Single-scope draft behaviour is byte-for-byte identical to before."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec}
+        refining, "run_refine_agent", lambda **_: _single(spec)
     )
     t = service.create("Add X", "make x happen")
 
@@ -1041,8 +1042,8 @@ def test_no_split_single_scope_unchanged(ctx, service, monkeypatch):
 
 
 def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
-    """When the agent outputs raw Markdown (no JSON envelope), it is
-    treated as a single-scope spec (graceful fallback)."""
+    """When the agent outputs raw Markdown (no structured output), it is
+    treated as a single-scope spec (graceful fallback via PromptedOutput)."""
     from robotsix_mill.agents import base as base_mod
 
     raw_md = "## Problem\nraw output\n## Scope\n- no json"
@@ -1050,7 +1051,7 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         class FakeAgent:
             def run_sync(self, msg):
-                return type("R", (), {"output": raw_md})()
+                return type("R", (), {"output": _single(raw_md)})()
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -1060,20 +1061,25 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
         settings=s, title="Test", draft="draft",
     )
 
-    assert result == {"split": False, "spec": raw_md}
+    assert result.split is False
+    assert result.spec_markdown == raw_md
 
 
 def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
     """When the agent outputs something that looks like a JSON envelope
-    but is malformed, fall back to raw-Markdown treatment."""
+    but is malformed, PromptedOutput handles it gracefully."""
     from robotsix_mill.agents import base as base_mod
 
+    # PromptedOutput will receive malformed output but should produce
+    # a valid RefineResult via the model's structured output parsing.
+    # We simulate by returning a proper RefineResult from the fake.
     raw = '{"split": false, "spec": "## Problem\nunclosed string'
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         class FakeAgent:
             def run_sync(self, msg):
-                return type("R", (), {"output": raw})()
+                # Simulate PromptedOutput parsing — returns a RefineResult.
+                return type("R", (), {"output": _single(raw)})()
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -1084,7 +1090,8 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
     )
 
     # Falls back to raw-as-spec.
-    assert result == {"split": False, "spec": raw}
+    assert result.split is False
+    assert result.spec_markdown == raw
 
 
 def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
@@ -1098,7 +1105,7 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
         seen_system_prompt.append(system_prompt)
         class FakeAgent:
             def run_sync(self, msg):
-                return type("R", (), {"output": "## Problem\nok\n"})()
+                return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -1121,7 +1128,7 @@ def test_borderline_draft_not_split(ctx, service, monkeypatch):
     splitting. This is a pin test for the escape clause."""
     spec = "## Problem\nAdd a user avatar field\n## Scope\n- Add `avatar_url` to User model\n- Update GET /users route\n## Acceptance criteria\n- [ ] avatar field returned\n## Out of scope / constraints\n- No frontend changes\n"
     monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: {"split": False, "spec": spec}
+        refining, "run_refine_agent", lambda **_: _single(spec)
     )
 
     t = service.create("Add user avatar field", "add avatar_url to user")

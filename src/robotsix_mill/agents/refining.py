@@ -16,7 +16,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from ..config import Settings
+
+
+class ChildSpec(BaseModel):
+    """A single child spec produced by a split."""
+
+    title: str
+    spec_markdown: str
+    depends_on: list[int] = []
+
+
+class RefineResult(BaseModel):
+    """Structured output from the refine agent."""
+
+    split: bool = False
+    spec_markdown: str | None = None
+    children: list[ChildSpec] | None = None
+    updated_memory: str = ""
 
 SYSTEM_PROMPT = """\
 You turn a rough ticket draft into a precise, self-contained
@@ -41,21 +60,34 @@ questions.
 - Stay faithful to the draft's intent; invent nothing unrelated. Be
   concrete and testable.
 
-## Output format — JSON envelope (not raw Markdown)
+## Memory
 
-You MUST output a single JSON object, no preamble, no fences.
+You are given a `<memory>` block containing a Markdown ledger of
+observations from your past refine runs. It records:
+- Recurring reviewer feedback patterns (e.g. "acceptance criteria
+  must be testable")
+- Split-vs-bundle heuristics for this codebase
+- Repo-specific conventions discovered during past refinements
 
-When the draft describes ONE focused change, output:
+Reference the memory when deciding how to structure the spec. After
+refining, update the memory in your `updated_memory` field:
+- Record any new reviewer feedback themes you observed
+- Note split/bundle decisions and their rationale
+- Record repo-specific conventions you discovered
+- Keep entries concise and ticket-ID-qualified
+- If nothing new was learned, return the incoming memory unchanged
 
-{"split": false, "spec": "## Problem\n...\n## Scope\n...\n## Acceptance criteria\n...\n## Out of scope / constraints\n..."}
+## Output format
+
+You MUST return a structured result. When the draft describes ONE
+focused change:
+
+- split=false, spec_markdown="## Problem\\n...\\n## Scope\\n...\\n## Acceptance criteria\\n...\\n## Out of scope / constraints\\n..."
 
 When the draft bundles MULTIPLE independent, self-contained changes
 that can each ship alone, split into focused children:
 
-{"split": true, "children": [
-  {"title": "Short title for change A", "spec_markdown": "## Problem\n...", "depends_on": []},
-  {"title": "Short title for change B", "spec_markdown": "## Problem\n...", "depends_on": [0]}
-]}
+- split=true, children=[{"title": "Short title for change A", "spec_markdown": "## Problem\\n...", "depends_on": []}, ...]
 
 Rules for splitting:
 - **Split by spec surface, not by user framing.** A draft that sounds
@@ -96,19 +128,23 @@ def run_refine_agent(
     draft: str,
     repo_dir: Path | None = None,
     reviewer_comments: str | None = None,
-) -> dict:
-    """Return a structured dict. When ``repo_dir`` is given the agent
-    grounds the spec in that local clone via explore/read_file/
-    list_dir/run_command; otherwise it works draft-only. When
-    ``reviewer_comments`` is given the agent incorporates the feedback
-    into the refined spec. Raises RuntimeError if no OpenRouter key is
-    configured (build_agent enforces this).
+    memory: str = "",
+) -> RefineResult:
+    """Return a structured ``RefineResult``. When ``repo_dir`` is given
+    the agent grounds the spec in that local clone via explore/
+    read_file/list_dir/run_command; otherwise it works draft-only.
+    When ``reviewer_comments`` is given the agent incorporates the
+    feedback into the refined spec. Raises ``RuntimeError`` if no
+    OpenRouter key is configured.
 
-    Return shape:
-      - Normal single-scope: ``{"split": false, "spec": "## Problem\\n..."}``
-      - Multi-scope split: ``{"split": true, "children": [{"title": "...",
-        "spec_markdown": "...", "depends_on": [0]}, ...]}``
+    Return fields:
+      - ``split``: whether the draft was split into children
+      - ``spec_markdown``: single-scope spec (when split=False)
+      - ``children``: list of ``ChildSpec`` (when split=True)
+      - ``updated_memory``: updated memory ledger
     """
+    from pydantic_ai import PromptedOutput
+
     from .base import build_agent
     from .retry import call_with_retry
 
@@ -123,22 +159,21 @@ def run_refine_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
-    # Tech-specific gotchas are NOT injected into refine — they live
-    # under agent_references/ and the implement agent consults them
-    # on-demand via the pointer in AGENT.md when it actually touches
-    # the relevant stack. Keeps refine's prompt small and prevents the
-    # spec writer from prescribing fixes for traps it can't verify.
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
+        output_type=PromptedOutput(RefineResult),
         tools=tools,
         web=True,  # cheap web_research sub-agent (external lookups only)
         model_name=settings.refine_model,
         name="refine",
     )
 
-    # Build user prompt: title, draft, and optionally reviewer feedback.
-    user_prompt = f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
+    # Build user prompt: title, draft, memory, and optionally reviewer feedback.
+    user_prompt = (
+        f"<title>{title}</title>\n<draft>\n{draft}\n</draft>\n\n"
+        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
+    )
     if reviewer_comments:
         user_prompt += (
             "\n<reviewer_feedback>The reviewer sent this spec back "
@@ -151,65 +186,4 @@ def run_refine_agent(
         lambda: agent.run_sync(user_prompt),
         settings=settings, what="refine",
     )
-    raw = str(result.output).strip()
-    return _parse_agent_json(raw)
-
-
-def _parse_agent_json(raw: str) -> dict:
-    """Parse the agent's JSON envelope, with graceful fallback.
-
-    If the model outputs raw Markdown (no JSON envelope), wrap it as a
-    single-scope spec.  If JSON is present but malformed, also fall back.
-    """
-    import json
-
-    cleaned = raw.strip()
-
-    # Try to find the outermost JSON object by looking for {"split"
-    # and then tracking brace depth.
-    split_idx = cleaned.find('{"split"')
-    if split_idx == -1:
-        split_idx = cleaned.find('{\n  "split"')
-    if split_idx == -1:
-        split_idx = cleaned.find('{\n "split"')
-    if split_idx == -1:
-        split_idx = cleaned.find('{ "split"')
-
-    if split_idx >= 0:
-        # Track brace depth to find the matching close brace.
-        depth = 0
-        in_string = False
-        escape = False
-        end_idx = -1
-        for i in range(split_idx, len(cleaned)):
-            c = cleaned[i]
-            if escape:
-                escape = False
-                continue
-            if c == '\\' and in_string:
-                escape = True
-                continue
-            if c == '"':
-                in_string = not in_string
-                continue
-            if in_string:
-                continue
-            if c == '{':
-                depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0:
-                    end_idx = i + 1
-                    break
-
-        if end_idx > split_idx:
-            json_candidate = cleaned[split_idx:end_idx]
-            try:
-                parsed = json.loads(json_candidate)
-                if isinstance(parsed, dict) and "split" in parsed:
-                    return parsed
-            except json.JSONDecodeError:
-                pass
-
-    # Fallback: treat the entire output as a single-scope Markdown spec.
-    return {"split": False, "spec": raw}
+    return result.output

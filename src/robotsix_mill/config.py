@@ -435,6 +435,28 @@ class Settings(BaseSettings):
         default=None, alias="MILL_HEALTH_MEMORY_PATH"
     )
 
+    # --- action-agent memory paths ---
+    # Path to the implement agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives <data_dir>/implement_memory.md.
+    implement_memory_path: Path | None = Field(
+        default=None, alias="MILL_IMPLEMENT_MEMORY_PATH"
+    )
+    # Path to the refine agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives <data_dir>/refine_memory.md.
+    refine_memory_path: Path | None = Field(
+        default=None, alias="MILL_REFINE_MEMORY_PATH"
+    )
+    # Path to the ci-fix agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives <data_dir>/ci_fix_memory.md.
+    ci_fix_memory_path: Path | None = Field(
+        default=None, alias="MILL_CI_FIX_MEMORY_PATH"
+    )
+    # Path to the rebase agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives <data_dir>/rebase_memory.md.
+    rebase_memory_path: Path | None = Field(
+        default=None, alias="MILL_REBASE_MEMORY_PATH"
+    )
+
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
     langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
@@ -499,6 +521,34 @@ class Settings(BaseSettings):
         if self.health_memory_path is not None:
             return self.health_memory_path
         return self.data_dir / "health_memory.md"
+
+    @property
+    def implement_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained implement memory ledger."""
+        if self.implement_memory_path is not None:
+            return self.implement_memory_path
+        return self.data_dir / "implement_memory.md"
+
+    @property
+    def refine_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained refine memory ledger."""
+        if self.refine_memory_path is not None:
+            return self.refine_memory_path
+        return self.data_dir / "refine_memory.md"
+
+    @property
+    def ci_fix_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained ci-fix memory ledger."""
+        if self.ci_fix_memory_path is not None:
+            return self.ci_fix_memory_path
+        return self.data_dir / "ci_fix_memory.md"
+
+    @property
+    def rebase_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained rebase memory ledger."""
+        if self.rebase_memory_path is not None:
+            return self.rebase_memory_path
+        return self.data_dir / "rebase_memory.md"
 
 
 def load_settings() -> Settings:

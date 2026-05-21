@@ -11,6 +11,7 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import Worker
 from robotsix_mill.stages import StageContext
+from robotsix_mill.agents.ci_fixing import CiFixResult
 
 
 def _ctx(tmp_path, **env):
@@ -454,7 +455,7 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
-        lambda **k: True,
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
     )
     push_seen = {}
 

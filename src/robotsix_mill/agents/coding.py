@@ -44,18 +44,20 @@ def run_implement_agent(
     spec: str,
     feedback: str | None = None,
     history: list | None = None,
-) -> tuple[str, list]:
+    memory: str = "",
+) -> tuple[str, list, str]:
     """Drive the coordinator for this ticket. Returns
-    ``(summary, [])``. ``feedback``/``history`` are accepted for the
-    stage's signature but unused — the coordinator owns the
-    explore→implement→test loop and a resume re-runs it fresh."""
+    ``(summary, [], updated_memory)``. ``feedback``/``history`` are
+    accepted for the stage's signature but unused — the coordinator
+    owns the explore→implement→test loop and a resume re-runs it
+    fresh."""
     from pydantic_ai.exceptions import UsageLimitExceeded
 
     from .coordinating import run_coordinator
 
     try:
-        summary = run_coordinator(
-            settings=settings, repo_dir=repo_dir, spec=spec
+        result = run_coordinator(
+            settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
         )
     except UsageLimitExceeded as e:
         raise AgentBudgetError(str(e), []) from e
@@ -64,11 +66,12 @@ def run_implement_agent(
     except Exception as e:  # noqa: BLE001 — block-as-resumable
         raise AgentRunError(str(e), []) from e
 
+    summary = result.summary
     if summary.strip().upper().startswith("UNRESOLVED"):
         raise AgentRunError(
             f"coordinator could not converge: {summary[:300]}", []
         )
-    return summary, []
+    return summary, [], result.updated_memory
 
 
 
