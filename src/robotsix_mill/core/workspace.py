@@ -16,34 +16,43 @@ log = logging.getLogger("robotsix_mill.core.workspace")
 
 
 class Workspace:
+    """Per-ticket directory layout providing access to ``description.md``, ``artifacts/``, and ``repo/``."""
+
     def __init__(self, root: Path, ticket_id: str) -> None:
+        """Create the workspace directory for *ticket_id* under *root*, creating parents as needed."""
         self.dir = Path(root) / ticket_id
         self.dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def description_path(self) -> Path:
+        """Path to ``description.md`` — the canonical ticket body."""
         return self.dir / "description.md"
 
     @property
     def artifacts_dir(self) -> Path:
+        """Path to the ``artifacts/`` subdirectory, creating it lazily on first access."""
         d = self.dir / "artifacts"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     @property
     def repo_dir(self) -> Path:
+        """Path to the ``repo/`` subdirectory (no creation side-effect)."""
         return self.dir / "repo"
 
     def write_description(self, text: str) -> str:
+        """Write *text* to ``description.md`` and return the new content hash."""
         self.description_path.write_text(text, encoding="utf-8")
         return self.content_hash()
 
     def read_description(self) -> str:
+        """Return the text of ``description.md``, or an empty string if absent."""
         if not self.description_path.exists():
             return ""
         return self.description_path.read_text(encoding="utf-8")
 
     def content_hash(self) -> str:
+        """Return the SHA-256 hex digest of ``description.md``, or an empty string if absent."""
         if not self.description_path.exists():
             return ""
         return hashlib.sha256(
