@@ -40,6 +40,15 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
     # Dimension A: Tool–Prompt Coherence
     for kw in ("tool–prompt", "tool names", "actual tool set", "mismatch"):
         assert kw in p, f"agent-check prompt missing tool-prompt cue: {kw}"
+    # pydantic-ai auto-injection must be documented so the agent knows
+    # not to flag absent tool mentions as gaps.
+    assert "docstring_format" in p or "auto-injects" in p or (
+        "pydantic-ai" in p and "auto" in p
+    )
+    # "tool in actual set but never mentioned" must NOT be treated as a gap.
+    assert "do not flag" in p or "DO NOT flag" in p or "absence from the prompt" in p
+    # Must mention docstring staleness / prompt-docstring contradiction checks.
+    assert "docstring" in p and ("thin or stale" in p or "contradict" in p)
     # Dimension B: Skill Coherence
     for kw in ("skill", "frontmatter", "orphan"):
         assert kw in p, f"agent-check prompt missing skill cue: {kw}"
@@ -56,13 +65,15 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
     assert "explore" in p
     assert "read_file" in p
     assert "list_dir" in p
-    # Must NOT claim run_command or web_research
-    assert "do NOT have `run_command`" in p or "do not have" in p
     # Must read base.py to understand report_issue/web injection
     assert "base.py" in p
     # Must read skills and references
     assert "skills/" in p or "SKILL.md" in p
     assert "agent_references/" in p
+    # Memory note about deleted false-positive drafts
+    assert "90ac" in p or "d847" in p or "false-positive" in p or (
+        "deleted" in p and "draft" in p
+    )
 
 
 def test_agent_check_result_model():

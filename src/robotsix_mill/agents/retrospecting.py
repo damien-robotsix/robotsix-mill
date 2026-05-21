@@ -107,10 +107,10 @@ _DEEP_ANALYSIS_ADDENDUM = """\
 
 ## DEEP ANALYSIS MODE
 
-You have a `trace_inspect(trace_id)` tool available.  You MUST call it
-for EVERY trace in this session to inspect its full observation tree.
-The tool returns a text summary of tool errors, agent limitations, and
-optimisation opportunities found in that trace.
+You MUST call `trace_inspect` for EVERY trace in this
+session to inspect its full observation tree. The tool returns a text
+summary of tool errors, agent limitations, and optimisation
+opportunities found in that trace.
 
 After inspecting all traces, synthesise the findings across traces:
 - Patterns that appear in *multiple* traces are stronger evidence and
