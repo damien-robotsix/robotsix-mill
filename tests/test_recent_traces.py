@@ -165,11 +165,14 @@ def test_unnamed_traces_filtered_out_no_cost_filter(tmp_path, monkeypatch):
 def test_unnamed_traces_filtered_out_with_cost_filter(tmp_path, monkeypatch):
     """Same filter applies under the paginated cost-filter path."""
     def fake_get(settings, path, params=None):
-        return {"data": [
-            _trace("t1", 0.05, name="refine"),
-            _trace("t2", 0.06, name=None),       # in-flight, excluded
-            _trace("t3", 0.07, name="implement"),
-        ]}
+        p = dict(params or {})
+        if p.get("page", 1) == 1:
+            return {"data": [
+                _trace("t1", 0.05, name="refine"),
+                _trace("t2", 0.06, name=None),       # in-flight, excluded
+                _trace("t3", 0.07, name="implement"),
+            ]}
+        return {"data": []}  # exhausted
 
     from robotsix_mill import langfuse_client
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
