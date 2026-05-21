@@ -93,6 +93,7 @@ border-left:3px solid #2563eb;border-radius:3px}
  display:flex;align-items:center;justify-content:center;z-index:1000}
 .modal{background:#11141b;border:1px solid #2a2e37;border-radius:10px;
  padding:20px 24px;width:min(480px,94vw);max-height:90vh;overflow-y:auto}
+.modal-wide{width:min(560px,94vw)}
 .modal h2{margin:0 0 14px 0;font-size:15px;color:#fff}
 .modal-label{display:block;font-size:11px;text-transform:uppercase;
  letter-spacing:.05em;color:#aab0bd;margin-bottom:4px;margin-top:10px}

@@ -591,25 +591,76 @@ function createTicketFromFinding(idx,event){
  if(event)event.stopPropagation();
  const finding=deepReviewFindings[idx];
  if(!finding)return;
- // Build a full structured markdown body so refine doesn't have to
- // re-derive the fix from a one-line symptom. The proposed_solution
- // is the key payload here — it's what makes the ticket actionable
- // instead of diagnostic.
- const symptom=finding.symptom||finding.text||"";
- const titleDefault="Deep review: "+symptom.substring(0,80);
- const title=prompt("Ticket title:", titleDefault);
- if(title===null)return;
- if(!title.trim()){alert("Title is required");return}
- const body=
-  "## Symptom\n"+symptom+"\n\n"+
-  (finding.root_cause?"## Root cause\n"+finding.root_cause+"\n\n":"")+
-  (finding.proposed_solution?"## Proposed solution\n"+finding.proposed_solution+"\n\n":"")+
-  "_Inspector confidence: "+(finding.confidence||"medium")+"_\n"+
-  "_Source trace: `"+deepReviewTraceId+"`_\n";
- (async()=>{
-  const r=await jpost("/tickets",{title:title.trim(),description:body,source:"deep-review"});
-  if(!r.ok){const e=await r.text();alert("create ticket failed: "+e)}else refresh()
- })();
+ const itemText=finding.symptom||finding.text||"";
+ const category=finding.category||"";
+
+ // Build modal DOM
+ const backdrop=document.createElement("div");
+ backdrop.className="modal-backdrop";
+ const modal=document.createElement("div");
+ modal.className="modal modal-wide";
+ modal.innerHTML=
+  `<h2>Create Ticket from Finding</h2>
+   <label class="modal-label">Title <span class="modal-req">*</span></label>
+   <input type="text" class="modal-input" id="modal-title" placeholder="What needs doing?" autocomplete="off">
+   <div class="modal-field-error" id="modal-title-err"></div>
+   <label class="modal-label">Description</label>
+   <textarea class="modal-textarea" id="modal-desc" rows="8"></textarea>
+   <div class="modal-buttons">
+    <span class="modal-submit-error" id="modal-submit-err"></span>
+    <button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>
+    <button type="button" class="modal-btn-create" id="modal-create">Create</button>
+   </div>`;
+ backdrop.appendChild(modal);
+ document.body.appendChild(backdrop);
+
+ const titleEl=document.getElementById("modal-title");
+ const titleErr=document.getElementById("modal-title-err");
+ const descEl=document.getElementById("modal-desc");
+ const submitErr=document.getElementById("modal-submit-err");
+ const createBtn=document.getElementById("modal-create");
+
+ titleEl.value="Deep review: "+itemText.substring(0,80);
+ descEl.value="Finding from deep review of trace "+deepReviewTraceId+":\n\n["+category+"] "+itemText;
+
+ function close(){
+  document.body.removeChild(backdrop);
+ }
+
+ function showTitleErr(msg){titleErr.textContent=msg}
+ function clearTitleErr(){titleErr.textContent=""}
+ function showSubmitErr(msg){submitErr.textContent=msg}
+ function clearSubmitErr(){submitErr.textContent=""}
+
+ async function doSubmit(){
+  const title=titleEl.value.trim();
+  if(!title){showTitleErr("Title is required");titleEl.focus();return}
+  clearTitleErr();clearSubmitErr();
+  createBtn.disabled=true;createBtn.textContent="Creating…";
+  const r=await jpost("/tickets",{title:title,description:descEl.value,source:"deep-review"});
+  if(!r.ok){const e=await r.text();showSubmitErr("create failed: "+e);
+   createBtn.disabled=false;createBtn.textContent="Create"}
+  else{close();refresh()}
+ }
+
+ // Backdrop click → close
+ backdrop.addEventListener("click",function(e){if(e.target===backdrop)close()});
+
+ // Cancel button
+ document.getElementById("modal-cancel").addEventListener("click",close);
+
+ // Create button
+ createBtn.addEventListener("click",doSubmit);
+
+ // Keyboard handling
+ modal.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){e.preventDefault();close();return}
+  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();doSubmit();return}
+  if(e.key==="Enter"&&e.target===titleEl){e.preventDefault();descEl.focus();return}
+ });
+
+ // Auto-focus title
+ titleEl.focus();
 }
 // -- end deep review ----------------------------------------------------
 refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);
