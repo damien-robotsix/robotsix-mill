@@ -192,6 +192,44 @@ def test_no_progress_guard_exempts_poll_stage(ctx, service):
     assert service.get(t.id).state is State.IN_REVIEW
 
 
+async def test_dep_gated_ticket_does_not_invoke_stage_or_trace(ctx, service, monkeypatch):
+    """A ticket with unmet ``depends_on`` must short-circuit inside
+    _process_ticket_inner BEFORE the stage runs and BEFORE the Langfuse
+    'ticket' root span is opened. Otherwise every reconcile sweep
+    produces an empty trace per dep-gated ticket. The check is at
+    process_ticket level so a manual enqueue (e.g. via approve) also
+    benefits, not just the reconcile sweep."""
+    parent = service.create("parent")
+    dependent = service.create("waits on parent")
+    service.set_depends_on(dependent.id, [parent.id])
+    service.transition(dependent.id, State.READY)
+
+    invocations = []
+
+    class TrackingImpl(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, t, _c):
+            invocations.append(t.id)
+            return Outcome(State.READY)
+
+    monkeypatch.setitem(registry.STAGES, "implement", TrackingImpl())
+    await process_ticket(dependent.id, ctx)
+    assert invocations == [], (
+        "implement stage must NOT be invoked while deps are unmet "
+        "(otherwise every reconcile sweep emits an empty Langfuse trace)"
+    )
+
+    # Once the parent terminates the gate clears and the stage runs.
+    service.transition(parent.id, State.DONE)
+    service.transition(parent.id, State.CLOSED)
+    await process_ticket(dependent.id, ctx)
+    assert dependent.id in invocations, (
+        "after the dep clears, the stage must run on the next process pass"
+    )
+
+
 def test_no_progress_guard_exempts_dependency_gated_ticket(ctx, service):
     """A ticket with unmet ``depends_on`` legitimately doesn't advance
     — implement.py returns Outcome(READY) until the dep is merged. The

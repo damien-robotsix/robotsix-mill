@@ -49,6 +49,19 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
         if stage_name is None:
             log.debug("no stage for %s; pausing %s", ticket.state, ticket_id)
             return
+        # Dependency gate at the top of the chain: a ticket waiting on
+        # another ticket is not "running" — short-circuit BEFORE the
+        # trace span is opened. Otherwise every reconcile sweep would
+        # open a Langfuse "ticket" root span, the implement stage would
+        # return same-state, and the span closes immediately — empty
+        # trace per sweep, accumulating quickly. The wait is resumed
+        # naturally by the next sweep once the dep terminates.
+        if ctx.service.unmet_dependencies(ticket):
+            log.debug(
+                "%s: waiting on unmet dependencies — skipping (no trace)",
+                ticket_id,
+            )
+            return
         stage = get_stage(stage_name)
         # Only trace stages that call the model. Poll-driven no-LLM
         # stages (merge, deliver) would otherwise emit an empty "ticket"
@@ -211,8 +224,16 @@ class Worker:
             await asyncio.sleep(interval)
             try:
                 for t in self.ctx.service.list():
-                    if t.state in STAGE_FOR_STATE:
-                        self.enqueue(t.id)
+                    if t.state not in STAGE_FOR_STATE:
+                        continue
+                    # Dep-gated tickets are skipped at the source —
+                    # enqueuing them would just trigger _process_ticket_inner
+                    # to short-circuit (no trace, no work), but every sweep
+                    # would still consume a queue slot + a service.get +
+                    # an unmet check. Cheaper to filter here.
+                    if self.ctx.service.unmet_dependencies(t):
+                        continue
+                    self.enqueue(t.id)
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("reconcile sweep failed")
 
