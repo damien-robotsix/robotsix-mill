@@ -69,17 +69,23 @@ def list_tickets(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
-    # The board polls this every 5s. Cost lookups go cache-only here
-    # (blocking_cost=False): on a cold cache, N serial Langfuse HTTP
-    # calls would make the response take seconds, longer than the poll
-    # interval, so each tick would cancel its predecessor and the board
-    # would never paint. Per-ticket detail GETs still do the full
-    # lookup, so opening the drawer always shows the authoritative cost.
+    # The board polls this every 5s. Both expensive enrichments are
+    # downgraded for the list:
+    #   blocking_cost=False — cache-only Langfuse cost lookup (no HTTP).
+    #   fetch_pr_url=False  — skip the per-ticket forge pr_status call.
+    # On a cold cache with N review-state tickets, the full enrichment
+    # would issue N Langfuse + N GitHub HTTP calls serially. The board
+    # response would take longer than the poll interval, the next tick
+    # would cancel its predecessor, and the board would never paint.
+    # Per-ticket detail GETs keep both authoritative — when the user
+    # opens the drawer they see real cost and a real PR link.
     exclude = None
     if not include_closed:
         exclude = {State.CLOSED, State.DONE}
     return [
-        enrich_ticket_read(t, settings, svc, blocking_cost=False)
+        enrich_ticket_read(
+            t, settings, svc, blocking_cost=False, fetch_pr_url=False
+        )
         for t in svc.list(state=state, exclude_states=exclude)
     ]
 

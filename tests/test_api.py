@@ -76,20 +76,45 @@ def test_get_tickets_includes_origin_session(client):
         assert "origin_session_url" in t
 
 
-def test_get_tickets_includes_cost_usd(client, service, monkeypatch):
-    """GET /tickets injects cost_usd read on-demand from the Langfuse
-    session (not persisted) via langfuse_client.session_cost."""
+def test_get_ticket_detail_includes_cost_usd(client, service, monkeypatch):
+    """GET /tickets/{id} (the per-ticket detail) injects cost_usd
+    on-demand from the Langfuse session via session_cost. The list
+    endpoint is intentionally cache-only (see test below) — only the
+    drawer view does the live lookup."""
     t = service.create("Cost API test")
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost",
         lambda settings, sid: 0.0420 if sid == t.id else 0.0,
     )
 
+    r = client.get(f"/tickets/{t.id}").json()
+    assert r["id"] == t.id
+    assert r["cost_usd"] == pytest.approx(0.0420)
+
+
+def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
+    """GET /tickets (the polled list) must NEVER call the blocking
+    Langfuse session_cost — that would cost N serial HTTP roundtrips
+    on cold cache and stall the response past the board's 5s poll
+    interval. Cost comes from session_cost_cached (no network), so
+    the list value is 0.0 for an unseeded cache, regardless of what
+    session_cost is monkeypatched to return."""
+    t = service.create("Cache-only test")
+    called = []
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_cost",
+        lambda settings, sid: called.append(sid) or 0.999,
+    )
+
     ts = client.get("/tickets").json()
     found = [x for x in ts if x["id"] == t.id]
     assert len(found) == 1
-    assert "cost_usd" in found[0]
-    assert found[0]["cost_usd"] == pytest.approx(0.0420)
+    assert found[0]["cost_usd"] == 0.0, (
+        "list endpoint must use the non-blocking cached path"
+    )
+    assert called == [], (
+        f"blocking session_cost must not be called by /tickets list; got {called}"
+    )
 
 
 def test_board_renders_source_badge(client):

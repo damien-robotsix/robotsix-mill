@@ -116,6 +116,7 @@ def enrich_ticket_read(
     service: TicketService,
     *,
     blocking_cost: bool = True,
+    fetch_pr_url: bool = True,
 ) -> TicketRead:
     """Convert a :class:`Ticket` into a :class:`TicketRead`, populating
     ``cost_usd`` from Langfuse, computing ``origin_session_url``, and
@@ -124,6 +125,12 @@ def enrich_ticket_read(
     ``blocking_cost=False`` makes the cost lookup cache-only — used by
     the polled /tickets list endpoint to avoid N serial Langfuse calls
     on a cold cache stalling the response past the next poll tick.
+
+    ``fetch_pr_url=False`` skips the per-ticket forge ``pr_status``
+    call entirely. Same problem class: with N review-state tickets in
+    the list, N serial GitHub API calls would stall the response. The
+    drawer (per-ticket GET) keeps the full lookup so the PR link is
+    authoritative when the user actually opens a ticket.
     """
     with_cost(ticket, settings, blocking=blocking_cost)
     return TicketRead(
@@ -138,7 +145,7 @@ def enrich_ticket_read(
         cost_usd=ticket.cost_usd,
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
-        pr_url=_pr_url(ticket, settings),
+        pr_url=_pr_url(ticket, settings) if fetch_pr_url else None,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )
