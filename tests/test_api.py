@@ -431,6 +431,48 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
     release.set()              # let the daemon thread finish
 
 
+def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
+    """POST /agent-check returns 202 immediately and runs the
+    agent-check agent in the background — same fire-and-forget
+    contract as /audit, /scout, /health-check, /trace-health."""
+    import threading
+
+    from robotsix_mill import agent_check_runner
+
+    ran = threading.Event()
+    release = threading.Event()
+
+    class _R:
+        drafts_created: list = []
+
+    def slow_agent_check():
+        ran.set()
+        release.wait(5)
+        return _R()
+
+    monkeypatch.setattr(
+        agent_check_runner, "run_agent_check_pass", slow_agent_check
+    )
+
+    r = client.post("/agent-check")
+    assert r.status_code == 202
+    assert r.json() == {"status": "started"}
+    assert ran.wait(5)
+    release.set()
+
+
+def test_board_html_includes_agent_check_button(client):
+    """The board exposes a 'Run Agent Check' button wired to
+    runAgentCheck() in the JS. Without it the user can't see the
+    agent-check feature exists, and only the CLI is discoverable."""
+    body = client.get("/").text
+    assert "Run Agent Check" in body
+    assert "runAgentCheck()" in body
+    js = client.get("/static/board.js").text
+    assert "runAgentCheck" in js
+    assert 'jpost("/agent-check")' in js
+
+
 def test_setup_logging_surfaces_app_logs_idempotently(capsys):
     """Regression: robotsix_mill.* logs were dropped (no handler under
     uvicorn), masking the silently-failing /audit thread. setup_logging

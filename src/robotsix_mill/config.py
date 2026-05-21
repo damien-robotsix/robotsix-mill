@@ -395,6 +395,18 @@ class Settings(BaseSettings):
     agent_check_memory_path: Path | None = Field(
         default=None, alias="MILL_AGENT_CHECK_MEMORY_PATH"
     )
+    # Opt-in periodic agent-check pass. Defaults to False (off); flip
+    # to true to schedule the pass every ``agent_check_interval_seconds``
+    # in addition to the on-demand POST /agent-check and CLI.
+    agent_check_periodic: bool = Field(
+        default=False, alias="MILL_AGENT_CHECK_PERIODIC"
+    )
+    # Seconds between periodic agent-check passes when
+    # MILL_AGENT_CHECK_PERIODIC=true. Minimum enforced at 60s in the
+    # worker loop.
+    agent_check_interval_seconds: int = Field(
+        default=86400, alias="MILL_AGENT_CHECK_INTERVAL_SECONDS"
+    )
 
     # --- health agent (codebase-health inspection) ---
     # Model for the health agent. Defaults to the same capable model as

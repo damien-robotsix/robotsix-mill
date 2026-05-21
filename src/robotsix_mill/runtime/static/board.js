@@ -153,6 +153,20 @@ async function runHealth(){
    btn.disabled=false; btn.textContent='Run Health Check';
  }
 }
+async function runAgentCheck(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/agent-check");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Agent-check started — it inspects every agent's prompt/tools for coherence gaps. New draft tickets appear on the board when it finishes.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Agent-check failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Run Agent Check';
+ }
+}
 async function open_(id){
  sel=id;
  const [t,h,d,cs,rt]=await Promise.all([jget("/tickets/"+id),

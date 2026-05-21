@@ -32,6 +32,11 @@ background:#0ea5e9;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Trace Health
 </button>
+<button onclick="runAgentCheck()" style="font-size:11px;padding:3px 10px;
+background:#db2777;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Run Agent Check
+</button>
 <button onclick="toggleRuns()" style="font-size:11px;padding:3px 10px;
 background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">

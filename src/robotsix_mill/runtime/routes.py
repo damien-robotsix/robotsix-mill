@@ -302,6 +302,44 @@ def audit_pass(
     return {"status": "started"}
 
 
+@router.post("/agent-check", status_code=202)
+def agent_check_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off an agent-check pass in the BACKGROUND and return at
+    once. The agent inspects every agent's prompt, tools, and
+    structured output, looking for coherence gaps (e.g. an agent
+    promising behaviour its tools can't deliver). New draft tickets
+    appear on the board when it finishes.
+    """
+    from ..agent_check_runner import run_agent_check_pass
+
+    run_id = registry.start("agent_check")
+
+    def _run() -> None:
+        try:
+            r = run_agent_check_pass()
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "agent-check pass done: %d draft(s)",
+                len(r.drafts_created),
+            )
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("agent-check pass failed")
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="agent-check-pass", daemon=True
+    ).start()
+    return {"status": "started"}
+
+
 @router.post("/scout", status_code=202)
 def scout_pass(
     registry=Depends(get_run_registry),

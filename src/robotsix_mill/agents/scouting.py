@@ -40,7 +40,10 @@ CHEAP_ROLES = [
 ALL_ROLES = CAPABLE_ROLES + STRUCTURED_ROLES + CHEAP_ROLES
 
 CAPABLE_CANDIDATES = [
-    "anthropic/claude-sonnet-4-20250514",
+    # ``claude-sonnet-4-20250514`` was retired by OpenRouter (404 on
+    # /endpoints) — the current id is ``claude-sonnet-4-5``. The old
+    # one polluted scout logs and silently shrank the candidate pool.
+    "anthropic/claude-sonnet-4-5",
     "openai/gpt-4o",
     "google/gemini-2.5-pro",
 ]

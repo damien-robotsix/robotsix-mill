@@ -106,6 +106,7 @@ class Worker:
         self._scout_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
+        self._agent_check_task: asyncio.Task | None = None
         self._ci_monitor_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
@@ -497,6 +498,22 @@ class Worker:
                 "Periodic health enabled: interval %ds",
                 self.ctx.settings.health_interval_seconds,
             )
+        # Opt-in periodic agent-check
+        if (
+            self.ctx.settings.agent_check_periodic
+            and self._agent_check_task is None
+        ):
+            from ..agent_check_runner import run_agent_check_pass
+            self._agent_check_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "agent_check", run_agent_check_pass,
+                    max(60, self.ctx.settings.agent_check_interval_seconds),
+                )
+            )
+            log.info(
+                "Periodic agent-check enabled: interval %ds",
+                self.ctx.settings.agent_check_interval_seconds,
+            )
         # Opt-in CI monitor
         if self.ctx.settings.ci_monitor_periodic and self._ci_monitor_task is None:
             self._ci_monitor_task = asyncio.create_task(
@@ -512,6 +529,7 @@ class Worker:
         for attr in (
             "_poll_task", "_audit_task", "_scout_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
+            "_agent_check_task",
         ):
             t = getattr(self, attr)
             if t is not None:
