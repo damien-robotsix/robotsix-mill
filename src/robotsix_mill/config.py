@@ -373,6 +373,16 @@ class Settings(BaseSettings):
     scout_memory_path: Path | None = Field(
         default=None, alias="MILL_SCOUT_MEMORY_PATH"
     )
+    # When True, the scout pass optionally runs a web-research-powered
+    # discovery step to find new candidate models. Default False (opt-in).
+    scout_discovery: bool = Field(
+        default=False, alias="MILL_SCOUT_DISCOVERY"
+    )
+    # Minimum days between discovery runs. Last discovery timestamp is
+    # stored in the ## Candidates section comment.
+    scout_discovery_cooldown_days: int = Field(
+        default=7, alias="MILL_SCOUT_DISCOVERY_COOLDOWN_DAYS"
+    )
 
     # --- trace-health check ---
     # When True, the worker runs periodic trace-health checks at the

@@ -1212,6 +1212,548 @@ def test_scout_memory_file_override(tmp_path):
     assert s.scout_memory_file == custom_path
 
 
+# ── Discovery config defaults ─────────────────────────────────────────
+
+
+def test_scout_discovery_config_defaults():
+    """scout_discovery defaults to False, cooldown defaults to 7."""
+    s = Settings()
+    assert s.scout_discovery is False
+    assert s.scout_discovery_cooldown_days == 7
+
+
+# ── _parse_last_discovery_date ────────────────────────────────────────
+
+
+def test_parse_last_discovery_date_found():
+    """Extracts date from <!-- last_discovery: YYYY-MM-DD --> in ## Candidates."""
+    memory = """# Scout Memory
+
+## Candidates
+<!-- last_discovery: 2025-06-15 -->
+<!-- Edit the lists below... -->
+- capable:
+  - some/model
+- cheap:
+  - cheap/model
+
+## Proposed
+
+## Declined
+"""
+    result = scouting._parse_last_discovery_date(memory)
+    assert result == "2025-06-15"
+
+
+def test_parse_last_discovery_date_not_found():
+    """Returns None when no last_discovery comment exists."""
+    memory = """# Scout Memory
+
+## Candidates
+<!-- Edit the lists below... -->
+- capable:
+  - some/model
+- cheap:
+
+## Proposed
+
+## Declined
+"""
+    result = scouting._parse_last_discovery_date(memory)
+    assert result is None
+
+
+def test_parse_last_discovery_date_outside_candidates():
+    """Only matches within ## Candidates section, not elsewhere."""
+    memory = """# Scout Memory
+<!-- last_discovery: 2025-01-01 -->
+
+## Candidates
+- capable:
+  - some/model
+
+## Proposed
+"""
+    result = scouting._parse_last_discovery_date(memory)
+    assert result is None
+
+
+# ── _discover_candidates ──────────────────────────────────────────────
+
+
+def test_discover_candidates_adds_new_models(tmp_path, monkeypatch):
+    """Discovery adds new model IDs found via web research that exist in all_model_ids."""
+    settings = _make_settings(tmp_path, MILL_SCOUT_DISCOVERY="true")
+    all_model_ids = {
+        "openai/gpt-4.1", "anthropic/claude-opus-4-5",
+        "google/gemini-2.5-pro", "deepseek/deepseek-v4-pro",
+    }
+
+    def mock_web_research(*, settings, query):
+        if "cheap" in query.lower():
+            return "I recommend `openai/gpt-4.1-mini` for cheap roles."
+        return "I recommend `openai/gpt-4.1` and `anthropic/claude-opus-4-5` for coding roles."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    result = scouting._discover_candidates(
+        settings=settings,
+        capable_current=[],
+        cheap_current=[],
+        proposed_ids=set(),
+        all_model_ids=all_model_ids,
+        last_discovery_date=None,
+    )
+    assert "openai/gpt-4.1" in result["capable"]
+    assert "anthropic/claude-opus-4-5" in result["capable"]
+    # openai/gpt-4.1-mini not in all_model_ids → excluded
+    assert "openai/gpt-4.1-mini" not in result["cheap"]
+
+
+def test_discover_candidates_filters_by_all_model_ids(tmp_path, monkeypatch):
+    """IDs not present in all_model_ids are excluded."""
+    settings = _make_settings(tmp_path, MILL_SCOUT_DISCOVERY="true")
+    all_model_ids = {"openai/gpt-4.1"}
+
+    def mock_web_research(*, settings, query):
+        return "I recommend `openai/gpt-4.1` and `anthropic/claude-opus-4-5`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    result = scouting._discover_candidates(
+        settings=settings,
+        capable_current=[],
+        cheap_current=[],
+        proposed_ids=set(),
+        all_model_ids=all_model_ids,
+        last_discovery_date=None,
+    )
+    assert "openai/gpt-4.1" in result["capable"]
+    assert "anthropic/claude-opus-4-5" not in result["capable"]
+
+
+def test_discover_candidates_skips_existing(tmp_path, monkeypatch):
+    """Models already in capable_current or cheap_current are not added again."""
+    settings = _make_settings(tmp_path, MILL_SCOUT_DISCOVERY="true")
+    all_model_ids = {"openai/gpt-4.1", "google/gemini-2.5-pro"}
+
+    def mock_web_research(*, settings, query):
+        return "I recommend `openai/gpt-4.1` and `google/gemini-2.5-pro`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    result = scouting._discover_candidates(
+        settings=settings,
+        capable_current=["openai/gpt-4.1"],
+        cheap_current=["google/gemini-2.5-pro"],
+        proposed_ids=set(),
+        all_model_ids=all_model_ids,
+        last_discovery_date=None,
+    )
+    assert result == {"capable": [], "cheap": []}
+
+
+def test_discover_candidates_skips_proposed(tmp_path, monkeypatch):
+    """Models already in proposed_ids are excluded."""
+    settings = _make_settings(tmp_path, MILL_SCOUT_DISCOVERY="true")
+    all_model_ids = {"openai/gpt-4.1"}
+
+    def mock_web_research(*, settings, query):
+        return "I recommend `openai/gpt-4.1`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    result = scouting._discover_candidates(
+        settings=settings,
+        capable_current=[],
+        cheap_current=[],
+        proposed_ids={"openai/gpt-4.1"},
+        all_model_ids=all_model_ids,
+        last_discovery_date=None,
+    )
+    assert result == {"capable": [], "cheap": []}
+
+
+def test_discover_candidates_max_three_per_tier(tmp_path, monkeypatch):
+    """At most 3 new IDs per tier, even if web research returns more."""
+    settings = _make_settings(tmp_path, MILL_SCOUT_DISCOVERY="true")
+    many_ids = {f"provider/model-{i}" for i in range(10)}
+    all_model_ids = many_ids
+
+    def mock_web_research(*, settings, query):
+        ids = " ".join(f"`provider/model-{i}`" for i in range(10))
+        return f"I recommend these models: {ids}."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    result = scouting._discover_candidates(
+        settings=settings,
+        capable_current=[],
+        cheap_current=[],
+        proposed_ids=set(),
+        all_model_ids=all_model_ids,
+        last_discovery_date=None,
+    )
+    assert len(result["capable"]) == 3
+
+
+def test_discover_candidates_cooldown_active(tmp_path, monkeypatch):
+    """When cooldown hasn't elapsed, discovery returns empty dicts."""
+    settings = _make_settings(
+        tmp_path,
+        MILL_SCOUT_DISCOVERY="true",
+        MILL_SCOUT_DISCOVERY_COOLDOWN_DAYS="7",
+    )
+    all_model_ids = {"openai/gpt-4.1"}
+
+    call_count = 0
+
+    def mock_web_research(*, settings, query):
+        nonlocal call_count
+        call_count += 1
+        return "I recommend `openai/gpt-4.1`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    # Set last_discovery to yesterday — cooldown not elapsed
+    from datetime import date, timedelta
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    result = scouting._discover_candidates(
+        settings=settings,
+        capable_current=[],
+        cheap_current=[],
+        proposed_ids=set(),
+        all_model_ids=all_model_ids,
+        last_discovery_date=yesterday,
+    )
+    assert result == {"capable": [], "cheap": []}
+    assert call_count == 0  # No web research call made
+
+
+def test_discover_candidates_cooldown_elapsed(tmp_path, monkeypatch):
+    """When cooldown has elapsed, discovery runs."""
+    settings = _make_settings(
+        tmp_path,
+        MILL_SCOUT_DISCOVERY="true",
+        MILL_SCOUT_DISCOVERY_COOLDOWN_DAYS="7",
+    )
+    all_model_ids = {"openai/gpt-4.1"}
+
+    call_count = 0
+
+    def mock_web_research(*, settings, query):
+        nonlocal call_count
+        call_count += 1
+        return "I recommend `openai/gpt-4.1`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    # Set last_discovery to 8 days ago — cooldown elapsed
+    from datetime import date, timedelta
+    eight_days_ago = (date.today() - timedelta(days=8)).isoformat()
+
+    result = scouting._discover_candidates(
+        settings=settings,
+        capable_current=[],
+        cheap_current=[],
+        proposed_ids=set(),
+        all_model_ids=all_model_ids,
+        last_discovery_date=eight_days_ago,
+    )
+    assert "openai/gpt-4.1" in result["capable"]
+    assert call_count > 0
+
+
+def test_discover_candidates_web_research_failure_returns_empty(tmp_path, monkeypatch):
+    """If run_web_research returns an error/empty, discovery returns empty dicts."""
+    settings = _make_settings(tmp_path, MILL_SCOUT_DISCOVERY="true")
+    all_model_ids = {"openai/gpt-4.1"}
+
+    def mock_web_research(*, settings, query):
+        return "web research failed: connection error"
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    result = scouting._discover_candidates(
+        settings=settings,
+        capable_current=[],
+        cheap_current=[],
+        proposed_ids=set(),
+        all_model_ids=all_model_ids,
+        last_discovery_date=None,
+    )
+    assert result == {"capable": [], "cheap": []}
+
+
+# ── Discovery integration in run_scout_agent ──────────────────────────
+
+
+def test_discovery_integration_adds_candidates(tmp_path, monkeypatch):
+    """When scout_discovery=True, discovered candidates appear in updated_memory."""
+    model_id = "anthropic/claude-sonnet-4-5"
+    settings = _make_settings(
+        tmp_path,
+        MILL_MODEL=model_id,
+        MILL_EXPLORE_MODEL=model_id,
+        MILL_WEB_RESEARCH_MODEL=model_id,
+        MILL_TEST_MODEL=model_id,
+        MILL_REFINE_MODEL=model_id,
+        MILL_RETROSPECT_MODEL=model_id,
+        MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
+        MILL_SCOUT_DISCOVERY="true",
+    )
+
+    current = _model_info(model_id)
+    discovered = _model_info("openai/gpt-4.1")
+
+    _patch_scout(monkeypatch, {
+        current.id: current,
+        discovered.id: discovered,
+    })
+
+    def mock_web_research(*, settings, query):
+        if "cheap" in query.lower():
+            return "I recommend `openai/gpt-4.1-mini`."
+        return "I recommend `openai/gpt-4.1`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    result = scouting.run_scout_agent(settings=settings, memory="")
+    # The discovered model should appear in the capable candidates
+    assert "openai/gpt-4.1" in result.updated_memory
+    # openai/gpt-4.1-mini not in all_model_ids → excluded
+    assert "openai/gpt-4.1-mini" not in result.updated_memory
+
+
+def test_discovery_integration_adds_last_discovery_comment(tmp_path, monkeypatch):
+    """After discovery runs, updated_memory contains last_discovery comment."""
+    model_id = "anthropic/claude-sonnet-4-5"
+    settings = _make_settings(
+        tmp_path,
+        MILL_MODEL=model_id,
+        MILL_EXPLORE_MODEL=model_id,
+        MILL_WEB_RESEARCH_MODEL=model_id,
+        MILL_TEST_MODEL=model_id,
+        MILL_REFINE_MODEL=model_id,
+        MILL_RETROSPECT_MODEL=model_id,
+        MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
+        MILL_SCOUT_DISCOVERY="true",
+    )
+
+    current = _model_info(model_id)
+    discovered = _model_info("openai/gpt-4.1")
+
+    _patch_scout(monkeypatch, {
+        current.id: current,
+        discovered.id: discovered,
+    })
+
+    def mock_web_research(*, settings, query):
+        return "I recommend `openai/gpt-4.1`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    result = scouting.run_scout_agent(settings=settings, memory="")
+    assert "<!-- last_discovery:" in result.updated_memory
+
+
+def test_discovery_integration_preserves_existing_date_when_off(tmp_path, monkeypatch):
+    """When scout_discovery=False, existing last_discovery date is preserved."""
+    model_id = "anthropic/claude-sonnet-4-5"
+    settings = _make_settings(
+        tmp_path,
+        MILL_MODEL=model_id,
+        MILL_EXPLORE_MODEL=model_id,
+        MILL_WEB_RESEARCH_MODEL=model_id,
+        MILL_TEST_MODEL=model_id,
+        MILL_REFINE_MODEL=model_id,
+        MILL_RETROSPECT_MODEL=model_id,
+        MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
+        # scout_discovery defaults to False
+    )
+
+    memory = """# Scout Memory
+
+## Candidates
+<!-- last_discovery: 2025-06-15 -->
+<!-- Edit the lists below... -->
+- capable:
+  - anthropic/claude-sonnet-4-5
+- cheap:
+
+## Proposed
+
+## Declined
+"""
+    current = _model_info(model_id)
+    _patch_scout(monkeypatch, {current.id: current})
+
+    result = scouting.run_scout_agent(settings=settings, memory=memory)
+    assert "<!-- last_discovery: 2025-06-15 -->" in result.updated_memory
+
+
+def test_discovery_integration_no_web_research_when_disabled(tmp_path, monkeypatch):
+    """When scout_discovery=False (default), no web research calls are made."""
+    model_id = "anthropic/claude-sonnet-4-5"
+    settings = _make_settings(
+        tmp_path,
+        MILL_MODEL=model_id,
+        MILL_EXPLORE_MODEL=model_id,
+        MILL_WEB_RESEARCH_MODEL=model_id,
+        MILL_TEST_MODEL=model_id,
+        MILL_REFINE_MODEL=model_id,
+        MILL_RETROSPECT_MODEL=model_id,
+        MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
+    )
+
+    call_count = 0
+
+    def mock_web_research(*, settings, query):
+        nonlocal call_count
+        call_count += 1
+        return "I recommend `openai/gpt-4.1`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    current = _model_info(model_id)
+    _patch_scout(monkeypatch, {current.id: current})
+
+    scouting.run_scout_agent(settings=settings, memory="")
+    assert call_count == 0
+
+
+def test_discovery_integration_no_crash_on_web_research_exception(tmp_path, monkeypatch):
+    """If run_web_research raises, scout continues normally."""
+    model_id = "anthropic/claude-sonnet-4-5"
+    settings = _make_settings(
+        tmp_path,
+        MILL_MODEL=model_id,
+        MILL_EXPLORE_MODEL=model_id,
+        MILL_WEB_RESEARCH_MODEL=model_id,
+        MILL_TEST_MODEL=model_id,
+        MILL_REFINE_MODEL=model_id,
+        MILL_RETROSPECT_MODEL=model_id,
+        MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
+        MILL_SCOUT_DISCOVERY="true",
+    )
+
+    def mock_web_research(*, settings, query):
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    current = _model_info(model_id)
+    _patch_scout(monkeypatch, {current.id: current})
+
+    # Should not raise
+    result = scouting.run_scout_agent(settings=settings, memory="")
+    assert isinstance(result.updated_memory, str)
+    assert len(result.updated_memory) > 0
+    # Discovery timestamp should NOT be updated (no last_discovery comment)
+    assert "<!-- last_discovery:" not in result.updated_memory
+
+
+def test_discovery_integration_no_duplicate_in_memory(tmp_path, monkeypatch):
+    """A model already in ## Candidates is not duplicated by discovery."""
+    model_id = "anthropic/claude-sonnet-4-5"
+    settings = _make_settings(
+        tmp_path,
+        MILL_MODEL=model_id,
+        MILL_EXPLORE_MODEL=model_id,
+        MILL_WEB_RESEARCH_MODEL=model_id,
+        MILL_TEST_MODEL=model_id,
+        MILL_REFINE_MODEL=model_id,
+        MILL_RETROSPECT_MODEL=model_id,
+        MILL_AUDIT_MODEL=model_id,
+        MILL_AGENT_CHECK_MODEL=model_id,
+        MILL_SCOUT_DISCOVERY="true",
+    )
+
+    current = _model_info(model_id)
+    existing = _model_info("openai/gpt-4.1")
+
+    _patch_scout(monkeypatch, {
+        current.id: current,
+        existing.id: existing,
+    })
+
+    def mock_web_research(*, settings, query):
+        return "I recommend `openai/gpt-4.1`."
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.web_research.run_web_research", mock_web_research,
+    )
+
+    # Memory already has openai/gpt-4.1 in candidates
+    memory = """# Scout Memory
+
+## Candidates
+<!-- Edit the lists below... -->
+- capable:
+  - openai/gpt-4.1
+- cheap:
+
+## Proposed
+
+## Declined
+"""
+    result = scouting.run_scout_agent(settings=settings, memory=memory)
+    # Count occurrences of openai/gpt-4.1 in updated memory
+    assert result.updated_memory.count("openai/gpt-4.1") == 1
+
+
+def test_discovery_extract_model_ids():
+    """_extract_model_ids parses model IDs from text and filters by all_model_ids."""
+    all_ids = {"openai/gpt-4.1", "anthropic/claude-opus-4-5", "google/gemini-2.5-pro"}
+    text = "I recommend `openai/gpt-4.1` and `anthropic/claude-opus-4-5`. Also consider `some/fake-id`."
+    result = scouting._extract_model_ids(text, all_ids)
+    assert result == ["openai/gpt-4.1", "anthropic/claude-opus-4-5"]
+
+
+def test_discovery_extract_model_ids_deduplicates():
+    """_extract_model_ids deduplicates repeated IDs."""
+    all_ids = {"openai/gpt-4.1"}
+    text = "Try `openai/gpt-4.1`. Again, `openai/gpt-4.1` is great."
+    result = scouting._extract_model_ids(text, all_ids)
+    assert result == ["openai/gpt-4.1"]
+
+
+def test_discovery_extract_model_ids_empty_text():
+    """_extract_model_ids returns empty list for empty/None text."""
+    assert scouting._extract_model_ids("", {"a/b"}) == []
+    assert scouting._extract_model_ids("no model ids here", {"a/b"}) == []
+
+
 # ── CLI tests ─────────────────────────────────────────────────────────
 
 

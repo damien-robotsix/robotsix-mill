@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 import httpx
 from pydantic import BaseModel, Field
@@ -57,6 +59,12 @@ _SEED_CANDIDATES: dict[str, list[str]] = {
 
 LATENCY_P99_WARN_MS = 10_000  # 10 seconds
 THROUGHPUT_P50_WARN_TPS = 20
+
+# Regex for extracting OpenRouter-style model IDs from web research
+# conclusions. Matches `provider/name` with optional backtick wrappers
+# (Markdown-formatted). False positives are filtered by cross-reference
+# against the /models response.
+_MODEL_ID_RE = re.compile(r'`?([a-z][a-z0-9_-]*/[a-z][a-z0-9_.-]*)`?')
 
 
 # ── data types ────────────────────────────────────────────────────────
@@ -451,6 +459,126 @@ def _parse_memory(memory: str) -> dict[str, set[str]]:
     return proposed
 
 
+def _parse_last_discovery_date(memory: str) -> str | None:
+    """Extract the last discovery date from a ``<!-- last_discovery: YYYY-MM-DD -->``
+    comment in the ``## Candidates`` section.  Returns ``None`` when not found."""
+    # Only search within the Candidates section to avoid false matches
+    in_candidates = False
+    for line in memory.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## Candidates"):
+            in_candidates = True
+            continue
+        if in_candidates and stripped.startswith("## "):
+            break
+        if in_candidates:
+            m = re.match(r"<!--\s*last_discovery:\s*(\d{4}-\d{2}-\d{2})\s*-->", stripped)
+            if m:
+                return m.group(1)
+    return None
+
+
+def _discover_candidates(
+    *,
+    settings: Settings,
+    capable_current: list[str],
+    cheap_current: list[str],
+    proposed_ids: set[str],
+    all_model_ids: set[str],
+    last_discovery_date: str | None,
+) -> dict[str, list[str]]:
+    """Optionally discover new candidate models via web research.
+
+    Returns ``{"capable": [...], "cheap": [...]}`` — lists of *new* model
+    ids to add to each tier.  Only model ids that exist in *all_model_ids*
+    and are not already present in *capable_current*, *cheap_current*, or
+    *proposed_ids* are included.  At most 3 new ids per tier per run.
+
+    Skips discovery entirely when the cooldown period has not elapsed.
+    """
+    # Cooldown check
+    if last_discovery_date is not None:
+        try:
+            last_date = date.fromisoformat(last_discovery_date)
+            if date.today() - last_date < timedelta(days=settings.scout_discovery_cooldown_days):
+                log.debug("Discovery cooldown active — last ran %s, skipping", last_discovery_date)
+                return {"capable": [], "cheap": []}
+        except ValueError:
+            log.warning("Unparseable last_discovery_date %r — running discovery", last_discovery_date)
+
+    # Build queries from role labels
+    today = date.today()
+    month_year = today.strftime("%B %Y")
+
+    capable_labels = [label for _, _, label in CAPABLE_ROLES + STRUCTURED_ROLES]
+    cheap_labels = [label for _, _, label in CHEAP_ROLES]
+
+    capable_query = (
+        f"What are the best models available on OpenRouter as of {month_year} "
+        f"for these agent roles: {', '.join(capable_labels)}? "
+        f"List exact model IDs in provider/model-name format."
+    )
+    cheap_query = (
+        f"What are the best cheap/fast models available on OpenRouter as of {month_year} "
+        f"for these agent roles: {', '.join(cheap_labels)}? "
+        f"List exact model IDs in provider/model-name format."
+    )
+
+    # Call web research (sequential — run_web_research uses agent.run_sync() internally)
+    from robotsix_mill.agents.web_research import run_web_research
+
+    try:
+        capable_answer = run_web_research(settings=settings, query=capable_query)
+    except Exception as exc:
+        log.warning("Web research for capable tier failed: %s", exc)
+        capable_answer = ""
+    try:
+        cheap_answer = run_web_research(settings=settings, query=cheap_query)
+    except Exception as exc:
+        log.warning("Web research for cheap tier failed: %s", exc)
+        cheap_answer = ""
+
+    # Parse model IDs and cross-reference against all_model_ids
+    capable_ids = _extract_model_ids(capable_answer, all_model_ids)
+    cheap_ids = _extract_model_ids(cheap_answer, all_model_ids)
+
+    # Build exclusion set
+    existing: set[str] = set(capable_current) | set(cheap_current) | proposed_ids
+
+    # Filter and assign to tiers (capable query → capable, cheap query → cheap;
+    # if an id appears in both, it goes to capable)
+    new_capable: list[str] = []
+    new_cheap: list[str] = []
+
+    for mid in capable_ids:
+        if mid not in existing and len(new_capable) < 3:
+            new_capable.append(mid)
+            existing.add(mid)
+
+    for mid in cheap_ids:
+        if mid not in existing and len(new_cheap) < 3:
+            new_cheap.append(mid)
+            existing.add(mid)
+
+    return {"capable": new_capable, "cheap": new_cheap}
+
+
+def _extract_model_ids(text: str, all_model_ids: set[str]) -> list[str]:
+    """Extract OpenRouter-style model IDs from *text* using :data:`_MODEL_ID_RE`,
+    returning only those present in *all_model_ids*.  Preserves order and
+    deduplicates."""
+    if not text:
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for m in _MODEL_ID_RE.finditer(text):
+        mid = m.group(1)
+        if mid in all_model_ids and mid not in seen:
+            seen.add(mid)
+            result.append(mid)
+    return result
+
+
 def _load_candidates(memory_text: str) -> tuple[list[str], list[str]]:
     """Parse a ``## Candidates`` section from the memory ledger.
 
@@ -525,16 +653,20 @@ def _rebuild_candidates_section(
     capable: list[str],
     cheap: list[str],
     dead_ids: set[str],
+    discovery_date: str | None = None,
 ) -> str:
     """Rewrite the ``## Candidates`` section of *memory*, removing any
     model id present in *dead_ids* from both *capable* and *cheap* lists.
+
+    When *discovery_date* is provided, includes/updates the
+    ``<!-- last_discovery: YYYY-MM-DD -->`` comment in the section.
 
     Preserves all other sections unchanged.  When *memory* is empty or
     whitespace-only, seeds the entire file from :data:`_SEED_CANDIDATES`
     (minus *dead_ids*).
     """
     if not memory or memory.strip() == "":
-        return _seed_full_memory(capable, cheap, dead_ids)
+        return _seed_full_memory(capable, cheap, dead_ids, discovery_date=discovery_date)
 
     filtered_capable = [c for c in capable if c not in dead_ids]
     filtered_cheap = [c for c in cheap if c not in dead_ids]
@@ -552,7 +684,9 @@ def _rebuild_candidates_section(
             section_end = i
             break
 
-    candidate_block = _build_candidate_block(filtered_capable, filtered_cheap)
+    candidate_block = _build_candidate_block(
+        filtered_capable, filtered_cheap, discovery_date=discovery_date,
+    )
 
     if section_start is not None:
         if section_end is not None:
@@ -574,9 +708,16 @@ def _rebuild_candidates_section(
     return "".join(new_lines)
 
 
-def _build_candidate_block(capable: list[str], cheap: list[str]) -> str:
-    """Build the ``## Candidates`` Markdown block from two model-id lists."""
+def _build_candidate_block(
+    capable: list[str],
+    cheap: list[str],
+    discovery_date: str | None = None,
+) -> str:
+    """Build the ``## Candidates`` Markdown block from two model-id lists.
+    Optionally includes a ``<!-- last_discovery: ... -->`` comment."""
     block = "## Candidates\n"
+    if discovery_date:
+        block += f"<!-- last_discovery: {discovery_date} -->\n"
     block += "<!-- Edit the lists below to add or remove models the scout should evaluate.\n"
     block += "     The scout will automatically remove models that return 404 from OpenRouter. -->\n"
     block += "- capable:\n"
@@ -592,6 +733,7 @@ def _seed_full_memory(
     capable: list[str],
     cheap: list[str],
     dead_ids: set[str],
+    discovery_date: str | None = None,
 ) -> str:
     """Return a fully-seeded memory ledger with header, candidates,
     and empty Proposed / Declined sections."""
@@ -599,7 +741,7 @@ def _seed_full_memory(
     filtered_cheap = [c for c in cheap if c not in dead_ids]
     return (
         "# Scout Memory\n\n"
-        + _build_candidate_block(filtered_capable, filtered_cheap)
+        + _build_candidate_block(filtered_capable, filtered_cheap, discovery_date=discovery_date)
         + "\n## Proposed\n\n## Declined\n"
     )
 
@@ -835,6 +977,23 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
         client.close()
         return ScoutResult(updated_memory=memory)
 
+    # ── optional discovery pass ──────────────────────────────────────
+    existing_discovery_date = _parse_last_discovery_date(memory)
+    discovery_ran = False
+    if settings.scout_discovery:
+        new_candidates = _discover_candidates(
+            settings=settings,
+            capable_current=capable_cands,
+            cheap_current=cheap_cands,
+            proposed_ids={mid for ids in proposed_set.values() for mid in ids},
+            all_model_ids=set(all_models.keys()),
+            last_discovery_date=existing_discovery_date,
+        )
+        if new_candidates["capable"] or new_candidates["cheap"]:
+            capable_cands = list(dict.fromkeys(capable_cands + new_candidates["capable"]))
+            cheap_cands = list(dict.fromkeys(cheap_cands + new_candidates["cheap"]))
+            discovery_ran = True
+
     needed_ids: set[str] = set()
     role_configs: dict[str, tuple[str, str, str]] = {}
     for attr, env_var, label in ALL_ROLES:
@@ -898,7 +1057,10 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
             drafts_bodies.append(body)
             new_proposals.append((env_var, model_id, label))
 
-    memory = _rebuild_candidates_section(memory, capable_cands, cheap_cands, dead_ids)
+    discovery_date = date.today().isoformat() if discovery_ran else existing_discovery_date
+    memory = _rebuild_candidates_section(
+        memory, capable_cands, cheap_cands, dead_ids, discovery_date=discovery_date,
+    )
     updated_memory = _build_updated_memory(memory, new_proposals)
     client.close()  # release the httpx connection pool (audit 6617)
     return ScoutResult(
