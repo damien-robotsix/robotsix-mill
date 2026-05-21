@@ -738,3 +738,114 @@ def test_deep_analysis_handles_missing_langfuse_traces(tmp_path, monkeypatch):
     assert out.next_state is State.CLOSED
     assert captured_kwargs.get("deep_analysis") is True
     assert captured_kwargs.get("trace_ids") == []
+
+
+# ---------------------------------------------------------------------------
+# draft_gap_id marker injection tests
+# ---------------------------------------------------------------------------
+
+
+def test_draft_gap_id_marker_injected_on_spawn(tmp_path, monkeypatch):
+    """When the agent returns draft_gap_id, the marker is appended to
+    the draft description."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="pattern found",
+            conclusion="filing draft",
+            propose_draft=True,
+            draft_title="Fix token waste in explore",
+            draft_body="Reduce duplicate reads.",
+            draft_gap_id="token_waste_explore",
+        ),
+    )
+    t = _done(ctx)
+    RetrospectStage().run(t, ctx)
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 1
+    # Read the ticket description via workspace.
+    desc = ctx.service.workspace(drafts[0]).read_description()
+    assert "<!-- retrospect-gap-id: token_waste_explore -->" in desc
+
+
+def test_no_marker_when_draft_gap_id_is_none(tmp_path, monkeypatch):
+    """When draft_gap_id is None, no marker is injected."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="pattern found",
+            conclusion="filing draft",
+            propose_draft=True,
+            draft_title="Fix token waste in explore",
+            draft_body="Reduce duplicate reads.",
+            draft_gap_id=None,
+        ),
+    )
+    t = _done(ctx)
+    RetrospectStage().run(t, ctx)
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 1
+    desc = ctx.service.workspace(drafts[0]).read_description()
+    assert "<!-- retrospect-gap-id:" not in desc
+
+
+def test_verified_state_block_in_memory(tmp_path, monkeypatch):
+    """When a prior retrospect-spawned draft exists and is CLOSED with DONE,
+    the verified-state table appears in the memory passed to the agent."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    # Create a CLOSED ticket with source=retrospect and a gap-id marker.
+    draft = ctx.service.create(
+        "Fix slow CI",
+        "Speed up CI.\n\n<!-- retrospect-gap-id: slow_ci -->",
+        source="retrospect",
+    )
+    # Transition it to DONE then CLOSED (simulates a merged draft).
+    ctx.service.transition(draft.id, State.READY)
+    ctx.service.transition(draft.id, State.DELIVERABLE)
+    ctx.service.transition(draft.id, State.IN_REVIEW)
+    ctx.service.transition(draft.id, State.DONE)
+    ctx.service.transition(draft.id, State.CLOSED)
+
+    captured_memory = []
+
+    def capture(**kwargs):
+        captured_memory.append(kwargs.get("memory", ""))
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    t = _done(ctx)
+    RetrospectStage().run(t, ctx)
+    assert len(captured_memory) == 1
+    mem = captured_memory[0]
+    assert "## Prior proposals — verified state" in mem
+    assert "slow_ci" in mem
+    assert "merged" in mem
+
+
+def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path):
+    """A retrospect-sourced ticket without a gap-id marker does not appear
+    in the mapping and does not raise an error."""
+    from robotsix_mill.pass_runner import _verify_prior_proposals
+
+    db.reset_engine()
+    s = Settings(MILL_DATA_DIR=str(tmp_path / "data"))
+    db.init_db(s)
+    svc = TicketService(s)
+
+    # Create a retrospect-sourced ticket with NO gap-id marker.
+    ticket = svc.create("Old retrospect draft", "No marker here.", source="retrospect")
+    # Move it to CLOSED (with DONE in history).
+    for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW, State.DONE, State.CLOSED):
+        svc.transition(ticket.id, st)
+
+    result = _verify_prior_proposals(svc, s, "retrospect")
+    # The marker-less ticket must not appear.
+    assert ticket.id not in [v["ticket_id"] for v in result.values()]
+    # No error raised — we got here fine.

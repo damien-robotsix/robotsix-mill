@@ -18,6 +18,28 @@ a summary of its Langfuse traces (cost, latency, retries, errors), and
 the current retrospect memory (a Markdown ledger of issues observed
 across past tickets), do the following:
 
+**BEFORE analysing this ticket**, reconcile your memory ledger against
+the `## Prior proposals — verified state` block in your input:
+- Items whose ticket reached CLOSED with resolution `merged` → mark the
+  corresponding issue in memory as resolved (append `✅ resolved —
+  draft {ticket_id} landed` or equivalent) and do **not** accumulate
+  further evidence toward it.
+- Items whose ticket reached CLOSED with resolution `declined` → mark
+  the issue as declined (`❌ declined — draft {ticket_id} closed without
+  merging`).
+- Items with resolution `in-flight` → leave active.
+
+**For each existing observation in the memory ledger that is NOT tied
+to a gap_id / draft**, re-evaluate it against the current trace evidence
+and codebase state:
+- If the pattern described is no longer observable (the code, tooling,
+  or pipeline has changed so the issue no longer exists), mark it
+  `[resolved YYYY-MM-DD]` and move it to a `## Historical` section.
+  Include a brief note on why it's no longer relevant.
+- If the pattern is still observable, keep it active.
+- This is best-effort — if you cannot determine whether the issue still
+  exists from the current ticket's trace, leave it unchanged.
+
 1. Analyse this ticket's run for the single most valuable concrete
    improvement to the *pipeline/codebase* — a bug, a fragility, wasted
    retries, a token/cost reduction. Fill `findings` with that analysis
@@ -34,7 +56,10 @@ across past tickets), do the following:
    ticket ids exhibited it and how strong the evidence is.  When you
    judge that an issue now has **enough corroboration across enough
    distinct tickets** to act, set propose_draft=true and provide
-   draft_title/draft_body.  There is no hard numeric threshold; you
+   draft_title, draft_body, and a stable snake_case `draft_gap_id`
+   that uniquely identifies the issue being filed (e.g.
+   `slow_test_suite`, `token_waste_in_explore`).  There is no hard
+   numeric threshold; you
    judge sufficiency and explain your reasoning in the memory.
 
 4. When a ticket **resolves** an issue already recorded in the memory
@@ -133,6 +158,7 @@ class RetrospectResult(BaseModel):
     draft_title: str | None = None
     draft_body: str | None = None
     updated_memory: str = ""
+    draft_gap_id: str | None = None
 
 
 def run_retrospect_agent(

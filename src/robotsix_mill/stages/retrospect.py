@@ -247,7 +247,10 @@ class RetrospectStage(Stage):
                 log.info("%s: retrospect proposed a no-op draft %r — skipped",
                          ticket.id, res.draft_title)
             else:
-                draft = ctx.service.create(res.draft_title, res.draft_body,
+                body = res.draft_body
+                if res.draft_gap_id:
+                    body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
+                draft = ctx.service.create(res.draft_title, body,
                                            source="retrospect",
                                            origin_session=current_session())
                 ctx.service.set_parent(draft.id, ticket.id)
@@ -285,6 +288,14 @@ class RetrospectStage(Stage):
                 memory_text = memory_file.read_text(encoding="utf-8")
         except OSError:
             log.warning("%s: could not read memory file %s", ticket.id, memory_file)
+
+        # Verify prior proposals and prepend verified-state table.
+        from ..pass_runner import _verify_prior_proposals, _render_verified_table
+
+        verified = _verify_prior_proposals(ctx.service, s, "retrospect")
+        if verified:
+            table = _render_verified_table(verified)
+            memory_text = table + "\n\n" + memory_text
 
         try:
             res = retrospecting.run_retrospect_agent(
