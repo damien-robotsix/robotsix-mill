@@ -173,7 +173,7 @@ def test_fetch_rejects_non_http(tmp_path):
 
 
 def test_fetch_argv_is_locked_down(tmp_path, monkeypatch):
-    s = _settings(tmp_path, MILL_FETCH_IMAGE="curlimages/curl:latest")
+    s = _settings(tmp_path)
     seen = {}
 
     def fake_run(argv, **kw):
@@ -191,3 +191,9 @@ def test_fetch_argv_is_locked_down(tmp_path, monkeypatch):
     assert "no-new-privileges" in a
     assert "-v" not in a  # NO repo/data mount in the fetch container
     assert a[-2:] == ["--", "https://docs.example/api"]  # URL is argv, not shell
+
+
+def test_fetch_image_config_default():
+    """fetch_image defaults to a pinned version, not a mutable tag."""
+    s = Settings()
+    assert s.fetch_image == "curlimages/curl:8.17.0"
