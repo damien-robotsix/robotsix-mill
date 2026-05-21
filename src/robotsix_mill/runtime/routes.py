@@ -442,12 +442,23 @@ def list_runs(
 
 @router.get("/traces/recent")
 def list_recent_traces(
+    limit: int = 10,
+    min_cost: float | None = None,
+    max_cost: float | None = None,
     settings=Depends(get_settings),
 ) -> list[dict]:
-    """Return the 10 most-recent Langfuse traces."""
+    """Return recent Langfuse traces, filtered by cost and limited in
+    count.  *limit* is clamped to 1–50; *min_cost* and *max_cost* are
+    inclusive USD filters on ``totalCost``."""
     from ..langfuse_client import list_recent_traces as _list_recent
 
-    traces = _list_recent(settings)
+    limit = max(1, min(limit, 50))
+    traces = _list_recent(
+        settings,
+        limit=limit,
+        min_cost=min_cost,
+        max_cost=max_cost,
+    )
     return [
         {
             "id": t.get("id", ""),

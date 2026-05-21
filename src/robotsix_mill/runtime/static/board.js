@@ -249,14 +249,42 @@ async function openDeepReview(){
  deepReviewOpen=true; deepReviewTraceId=null; deepReviewPollCount=0;
  deepReviewFindings=[];
  document.getElementById("drawer").classList.add("open");
+ // reset filter inputs to defaults
+ const lim=document.getElementById("dr-limit");
+ const minc=document.getElementById("dr-min-cost");
+ const maxc=document.getElementById("dr-max-cost");
+ if(lim)lim.value='10';
+ if(minc)minc.value='';
+ if(maxc)maxc.value='';
  await renderTraceList();
 }
 async function renderTraceList(){
- document.getElementById("d").innerHTML='<h3>Deep Review</h3><div id="trace-list">loading traces…</div>';
- const traces=await jget("/traces/recent");
+ const lim=document.getElementById("dr-limit");
+ const minc=document.getElementById("dr-min-cost");
+ const maxc=document.getElementById("dr-max-cost");
+ const limit=lim?parseInt(lim.value)||10:10;
+ const minCost=minc&&minc.value!==''?minc.value:null;
+ const maxCost=maxc&&maxc.value!==''?maxc.value:null;
+ let url='/traces/recent?limit='+limit;
+ if(minCost!==null)url+='&min_cost='+encodeURIComponent(minCost);
+ if(maxCost!==null)url+='&max_cost='+encodeURIComponent(maxCost);
+ document.getElementById("d").innerHTML='<h3>Deep Review</h3>'+
+  '<div class="dr-filters">'+
+   '<label>Show <input type="number" id="dr-limit" value="'+limit+'" min="1" max="50" style="width:4em"></label>'+
+   '<label>Min cost $ <input type="number" id="dr-min-cost" value="'+(minCost!==null?minCost:'')+'" step="0.0001" placeholder="0.0000" style="width:7em"></label>'+
+   '<label>Max cost $ <input type="number" id="dr-max-cost" value="'+(maxCost!==null?maxCost:'')+'" step="0.0001" placeholder="—" style="width:7em"></label>'+
+  '</div><div id="trace-list">loading traces…</div>';
+ // bind filter-change handlers
+ ['dr-limit','dr-min-cost','dr-max-cost'].forEach(function(id){
+  const el=document.getElementById(id);if(el){el.oninput=renderTraceList;el.onchange=renderTraceList}
+ });
+ const traces=await jget(url);
+ const costFilterActive=minCost!==null||maxCost!==null;
  if(!traces||!traces.length){
   document.getElementById("trace-list").innerHTML=
-   '<div class="muted" style="padding:12px 0">No recent traces available — check Langfuse connectivity.</div>';
+   '<div class="muted" style="padding:12px 0">'+
+   (costFilterActive?'No traces match your cost filter.':'No recent traces available — check Langfuse connectivity.')+
+   '</div>';
   return;
  }
  const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
