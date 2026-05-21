@@ -165,6 +165,7 @@ class ScoutResult(BaseModel):
 
 
 def _auth_headers(settings: Settings) -> dict[str, str]:
+    """Build the HTTP auth headers dict from settings using the OpenRouter API key."""
     h: dict[str, str] = {}
     if settings.openrouter_api_key:
         h["Authorization"] = f"Bearer {settings.openrouter_api_key}"
@@ -172,6 +173,9 @@ def _auth_headers(settings: Settings) -> dict[str, str]:
 
 
 def _fetch_models(client: httpx.Client, settings: Settings) -> dict[str, ModelInfo]:
+    """GET ``/models`` from the OpenRouter API and return a dict mapping model
+    IDs to :class:`ModelInfo` objects.  Each model's pricing fields are coerced
+    via :func:`_float`."""
     headers = _auth_headers(settings)
     r = client.get(f"{OPENROUTER_BASE}/models", headers=headers, timeout=30.0)
     r.raise_for_status()
@@ -191,6 +195,8 @@ def _fetch_models(client: httpx.Client, settings: Settings) -> dict[str, ModelIn
 
 
 def _parse_percentile_stats(raw: dict | None) -> PercentileStats | None:
+    """Parse a raw percentile dict into a :class:`PercentileStats`, returning
+    ``None`` when the raw dict is empty or all percentile values are ``None``."""
     if not raw:
         return None
     stats = PercentileStats(
@@ -207,6 +213,9 @@ def _parse_percentile_stats(raw: dict | None) -> PercentileStats | None:
 def _fetch_endpoints(
     client: httpx.Client, settings: Settings, model_id: str
 ) -> list[EndpointInfo]:
+    """Fetch endpoint/availability data for a single model from OpenRouter.
+    Returns a list of :class:`EndpointInfo` objects, or an empty list on
+    HTTP errors."""
     headers = _auth_headers(settings)
     try:
         r = client.get(
@@ -237,6 +246,8 @@ def _fetch_endpoints(
 
 
 def _float(v: object) -> float | None:
+    """Coerce *v* to ``float``, returning ``None`` when the value is ``None``
+    or cannot be converted."""
     if v is None:
         return None
     try:
@@ -279,6 +290,10 @@ def _evaluate_model(  # noqa: C901  # TODO: split scoring/flagging into sub-func
     role_tier: str,
     model_info: ModelInfo,
 ) -> EvalResult:
+    """Score *model_id* for a single agent role, producing an :class:`EvalResult`
+    with provider counts, uptime, pricing, latency, throughput, flags, and
+    a composite score.  Flags such as ``SINGLE_PROVIDER``, ``PREVIEW``, or
+    ``ZERO_PROVIDERS`` are set based on endpoint data and role tier."""
     e = EvalResult(
         model_id=model_id,
         role_name=role_name,
@@ -362,6 +377,8 @@ def _evaluate_model(  # noqa: C901  # TODO: split scoring/flagging into sub-func
 
 
 def _flag_text(flags: list[str]) -> str:
+    """Join a list of flag strings into a pipe-delimited display string, or
+    return an empty string when there are no flags."""
     if not flags:
         return ""
     return " | ".join(flags)
@@ -371,6 +388,9 @@ def _flag_text(flags: list[str]) -> str:
 
 
 def _parse_memory(memory: str) -> dict[str, set[str]]:
+    """Parse the memory ledger text into a ``dict[str, set[str]]`` mapping role
+    env-var names to sets of previously-proposed model IDs.  Only entries under
+    the ``## Proposed`` section are collected."""
     proposed: dict[str, set[str]] = {}
     current_section: str | None = None
     for line in memory.splitlines():
@@ -398,6 +418,8 @@ def _build_updated_memory(
     old_memory: str,
     new_proposals: list[tuple[str, str, str]],
 ) -> str:
+    """Merge new proposals into the old memory ledger, prepending a date header.
+    New entries are inserted immediately after the ``## Proposed`` section heading."""
     from datetime import date
     today = date.today().isoformat()
     if not old_memory or old_memory.strip() == "":
@@ -418,6 +440,9 @@ def _build_updated_memory(
 
 
 def _fragile_text(best: EvalResult) -> str:
+    """Produce a warning paragraph when *best* carries fragility flags such as
+    ``SINGLE_PROVIDER`` or is a preview model.  Returns an empty string when no
+    fragility concerns are present."""
     parts: list[str] = []
     if "SINGLE_PROVIDER" in best.flags:
         parts.append(
@@ -487,6 +512,9 @@ def _build_draft_body(
     label: str,
     settings: Settings,
 ) -> str:
+    """Build the full Markdown body of a scout draft for a regression or
+    improvement finding.  Includes the heading, reason, proposed change,
+    evidence comparison, and any fragility or latency/timeout advisories."""
     heading = (
         "## Regression detected" if reason_kind == "regression"
         else "## Improvement identified"
@@ -529,6 +557,10 @@ def _evaluate_role(  # noqa: C901  # TODO: split into smaller functions (ticket:
     already: set[str],
     settings: Settings,
 ) -> list[tuple[str, str, str]]:
+    """Evaluate all candidate models for a single configured agent role, returning
+    a list of ``(draft_title, draft_body, model_id)`` proposals for any findings.
+    Detects regressions (zero providers, preview, single provider) and material
+    score improvements against the currently configured model."""
     current_info = enriched.get(configured_id)
     if current_info is None:
         return []
@@ -673,6 +705,7 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
 def _pick_price(
     base: float | None, endpoint_prices: list[float | None],
 ) -> float | None:
+    """Return the first non-``None`` value from *endpoint_prices*, falling back to *base*."""
     for p in endpoint_prices:
         if p is not None:
             return p
@@ -680,6 +713,8 @@ def _pick_price(
 
 
 def _providers_text(endpoints: list[EndpointInfo]) -> str:
+    """Format a list of :class:`EndpointInfo` objects into a comma-separated
+    string of provider names with status labels."""
     if not endpoints:
         return "none"
     return ", ".join(
@@ -688,6 +723,7 @@ def _providers_text(endpoints: list[EndpointInfo]) -> str:
 
 
 def _eval_summary(e: EvalResult) -> str:
+    """Produce a compact one-line summary string of an :class:`EvalResult` for logging."""
     parts = [
         f"providers={e.total_providers}",
         f"active={e.active_providers}",
@@ -713,6 +749,8 @@ def _eval_summary(e: EvalResult) -> str:
 
 
 def _best_candidate(candidates: list[EvalResult]) -> EvalResult | None:
+    """Return the :class:`EvalResult` with the highest score from *candidates*,
+    or ``None`` when the list is empty."""
     if not candidates:
         return None
     return max(candidates, key=lambda c: c.score)
