@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from ..config import Settings
 
@@ -22,6 +22,34 @@ class ImplementResult(BaseModel):
 
     summary: str
     updated_memory: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _absorb_summary_typos(cls, data):
+        """deepseek-v4-pro repeatedly mis-keys the required ``summary``
+        field as a near-miss (``summary_text``, ``text``, ``result``,
+        etc.). pydantic-ai's strict validation then exceeds output
+        retries, the implement stage blocks the ticket with "Exceeded
+        maximum output retries", and the user pays $1+ in coordinator
+        cost per retry. Same absorption pattern as RefineResult's
+        ``spec_markmark`` typo handler.
+
+        Only kicks in when canonical ``summary`` is missing/empty —
+        correctly-keyed output passes straight through.
+        """
+        if not isinstance(data, dict):
+            return data
+        if data.get("summary"):
+            return data
+        # Common near-misses observed in production. Order matters —
+        # earlier names are preferred over more generic ones.
+        for k in ("summary_text", "summary_str", "summaryText",
+                  "result_summary", "text", "result", "output"):
+            v = data.get(k)
+            if isinstance(v, str) and v.strip():
+                data["summary"] = v
+                break
+        return data
 
 
 _SYSTEM_PROMPT = """\
