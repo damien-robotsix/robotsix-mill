@@ -461,6 +461,66 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
     release.set()
 
 
+def test_deep_review_session_id_format(client, monkeypatch):
+    """POST /traces/{trace_id}/deep-review uses make_session_id("deep-review")
+    as the ticket_id for the root span (not the source trace_id), and
+    passes the source trace_id as extra_attributes."""
+    import contextlib
+    import time
+
+    from robotsix_mill.runtime import tracing
+    from robotsix_mill.agents import trace_inspector
+    from robotsix_mill.config import Settings
+
+    # The default test settings don't have Langfuse keys, so the
+    # endpoint's tracing_enabled check would short-circuit.
+    monkeypatch.setattr(
+        Settings, "tracing_enabled", property(lambda self: True),
+    )
+
+    seen = {}
+
+    @contextlib.contextmanager
+    def fake_root(ticket_id, stage_name=None, extra_attributes=None):
+        seen["ticket_id"] = ticket_id
+        seen["stage_name"] = stage_name
+        seen["extra_attributes"] = extra_attributes
+        yield
+
+    monkeypatch.setattr(tracing, "start_ticket_root_span", fake_root)
+
+    # Provide a fake trace detail so the endpoint doesn't 404.
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.fetch_trace_detail",
+        lambda s, tid: {"id": tid, "name": "test-trace"},
+    )
+    # Make the inspector return success.
+    monkeypatch.setattr(
+        trace_inspector, "run_trace_inspector",
+        lambda **kw: trace_inspector.TraceInspectorResult(
+            updated_memory="", findings=[], tool_errors=[],
+            agent_limitations=[], optimizations=[], error=None,
+        ),
+    )
+
+    trace_id = "some-source-trace-abc123"
+    r = client.post(f"/traces/{trace_id}/deep-review")
+    assert r.status_code == 202
+
+    # Wait briefly for the background thread.
+    deadline = time.monotonic() + 2
+    while "ticket_id" not in seen and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+    assert "ticket_id" in seen, "start_ticket_root_span was never called"
+    assert seen["ticket_id"].startswith("deep-review-"), \
+        f"ticket_id={seen['ticket_id']!r} should start with 'deep-review-'"
+    assert trace_id not in seen["ticket_id"], \
+        f"source trace_id must not appear in session id: {seen['ticket_id']!r}"
+    assert seen["stage_name"] == "deep-review"
+    assert seen["extra_attributes"] == {"source_trace_id": trace_id}
+
+
 def test_board_html_includes_agent_check_button(client):
     """The board exposes a 'Run Agent Check' button wired to
     runAgentCheck() in the JS. Without it the user can't see the

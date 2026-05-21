@@ -600,6 +600,56 @@ def test_list_all_traces_since_tracing_disabled_returns_empty():
 
 
 # ---------------------------------------------------------------------------
+# 10. Session span wrapping
+# ---------------------------------------------------------------------------
+
+
+def test_run_trace_health_opens_langfuse_session(tmp_path, monkeypatch):
+    """Trace-health check wraps the entire run in a Langfuse session
+    span, so the created ticket's origin_session reflects it."""
+    import contextlib
+
+    from robotsix_mill import trace_health_runner
+
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+    seen = {}
+
+    @contextlib.contextmanager
+    def fake_root(sid, stage_name=None, extra_attributes=None):
+        seen["session_id"] = sid
+        yield
+
+    # One unsessioned trace triggers ticket creation.
+    traces = _mixed_traces(sessioned=0, unsessioned=1)
+
+    monkeypatch.setattr(trace_health_runner, "start_ticket_root_span", fake_root)
+    monkeypatch.setattr(
+        trace_health_runner, "make_session_id",
+        lambda kind: f"{kind}-test-session",
+    )
+    monkeypatch.setattr(
+        trace_health_runner, "list_all_traces_since",
+        lambda s, ts: traces,
+    )
+    monkeypatch.setattr(
+        trace_health_runner, "Settings", lambda: settings,
+    )
+
+    result = run_trace_health_check()
+
+    assert result.draft_created is True
+    assert seen["session_id"] == "trace-health-test-session"
+
+    # Verify the created ticket's origin_session.
+    svc = TicketService(settings)
+    tickets = [t for t in svc.list() if t.source == "trace-health"]
+    assert len(tickets) == 1
+    assert tickets[0].origin_session is not None
+    assert tickets[0].origin_session.startswith("trace-health-")
+
+
+# ---------------------------------------------------------------------------
 # result dataclass
 # ---------------------------------------------------------------------------
 

@@ -1187,6 +1187,58 @@ def test_scout_pass_result_structure(tmp_path, monkeypatch):
     assert len(result.drafts_created) == 1
 
 
+def test_run_scout_pass_opens_langfuse_session(tmp_path, monkeypatch):
+    """Each scout run wraps the agent in a Langfuse session span with a
+    unique per-run id, and returns it (so scout traces aren't
+    untagged). No-op-safe when tracing isn't ready."""
+    import contextlib
+
+    from robotsix_mill.runtime import tracing
+
+    settings = _make_settings(tmp_path)
+    seen = {}
+
+    @contextlib.contextmanager
+    def fake_root(sid, stage_name=None, extra_attributes=None):
+        seen["session_id"] = sid
+        yield
+
+    def mock_agent(**kwargs):
+        return scouting.ScoutResult(
+            updated_memory="mem", draft_titles=[], draft_bodies=[],
+        )
+
+    monkeypatch.setattr(tracing, "start_ticket_root_span", fake_root)
+    monkeypatch.setattr(tracing, "make_session_id", lambda kind: f"{kind}-test-session")
+    monkeypatch.setattr(scouting, "run_scout_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.scout_runner.Settings", lambda: settings,
+    )
+
+    res = run_scout_pass()
+
+    assert res.session_id == "scout-test-session"
+    assert seen["session_id"] == "scout-test-session"
+    assert res.session_id.startswith("scout-")
+
+
+def test_scout_session_ids_are_unique_per_run(tmp_path, monkeypatch):
+    """Two scout runs produce different session ids."""
+    settings = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        scouting, "run_scout_agent",
+        lambda **k: scouting.ScoutResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[],
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.scout_runner.Settings", lambda: settings,
+    )
+    a = run_scout_pass().session_id
+    b = run_scout_pass().session_id
+    assert a != b and a.startswith("scout-") and b.startswith("scout-")
+
+
 # ── Config tests ──────────────────────────────────────────────────────
 
 

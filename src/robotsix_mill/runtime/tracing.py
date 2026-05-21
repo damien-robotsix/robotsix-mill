@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import contextvars
 import os
+import uuid
 from contextlib import contextmanager, nullcontext
+from datetime import datetime, timezone
 from typing import Iterator
 
 from ..config import Settings
@@ -34,6 +36,20 @@ _tracing_ready: bool | None = None  # tri-state: None=unchecked, True/False
 _current_session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "mill_session_id", default=None
 )
+
+
+def make_session_id(kind: str) -> str:
+    """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid6>``.
+
+    Use for non-ticket-driven flows (audit, health, scout, agent-check,
+    trace-health, deep-review).  Ticket-driven flows pass the ticket id
+    directly to ``start_ticket_root_span`` — the ticket id is already a
+    self-unique ``<ts>-<slug>-<hash>`` and serves as its own session id.
+    """
+    return (
+        f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-"
+        f"{uuid.uuid4().hex[:6]}"
+    )
 
 
 def _tracing_enabled() -> bool:
@@ -156,7 +172,11 @@ def flush_tracing() -> None:
 
 
 @contextmanager
-def start_ticket_root_span(ticket_id: str, stage_name: str | None = None) -> Iterator[None]:
+def start_ticket_root_span(
+    ticket_id: str,
+    stage_name: str | None = None,
+    extra_attributes: dict[str, str] | None = None,
+) -> Iterator[None]:
     """Open a root OTel span for one stage of a ticket, named after the
     stage (e.g. ``"refine"``, ``"implement"``) with ``session.id``
     attribute set to the ticket id.
@@ -170,6 +190,9 @@ def start_ticket_root_span(ticket_id: str, stage_name: str | None = None) -> Ite
     The optional ``stage_name=None`` path keeps the legacy ``"ticket"``
     name as a back-compat shim — call sites that need explicit stage
     naming pass it; anything else still works.
+
+    ``extra_attributes`` — optional dict of additional span attributes
+    to merge into the root span (e.g. ``{"source_trace_id": "..."}``).
 
     Usage::
 
@@ -190,9 +213,12 @@ def start_ticket_root_span(ticket_id: str, stage_name: str | None = None) -> Ite
     token = _current_session.set(ticket_id)
     try:
         tracer = trace.get_tracer("robotsix-mill")
+        attrs: dict[str, str] = {"session.id": ticket_id}
+        if extra_attributes:
+            attrs.update(extra_attributes)
         with tracer.start_as_current_span(
             stage_name or "ticket",
-            attributes={"session.id": ticket_id},
+            attributes=attrs,
         ):
             yield
     finally:

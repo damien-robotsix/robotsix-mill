@@ -9,9 +9,7 @@ Seam: tests monkeypatch ``run_audit_agent`` from agents.auditing.
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from functools import partial
 
 from .config import Settings
@@ -81,10 +79,9 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
 
     # One Langfuse session per audit run, so its model calls are
     # attributed (no untagged traces). No-op if tracing isn't ready.
-    session_id = (
-        f"audit-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-"
-        f"{uuid.uuid4().hex[:6]}"
-    )
+    from .runtime.tracing import make_session_id
+
+    session_id = make_session_id("audit")
     log.info("audit pass starting (session %s)", session_id)
     try:
         with tracing.start_ticket_root_span(session_id), \

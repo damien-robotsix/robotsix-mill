@@ -158,3 +158,45 @@ def test_current_session_returns_contextvar_value():
         assert tracing.current_session() == "ticket-42"
     finally:
         tracing._current_session.reset(token)
+
+
+# --- make_session_id ---
+
+import uuid as _real_uuid
+from datetime import datetime as _real_datetime, timezone as _real_timezone
+
+
+class _FakeDatetime:
+    @staticmethod
+    def now(tz=None):
+        return _real_datetime(2026, 5, 21, 14, 30, 25, tzinfo=_real_timezone.utc)
+
+
+class _FakeUUIDObj:
+    hex = "a1b2c3000000000000000000000000"
+
+
+class _FakeUuidModule:
+    @staticmethod
+    def uuid4():
+        return _FakeUUIDObj()
+
+
+def test_make_session_id_format(monkeypatch):
+    """make_session_id returns <kind>-<UTC-ts>-<6hex>."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.datetime", _FakeDatetime,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.uuid", _FakeUuidModule,
+    )
+
+    assert tracing.make_session_id("audit") == "audit-20260521T143025Z-a1b2c3"
+
+
+def test_make_session_id_all_unique():
+    """1000 calls produce unique ids, all with the expected prefix."""
+    ids = [tracing.make_session_id("smoke") for _ in range(1000)]
+    assert len(set(ids)) == 1000
+    for sid in ids:
+        assert sid.startswith("smoke-")
