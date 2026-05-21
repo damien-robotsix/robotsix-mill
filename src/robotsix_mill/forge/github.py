@@ -338,6 +338,62 @@ def _statuses_to_check_runs(statuses_data: dict) -> list[dict]:
     return runs
 
 
+def _conclusion_for_check(cr: dict) -> str:
+    """Classify a single check run as 'pending', 'failure', or 'neutral'."""
+    if cr.get("status", "") in _PENDING_STATUSES:
+        return "pending"
+    if cr.get("conclusion") in _FAILING_CONCLUSIONS:
+        return "failure"
+    return "neutral"
+
+
+def _extract_annotations(
+    client, api: str, owner: str, repo: str, headers: dict, cr: dict,
+) -> dict:
+    """Fetch and parse annotations for a failing check run (best-effort)."""
+    cr_id = cr.get("id")
+    name = cr.get("name", "unknown")
+    summary = None
+    text = None
+    annotations: list[dict] = []
+
+    if cr_id is not None:
+        try:
+            detail = client.get(
+                f"{api}/repos/{owner}/{repo}/check-runs/{cr_id}",
+                headers=headers,
+            )
+            detail.raise_for_status()
+            output = detail.json().get("output", {}) or {}
+            summary = output.get("summary")
+            text = output.get("text")
+            raw_anns = output.get("annotations") or []
+            annotations = [
+                {
+                    "path": a.get("path", ""),
+                    "start_line": a.get("start_line"),
+                    "message": a.get("message", ""),
+                    "level": a.get("annotation_level", "failure"),
+                }
+                for a in raw_anns[:20]
+            ]
+        except Exception:
+            pass  # detail fetch is best-effort
+
+    # Apply truncation.
+    if summary and len(summary) > 2000:
+        summary = summary[:1999] + "…"
+    if text and len(text) > 4000:
+        text = text[:3999] + "…"
+
+    return {
+        "name": name,
+        "summary": summary,
+        "text": text,
+        "annotations": annotations,
+    }
+
+
 def _derive_check_conclusion(
     client, api: str, owner: str, repo: str, headers: dict,
     check_runs: list[dict],
@@ -351,58 +407,14 @@ def _derive_check_conclusion(
     failing: list[dict] = []
 
     for cr in check_runs:
-        status = cr.get("status", "")
-        conclusion = cr.get("conclusion")
-
-        if status in _PENDING_STATUSES:
+        cat = _conclusion_for_check(cr)
+        if cat == "pending":
             has_pending = True
-            continue
-
-        # status == "completed" (or unknown, treat as completed)
-        if conclusion in _FAILING_CONCLUSIONS:
+        elif cat == "failure":
             has_failure = True
-            cr_id = cr.get("id")
-            name = cr.get("name", "unknown")
-            summary = None
-            text = None
-            annotations = []
-
-            if cr_id is not None:
-                # Fetch full check-run detail for output.
-                try:
-                    detail = client.get(
-                        f"{api}/repos/{owner}/{repo}/check-runs/{cr_id}",
-                        headers=headers,
-                    )
-                    detail.raise_for_status()
-                    output = detail.json().get("output", {}) or {}
-                    summary = output.get("summary")
-                    text = output.get("text")
-                    raw_anns = output.get("annotations") or []
-                    annotations = [
-                        {
-                            "path": a.get("path", ""),
-                            "start_line": a.get("start_line"),
-                            "message": a.get("message", ""),
-                            "level": a.get("annotation_level", "failure"),
-                        }
-                        for a in raw_anns[:20]
-                    ]
-                except Exception:
-                    pass  # detail fetch is best-effort
-
-            # Apply truncation.
-            if summary and len(summary) > 2000:
-                summary = summary[:1999] + "…"
-            if text and len(text) > 4000:
-                text = text[:3999] + "…"
-
-            failing.append({
-                "name": name,
-                "summary": summary,
-                "text": text,
-                "annotations": annotations,
-            })
+            failing.append(
+                _extract_annotations(client, api, owner, repo, headers, cr)
+            )
 
     if has_failure:
         return {"conclusion": "failure", "failing": failing}
