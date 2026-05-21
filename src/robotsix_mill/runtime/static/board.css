@@ -81,5 +81,29 @@ padding:4px 0;font-size:12px;color:#cfd3db;border-bottom:1px solid rgba(255,255,
 .dr-ticket-btn:hover{background:#3b82f6!important}
 .dr-btn:hover{background:#2a3a4b!important}
 .s-asked{--c:#38bdf8}.s-answered{--c:#34d399}
+/* new-ticket modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);
+ display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:#11141b;border:1px solid #2a2e37;border-radius:10px;
+ padding:20px 24px;width:min(480px,94vw);max-height:90vh;overflow-y:auto}
+.modal h2{margin:0 0 14px 0;font-size:15px;color:#fff}
+.modal-label{display:block;font-size:11px;text-transform:uppercase;
+ letter-spacing:.05em;color:#aab0bd;margin-bottom:4px;margin-top:10px}
+.modal-req{color:#f87171}
+.modal-input,.modal-textarea{width:100%;font:13px/1.4 ui-monospace,monospace;
+ background:#1d212c;border:1px solid #2c313d;border-radius:6px;padding:8px 10px;
+ color:#eef0f4;outline:none}
+.modal-input:focus,.modal-textarea:focus{border-color:#3b82f6}
+.modal-textarea{resize:vertical;min-height:8em}
+.modal-field-error{font-size:11px;color:#f87171;margin-top:3px;min-height:1.2em}
+.modal-buttons{display:flex;align-items:center;gap:8px;margin-top:16px}
+.modal-submit-error{flex:1;font-size:11px;color:#f87171}
+.modal-btn-cancel,.modal-btn-create{font:13px/1 ui-monospace,monospace;
+ padding:6px 16px;border-radius:6px;cursor:pointer;border:none}
+.modal-btn-cancel{background:#2a2f3a;color:#aab0bd}
+.modal-btn-cancel:hover{background:#3a3f4a;color:#fff}
+.modal-btn-create{background:#2563eb;color:#fff}
+.modal-btn-create:hover{background:#3b82f6}
+.modal-btn-create:disabled{opacity:.5;cursor:default}
 .inquiry-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
 margin-top:3px;background:#1e2a3a;color:#38bdf8;text-transform:uppercase;letter-spacing:.04em}
