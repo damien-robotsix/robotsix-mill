@@ -443,9 +443,10 @@ def test_board_has_new_ticket_affordance(client):
     body = client.get("/").text
     assert "newTicket()" in body
     assert "+ New Ticket" in body
-    # fetch("/tickets",{method:"POST" is in the external JS
+    # POST /tickets is in the external JS (now via the XHR helper,
+    # not fetch — fetch is wrapped by SES/extensions and unreliable).
     js = client.get("/static/board.js").text
-    assert 'fetch("/tickets",{method:"POST"' in js
+    assert 'jpost("/tickets"' in js
 
 
 def test_post_tickets_creates_user_draft(client):
