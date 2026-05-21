@@ -90,7 +90,7 @@ def run_coordinator(
     # sub-agent (run_tests), so no raw run_command here.
     fs_tools = [
         t for t in fs if t.__name__ in
-        ("read_file", "write_file", "list_dir", "edit_file")
+        ("read_file", "write_file", "list_dir", "edit_file", "delete_file")
     ]
     agent = build_agent(
         settings,

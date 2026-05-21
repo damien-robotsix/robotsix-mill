@@ -80,7 +80,7 @@ def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    read_file, write_file, edit_file, list_dir, run_command = build_fs_tools(
+    read_file, write_file, edit_file, delete_file, list_dir, run_command = build_fs_tools(
         tmp_path, s
     )
     assert "wrote" in write_file("a/b.txt", "hi")
@@ -108,7 +108,7 @@ def test_edit_file_replaces_unique_substring_preserves_rest(tmp_path, fake_sandb
     from robotsix_mill.config import Settings
 
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    _, _, edit_file, _, _ = build_fs_tools(tmp_path, s)
+    _, _, edit_file, _, _, _ = build_fs_tools(tmp_path, s)
     original = "line1\nline2\nline3\nline4\n"
     (tmp_path / "f.txt").write_text(original)
     result = edit_file("f.txt", "line2", "REPLACED")
@@ -124,7 +124,7 @@ def test_edit_file_old_string_absent_returns_error_file_unchanged(tmp_path, fake
     from robotsix_mill.config import Settings
 
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    _, _, edit_file, _, _ = build_fs_tools(tmp_path, s)
+    _, _, edit_file, _, _, _ = build_fs_tools(tmp_path, s)
     original = "line1\nline2\n"
     (tmp_path / "f.txt").write_text(original)
     result = edit_file("f.txt", "nonexistent", "X")
@@ -138,7 +138,7 @@ def test_edit_file_old_string_appears_multiple_returns_error_file_unchanged(
     from robotsix_mill.config import Settings
 
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    _, _, edit_file, _, _ = build_fs_tools(tmp_path, s)
+    _, _, edit_file, _, _, _ = build_fs_tools(tmp_path, s)
     original = "dup\nmiddle\ndup\n"
     (tmp_path / "f.txt").write_text(original)
     result = edit_file("f.txt", "dup", "X")
@@ -150,8 +150,53 @@ def test_edit_file_path_escape_rejected(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    _, _, edit_file, _, _ = build_fs_tools(tmp_path, s)
+    _, _, edit_file, _, _, _ = build_fs_tools(tmp_path, s)
     result = edit_file("../outside.txt", "x", "y")
+    assert "escapes" in result
+
+
+def test_delete_file_removes_existing_file(tmp_path, fake_sandbox):
+    """delete_file returns success and the file no longer exists."""
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    _, _, _, delete_file, _, _ = build_fs_tools(tmp_path, s)
+    (tmp_path / "foo.txt").write_text("hello")
+    result = delete_file("foo.txt")
+    assert "deleted" in result
+    assert not (tmp_path / "foo.txt").exists()
+
+
+def test_delete_file_missing_returns_error(tmp_path, fake_sandbox):
+    """delete_file on a missing file returns an error string, not a crash."""
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    _, _, _, delete_file, _, _ = build_fs_tools(tmp_path, s)
+    result = delete_file("nope.txt")
+    assert result.startswith("error:")
+
+
+def test_delete_file_on_directory_returns_error(tmp_path, fake_sandbox):
+    """delete_file on a directory returns an error string, no deletion."""
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    _, _, _, delete_file, _, _ = build_fs_tools(tmp_path, s)
+    d = tmp_path / "subdir"
+    d.mkdir()
+    result = delete_file("subdir")
+    assert result.startswith("error:")
+    assert d.exists()  # directory untouched
+
+
+def test_delete_file_path_escape_rejected(tmp_path, fake_sandbox):
+    """Path traversal is rejected by _safe."""
+    from robotsix_mill.config import Settings
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    _, _, _, delete_file, _, _ = build_fs_tools(tmp_path, s)
+    result = delete_file("../outside.txt")
     assert "escapes" in result
 
 
@@ -162,7 +207,7 @@ def test_fs_tools_non_existent_root_returns_clear_error(tmp_path, fake_sandbox):
 
     fake_root = tmp_path / "does-not-exist"
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    read_file, write_file, edit_file, list_dir, run_command = build_fs_tools(
+    read_file, write_file, edit_file, delete_file, list_dir, run_command = build_fs_tools(
         fake_root, s
     )
     msg = "workspace repo directory does not exist"
@@ -170,6 +215,7 @@ def test_fs_tools_non_existent_root_returns_clear_error(tmp_path, fake_sandbox):
     assert msg in read_file("anything.txt")
     assert msg in write_file("x.txt", "content")
     assert msg in edit_file("x.txt", "a", "b")
+    assert msg in delete_file("x.txt")
     assert msg in list_dir(".")
     # run_command does NOT go through _safe — it calls sandbox.run()
     # directly. When the repo_dir doesn't exist, _repo_mount rejects it.

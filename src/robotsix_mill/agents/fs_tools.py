@@ -81,6 +81,15 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
+    def delete_file(path: str) -> str:
+        """Delete a file from the repository. Returns a short status string."""
+        try:
+            p = _safe(root, path)
+            p.unlink()
+        except (ValueError, OSError) as e:
+            return f"error: {e}"
+        return f"deleted {path}"
+
     def list_dir(path: str = ".") -> str:
         """List entries of a directory in the repository (dirs end '/')."""
         try:
@@ -110,4 +119,4 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
             return f"sandbox error: {e}"
         return f"exit={rc}\n{out}"
 
-    return [read_file, write_file, edit_file, list_dir, run_command]
+    return [read_file, write_file, edit_file, delete_file, list_dir, run_command]
