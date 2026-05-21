@@ -533,6 +533,21 @@ def test_board_html_includes_agent_check_button(client):
     assert 'jpost("/agent-check")' in js
 
 
+def test_board_has_last_reviews_panel(client):
+    """The board JS includes a 'Last reviews' affordance wired to
+    GET /deep-review so users can replay past deep-review findings."""
+    js = client.get("/static/board.js").text
+    assert "Last reviews" in js, (
+        "'Last reviews' literal must appear in board.js — "
+        "the UI panel for replaying past deep-review results"
+    )
+    assert 'renderLastReviewsList' in js
+    assert 'viewStoredReview' in js
+    assert 'jget("/deep-review")' in js or 'jget("/deep-review"' in js, (
+        "board.js must call GET /deep-review to fetch stored reviews"
+    )
+
+
 def test_setup_logging_surfaces_app_logs_idempotently(capsys):
     """Regression: robotsix_mill.* logs were dropped (no handler under
     uvicorn), masking the silently-failing /audit thread. setup_logging
