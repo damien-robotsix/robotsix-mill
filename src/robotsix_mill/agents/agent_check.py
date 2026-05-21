@@ -182,4 +182,6 @@ def run_agent_check_agent(
     result = call_with_retry(
         lambda: agent.run_sync(prompt), settings=settings, what="agent_check"
     )
+    result.output.draft_titles = result.output.draft_titles[:MAX_GAPS]
+    result.output.draft_bodies = result.output.draft_bodies[:MAX_GAPS]
     return result.output
