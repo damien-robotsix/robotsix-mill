@@ -26,6 +26,7 @@ class Ticket(SQLModel, table=True):
     id: str = Field(primary_key=True)
     title: str
     state: State = Field(default=State.DRAFT, index=True)
+    kind: str = Field(default="task")  # "task" (existing pipeline) or "inquiry" (new path)
     # pointer into the work plane (file-canonical body)
     workspace_path: str
     content_hash: str = ""
@@ -92,6 +93,7 @@ class TicketCreate(SQLModel):
     description: str = ""
     depends_on: str | None = None
     source: str = "user"
+    kind: str = "task"  # "task" (pipeline) or "inquiry" (Q&A)
 
 
 class TicketTransition(SQLModel):
@@ -103,6 +105,7 @@ class TicketRead(SQLModel):
     id: str
     title: str
     state: State
+    kind: str
     branch: str | None
     parent_id: str | None
     source: str

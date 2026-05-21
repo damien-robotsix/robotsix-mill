@@ -133,6 +133,7 @@ class TicketService:
         self, title: str, description: str = "", source: str = "user",
         origin_session: str | None = None,
         depends_on: str | None = None,
+        kind: str = "task",
     ) -> Ticket:
         """Create a new ticket with the given *title*.
 
@@ -143,11 +144,21 @@ class TicketService:
         The ticket id is constructed from the UTC timestamp, a slug of
         the title, and a short random hex suffix.
 
+        When *kind* is ``"inquiry"`` the initial state is ``ASKED``
+        (the answer stage picks it up) instead of ``DRAFT``.
+        ``depends_on`` is NOT allowed for inquiries — raises
+        :class:`ValueError`.
+
         Raises :class:`ValueError` if *depends_on* includes the ticket's
-        own ID (self-dependency).
+        own ID (self-dependency) or is provided for an inquiry.
         """
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         ticket_id = f"{stamp}-{_slug(title)}-{token_hex(2)}"
+
+        if kind == "inquiry" and depends_on:
+            raise ValueError(
+                "inquiries do not support depends_on — they are standalone Q&A"
+            )
 
         # Reject self-dependency before persisting.
         if depends_on:
@@ -157,13 +168,16 @@ class TicketService:
                     f"Ticket cannot depend on itself: {ticket_id}"
                 )
 
+        initial_state = State.ASKED if kind == "inquiry" else State.DRAFT
+
         ws = Workspace(self.settings.workspaces_dir, ticket_id)
         content_hash = ws.write_description(description)
         with db.session(self.settings) as s:
             ticket = Ticket(
                 id=ticket_id,
                 title=title,
-                state=State.DRAFT,
+                state=initial_state,
+                kind=kind,
                 workspace_path=str(ws.dir),
                 content_hash=content_hash,
                 source=source,
@@ -173,7 +187,7 @@ class TicketService:
             s.add(ticket)
             s.add(
                 TicketEvent(
-                    ticket_id=ticket_id, state=State.DRAFT, note="created"
+                    ticket_id=ticket_id, state=initial_state, note="created"
                 )
             )
             s.commit()

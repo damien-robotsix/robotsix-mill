@@ -1,4 +1,4 @@
-const ST=["draft","awaiting_approval","ready","deliverable","in_review","rebasing","fixing_ci","done","closed","blocked","errored"];
+const ST=["draft","awaiting_approval","ready","deliverable","in_review","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered"];
 const LBL={ready:"implementing"};   // display label only; state value stays "ready"
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
@@ -59,6 +59,7 @@ async function refresh(){
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <button class="del-btn" title="Delete ticket" onclick="event.stopPropagation();del_('${t.id}')">✕</button>
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
+   ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
    (s==="awaiting_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
@@ -177,7 +178,7 @@ async function open_(id){
   `<h3>${esc(t.title)}</h3>
    <div class="muted">${t.id}</div>
    <p>state <b class="s-${t.state}" style="border-left:3px solid var(--c);
-      padding-left:6px">${t.state}</b> · branch ${esc(t.branch)||"—"}<br>
+      padding-left:6px">${t.state}</b>${t.kind==="inquiry"?` <span class="inquiry-badge">🔍 inquiry</span>`:""} · branch ${esc(t.branch)||"—"}<br>
    source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
    (t.origin_session_url?` · origin <a href="${esc(t.origin_session_url)}" target="_blank" rel="noopener" class="origin-link">${esc(t.origin_session)}</a>`:
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+

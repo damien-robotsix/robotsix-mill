@@ -7,6 +7,7 @@ source of truth; it must cover every value in
 
 from __future__ import annotations
 
+from .answer import AnswerStage
 from .base import Stage
 from .ci_fix import CIFixStage
 from .deliver import DeliverStage
@@ -22,6 +23,7 @@ _REGISTERED: list[type[Stage]] = [
     MergeStage,
     CIFixStage,
     RetrospectStage,
+    AnswerStage,
 ]
 
 STAGES: dict[str, Stage] = {cls.name: cls() for cls in _REGISTERED}

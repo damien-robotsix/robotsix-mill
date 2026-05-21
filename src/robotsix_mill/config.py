@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     #  - test_model     : distills test failures into actionable
     #                     feedback (cheap).
     #  - refine_model   : spec authoring (capable; may web_research).
+    #  - answer_model   : investigative analyst (capable; web + repo +
+    #                     Langfuse tools).
     #  - retrospect_model / audit_model : structured analysis (capable).
     # Transient 429/5xx/timeouts on any of these are absorbed by the
     # bounded retry+backoff (see transient_* below).
@@ -52,6 +54,9 @@ class Settings(BaseSettings):
     )
     refine_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_REFINE_MODEL"
+    )
+    answer_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_ANSWER_MODEL"
     )
     retrospect_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_RETROSPECT_MODEL"

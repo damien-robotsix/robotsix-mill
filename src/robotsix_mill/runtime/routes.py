@@ -62,6 +62,7 @@ def create_ticket(
         body.description,
         source=body.source,
         depends_on=body.depends_on,
+        kind=body.kind,
     )
     maybe_enqueue(ticket, worker)  # "directly taken in charge"
     return enrich_ticket_read(ticket, settings, svc)
