@@ -71,15 +71,4 @@ def run_implement_agent(
     return summary, []
 
 
-def dump_history(messages: list) -> bytes:
-    """Serialize a pydantic-ai message list (kept for the stage's
-    transcript artifact; the coordinator path produces none)."""
-    from pydantic_ai.messages import ModelMessagesTypeAdapter
 
-    return ModelMessagesTypeAdapter.dump_json(messages)
-
-
-def load_history(data: bytes) -> list:
-    from pydantic_ai.messages import ModelMessagesTypeAdapter
-
-    return list(ModelMessagesTypeAdapter.validate_json(data))
