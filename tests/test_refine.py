@@ -109,10 +109,28 @@ def test_success_rewrites_description(ctx, service, monkeypatch):
     assert service.get(t.id).content_hash == expected
 
 
-def test_empty_spec_blocks(ctx, service, monkeypatch):
+def test_empty_spec_proceeds_to_ready(ctx, service, monkeypatch):
+    """Whitespace-only spec → proceed with original draft (not BLOCKED)."""
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
-    out = RefineStage().run(service.create("x", "draft"), ctx)
-    assert out.next_state is State.BLOCKED
+    t = service.create("x", "draft")
+    out = RefineStage().run(t, ctx)
+    assert out.next_state is State.READY
+    # Original draft preserved as description.md
+    assert service.workspace(t).read_description() == "draft"
+    assert (service.workspace(t).artifacts_dir / "draft-original.md").read_text() == "draft"
+
+
+def test_empty_spec_proceeds_to_awaiting_approval_when_gated(ctx, service, monkeypatch, tmp_path):
+    """Whitespace-only spec + gated → AWAITING_APPROVAL."""
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
+    gated_settings = Settings(
+        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+    )
+    gated_ctx = StageContext(settings=gated_settings, service=service)
+    t = service.create("x", "draft")
+    out = RefineStage().run(t, gated_ctx)
+    assert out.next_state is State.AWAITING_APPROVAL
+    assert service.workspace(t).read_description() == "draft"
 
 
 async def test_chains_draft_to_implement(ctx, service, monkeypatch):
@@ -824,8 +842,8 @@ def test_split_single_child_falls_back_to_normal(ctx, service, monkeypatch):
     assert (service.workspace(t).artifacts_dir / "draft-original.md").exists()
 
 
-def test_split_empty_children_blocks(ctx, service, monkeypatch):
-    """No valid children → BLOCKED."""
+def test_split_empty_children_proceeds(ctx, service, monkeypatch):
+    """No children in split → proceed with original draft (not BLOCKED)."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
         lambda **_: RefineResult(split=True, children=[]),
@@ -833,7 +851,29 @@ def test_split_empty_children_blocks(ctx, service, monkeypatch):
 
     t = service.create("Empty split", "draft")
     out = RefineStage().run(t, ctx)
-    assert out.next_state is State.BLOCKED
+    assert out.next_state is State.READY
+    # Original draft preserved
+    assert service.workspace(t).read_description() == "draft"
+
+
+def test_split_empty_children_proceeds_to_awaiting_approval_when_gated(
+    ctx, service, monkeypatch, tmp_path
+):
+    """No children in split + gated → AWAITING_APPROVAL."""
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(split=True, children=[]),
+    )
+
+    gated_settings = Settings(
+        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+    )
+    gated_ctx = StageContext(settings=gated_settings, service=service)
+
+    t = service.create("Empty split gated", "draft")
+    out = RefineStage().run(t, gated_ctx)
+    assert out.next_state is State.AWAITING_APPROVAL
+    assert service.workspace(t).read_description() == "draft"
 
 
 def test_split_malformed_children_skipped(ctx, service, monkeypatch):
