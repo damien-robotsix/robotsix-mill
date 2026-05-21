@@ -87,6 +87,112 @@ def test_record_sets_span_attrs(monkeypatch):
     assert captured["gen_ai.usage.input_tokens"] == 10
     assert captured["gen_ai.usage.output_tokens"] == 20
     assert captured["gen_ai.provider.name"] == "openrouter"
+    # No cache attributes set when prompt_tokens_details is absent.
+    assert "gen_ai.usage.cache_read_input_tokens" not in captured
+    assert "gen_ai.usage.reasoning_tokens" not in captured
+
+
+def test_record_sets_cache_span_attrs(monkeypatch):
+    """OpenRouter cache and reasoning token details are surfaced on the
+    OTel span when present in the usage object."""
+    ot = pytest.importorskip("opentelemetry.trace")
+    captured: dict = {}
+
+    class Span:
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, k, v):
+            captured[k] = v
+
+    monkeypatch.setattr(ot, "get_current_span", lambda: Span())
+
+    class PromptDetails:
+        cached_tokens = 470400
+        cache_creation_input_tokens = 30000
+
+    class CompletionDetails:
+        reasoning_tokens = 500
+
+    class U:
+        model_extra = {"cost": 0.025}
+        prompt_tokens = 500000
+        completion_tokens = 16000
+        prompt_tokens_details = PromptDetails()
+        completion_tokens_details = CompletionDetails()
+
+    class R:
+        usage = U()
+        model = "deepseek/deepseek-v4-pro"
+
+    record_openrouter_cost(R())
+    assert captured["gen_ai.usage.cache_read_input_tokens"] == 470400
+    assert captured["gen_ai.usage.cache_creation_input_tokens"] == 30000
+    assert captured["gen_ai.usage.reasoning_tokens"] == 500
+
+
+def test_record_cache_attrs_dict_shape(monkeypatch):
+    """prompt_tokens_details and completion_tokens_details may be dicts
+    (depending on the provider/model)."""
+    ot = pytest.importorskip("opentelemetry.trace")
+    captured: dict = {}
+
+    class Span:
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, k, v):
+            captured[k] = v
+
+    monkeypatch.setattr(ot, "get_current_span", lambda: Span())
+
+    class U:
+        model_extra = {"cost": 0.01}
+        prompt_tokens = 100
+        completion_tokens = 50
+        prompt_tokens_details = {"cached_tokens": 90, "cache_creation_input_tokens": 10}
+        completion_tokens_details = {"reasoning_tokens": 5}
+
+    class R:
+        usage = U()
+        model = "test-model"
+
+    record_openrouter_cost(R())
+    assert captured["gen_ai.usage.cache_read_input_tokens"] == 90
+    assert captured["gen_ai.usage.cache_creation_input_tokens"] == 10
+    assert captured["gen_ai.usage.reasoning_tokens"] == 5
+
+
+def test_record_cache_partial_details_no_crash(monkeypatch):
+    """When prompt_tokens_details exists but lacks some keys, no crash."""
+    ot = pytest.importorskip("opentelemetry.trace")
+    captured: dict = {}
+
+    class Span:
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, k, v):
+            captured[k] = v
+
+    monkeypatch.setattr(ot, "get_current_span", lambda: Span())
+
+    class U:
+        model_extra = {"cost": 0.01}
+        prompt_tokens = 100
+        completion_tokens = 50
+        # Only cached_tokens, no cache_creation_input_tokens
+        prompt_tokens_details = {"cached_tokens": 75}
+        # completion_tokens_details absent entirely
+
+    class R:
+        usage = U()
+        model = "test-model"
+
+    record_openrouter_cost(R())
+    assert captured["gen_ai.usage.cache_read_input_tokens"] == 75
+    assert "gen_ai.usage.cache_creation_input_tokens" not in captured
+    assert "gen_ai.usage.reasoning_tokens" not in captured
 
 
 # --- session_total_cost (Langfuse API read) ----------------------------

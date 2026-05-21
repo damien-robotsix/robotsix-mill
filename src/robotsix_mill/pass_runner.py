@@ -107,11 +107,36 @@ def _render_verified_table(verified: dict[str, dict]) -> str:
     return "\n".join(lines)
 
 
-def load_memory(memory_file: Path) -> str:
-    """Read a memory ledger file; returns ``""`` if missing/unreadable."""
+def load_memory(memory_file: Path, max_chars: int | None = None) -> str:
+    """Read a memory ledger file; returns ``""`` if missing/unreadable.
+
+    When *max_chars* is set and the file exceeds that limit, the oldest
+    entries are dropped — only the last *max_chars* characters (most
+    recent) are kept, adjusted to a newline boundary so entries aren't
+    split mid-line.  A ``[... memory truncated: N chars omitted]`` note
+    is prepended and a warning is logged.
+    """
     try:
         if memory_file.exists():
-            return memory_file.read_text(encoding="utf-8")
+            text = memory_file.read_text(encoding="utf-8")
+            if max_chars is not None and len(text) > max_chars:
+                original_size = len(text)
+                # Find the cut point (keep the last max_chars), then
+                # advance to the next newline so the first kept line is
+                # a complete line.
+                cut_point = original_size - max_chars
+                nl_idx = text.find("\n", cut_point)
+                if nl_idx != -1:
+                    kept = text[nl_idx + 1:]  # start after the newline
+                else:
+                    kept = text[cut_point:]  # fallback (no newline found)
+                omitted = original_size - len(kept)
+                text = f"[... memory truncated: {omitted} chars omitted]\n\n{kept}"
+                log.warning(
+                    "memory file %s truncated: %d → %d chars",
+                    memory_file, original_size, len(text),
+                )
+            return text
     except OSError:
         log.warning("could not read memory file %s", memory_file)
     return ""
@@ -162,7 +187,7 @@ def run_agent_pass(
         ``AgentPassResult`` with updated memory and created draft info.
     """
     # 1. Read current memory — empty string if missing/unreadable.
-    memory_text = load_memory(memory_file)
+    memory_text = load_memory(memory_file, max_chars=settings.max_memory_chars)
 
     # 2. Verify prior proposals and prepend verified-state table.
     verified = _verify_prior_proposals(service, settings, source_label)

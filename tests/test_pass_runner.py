@@ -468,3 +468,98 @@ def test_missing_gap_ids_no_crash(tmp_path):
     assert "gap-id:" not in desc
 
     db.reset_engine()
+
+
+# --- memory truncation tests (load_memory) ---
+
+from robotsix_mill.pass_runner import load_memory
+
+
+def test_load_memory_under_limit_noop(tmp_path):
+    """When the memory file is ≤ max_chars, load_memory returns the
+    full content unchanged."""
+    mf = tmp_path / "memory.md"
+    content = "## Entry 1\nSome content\n## Entry 2\nMore content\n"
+    mf.write_text(content, encoding="utf-8")
+
+    result = load_memory(mf, max_chars=8000)
+    assert result == content
+
+
+def test_load_memory_over_limit_truncates_keep_last(tmp_path, caplog):
+    """When the file exceeds max_chars, load_memory keeps the LAST
+    entries and prepends a truncation note."""
+    import logging
+
+    mf = tmp_path / "memory.md"
+    # Build a memory file with dated sections, oldest first.
+    sections = []
+    for i in range(50):
+        sections.append(f"## Entry {i}\nObservation {i}.\n" + ("x" * 200) + "\n")
+    content = "\n".join(sections)
+    mf.write_text(content, encoding="utf-8")
+    assert len(content) > 8000
+
+    caplog.set_level(logging.WARNING)
+    result = load_memory(mf, max_chars=8000)
+
+    # Must be ≤ max_chars + truncation note overhead (~60 chars)
+    assert len(result) <= 8000 + 100
+    # Must start with the truncation note
+    assert result.startswith("[... memory truncated:")
+    assert "chars omitted]" in result.split("\n")[0]
+    # Latest entries preserved (Entry 49 should be there)
+    assert "Entry 49" in result
+    # Earliest entries dropped
+    assert "Entry 0" not in result
+    # Warning logged
+    assert "truncated:" in caplog.text
+
+
+def test_load_memory_truncation_at_newline_boundary(tmp_path):
+    """Truncation happens at a newline boundary so the first kept line
+    is a complete line, not a fragment."""
+    mf = tmp_path / "memory.md"
+    # Build content with clear newline boundaries between entries.
+    header = "## Entry old\n" + ("x" * 5000) + "\n"
+    middle = "## Entry mid\n" + ("y" * 5000) + "\n"
+    tail = "## Entry recent\nRecent observation.\n"
+    content = header + middle + tail
+    mf.write_text(content, encoding="utf-8")
+
+    result = load_memory(mf, max_chars=3000)
+
+    # The first line of the result (after the note) should NOT be a
+    # mid-line fragment — it should start at a newline boundary.
+    # Verify the note is present and the result contains the recent entry.
+    assert result.startswith("[... memory truncated:")
+    assert "chars omitted]" in result.split("\n")[0]
+    assert "## Entry recent" in result
+    # The result should NOT contain a fragment like "xxxx" or "yyyy"
+    # that is not on a complete line starting after a newline —
+    # since we advance to the next newline after the cut point.
+
+
+def test_load_memory_missing_file_ok(tmp_path):
+    """load_memory on a non-existent file returns '' (existing behavior)."""
+    mf = tmp_path / "nonexistent.md"
+    result = load_memory(mf, max_chars=8000)
+    assert result == ""
+
+
+def test_load_memory_max_chars_none_no_truncation(tmp_path):
+    """When max_chars is None, no truncation occurs (backward compat)."""
+    mf = tmp_path / "memory.md"
+    content = "x" * 12000
+    mf.write_text(content, encoding="utf-8")
+
+    result = load_memory(mf, max_chars=None)
+    assert result == content
+
+
+# --- config default ---
+
+
+def test_max_memory_chars_default():
+    """Bare Settings() has max_memory_chars == 8000."""
+    assert Settings().max_memory_chars == 8000

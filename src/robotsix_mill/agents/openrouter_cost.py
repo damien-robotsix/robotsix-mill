@@ -121,3 +121,27 @@ def record_openrouter_cost(response: Any) -> None:
         completion_tokens = getattr(usage_obj, "completion_tokens", None)
         if completion_tokens is not None:
             span.set_attribute("gen_ai.usage.output_tokens", completion_tokens)
+
+        # --- OpenRouter cache & reasoning token details ---
+        prompt_details = getattr(usage_obj, "prompt_tokens_details", None)
+        if prompt_details is not None:
+            # Support both dict and object shapes (varies by provider).
+            if isinstance(prompt_details, dict):
+                cached = prompt_details.get("cached_tokens")
+                cache_creation = prompt_details.get("cache_creation_input_tokens")
+            else:
+                cached = getattr(prompt_details, "cached_tokens", None)
+                cache_creation = getattr(prompt_details, "cache_creation_input_tokens", None)
+            if cached is not None:
+                span.set_attribute("gen_ai.usage.cache_read_input_tokens", cached)
+            if cache_creation is not None:
+                span.set_attribute("gen_ai.usage.cache_creation_input_tokens", cache_creation)
+
+        completion_details = getattr(usage_obj, "completion_tokens_details", None)
+        if completion_details is not None:
+            if isinstance(completion_details, dict):
+                reasoning = completion_details.get("reasoning_tokens")
+            else:
+                reasoning = getattr(completion_details, "reasoning_tokens", None)
+            if reasoning is not None:
+                span.set_attribute("gen_ai.usage.reasoning_tokens", reasoning)

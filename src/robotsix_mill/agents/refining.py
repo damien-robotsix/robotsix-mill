@@ -157,6 +157,57 @@ Rules for splitting:
   original draft — nothing dropped, nothing added.
 """
 
+REVIEWER_SENDBACK_PROMPT = """\
+You are revising an existing spec per reviewer feedback. The spec
+already exists — your only task is to address each comment in the
+``<reviewer_feedback>`` block.
+
+- Address each reviewer comment directly.  If a comment asks for a
+  specific change, apply it precisely; if it asks for clarification,
+  elaborate the relevant section.
+- Keep everything the reviewer didn't flag unchanged — do not
+  introduce new scope or restructure untouched sections.
+- The revised spec must remain concrete and testable so the implement
+  agent can act on it without asking questions.
+
+## Memory
+
+You are given a `<memory>` block containing a Markdown ledger of
+observations from your past refine runs. It records:
+- Recurring reviewer feedback patterns (e.g. "acceptance criteria
+  must be testable")
+- Split-vs-bundle heuristics for this codebase
+- Repo-specific conventions discovered during past refinements
+
+Reference the memory when deciding how to structure the spec. After
+refining, update the memory in your `updated_memory` field:
+- Record any new reviewer feedback themes you observed
+- Note split/bundle decisions and their rationale
+- Record repo-specific conventions you discovered
+- Keep entries concise and ticket-ID-qualified
+- If nothing new was learned, return the incoming memory unchanged
+
+## Output format
+
+You MUST return a structured result. When the draft describes ONE
+focused change:
+
+- split=false, spec_markdown="## Problem\\n...\\n## Scope\\n...\\n## Acceptance criteria\\n...\\n## Out of scope / constraints\\n..."
+
+When the draft bundles MULTIPLE independent, self-contained changes
+that can each ship alone, split into focused children:
+
+- split=true, children=[{"title": "Short title for change A", "spec_markdown": "## Problem\\n...", "depends_on": []}, ...]
+
+- Each child's ``spec_markdown`` must be a complete, self-contained
+  spec with ## Problem, ## Scope, ## Acceptance criteria, and
+  ## Out of scope / constraints sections.
+- ``depends_on`` is a list of zero-based indices of earlier children
+  in the same split that must be completed first.
+- The union of all children's scope must faithfully cover the entire
+  original draft — nothing dropped, nothing added.
+"""
+
 
 def run_refine_agent(
     *,
@@ -198,7 +249,7 @@ def run_refine_agent(
 
     agent = build_agent(
         settings,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=REVIEWER_SENDBACK_PROMPT if reviewer_comments else SYSTEM_PROMPT,
         output_type=PromptedOutput(RefineResult),
         tools=tools,
         web=True,  # cheap web_research sub-agent (external lookups only)
