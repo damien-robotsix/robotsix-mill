@@ -52,7 +52,7 @@ class Ticket(SQLModel, table=True):
     depends_on: str | None = Field(default=None)
     created_at: datetime = Field(
         default_factory=_now,
-        sa_column=Column(TZDateTime()),
+        sa_column=Column(TZDateTime(), index=True),
     )
     updated_at: datetime = Field(
         default_factory=_now,
