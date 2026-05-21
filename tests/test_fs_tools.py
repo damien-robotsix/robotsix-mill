@@ -155,6 +155,142 @@ class TestReadFile:
 
 
 # ===================================================================
+# read_file offset/limit
+# ===================================================================
+
+class TestReadFileOffsetLimit:
+    def test_default_args_byte_identical(self, tmp_path, settings):
+        """read_file(path) returns same content as before the change."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "hello.txt", "line1\nline2\n")
+        tools = _build(root, settings)
+        result = tools["read_file"]("hello.txt")
+        assert result == "line1\nline2\n"
+
+    def test_default_args_empty_file(self, tmp_path, settings):
+        """Empty file with default args returns '' (no regression)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "empty.txt", "")
+        tools = _build(root, settings)
+        result = tools["read_file"]("empty.txt")
+        assert result == ""
+
+    def test_default_args_trailing_newline(self, tmp_path, settings):
+        """File ending with newline preserved byte-identically."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "a\n")
+        tools = _build(root, settings)
+        assert tools["read_file"]("f.txt") == "a\n"
+
+    def test_default_args_no_trailing_newline(self, tmp_path, settings):
+        """File without trailing newline preserved."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "a")
+        tools = _build(root, settings)
+        assert tools["read_file"]("f.txt") == "a"
+
+    def test_basic_offset_limit(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "line1\nline2\nline3\nline4\n")
+        tools = _build(root, settings)
+        assert tools["read_file"]("f.txt", offset=2, limit=2) == "line2\nline3\n"
+
+    def test_offset_to_eof(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "line1\nline2\nline3\nline4\n")
+        tools = _build(root, settings)
+        assert tools["read_file"]("f.txt", offset=3) == "line3\nline4\n"
+
+    def test_offset_past_eof_returns_note(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "a\nb\nc\n")
+        tools = _build(root, settings)
+        result = tools["read_file"]("f.txt", offset=5)
+        assert "(file has 3 lines; offset 5 is beyond end)" in result
+
+    def test_offset_past_eof_with_limit_returns_note(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "a\nb\nc\n")
+        tools = _build(root, settings)
+        result = tools["read_file"]("f.txt", offset=4, limit=1)
+        assert "(file has 3 lines; offset 4 is beyond end)" in result
+
+    def test_zero_offset_normalized_to_1(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "line1\nline2\nline3\n")
+        tools = _build(root, settings)
+        a = tools["read_file"]("f.txt", offset=0, limit=1)
+        b = tools["read_file"]("f.txt", offset=1, limit=1)
+        assert a == b == "line1\n"
+
+    def test_negative_offset_normalized_to_1(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "line1\nline2\n")
+        tools = _build(root, settings)
+        result = tools["read_file"]("f.txt", offset=-5, limit=2)
+        assert result == "line1\nline2\n"
+
+    def test_limit_exceeds_remaining_clips_silently(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "a\nb\nc\n")
+        tools = _build(root, settings)
+        result = tools["read_file"]("f.txt", offset=2, limit=10)
+        assert result == "b\nc\n"
+
+    def test_limit_none_with_offset_reads_to_eof(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "a\nb\nc\nd\n")
+        tools = _build(root, settings)
+        result = tools["read_file"]("f.txt", offset=2, limit=None)
+        assert result == "b\nc\nd\n"
+
+    def test_error_paths_unchanged(self, tmp_path, settings):
+        """Nonexistent, outside root, and not-cloned still return error strings."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        assert "error" in tools["read_file"]("nope.txt").lower()
+        assert "error" in tools["read_file"]("../../../etc/passwd").lower()
+
+        root2 = tmp_path / "nonexistent"
+        tools2 = _build(root2, settings)
+        assert "not been cloned yet" in tools2["read_file"]("any.txt", offset=2, limit=1).lower()
+
+    def test_docstring_visible(self, tmp_path, settings):
+        """Docstring is pydantic-ai-visible on the closure."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = build_fs_tools(root, settings)
+        rf = [t for t in tools if t.__name__ == "read_file"][0]
+        assert "offset" in rf.__doc__
+        assert "limit" in rf.__doc__
+
+    def test_splitlines_keepends_preserves_lf(self, tmp_path, settings):
+        """splitlines(keepends=True) preserves \\n endings — no
+        regressions from the offset/limit logic."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "line1\nline2\nline3\n")
+        tools = _build(root, settings)
+        # default: byte-identical
+        assert tools["read_file"]("f.txt") == "line1\nline2\nline3\n"
+        # offset/limit preserves line endings
+        assert tools["read_file"]("f.txt", offset=2, limit=1) == "line2\n"
+
+
+# ===================================================================
 # write_file
 # ===================================================================
 

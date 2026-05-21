@@ -34,14 +34,38 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
     # Tools return errors as strings so the model can self-correct
     # (try another path, list the dir, ...) instead of the whole agent
     # run aborting on an exception.
-    def read_file(path: str) -> str:
-        """Return the text content of a file in the repository."""
+    def read_file(
+        path: str, offset: int = 1, limit: int | None = None
+    ) -> str:
+        """Return the text content of a file in the repository.
+
+        Optionally narrow to a line range with ``offset`` and ``limit``
+        (both 1-indexed):
+        - ``offset`` — first line to return (default 1). Values ≤ 0 are
+          treated as 1.
+        - ``limit`` — maximum number of lines to return (None = to end).
+          When ``limit`` exceeds remaining lines, returns what's available.
+        - If ``offset`` is past the last line, returns a note with the
+          actual line count.
+        """
         try:
-            return _safe(root, path).read_text(
+            text = _safe(root, path).read_text(
                 encoding="utf-8", errors="replace"
             )
         except (ValueError, OSError) as e:
             return f"error: {e}"
+
+        lines = text.splitlines(keepends=True)
+
+        if offset < 1:
+            offset = 1
+
+        if offset > len(lines) and offset > 1:
+            return f"(file has {len(lines)} lines; offset {offset} is beyond end)"
+
+        start = offset - 1
+        end = start + limit if limit is not None else None
+        return "".join(lines[start:end])
 
     def write_file(path: str, content: str) -> str:
         """Create or overwrite a file in the repository with ``content``."""
