@@ -3,21 +3,26 @@
 import pytest
 from pathlib import Path
 
-from robotsix_mill.pass_runner import run_agent_pass
+from robotsix_mill.pass_runner import run_agent_pass, _verify_prior_proposals
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.core.workspace import Workspace
+from robotsix_mill.core.models import TicketEvent
 
 
 class _FakeAgentResult:
     """Returned by mock agent callables — matches the interface that
     run_agent_pass accesses: .updated_memory, .draft_titles, .draft_bodies."""
 
-    def __init__(self, updated_memory, draft_titles, draft_bodies):
+    def __init__(self, updated_memory, draft_titles, draft_bodies,
+                 gap_ids=None):
         self.updated_memory = updated_memory
         self.draft_titles = draft_titles
         self.draft_bodies = draft_bodies
+        if gap_ids is not None:
+            self.gap_ids = gap_ids
 
 
 def _make_settings(tmp_path, **overrides):
@@ -276,5 +281,190 @@ def test_memory_write_ioerror_swallowed(tmp_path, monkeypatch):
     assert result.updated_memory == "would-be memory"
     # The file on disk still has the old content (write failed)
     assert memory_file.read_text(encoding="utf-8") == "old memory"
+
+    db.reset_engine()
+
+
+# ------------------------------------------------------------------ new tests
+
+
+# 7. Hermetic verification — synthesised memory + ticket DB
+def test_verified_state_table_in_agent_prompt(tmp_path):
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+    service = TicketService(settings)
+
+    # Create three tickets with gap-id markers in different states.
+
+    # Ticket A: CLOSED with DONE event → resolution "merged"
+    ta = service.create(
+        "Gap A", "body A\n\n<!-- audit-gap-id: gap_alpha -->",
+        source="audit",
+    )
+    with db.session(settings) as s:
+        ticket = s.get(type(ta), ta.id)
+        ticket.state = State.DONE
+        s.add(TicketEvent(ticket_id=ta.id, state=State.DONE, note="done"))
+        s.add(TicketEvent(ticket_id=ta.id, state=State.CLOSED, note="closed"))
+        ticket.state = State.CLOSED
+        s.commit()
+
+    # Ticket B: CLOSED without DONE → resolution "declined"
+    tb = service.create(
+        "Gap B", "body B\n\n<!-- audit-gap-id: gap_beta -->",
+        source="audit",
+    )
+    with db.session(settings) as s:
+        ticket = s.get(type(tb), tb.id)
+        ticket.state = State.CLOSED
+        s.add(TicketEvent(ticket_id=tb.id, state=State.CLOSED, note="closed"))
+        s.commit()
+
+    # Ticket C: IN_REVIEW → resolution "in-flight"
+    tc = service.create(
+        "Gap C", "body C\n\n<!-- audit-gap-id: gap_gamma -->",
+        source="audit",
+    )
+    with db.session(settings) as s:
+        ticket = s.get(type(tc), tc.id)
+        ticket.state = State.IN_REVIEW
+        s.add(TicketEvent(ticket_id=tc.id, state=State.IN_REVIEW, note="reviewing"))
+        s.commit()
+
+    memory_file = tmp_path / "audit_memory.md"
+    memory_file.write_text(
+        "## Proposals\n- gap_alpha: fix alpha\n- gap_beta: fix beta\n- gap_gamma: fix gamma\n",
+        encoding="utf-8",
+    )
+
+    captured_memory = []
+
+    def echo_agent(*, settings, memory):
+        captured_memory.append(memory)
+        return _FakeAgentResult(
+            updated_memory=memory,
+            draft_titles=[],
+            draft_bodies=[],
+        )
+
+    run_agent_pass(
+        echo_agent,
+        memory_file=memory_file,
+        source_label="audit",
+        service=service,
+        settings=settings,
+    )
+
+    prompt = captured_memory[0]
+    assert "## Prior proposals — verified state" in prompt
+    assert "gap_alpha" in prompt
+    assert "gap_beta" in prompt
+    assert "gap_gamma" in prompt
+    assert "merged (via DONE)" in prompt
+    assert "declined (closed directly)" in prompt
+    assert "in-flight" in prompt
+    assert "CLOSED" in prompt
+    assert "IN_REVIEW" in prompt
+
+    db.reset_engine()
+
+
+# 8. Marker round-trip
+def test_marker_round_trip(tmp_path):
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+    service = TicketService(settings)
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("old", encoding="utf-8")
+
+    # Create an agent that returns gap_ids
+    def agent_with_gap_ids(*, settings, memory):
+        return _FakeAgentResult(
+            updated_memory="updated",
+            draft_titles=["Fix Z"],
+            draft_bodies=["Details"],
+            gap_ids=["fix_z"],
+        )
+
+    run_agent_pass(
+        agent_with_gap_ids,
+        memory_file=memory_file,
+        source_label="health",
+        service=service,
+        settings=settings,
+    )
+
+    # Now verify the marker was written
+    tickets = service.list()
+    assert len(tickets) == 1
+    tid = tickets[0].id
+    desc = Workspace(settings.workspaces_dir, tid).read_description()
+    assert "<!-- health-gap-id: fix_z -->" in desc
+
+    # Now call _verify_prior_proposals directly
+    mapping = _verify_prior_proposals(service, settings, "health")
+    assert "fix_z" in mapping
+    assert mapping["fix_z"]["ticket_id"] == tid
+    assert mapping["fix_z"]["state"] == "DRAFT"
+    assert mapping["fix_z"]["resolution"] == "in-flight"
+
+    db.reset_engine()
+
+
+# 9. Backwards compatibility — no marker, no crash, no entry
+def test_no_marker_ticket_not_in_mapping(tmp_path):
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+    service = TicketService(settings)
+
+    # Create a ticket WITH the correct source but NO gap-id marker.
+    service.create(
+        "Old draft", "No marker here, just old pre-rollout.",
+        source="audit",
+    )
+
+    mapping = _verify_prior_proposals(service, settings, "audit")
+    assert mapping == {}
+
+    db.reset_engine()
+
+
+# 10. Missing gap_ids attribute — no crash, drafts still created
+def test_missing_gap_ids_no_crash(tmp_path):
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+    service = TicketService(settings)
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    # Result object with NO gap_ids attribute at all
+    class NoGapIdsResult:
+        updated_memory = "mem"
+        draft_titles = ["Title"]
+        draft_bodies = ["Body"]
+
+    def agent_fn(*, settings, memory):
+        return NoGapIdsResult()
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label="audit",
+        service=service,
+        settings=settings,
+    )
+
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 1
+    desc = Workspace(settings.workspaces_dir, tickets[0].id).read_description()
+    # No marker appended
+    assert "gap-id:" not in desc
 
     db.reset_engine()

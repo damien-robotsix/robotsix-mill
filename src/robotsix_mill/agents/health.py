@@ -62,18 +62,23 @@ declined, or already addressed (done). The memory is *yours* — you own
 its structure and content.
 
 Your task:
-1. Inspect the repository across all six dimensions using `list_dir`,
+1. **BEFORE proposing new gaps**, reconcile your memory ledger against the `## Prior proposals — verified state` block in your input:
+   - Items whose ticket reached CLOSED with resolution `merged` → move to `## Done` (or equivalent), include the ticket_id.
+   - Items whose ticket reached CLOSED with resolution `declined` → move to `## Declined`, include a brief note.
+   - Items with resolution `in-flight` → leave in `## Proposals`.
+   - Do **not** re-propose anything that appears as Done or Declined.
+2. Inspect the repository across all six dimensions using `list_dir`,
    `explore`, and `read_file` as your primary tools. Use `web_research`
    sparingly — only for external best-practice references (e.g. "what
    is a reasonable function-length guideline for Python?").
-2. Compare findings against the memory ledger. Skip issues already
+3. Compare findings against the memory ledger. Skip issues already
    recorded (proposed, declined, or done).
-3. For each NEW, worthwhile finding, decide whether it merits a draft
+4. For each NEW, worthwhile finding, decide whether it merits a draft
    ticket. Be conservative — only file when there is a specific,
    actionable gap. Vague observations are skipped.
-4. Update the memory ledger to record new gaps, mark addressed ones,
+5. Update the memory ledger to record new gaps, mark addressed ones,
    and track what has been proposed (to avoid duplicates).
-5. Return the updated memory ledger verbatim in `updated_memory`.
+6. Return the updated memory ledger verbatim in `updated_memory`.
 
 For each gap you decide to propose as a draft ticket, provide:
 - `draft_title`: concise, actionable title

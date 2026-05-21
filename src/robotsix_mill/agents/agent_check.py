@@ -33,6 +33,13 @@ they flagged absent tool mentions as gaps — that class of finding is
 closed (the absence was intentional): 90ac, d847, bf3e, 4892, 2f7d,
 9fe4. Do not re-file the same pattern.
 
+**BEFORE proposing new gaps**, reconcile your memory ledger against
+the `## Prior proposals — verified state` block in your input:
+- Items whose ticket reached CLOSED with resolution `merged` → move to `## Done` (or equivalent), include the ticket_id.
+- Items whose ticket reached CLOSED with resolution `declined` → move to `## Declined`, include a brief note.
+- Items with resolution `in-flight` → leave in `## Proposals`.
+- Do **not** re-propose anything that appears as Done or Declined.
+
 Follow this procedure carefully:
 
 ### 1. Survey
@@ -159,6 +166,9 @@ Return an `AgentCheckResult` with:
   Skip anything that is already working correctly.
 - `draft_bodies`: one concrete body per draft, citing specific
   file(s) and the suggested fix.
+- `gap_ids`: one short snake_case identifier per draft (same
+  length as `draft_titles`), used for dedup across passes.  For
+  example: ``missing_report_issue_flag``, ``duplicate_tool_pipeline``.
 
 Be thorough but not pedantic. If a prompt doesn't mention `list_dir`
 but the agent has it and the role clearly needs it, flag it. If the
@@ -174,6 +184,7 @@ class AgentCheckResult(BaseModel):
     updated_memory: str = ""
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
+    gap_ids: list[str] = Field(default_factory=list)
 
 
 def run_agent_check_agent(
@@ -221,4 +232,5 @@ def run_agent_check_agent(
         _safe_close(agent)
     result.output.draft_titles = result.output.draft_titles[:MAX_GAPS]
     result.output.draft_bodies = result.output.draft_bodies[:MAX_GAPS]
+    result.output.gap_ids = result.output.gap_ids[:MAX_GAPS]
     return result.output
