@@ -37,6 +37,11 @@ background:#db2777;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Run Agent Check
 </button>
+<button onclick="openDeepReview()" style="font-size:11px;padding:3px 10px;
+background:#1a2a3b;color:#60c0fa;border:1px solid #2a3a4b;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Deep Review
+</button>
 <button onclick="toggleRuns()" style="font-size:11px;padding:3px 10px;
 background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">

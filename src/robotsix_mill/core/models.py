@@ -91,6 +91,7 @@ class TicketCreate(SQLModel):
     title: str
     description: str = ""
     depends_on: str | None = None
+    source: str = "user"
 
 
 class TicketTransition(SQLModel):

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from ..core.models import (
@@ -57,7 +57,12 @@ def create_ticket(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
-    ticket = svc.create(body.title, body.description, depends_on=body.depends_on)
+    ticket = svc.create(
+        body.title,
+        body.description,
+        source=body.source,
+        depends_on=body.depends_on,
+    )
     maybe_enqueue(ticket, worker)  # "directly taken in charge"
     return enrich_ticket_read(ticket, settings, svc)
 
@@ -429,6 +434,126 @@ def list_runs(
 ) -> list[dict]:
     """Return recent background-run entries (newest first)."""
     return registry.list_all()
+
+
+# -- deep-review --------------------------------------------------------
+
+
+@router.get("/traces/recent")
+def list_recent_traces(
+    settings=Depends(get_settings),
+) -> list[dict]:
+    """Return the 10 most-recent Langfuse traces."""
+    from ..langfuse_client import list_recent_traces as _list_recent
+
+    traces = _list_recent(settings)
+    return [
+        {
+            "id": t.get("id", ""),
+            "name": t.get("name", ""),
+            "timestamp": t.get("timestamp", ""),
+            "sessionId": t.get("sessionId"),
+            "totalCost": t.get("totalCost"),
+            "userId": t.get("userId"),
+        }
+        for t in traces
+    ]
+
+
+@router.post("/traces/{trace_id}/deep-review", status_code=202)
+def deep_review_trace(
+    trace_id: str,
+    request: Request,
+    settings=Depends(get_settings),
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Start a background deep review of a single Langfuse trace."""
+    if not settings.tracing_enabled:
+        return {"status": "unavailable"}
+
+    state = request.app.state
+    if not hasattr(state, "deep_review_results"):
+        state.deep_review_results = {}
+
+    from ..langfuse_client import fetch_trace_detail
+    from ..agents.trace_inspector import run_trace_inspector
+
+    run_id = registry.start("deep-review")
+
+    def _run() -> None:
+        try:
+            detail = fetch_trace_detail(settings, trace_id)
+            if detail is None:
+                state.deep_review_results[trace_id] = {
+                    "status": "error",
+                    "error": "trace unavailable — could not fetch from Langfuse",
+                    "tool_errors": [],
+                    "agent_limitations": [],
+                    "optimizations": [],
+                }
+                registry.finish_error(
+                    run_id, f"deep review of trace {trace_id}: trace unavailable"
+                )
+                return
+
+            import json as _json
+
+            trace_data = _json.dumps(detail, default=str)
+            result = run_trace_inspector(
+                settings=settings, trace_data=trace_data
+            )
+            data = {
+                "status": "ok",
+                "trace_id": trace_id,
+                "tool_errors": result.tool_errors,
+                "agent_limitations": result.agent_limitations,
+                "optimizations": result.optimizations,
+            }
+            state.deep_review_results[trace_id] = data
+
+            n_te = len(result.tool_errors)
+            n_al = len(result.agent_limitations)
+            n_opt = len(result.optimizations)
+            summary = (
+                f"deep review of trace {trace_id}: "
+                f"{n_te} tool errors, {n_al} limitations, "
+                f"{n_opt} optimizations"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info("deep review of trace %s complete", trace_id)
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("deep review of trace %s failed", trace_id)
+            state.deep_review_results[trace_id] = {
+                "status": "error",
+                "error": str(e),
+                "tool_errors": [],
+                "agent_limitations": [],
+                "optimizations": [],
+            }
+            registry.finish_error(run_id, str(e))
+
+    # Mark as running before thread starts.
+    state.deep_review_results[trace_id] = {"status": "running"}
+    threading.Thread(
+        target=_run, name=f"deep-review-{trace_id}", daemon=True
+    ).start()
+    return {"status": "started", "trace_id": trace_id}
+
+
+@router.get("/deep-review/{trace_id}")
+def get_deep_review_result(
+    trace_id: str,
+    request: Request,
+) -> dict:
+    """Return the stored deep-review result for *trace_id*."""
+    state = request.app.state
+    results = getattr(state, "deep_review_results", None)
+    if not results or trace_id not in results:
+        raise HTTPException(404, "no review found for this trace")
+    entry = results[trace_id]
+    if isinstance(entry, dict) and entry.get("status") == "running":
+        return entry  # no explicit status_code=202 needed; body signals it
+    return entry
 
 
 @router.post("/health-check", status_code=202)
