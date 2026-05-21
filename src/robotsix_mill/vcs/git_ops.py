@@ -7,7 +7,6 @@ the container only needs the git binary (already in the image).
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
