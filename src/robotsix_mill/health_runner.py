@@ -12,11 +12,9 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 
 from .config import Settings
 from .core.service import TicketService
-from .core.states import State
 
 log = logging.getLogger("robotsix_mill.health")
 
