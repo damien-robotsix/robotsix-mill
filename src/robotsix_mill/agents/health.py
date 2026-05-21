@@ -171,6 +171,12 @@ def run_health_agent(
         output_type=PromptedOutput(HealthResult),
         tools=tools,
         web=True,  # web_research = EXTERNAL best-practice lookups only
+        # No report_issue: this agent emits drafts via PromptedOutput.
+        # Same pattern as audit/retrospect/agent_check; having both
+        # channels open produces double-filing. Regressed twice — ticket
+        # f3d1 fixed it in PR #98, then PR #94 (docstring add on a stale
+        # base) auto-merged and silently dropped the kwarg. The test in
+        # tests/test_agent_double_emit.py locks the contract in.
         report_issue=False,
         model_name=settings.health_model,
         name="health",
