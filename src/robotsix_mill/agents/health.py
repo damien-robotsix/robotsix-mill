@@ -171,6 +171,7 @@ def run_health_agent(
         output_type=PromptedOutput(HealthResult),
         tools=tools,
         web=True,  # web_research = EXTERNAL best-practice lookups only
+        report_issue=False,
         model_name=settings.health_model,
         name="health",
     )
