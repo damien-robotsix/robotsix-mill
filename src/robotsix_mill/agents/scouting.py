@@ -661,77 +661,77 @@ def run_scout_agent(  # noqa: C901  # TODO: split into smaller functions (ticket
     no real network calls are made during test runs.
     """
     proposed_set = _parse_memory(memory)
-    client = httpx.Client()
+    with httpx.Client() as client:
 
-    try:
-        all_models = _fetch_models(client, settings)
-    except httpx.HTTPError as exc:
-        log.warning("Failed to fetch /models: %s", exc)
-        return ScoutResult(updated_memory=memory)
+        try:
+            all_models = _fetch_models(client, settings)
+        except httpx.HTTPError as exc:
+            log.warning("Failed to fetch /models: %s", exc)
+            return ScoutResult(updated_memory=memory)
 
-    needed_ids: set[str] = set()
-    role_configs: dict[str, tuple[str, str, str]] = {}
-    for attr, env_var, label in ALL_ROLES:
-        configured = getattr(settings, attr, "")
-        if configured:
-            needed_ids.add(configured)
-            role_configs[env_var] = (attr, "", label)
-    for roles, tier in [
-        (CAPABLE_ROLES, "capable"),
-        (STRUCTURED_ROLES, "structured"),
-        (CHEAP_ROLES, "cheap"),
-    ]:
-        for attr, env_var, label in roles:
-            if env_var in role_configs:
-                role_configs[env_var] = (attr, tier, label)
-    for roles, cands in [
-        (CAPABLE_ROLES + STRUCTURED_ROLES, CAPABLE_CANDIDATES),
-        (CHEAP_ROLES, CHEAP_CANDIDATES),
-    ]:
-        for cid in cands:
-            needed_ids.add(cid)
+        needed_ids: set[str] = set()
+        role_configs: dict[str, tuple[str, str, str]] = {}
+        for attr, env_var, label in ALL_ROLES:
+            configured = getattr(settings, attr, "")
+            if configured:
+                needed_ids.add(configured)
+                role_configs[env_var] = (attr, "", label)
+        for roles, tier in [
+            (CAPABLE_ROLES, "capable"),
+            (STRUCTURED_ROLES, "structured"),
+            (CHEAP_ROLES, "cheap"),
+        ]:
+            for attr, env_var, label in roles:
+                if env_var in role_configs:
+                    role_configs[env_var] = (attr, tier, label)
+        for roles, cands in [
+            (CAPABLE_ROLES + STRUCTURED_ROLES, CAPABLE_CANDIDATES),
+            (CHEAP_ROLES, CHEAP_CANDIDATES),
+        ]:
+            for cid in cands:
+                needed_ids.add(cid)
 
-    enriched: dict[str, ModelInfo] = {}
-    for mid in needed_ids:
-        base = all_models.get(mid)
-        if base is None:
-            base = ModelInfo(id=mid, name=mid)
-        endpoints = _fetch_endpoints(client, settings, mid)
-        enriched[mid] = ModelInfo(
-            id=base.id,
-            name=base.name,
-            context_length=base.context_length or (endpoints[0].context_length if endpoints else 0),
-            prompt_price=_pick_price(base.prompt_price, [e.prompt_price for e in endpoints]),
-            completion_price=_pick_price(base.completion_price, [e.completion_price for e in endpoints]),
-            endpoints=endpoints,
+        enriched: dict[str, ModelInfo] = {}
+        for mid in needed_ids:
+            base = all_models.get(mid)
+            if base is None:
+                base = ModelInfo(id=mid, name=mid)
+            endpoints = _fetch_endpoints(client, settings, mid)
+            enriched[mid] = ModelInfo(
+                id=base.id,
+                name=base.name,
+                context_length=base.context_length or (endpoints[0].context_length if endpoints else 0),
+                prompt_price=_pick_price(base.prompt_price, [e.prompt_price for e in endpoints]),
+                completion_price=_pick_price(base.completion_price, [e.completion_price for e in endpoints]),
+                endpoints=endpoints,
+            )
+
+        drafts_titles: list[str] = []
+        drafts_bodies: list[str] = []
+        new_proposals: list[tuple[str, str, str]] = []
+
+        for env_var, (attr, tier, label) in role_configs.items():
+            configured_id = getattr(settings, attr, "")
+            if not configured_id:
+                continue
+            candidate_ids = CHEAP_CANDIDATES if tier == "cheap" else CAPABLE_CANDIDATES
+            already = proposed_set.get(env_var, set())
+            results = _evaluate_role(
+                env_var=env_var, attr=attr, tier=tier, label=label,
+                configured_id=configured_id, enriched=enriched,
+                candidate_ids=candidate_ids, already=already, settings=settings,
+            )
+            for title, body, model_id in results:
+                drafts_titles.append(title)
+                drafts_bodies.append(body)
+                new_proposals.append((env_var, model_id, label))
+
+        updated_memory = _build_updated_memory(memory, new_proposals)
+        return ScoutResult(
+            updated_memory=updated_memory,
+            draft_titles=drafts_titles,
+            draft_bodies=drafts_bodies,
         )
-
-    drafts_titles: list[str] = []
-    drafts_bodies: list[str] = []
-    new_proposals: list[tuple[str, str, str]] = []
-
-    for env_var, (attr, tier, label) in role_configs.items():
-        configured_id = getattr(settings, attr, "")
-        if not configured_id:
-            continue
-        candidate_ids = CHEAP_CANDIDATES if tier == "cheap" else CAPABLE_CANDIDATES
-        already = proposed_set.get(env_var, set())
-        results = _evaluate_role(
-            env_var=env_var, attr=attr, tier=tier, label=label,
-            configured_id=configured_id, enriched=enriched,
-            candidate_ids=candidate_ids, already=already, settings=settings,
-        )
-        for title, body, model_id in results:
-            drafts_titles.append(title)
-            drafts_bodies.append(body)
-            new_proposals.append((env_var, model_id, label))
-
-    updated_memory = _build_updated_memory(memory, new_proposals)
-    return ScoutResult(
-        updated_memory=updated_memory,
-        draft_titles=drafts_titles,
-        draft_bodies=drafts_bodies,
-    )
 
 
 def _pick_price(
