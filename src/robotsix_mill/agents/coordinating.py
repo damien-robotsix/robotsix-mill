@@ -27,28 +27,46 @@ class ImplementResult(BaseModel):
     @classmethod
     def _absorb_summary_typos(cls, data):
         """deepseek-v4-pro repeatedly mis-keys the required ``summary``
-        field as a near-miss (``summary_text``, ``text``, ``result``,
-        etc.). pydantic-ai's strict validation then exceeds output
+        field. pydantic-ai's strict validation then exceeds output
         retries, the implement stage blocks the ticket with "Exceeded
         maximum output retries", and the user pays $1+ in coordinator
-        cost per retry. Same absorption pattern as RefineResult's
-        ``spec_markmark`` typo handler.
+        cost per retry.
+
+        Two-tier absorption:
+        1. Preferred: a known near-miss key (``summary_text``, ``text``,
+           ``result``, etc.).
+        2. Fallback: any non-``updated_memory`` string value in the
+           dict — the schema has only two string fields, so anything
+           else the model emitted under a different name is almost
+           certainly the intended summary.
 
         Only kicks in when canonical ``summary`` is missing/empty —
-        correctly-keyed output passes straight through.
+        correctly-keyed output passes straight through. Empty values
+        are NOT absorbed (a genuinely-empty summary still surfaces
+        downstream).
         """
         if not isinstance(data, dict):
             return data
         if data.get("summary"):
             return data
-        # Common near-misses observed in production. Order matters —
-        # earlier names are preferred over more generic ones.
+        # Tier 1: known near-misses in priority order.
         for k in ("summary_text", "summary_str", "summaryText",
                   "result_summary", "text", "result", "output"):
             v = data.get(k)
             if isinstance(v, str) and v.strip():
                 data["summary"] = v
-                break
+                return data
+        # Tier 2: any non-updated_memory string value. Pick the
+        # longest — heuristically the most likely candidate for a
+        # multi-sentence summary.
+        candidates = [
+            (k, v) for k, v in data.items()
+            if k not in ("summary", "updated_memory")
+            and isinstance(v, str) and v.strip()
+        ]
+        if candidates:
+            best_k, best_v = max(candidates, key=lambda kv: len(kv[1]))
+            data["summary"] = best_v
         return data
 
 
