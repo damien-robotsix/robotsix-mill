@@ -516,12 +516,46 @@ def test_board_has_new_ticket_affordance(client):
     assert 'jpost("/tickets"' in js
 
 
+def test_board_has_new_inquiry_affordance(client):
+    """The board exposes a '+ Ask' button wired to POST /tickets with kind='inquiry'.
+
+    Regression guard: the inquiry backend landed but the button was
+    forgotten (same as the comment-UI gap). This assertion prevents recurrence.
+    """
+    body = client.get("/").text
+    assert "newInquiry()" in body
+    assert "+ Ask" in body
+    js = client.get("/static/board.js").text
+    assert "newInquiry" in js
+    # The only thing that distinguishes inquiry creation from task creation:
+    assert 'kind:"inquiry"' in js, (
+        "newInquiry() must POST kind='inquiry', not the default 'task' — "
+        "without this the button silently creates tasks instead of inquiries"
+    )
+
+
 def test_post_tickets_creates_user_draft(client):
     """The control's backend: POST /tickets -> a DRAFT, source=user."""
     r = client.post("/tickets", json={"title": "From the board", "description": "idea"})
     assert r.status_code == 201
     d = r.json()
     assert d["state"] == "draft"
+    assert d["source"] == "user"
+
+
+def test_post_tickets_with_kind_inquiry_creates_asked_inquiry(client):
+    """POST /tickets with kind='inquiry' creates an inquiry in ASKED state.
+
+    This is the backend path the '+ Ask' button drives.
+    """
+    r = client.post(
+        "/tickets",
+        json={"title": "Why does X happen?", "description": "context", "kind": "inquiry"},
+    )
+    assert r.status_code == 201
+    d = r.json()
+    assert d["state"] == "asked"  # inquiries start in ASKED, not DRAFT
+    assert d["kind"] == "inquiry"
     assert d["source"] == "user"
 
 
@@ -580,6 +614,24 @@ def test_create_ticket_without_depends_on_has_none(client):
     data = r.json()
     assert data["depends_on"] is None
     assert data["unmet_deps"] == []
+
+
+def test_create_inquiry_with_depends_on_is_rejected(client):
+    """POST /tickets with kind='inquiry' and depends_on raises 400.
+
+    Inquiries are standalone Q&A — they don't wait on other tickets.
+    """
+    r = client.post(
+        "/tickets",
+        json={
+            "title": "Inquiry with dep",
+            "kind": "inquiry",
+            "depends_on": '["ticket-abc"]',
+        },
+    )
+    assert r.status_code in (400, 422), (
+        "inquiries must reject depends_on — they are standalone Q&A"
+    )
 
 
 def test_list_tickets_include_closed_hides_only_closed_keeps_done(client, service):

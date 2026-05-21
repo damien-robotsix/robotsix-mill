@@ -57,13 +57,16 @@ def create_ticket(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
-    ticket = svc.create(
-        body.title,
-        body.description,
-        source=body.source,
-        depends_on=body.depends_on,
-        kind=body.kind,
-    )
+    try:
+        ticket = svc.create(
+            body.title,
+            body.description,
+            source=body.source,
+            depends_on=body.depends_on,
+            kind=body.kind,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     maybe_enqueue(ticket, worker)  # "directly taken in charge"
     return enrich_ticket_read(ticket, settings, svc)
 
