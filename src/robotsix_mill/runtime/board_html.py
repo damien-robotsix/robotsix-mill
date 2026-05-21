@@ -3,39 +3,11 @@
 CSS and JavaScript are served as static files from ``static/board.css``
 and ``static/board.js``.  This module only contains the HTML skeleton
 that links to them.
-
-Cache-busting: the link/script tags are emitted with ``?v=<sha1[:10]>``
-queries derived from the actual file contents at process start. Same
-content → same URL (no spurious refetch); any code edit → new URL →
-the browser bypasses its cache without the user needing a hard-reload.
-The user has been bitten by stale ``board.js`` more than once this
-session — the static files are baked into the image, so a normal
-reload after a ``docker compose up --build`` would still hit the
-cached copy.
 """
 
-from __future__ import annotations
-
-import hashlib
-from pathlib import Path
-
-
-def _asset_version(name: str) -> str:
-    """Return a short content hash for a static asset, or ``"0"`` if the
-    file is missing (the page still renders without versioning)."""
-    p = Path(__file__).parent / "static" / name
-    if not p.is_file():
-        return "0"
-    return hashlib.sha1(p.read_bytes()).hexdigest()[:10]
-
-
-_CSS_V = _asset_version("board.css")
-_JS_V = _asset_version("board.js")
-
-
-BOARD_HTML = f"""<!doctype html><html><head><meta charset="utf-8">
+BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <title>robotsix-mill</title><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/static/board.css?v={_CSS_V}"></head><body>
+<link rel="stylesheet" href="/static/board.css"></head><body>
 <header><h1>robotsix-mill</h1>
 <span class="muted" id="meta">loading…</span>
 <label class="muted" style="margin-left:auto">
@@ -73,4 +45,4 @@ margin-left:4px">
 </header>
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
-<script src="/static/board.js?v={_JS_V}"></script></body></html>"""
+<script src="/static/board.js"></script></body></html>"""
