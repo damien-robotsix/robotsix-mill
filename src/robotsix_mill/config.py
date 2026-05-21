@@ -142,6 +142,13 @@ class Settings(BaseSettings):
     dedup_request_limit: int = Field(
         default=4, alias="MILL_DEDUP_REQUEST_LIMIT"
     )
+    # Maximum characters of the memory ledger to load per agent pass.
+    # When the file exceeds this, the oldest entries are dropped (read-side
+    # only — persist_memory is unchanged).  Applies to all memory ledgers
+    # (refine, audit, scout, health, agent-check, etc.).
+    max_memory_chars: int = Field(
+        default=8000, alias="MILL_MAX_MEMORY_CHARS"
+    )
     # How many days back closed tickets are considered as duplicate
     # candidates by the pre-refine dedup check.
     dedup_lookback_days: int = Field(

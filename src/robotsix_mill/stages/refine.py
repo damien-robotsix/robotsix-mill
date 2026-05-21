@@ -187,7 +187,7 @@ class RefineStage(Stage):
                     f"[{c.created_at.isoformat()}] {c.body}" for c in comments
                 )
 
-            memory_text = load_memory(s.refine_memory_file)
+            memory_text = load_memory(s.refine_memory_file, max_chars=s.max_memory_chars)
 
             result = refining.run_refine_agent(
                 settings=s, title=ticket.title, draft=draft,

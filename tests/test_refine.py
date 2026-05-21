@@ -1192,3 +1192,75 @@ def test_refine_result_empty_typo_value_not_absorbed():
         "spec_markmark": "",
     })
     assert r.spec_markdown is None  # genuinely empty → blocks downstream
+
+
+# --- reviewer sendback prompt ---
+
+
+def test_sendback_uses_short_prompt(monkeypatch, tmp_path):
+    """When reviewer_comments is non-empty, REVIEWER_SENDBACK_PROMPT
+    is passed to build_agent instead of SYSTEM_PROMPT."""
+    from robotsix_mill.agents import base as base_mod
+    from robotsix_mill.agents.refining import (
+        REVIEWER_SENDBACK_PROMPT,
+        SYSTEM_PROMPT,
+    )
+
+    seen_system_prompt: list[str] = []
+
+    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+        seen_system_prompt.append(system_prompt)
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": _single("## Problem\nok\n")})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    refining.run_refine_agent(
+        settings=s, title="Test", draft="draft",
+        reviewer_comments="fix this",
+    )
+
+    assert len(seen_system_prompt) == 1
+    assert seen_system_prompt[0] == REVIEWER_SENDBACK_PROMPT
+    assert seen_system_prompt[0] != SYSTEM_PROMPT
+
+
+def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
+    """When reviewer_comments is None/empty, SYSTEM_PROMPT is used."""
+    from robotsix_mill.agents import base as base_mod
+    from robotsix_mill.agents.refining import SYSTEM_PROMPT
+
+    seen_system_prompt: list[str] = []
+
+    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+        seen_system_prompt.append(system_prompt)
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": _single("## Problem\nok\n")})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    refining.run_refine_agent(settings=s, title="Test", draft="draft")
+
+    assert len(seen_system_prompt) == 1
+    assert seen_system_prompt[0] == SYSTEM_PROMPT
+
+
+def test_sendback_prompt_includes_reviewer_feedback_reference():
+    """The sendback prompt must instruct the agent to incorporate
+    the reviewer_feedback block."""
+    from robotsix_mill.agents.refining import REVIEWER_SENDBACK_PROMPT
+
+    assert "reviewer_feedback" in REVIEWER_SENDBACK_PROMPT.lower()
+    # Must preserve Memory section
+    assert "## Memory" in REVIEWER_SENDBACK_PROMPT
+    # Must preserve Output format section
+    assert "## Output format" in REVIEWER_SENDBACK_PROMPT
+    # Must NOT contain the lengthy split heuristics (from SYSTEM_PROMPT)
+    assert "≥4 distinct source files" not in REVIEWER_SENDBACK_PROMPT
+    assert "backend↔frontend boundary" not in REVIEWER_SENDBACK_PROMPT
