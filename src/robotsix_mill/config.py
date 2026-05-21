@@ -243,7 +243,7 @@ class Settings(BaseSettings):
     # mount, non-root, read-only, fixed curl. Trade-off accepted: an
     # agent could encode data into a fetched URL. http(s) only.
     fetch_image: str = Field(
-        default="curlimages/curl:latest", alias="MILL_FETCH_IMAGE"
+        default="curlimages/curl:8.17.0", alias="MILL_FETCH_IMAGE"
     )
     web_fetch_max_bytes: int = Field(
         default=2_000_000, alias="MILL_WEB_FETCH_MAX_BYTES"
