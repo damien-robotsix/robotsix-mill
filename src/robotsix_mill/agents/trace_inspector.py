@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..config import Settings
 
@@ -24,46 +26,117 @@ log = logging.getLogger("robotsix_mill.trace_inspector")
 
 _SYSTEM_PROMPT = """\
 You are a trace inspector for an autonomous ticket pipeline. You are
-given the FULL JSON observation tree of a single Langfuse trace. Your
-job is to find systematic issues that a shallow summary would miss.
+given the FULL JSON observation tree of a single Langfuse trace AND
+read-only access to the repository that produced it. Your job is not
+just to *describe* issues — it is to **propose concrete, code-grounded
+solutions** that an implement agent could ship.
 
-Analyse the trace and return a structured result with THREE lists:
+Three categories of finding:
 
-1. **tool_errors**: tool invocations that failed or returned errors.
-   Look at each observation — if `level` is "ERROR" or
-   `statusMessage` indicates a failure, capture a one-line description
-   (e.g. "run_command `pytest -q` returned exit code 1 — test failure").
+1. **tool_error**: a tool invocation failed or returned an error. Look
+   at each observation — if `level` is "ERROR" or `statusMessage`
+   indicates a failure.
+2. **agent_limitation**: behavioural patterns that show the agent got
+   stuck or was ineffective. Fix loops (same tool, same args, no
+   convergence), retries of a failed approach, no progress across
+   model calls.
+3. **optimization**: cost / latency / token-usage waste. Unusually
+   high token usage for trivial work, redundant tool calls, a stage
+   dominated by one slow operation.
 
-2. **agent_limitations**: behavioural patterns that suggest the agent
-   got stuck or was ineffective. Examples:
-   - fix loops: the same tool is called repeatedly with the same or
-     trivially-different arguments without converging
-   - the agent retries a failed approach instead of pivoting
-   - the agent makes no progress across multiple model calls
-   Describe each pattern concisely with evidence (tool names + counts).
+## How to produce a *useful* finding
 
-3. **optimizations**: cost, latency, or token-usage patterns worth
-   acting on. Examples:
-   - a model call with unusually high token usage relative to its work
-   - redundant tool calls that could be cached or skipped
-   - a stage whose latency is dominated by one slow operation
-   Describe each opportunity concisely.
+For each finding, output four fields:
 
-Be specific and evidence-based — reference observation IDs, tool names,
-and counts.  If a category has nothing to report, return an empty list.
-Never invent issues — only report what is actually in the trace data.
+- ``category``: one of "tool_error", "agent_limitation",
+  "optimization".
+- ``symptom``: WHAT is happening, evidence-based. Reference
+  observation IDs, tool names, counts, token totals. One sentence,
+  grounded in the trace.
+- ``root_cause``: WHY it's happening, traced to the code if possible.
+  Use ``read_file`` / ``list_dir`` / ``explore`` to look at the
+  prompts, tool docstrings, retry logic, or output schemas involved.
+  Cite ``path/to/file.py:LINE``. If the evidence is in the trace only,
+  say so — don't fabricate a code reference.
+- ``proposed_solution``: a CONCRETE fix. Name files and (when known)
+  the change pattern: "in ``agents/foo.py`` change X to Y because Z",
+  "tighten the docstring on ``read_file`` to clarify N", "add an
+  early-return guard before line M". The implement agent should be
+  able to act on this directly.
+- ``confidence``: "high" if you both saw the symptom in the trace AND
+  confirmed the cause in the code; "medium" if you have a strong
+  hypothesis from trace evidence alone; "low" if it's a guess worth
+  investigating.
+
+## Memory
+
+You are given a ``<memory>`` ledger of patterns and decisions from
+your past inspections. Reference it:
+
+- Skip findings the ledger says were already addressed (don't re-propose).
+- Strengthen confidence when the ledger shows the same pattern
+  recurring across multiple traces.
+- After analysis, update the ledger via ``updated_memory``: record
+  newly-observed patterns, mark any findings whose proposed solutions
+  have likely already been merged (you can grep / read_file to check),
+  and prune stale entries.
+
+## Output discipline
+
+- One finding per ROOT issue. Don't split one bug across three
+  findings ("token usage high", "many tool calls", "stage is slow"
+  describing the same underlying loop = one finding).
+- An empty findings list is fine for a clean trace.
+- Never invent issues. If you cannot ground a proposed solution in
+  the trace+code, return the finding with confidence="low" and an
+  honest "investigate this further" note, OR drop it.
+- Return the updated memory verbatim in ``updated_memory``. If
+  nothing changed, return the input memory unchanged.
 """
 
 
+FindingCategory = Literal["tool_error", "agent_limitation", "optimization"]
+Confidence = Literal["high", "medium", "low"]
+
+
+class TraceFinding(BaseModel):
+    """One actionable finding from a deep-review pass.
+
+    Solution-bearing by design — ``proposed_solution`` is mandatory
+    so the ``+ Ticket`` flow can file drafts whose body is something
+    an implement agent can act on directly, not just a symptom string.
+    """
+
+    category: FindingCategory
+    symptom: str
+    root_cause: str
+    proposed_solution: str
+    confidence: Confidence = "medium"
+
+
 class TraceInspectResult(BaseModel):
-    tool_errors: list[str] = []
-    agent_limitations: list[str] = []
-    optimizations: list[str] = []
+    findings: list[TraceFinding] = Field(default_factory=list)
+    updated_memory: str = ""
     # When non-empty, surfaces an inspector-side failure to the caller
     # (e.g. "trace too large for the model context"). Empty findings
     # WITHOUT an error means a clean run with nothing notable; empty
     # findings WITH an error means the analysis didn't happen.
     error: str = ""
+
+    # Backwards-compat accessors so callers (and especially the
+    # retrospect tool's text renderer) can still ask for the three
+    # legacy lists by category without restructuring.
+    @property
+    def tool_errors(self) -> list[str]:
+        return [f.symptom for f in self.findings if f.category == "tool_error"]
+
+    @property
+    def agent_limitations(self) -> list[str]:
+        return [f.symptom for f in self.findings if f.category == "agent_limitation"]
+
+    @property
+    def optimizations(self) -> list[str]:
+        return [f.symptom for f in self.findings if f.category == "optimization"]
 
 
 def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
@@ -124,16 +197,40 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
 
 
 def run_trace_inspector(
-    *, settings: Settings, trace_data: str
+    *,
+    settings: Settings,
+    trace_data: str,
+    repo_dir: Path | None = None,
+    memory: str = "",
 ) -> TraceInspectResult:
     """Analyse a single trace's full observation tree and return
-    structured findings.
+    structured findings with proposed solutions.
 
-    On error, returns a result with ``error`` populated rather than
-    silently returning an empty findings list — the previous behaviour
+    Two operating modes:
+
+    - **Tool-less** (``repo_dir is None``): no code access, no tools,
+      tight ``request_limit=3``. Used by the retrospect agent's
+      ``trace_inspect`` tool path — retrospect already runs in a
+      tools-rich agent of its own, and the tool's contract is a quick
+      text summary, not a deep dive. Behaviour matches the legacy
+      shape.
+
+    - **Tools-on** (``repo_dir`` provided): the inspector gets
+      ``read_file``, ``list_dir``, ``run_command``, and ``explore`` —
+      everything it needs to confirm a hypothesis in the code before
+      writing a ``proposed_solution``. ``request_limit`` bumps to 20
+      so it has room to read → reason → emit. Used by the manual
+      Deep Review surface.
+
+    The optional ``memory`` is rendered into the prompt as
+    ``<memory>...</memory>`` so the agent can avoid re-proposing what
+    it already addressed, strengthen confidence on recurring patterns,
+    and emit an updated ledger via ``result.updated_memory``.
+
+    On error, the result's ``error`` field is populated rather than
+    returning a silent empty findings list — the previous behaviour
     made model-context-overflow indistinguishable from a clean
-    no-findings run (e.g. the user couldn't tell *"trace was too big"*
-    from *"trace was fine, nothing notable"*).
+    no-findings run.
     """
     if not settings.openrouter_api_key:
         return TraceInspectResult(error="OPENROUTER_API_KEY is not set")
@@ -144,12 +241,29 @@ def run_trace_inspector(
     trimmed = _shrink_trace_data(trace_data)
 
     # lazy: keep core import-light / the suite hermetic
-    from pydantic_ai import Agent
+    from pydantic_ai import Agent, PromptedOutput
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
     from .base import _close_async_client, timeout_http_client
     from .openrouter_cost import CostInstrumentedOpenRouterModel
+
+    # Wire read-only fs tools + explore when repo_dir is provided.
+    # NEVER include write_file/edit_file/delete_file: the inspector
+    # is analysis-only, no side effects.
+    tools: list = []
+    if repo_dir is not None:
+        from .fs_tools import build_fs_tools
+        from .explore import make_explore_tool
+
+        ro = [
+            t for t in build_fs_tools(repo_dir, settings)
+            if t.__name__ in ("read_file", "list_dir", "run_command")
+        ]
+        tools = [make_explore_tool(settings, repo_dir), *ro]
+    # Tool-less path stays cheap (3 reqs); tools-on path needs room
+    # to read → reason → emit (20 reqs is generous but bounded).
+    request_limit = 20 if repo_dir is not None else 3
 
     client = timeout_http_client(settings)
     model = CostInstrumentedOpenRouterModel(
@@ -162,12 +276,18 @@ def run_trace_inspector(
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT,
-        output_type=TraceInspectResult,
+        # PromptedOutput tolerates providers that 404 on forced
+        # tool_choice (DeepSeek's OpenRouter endpoint among others).
+        output_type=PromptedOutput(TraceInspectResult),
+        tools=tools,
     )
-    limits = UsageLimits(request_limit=3)  # one cheap call per trace
+    limits = UsageLimits(request_limit=request_limit)
     prompt = (
+        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
         "Analyse the following Langfuse trace JSON for tool errors, "
-        "agent limitations, and optimisation opportunities.\n\n"
+        "agent limitations, and optimisation opportunities. For each "
+        "finding, propose a CONCRETE solution grounded in the code "
+        "(use read_file / list_dir / explore to confirm hypotheses).\n\n"
         f"<trace>\n{trimmed}\n</trace>"
     )
     try:
@@ -210,30 +330,49 @@ def make_trace_inspect_tool(settings: Settings):
         if detail is None:
             return f"trace {trace_id} unavailable"
 
-        # Serialise to compact JSON so the sub-agent gets the raw data.
+        # Serialise to compact JSON. NB: retrospect's deep-analysis path
+        # calls this without a repo_dir — that's intentional. Retrospect
+        # is itself a tool-bearing agent; trace_inspect here just adds a
+        # quick per-trace summary to the synthesis. The full Deep Review
+        # surface uses run_trace_inspector directly with repo_dir set,
+        # to get solution-bearing findings.
         trace_data = json.dumps(detail, default=str)
         result = run_trace_inspector(settings=settings, trace_data=trace_data)
 
         parts: list[str] = [f"## trace {trace_id} inspection"]
+        if result.error:
+            parts.append(f"\n_inspector error: {result.error[:200]}_")
+            return "\n".join(parts)
 
-        if result.tool_errors:
-            parts.append("\n### Tool Errors")
-            for e in result.tool_errors:
-                parts.append(f"- {e}")
+        # Group findings by category so the rendered output mirrors the
+        # legacy three-section format retrospect's prompt was written
+        # for. Each finding renders its symptom; if a proposed_solution
+        # exists we tack it on as a parenthetical, keeping per-line
+        # density readable.
+        by_cat: dict[str, list[TraceFinding]] = {
+            "tool_error": [], "agent_limitation": [], "optimization": [],
+        }
+        for f in result.findings:
+            by_cat.setdefault(f.category, []).append(f)
 
-        if result.agent_limitations:
-            parts.append("\n### Agent Limitations")
-            for a in result.agent_limitations:
-                parts.append(f"- {a}")
+        section_titles = {
+            "tool_error": "Tool Errors",
+            "agent_limitation": "Agent Limitations",
+            "optimization": "Optimizations",
+        }
+        for cat, title in section_titles.items():
+            items = by_cat.get(cat, [])
+            if not items:
+                continue
+            parts.append(f"\n### {title}")
+            for f in items:
+                line = f"- {f.symptom}"
+                if f.proposed_solution:
+                    line += f"  _(fix: {f.proposed_solution[:200]})_"
+                parts.append(line)
 
-        if result.optimizations:
-            parts.append("\n### Optimizations")
-            for o in result.optimizations:
-                parts.append(f"- {o}")
-
-        if not result.tool_errors and not result.agent_limitations and not result.optimizations:
+        if not result.findings:
             parts.append("\n(no issues found in this trace)")
-
         return "\n".join(parts)
 
     return trace_inspect

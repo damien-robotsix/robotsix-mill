@@ -157,12 +157,22 @@ class TestRunTraceInspector:
 
     def test_returns_result_with_errors_found(self, monkeypatch):
         """When the sub-agent identifies tool errors, they appear in the result."""
+        from robotsix_mill.agents.trace_inspector import TraceFinding
         monkeypatch.setattr(
             trace_inspector_mod,
             "run_trace_inspector",
-            lambda **kwargs: TraceInspectResult(
-                tool_errors=["pytest exit code 1", "flake8 exit code 1"],
-            ),
+            lambda **kwargs: TraceInspectResult(findings=[
+                TraceFinding(
+                    category="tool_error",
+                    symptom="pytest exit code 1",
+                    root_cause="", proposed_solution="",
+                ),
+                TraceFinding(
+                    category="tool_error",
+                    symptom="flake8 exit code 1",
+                    root_cause="", proposed_solution="",
+                ),
+            ]),
         )
         result = trace_inspector_mod.run_trace_inspector(
             settings=Settings(openrouter_api_key="sk-test"),
@@ -188,14 +198,17 @@ class TestRunTraceInspector:
 
     def test_detects_agent_loop_pattern(self, monkeypatch):
         """A trace with repeated edit→test→fail cycles should flag limitations."""
+        from robotsix_mill.agents.trace_inspector import TraceFinding
         monkeypatch.setattr(
             trace_inspector_mod,
             "run_trace_inspector",
-            lambda **kwargs: TraceInspectResult(
-                agent_limitations=[
-                    "fix loop detected: 3 edit_file → run_command cycles without convergence"
-                ],
-            ),
+            lambda **kwargs: TraceInspectResult(findings=[
+                TraceFinding(
+                    category="agent_limitation",
+                    symptom="fix loop detected: 3 edit_file → run_command cycles without convergence",
+                    root_cause="", proposed_solution="",
+                ),
+            ]),
         )
         result = trace_inspector_mod.run_trace_inspector(
             settings=Settings(openrouter_api_key="sk-test"),
@@ -225,14 +238,24 @@ class TestMakeTraceInspectTool:
             lambda s, tid: {"id": tid, "name": "test-trace", "observations": []},
         )
         # Inject synthetic inspection result
+        from robotsix_mill.agents.trace_inspector import TraceFinding
         monkeypatch.setattr(
             trace_inspector_mod,
             "run_trace_inspector",
-            lambda **kwargs: TraceInspectResult(
-                tool_errors=["error A"],
-                agent_limitations=["loop B"],
-                optimizations=["cache C"],
-            ),
+            lambda **kwargs: TraceInspectResult(findings=[
+                TraceFinding(
+                    category="tool_error", symptom="error A",
+                    root_cause="", proposed_solution="",
+                ),
+                TraceFinding(
+                    category="agent_limitation", symptom="loop B",
+                    root_cause="", proposed_solution="",
+                ),
+                TraceFinding(
+                    category="optimization", symptom="cache C",
+                    root_cause="", proposed_solution="",
+                ),
+            ]),
         )
         tool = make_trace_inspect_tool(settings)
         output = tool("trace-1")
@@ -279,12 +302,16 @@ class TestMakeTraceInspectTool:
             "robotsix_mill.langfuse_client.fetch_trace_detail",
             lambda s, tid: {"id": tid, "name": "partial", "observations": []},
         )
+        from robotsix_mill.agents.trace_inspector import TraceFinding
         monkeypatch.setattr(
             trace_inspector_mod,
             "run_trace_inspector",
-            lambda **kwargs: TraceInspectResult(
-                tool_errors=["only error"],
-            ),
+            lambda **kwargs: TraceInspectResult(findings=[
+                TraceFinding(
+                    category="tool_error", symptom="only error",
+                    root_cause="", proposed_solution="",
+                ),
+            ]),
         )
         tool = make_trace_inspect_tool(settings)
         output = tool("partial-trace")
@@ -340,13 +367,21 @@ class TestTraceInspectResult:
         assert result.optimizations == []
 
     def test_json_roundtrip(self):
-        result = TraceInspectResult(
-            tool_errors=["e1", "e2"],
-            agent_limitations=["a1"],
-            optimizations=[],
-        )
+        from robotsix_mill.agents.trace_inspector import TraceFinding
+        result = TraceInspectResult(findings=[
+            TraceFinding(category="tool_error", symptom="e1",
+                         root_cause="rc", proposed_solution="sol"),
+            TraceFinding(category="tool_error", symptom="e2",
+                         root_cause="", proposed_solution=""),
+            TraceFinding(category="agent_limitation", symptom="a1",
+                         root_cause="", proposed_solution="",
+                         confidence="high"),
+        ])
         data = result.model_dump_json()
         parsed = TraceInspectResult.model_validate_json(data)
         assert parsed.tool_errors == ["e1", "e2"]
         assert parsed.agent_limitations == ["a1"]
         assert parsed.optimizations == []
+        # Round-trip preserves solution + confidence.
+        assert parsed.findings[0].proposed_solution == "sol"
+        assert parsed.findings[2].confidence == "high"

@@ -283,6 +283,13 @@ class Settings(BaseSettings):
         default="deepseek/deepseek-v4-pro",
         alias="MILL_TRACE_INSPECTOR_MODEL",
     )
+    # Memory ledger for the trace inspector. Used only by the manual
+    # Deep Review surface (the route path) — retrospect's deep-analysis
+    # `trace_inspect` tool calls run_trace_inspector without a memory
+    # arg. Unset (default) derives <data_dir>/trace_inspector_memory.md.
+    trace_inspector_memory_path: Path | None = Field(
+        default=None, alias="MILL_TRACE_INSPECTOR_MEMORY_PATH"
+    )
     # Path to the agent-maintained Markdown memory ledger.  Override to
     # pin a specific path; unset (default) derives <data_dir>/retrospect_memory.md.
     retrospect_memory_path: Path | None = Field(
@@ -503,6 +510,13 @@ class Settings(BaseSettings):
         if self.retrospect_memory_path is not None:
             return self.retrospect_memory_path
         return self.data_dir / "retrospect_memory.md"
+
+    @property
+    def trace_inspector_memory_file(self) -> Path:
+        """Resolved path to the trace inspector's memory ledger."""
+        if self.trace_inspector_memory_path is not None:
+            return self.trace_inspector_memory_path
+        return self.data_dir / "trace_inspector_memory.md"
 
     @property
     def audit_memory_file(self) -> Path:

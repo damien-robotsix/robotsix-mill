@@ -78,6 +78,13 @@ border-radius:6px;cursor:pointer;background:#1d212c}
 .dr-finding{display:flex;align-items:flex-start;justify-content:space-between;
 padding:4px 0;font-size:12px;color:#cfd3db;border-bottom:1px solid rgba(255,255,255,0.04)}
 .dr-finding:last-child{border-bottom:none}
+.dr-finding-card{padding:8px 0;font-size:12px;color:#cfd3db;border-bottom:1px solid rgba(255,255,255,0.04)}
+.dr-finding-card:last-child{border-bottom:none}
+.dr-finding-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.dr-finding-symptom{margin:2px 0}
+.dr-finding-rc{margin:2px 0;font-size:11px}
+.dr-finding-sol{margin:4px 0 2px 0;padding:6px 8px;background:rgba(37,99,235,.12);
+border-left:3px solid #2563eb;border-radius:3px}
 .dr-ticket-btn:hover{background:#3b82f6!important}
 .dr-btn:hover{background:#2a3a4b!important}
 .s-asked{--c:#38bdf8}.s-answered{--c:#34d399}

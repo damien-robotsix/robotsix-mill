@@ -540,31 +540,49 @@ function renderDeepReviewResult(res){
   document.getElementById("d").innerHTML=html;
   return;
  }
- const toolErrors=res.tool_errors||[];
- const limitations=res.agent_limitations||[];
- const optimizations=res.optimizations||[];
- deepReviewFindings=[];
- if(!toolErrors.length&&!limitations.length&&!optimizations.length){
+ // New schema: res.findings is a list of {category, symptom, root_cause,
+ // proposed_solution, confidence}. The legacy three-list response shape
+ // is also handled below as a fallback for any in-flight pre-upgrade
+ // results sitting in app.state.
+ let findings=Array.isArray(res.findings)?res.findings:null;
+ if(!findings){
+  findings=[];
+  (res.tool_errors||[]).forEach(s=>findings.push({category:"tool_error",symptom:s,root_cause:"",proposed_solution:"",confidence:"medium"}));
+  (res.agent_limitations||[]).forEach(s=>findings.push({category:"agent_limitation",symptom:s,root_cause:"",proposed_solution:"",confidence:"medium"}));
+  (res.optimizations||[]).forEach(s=>findings.push({category:"optimization",symptom:s,root_cause:"",proposed_solution:"",confidence:"medium"}));
+ }
+ deepReviewFindings=findings.slice();
+ if(!findings.length){
   html+=`<div class="muted" style="padding:12px 0">(no issues found in this trace)</div>`;
   document.getElementById("d").innerHTML=html;
   return;
  }
- function renderSection(title,items,cls){
-  if(!items.length)return'';
+ const sectionTitles={"tool_error":"Tool Errors","agent_limitation":"Agent Limitations","optimization":"Optimizations"};
+ const sectionCls={"tool_error":"dr-tool-errors","agent_limitation":"dr-limitations","optimization":"dr-optimizations"};
+ const confColor={"high":"#22c55e","medium":"#eab308","low":"#7d828c"};
+ function renderFinding(f,idx){
+  const conf=f.confidence||"medium";
+  return `<div class="dr-finding-card"><div class="dr-finding-head">`+
+   `<span class="dr-conf" style="background:${confColor[conf]||"#7d828c"};color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;text-transform:uppercase">${escT(conf)}</span>`+
+   `<button class="dr-ticket-btn" onclick="createTicketFromFinding(${idx},event)" style="font-size:10px;padding:2px 8px;background:#2563eb;color:#fff;border:none;border-radius:3px;cursor:pointer;margin-left:auto;flex-shrink:0">+ Ticket</button>`+
+   `</div>`+
+   `<div class="dr-finding-symptom"><b>Symptom.</b> ${escT(f.symptom||"")}</div>`+
+   (f.root_cause?`<div class="dr-finding-rc muted"><b>Root cause.</b> ${escT(f.root_cause)}</div>`:"")+
+   (f.proposed_solution?`<div class="dr-finding-sol"><b>Proposed solution.</b> ${escT(f.proposed_solution)}</div>`:`<div class="muted" style="font-size:11px;font-style:italic">(no proposed solution)</div>`)+
+   `</div>`;
+ }
+ function renderSectionStructured(cat,items){
+  if(!items.length)return"";
+  const title=sectionTitles[cat]||cat;
+  const cls=sectionCls[cat]||"";
   let h=`<div class="dr-section ${cls}"><h4>${title} (${items.length})</h4>`;
-  items.forEach((item,i)=>{
-   const idx=deepReviewFindings.length;
-   deepReviewFindings.push({category:title,text:item});
-   h+=`<div class="dr-finding"><span>${escT(item)}</span>`+
-    `<button class="dr-ticket-btn" onclick="createTicketFromFinding(${idx},event)"`+
-    ` style="font-size:10px;padding:2px 8px;background:#2563eb;color:#fff;border:none;border-radius:3px;cursor:pointer;margin-left:8px;flex-shrink:0">+ Ticket</button></div>`;
-  });
+  items.forEach(f=>{const idx=deepReviewFindings.indexOf(f);h+=renderFinding(f,idx)});
   h+=`</div>`;
   return h;
  }
- html+=renderSection("Tool Errors",toolErrors,"dr-tool-errors");
- html+=renderSection("Agent Limitations",limitations,"dr-limitations");
- html+=renderSection("Optimizations",optimizations,"dr-optimizations");
+ const byCat={"tool_error":[],"agent_limitation":[],"optimization":[]};
+ findings.forEach(f=>{(byCat[f.category]=byCat[f.category]||[]).push(f)});
+ ["tool_error","agent_limitation","optimization"].forEach(cat=>{html+=renderSectionStructured(cat,byCat[cat]||[])});
  html+=`<div style="margin-top:16px"><button onclick="openDeepReview()"`+
    ` style="font-size:11px;padding:3px 10px;background:#2a2f3a;color:#aab0bd;border:1px solid #3a3f4a;border-radius:4px;cursor:pointer">← Back to traces</button></div>`;
  document.getElementById("d").innerHTML=html;
@@ -573,15 +591,23 @@ function createTicketFromFinding(idx,event){
  if(event)event.stopPropagation();
  const finding=deepReviewFindings[idx];
  if(!finding)return;
- const itemText=finding.text;
- const title=prompt("Ticket title:","Deep review: "+itemText.substring(0,80));
+ // Build a full structured markdown body so refine doesn't have to
+ // re-derive the fix from a one-line symptom. The proposed_solution
+ // is the key payload here — it's what makes the ticket actionable
+ // instead of diagnostic.
+ const symptom=finding.symptom||finding.text||"";
+ const titleDefault="Deep review: "+symptom.substring(0,80);
+ const title=prompt("Ticket title:", titleDefault);
  if(title===null)return;
  if(!title.trim()){alert("Title is required");return}
- const desc=prompt("Description:",
-  "Finding from deep review of trace "+deepReviewTraceId+":\n\n["+finding.category+"] "+itemText);
- if(desc===null)return;
+ const body=
+  "## Symptom\n"+symptom+"\n\n"+
+  (finding.root_cause?"## Root cause\n"+finding.root_cause+"\n\n":"")+
+  (finding.proposed_solution?"## Proposed solution\n"+finding.proposed_solution+"\n\n":"")+
+  "_Inspector confidence: "+(finding.confidence||"medium")+"_\n"+
+  "_Source trace: `"+deepReviewTraceId+"`_\n";
  (async()=>{
-  const r=await jpost("/tickets",{title:title.trim(),description:desc,source:"deep-review"});
+  const r=await jpost("/tickets",{title:title.trim(),description:body,source:"deep-review"});
   if(!r.ok){const e=await r.text();alert("create ticket failed: "+e)}else refresh()
  })();
 }

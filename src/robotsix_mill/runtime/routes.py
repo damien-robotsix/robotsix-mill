@@ -503,9 +503,7 @@ def deep_review_trace(
                 state.deep_review_results[trace_id] = {
                     "status": "error",
                     "error": "trace unavailable — could not fetch from Langfuse",
-                    "tool_errors": [],
-                    "agent_limitations": [],
-                    "optimizations": [],
+                    "findings": [],
                 }
                 registry.finish_error(
                     run_id, f"deep review of trace {trace_id}: trace unavailable"
@@ -513,28 +511,72 @@ def deep_review_trace(
                 return
 
             import json as _json
+            import subprocess
+            from ..vcs import git_ops
+
+            # Clone the forge repo so the inspector can read_file /
+            # list_dir / explore the actual code that produced this
+            # trace. Best-effort: if the clone fails (no forge
+            # configured, network down) we still run the inspector
+            # in tool-less mode. The clone is at a stable, reusable
+            # path; later passes reuse it.
+            repo_dir = None
+            if settings.forge_remote_url:
+                cand = settings.data_dir / "deep_review_workspace" / "repo"
+                try:
+                    if (cand / ".git").exists():
+                        # Update the existing clone in place.
+                        try:
+                            git_ops.try_rebase_onto(cand, settings.forge_target_branch)
+                        except Exception:  # noqa: BLE001 — best effort
+                            pass
+                        repo_dir = cand
+                    else:
+                        git_ops.clone(
+                            settings.forge_remote_url, cand,
+                            settings.forge_target_branch, settings.forge_token,
+                        )
+                        repo_dir = cand
+                except subprocess.CalledProcessError as e:
+                    log.warning(
+                        "deep review clone failed (running tool-less): %s",
+                        (e.stderr or "")[:200],
+                    )
+
+            # Read inspector memory (best-effort).
+            memory_file = settings.trace_inspector_memory_file
+            memory = ""
+            if memory_file.exists():
+                try:
+                    memory = memory_file.read_text(encoding="utf-8")
+                except OSError:
+                    memory = ""
 
             trace_data = _json.dumps(detail, default=str)
             # Wrap the LLM call in an OTel root span so its pydantic-ai
             # spans get exported as a properly-named, session-grouped
-            # Langfuse trace. Without this the inspector's spans are
-            # orphans (no session.id stamped) and the user has no way
-            # to find the analysis afterwards — even a "no issues"
-            # result should be inspectable.
-            #   session.id = "deep-review:<source_trace_id>"  groups all
-            #     deep reviews of the SAME source trace under one session.
-            #   trace name = "deep-review"  matches the run-registry kind.
+            # Langfuse trace.
             with tracing.start_ticket_root_span(
                 f"deep-review:{trace_id}", "deep-review"
             ):
                 result = run_trace_inspector(
-                    settings=settings, trace_data=trace_data
+                    settings=settings,
+                    trace_data=trace_data,
+                    repo_dir=repo_dir,
+                    memory=memory,
                 )
-            # Distinguish inspector-side failure from a real "nothing
-            # found" — surfaces the cause so the UI can show it instead
-            # of indistinguishable "all zeros". Common case: the source
-            # trace is too large for the model context even after
-            # trimming.
+            # Persist updated memory verbatim (atomic write).
+            if result.updated_memory:
+                try:
+                    memory_file.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = memory_file.with_suffix(".md.tmp")
+                    tmp.write_text(result.updated_memory, encoding="utf-8")
+                    tmp.replace(memory_file)
+                except OSError as e:
+                    log.warning(
+                        "deep review: could not write memory file: %s", e
+                    )
+
             data = {
                 # JS renderDeepReviewResult treats status=="error" as
                 # "show the error message" — use it for inspector
@@ -542,13 +584,12 @@ def deep_review_trace(
                 # rendering an indistinguishable all-zeros result.
                 "status": "ok" if not result.error else "error",
                 "trace_id": trace_id,
-                "tool_errors": result.tool_errors,
-                "agent_limitations": result.agent_limitations,
-                "optimizations": result.optimizations,
+                "findings": [f.model_dump() for f in result.findings],
                 "error": result.error,
             }
             state.deep_review_results[trace_id] = data
 
+            n_findings = len(result.findings)
             n_te = len(result.tool_errors)
             n_al = len(result.agent_limitations)
             n_opt = len(result.optimizations)
@@ -558,8 +599,7 @@ def deep_review_trace(
             else:
                 summary = (
                     f"deep review of trace {trace_id}: "
-                    f"{n_te} tool errors, {n_al} limitations, "
-                    f"{n_opt} optimizations"
+                    f"{n_findings} findings ({n_te} TE, {n_al} AL, {n_opt} OPT)"
                 )
                 registry.finish_ok(run_id, summary)
             log.info("deep review of trace %s complete", trace_id)
@@ -568,9 +608,7 @@ def deep_review_trace(
             state.deep_review_results[trace_id] = {
                 "status": "error",
                 "error": str(e),
-                "tool_errors": [],
-                "agent_limitations": [],
-                "optimizations": [],
+                "findings": [],
             }
             registry.finish_error(run_id, str(e))
 
