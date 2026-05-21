@@ -15,7 +15,16 @@ from __future__ import annotations
 import json
 import logging
 
+from pydantic import BaseModel
+
 from ..config import Settings
+
+
+class DedupResult(BaseModel):
+    """Structured output from the dedup check agent."""
+    duplicate_of: str | None = None
+    already_done: str | None = None
+    reason: str = ""
 
 log = logging.getLogger("robotsix_mill.agents.dedup")
 
@@ -37,12 +46,6 @@ When unsure, return nulls.
    same change the draft is asking for.  Vague subjects (e.g. "fix",
    "cleanup") are NOT a match.
 4. When you are less than ~90% confident, return null for both fields.
-
-## Output
-
-Return ONLY a JSON object (no markdown, no fences):
-
-{"duplicate_of": null | "<ticket_id>", "already_done": null | "<commit_sha>", "reason": "..."}
 """
 
 
@@ -87,6 +90,7 @@ def run_dedup_check(
     reason — the guard is best-effort and never blocks the pipeline.
     """
     from .base import build_agent, _safe_close
+    from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
     from .retry import call_with_retry
@@ -94,7 +98,7 @@ def run_dedup_check(
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
-        output_type=dict,
+        output_type=PromptedOutput(DedupResult),
         model_name=settings.dedup_model,
         name="dedup",
     )
@@ -120,17 +124,17 @@ def run_dedup_check(
             what="dedup check",
         )
         output = result.output
-        if not isinstance(output, dict):
-            log.warning("dedup check returned non-dict: %s", type(output))
+        if not isinstance(output, DedupResult):
+            log.warning("dedup check returned non-DedupResult: %s", type(output))
             return {
                 "duplicate_of": None,
                 "already_done": None,
                 "reason": "dedup check returned unexpected type",
             }
         return {
-            "duplicate_of": output.get("duplicate_of"),
-            "already_done": output.get("already_done"),
-            "reason": output.get("reason", "no reason given"),
+            "duplicate_of": output.duplicate_of,
+            "already_done": output.already_done,
+            "reason": output.reason,
         }
     except Exception:
         log.warning("dedup check failed, proceeding with refine", exc_info=True)
