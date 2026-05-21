@@ -6,7 +6,36 @@ let runsOpen=false;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":"user");
-async function jget(u){const r=await fetch(u);return r.ok?r.json():null}
+// HTTP helpers built on XMLHttpRequest, not fetch().
+// `fetch` is wrapped by SES / hardened-JS extensions (MetaMask, some
+// privacy/wallet add-ons) and can fail with "NetworkError when
+// attempting to fetch resource" before any request leaves the browser.
+// XHR predates that interceptor surface and survives those wrappers.
+// All board POST/GET/DELETE goes through these; no direct fetch() use.
+function jget(u){return new Promise(res=>{
+ const x=new XMLHttpRequest();x.open("GET",u,true);
+ x.onload=()=>{if(x.status>=200&&x.status<300){
+  try{res(JSON.parse(x.responseText))}catch{res(null)}
+ }else res(null)};
+ x.onerror=()=>res(null);x.send();
+})}
+// fetch-shaped response: {ok, status, text(), json()} so call-sites
+// keep their `if(!r.ok){const e=await r.text();…}` pattern unchanged.
+function _xhr(method,u,body){return new Promise(res=>{
+ const x=new XMLHttpRequest();x.open(method,u,true);
+ if(body!=null)x.setRequestHeader("Content-Type","application/json");
+ const wrap=()=>({ok:x.status>=200&&x.status<300,status:x.status,
+  text:()=>Promise.resolve(x.responseText||""),
+  json:()=>{try{return Promise.resolve(JSON.parse(x.responseText||"null"))}
+           catch(e){return Promise.reject(e)}}});
+ x.onload=()=>res(wrap());
+ x.onerror=()=>res({ok:false,status:0,
+  text:()=>Promise.resolve("network error"),
+  json:()=>Promise.resolve(null)});
+ x.send(body!=null?JSON.stringify(body):null);
+})}
+function jpost(u,body){return _xhr("POST",u,body)}
+function jdel(u){return _xhr("DELETE",u,null)}
 async function refresh(){
  // Skip loading reviewed (closed/done) tickets by default — they dominate
  // the row count and each costs a session_cost lookup. Fetch them only
@@ -38,25 +67,21 @@ async function refresh(){
   .join("")+`</div></div>`).join("");
 }
 async function approve(id){
- const r=await fetch("/tickets/"+id+"/approve",{method:"POST"});
+ const r=await jpost("/tickets/"+id+"/approve");
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
 }
 async function requestChanges(id){
  const body=prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
  if(body===null)return;
  if(!body.trim()){alert("A comment is required when requesting changes");return}
- const r=await fetch("/tickets/"+id+"/request-changes",{method:"POST",
-  headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({body:body.trim()})});
+ const r=await jpost("/tickets/"+id+"/request-changes",{body:body.trim()});
  if(!r.ok){const e=await r.text();alert("request-changes failed: "+e)}else{refresh();if(sel===id)open_(id)}
 }
 async function addComment(id){
  const body=prompt("Add a comment to this ticket:");
  if(body===null)return;
  if(!body.trim())return;
- const r=await fetch("/tickets/"+id+"/comments",{method:"POST",
-  headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({body:body.trim()})});
+ const r=await jpost("/tickets/"+id+"/comments",{body:body.trim()});
  if(!r.ok){const e=await r.text();alert("add comment failed: "+e)}else if(sel===id)open_(id)
 }
 async function newTicket(){
@@ -64,21 +89,19 @@ async function newTicket(){
  if(title===null)return;
  if(!title.trim()){alert("Title is required");return}
  const description=prompt("Description / rough idea (optional):")||"";
- const r=await fetch("/tickets",{method:"POST",
-  headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({title:title.trim(),description:description})});
+ const r=await jpost("/tickets",{title:title.trim(),description:description});
  if(!r.ok){const e=await r.text();alert("create failed: "+e)}else refresh()
 }
 async function del_(id){
  if(!confirm("Delete ticket "+id+"? This is irreversible (row, history, workspace)."))return;
- const r=await fetch("/tickets/"+id,{method:"DELETE"});
+ const r=await jdel("/tickets/"+id);
  if(!r.ok&&r.status!==204){const e=await r.text();alert("delete failed: "+e)}else refresh()
 }
 async function runAudit(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await fetch("/audit",{method:"POST"});
+   const r=await jpost("/audit");
    if(!r.ok){throw new Error(await r.text())}
    alert("Audit started — it runs for a few minutes; new draft tickets will appear on the board when it finishes.");
    setTimeout(refresh,4000);
@@ -92,7 +115,7 @@ async function runScout(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await fetch("/scout",{method:"POST"});
+   const r=await jpost("/scout");
    if(!r.ok){throw new Error(await r.text())}
    alert("Scout started — it runs for a few minutes; new draft tickets will appear on the board when it finishes.");
    setTimeout(refresh,4000);
@@ -106,7 +129,7 @@ async function runTraceHealth(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await fetch("/trace-health",{method:"POST"});
+   const r=await jpost("/trace-health");
    if(!r.ok){throw new Error(await r.text())}
    alert("Trace-health check started — new draft tickets will appear on the board if unsessioned traces are found.");
    setTimeout(refresh,3000);
@@ -120,7 +143,7 @@ async function runHealth(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await fetch("/health-check",{method:"POST"});
+   const r=await jpost("/health-check");
    if(!r.ok){throw new Error(await r.text())}
    alert("Health check started — new draft tickets will appear on the board if issues are found.");
    setTimeout(refresh,3000);
