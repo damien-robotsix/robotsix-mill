@@ -193,6 +193,68 @@ class RetrospectStage(Stage):
         except OSError:
             log.warning("could not write deep counter to %s", path)
 
+    @staticmethod
+    def _resolve_deep_analysis(settings: Settings, session_id: str) -> tuple[bool, list[str]]:
+        """Return (deep_analysis, trace_ids) based on the frequency counter.
+
+        # --- deep-analysis frequency gate ---
+        """
+        deep_analysis = False
+        trace_ids: list[str] = []
+        counter = RetrospectStage._read_deep_counter(settings)
+        frequency = settings.retrospect_deep_analysis_frequency
+        if counter >= frequency:
+            deep_analysis = True
+            RetrospectStage._write_deep_counter(settings, 0)
+            # Fetch the session trace list to extract trace IDs.
+            traces_data = langfuse_client._langfuse_api_get(
+                settings,
+                "/api/public/traces",
+                params={"sessionId": session_id, "limit": 100},
+            )
+            if traces_data:
+                for t in traces_data.get("data", []):
+                    tid = t.get("id")
+                    if tid:
+                        trace_ids.append(tid)
+        else:
+            RetrospectStage._write_deep_counter(settings, counter + 1)
+        return deep_analysis, trace_ids
+
+    def _maybe_spawn_draft(
+        self,
+        res: RetrospectResult,
+        ticket: Ticket,
+        settings: Settings,
+        ctx: StageContext,
+    ) -> str | None:
+        """Conditionally spawn a draft ticket from the agent's proposal.
+
+        Returns the spawned draft ID, or None if no draft was created.
+        """
+        spawned = None
+        if (
+            settings.retrospect_spawn_drafts
+            and res.propose_draft
+            and res.draft_title
+            and res.draft_body
+        ):
+            if _is_noop_draft(res.draft_title, res.draft_body):
+                # Model set propose_draft=true on a clean/no-issue run.
+                # Don't pollute the board with "no notable issues"
+                # tickets — drop it (the analysis is still in findings
+                # and the memory ledger).
+                log.info("%s: retrospect proposed a no-op draft %r — skipped",
+                         ticket.id, res.draft_title)
+            else:
+                draft = ctx.service.create(res.draft_title, res.draft_body,
+                                           source="retrospect",
+                                           origin_session=current_session())
+                ctx.service.set_parent(draft.id, ticket.id)
+                spawned = draft.id
+                log.info("%s: retrospect spawned draft %s", ticket.id, spawned)
+        return spawned
+
     # ------------------------------------------------------------------
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
@@ -213,28 +275,7 @@ class RetrospectStage(Stage):
         )
         lf = langfuse_client.fetch_session_summary(s, ticket.id)
 
-        # --- deep-analysis frequency gate ------------------------------
-        deep_analysis = False
-        trace_ids: list[str] = []
-        counter = self._read_deep_counter(s)
-        frequency = s.retrospect_deep_analysis_frequency
-        if counter >= frequency:
-            deep_analysis = True
-            self._write_deep_counter(s, 0)
-            # Fetch the session trace list to extract trace IDs.
-            traces_data = langfuse_client._langfuse_api_get(
-                s,
-                "/api/public/traces",
-                params={"sessionId": ticket.id, "limit": 100},
-            )
-            if traces_data:
-                for t in traces_data.get("data", []):
-                    tid = t.get("id")
-                    if tid:
-                        trace_ids.append(tid)
-        else:
-            self._write_deep_counter(s, counter + 1)
-        # ---------------------------------------------------------------
+        deep_analysis, trace_ids = self._resolve_deep_analysis(s, ticket.id)
 
         # Read current memory — empty string if missing/unreadable.
         memory_text = ""
@@ -273,32 +314,7 @@ class RetrospectStage(Stage):
             except OSError:
                 log.warning("%s: could not write memory file %s", ticket.id, memory_file)
 
-        spawned = None
-        if (
-            s.retrospect_spawn_drafts
-            and res.propose_draft
-            and res.draft_title
-            and res.draft_body
-        ):
-            if _is_noop_draft(res.draft_title, res.draft_body):
-                # Model set propose_draft=true on a clean/no-issue run.
-                # Don't pollute the board with "no notable issues"
-                # tickets — drop it (the analysis is still in findings
-                # and the memory ledger).
-                log.info(
-                    "%s: retrospect proposed a no-op draft %r — skipped",
-                    ticket.id, res.draft_title,
-                )
-            else:
-                draft = ctx.service.create(
-                    res.draft_title, res.draft_body, source="retrospect",
-                    origin_session=current_session(),
-                )
-                ctx.service.set_parent(draft.id, ticket.id)
-                spawned = draft.id
-                log.info(
-                    "%s: retrospect spawned draft %s", ticket.id, spawned
-                )
+        spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
 
         (ws.artifacts_dir / "retrospect.md").write_text(
             f"# Retrospect\nlangfuse: "
