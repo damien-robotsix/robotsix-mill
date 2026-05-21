@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import importlib
 import sys
 
 import httpx
@@ -30,7 +31,106 @@ def _client(settings: Settings) -> httpx.Client:
     return httpx.Client(base_url=settings.api_url, timeout=30.0)
 
 
+_RUNNERS: dict[str, dict[str, str]] = {
+    "audit": {
+        "module": "audit_runner",
+        "function": "run_audit_pass",
+        "label": "Audit pass",
+        "format": "memory_drafts",
+    },
+    "scout": {
+        "module": "scout_runner",
+        "function": "run_scout_pass",
+        "label": "Scout pass",
+        "format": "memory_drafts",
+    },
+    "health": {
+        "module": "health_runner",
+        "function": "run_health_pass",
+        "label": "Health pass",
+        "format": "memory_drafts",
+    },
+    "agent-check": {
+        "module": "agent_check_runner",
+        "function": "run_agent_check_pass",
+        "label": "Agent-check pass",
+        "format": "memory_drafts",
+    },
+    "trace-health": {
+        "module": "trace_health_runner",
+        "function": "run_trace_health_check",
+        "label": "Trace-health check",
+        "format": "trace_health",
+    },
+}
+
+
+def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
+    """Dynamically import and run a subcommand's runner, then print results."""
+    entry = _RUNNERS[cmd]
+    mod = importlib.import_module(
+        f".{entry['module']}", package="robotsix_mill"
+    )
+    func = getattr(mod, entry["function"])
+
+    try:
+        result = func()
+    except Exception as e:
+        print(f"{cmd} failed: {e}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        if entry["format"] == "trace_health":
+            print(
+                json.dumps(
+                    {
+                        "draft_created": result.draft_created,
+                        "unsessioned_count": result.unsessioned_count,
+                        "total_traces": result.total_traces,
+                        "window_start": result.window_start,
+                        "window_end": result.window_end,
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            print(
+                json.dumps(
+                    {
+                        "memory": result.updated_memory,
+                        "tickets_created": result.drafts_created,
+                    },
+                    indent=2,
+                )
+            )
+    else:
+        if entry["format"] == "trace_health":
+            print("Trace-health check complete.")
+            if result.draft_created:
+                print("Draft ticket created for unsessioned traces.")
+            else:
+                print("No alert needed.")
+            print(
+                f"Unsessoned: {result.unsessioned_count} / "
+                f"{result.total_traces} traces "
+                f"({result.window_start} → {result.window_end})"
+            )
+        else:
+            print(f"{entry['label']} complete.")
+            print(f"Memory updated: {len(result.updated_memory)} chars")
+            if result.drafts_created:
+                print(
+                    f"Draft tickets created: {len(result.drafts_created)}"
+                )
+                for d in result.drafts_created:
+                    print(f"  - {d['id']}: {d['title']}")
+            else:
+                print("No new draft tickets created.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    """Parse CLI args, dispatch to the appropriate runner or HTTP client, and return an exit code."""
     parser = argparse.ArgumentParser(prog="robotsix-mill")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -126,152 +226,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    if args.cmd == "audit":
-        # Run audit pass locally (not via HTTP — the CLI is thin but
-        # audit is a local operation that uses the agent directly).
-        from .audit_runner import run_audit_pass
-
-        try:
-            result = run_audit_pass()
-        except Exception as e:
-            print(f"audit failed: {e}", file=sys.stderr)
-            return 1
-
-        if args.json:
-            print(json.dumps(
-                {
-                    "memory": result.updated_memory,
-                    "tickets_created": result.drafts_created,
-                },
-                indent=2,
-            ))
-        else:
-            print(f"Audit pass complete.")
-            print(f"Memory updated: {len(result.updated_memory)} chars")
-            if result.drafts_created:
-                print(f"Draft tickets created: {len(result.drafts_created)}")
-                for d in result.drafts_created:
-                    print(f"  - {d['id']}: {d['title']}")
-            else:
-                print("No new draft tickets created.")
-        return 0
-
-    if args.cmd == "scout":
-        from .scout_runner import run_scout_pass
-
-        try:
-            result = run_scout_pass()
-        except Exception as e:
-            print(f"scout failed: {e}", file=sys.stderr)
-            return 1
-
-        if args.json:
-            print(json.dumps(
-                {
-                    "memory": result.updated_memory,
-                    "tickets_created": result.drafts_created,
-                },
-                indent=2,
-            ))
-        else:
-            print("Scout pass complete.")
-            print(f"Memory updated: {len(result.updated_memory)} chars")
-            if result.drafts_created:
-                print(f"Draft tickets created: {len(result.drafts_created)}")
-                for d in result.drafts_created:
-                    print(f"  - {d['id']}: {d['title']}")
-            else:
-                print("No new draft tickets created.")
-        return 0
-
-    if args.cmd == "trace-health":
-        from .trace_health_runner import run_trace_health_check
-
-        try:
-            result = run_trace_health_check()
-        except Exception as e:
-            print(f"trace-health failed: {e}", file=sys.stderr)
-            return 1
-
-        if args.json:
-            print(json.dumps(
-                {
-                    "draft_created": result.draft_created,
-                    "unsessioned_count": result.unsessioned_count,
-                    "total_traces": result.total_traces,
-                    "window_start": result.window_start,
-                    "window_end": result.window_end,
-                },
-                indent=2,
-            ))
-        else:
-            print("Trace-health check complete.")
-            if result.draft_created:
-                print("Draft ticket created for unsessioned traces.")
-            else:
-                print("No alert needed.")
-            print(
-                f"Unsessoned: {result.unsessioned_count} / "
-                f"{result.total_traces} traces "
-                f"({result.window_start} → {result.window_end})"
-            )
-        return 0
-
-    if args.cmd == "health":
-        from .health_runner import run_health_pass
-
-        try:
-            result = run_health_pass()
-        except Exception as e:
-            print(f"health failed: {e}", file=sys.stderr)
-            return 1
-
-        if args.json:
-            print(json.dumps(
-                {
-                    "memory": result.updated_memory,
-                    "tickets_created": result.drafts_created,
-                },
-                indent=2,
-            ))
-        else:
-            print("Health pass complete.")
-            print(f"Memory updated: {len(result.updated_memory)} chars")
-            if result.drafts_created:
-                print(f"Draft tickets created: {len(result.drafts_created)}")
-                for d in result.drafts_created:
-                    print(f"  - {d['id']}: {d['title']}")
-            else:
-                print("No new draft tickets created.")
-        return 0
-
-    if args.cmd == "agent-check":
-        from .agent_check_runner import run_agent_check_pass
-
-        try:
-            result = run_agent_check_pass()
-        except Exception as e:
-            print(f"agent-check failed: {e}", file=sys.stderr)
-            return 1
-
-        if args.json:
-            print(json.dumps(
-                {
-                    "memory": result.updated_memory,
-                    "tickets_created": result.drafts_created,
-                },
-                indent=2,
-            ))
-        else:
-            print("Agent-check pass complete.")
-            print(f"Memory updated: {len(result.updated_memory)} chars")
-            if result.drafts_created:
-                print(f"Draft tickets created: {len(result.drafts_created)}")
-                for d in result.drafts_created:
-                    print(f"  - {d['id']}: {d['title']}")
-            else:
-                print("No new draft tickets created.")
-        return 0
+    if args.cmd in _RUNNERS:
+        return _run_and_print(args.cmd, args)
 
     with _client(settings) as c:
         if args.tcmd == "new":
