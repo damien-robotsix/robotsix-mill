@@ -59,17 +59,89 @@ class TraceInspectResult(BaseModel):
     tool_errors: list[str] = []
     agent_limitations: list[str] = []
     optimizations: list[str] = []
+    # When non-empty, surfaces an inspector-side failure to the caller
+    # (e.g. "trace too large for the model context"). Empty findings
+    # WITHOUT an error means a clean run with nothing notable; empty
+    # findings WITH an error means the analysis didn't happen.
+    error: str = ""
+
+
+def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
+    """Shrink a serialised Langfuse trace so a real implement-run trace
+    (~15 MB raw, ~2-4 M tokens) fits the model's 1 M-token context.
+
+    Strategy: parse the JSON, walk every observation, and cap each
+    observation's verbose ``input``/``output`` to a head+tail snippet.
+    Structural fields (id, name, type, level, parent, statusMessage,
+    startTime/endTime, calculatedTotalCost, usage tokens) are preserved
+    in full — those are what the inspector actually reasons about.
+
+    If the trace isn't valid JSON or shrinking doesn't get us under
+    ``max_chars``, the raw string is returned truncated head+tail —
+    the model will see context but the prompt won't blow up.
+    """
+    import json as _json
+
+    def _trim(v, head: int = 800, tail: int = 800) -> str:
+        s = v if isinstance(v, str) else _json.dumps(v, default=str)
+        if len(s) <= head + tail + 64:
+            return s
+        return s[:head] + f"\n…[trimmed {len(s) - head - tail} chars]…\n" + s[-tail:]
+
+    try:
+        trace = _json.loads(trace_data)
+    except Exception:  # noqa: BLE001
+        if len(trace_data) <= max_chars:
+            return trace_data
+        return (
+            trace_data[: max_chars // 2]
+            + f"\n…[trimmed {len(trace_data) - max_chars} chars]…\n"
+            + trace_data[-max_chars // 2:]
+        )
+
+    obs = trace.get("observations") or []
+    for o in obs:
+        for k in ("input", "output", "metadata"):
+            if k in o and o[k] is not None:
+                o[k] = _trim(o[k])
+        # usageDetails / costDetails can themselves be huge nested dicts
+        for k in ("usageDetails", "costDetails"):
+            if k in o and isinstance(o[k], (dict, list)):
+                # keep totals, drop per-call breakdowns over a cap
+                s = _json.dumps(o[k], default=str)
+                if len(s) > 2000:
+                    o[k] = f"[summarised {len(s)} chars — dropped breakdowns]"
+
+    shrunk = _json.dumps(trace, default=str)
+    if len(shrunk) <= max_chars:
+        return shrunk
+    # Still too big — last-resort head/tail truncation on the whole thing.
+    return (
+        shrunk[: max_chars // 2]
+        + f"\n…[trimmed {len(shrunk) - max_chars} chars]…\n"
+        + shrunk[-max_chars // 2:]
+    )
 
 
 def run_trace_inspector(
     *, settings: Settings, trace_data: str
 ) -> TraceInspectResult:
     """Analyse a single trace's full observation tree and return
-    structured findings.  Degrades to an empty result on error rather
-    than raising — the caller must be able to continue across many
-    traces."""
+    structured findings.
+
+    On error, returns a result with ``error`` populated rather than
+    silently returning an empty findings list — the previous behaviour
+    made model-context-overflow indistinguishable from a clean
+    no-findings run (e.g. the user couldn't tell *"trace was too big"*
+    from *"trace was fine, nothing notable"*).
+    """
     if not settings.openrouter_api_key:
-        return TraceInspectResult()
+        return TraceInspectResult(error="OPENROUTER_API_KEY is not set")
+
+    # Shrink the payload BEFORE sending. A full implement-run trace
+    # routinely serialises to 15+ MB / 2-4 M tokens; the model caps at
+    # 1 M, and Langfuse's OTel ingest 413s on huge span attributes.
+    trimmed = _shrink_trace_data(trace_data)
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
@@ -96,7 +168,7 @@ def run_trace_inspector(
     prompt = (
         "Analyse the following Langfuse trace JSON for tool errors, "
         "agent limitations, and optimisation opportunities.\n\n"
-        f"<trace>\n{trace_data}\n</trace>"
+        f"<trace>\n{trimmed}\n</trace>"
     )
     try:
         from .retry import call_with_retry
@@ -108,7 +180,14 @@ def run_trace_inspector(
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller
         log.warning("trace inspector failed: %s", e)
-        return TraceInspectResult()
+        msg = str(e)
+        # Common, recognisable failure modes get a user-readable hint.
+        if "maximum context length" in msg.lower():
+            return TraceInspectResult(
+                error=f"trace too large for the model context even after "
+                      f"trimming ({len(trimmed)} chars sent): {msg[:300]}"
+            )
+        return TraceInspectResult(error=msg[:500])
     finally:
         _close_async_client(client)
     return result.output

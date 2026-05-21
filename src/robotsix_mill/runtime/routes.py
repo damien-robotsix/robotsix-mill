@@ -530,24 +530,38 @@ def deep_review_trace(
                 result = run_trace_inspector(
                     settings=settings, trace_data=trace_data
                 )
+            # Distinguish inspector-side failure from a real "nothing
+            # found" — surfaces the cause so the UI can show it instead
+            # of indistinguishable "all zeros". Common case: the source
+            # trace is too large for the model context even after
+            # trimming.
             data = {
-                "status": "ok",
+                # JS renderDeepReviewResult treats status=="error" as
+                # "show the error message" — use it for inspector
+                # failures too so the UI surfaces the cause instead of
+                # rendering an indistinguishable all-zeros result.
+                "status": "ok" if not result.error else "error",
                 "trace_id": trace_id,
                 "tool_errors": result.tool_errors,
                 "agent_limitations": result.agent_limitations,
                 "optimizations": result.optimizations,
+                "error": result.error,
             }
             state.deep_review_results[trace_id] = data
 
             n_te = len(result.tool_errors)
             n_al = len(result.agent_limitations)
             n_opt = len(result.optimizations)
-            summary = (
-                f"deep review of trace {trace_id}: "
-                f"{n_te} tool errors, {n_al} limitations, "
-                f"{n_opt} optimizations"
-            )
-            registry.finish_ok(run_id, summary)
+            if result.error:
+                summary = f"deep review of trace {trace_id}: {result.error[:120]}"
+                registry.finish_error(run_id, result.error[:300])
+            else:
+                summary = (
+                    f"deep review of trace {trace_id}: "
+                    f"{n_te} tool errors, {n_al} limitations, "
+                    f"{n_opt} optimizations"
+                )
+                registry.finish_ok(run_id, summary)
             log.info("deep review of trace %s complete", trace_id)
         except Exception as e:  # noqa: BLE001 — background; just log
             log.exception("deep review of trace %s failed", trace_id)
