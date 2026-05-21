@@ -85,7 +85,7 @@ def run_coordinator(
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
-    from .base import build_agent
+    from .base import build_agent, _safe_close
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import call_with_retry
@@ -112,13 +112,16 @@ def run_coordinator(
         model_name=settings.model,  # the capable implement model
         name="implement",
     )
-    limits = UsageLimits(request_limit=settings.coordinator_request_limit)
-    user_prompt = (
-        f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
-    )
-    result = call_with_retry(
-        lambda: agent.run_sync(user_prompt, usage_limits=limits),
-        settings=settings, what="implement",
-    )
+    try:
+        limits = UsageLimits(request_limit=settings.coordinator_request_limit)
+        user_prompt = (
+            f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
+            f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
+        )
+        result = call_with_retry(
+            lambda: agent.run_sync(user_prompt, usage_limits=limits),
+            settings=settings, what="implement",
+        )
+    finally:
+        _safe_close(agent)
     return result.output

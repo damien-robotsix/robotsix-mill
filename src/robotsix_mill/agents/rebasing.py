@@ -51,7 +51,7 @@ def run_rebase_agent(
 
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent
+    from .base import build_agent, _safe_close
     from .fs_tools import build_fs_tools
 
     # Build tools confined to the ticket's own clone.
@@ -116,6 +116,9 @@ DONE or FAILED and provide a brief summary."""
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
     )
 
-    result = agent.run_sync(user_prompt)
+    try:
+        result = agent.run_sync(user_prompt)
+    finally:
+        _safe_close(agent)
 
     return result.output

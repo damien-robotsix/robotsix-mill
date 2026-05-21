@@ -152,7 +152,7 @@ def run_health_agent(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent
+    from .base import build_agent, _safe_close
 
     tools: list = []
     if repo_dir is not None:
@@ -189,9 +189,12 @@ def run_health_agent(
     )
     from .retry import call_with_retry
 
-    result = call_with_retry(
-        lambda: agent.run_sync(prompt), settings=settings, what="health"
-    )
+    try:
+        result = call_with_retry(
+            lambda: agent.run_sync(prompt), settings=settings, what="health"
+        )
+    finally:
+        _safe_close(agent)
     result.output.draft_titles = result.output.draft_titles[:MAX_GAPS]
     result.output.draft_bodies = result.output.draft_bodies[:MAX_GAPS]
     result.output.gap_ids = result.output.gap_ids[:MAX_GAPS]
