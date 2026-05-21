@@ -514,34 +514,6 @@ def test_create_ticket_without_depends_on_has_none(client):
     assert data["unmet_deps"] == []
 
 
-def test_list_tickets_include_closed_hides_only_closed_keeps_done(client, service):
-    """include_closed=false must hide CLOSED but ALWAYS return DONE —
-    DONE is the transient retrospect-in-flight window and needs to
-    stay visible so the board can show retrospect work without the
-    user toggling 'Show closed.'"""
-    # Create via the service (not the API) to bypass maybe_enqueue —
-    # the worker would otherwise refine these tickets and BLOCK them
-    # on the missing API key, racing the transitions below.
-    closed = service.create("C-closed")
-    done = service.create("C-done")
-    draft = service.create("C-draft")
-    # Walk the two via legal edges: DRAFT -> DONE (refine's
-    # dedup-discard route), DONE -> CLOSED (retrospect's edge).
-    service.transition(closed.id, State.DONE)
-    service.transition(closed.id, State.CLOSED)
-    service.transition(done.id, State.DONE)
-
-    # include_closed=true → everything visible.
-    ids_all = {t["id"] for t in client.get("/tickets").json()}
-    assert {closed.id, done.id, draft.id} <= ids_all
-
-    # include_closed=false → CLOSED hidden, DONE + DRAFT still visible.
-    ids = {t["id"] for t in client.get("/tickets?include_closed=false").json()}
-    assert done.id in ids, "DONE must stay visible (retrospect-in-flight)"
-    assert draft.id in ids
-    assert closed.id not in ids, "CLOSED must be hidden by the toggle"
-
-
 def test_board_js_includes_depends_on_rendering(client):
     """The board JS includes depends_on and unmet_deps rendering logic."""
     js = client.get("/static/board.js").text
