@@ -145,7 +145,7 @@ def run_refine_agent(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent
+    from .base import build_agent, _safe_close
     from .retry import call_with_retry
 
     tools: list = []
@@ -182,8 +182,11 @@ def run_refine_agent(
             f"{reviewer_comments}\n</reviewer_feedback>"
         )
 
-    result = call_with_retry(
-        lambda: agent.run_sync(user_prompt),
-        settings=settings, what="refine",
-    )
+    try:
+        result = call_with_retry(
+            lambda: agent.run_sync(user_prompt),
+            settings=settings, what="refine",
+        )
+    finally:
+        _safe_close(agent)
     return result.output

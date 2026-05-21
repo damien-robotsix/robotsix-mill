@@ -41,16 +41,17 @@ def run_web_research(*, settings: Settings, query: str) -> str:
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import timeout_http_client
+    from .base import _close_async_client, timeout_http_client
     from .openrouter_cost import CostInstrumentedOpenRouterModel
     from .web_tools import make_web_fetch
 
     online = ":online" if settings.web_search else ""
+    client = timeout_http_client(settings)
     model = CostInstrumentedOpenRouterModel(
         f"{settings.web_research_model}{online}",
         provider=OpenRouterProvider(
             api_key=settings.openrouter_api_key,
-            http_client=timeout_http_client(settings),
+            http_client=client,
         ),
     )
     agent = Agent(
@@ -70,6 +71,8 @@ def run_web_research(*, settings: Settings, query: str) -> str:
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller
         return f"web research failed: {e}"
+    finally:
+        _close_async_client(client)
     return str(result.output)
 
 

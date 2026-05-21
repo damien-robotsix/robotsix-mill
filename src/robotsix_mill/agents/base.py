@@ -13,6 +13,8 @@ unit-testable without a key or pydantic_ai.
 
 from __future__ import annotations
 
+import asyncio
+import weakref
 from typing import Any
 
 from ..config import Settings
@@ -21,15 +23,64 @@ from .skills import load_skills
 from .web_research import make_web_research_tool
 
 
+def _close_async_client(client: "httpx.AsyncClient") -> None:
+    """Close an httpx.AsyncClient from outside its original event loop.
+
+    Creates a temporary event loop to run aclose(), catching any errors
+    so cleanup never raises in a finally/del context."""
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(client.aclose())
+        loop.close()
+    except Exception:
+        pass
+
+
+def _safe_close(agent: Any) -> None:
+    """Close an agent's HTTP client if it has a close method.
+
+    Safe to call on any object — silently no-ops if the object lacks
+    a ``close`` method or if closing raises."""
+    close_fn = getattr(agent, "close", None)
+    if close_fn is not None:
+        try:
+            close_fn()
+        except Exception:
+            pass
+
+
 def timeout_http_client(settings: Settings):
     """A fresh httpx.AsyncClient with a hard per-request timeout, so a
     hung/glacial provider connection raises instead of blocking the
     worker forever. Pass to OpenRouterProvider(http_client=...)."""
     import httpx
 
-    return httpx.AsyncClient(
+    client = httpx.AsyncClient(
         timeout=httpx.Timeout(settings.model_request_timeout, connect=15.0)
     )
+    weakref.finalize(client, _close_async_client, client)
+    return client
+
+
+class AgentHandle:
+    """Wraps a pydantic-ai Agent with its httpx client so callers can
+    deterministically close the client after use.
+
+    Delegates attribute access to the underlying agent so existing
+    code (including test mocks) works unchanged."""
+
+    def __init__(self, agent: Any, http_client: Any) -> None:
+        self._agent = agent
+        self._http_client = http_client
+
+    def close(self) -> None:
+        """Close the HTTP client. Idempotent; safe to call multiple times."""
+        if self._http_client is not None:
+            _close_async_client(self._http_client)
+            self._http_client = None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._agent, name)
 
 
 def _model_name(settings: Settings) -> str:
@@ -74,11 +125,12 @@ def build_agent(
 
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
+    http_client = timeout_http_client(settings)
     model = CostInstrumentedOpenRouterModel(
         model_name or _model_name(settings),
         provider=OpenRouterProvider(
             api_key=settings.openrouter_api_key,
-            http_client=timeout_http_client(settings),
+            http_client=http_client,
         ),
     )
 
@@ -101,4 +153,5 @@ def build_agent(
     )
     if name is not None:
         agent_kwargs["name"] = name
-    return Agent(**agent_kwargs)
+    agent = Agent(**agent_kwargs)
+    return AgentHandle(agent, http_client)

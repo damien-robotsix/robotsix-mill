@@ -52,7 +52,7 @@ def run_test_agent(
 
     from pydantic_ai.usage import UsageLimits
 
-    from .base import build_agent
+    from .base import build_agent, _safe_close
     from .retry import call_with_retry
 
     agent = build_agent(
@@ -73,3 +73,5 @@ def run_test_agent(
         return False, str(result.output).strip()
     except Exception as e:  # noqa: BLE001 — degrade to raw tail
         return False, f"tests failed (rc={rc}); distill error {e}:\n{tail[-1500:]}"
+    finally:
+        _safe_close(agent)

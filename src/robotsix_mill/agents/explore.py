@@ -52,13 +52,14 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     all_fs = build_fs_tools(repo_dir, settings)
     ro_tools = [t for t in all_fs if t.__name__ in ("read_file", "list_dir")]
 
-    from .base import timeout_http_client
+    from .base import _close_async_client, timeout_http_client
 
+    main_client = timeout_http_client(settings)
     model = CostInstrumentedOpenRouterModel(  # dedicated cheap explore model
         settings.explore_model,
         provider=OpenRouterProvider(
             api_key=settings.openrouter_api_key,
-            http_client=timeout_http_client(settings),
+            http_client=main_client,
         ),
     )
     agent = Agent(
@@ -69,17 +70,20 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
         name="explore",
     )
     limits = UsageLimits(request_limit=settings.explore_request_limit)
+
+    fallback_client = None
     try:
         from .retry import call_with_retry
 
         # Build fallback agent if a fallback model is configured
         fallback_fn = None
         if settings.rate_limit_fallback_model:
+            fallback_client = timeout_http_client(settings)
             fallback_model = CostInstrumentedOpenRouterModel(
                 settings.rate_limit_fallback_model,
                 provider=OpenRouterProvider(
                     api_key=settings.openrouter_api_key,
-                    http_client=timeout_http_client(settings),
+                    http_client=fallback_client,
                 ),
             )
             fallback_agent = Agent(
@@ -99,6 +103,10 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
         )
     except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
         return f"explore failed: {e}"
+    finally:
+        _close_async_client(main_client)
+        if fallback_client is not None:
+            _close_async_client(fallback_client)
     return str(result.output).strip()
 
 

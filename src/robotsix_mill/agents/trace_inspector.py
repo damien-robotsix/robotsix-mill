@@ -76,14 +76,15 @@ def run_trace_inspector(
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import timeout_http_client
+    from .base import _close_async_client, timeout_http_client
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
+    client = timeout_http_client(settings)
     model = CostInstrumentedOpenRouterModel(
         settings.trace_inspector_model,
         provider=OpenRouterProvider(
             api_key=settings.openrouter_api_key,
-            http_client=timeout_http_client(settings),
+            http_client=client,
         ),
     )
     agent = Agent(
@@ -108,6 +109,8 @@ def run_trace_inspector(
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller
         log.warning("trace inspector failed: %s", e)
         return TraceInspectResult()
+    finally:
+        _close_async_client(client)
     return result.output
 
 

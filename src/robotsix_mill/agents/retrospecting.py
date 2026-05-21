@@ -147,7 +147,7 @@ def run_retrospect_agent(
 ) -> RetrospectResult:
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent
+    from .base import build_agent, _safe_close
 
     extra_tools = []
     if deep_analysis:
@@ -188,7 +188,10 @@ def run_retrospect_agent(
         )
     from .retry import call_with_retry
 
-    result = call_with_retry(
-        lambda: agent.run_sync(prompt), settings=settings, what="retrospect"
-    )
+    try:
+        result = call_with_retry(
+            lambda: agent.run_sync(prompt), settings=settings, what="retrospect"
+        )
+    finally:
+        _safe_close(agent)
     return result.output

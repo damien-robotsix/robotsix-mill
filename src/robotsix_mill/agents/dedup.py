@@ -86,7 +86,7 @@ def run_dedup_check(
     Degrades gracefully: on any exception, returns nulls with a failure
     reason — the guard is best-effort and never blocks the pipeline.
     """
-    from .base import build_agent
+    from .base import build_agent, _safe_close
     from pydantic_ai.usage import UsageLimits
 
     from .retry import call_with_retry
@@ -139,3 +139,5 @@ def run_dedup_check(
             "already_done": None,
             "reason": "dedup check failed",
         }
+    finally:
+        _safe_close(agent)

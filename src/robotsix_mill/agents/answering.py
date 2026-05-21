@@ -135,7 +135,7 @@ def run_answer_agent(
     and Langfuse tools. Raises RuntimeError if no OpenRouter key is
     configured.
     """
-    from .base import build_agent
+    from .base import build_agent, _safe_close
     from .retry import call_with_retry
 
     tools: list = []
@@ -164,8 +164,11 @@ def run_answer_agent(
 
     user_prompt = f"<title>{title}</title>\n<question>\n{question}\n</question>\n\nAnswer the question above. Cite all sources."
 
-    result = call_with_retry(
-        lambda: agent.run_sync(user_prompt),
-        settings=settings, what="answer",
-    )
+    try:
+        result = call_with_retry(
+            lambda: agent.run_sync(user_prompt),
+            settings=settings, what="answer",
+        )
+    finally:
+        _safe_close(agent)
     return str(result.output).strip()
