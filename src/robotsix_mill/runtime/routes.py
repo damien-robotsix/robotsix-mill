@@ -79,9 +79,13 @@ def list_tickets(
     # would cancel its predecessor, and the board would never paint.
     # Per-ticket detail GETs keep both authoritative — when the user
     # opens the drawer they see real cost and a real PR link.
+    #
+    # include_closed=false hides CLOSED (the volume case) but keeps
+    # DONE visible — DONE is the transient retrospect-in-flight window
+    # and we want to watch retrospect work without toggling.
     exclude = None
     if not include_closed:
-        exclude = {State.CLOSED, State.DONE}
+        exclude = {State.CLOSED}
     return [
         enrich_ticket_read(
             t, settings, svc, blocking_cost=False, fetch_pr_url=False
@@ -121,6 +125,26 @@ def get_description(
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     return {"description": svc.workspace(ticket).read_description()}
+
+
+@router.get("/tickets/{ticket_id}/retrospect")
+def get_retrospect(
+    ticket_id: str,
+    svc=Depends(get_service),
+) -> dict:
+    """Return the retrospect.md artifact for a ticket, or empty if
+    retrospect has not run yet (or the artifact was lost). Lets the
+    board surface what retrospect actually wrote — without this the
+    DONE -> CLOSED transition looks like it happened with no
+    reflection, even when retrospect did run and write real analysis."""
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    ws = svc.workspace(ticket)
+    p = ws.artifacts_dir / "retrospect.md"
+    if not p.exists():
+        return {"retrospect": ""}
+    return {"retrospect": p.read_text(encoding="utf-8")}
 
 
 @router.delete("/tickets/{ticket_id}", status_code=204)
