@@ -103,6 +103,26 @@ class ContextStore:
             self._cache[conversation_id] = turns
             self._flush(conversation_id)
 
+    def delete_conversation(self, conversation_id: str) -> None:
+        """Remove the conversation from cache and disk.
+
+        Silently succeeds when the conversation doesn't exist
+        (idempotent).  Swallows ``OSError`` after logging a warning,
+        matching ``prune_clone``'s error-handling posture.
+        Thread-safe: acquires ``self._lock`` while mutating state.
+        """
+        with self._lock:
+            self._cache.pop(conversation_id, None)
+            file_path = self._file_path(conversation_id)
+            try:
+                file_path.unlink(missing_ok=True)
+            except OSError as exc:
+                log.warning(
+                    "ContextStore.delete_conversation: could not remove %s (%s)",
+                    file_path,
+                    exc,
+                )
+
     def get_messages(self, conversation_id: str) -> list[dict]:
         """Return all conversation turns sorted by index ascending.
 

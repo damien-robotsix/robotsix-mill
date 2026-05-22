@@ -129,6 +129,12 @@ class TicketService:
         shutil.rmtree(
             self.settings.workspaces_dir / ticket_id, ignore_errors=True
         )
+        # Remove the conversation file unconditionally.
+        conv_file = self.settings.data_dir / "conversations" / f"{ticket_id}.json"
+        try:
+            conv_file.unlink(missing_ok=True)
+        except OSError:
+            pass
         return True
 
     def _maybe_purge_archived(self) -> None:
