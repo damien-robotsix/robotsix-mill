@@ -894,69 +894,6 @@ def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path
     # No error raised — we got here fine.
 
 
-# --- prune_conversation_on_close integration tests ---------------------
-
-
-class TestRetrospectPruneConversation:
-    def test_prune_on_close_deletes_conversation_file(self, tmp_path, monkeypatch):
-        """When flag is true (default), conversation file is removed on close."""
-        monkeypatch.setattr(
-            retrospecting, "run_retrospect_agent",
-            lambda *a, **kw: _default_result(),
-        )
-        _no_langfuse(monkeypatch)
-        ctx = _ctx(tmp_path)
-        ticket = _done(ctx)
-        stage = RetrospectStage()
-
-        # Pre-create a conversation file.
-        conv_dir = ctx.settings.data_dir / "conversations"
-        conv_dir.mkdir(parents=True, exist_ok=True)
-        conv_file = conv_dir / f"{ticket.id}.json"
-        conv_file.write_text('[{"index":0}]', encoding="utf-8")
-        assert conv_file.exists()
-
-        outcome = stage.run(ticket, ctx)
-        assert outcome.next_state is State.CLOSED
-        assert not conv_file.exists()
-
-    def test_prune_off_preserves_conversation_file(self, tmp_path, monkeypatch):
-        """When MILL_PRUNE_CONVERSATION_ON_CLOSE=false, file is preserved."""
-        monkeypatch.setattr(
-            retrospecting, "run_retrospect_agent",
-            lambda *a, **kw: _default_result(),
-        )
-        _no_langfuse(monkeypatch)
-        ctx = _ctx(tmp_path, MILL_PRUNE_CONVERSATION_ON_CLOSE="false")
-        ticket = _done(ctx)
-        stage = RetrospectStage()
-
-        conv_dir = ctx.settings.data_dir / "conversations"
-        conv_dir.mkdir(parents=True, exist_ok=True)
-        conv_file = conv_dir / f"{ticket.id}.json"
-        conv_file.write_text('[{"index":0}]', encoding="utf-8")
-        assert conv_file.exists()
-
-        outcome = stage.run(ticket, ctx)
-        assert outcome.next_state is State.CLOSED
-        assert conv_file.exists()
-
-    def test_missing_conversation_file_is_noop(self, tmp_path, monkeypatch):
-        """When conversation file doesn't exist, prune is a no-op."""
-        monkeypatch.setattr(
-            retrospecting, "run_retrospect_agent",
-            lambda *a, **kw: _default_result(),
-        )
-        _no_langfuse(monkeypatch)
-        ctx = _ctx(tmp_path)
-        ticket = _done(ctx)
-        stage = RetrospectStage()
-
-        # Don't create a conversation file — should not error.
-        outcome = stage.run(ticket, ctx)
-        assert outcome.next_state is State.CLOSED
-
-
 # ---------------------------------------------------------------------------
 # follow-up (concrete incomplete-work detection) tests
 # ---------------------------------------------------------------------------

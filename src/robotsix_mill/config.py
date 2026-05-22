@@ -379,11 +379,6 @@ class Settings(BaseSettings):
     max_archived_tickets: int = Field(
         default=100, alias="MILL_MAX_ARCHIVED_TICKETS"
     )
-    # When true (default), the conversation file is removed on close
-    # to save disk space.
-    prune_conversation_on_close: bool = Field(
-        default=True, alias="MILL_PRUNE_CONVERSATION_ON_CLOSE"
-    )
 
     # --- merge stage: auto-rebase of stale PRs ---
     # When a PR in human_mr_approval becomes conflicting (other PRs merged to
