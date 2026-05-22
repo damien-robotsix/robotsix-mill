@@ -22,6 +22,13 @@ from ..core.states import State
 
 @dataclass
 class StageContext:
+    """Dependency-injection context passed to every :meth:`Stage.run`.
+
+    Attributes:
+        settings: Mill runtime configuration (models, paths, limits).
+        service: :class:`TicketService` for reading ticket state and
+            workspace.
+    """
     settings: Settings
     service: TicketService
 
@@ -35,6 +42,12 @@ class Outcome:
 
 
 class Stage(ABC):
+    """One step in the ticket pipeline.
+
+    Implementors must set ``name`` and ``input_state``, and implement
+    :meth:`run`. Set ``traced = False`` for poll-driven, no-LLM stages
+    (e.g. merge, deliver) to avoid spamming empty Langfuse traces.
+    """
     #: unique stage name
     name: str
     #: the state this stage consumes
