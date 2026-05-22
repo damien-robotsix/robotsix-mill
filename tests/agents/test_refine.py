@@ -1818,16 +1818,26 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_auto_approve_obvious_skips_human_gate(ctx, service, monkeypatch, tmp_path):
-    """When triage_auto_approve returns OBVIOUS, the ticket goes straight
-    to READY even when require_approval=true."""
-    spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
+def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_path):
+    """When triage_auto_approve returns APPROVE, the ticket goes straight
+    to READY even when require_approval=true.  Uses a precise multi-file
+    feature spec to demonstrate the relaxed criteria."""
+    spec = (
+        "## Problem\nUsers need to export their data in CSV format.\n"
+        "## Scope\n- src/export/csv_writer.py: add write_csv() function\n"
+        "- src/cli/export.py: wire --format csv flag\n"
+        "- tests/export/test_csv_writer.py: add round-trip test\n"
+        "## Acceptance criteria\n"
+        "- [ ] write_csv() produces valid RFC 4180 CSV\n"
+        "- [ ] --format csv flag triggers CSV export path\n"
+        "- [ ] round-trip test passes: write then parse matches input\n"
+    )
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(
         refining, "triage_auto_approve",
         lambda **_: refining.AutoApproveResult(
-            decision="OBVIOUS", reason="doc-only typo fix in a single file",
+            decision="APPROVE", reason="precise multi-file feature, no design decisions",
         ),
     )
 
@@ -1838,23 +1848,28 @@ def test_auto_approve_obvious_skips_human_gate(ctx, service, monkeypatch, tmp_pa
     )
     gated_ctx = StageContext(settings=gated, service=service)
 
-    t = service.create("Fix typo", "fix a typo in README.md")
+    t = service.create("CSV export", "add CSV export feature")
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.READY
-    assert "auto-approve: OBVIOUS — doc-only typo fix in a single file" in out.note
+    assert "auto-approve: APPROVE — precise multi-file feature, no design decisions" in out.note
 
 
 def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tmp_path):
     """When triage_auto_approve returns NEEDS_APPROVAL, the ticket goes to
-    HUMAN_ISSUE_APPROVAL when gated."""
-    spec = "## Problem\nAdd new endpoint\n## Scope\n- src/api.py new POST /users route\n## Acceptance criteria\n- [ ] endpoint returns 201\n"
+    HUMAN_ISSUE_APPROVAL when gated.  The spec here is ambiguous about scope
+    — the implementer would have to guess where to make changes."""
+    spec = (
+        "## Problem\nImprove error handling across the application.\n"
+        "## Scope\n- Various files\n"
+        "## Acceptance criteria\n- [ ] errors are handled better\n"
+    )
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(
         refining, "triage_auto_approve",
         lambda **_: refining.AutoApproveResult(
-            decision="NEEDS_APPROVAL", reason="new API endpoint, logic change",
+            decision="NEEDS_APPROVAL", reason="ambiguous scope, unclear acceptance criteria",
         ),
     )
 
@@ -1865,11 +1880,11 @@ def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tm
     )
     gated_ctx = StageContext(settings=gated, service=service)
 
-    t = service.create("Add endpoint", "add a new POST endpoint")
+    t = service.create("Improve errors", "improve error handling")
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert "auto-approve: NEEDS_APPROVAL — new API endpoint, logic change" in out.note
+    assert "auto-approve: NEEDS_APPROVAL — ambiguous scope, unclear acceptance criteria" in out.note
 
 
 def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp_path):
@@ -1907,7 +1922,7 @@ def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path)
     def fake_auto_approve(*, settings, spec):
         nonlocal auto_approve_called
         auto_approve_called = True
-        return refining.AutoApproveResult(decision="OBVIOUS", reason="should not be reached")
+        return refining.AutoApproveResult(decision="APPROVE", reason="should not be reached")
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(refining, "triage_auto_approve", fake_auto_approve)
@@ -1923,6 +1938,109 @@ def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path)
     out = RefineStage().run(t, gated_ctx)
 
     assert not auto_approve_called
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+
+
+def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypatch, tmp_path):
+    """A precise, well-specified multi-file feature spec with clear
+    acceptance criteria → APPROVE, ticket goes to READY."""
+    spec = (
+        "## Problem\nAdd pagination to the list-endpoints response.\n"
+        "## Scope\n"
+        "- src/api/list.py: accept ?page= and ?per_page= query params\n"
+        "- src/db/queries.py: add LIMIT/OFFSET to list queries\n"
+        "- tests/api/test_list.py: test paginated responses\n"
+        "## Acceptance criteria\n"
+        "- [ ] GET /items?page=2&per_page=10 returns second page of 10 items\n"
+        "- [ ] default per_page=20 when not specified\n"
+        "- [ ] page < 1 returns 400\n"
+    )
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(
+        refining, "triage_auto_approve",
+        lambda **_: refining.AutoApproveResult(
+            decision="APPROVE", reason="precise multi-file feature, no design decisions",
+        ),
+    )
+
+    gated = Settings(
+        MILL_DATA_DIR=str(tmp_path),
+        MILL_REQUIRE_APPROVAL="true",
+        MILL_AUTO_APPROVE_ENABLED="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service)
+
+    t = service.create("Add pagination", "add pagination to list endpoints")
+    out = RefineStage().run(t, gated_ctx)
+
+    assert out.next_state is State.READY
+
+
+def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, tmp_path):
+    """A spec with ambiguous scope where the implementer would have to
+    guess → NEEDS_APPROVAL, ticket goes to HUMAN_ISSUE_APPROVAL."""
+    spec = (
+        "## Problem\nMake the app faster.\n"
+        "## Scope\n- Improve performance\n"
+        "## Acceptance criteria\n- [ ] app is faster\n"
+    )
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(
+        refining, "triage_auto_approve",
+        lambda **_: refining.AutoApproveResult(
+            decision="NEEDS_APPROVAL", reason="ambiguous scope, implementer must guess",
+        ),
+    )
+
+    gated = Settings(
+        MILL_DATA_DIR=str(tmp_path),
+        MILL_REQUIRE_APPROVAL="true",
+        MILL_AUTO_APPROVE_ENABLED="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service)
+
+    t = service.create("Make faster", "make the app faster")
+    out = RefineStage().run(t, gated_ctx)
+
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+
+
+def test_auto_approve_architecture_decision_needs_approval(ctx, service, monkeypatch, tmp_path):
+    """A spec introducing a new abstraction/module boundary →
+    NEEDS_APPROVAL, ticket goes to HUMAN_ISSUE_APPROVAL."""
+    spec = (
+        "## Problem\nIntroduce a plugin system so third-party extensions\n"
+        "can hook into the request pipeline.\n"
+        "## Scope\n"
+        "- src/core/plugin.py: new Plugin base class and registry\n"
+        "- src/core/pipeline.py: refactor to call plugin hooks\n"
+        "- src/core/__init__.py: export plugin API as public interface\n"
+        "## Acceptance criteria\n"
+        "- [ ] plugins can register before_request and after_response hooks\n"
+        "- [ ] hooks fire in registration order\n"
+        "- [ ] a faulty plugin does not crash the pipeline\n"
+    )
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(
+        refining, "triage_auto_approve",
+        lambda **_: refining.AutoApproveResult(
+            decision="NEEDS_APPROVAL", reason="new plugin abstraction, public API change",
+        ),
+    )
+
+    gated = Settings(
+        MILL_DATA_DIR=str(tmp_path),
+        MILL_REQUIRE_APPROVAL="true",
+        MILL_AUTO_APPROVE_ENABLED="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service)
+
+    t = service.create("Plugin system", "add plugin system")
+    out = RefineStage().run(t, gated_ctx)
+
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
 
 

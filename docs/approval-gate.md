@@ -17,15 +17,17 @@ To run fully autonomous (refine → implement with no pause), set
 
 When `MILL_REQUIRE_APPROVAL=true` and `MILL_AUTO_APPROVE_ENABLED=true`,
 a cheap, conservative LLM check inspects the refined spec **after**
-refinement. If the described change is "obviously safe" — cosmetic,
-doc-only, formatting, single-file, no logic changes — the ticket skips
-the human gate and transitions straight to `READY`. When the triage
-returns `NEEDS_APPROVAL` (or on any error), the ticket proceeds to
+refinement. If the spec is precise, unambiguous, and free of genuine
+design or architecture decisions — regardless of how many files are
+touched or whether logic changes — the ticket skips the human gate
+and transitions straight to `READY`. When the triage returns
+`NEEDS_APPROVAL` (or on any error), the ticket proceeds to
 `HUMAN_ISSUE_APPROVAL` as usual.
 
 This gives operators a middle ground between approving every ticket
 (toil) and disabling the gate entirely (risk). The triage is **biased
-conservative**: when uncertain, it defers to the human.
+conservative**: when unsure whether a genuine design decision exists,
+it defers to the human.
 
 The model used for triage is controlled by `MILL_AUTO_APPROVE_MODEL`
 (default: `openai/gpt-4o-mini`). Only the refined spec text is
