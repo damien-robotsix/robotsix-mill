@@ -8,6 +8,7 @@ APPROVE / REQUEST_CHANGES / NEEDS_DISCUSSION.
 
 from __future__ import annotations
 
+from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Literal
 
@@ -69,6 +70,25 @@ Return your verdict:
   (ambiguous design trade-off, unclear spec interpretation). Explain
   what needs discussion in comments.
 
+When the user prompt contains a ``<prior_context>`` block:
+- Check it for comments you already raised in earlier rounds — do NOT
+  re-raise the same issue unless the implement agent has *not* addressed
+  it.  If you recognise a contradiction across your own prior rounds,
+  resolve it and explain your final position.
+- The ``<implement_rebuttal>`` section (if present) contains the implement
+  agent's summary of what it did in the last round.  If it convincingly
+  demonstrates that a prior comment was a false positive (e.g. a claim
+  you made based on incomplete diff context), explicitly acknowledge the
+  withdrawal and drop that comment.  Do NOT re-raise withdrawn issues.
+
+You have access to read-only filesystem tools (``read_file`` and
+``list_dir``) on the real repo clone.  Use them:
+- Verify "missing import", "undefined symbol", "duplicated code", or
+  similar claims against the real file content *before* raising them.
+- If you cannot verify a claim from the diff alone, either verify it
+  with a tool or explicitly flag it as unverified ("I cannot confirm X
+  from the diff — consider checking manually").
+
 The ``auto_merge_eligible`` field:
 Set this to ``true`` ONLY when the change meets ALL of these criteria:
 - The diff is small and focused (single concern, few files).
@@ -88,30 +108,57 @@ def run_review_agent(
     diff: str,
     spec: str,
     model_name: str | None = None,
+    prior_context: str | None = None,
+    repo_dir: Path | None = None,
 ) -> ReviewVerdict:
     """Run a blind review of *diff* against *spec*.
 
     The agent receives ONLY the diff and spec — no implementation
     context, no memory, no history. Uses *model_name* if given,
-    otherwise falls back to ``settings.review_model``."""
+    otherwise falls back to ``settings.review_model``.
+
+    When *prior_context* is provided (prior review comments and the
+    implement agent's rebuttal from the last round), it is injected
+    before the ticket spec so the reviewer can avoid re-raising
+    resolved issues.
+
+    When *repo_dir* is provided, the agent receives read-only
+    filesystem tools (``read_file`` and ``list_dir``) sandboxed to
+    that directory, allowing it to verify claims before raising them.
+    ``run_command`` is deliberately excluded — even sandboxed, executing
+    shell is not read-only."""
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
     from .base import build_agent, _safe_close
     from .retry import call_with_retry
 
+    tools: list = []
+    if repo_dir is not None:
+        from .fs_tools import build_fs_tools
+
+        all_fs_tools = build_fs_tools(repo_dir, settings)
+        # run_command is deliberately NOT included — even sandboxed, executing
+        # shell is not read-only. The reviewer can verify file content via
+        # read_file + list_dir without arbitrary command execution.
+        readonly_names = {"read_file", "list_dir"}
+        tools = [t for t in all_fs_tools if t.__name__ in readonly_names]
+
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
         output_type=PromptedOutput(ReviewVerdict),
-        tools=[],
+        tools=tools,
         web=False,
         report_issue=False,
         model_name=model_name if model_name is not None else settings.review_model,
         name="review",
     )
     try:
-        user_prompt = (
+        user_prompt = ""
+        if prior_context is not None:
+            user_prompt += f"{prior_context}\n\n"
+        user_prompt += (
             f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
             f"<git_diff>\n{diff}\n</git_diff>"
         )
