@@ -962,45 +962,46 @@ def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
     assert out.next_state is State.REBASING
 
 
-# --- tracing: root span uses stage_name ---
+# --- tracing: root span only on first attempt ---
 
-def test_rebase_path_uses_stage_name_in_root_span(tmp_path, monkeypatch):
-    """The rebase path passes 'rebase' as the second positional arg to
-    start_ticket_root_span, so Langfuse shows 'rebase' as the trace
-    display name, not 'ticket'."""
-    ctx = _gh(tmp_path)
+def test_root_span_only_on_first_rebase_attempt(tmp_path, monkeypatch):
+    """start_ticket_root_span must fire only on attempt==1.
+    Retries (attempt>1) skip the root span to avoid creating duplicate
+    Langfuse traces for the same logical rebase operation."""
+    import contextlib
 
+    from robotsix_mill.runtime import tracing as tr
+
+    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="3")
+
+    root_calls = []
+    stage_calls = []
+
+    @contextlib.contextmanager
+    def fake_root(ticket_id, stage_name=None, extra_attributes=None):
+        root_calls.append({"ticket_id": ticket_id, "stage_name": stage_name})
+        yield
+
+    @contextlib.contextmanager
+    def fake_stage(stage_name):
+        stage_calls.append(stage_name)
+        yield
+
+    # Capture real functions before patching to avoid recursion gotchas
+    # if the wrapper were to import the real function after patching.
+    _real_root = tr.start_ticket_root_span
+    _real_stage = tr.trace_stage
+
+    monkeypatch.setattr(tr, "start_ticket_root_span", fake_root)
+    monkeypatch.setattr(tr, "trace_stage", fake_stage)
+    # Agent always fails → stays REBASING (retry loop).
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
-        lambda **k: RebaseResult(status="DONE", summary="ok"),
+        lambda **k: RebaseResult(status="FAILED", summary="nope"),
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
         lambda *a, **k: None,
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push",
-        lambda *a, **k: None,
-    )
-
-    captured_args = []
-
-    import contextlib
-
-    # Capture the real function before monkeypatching, because the
-    # wrapper delegates to it (and the import inside the wrapper would
-    # resolve to the monkeypatched version, causing infinite recursion).
-    from robotsix_mill.runtime.tracing import start_ticket_root_span as _real_start
-
-    @contextlib.contextmanager
-    def wrap_start_ticket_root_span(*args, **kwargs):
-        captured_args.append(args)
-        with _real_start(*args, **kwargs):
-            yield
-
-    monkeypatch.setattr(
-        "robotsix_mill.stages.merge.tracing.start_ticket_root_span",
-        wrap_start_ticket_root_span,
     )
 
     t = _in_rebasing(ctx)
@@ -1008,8 +1009,18 @@ def test_rebase_path_uses_stage_name_in_root_span(tmp_path, monkeypatch):
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
 
-    MergeStage().run(t, ctx)
+    # Run 3 times — simulating poll cycles.
+    for _ in range(3):
+        MergeStage().run(t, ctx)
 
-    assert len(captured_args) == 1
-    assert captured_args[0][0] == t.id
-    assert captured_args[0][1] == "rebase"
+    # Root span must have been called exactly once (first attempt only).
+    assert len(root_calls) == 1, (
+        f"expected 1 root span call, got {len(root_calls)}: {root_calls}"
+    )
+    assert root_calls[0]["ticket_id"] == t.id
+
+    # trace_stage("rebase") called once per invocation.
+    assert len(stage_calls) == 3, (
+        f"expected 3 stage calls, got {len(stage_calls)}: {stage_calls}"
+    )
+    assert all(s == "rebase" for s in stage_calls)
