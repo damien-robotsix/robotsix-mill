@@ -43,11 +43,8 @@ class Settings(BaseSettings):
     model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_MODEL"
     )
-    # NOTE: cheap candidates (deepseek-v4-flash) for explore/test/
-    # web_research are deferred — all default to the capable model for
-    # now (best performance); switch per-agent later for cost leverage.
     explore_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_EXPLORE_MODEL"
+        default="deepseek/deepseek-v4-flash", alias="MILL_EXPLORE_MODEL"
     )
     test_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_TEST_MODEL"
