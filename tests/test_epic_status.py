@@ -227,3 +227,442 @@ def test_e2e_update_description(settings, service, monkeypatch):
 
     assert service.get(epic.id).state == State.EPIC_OPEN
     assert service.workspace(epic).read_description() == new_desc
+
+
+# -----------------------------------------------------------------------
+# New child-ticket change tests
+# -----------------------------------------------------------------------
+
+
+def test_e2e_rewrites_generic_description(settings, service, monkeypatch):
+    """Epic has a vague one-liner description. Agent returns
+    ``update_description`` with a strategic rewrite. Assert the epic
+    description is replaced and epic stays EPIC_OPEN."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    strategic = (
+        "## Strategy\n\n"
+        "1. Implement the core engine (done — child #1)\n"
+        "2. Add the web dashboard (remaining — child #2)\n"
+        "3. Write integration tests (remaining — child #3)\n"
+    )
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="update_description", note=strategic,
+        ),
+    )
+
+    epic = service.create("My Epic", "Make it better", kind="epic")
+    c1 = service.create("Child 1", "part 1", parent_id=epic.id)
+    service.transition(c1.id, State.DONE)
+
+    _run_epic_reeval(epic.id, settings)
+
+    assert service.get(epic.id).state == State.EPIC_OPEN
+    assert service.workspace(epic).read_description() == strategic
+
+
+def test_e2e_adds_new_child(settings, service, monkeypatch):
+    """Agent returns ``new_children`` with one entry. Assert a new child
+    ticket is created under the epic with kind="task"."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Need more work.",
+            new_children=[{"title": "New work", "body": "Do the new thing."}],
+        ),
+    )
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    c1 = service.create("Child 1", "part 1", parent_id=epic.id)
+    service.transition(c1.id, State.DONE)
+
+    _run_epic_reeval(epic.id, settings)
+
+    children = service.list_children(epic.id)
+    titles = [c.title for c in children]
+    assert "New work" in titles
+    new_child = next(c for c in children if c.title == "New work")
+    assert new_child.kind == "task"
+    assert new_child.parent_id == epic.id
+
+
+def test_e2e_rescopes_draft_child(settings, service, monkeypatch):
+    """Epic has a child in DRAFT. Agent returns rescope with a new title.
+    Assert child's title is updated."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    child = service.create("Old Title", "old body", parent_id=epic.id)
+    # child starts in DRAFT
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Rescoping needed.",
+            child_rescopes={child.id: {"title": "Better title"}},
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    updated = service.get(child.id)
+    assert updated.title == "Better title"
+
+
+def test_e2e_skips_rescope_of_in_flight_child(settings, service, monkeypatch):
+    """Epic has a child in READY (in-flight). Agent returns rescope.
+    Assert child's title is NOT changed (reconciliation skips it)."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    child = service.create("Old Title", "old body", parent_id=epic.id)
+    service.transition(child.id, State.READY)  # move to in-flight
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Rescoping attempted.",
+            child_rescopes={child.id: {"title": "Better title"}},
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    updated = service.get(child.id)
+    assert updated.title == "Old Title"  # unchanged
+
+
+def test_e2e_closes_draft_child(settings, service, monkeypatch):
+    """Epic has a child in DRAFT. Agent returns child_closures with the
+    child's ID. Assert child transitions to CLOSED."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    child = service.create("Obsolete child", "no longer needed", parent_id=epic.id)
+    # child starts in DRAFT
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Closing obsolete child.",
+            child_closures=[child.id],
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    updated = service.get(child.id)
+    assert updated.state == State.CLOSED
+
+
+def test_e2e_skips_closure_of_done_child(settings, service, monkeypatch):
+    """Epic has a child in DONE. Agent returns child_closures.
+    Assert child stays in DONE (reconciliation skips terminal children)."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    child = service.create("Already done", "finished work", parent_id=epic.id)
+    service.transition(child.id, State.DONE)
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Attempting to close done child.",
+            child_closures=[child.id],
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    updated = service.get(child.id)
+    assert updated.state == State.DONE  # unchanged
+
+
+# -----------------------------------------------------------------------
+# Mixed operations & edge cases
+# -----------------------------------------------------------------------
+
+
+def test_e2e_mixed_operations(settings, service, monkeypatch):
+    """Agent proposes new children + rescopes + closures in one call.
+    Assert all safe operations are applied."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    draft_child = service.create("Rescope me", "old body", parent_id=epic.id)
+    close_child = service.create("Close me", "obsolete", parent_id=epic.id)
+    ready_child = service.create("In-flight", "don't touch", parent_id=epic.id)
+    service.transition(ready_child.id, State.READY)
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Mixed operations.",
+            new_children=[
+                {"title": "Fresh work", "body": "Do this new thing."},
+            ],
+            child_rescopes={
+                draft_child.id: {"title": "Rescoped title"},
+                ready_child.id: {"title": "Should not apply"},
+            },
+            child_closures=[close_child.id],
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    # New child created
+    children = service.list_children(epic.id)
+    titles = [c.title for c in children]
+    assert "Fresh work" in titles
+
+    # DRAFT child rescoped
+    assert service.get(draft_child.id).title == "Rescoped title"
+
+    # READY child NOT rescoped
+    assert service.get(ready_child.id).title == "In-flight"
+
+    # DRAFT child closed
+    assert service.get(close_child.id).state == State.CLOSED
+
+
+def test_e2e_new_child_missing_title(settings, service, monkeypatch, caplog):
+    """Agent returns new_children entry with empty title — skipped with warning."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Bad children.",
+            new_children=[{"title": "", "body": "some body"}],
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    children = service.list_children(epic.id)
+    assert len(children) == 0
+    assert "missing non-empty 'title'" in caplog.text
+
+
+def test_e2e_new_child_missing_body(settings, service, monkeypatch, caplog):
+    """Agent returns new_children entry with empty body — skipped with warning."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Bad children.",
+            new_children=[{"title": "A title", "body": ""}],
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    children = service.list_children(epic.id)
+    assert len(children) == 0
+    assert "missing non-empty 'body'" in caplog.text
+
+
+def test_e2e_rescope_missing_both_fields(settings, service, monkeypatch, caplog):
+    """Agent returns child_rescopes entry with neither title nor body — skipped."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    child = service.create("A child", "body", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Bad rescope.",
+            child_rescopes={child.id: {"title": "", "body": ""}},
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    assert service.get(child.id).title == "A child"  # unchanged
+    assert "has no non-empty 'title' or 'body'" in caplog.text
+
+
+def test_e2e_new_child_not_a_dict(settings, service, monkeypatch, caplog):
+    """Agent returns new_children with a non-dict entry — Pydantic
+    catches this before the worker runs, so the re-evaluation fails
+    with a validation error rather than crashing. The worker's
+    except-block logs the failure."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult.model_validate({
+            "decision": "keep_open",
+            "note": "Malformed.",
+            "new_children": ["not a dict"],
+        }),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    # Pydantic validation error is caught by the worker's except-block
+    assert "re-evaluation failed" in caplog.text
+
+
+def test_e2e_child_rescopes_not_a_dict(settings, service, monkeypatch, caplog):
+    """Agent returns child_rescopes with a non-dict value — Pydantic
+    catches this before the worker runs, so the re-evaluation fails
+    with a validation error rather than crashing."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    child = service.create("A child", "body", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult.model_validate({
+            "decision": "keep_open",
+            "note": "Malformed.",
+            "child_rescopes": {child.id: "not a dict"},
+        }),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    # Pydantic validation error is caught by the worker's except-block
+    assert "re-evaluation failed" in caplog.text
+
+
+def test_e2e_reconciliation_failure_does_not_crash(settings, service, monkeypatch):
+    """When a child reconciliation operation raises, the exception is
+    caught and logged — the re-evaluation does not crash."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    child = service.create("Will fail", "body", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Will trigger failure.",
+            child_rescopes={child.id: {"title": "New title"}},
+        ),
+    )
+
+    # Force svc.set_title to raise an exception to simulate a service failure
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService.set_title",
+        lambda self, tid, title: (_ for _ in ()).throw(RuntimeError("simulated failure")),
+    )
+
+    # Must not raise — the worker catches and logs
+    _run_epic_reeval(epic.id, settings)
+
+
+def test_e2e_closure_bad_id_type(settings, service, monkeypatch, caplog):
+    """Agent returns child_closures with a non-string entry — Pydantic
+    catches this before the worker runs, so the re-evaluation fails
+    with a validation error rather than crashing."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult.model_validate({
+            "decision": "keep_open",
+            "note": "Bad closure.",
+            "child_closures": [12345],
+        }),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    # Pydantic validation error is caught by the worker's except-block
+    assert "re-evaluation failed" in caplog.text
+
+
+def test_e2e_closure_nonexistent_child(settings, service, monkeypatch, caplog):
+    """Agent returns child_closures with a non-existent child ID —
+    logged as warning, does not crash."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Closing nonexistent.",
+            child_closures=["nonexistent-id"],
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    assert "not found" in caplog.text
+
+
+def test_e2e_all_fields_none_backward_compatible(settings, service, monkeypatch):
+    """When new fields are None (backward-compatible), the worker
+    handles them gracefully."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="All good.",
+            new_children=None,
+            child_rescopes=None,
+            child_closures=None,
+        ),
+    )
+
+    # Must not raise
+    _run_epic_reeval(epic.id, settings)
+    assert service.get(epic.id).state == State.EPIC_OPEN
+
+
+def test_e2e_rescope_updates_body(settings, service, monkeypatch):
+    """Agent returns child_rescopes with a new body for a DRAFT child.
+    Assert the body is updated."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+
+    epic = service.create("My Epic", "Build the thing", kind="epic")
+    child = service.create("Keep title", "old body", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_status.run_epic_status_agent",
+        lambda **kw: EpicStatusResult(
+            decision="keep_open",
+            note="Updating body.",
+            child_rescopes={child.id: {"body": "new strategic body"}},
+        ),
+    )
+
+    _run_epic_reeval(epic.id, settings)
+
+    assert service.get(child.id).title == "Keep title"  # unchanged
+    assert service.workspace(child).read_description() == "new strategic body"
