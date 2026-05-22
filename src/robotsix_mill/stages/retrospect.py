@@ -395,12 +395,6 @@ class RetrospectStage(Stage):
         if s.prune_clone_on_close:
             prune_clone(ws)
 
-        if s.prune_conversation_on_close:
-            from ..agents.ticket_context import ContextStore
-
-            store = ContextStore(s.data_dir / "conversations")
-            store.delete_conversation(ticket.id)
-
         note = res.conclusion or "closed"
         if spawned:
             note = f"{note} — improvement draft {spawned}"

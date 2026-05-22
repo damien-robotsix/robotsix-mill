@@ -24,9 +24,6 @@ import random
 import time
 from typing import Callable, TypeVar
 
-from pydantic_ai import capture_run_messages
-from pydantic_ai.messages import ModelMessagesTypeAdapter
-
 from ..config import Settings
 
 log = logging.getLogger("robotsix_mill.retry")
@@ -184,21 +181,7 @@ def call_with_retry(
             if using_fallback:
                 assert fallback_fn is not None  # type-narrowing
                 return fallback_fn()
-            with capture_run_messages() as messages:
-                result = fn()
-            # Persist captured messages when the context vars are wired.
-            if messages:
-                from .ticket_context import (
-                    _current_context_store,
-                    _current_conversation_id,
-                )
-                store = _current_context_store.get()
-                conv_id = _current_conversation_id.get()
-                if store is not None and conv_id is not None:
-                    messages_str = ModelMessagesTypeAdapter.dump_json(
-                        messages
-                    ).decode()
-                    store.append_messages(conv_id, messages_str)
+            result = fn()
             return result
         except Exception as e:  # noqa: BLE001 — re-raised unless retryable
             if attempt >= attempts:

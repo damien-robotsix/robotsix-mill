@@ -42,7 +42,7 @@ HEURISTICS:
 - **Indirect-only**: tested only through integration tests AND >80
   lines → flag for review.
 - **Exclude**: ABCs <60 lines, stubs (e.g. `gitlab.py`), trivial
-  wrappers (e.g. `ticket_context.py` at 22 lines).
+  wrappers.
 
 DRAFT FORMAT:
 
