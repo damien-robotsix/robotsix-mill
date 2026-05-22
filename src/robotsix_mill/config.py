@@ -283,6 +283,19 @@ class Settings(BaseSettings):
         default=True, alias="MILL_REQUIRE_APPROVAL"
     )
 
+    # When true, a cheap conservative LLM call inspects the refined spec
+    # after refinement.  If the change is "obviously safe" (cosmetic,
+    # doc-only, single-file, no logic changes) the ticket skips the
+    # human approval gate and goes straight to READY.  When false
+    # (default), every gated ticket waits for a human click.
+    auto_approve_enabled: bool = Field(
+        default=False, alias="MILL_AUTO_APPROVE_ENABLED"
+    )
+    # Model for the auto-approve triage call — must be fast and cheap.
+    auto_approve_model: str = Field(
+        default="openai/gpt-4o-mini", alias="MILL_AUTO_APPROVE_MODEL"
+    )
+
     # --- dual-model review gate (implement → deliver) ---
     # When true, the implement stage transitions to code_review instead of
     # deliverable. A dedicated review agent audits the diff blind before the

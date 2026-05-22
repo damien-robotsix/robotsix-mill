@@ -84,6 +84,8 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 | Env var | Python field | Default | Type | Description |
 |---|---|---|---|---|
 | `MILL_REQUIRE_APPROVAL` | `require_approval` | `true` | `bool` | Pause after refine for human approval (`awaiting_approval` state) |
+| `MILL_AUTO_APPROVE_ENABLED` | `auto_approve_enabled` | `false` | `bool` | Enable conservative auto-approve triage: trivially safe specs skip the human gate |
+| `MILL_AUTO_APPROVE_MODEL` | `auto_approve_model` | `openai/gpt-4o-mini` | `str` | Model for the auto-approve triage call (must be fast and cheap) |
 | `MILL_REVIEW_ENABLED` | `review_enabled` | `false` | `bool` | Enable dual-model code review stage before deliver |
 | `MILL_REVIEW_MODEL` | `review_model` | `deepseek/deepseek-v4-pro` | `str` | Review agent model (see §1) |
 

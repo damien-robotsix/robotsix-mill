@@ -1714,3 +1714,116 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
     assert refine_called
     assert out.next_state is State.READY
     assert out.note == "refined"
+
+
+# ---------------------------------------------------------------------------
+# auto-approve triage tests
+# ---------------------------------------------------------------------------
+
+
+def test_auto_approve_obvious_skips_human_gate(ctx, service, monkeypatch, tmp_path):
+    """When triage_auto_approve returns OBVIOUS, the ticket goes straight
+    to READY even when require_approval=true."""
+    spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(
+        refining, "triage_auto_approve",
+        lambda **_: refining.AutoApproveResult(
+            decision="OBVIOUS", reason="doc-only typo fix in a single file",
+        ),
+    )
+
+    gated = Settings(
+        MILL_DATA_DIR=str(tmp_path),
+        MILL_REQUIRE_APPROVAL="true",
+        MILL_AUTO_APPROVE_ENABLED="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service)
+
+    t = service.create("Fix typo", "fix a typo in README.md")
+    out = RefineStage().run(t, gated_ctx)
+
+    assert out.next_state is State.READY
+    assert "auto-approved: doc-only typo fix in a single file" in out.note
+
+
+def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tmp_path):
+    """When triage_auto_approve returns NEEDS_APPROVAL, the ticket goes to
+    HUMAN_ISSUE_APPROVAL when gated."""
+    spec = "## Problem\nAdd new endpoint\n## Scope\n- src/api.py new POST /users route\n## Acceptance criteria\n- [ ] endpoint returns 201\n"
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(
+        refining, "triage_auto_approve",
+        lambda **_: refining.AutoApproveResult(
+            decision="NEEDS_APPROVAL", reason="new API endpoint, logic change",
+        ),
+    )
+
+    gated = Settings(
+        MILL_DATA_DIR=str(tmp_path),
+        MILL_REQUIRE_APPROVAL="true",
+        MILL_AUTO_APPROVE_ENABLED="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service)
+
+    t = service.create("Add endpoint", "add a new POST endpoint")
+    out = RefineStage().run(t, gated_ctx)
+
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert "auto-approved" not in out.note
+
+
+def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp_path):
+    """When triage_auto_approve raises, the ticket falls back to
+    HUMAN_ISSUE_APPROVAL when gated."""
+    spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(
+        refining, "triage_auto_approve",
+        lambda **_: (_ for _ in ()).throw(RuntimeError("auto-approve model down")),
+    )
+
+    gated = Settings(
+        MILL_DATA_DIR=str(tmp_path),
+        MILL_REQUIRE_APPROVAL="true",
+        MILL_AUTO_APPROVE_ENABLED="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service)
+
+    t = service.create("Fix typo", "fix a typo in README.md")
+    out = RefineStage().run(t, gated_ctx)
+
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert "auto-approved" not in out.note
+
+
+def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path):
+    """When auto_approve_enabled=false, triage_auto_approve is never called
+    and the ticket follows normal gated behaviour."""
+    spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
+
+    auto_approve_called = False
+
+    def fake_auto_approve(*, settings, spec):
+        nonlocal auto_approve_called
+        auto_approve_called = True
+        return refining.AutoApproveResult(decision="OBVIOUS", reason="should not be reached")
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(refining, "triage_auto_approve", fake_auto_approve)
+
+    gated = Settings(
+        MILL_DATA_DIR=str(tmp_path),
+        MILL_REQUIRE_APPROVAL="true",
+        MILL_AUTO_APPROVE_ENABLED="false",
+    )
+    gated_ctx = StageContext(settings=gated, service=service)
+
+    t = service.create("Fix typo", "fix a typo in README.md")
+    out = RefineStage().run(t, gated_ctx)
+
+    assert not auto_approve_called
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
