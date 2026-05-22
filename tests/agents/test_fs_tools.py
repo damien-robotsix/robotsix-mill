@@ -649,9 +649,9 @@ class TestFileReadCache:
     """Tests for the in-memory file-content cache in ``build_fs_tools``."""
 
     def test_repeated_read_hits_cache(self, tmp_path, settings):
-        """Two consecutive reads return identical content; mutating the
-        file on disk behind the cache's back doesn't change the second
-        read."""
+        """First full-file read returns content; second returns a stub
+        ("already in context above — unchanged") because the cache is
+        still populated."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "original\n")
@@ -660,10 +660,8 @@ class TestFileReadCache:
         first = tools["read_file"]("f.txt")
         assert first == "original\n"
 
-        # Mutate the file on disk behind the cache's back.
-        (root / "f.txt").write_text("mutated\n", encoding="utf-8")
         second = tools["read_file"]("f.txt")
-        assert second == "original\n"
+        assert second == "already in context above — unchanged"
 
     def test_offset_limit_still_hits_cache(self, tmp_path, settings):
         """A full read populates the cache; a subsequent offset/limit
@@ -734,7 +732,7 @@ class TestFileReadCache:
 
     def test_equivalent_paths_same_cache_entry(self, tmp_path, settings):
         """``read_file("foo/bar.py")`` and ``read_file("./foo/bar.py")``
-        hit the same cache entry."""
+        hit the same cache entry — the second full-file read returns a stub."""
         root = tmp_path / "repo"
         root.mkdir()
         (root / "sub").mkdir()
@@ -745,16 +743,14 @@ class TestFileReadCache:
         first = tools["read_file"]("./sub/file.txt")
         assert first == "cached\n"
 
-        # Mutate on disk.
-        (root / "sub" / "file.txt").write_text("mutated\n", encoding="utf-8")
-
-        # Second read via the normal path — must hit cache.
+        # Second read via the normal path — must hit cache → stub.
         second = tools["read_file"]("sub/file.txt")
-        assert second == "cached\n"
+        assert second == "already in context above — unchanged"
 
     def test_parent_dotdot_paths_same_cache_entry(self, tmp_path, settings):
         """``read_file("sub/../sub/file.txt")`` resolves to the same
-        canonical path as ``read_file("sub/file.txt")``."""
+        canonical path as ``read_file("sub/file.txt")`` — the second
+        full-file read returns a stub."""
         root = tmp_path / "repo"
         root.mkdir()
         (root / "sub").mkdir()
@@ -764,10 +760,8 @@ class TestFileReadCache:
         first = tools["read_file"]("sub/file.txt")
         assert first == "cached\n"
 
-        (root / "sub" / "file.txt").write_text("mutated\n", encoding="utf-8")
-
         second = tools["read_file"]("sub/../sub/file.txt")
-        assert second == "cached\n"
+        assert second == "already in context above — unchanged"
 
     def test_error_returns_not_cached(self, tmp_path, settings):
         """read_file of a nonexistent file returns an error string and
@@ -799,3 +793,71 @@ class TestFileReadCache:
         # must not be poisoned by the prior error.
         _make_file(root, "passwd", "local\n")
         assert tools["read_file"]("passwd") == "local\n"
+
+    def test_repeat_full_read_returns_stub(self, tmp_path, settings):
+        """First full-file read returns content; second returns stub."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "hello\n")
+        tools = _build(root, settings)
+
+        first = tools["read_file"]("f.txt")
+        assert first == "hello\n"
+
+        second = tools["read_file"]("f.txt")
+        assert second == "already in context above — unchanged"
+
+    def test_offset_limit_read_not_stubbed(self, tmp_path, settings):
+        """Full read populates cache; offset/limit read still returns
+        the actual slice, not a stub."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "line1\nline2\nline3\n")
+        tools = _build(root, settings)
+
+        # Populate cache with full read.
+        tools["read_file"]("f.txt")
+
+        # Offset/limit read returns slice from cache.
+        result = tools["read_file"]("f.txt", offset=2, limit=1)
+        assert result == "line2\n"
+
+    def test_after_edit_subsequent_read_returns_stub(self, tmp_path, settings):
+        """After edit_file invalidates cache, first read returns fresh
+        content; second read returns stub."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "hello world\n")
+        tools = _build(root, settings)
+
+        # Read → content.
+        assert tools["read_file"]("f.txt") == "hello world\n"
+
+        # Edit → invalidates.
+        tools["edit_file"]("f.txt", "hello", "HELLO")
+
+        # First read after edit → fresh content from disk.
+        assert tools["read_file"]("f.txt") == "HELLO world\n"
+
+        # Second read → stub.
+        assert tools["read_file"]("f.txt") == "already in context above — unchanged"
+
+    def test_after_write_subsequent_read_returns_stub(self, tmp_path, settings):
+        """After write_file invalidates cache, first read returns new
+        content; second read returns stub."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "old\n")
+        tools = _build(root, settings)
+
+        # Read → content.
+        assert tools["read_file"]("f.txt") == "old\n"
+
+        # Write → invalidates.
+        tools["write_file"]("f.txt", "new\n")
+
+        # First read after write → fresh content from disk.
+        assert tools["read_file"]("f.txt") == "new\n"
+
+        # Second read → stub.
+        assert tools["read_file"]("f.txt") == "already in context above — unchanged"
