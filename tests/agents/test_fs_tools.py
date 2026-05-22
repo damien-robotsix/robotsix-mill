@@ -639,3 +639,163 @@ class TestNeverRaises:
                 continue
             assert isinstance(r, str), f"{name} returned {type(r)}"
             assert "error" in r.lower(), f"{name}: {r!r}"
+
+
+# ===================================================================
+# File-read cache
+# ===================================================================
+
+class TestFileReadCache:
+    """Tests for the in-memory file-content cache in ``build_fs_tools``."""
+
+    def test_repeated_read_hits_cache(self, tmp_path, settings):
+        """Two consecutive reads return identical content; mutating the
+        file on disk behind the cache's back doesn't change the second
+        read."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "original\n")
+        tools = _build(root, settings)
+
+        first = tools["read_file"]("f.txt")
+        assert first == "original\n"
+
+        # Mutate the file on disk behind the cache's back.
+        (root / "f.txt").write_text("mutated\n", encoding="utf-8")
+        second = tools["read_file"]("f.txt")
+        assert second == "original\n"
+
+    def test_offset_limit_still_hits_cache(self, tmp_path, settings):
+        """A full read populates the cache; a subsequent offset/limit
+        read hits the cache and slices correctly."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "line1\nline2\nline3\n")
+        tools = _build(root, settings)
+
+        # Populate cache with full read.
+        tools["read_file"]("f.txt")
+
+        # Mutate on disk.
+        (root / "f.txt").write_text("x\ny\nz\n", encoding="utf-8")
+
+        # Offset/limit read should still return cached original.
+        result = tools["read_file"]("f.txt", offset=2, limit=1)
+        assert result == "line2\n"
+
+    def test_write_file_invalidates(self, tmp_path, settings):
+        """After write_file, a subsequent read_file sees the new content."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "old\n")
+        tools = _build(root, settings)
+
+        # Populate cache.
+        assert tools["read_file"]("f.txt") == "old\n"
+
+        # Write new content.
+        tools["write_file"]("f.txt", "new\n")
+        # Read must see the new content.
+        assert tools["read_file"]("f.txt") == "new\n"
+
+    def test_edit_file_invalidates(self, tmp_path, settings):
+        """After edit_file, a subsequent read_file sees the edited content."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "hello world\n")
+        tools = _build(root, settings)
+
+        # Populate cache.
+        assert tools["read_file"]("f.txt") == "hello world\n"
+
+        # Edit.
+        tools["edit_file"]("f.txt", "hello", "HELLO")
+        # Read must see edited content.
+        assert tools["read_file"]("f.txt") == "HELLO world\n"
+
+    def test_delete_file_invalidates(self, tmp_path, settings):
+        """After delete_file, the cache entry is removed.  A subsequent
+        read_file of a freshly created file with the same name sees the
+        new content."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "first\n")
+        tools = _build(root, settings)
+
+        # Populate cache.
+        assert tools["read_file"]("f.txt") == "first\n"
+
+        # Delete.
+        tools["delete_file"]("f.txt")
+
+        # Create a fresh file at the same path.
+        _make_file(root, "f.txt", "second\n")
+        assert tools["read_file"]("f.txt") == "second\n"
+
+    def test_equivalent_paths_same_cache_entry(self, tmp_path, settings):
+        """``read_file("foo/bar.py")`` and ``read_file("./foo/bar.py")``
+        hit the same cache entry."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "sub").mkdir()
+        _make_file(root, "sub/file.txt", "cached\n")
+        tools = _build(root, settings)
+
+        # First read via a path with a dot prefix.
+        first = tools["read_file"]("./sub/file.txt")
+        assert first == "cached\n"
+
+        # Mutate on disk.
+        (root / "sub" / "file.txt").write_text("mutated\n", encoding="utf-8")
+
+        # Second read via the normal path — must hit cache.
+        second = tools["read_file"]("sub/file.txt")
+        assert second == "cached\n"
+
+    def test_parent_dotdot_paths_same_cache_entry(self, tmp_path, settings):
+        """``read_file("sub/../sub/file.txt")`` resolves to the same
+        canonical path as ``read_file("sub/file.txt")``."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "sub").mkdir()
+        _make_file(root, "sub/file.txt", "cached\n")
+        tools = _build(root, settings)
+
+        first = tools["read_file"]("sub/file.txt")
+        assert first == "cached\n"
+
+        (root / "sub" / "file.txt").write_text("mutated\n", encoding="utf-8")
+
+        second = tools["read_file"]("sub/../sub/file.txt")
+        assert second == "cached\n"
+
+    def test_error_returns_not_cached(self, tmp_path, settings):
+        """read_file of a nonexistent file returns an error string and
+        does not populate the cache.  A later creation + read must see
+        the new content."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        # First call on a nonexistent file → error, not cached.
+        result = tools["read_file"]("nonexistent.txt")
+        assert "error" in result.lower()
+
+        # Create the file and read — must read from disk.
+        _make_file(root, "nonexistent.txt", "now exists\n")
+        assert tools["read_file"]("nonexistent.txt") == "now exists\n"
+
+    def test_escape_error_not_cached(self, tmp_path, settings):
+        """read_file of a path outside root returns an error string and
+        does not populate the cache."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        result = tools["read_file"]("../../../etc/passwd")
+        assert "error" in result.lower()
+
+        # A subsequent read of a valid file with name "passwd" in root
+        # must not be poisoned by the prior error.
+        _make_file(root, "passwd", "local\n")
+        assert tools["read_file"]("passwd") == "local\n"

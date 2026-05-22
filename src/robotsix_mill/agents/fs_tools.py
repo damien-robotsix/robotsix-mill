@@ -31,6 +31,22 @@ def _safe(root: Path, rel: str) -> Path:
 def build_fs_tools(root: Path, settings: Settings) -> list:
     root = Path(root).resolve()
 
+    # In-memory file-content cache shared by all closures in this
+    # build_fs_tools call.  Lifetime = one agent invocation.
+    _file_cache: dict[Path, str] = {}
+
+    def _read_cached(p: Path) -> str:
+        """Read *p* and cache the result.  *p* is already sandbox-safe
+        (returned by ``_safe``), but we ``resolve()`` again for a
+        canonical cache key.  ``ValueError`` / ``OSError`` are re-raised
+        so the caller can convert them to error strings."""
+        key = p.resolve()
+        if key in _file_cache:
+            return _file_cache[key]
+        text = p.read_text(encoding="utf-8", errors="replace")
+        _file_cache[key] = text
+        return text
+
     # Tools return errors as strings so the model can self-correct
     # (try another path, list the dir, ...) instead of the whole agent
     # run aborting on an exception.
@@ -49,9 +65,8 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
           actual line count.
         """
         try:
-            text = _safe(root, path).read_text(
-                encoding="utf-8", errors="replace"
-            )
+            p = _safe(root, path)
+            text = _read_cached(p)
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
@@ -75,6 +90,7 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
             p.write_text(content, encoding="utf-8")
         except (ValueError, OSError) as e:
             return f"error: {e}"
+        _file_cache.pop(p.resolve(), None)
         return f"wrote {len(content)} bytes to {path}"
 
     def edit_file(path: str, old_string: str, new_string: str) -> str:
@@ -84,7 +100,7 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
         for surgical edits over ``write_file``."""
         try:
             p = _safe(root, path)
-            content = p.read_text(encoding="utf-8", errors="replace")
+            content = _read_cached(p)
             count = content.count(old_string)
             if count == 0:
                 return (
@@ -101,6 +117,7 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
                 content.replace(old_string, new_string, 1),
                 encoding="utf-8",
             )
+            _file_cache.pop(p.resolve(), None)
             return f"edit_file: replaced 1 occurrence in {path}"
         except (ValueError, OSError) as e:
             return f"error: {e}"
@@ -112,6 +129,7 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
             p.unlink()
         except (ValueError, OSError) as e:
             return f"error: {e}"
+        _file_cache.pop(p.resolve(), None)
         return f"deleted {path}"
 
     def list_dir(path: str = ".") -> str:
