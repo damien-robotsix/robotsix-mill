@@ -54,7 +54,7 @@ def run_jscpd(repo_dir: Path) -> str:
     except OSError as exc:
         return f"ERROR: could not run jscpd — {exc}"
 
-    # jscpd can exit 0 even with findings; non-zero = execution error.
+    # jscpd exits non-zero on findings (and on execution errors).
     if result.returncode != 0 and not result.stdout.strip():
         return (
             f"ERROR: jscpd exited with code {result.returncode}. "
@@ -141,15 +141,16 @@ def make_jscpd_tool(repo_dir: Path):
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="detect_duplication",
-        description=(
-            "Run jscpd to detect copy-paste duplication across the "
-            "repository, returning clone pairs with file paths, line "
-            "ranges, and duplication metrics."
-        ),
-        category="exploration",
-        parameters={},
-    ))
+    if "detect_duplication" not in ToolRegistry._tools:
+        ToolRegistry.register(ToolInfo(
+            name="detect_duplication",
+            description=(
+                "Run jscpd to detect copy-paste duplication across the "
+                "repository, returning clone pairs with file paths, line "
+                "ranges, and duplication metrics."
+            ),
+            category="exploration",
+            parameters={},
+        ))
 
     return detect_duplication
