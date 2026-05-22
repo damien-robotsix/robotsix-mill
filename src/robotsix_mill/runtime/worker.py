@@ -79,8 +79,24 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
                     es.enter_context(
                         tracing.start_ticket_root_span(ticket_id, stage_name)
                     )
-                # stage.run is sync (LLM/tool) — keep the loop responsive
-                outcome = await asyncio.to_thread(stage.run, ticket, ctx)
+                # Wire conversation context so retry.py can capture LLM
+                # messages into the ticket's ContextStore.
+                from ..agents.ticket_context import (
+                    _current_context_store,
+                    _current_conversation_id,
+                    ContextStore,
+                )
+                store = ContextStore(ctx.settings.data_dir / "conversations")
+                token_store = _current_context_store.set(store)
+                token_id = _current_conversation_id.set(ticket_id)
+                try:
+                    # stage.run is sync (LLM/tool) — keep the loop responsive
+                    outcome = await asyncio.to_thread(
+                        stage.run, ticket, ctx
+                    )
+                finally:
+                    _current_context_store.reset(token_store)
+                    _current_conversation_id.reset(token_id)
         except NotImplementedError as e:
             log.warning(
                 "%s: stub (%s) — chain paused at %s for %s",
