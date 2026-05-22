@@ -303,6 +303,13 @@ class Settings(BaseSettings):
     review_enabled: bool = Field(
         default=False, alias="MILL_REVIEW_ENABLED"
     )
+    # When true (and review is enabled + the review agent marks the
+    # change as auto-merge-eligible), the merge stage will attempt to
+    # merge its own green PR via the forge API without waiting for a
+    # human. Default False (opt-in).
+    auto_merge_enabled: bool = Field(
+        default=False, alias="MILL_AUTO_MERGE_ENABLED"
+    )
     # When True (default), a cheap triage LLM call runs before the full
     # refine agent.  Drafts that are already precise, single-scoped, and
     # implementation-ready skip the full refine — saving cost & latency.

@@ -1024,3 +1024,305 @@ def test_root_span_only_on_first_rebase_attempt(tmp_path, monkeypatch):
         f"expected 3 stage calls, got {len(stage_calls)}: {stage_calls}"
     )
     assert all(s == "rebase" for s in stage_calls)
+
+
+# ============================================================
+# E. Auto-merge gate (new)
+# ============================================================
+
+def _write_review_artifact(ctx, ticket, *, verdict="APPROVE", eligible=True):
+    """Helper: write a review.md artifact for auto-merge tests."""
+    art_dir = ctx.service.workspace(ticket).artifacts_dir
+    art_dir.mkdir(parents=True, exist_ok=True)
+    (art_dir / "review.md").write_text(
+        f"verdict: {verdict}\n"
+        f"auto_merge_eligible: {str(eligible).lower()}\n",
+        encoding="utf-8",
+    )
+
+
+def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
+    """Mergeable + CI success + auto_merge_enabled + review_enabled +
+    artifact auto_merge_eligible: true + merge_pr returns merged → DONE."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "https://gh/o/r/pull/1",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert "auto-merged" in out.note
+
+
+def test_auto_merge_skipped_when_flag_disabled(tmp_path, monkeypatch):
+    """auto_merge_enabled=False → HUMAN_MR_APPROVAL (standard no-op)."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="false", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []
+
+
+def test_auto_merge_skipped_when_review_disabled(tmp_path, monkeypatch):
+    """review_enabled=False → HUMAN_MR_APPROVAL even when auto_merge_enabled=True
+    and artifact says eligible."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="false")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []
+
+
+def test_auto_merge_skipped_when_no_review_artifact(tmp_path, monkeypatch):
+    """Artifact file doesn't exist → HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    # NO review artifact written
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []
+
+
+def test_auto_merge_skipped_when_not_eligible(tmp_path, monkeypatch):
+    """Artifact says auto_merge_eligible: false → HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t, eligible=False)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []
+
+
+def test_auto_merge_skipped_when_ci_pending(tmp_path, monkeypatch):
+    """CI conclusion is 'pending', not 'success' → HUMAN_MR_APPROVAL
+    (auto-merge gate never entered)."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []
+
+
+def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
+    """CI conclusion is 'failure' → FIXING_CI (auto-merge gate never entered)."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "failure", "failing": []},
+    )
+
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.FIXING_CI
+    assert merge_called == []
+
+
+def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
+    """mergeable=False → REBASING (auto-merge gate never entered)."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": False,
+        },
+    )
+
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.REBASING
+    assert merge_called == []
+
+
+def test_merge_pr_failure_stays_human_mr_approval(tmp_path, monkeypatch):
+    """merge_pr returns {'merged': False} → HUMAN_MR_APPROVAL (not BLOCKED)."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: {
+            "merged": False, "reason": "branch protection",
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_auto_merge_writes_merge_artifact(tmp_path, monkeypatch):
+    """On success, merge.md is written with the PR URL."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "https://gh/o/r/pull/42",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    merge_artifact = ctx.service.workspace(t).artifacts_dir / "merge.md"
+    assert merge_artifact.exists()
+    content = merge_artifact.read_text(encoding="utf-8")
+    assert "auto-merged: https://gh/o/r/pull/42" in content

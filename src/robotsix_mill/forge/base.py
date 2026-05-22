@@ -67,6 +67,15 @@ class Forge(ABC):
         """
 
     @abstractmethod
+    def merge_pr(self, *, source_branch: str) -> dict:
+        """Merge the PR for *source_branch* (squash merge).
+
+        Returns ``{"merged": True, "reason": "..."}`` on success,
+        ``{"merged": False, "reason": "..."}`` on failure. Must never
+        raise for API-level failures (branch protection, not mergeable,
+        conflict, network error) — catch and return a failure dict."""
+
+    @abstractmethod
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict]:

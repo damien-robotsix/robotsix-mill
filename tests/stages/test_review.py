@@ -224,3 +224,68 @@ def test_missing_repo_blocks(ctx_factory):
     out = ReviewStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "re-run implement" in out.note
+
+
+# --- review.md artifact --------------------------------------------------
+
+def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
+    """APPROVE with auto_merge_eligible=True → review.md exists."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+
+    def _fake_review(*, settings, diff, spec, model_name=None):
+        del settings, diff, spec, model_name
+        return ReviewVerdict(
+            verdict="APPROVE", comments="lgtm", auto_merge_eligible=True,
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    ReviewStage().run(t, ctx)
+    artifact = ctx.service.workspace(t).artifacts_dir / "review.md"
+    assert artifact.exists()
+    text = artifact.read_text(encoding="utf-8")
+    assert "verdict: APPROVE" in text
+    assert "auto_merge_eligible: true" in text
+
+
+def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
+    """REQUEST_CHANGES → review.md exists with auto_merge_eligible: false."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+
+    def _fake_review(*, settings, diff, spec, model_name=None):
+        del settings, diff, spec, model_name
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES", comments="fix X",
+            auto_merge_eligible=False,
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    ReviewStage().run(t, ctx)
+    artifact = ctx.service.workspace(t).artifacts_dir / "review.md"
+    assert artifact.exists()
+    text = artifact.read_text(encoding="utf-8")
+    assert "verdict: REQUEST_CHANGES" in text
+    assert "auto_merge_eligible: false" in text
+
+
+def test_auto_merge_eligible_defaults_false(ctx_factory, monkeypatch):
+    """When the model omits auto_merge_eligible, it defaults to False."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+
+    # Simulate an agent response that only includes verdict + comments
+    from pydantic import BaseModel
+
+    class PartialVerdict(BaseModel):
+        verdict: str = "APPROVE"
+        comments: str = "ok"
+
+    verdict = ReviewVerdict(**PartialVerdict().model_dump())
+    assert verdict.auto_merge_eligible is False
