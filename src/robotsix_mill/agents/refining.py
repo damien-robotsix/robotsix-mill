@@ -44,6 +44,7 @@ class RefineResult(BaseModel):
     spec_markdown: str | None = None
     children: list[ChildSpec] | None = None
     updated_memory: str = ""
+    title: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -232,6 +233,11 @@ Rules for splitting:
   ``depends_on``.
 - The union of all children's scope must faithfully cover the entire
   original draft — nothing dropped, nothing added.
+
+- When the draft title is vague, misleading, or just plain wrong for
+  the refined scope, set ``title`` to a concise, descriptive
+  alternative. Leave it unset (None) when the original title is
+  already accurate — don't rename just for the sake of renaming.
 """
 
 REVIEWER_SENDBACK_PROMPT = """\

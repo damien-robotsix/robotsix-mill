@@ -240,6 +240,9 @@ class RefineStage(Stage):
 
             if result.updated_memory:
                 persist_memory(s.refine_memory_file, result.updated_memory)
+
+            if result.title and result.title.strip():
+                ctx.service.set_title(ticket.id, result.title.strip())
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))
 
@@ -326,8 +329,10 @@ class RefineStage(Stage):
             child = valid_children[0]
             new_hash = ws.write_description(child["spec_markdown"])
             ctx.service.set_content_hash(ticket.id, new_hash)
-            # Also update the ticket title to the child's title.
-            ctx.service.set_title(ticket.id, child["title"])
+            # Update the ticket title: agent's explicit title beats
+            # the child's title (which is a fallback).
+            if not (result.title and result.title.strip()):
+                ctx.service.set_title(ticket.id, child["title"])
             next_state = (
                 State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
                 else State.READY
