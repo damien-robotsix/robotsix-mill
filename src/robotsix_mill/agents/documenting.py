@@ -117,6 +117,6 @@ def run_doc_agent(
             lambda: agent.run_sync(user_prompt, usage_limits=limits),
             settings=settings, what="document",
         )
+        return result.output
     finally:
         _safe_close(agent)
-    return result.output
