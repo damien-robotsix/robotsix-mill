@@ -16,9 +16,12 @@ plumbing (the transcript is now empty — resume = fresh coordinator).
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from ..config import Settings
+
+log = logging.getLogger("robotsix_mill.coding")
 
 
 class AgentBudgetError(RuntimeError):
@@ -51,7 +54,7 @@ def run_implement_agent(
     accepted for the stage's signature but unused — the coordinator
     owns the explore→implement→test loop and a resume re-runs it
     fresh."""
-    from pydantic_ai.exceptions import UsageLimitExceeded
+    from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
     from .coordinating import run_coordinator
 
@@ -61,6 +64,23 @@ def run_implement_agent(
         )
     except UsageLimitExceeded as e:
         raise AgentBudgetError(str(e), []) from e
+    except UnexpectedModelBehavior as e:
+        log.warning(
+            "implement: output retries exhausted on primary model (%s), "
+            "falling back to deepseek/deepseek-v4-flash",
+            settings.model,
+        )
+        try:
+            result = run_coordinator(
+                settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
+                model_name="deepseek/deepseek-v4-flash",
+            )
+        except Exception as fallback_e:
+            raise AgentRunError(
+                f"output retries exhausted on primary + fallback models: "
+                f"primary={e}, fallback={fallback_e}",
+                [],
+            ) from e
     except (AgentBudgetError, AgentRunError):
         raise
     except Exception as e:  # noqa: BLE001 — block-as-resumable

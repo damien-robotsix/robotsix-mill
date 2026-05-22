@@ -71,7 +71,7 @@ def test_build_agent_attaches_report_issue_by_default(settings, monkeypatch):
     captured = {}
 
     class _FakeAgent:
-        def __init__(self, *, model, system_prompt, output_type, tools):
+        def __init__(self, *, model, system_prompt, output_type, tools, retries):
             captured["tools"] = tools
 
     monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
@@ -118,7 +118,7 @@ def test_build_agent_without_report_issue(settings, monkeypatch):
     captured = {}
 
     class _FakeAgent:
-        def __init__(self, *, model, system_prompt, output_type, tools):
+        def __init__(self, *, model, system_prompt, output_type, tools, retries):
             captured["tools"] = tools
 
     monkeypatch.setattr("pydantic_ai.Agent", _FakeAgent)
@@ -146,7 +146,7 @@ def test_audit_agent_omits_report_issue(settings, monkeypatch):
     captured = {}
 
     class _FakeAgent:
-        def __init__(self, *, model, system_prompt, output_type, tools, name=None):
+        def __init__(self, *, model, system_prompt, output_type, tools, name=None, retries=None):
             captured["tools"] = tools
             captured["name"] = name
 
