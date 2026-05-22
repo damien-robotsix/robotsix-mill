@@ -19,6 +19,35 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.review")
 
 
+def _build_prior_context(ticket, ctx, ws) -> str | None:
+    """Assemble prior review comments and the implement agent's rebuttal
+    from the last round into a ``<prior_context>`` block.
+
+    Returns ``None`` when neither source has content (first review round)."""
+    parts: list[str] = []
+
+    prior_comments = ctx.service.list_comments(ticket.id)
+    if prior_comments:
+        formatted = "\n".join(
+            f"[{c.author}] {c.body}" for c in prior_comments
+        )
+        parts.append(
+            f"<prior_review_comments>\n{formatted}\n</prior_review_comments>"
+        )
+
+    implement_md = ws.artifacts_dir / "implement.md"
+    if implement_md.exists():
+        parts.append(
+            "<implement_rebuttal>\n"
+            f"{implement_md.read_text(encoding='utf-8')}\n"
+            "</implement_rebuttal>"
+        )
+
+    if not parts:
+        return None
+    return "<prior_context>\n" + "\n\n".join(parts) + "\n</prior_context>"
+
+
 class ReviewStage(Stage):
     name = "review"
     input_state = State.CODE_REVIEW
@@ -55,10 +84,16 @@ class ReviewStage(Stage):
 
         spec = ws.read_description()
 
+        prior_context = _build_prior_context(ticket, ctx, ws)
+
         # Run the blind review agent.
         try:
             verdict: ReviewVerdict = run_review_agent(
-                settings=s, diff=diff, spec=spec,
+                settings=s,
+                diff=diff,
+                spec=spec,
+                prior_context=prior_context,
+                repo_dir=repo_dir,
             )
         except Exception as e:
             log.exception("%s: review agent error", ticket.id)
