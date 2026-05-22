@@ -62,12 +62,9 @@ class DocumentStage(Stage):
         spec = ws.read_description()
 
         # --- Documentation agent ---
-        # Stub: classify change as user-facing vs internal, and edit docs
-        # when needed.  The real agent will be wired in a follow-up.
         try:
-            result_note = self._run_doc_agent(
+            doc_result = self._run_doc_agent(
                 settings=s,
-                ticket=ticket,
                 repo_dir=repo_dir,
                 diff=diff,
                 spec=spec,
@@ -83,10 +80,17 @@ class DocumentStage(Stage):
                 "doc agent failed (non-blocking)",
             )
 
-        return Outcome(
-            State.CODE_REVIEW if s.review_enabled else State.DELIVERABLE,
-            result_note,
-        )
+        next_state = State.CODE_REVIEW if s.review_enabled else State.DELIVERABLE
+
+        if doc_result.user_facing:
+            if git_ops.has_changes(repo_dir):
+                git_ops.commit_all(
+                    repo_dir,
+                    f"mill(docs): {ticket.title} ({ticket.id})",
+                )
+            return Outcome(next_state, doc_result.summary)
+
+        return Outcome(next_state, "no user-facing changes (internal-only)")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -96,21 +100,20 @@ class DocumentStage(Stage):
         self,
         *,
         settings,
-        ticket: Ticket,
         repo_dir,
         diff: str,
         spec: str,
-    ) -> str:
-        """Stub documentation agent.
+    ):
+        """Run the documentation agent to classify the diff and update docs.
 
-        In the real implementation this will:
-        1. Classify the change as user-facing or internal.
-        2. Identify which docs need updating (README.md, docs/*, AGENT.md,
-           or inline docstrings).
-        3. Apply the edits directly in the workspace.
-        4. Commit them.
-
-        For now the stub treats every change as internal (no-op).
+        Returns a ``DocResult`` with ``user_facing`` (bool) and ``summary``
+        (str describing what was updated or that no changes were needed).
         """
-        del settings, ticket, repo_dir, diff, spec
-        return "no user-facing changes (internal-only)"
+        from ..agents.documenting import run_doc_agent
+
+        return run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=diff,
+            spec=spec,
+        )
