@@ -5,7 +5,7 @@
 Python **3.14** is required (see [`.python-version`](.python-version)).
 
 ```bash
-cp .env.example .env          # fill in OPENROUTER_API_KEY at minimum
+cp secrets.env.example secrets.env          # fill in OPENROUTER_API_KEY at minimum
 make install                  # editable install into .venv with dev+tracing extras
 make dev                      # hot-reload server on http://127.0.0.1:8077
 make test                     # pytest with coverage (fail-under 70%)
@@ -15,7 +15,7 @@ Other `make` targets:
 
 | Target   | Description |
 |----------|-------------|
-| `serve`  | Production-style server (reads `.env`, data in `.mill-data`) |
+| `serve`  | Production-style server (reads `.env` and `secrets.env`, data in `.mill-data`) |
 | `docker` | `docker compose up -d --build` |
 | `clean`  | Remove `.venv`, `.mill-data`, `.pytest_cache`, and all `__pycache__` dirs |
 
@@ -113,7 +113,7 @@ Tests live in `tests/` and mirror the source tree
 - `fake_sandbox` — monkeypatches `sandbox.run` and `sandbox.fetch` with
   a tiny shell interpreter (supports `echo`, `false`, `true`). No
   Docker needed for tests.
-- `_no_dotenv` (autouse) — blocks `.env` leakage into tests.
+- `_no_dotenv` (autouse) — blocks `.env` and `secrets.env` leakage into tests.
 - `settings` — inits an isolated SQLite DB in `tmp_path` with
   `MILL_REQUIRE_APPROVAL=false`.
 - `service` — a `TicketService` bound to the test settings.

@@ -17,7 +17,7 @@ install: $(BIN)/activate
 test: install
 	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70
 
-# Run the service as it runs in prod/Docker (reads ./.env, data in
+# Run the service as it runs in prod/Docker (reads ./.env and ./secrets.env, data in
 # ./.mill-data). Ctrl-C to stop.
 serve: install
 	$(BIN)/robotsix-mill serve

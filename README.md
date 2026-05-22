@@ -121,7 +121,7 @@ across all agent runs.
 ## Run
 
 ```sh
-cp .env.example .env      # set OPENROUTER_API_KEY (+ FORGE_* later)
+cp secrets.env.example secrets.env      # set OPENROUTER_API_KEY (+ FORGE_* later)
 docker compose up -d --build
 ```
 
@@ -142,7 +142,7 @@ docker compose exec mill robotsix-mill trace-health
 ### Local development (no Docker)
 
 ```sh
-cp .env.example .env        # set OPENROUTER_API_KEY
+cp secrets.env.example secrets.env        # set OPENROUTER_API_KEY
 make install                # venv + editable install (.[dev,tracing])
 .venv/bin/pre-commit install
 make dev                    # service with hot-reload on http://127.0.0.1:8077
@@ -537,7 +537,7 @@ execution is isolated from the mill process:
 
 | Path | Role |
 |---|---|
-| `config.py` | settings (env / .env) |
+| `config.py` | settings (env / .env / secrets.env) |
 | `core/states.py` | state machine (single source of truth) |
 | `core/models.py` | SQLModel tables + API schemas |
 | `core/db.py` · `core/service.py` | DB lifecycle + management-plane operations |

@@ -2,7 +2,8 @@
 
 Full reference for every `MILL_*` environment variable (and a few key
 non-prefixed vars) from `config.py:Settings`.  This mirrors
-`.env.example`; that file remains the canonical inline config.
+`.env` and `secrets.env.example`; `.env` is the committed canonical inline config with
+production-ready defaults, `secrets.env.example` is the template for credentials.
 
 ---
 
@@ -279,4 +280,5 @@ These are consumed by `Settings` but use conventional names without the `MILL_` 
 
 - [README.md](../README.md) — project overview and quickstart
 - [docs/agents.md](agents.md) — maps every model var to its agent
-- [.env.example](../.env.example) — canonical inline config file
+- [`.env`](../.env) — committed canonical config with production defaults
+- [`secrets.env.example`](../secrets.env.example) — credentials template
