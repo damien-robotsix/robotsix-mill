@@ -22,6 +22,7 @@ def test_board_serves_html(client):
     assert r.headers["content-type"].startswith("text/html")
     body = r.text
     assert "robotsix-mill" in body
+    assert "cdn.jsdelivr.net/npm/marked" in body
     assert '<div id="board">' in body
     assert '<div id="drawer">' in body
     # state labels live in the external JS; verify they're served there
