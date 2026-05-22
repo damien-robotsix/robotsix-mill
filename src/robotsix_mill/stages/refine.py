@@ -77,6 +77,17 @@ class RefineStage(Stage):
         if not title and not draft:
             return Outcome(State.BLOCKED, "empty title and draft — nothing to refine")
 
+        # --- dependency gate: refuse to refine until all deps are
+        # terminal (CLOSED/DONE). Same-state no-op → the reconcile
+        # sweep re-enqueues this ticket each poll cycle.
+        unmet = ctx.service.unmet_dependencies(ticket)
+        if unmet:
+            log.debug(
+                "%s: unmet dependencies — deferring refine: %s",
+                ticket.id, unmet,
+            )
+            return Outcome(State.DRAFT)
+
         # Ground the spec in the ACTUAL repo: clone it locally so the
         # refine agent uses explore/read_file instead of web-fetching
         # the project's own files. Best-effort — a clone failure (or no
