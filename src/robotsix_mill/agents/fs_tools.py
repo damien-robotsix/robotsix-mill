@@ -149,7 +149,11 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
         """Run a shell command against the repository (tests, linters,
         build steps, generators, ...). Returns exit code + combined
         stdout/stderr (truncated). Runs in an isolated, network-less
-        sandbox — no internet, nothing outside the repo is reachable."""
+        sandbox — no internet, nothing outside the repo is reachable.
+
+        Commands automatically execute in the repository root
+        directory — do not prefix with ``cd /home/user/repo`` or
+        similar. Use ``cd <subdir> && …`` to work in a subdirectory."""
         if not root.exists():
             return (
                 "error: workspace repo directory does not exist — "
@@ -196,7 +200,7 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
     ))
     ToolRegistry.register(ToolInfo(
         name="run_command",
-        description="Run a shell command against the repository (tests, linters, build steps, generators, ...).",
+        description=f"Run a shell command against the repository (tests, linters, build steps, generators, ...). Commands already execute in the repository root ({root}) — do NOT prefix with ``cd /home/user/repo``, ``cd /root/workspace``, or any other absolute cd to a repo root. Use ``cd <subdir> && …`` to work in a subdirectory.",
         category="shell",
         parameters={"command": "str"},
     ))
