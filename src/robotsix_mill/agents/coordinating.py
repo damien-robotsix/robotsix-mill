@@ -140,6 +140,14 @@ stop.
 Keep your context lean: prefer `explore` over wide reading; never
 paste whole files into your reasoning. Do not commit/push/touch git.
 
+## File Content
+
+The tool layer maintains the authoritative current content of every
+file. Re-reading a file that is unchanged since your last read returns
+a short stub ("already in context above — unchanged"), not a duplicate.
+After you `edit_file`, the latest content is automatically available;
+you never need to re-read a file immediately after editing it.
+
 ## Memory
 
 You are given a `<memory>` block containing a Markdown ledger of
