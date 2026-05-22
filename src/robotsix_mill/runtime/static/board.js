@@ -1,6 +1,6 @@
 const ST=["draft","human_issue_approval","ready","documenting","code_review","deliverable","human_mr_approval","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered","epic_open","epic_closed"];
 const LBL={ready:"implementing"};   // display label only; state value stays "ready"
-let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
+let showClosed=false;               // empty cols hidden; CLOSED and EPIC_CLOSED also hidden unless toggled
 let sel=null;
 let runsOpen=false;
 let costDashboardOpen=false;
@@ -40,7 +40,7 @@ function _xhr(method,u,body){return new Promise(res=>{
 function jpost(u,body){return _xhr("POST",u,body)}
 function jdel(u){return _xhr("DELETE",u,null)}
 async function refresh(){
- // Skip loading reviewed (closed/done) tickets by default — they dominate
+ // Skip loading reviewed (closed/done/epic_closed) tickets by default — they dominate
  // the row count and each costs a session_cost lookup. Fetch them only
  // when the user toggles "show closed".
  // Race guard: each refresh() captures a seq token and the showClosed
@@ -66,7 +66,7 @@ async function refresh(){
  });
  document.getElementById("meta").textContent=
    ts.length+" tickets · "+new Date().toLocaleTimeString();
- document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"||wantClosed)).map(s=>`<div class="col">
+ document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed)).map(s=>`<div class="col">
   <h2>${LBL[s]||s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <button class="del-btn" title="Delete ticket" onclick="event.stopPropagation();del_('${t.id}')">✕</button>
