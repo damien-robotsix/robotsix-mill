@@ -317,6 +317,13 @@ class Settings(BaseSettings):
     refine_triage_enabled: bool = Field(
         default=True, alias="MILL_REFINE_TRIAGE_ENABLED"
     )
+    # When True, the refine stage runs a post-refinement review pass that
+    # strips verbose exploratory narrative from the spec, producing a
+    # concise version while saving the verbose original as an artifact.
+    # Defaults to False (opt-in) to avoid surprising behaviour changes.
+    spec_review_enabled: bool = Field(
+        default=False, alias="MILL_SPEC_REVIEW_ENABLED"
+    )
     # Model for the review agent. Defaults to the capable coordinator model.
     # Override to use a *different* model for a genuinely independent review
     # perspective (the dual-model benefit).

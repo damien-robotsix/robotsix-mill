@@ -345,6 +345,34 @@ class RefineStage(Stage):
                 next_state, _auto_reason = _resolve_next_state(ctx, "", ticket.id)
                 return Outcome(next_state, "refined (empty spec — kept original draft)")
 
+            # --- spec review (conciseness pass) ---
+            if s.spec_review_enabled and not reviewer_comments:
+                try:
+                    review_result = refining.review_spec_for_conciseness(
+                        settings=s, spec_markdown=spec,
+                    )
+                    (ws.artifacts_dir / "refine-verbose.md").write_text(
+                        spec, encoding="utf-8",
+                    )
+                    concise = review_result.concise_spec
+                    if not concise or not concise.strip():
+                        log.warning(
+                            "%s: spec review returned empty concise spec, "
+                            "using verbose spec",
+                            ticket.id,
+                        )
+                    else:
+                        spec = concise
+                        log.info(
+                            "%s: spec review: %s",
+                            ticket.id, review_result.stripped_summary,
+                        )
+                except Exception:
+                    log.warning(
+                        "%s: spec review failed, using verbose spec",
+                        ticket.id, exc_info=True,
+                    )
+
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
 
@@ -399,6 +427,36 @@ class RefineStage(Stage):
 
         if len(valid_children) == 0:
             return Outcome(State.BLOCKED, "refiner produced no valid split children")
+
+        # --- spec review for split children (conciseness pass) ---
+        if s.spec_review_enabled and not reviewer_comments:
+            for i, child in enumerate(valid_children):
+                try:
+                    review_result = refining.review_spec_for_conciseness(
+                        settings=s, spec_markdown=child["spec_markdown"],
+                    )
+                    (ws.artifacts_dir / f"refine-verbose-child-{i + 1}.md").write_text(
+                        child["spec_markdown"], encoding="utf-8",
+                    )
+                    concise = review_result.concise_spec
+                    if not concise or not concise.strip():
+                        log.warning(
+                            "%s: spec review child %d returned empty concise spec, "
+                            "using verbose spec",
+                            ticket.id, i + 1,
+                        )
+                    else:
+                        child["spec_markdown"] = concise
+                        log.info(
+                            "%s: spec review child %d: %s",
+                            ticket.id, i + 1, review_result.stripped_summary,
+                        )
+                except Exception:
+                    log.warning(
+                        "%s: spec review failed for child %d, using verbose spec",
+                        ticket.id, i + 1, exc_info=True,
+                    )
+
         if len(valid_children) == 1:
             # Only one valid child — fall back to single-spec path.
             child = valid_children[0]
