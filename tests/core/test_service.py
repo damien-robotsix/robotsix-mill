@@ -641,3 +641,30 @@ class TestArchivedPurge:
             t = service.create(f"task {i}")
             _close_ticket(service, t)
         assert _terminal_count(service) == 50
+
+
+# ---------------------------------------------------------------------------
+# _all_descendants cycle-safety
+# ---------------------------------------------------------------------------
+
+
+def test_all_descendants_is_cycle_safe(service):
+    """Directly insert rows where A → B → A (circular parent_id).
+    _all_descendants('A') returns [B] without infinite looping."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Ticket
+
+    with db.session(service.settings) as s:
+        ta = Ticket(id="cyc-A", title="A", kind="task", workspace_path="")
+        tb = Ticket(id="cyc-B", title="B", kind="task", parent_id="cyc-A", workspace_path="")
+        s.add_all([ta, tb])
+        s.commit()
+
+        # Create the cycle: update A's parent_id to point to B.
+        ta.parent_id = "cyc-B"
+        s.add(ta)
+        s.commit()
+
+    result = service._all_descendants("cyc-A")
+    assert len(result) == 1
+    assert result[0].id == "cyc-B"

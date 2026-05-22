@@ -394,6 +394,45 @@ class TicketService:
             stmt = select(Ticket).where(Ticket.parent_id == ticket_id)
             return list(s.exec(stmt).all())
 
+    def cumulative_cost(
+        self, ticket_id: str, settings: Settings, *, blocking: bool = True
+    ) -> float:
+        """Return the cumulative cost of *ticket_id* and all descendants (recursive).
+
+        Uses the same blocking/cache-only mode as the caller — blocking
+        for per-ticket detail views, cache-only for the polled /tickets list.
+        """
+        from ..langfuse_client import session_cost, session_cost_cached
+
+        cost_fn = (
+            (lambda sid: session_cost(settings, sid))
+            if blocking
+            else session_cost_cached
+        )
+
+        total = cost_fn(ticket_id)
+        for descendant in self._all_descendants(ticket_id):
+            total += cost_fn(descendant.id)
+        return total
+
+    def _all_descendants(self, ticket_id: str) -> list[Ticket]:
+        """Return every descendant of *ticket_id* at any depth (BFS, cycle-safe)."""
+        result: list[Ticket] = []
+        visited: set[str] = {ticket_id}
+        queue: list[str] = [ticket_id]
+        with db.session(self.settings) as s:
+            while queue:
+                parent = queue.pop(0)
+                children = list(
+                    s.exec(select(Ticket).where(Ticket.parent_id == parent)).all()
+                )
+                for child in children:
+                    if child.id not in visited:
+                        visited.add(child.id)
+                        result.append(child)
+                        queue.append(child.id)
+        return result
+
     def set_title(self, ticket_id: str, title: str) -> None:
         """Update the title of a ticket. Raises :class:`KeyError` if
         the ticket does not exist."""
