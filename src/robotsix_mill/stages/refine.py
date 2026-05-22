@@ -354,11 +354,19 @@ class RefineStage(Stage):
                     (ws.artifacts_dir / "refine-verbose.md").write_text(
                         spec, encoding="utf-8",
                     )
-                    spec = review_result.concise_spec
-                    log.info(
-                        "%s: spec review: %s",
-                        ticket.id, review_result.stripped_summary,
-                    )
+                    concise = review_result.concise_spec
+                    if not concise or not concise.strip():
+                        log.warning(
+                            "%s: spec review returned empty concise spec, "
+                            "using verbose spec",
+                            ticket.id,
+                        )
+                    else:
+                        spec = concise
+                        log.info(
+                            "%s: spec review: %s",
+                            ticket.id, review_result.stripped_summary,
+                        )
                 except Exception:
                     log.warning(
                         "%s: spec review failed, using verbose spec",
@@ -430,11 +438,19 @@ class RefineStage(Stage):
                     (ws.artifacts_dir / f"refine-verbose-child-{i + 1}.md").write_text(
                         child["spec_markdown"], encoding="utf-8",
                     )
-                    child["spec_markdown"] = review_result.concise_spec
-                    log.info(
-                        "%s: spec review child %d: %s",
-                        ticket.id, i + 1, review_result.stripped_summary,
-                    )
+                    concise = review_result.concise_spec
+                    if not concise or not concise.strip():
+                        log.warning(
+                            "%s: spec review child %d returned empty concise spec, "
+                            "using verbose spec",
+                            ticket.id, i + 1,
+                        )
+                    else:
+                        child["spec_markdown"] = concise
+                        log.info(
+                            "%s: spec review child %d: %s",
+                            ticket.id, i + 1, review_result.stripped_summary,
+                        )
                 except Exception:
                     log.warning(
                         "%s: spec review failed for child %d, using verbose spec",
