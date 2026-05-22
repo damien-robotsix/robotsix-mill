@@ -11,6 +11,7 @@ sub-agent — that layer just re-explored everything and never converged.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -70,6 +71,15 @@ class ImplementResult(BaseModel):
         return data
 
 
+class ValidationResult(BaseModel):
+    """Deterministic routing result from the ``run_tests`` tool."""
+
+    passed: bool
+    next_action: Literal["proceed", "retry", "escalate"]
+    failure_summary: str = ""
+    iterations_used: int = 0
+
+
 _SYSTEM_PROMPT = """\
 You are a senior engineer implementing ONE ticket in a git repo.
 
@@ -77,12 +87,18 @@ Procedure:
 1. `explore` to orient; `read_file` the specific files you'll change.
 2. Make the smallest change that fully satisfies the spec (prefer
    `edit_file` over `write_file`); add/adjust tests for the behaviour.
-3. `run_tests`. On PASS, stop and reply with a 1–3 sentence summary.
-4. On FAIL, use `run_command` to narrow the problem — re-run just
-   the failing test, check with a linter, inspect `git diff` — then
-   fix and `run_tests` again; at most {max_iters} test cycles. If
-   still failing, stop and reply starting with "UNRESOLVED:" and a
-   short reason.
+3. `run_tests`. Returns a structured result with fields:
+   - `passed`: boolean
+   - `next_action`: one of `"proceed"`, `"retry"`, `"escalate"`
+   - `failure_summary`: short diagnosis if failed
+   - `iterations_used`: how many test cycles so far (max {max_iters})
+4. On `next_action == "proceed"`: stop and reply with a 1–3 sentence summary.
+5. On `next_action == "retry"`: use `run_command` to narrow the problem —
+   re-run just the failing test, check with a linter, inspect `git diff` —
+   then fix and `run_tests` again.
+6. On `next_action == "escalate"`: STOP immediately. Do NOT attempt
+   another fix. Reply starting with "UNRESOLVED:" and a short reason
+   incorporating the `failure_summary`.
 
 Keep your context lean: prefer `explore` over wide reading; never
 paste whole files into your reasoning. Do not commit/push/touch git.
@@ -107,16 +123,33 @@ After the run, update the memory in your `updated_memory` field:
 
 
 def make_run_tests_tool(settings: Settings, repo_dir: Path):
-    def run_tests() -> str:
+    max_iters = settings.max_fix_iterations
+    iterations = 0
+
+    def run_tests() -> ValidationResult:
         """Run the project's test suite (isolated sandbox) via the test
-        sub-agent. Returns 'PASS' or 'FAIL' followed by a short,
-        actionable diagnosis — never the raw log."""
+        sub-agent. Returns a ValidationResult with deterministic routing."""
+        nonlocal iterations
+        iterations += 1
         from .testing import run_test_agent
 
         passed, feedback = run_test_agent(
             settings=settings, repo_dir=repo_dir
         )
-        return f"{'PASS' if passed else 'FAIL'}: {feedback}"
+
+        if passed:
+            next_action = "proceed"
+        elif iterations <= max_iters:
+            next_action = "retry"
+        else:
+            next_action = "escalate"
+
+        return ValidationResult(
+            passed=passed,
+            next_action=next_action,
+            failure_summary=feedback if not passed else "",
+            iterations_used=iterations,
+        )
 
     return run_tests
 

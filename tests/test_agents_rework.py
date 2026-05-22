@@ -8,7 +8,7 @@ import pytest
 
 from robotsix_mill.agents import coordinating, testing
 from robotsix_mill.agents import openrouter_cost as oc
-from robotsix_mill.agents.coordinating import ImplementResult
+from robotsix_mill.agents.coordinating import ImplementResult, ValidationResult
 from robotsix_mill.config import Settings
 
 
@@ -220,3 +220,93 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
     assert cap["tools"] == [
         "explore", "list_dir", "read_file", "run_command", "web_research",
     ]
+
+
+def test_run_tests_tool_proceed(tmp_path, monkeypatch):
+    """Tool returns proceed when tests pass."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path)
+    monkeypatch.setattr(
+        sandbox, "run", lambda cmd, *, repo_dir, settings: (0, "ok")
+    )
+    tool = coordinating.make_run_tests_tool(s, tmp_path)
+    result = tool()
+    assert result.passed is True
+    assert result.next_action == "proceed"
+    assert result.failure_summary == ""
+    assert result.iterations_used == 1
+
+
+def test_run_tests_tool_retry(tmp_path, monkeypatch):
+    """Tool returns retry when tests fail but iterations remain."""
+    from robotsix_mill import sandbox
+
+    s = _settings(tmp_path, MILL_TEST_MODEL="test/cheap")
+    monkeypatch.setattr(
+        sandbox, "run", lambda cmd, *, repo_dir, settings: (1, "fail")
+    )
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            return type("R", (), {"output": "fix the thing"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    tool = coordinating.make_run_tests_tool(s, tmp_path)
+    result = tool()
+    assert result.passed is False
+    assert result.next_action == "retry"
+    assert result.failure_summary == "fix the thing"
+    assert result.iterations_used == 1
+
+
+def test_run_tests_tool_escalate(tmp_path, monkeypatch):
+    """Tool returns escalate when max iterations exhausted."""
+    from robotsix_mill import sandbox
+
+    s = _settings(
+        tmp_path, MILL_MAX_FIX_ITERATIONS="3", MILL_TEST_MODEL="test/cheap",
+    )
+    monkeypatch.setattr(
+        sandbox, "run", lambda cmd, *, repo_dir, settings: (1, "fail")
+    )
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            return type("R", (), {"output": "still broken"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    tool = coordinating.make_run_tests_tool(s, tmp_path)
+
+    # first 3 calls: retry
+    for i in range(3):
+        result = tool()
+        assert result.next_action == "retry", f"call {i+1}"
+        assert result.iterations_used == i + 1
+
+    # 4th call: escalate
+    result = tool()
+    assert result.next_action == "escalate"
+    assert result.iterations_used == 4
+    assert result.passed is False
+    assert result.failure_summary == "still broken"
