@@ -42,6 +42,16 @@ class AutoApproveResult(BaseModel):
     reason: str
 
 
+class SpecReviewResult(BaseModel):
+    """Post-refinement spec review output — strips verbose narrative.
+
+    Produces a clean, concise spec without exploratory narration.
+    """
+
+    concise_spec: str
+    stripped_summary: str
+
+
 class ChildSpec(BaseModel):
     """A split child."""
 
@@ -226,6 +236,93 @@ A wrong NEEDS_APPROVAL just adds a human click — harmless.
             lambda: agent.run_sync(user_prompt),
             settings=settings,
             what="auto-approve triage",
+        )
+    finally:
+        _safe_close(agent)
+    return result.output
+
+
+def review_spec_for_conciseness(
+    *,
+    settings: Settings,
+    spec_markdown: str,
+) -> SpecReviewResult:
+    """Return a ``SpecReviewResult`` from a single cheap LLM call.
+
+    Strips verbose refinement-step narration (exploratory file reads,
+    command runs, dead-end investigations, reasoning chains) from the
+    refined spec while preserving the four standard sections
+    (## Problem, ## Scope, ## Acceptance criteria, ## Out of scope).
+
+    NO tools, NO web, NO explore — classification/transformation only.
+    """
+    from pydantic_ai import PromptedOutput
+
+    from .base import build_agent, _safe_close
+    from .retry import call_with_retry
+
+    SPEC_REVIEW_PROMPT = """\
+You are a spec editor.  Your ONLY job: take a verbose engineering spec
+and produce a clean, concise version by stripping exploratory narrative
+while preserving all technical content exactly.
+
+RULES:
+1. PRESERVE these four sections (and their exact headings) if present:
+   - ## Problem
+   - ## Scope
+   - ## Acceptance criteria
+   - ## Out of scope
+   (Headings may include trailing text like "## Out of scope / constraints".)
+
+2. STRIP all of the following:
+   - Exploratory narrative: "I found", "I checked", "Let me look at",
+     "Looking at", "I searched", "I inspected", "I read", "I opened".
+   - File-reading summaries: "The file at ...", "Reading ...", "In
+     src/foo/bar.py we see ...", "The class has methods ...", any
+     narration about what the agent looked at.
+   - Command-run notes: "running command", "the output shows", "I ran",
+     "pytest returned".
+   - Dead-end investigations: "This didn't work because",
+     "I considered but", "I originally thought".
+   - Reasoning chains and decision rationales: "Given that ...",
+     "Since the codebase uses ...", "The pattern here suggests ...".
+   - Any content that is NOT inside one of the four canonical sections.
+   - Trailing "---" separators, "## Notes", "## Investigation", or
+     similar non-canonical sections.
+
+3. DO NOT alter or rephrase:
+   - Acceptance criteria items (bullet points, numbered lists).
+   - Technical requirements, file paths listed under ## Scope.
+   - Problem statement text.
+   - Out-of-scope constraints.
+   - Code snippets or inline references.
+
+4. The output MUST contain ONLY the four canonical sections (those
+   present in the input).  If a section is missing from the input,
+   do NOT invent one.  Remove everything else.
+
+Return the cleaned spec in `concise_spec` and a one-line summary of
+what was removed in `stripped_summary` (e.g. "Stripped 12 lines of
+exploratory narrative and 3 dead-end sections").
+"""
+    agent = build_agent(
+        settings,
+        system_prompt=SPEC_REVIEW_PROMPT,
+        output_type=PromptedOutput(SpecReviewResult),
+        tools=[],          # NO tools — transformation only
+        web=False,         # NO web research
+        report_issue=False,
+        model_name=settings.triage_model,
+        name="spec-review",
+    )
+
+    user_prompt = f"<spec>\n{spec_markdown}\n</spec>"
+
+    try:
+        result = call_with_retry(
+            lambda: agent.run_sync(user_prompt),
+            settings=settings,
+            what="spec review",
         )
     finally:
         _safe_close(agent)
