@@ -477,3 +477,116 @@ def test_success_to_code_review_when_review_enabled(ctx_factory, tmp_path, monke
     out = ImplementStage().run(t, ctx)
 
     assert out.next_state is State.CODE_REVIEW
+
+
+# --- epic context -------------------------------------------------------
+
+def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
+    """When a ticket has an epic parent, the spec passed to
+    run_implement_agent starts with the epic context wrapper."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+
+    # Create an epic with rich global context
+    epic = ctx.service.create("Global Epic", "High-level goal: unify UX", kind="epic")
+    # Create a child ticket under this epic
+    child = ctx.service.create(
+        "Add dark mode", "Please add dark mode toggle",
+        parent_id=epic.id,
+    )
+    ctx.service.transition(child.id, State.READY)
+    child = ctx.service.get(child.id)
+
+    seen_spec: list[str] = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, feedback, history, memory
+        seen_spec.append(spec)
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    out = ImplementStage().run(child, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert len(seen_spec) == 1
+    expected = "<epic_context>\nHigh-level goal: unify UX\n</epic_context>"
+    assert seen_spec[0].startswith(expected)
+
+
+def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, monkeypatch):
+    """Ticket without a parent: no epic context in spec."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+
+    t = _ticket(ctx, title="Standalone", body="Just a task")
+    seen_spec: list[str] = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, feedback, history, memory
+        seen_spec.append(spec)
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    ImplementStage().run(t, ctx)
+    assert len(seen_spec) == 1
+    assert "<epic_context>" not in seen_spec[0]
+
+
+def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, monkeypatch):
+    """Ticket with a parent that is NOT an epic: no epic context."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+
+    # Create a regular task parent (kind="task")
+    parent = ctx.service.create("Parent task", "Ordinary task", kind="task")
+    child = ctx.service.create(
+        "Child of task", "Do a sub-thing",
+        parent_id=parent.id,
+    )
+    ctx.service.transition(child.id, State.READY)
+    child = ctx.service.get(child.id)
+
+    seen_spec: list[str] = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, feedback, history, memory
+        seen_spec.append(spec)
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    ImplementStage().run(child, ctx)
+    assert len(seen_spec) == 1
+    assert "<epic_context>" not in seen_spec[0]
+
+
+def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_path, monkeypatch):
+    """Epic with empty description: no injection."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+
+    epic = ctx.service.create("Empty Epic", "", kind="epic")
+    child = ctx.service.create(
+        "Child of empty epic", "Do a thing",
+        parent_id=epic.id,
+    )
+    ctx.service.transition(child.id, State.READY)
+    child = ctx.service.get(child.id)
+
+    seen_spec: list[str] = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
+        del settings, feedback, history, memory
+        seen_spec.append(spec)
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    ImplementStage().run(child, ctx)
+    assert len(seen_spec) == 1
+    assert "<epic_context>" not in seen_spec[0]

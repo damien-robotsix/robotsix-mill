@@ -191,6 +191,7 @@ def run_coordinator(
     memory: str = "",
     model_name: str | None = None,
     feedback: str | None = None,
+    epic_context: str = "",
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -232,7 +233,10 @@ def run_coordinator(
     )
     try:
         limits = UsageLimits(request_limit=settings.coordinator_request_limit)
-        user_prompt = (
+        user_prompt = ""
+        if epic_context:
+            user_prompt += f"{epic_context}\n\n"
+        user_prompt += (
             f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
             f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
         )

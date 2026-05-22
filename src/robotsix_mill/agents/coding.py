@@ -47,6 +47,7 @@ def run_implement_agent(
     feedback: str | None = None,
     history: list | None = None,
     memory: str = "",
+    epic_context: str = "",
 ) -> tuple[str, list, str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, [], updated_memory)``.
@@ -64,7 +65,7 @@ def run_implement_agent(
     try:
         result = run_coordinator(
             settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
-            feedback=feedback,
+            feedback=feedback, epic_context=epic_context,
         )
     except UsageLimitExceeded as e:
         raise AgentBudgetError(str(e), []) from e
@@ -78,6 +79,7 @@ def run_implement_agent(
             result = run_coordinator(
                 settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
                 feedback=feedback, model_name="deepseek/deepseek-v4-flash",
+                epic_context=epic_context,
             )
         except Exception as fallback_e:
             raise AgentRunError(
