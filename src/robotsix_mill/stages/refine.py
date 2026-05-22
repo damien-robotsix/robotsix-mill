@@ -211,7 +211,16 @@ class RefineStage(Stage):
         if not result.split:
             spec = result.spec_markdown or ""
             if not spec or not spec.strip():
-                return Outcome(State.BLOCKED, "refiner produced an empty spec")
+                log.warning(
+                    "%s: refiner produced an empty spec — "
+                    "proceeding with original draft",
+                    ticket.id,
+                )
+                next_state = (
+                    State.AWAITING_APPROVAL if ctx.settings.require_approval
+                    else State.READY
+                )
+                return Outcome(next_state, "refined (empty spec — kept original draft)")
 
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
@@ -228,7 +237,20 @@ class RefineStage(Stage):
             # Degrade gracefully: treat as single-spec with whatever we got.
             spec = result.spec_markdown or ""
             if not spec or not spec.strip():
-                return Outcome(State.BLOCKED, "refiner produced an empty spec (split with no children)")
+                log.warning(
+                    "%s: refiner produced an empty spec "
+                    "(split with no children) — "
+                    "proceeding with original draft",
+                    ticket.id,
+                )
+                next_state = (
+                    State.AWAITING_APPROVAL if ctx.settings.require_approval
+                    else State.READY
+                )
+                return Outcome(
+                    next_state,
+                    "refined (empty spec, split degraded — kept original draft)",
+                )
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
             next_state = (
