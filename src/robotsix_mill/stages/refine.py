@@ -91,6 +91,24 @@ def _resolve_next_state(
     return State.HUMAN_ISSUE_APPROVAL, None
 
 
+def _build_candidates_json(candidates: list[Ticket], ctx: StageContext) -> str:
+    """Serialize candidates for the dedup check, including ticket bodies."""
+    entries: list[dict] = []
+    for t in candidates:
+        try:
+            body = ctx.service.workspace(t).read_description()
+        except Exception:
+            body = ""
+        entries.append({
+            "id": t.id,
+            "title": t.title,
+            "state": t.state.value,
+            "source": t.source,
+            "body": body,
+        })
+    return json.dumps(entries, default=str)
+
+
 class RefineStage(Stage):
     name = "refine"
     input_state = State.DRAFT
@@ -155,11 +173,7 @@ class RefineStage(Stage):
                 )
             )
         ]
-        candidates_json = json.dumps(
-            [{"id": t.id, "title": t.title, "state": t.state.value, "source": t.source}
-             for t in candidates],
-            default=str,
-        )
+        candidates_json = _build_candidates_json(candidates, ctx)
 
         # Gather recent commits (only when we have a clone).
         recent_commits_json: str | None = None
