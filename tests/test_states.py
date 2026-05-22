@@ -15,7 +15,7 @@ from robotsix_mill.core.states import (
 VALID_STAGE_NAMES = {"refine", "implement", "review", "deliver", "merge", "ci_fix", "retrospect", "answer"}
 
 # States that should NOT appear as keys in STAGE_FOR_STATE.
-NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.HUMAN_ISSUE_APPROVAL, State.ANSWERED}
+NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.HUMAN_ISSUE_APPROVAL, State.ANSWERED, State.EPIC_OPEN, State.EPIC_CLOSED}
 
 # All states for iteration.
 ALL_STATES = list(State)
@@ -220,3 +220,23 @@ def test_code_review_not_undeclared_source():
 
 def test_blocked_resume_to_code_review():
     assert can_transition(State.BLOCKED, State.CODE_REVIEW, blocked_from=State.CODE_REVIEW) is True
+
+
+# ---------------------------------------------------------------------------
+# Epic transition spot-checks
+# ---------------------------------------------------------------------------
+
+def test_epic_open_to_epic_closed():
+    assert can_transition(State.EPIC_OPEN, State.EPIC_CLOSED) is True
+
+
+def test_epic_open_to_blocked():
+    assert can_transition(State.EPIC_OPEN, State.BLOCKED) is True
+
+
+def test_epic_closed_is_terminal():
+    assert can_transition(State.EPIC_CLOSED, State.EPIC_OPEN) is False
+
+
+def test_epic_open_not_in_stage_for_state():
+    assert State.EPIC_OPEN not in STAGE_FOR_STATE

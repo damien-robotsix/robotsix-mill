@@ -46,6 +46,8 @@ class State(StrEnum):
     BLOCKED = "blocked"       # escalated; needs a human
     ASKED = "asked"           # inquiry submitted; awaiting answer
     ANSWERED = "answered"     # inquiry answered (terminal)
+    EPIC_OPEN = "epic_open"   # epic actively collecting/grouping children
+    EPIC_CLOSED = "epic_closed"  # epic closed (terminal)
 
 
 #: state -> the set of states it may transition to (the "happy path"
@@ -80,6 +82,9 @@ TRANSITIONS: dict[State, set[State]] = {
     # inquiry states: asked -> answered (terminal), or errored/blocked
     State.ASKED: {State.ANSWERED, State.ERRORED, State.BLOCKED},
     State.ANSWERED: set(),
+    # epic states: open → closed or blocked; closed is terminal
+    State.EPIC_OPEN: {State.EPIC_CLOSED, State.BLOCKED},
+    State.EPIC_CLOSED: set(),
     # a human moves these back into the pipeline manually
     State.ERRORED: {State.READY, State.DRAFT},
     # BLOCKED: human can override to READY or DRAFT (re-run downstream),

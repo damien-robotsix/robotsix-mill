@@ -134,6 +134,7 @@ class TicketService:
         origin_session: str | None = None,
         depends_on: str | None = None,
         kind: str = "task",
+        parent_id: str | None = None,
     ) -> Ticket:
         """Create a new ticket with the given *title*.
 
@@ -146,18 +147,23 @@ class TicketService:
 
         When *kind* is ``"inquiry"`` the initial state is ``ASKED``
         (the answer stage picks it up) instead of ``DRAFT``.
-        ``depends_on`` is NOT allowed for inquiries — raises
+        When *kind* is ``"epic"`` the initial state is ``EPIC_OPEN``.
+        ``depends_on`` is NOT allowed for inquiries or epics — raises
         :class:`ValueError`.
 
+        If *parent_id* is provided, the parent ticket must exist; the
+        created ticket is linked to it via ``set_parent``.
+
         Raises :class:`ValueError` if *depends_on* includes the ticket's
-        own ID (self-dependency) or is provided for an inquiry.
+        own ID (self-dependency), is provided for an inquiry or epic, or
+        if *parent_id* references a nonexistent ticket.
         """
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         ticket_id = f"{stamp}-{_slug(title)}-{token_hex(2)}"
 
-        if kind == "inquiry" and depends_on:
+        if kind in ("inquiry", "epic") and depends_on:
             raise ValueError(
-                "inquiries do not support depends_on — they are standalone Q&A"
+                f"{kind}s do not support depends_on — they are standalone"
             )
 
         # Reject self-dependency before persisting.
@@ -168,7 +174,19 @@ class TicketService:
                     f"Ticket cannot depend on itself: {ticket_id}"
                 )
 
-        initial_state = State.ASKED if kind == "inquiry" else State.DRAFT
+        if kind == "epic":
+            initial_state = State.EPIC_OPEN
+        elif kind == "inquiry":
+            initial_state = State.ASKED
+        else:
+            initial_state = State.DRAFT
+
+        # Validate parent_id
+        if parent_id is not None:
+            with db.session(self.settings) as s:
+                parent = s.get(Ticket, parent_id)
+            if parent is None:
+                raise ValueError(f"parent_id {parent_id!r} does not exist")
 
         ws = Workspace(self.settings.workspaces_dir, ticket_id)
         content_hash = ws.write_description(description)
@@ -183,6 +201,7 @@ class TicketService:
                 source=source,
                 origin_session=origin_session,
                 depends_on=depends_on,
+                parent_id=parent_id,
             )
             s.add(ticket)
             s.add(
@@ -297,6 +316,26 @@ class TicketService:
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()
+
+    def get_epic_context(self, ticket: Ticket) -> str:
+        """Return the epic description wrapped in ``<epic_context>`` tags
+        if *ticket* has a parent whose ``kind`` is ``"epic"``, or ``""``
+        otherwise."""
+        if ticket.parent_id is None:
+            return ""
+        parent = self.get(ticket.parent_id)
+        if parent is None or parent.kind != "epic":
+            return ""
+        desc = self.workspace(parent).read_description()
+        if not desc:
+            return ""
+        return f"<epic_context>\n{desc}\n</epic_context>"
+
+    def list_children(self, ticket_id: str) -> list[Ticket]:
+        """Return all tickets whose ``parent_id`` equals *ticket_id*."""
+        with db.session(self.settings) as s:
+            stmt = select(Ticket).where(Ticket.parent_id == ticket_id)
+            return list(s.exec(stmt).all())
 
     def set_title(self, ticket_id: str, title: str) -> None:
         """Update the title of a ticket. Raises :class:`KeyError` if
