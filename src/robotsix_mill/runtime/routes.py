@@ -293,6 +293,68 @@ def list_children(
     ]
 
 
+@router.post("/tickets/{ticket_id}/generate-children", status_code=202)
+def generate_children(
+    ticket_id: str,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Generate child tickets from an epic description using the LLM
+    epic-breakdown agent.  Returns ``202 Accepted`` immediately — the
+    agent runs in a background thread.
+
+    Returns ``400`` if the ticket is not an epic.  Returns ``404`` if
+    the ticket does not exist.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    if ticket.kind != "epic":
+        raise HTTPException(400, "ticket is not an epic")
+
+    run_id = registry.start("epic-breakdown")
+
+    def _run() -> None:
+        try:
+            from ..agents.epic_breakdown import run_epic_breakdown_agent
+
+            description = svc.workspace(ticket).read_description()
+            result = run_epic_breakdown_agent(
+                settings=settings,
+                epic_title=ticket.title,
+                epic_description=description,
+            )
+            created_ids: list[str] = []
+            for title, body in zip(result.child_titles, result.child_bodies):
+                child = svc.create(
+                    title=title,
+                    description=body,
+                    kind="task",
+                    parent_id=ticket_id,
+                )
+                created_ids.append(child.id)
+
+            summary = (
+                f"Created {len(created_ids)} children: "
+                f"{', '.join(created_ids[:5])}"
+                f"{'…' if len(created_ids) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "epic-breakdown done: %d children for %s",
+                len(created_ids), ticket_id,
+            )
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("epic-breakdown failed for %s", ticket_id)
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name=f"epic-breakdown-{ticket_id}", daemon=True
+    ).start()
+    return {"status": "started"}
+
+
 @router.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)
 def resume_blocked(
     ticket_id: str,

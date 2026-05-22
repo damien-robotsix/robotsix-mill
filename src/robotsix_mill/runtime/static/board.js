@@ -385,6 +385,20 @@ async function runSurvey(){
    btn.disabled=false; btn.textContent='Survey';
  }
 }
+async function generateChildren(id){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Generating…';
+ try {
+   const r=await jpost("/tickets/"+id+"/generate-children");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Epic breakdown started — child tickets will appear below after the agent finishes.");
+   setTimeout(refresh,3000);
+ } catch(e) {
+   alert("Generate children failed: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Generate Tickets';
+ }
+}
 async function open_(id){
  sel=id;
  const [t,h,d,cs,rt,ch]=await Promise.all([jget("/tickets/"+id),
@@ -408,6 +422,7 @@ async function open_(id){
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
    (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_id)}</span></p>`:"")+
    (ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">${ch.map(c=>`<div class="child-ticket"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")}</div>`:"")+
+   (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button></p>`:"")+
    `<h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+esc(e.note):""}</div>`).join("")+
