@@ -52,7 +52,9 @@ def run_jscpd(repo_dir: Path) -> str:
     except OSError as exc:
         return f"ERROR: could not run jscpd — {exc}"
 
-    # jscpd exits non-zero on findings (and on execution errors).
+    # jscpd exits non-zero when clones are found (or on execution errors).
+    # Treat empty stdout + non-zero as a genuine error; non-empty stdout
+    # (even with non-zero exit) is parseable JSON with findings.
     if result.returncode != 0 and not result.stdout.strip():
         return (
             f"ERROR: jscpd exited with code {result.returncode}. "
@@ -77,11 +79,11 @@ def _parse_jscpd_output(stdout: str) -> str:
     except json.JSONDecodeError as exc:
         return f"ERROR: could not parse jscpd JSON output — {exc}"
 
-    statistics: dict[str, Any] = data.get("statistics", {})
+    statistics: dict[str, Any] = data.get("statistics") or data.get("statistic", {})
     total_clones: int = statistics.get("total", {}).get("clones", 0)
     duplications: list[dict[str, Any]] = data.get("duplications", [])
 
-    if total_clones == 0 or not duplications:
+    if not duplications:
         return (
             "jscpd scan complete — **no clone pairs detected** "
             "above the configured thresholds (minLines=5, minTokens=40)."
@@ -103,11 +105,11 @@ def _parse_jscpd_output(stdout: str) -> str:
         second_file = clone.get("secondFile", {})
 
         fa_name = first_file.get("name", "?")
-        fa_start = first_file.get("startLoc", "?")
-        fa_end = first_file.get("endLoc", "?")
+        fa_start = first_file.get("start", first_file.get("startLoc", "?"))
+        fa_end = first_file.get("end", first_file.get("endLoc", "?"))
         fb_name = second_file.get("name", "?")
-        fb_start = second_file.get("startLoc", "?")
-        fb_end = second_file.get("endLoc", "?")
+        fb_start = second_file.get("start", second_file.get("startLoc", "?"))
+        fb_end = second_file.get("end", second_file.get("endLoc", "?"))
 
         lines.append(
             f"- `{fa_name}:{fa_start}-{fa_end}` ↔ "
@@ -139,7 +141,7 @@ def make_jscpd_tool(repo_dir: Path):
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    if "detect_duplication" not in ToolRegistry._tools:
+    if not any(t.name == "detect_duplication" for t in ToolRegistry.list_tools()):
         ToolRegistry.register(ToolInfo(
             name="detect_duplication",
             description=(
