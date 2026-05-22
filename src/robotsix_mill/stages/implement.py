@@ -1,8 +1,12 @@
-"""Implement stage: READY -> IN_REVIEW (or BLOCKED, resumable).
+"""Implement stage: READY -> DELIVERABLE (or BLOCKED, resumable).
 
-First run: clone the target repo into the ticket workspace, branch, let
-the implement agent work via sandboxed tools, run the test command in a
-bounded fix loop. Pass -> IN_REVIEW.
+First run: clone the target repo into the ticket workspace, branch,
+then run a deterministic, stage-owned fix loop: invoke the implement
+agent for one edit pass, run the test gate, and — on failure — re-invoke
+the agent with a distilled diagnosis. The routing (proceed / retry /
+escalate) is decided in Python (see
+:class:`~..agents.coordinating.ValidationResult`), bounded by
+``settings.max_fix_iterations``. Pass -> DELIVERABLE.
 
 Resume: if the ticket workspace already has the clone + its branch (a
 prior BLOCKED run), do NOT re-clone — check the branch out and continue
@@ -10,7 +14,7 @@ from the committed WIP.
 
 Everything that isn't success is BLOCKED-resumable with WIP committed:
 no remote, clone failure, no changes, sandbox down, agent error/budget
-cap, or tests still failing after ``max_fix_attempts``. Pushing the
+cap, or tests still failing after ``max_fix_iterations``. Pushing the
 branch + opening the MR happens later, in the deliver stage.
 """
 
@@ -20,9 +24,10 @@ import logging
 import shutil
 import subprocess
 
-from .. import sandbox
 from ..agents import coding
 from ..agents.coding import AgentBudgetError, AgentRunError
+from ..agents.coordinating import ValidationResult
+from ..agents.testing import run_test_agent
 from ..core.models import Ticket
 from ..core.states import State
 from ..pass_runner import load_memory, persist_memory
@@ -59,41 +64,111 @@ class ImplementStage(Stage):
             return result
         repo_dir, branch, resuming = result
 
-        # Phase 2: run implement agent
-        result = ImplementStage._run_implement_agent(ctx, ticket, repo_dir, branch, s)
-        if isinstance(result, Outcome):
-            return result
-        summary = result
-
-        # Authoritative final gate: the coordinator already looped via
-        # the test sub-agent, but the stage re-verifies once as the
-        # trusted word before delivering.
-        try:
-            rc, _ = self._run_tests(repo_dir, s)
-        except sandbox.SandboxError as e:
-            self._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
-            return Outcome(State.BLOCKED, f"sandbox unavailable: {e}")
-
-        if rc != 0:
-            self._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
-            return Outcome(
-                State.BLOCKED,
-                "coordinator finished but the test gate still fails "
-                "— resumable (move to READY)",
-            )
-        if not git_ops.has_changes(repo_dir) and not resuming:
-            return Outcome(State.BLOCKED, "no changes produced")
-        self._finalize(ctx, ticket, repo_dir, branch, summary, ok=True)
-        return Outcome(State.DELIVERABLE, summary[:200] or "implemented")
+        # Phase 2: deterministic, stage-owned implement loop.
+        return ImplementStage._implement_loop(
+            ctx, ticket, repo_dir, branch, resuming, s
+        )
 
     # --- helpers ---
     @staticmethod
-    def _run_tests(repo_dir, settings) -> tuple[int, str]:
-        cmd = settings.test_command.strip()
-        if not cmd:
-            return 0, ""  # test gate disabled
-        # same sandbox as the agent's run_command: isolated, no network
-        return sandbox.run(cmd, repo_dir=repo_dir, settings=settings)
+    def _implement_loop(ctx, ticket, repo_dir, branch, resuming, settings):
+        """Run the bounded fix loop: edit pass → test gate → route.
+
+        The implement agent does ONE edit pass per iteration; the test
+        gate runs the suite once and produces a distilled diagnosis;
+        :meth:`ValidationResult.decide` routes deterministically. On
+        ``retry`` the diagnosis is fed back into the next pass; on
+        ``escalate`` (suite still failing after ``max_fix_iterations``)
+        the ticket is BLOCKED-resumable. No LLM owns the loop or the
+        bound — both are enforced here.
+        """
+        ws = ctx.service.workspace(ticket)
+        spec = ws.read_description()
+        memory_text = load_memory(settings.implement_memory_file)
+        max_iters = max(1, settings.max_fix_iterations)
+
+        feedback: str | None = None
+        summary = ""
+
+        for attempt in range(1, max_iters + 1):
+            try:
+                summary, _, updated_memory = coding.run_implement_agent(
+                    settings=settings, repo_dir=repo_dir, spec=spec,
+                    feedback=feedback, memory=memory_text,
+                )
+            except AgentBudgetError as e:
+                ImplementStage._finalize(
+                    ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
+                    ok=False,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"agent budget cap — resumable (move to READY): {e}",
+                )
+            except AgentRunError as e:
+                ImplementStage._finalize(
+                    ctx, ticket, repo_dir, branch, f"agent error: {e}",
+                    ok=False,
+                )
+                return Outcome(
+                    State.BLOCKED, f"agent error — resumable: {e}"
+                )
+
+            # Persist the agent's updated memory as soon as it's produced
+            # so a later-iteration failure can't lose the learning.
+            if updated_memory:
+                persist_memory(settings.implement_memory_file, updated_memory)
+
+            # Stage-owned test gate: one sandbox run; on failure a cheap
+            # model distills an actionable diagnosis. `passed` is the
+            # deterministic process exit code — the authoritative word.
+            passed, diag = run_test_agent(
+                settings=settings, repo_dir=repo_dir
+            )
+            if not passed and diag.startswith("sandbox unavailable"):
+                # Infra failure — not the code's fault; don't burn
+                # iterations retrying against a broken sandbox.
+                ImplementStage._finalize(
+                    ctx, ticket, repo_dir, branch, summary, ok=False
+                )
+                return Outcome(State.BLOCKED, diag)
+
+            decision = ValidationResult.decide(
+                passed=passed, iterations=attempt, max_iters=max_iters,
+                feedback=diag,
+            )
+
+            if decision.next_action == "proceed":
+                if not git_ops.has_changes(repo_dir) and not resuming:
+                    return Outcome(State.BLOCKED, "no changes produced")
+                ImplementStage._finalize(
+                    ctx, ticket, repo_dir, branch, summary, ok=True
+                )
+                return Outcome(
+                    State.DELIVERABLE, summary[:200] or "implemented"
+                )
+
+            if decision.next_action == "escalate":
+                ImplementStage._finalize(
+                    ctx, ticket, repo_dir, branch, summary, ok=False
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"tests still failing after {max_iters} fix "
+                    "attempt(s) — resumable (move to READY)",
+                )
+
+            # retry → feed the diagnosis into the next edit pass.
+            feedback = diag
+
+        # The escalate branch fires on the final attempt, so the loop
+        # always returns above. This is a defensive fallback.
+        ImplementStage._finalize(
+            ctx, ticket, repo_dir, branch, summary, ok=False
+        )
+        return Outcome(
+            State.BLOCKED, "implement loop exhausted — resumable"
+        )
 
     @staticmethod
     def _finalize(ctx, ticket, repo_dir, branch, summary, *, ok: bool) -> None:
@@ -178,40 +253,3 @@ class ImplementStage(Stage):
                 )
         ctx.service.set_branch(ticket.id, branch)
         return (repo_dir, branch, resuming)
-
-    @staticmethod
-    def _run_implement_agent(ctx, ticket, repo_dir, branch, settings):
-        ws = ctx.service.workspace(ticket)
-        spec = ws.read_description()
-
-        # Load the implement agent's memory ledger.
-        memory_text = load_memory(settings.implement_memory_file)
-
-        try:
-            summary, _, updated_memory = coding.run_implement_agent(
-                settings=settings, repo_dir=repo_dir, spec=spec,
-                memory=memory_text,
-            )
-        except AgentBudgetError as e:
-            ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
-                ok=False,
-            )
-            return Outcome(
-                State.BLOCKED,
-                f"agent budget cap — resumable (move to READY): {e}",
-            )
-        except AgentRunError as e:
-            ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, f"agent error: {e}",
-                ok=False,
-            )
-            return Outcome(
-                State.BLOCKED, f"agent error — resumable: {e}"
-            )
-
-        # Persist the agent's updated memory.
-        if updated_memory:
-            persist_memory(settings.implement_memory_file, updated_memory)
-
-        return summary

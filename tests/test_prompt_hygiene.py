@@ -68,7 +68,10 @@ def test_coordinating_prompt_no_tool_signatures():
     assert "prefer `explore`" in p
     assert "`edit_file`" in p
     assert "`write_file`" in p
-    assert "`run_tests`" in p
+    # The coordinator no longer runs the suite itself — the stage owns
+    # the test→retry→escalate loop. The prompt must say so.
+    assert "test suite" in p
+    assert "<test_failure>" in p
 
 
 def test_health_prompt_no_tool_signatures():

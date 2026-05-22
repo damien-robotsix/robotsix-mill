@@ -263,19 +263,21 @@ def test_no_changes_blocks(ctx_factory, tmp_path, monkeypatch):
 
 
 def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
-    """The coordinator owns the loop; the stage calls it ONCE and the
-    authoritative final gate decides. Gate fails -> BLOCKED-resumable,
-    WIP committed, coordinator invoked exactly once."""
+    """The stage owns a bounded fix loop: it re-invokes the coordinator
+    on each test-gate failure, feeding the diagnosis back, and escalates
+    to BLOCKED-resumable once max_fix_iterations is exhausted — WIP
+    committed."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote,
-        MILL_TEST_COMMAND="false",  # final gate always fails
+        MILL_TEST_COMMAND="false",        # gate always fails
+        MILL_MAX_FIX_ITERATIONS="2",      # keep the loop short
     )
     calls = []
 
     def _run(*, settings, repo_dir, spec, feedback=None, history=None, memory=""):
-        del settings, spec, feedback, history, memory  # seam signature
-        calls.append(1)
+        del settings, spec, history, memory  # seam signature
+        calls.append(feedback)
         (Path(repo_dir) / "wip.txt").write_text("did work")
         return ("tried", [], "")
 
@@ -285,8 +287,11 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     out = ImplementStage().run(t, ctx)
 
     assert out.next_state is State.BLOCKED
-    assert "test gate still fails" in out.note and "resumable" in out.note
-    assert len(calls) == 1  # stage calls the coordinator once, not a loop
+    assert "still failing" in out.note and "resumable" in out.note
+    # The stage re-invokes the coordinator once per iteration.
+    assert len(calls) == 2
+    assert calls[0] is None              # first pass: no feedback
+    assert calls[1] is not None          # retry: prior diagnosis fed back
     repo = ctx.service.workspace(t).dir / "repo"
     log = subprocess.run(
         ["git", "-C", str(repo), "log", "-1", "--pretty=%s"],

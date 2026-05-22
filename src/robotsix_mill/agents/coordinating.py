@@ -1,8 +1,11 @@
 """The implement agent.
 
-A capable model that reads and edits the repo ITSELF. It implements
-directly, runs tests, and loops on failure. No separate implement
-sub-agent — that layer just re-explored everything and never converged.
+A capable model that reads and edits the repo ITSELF to satisfy ONE
+ticket. Each invocation is a single explore→read→edit pass — the
+implement *stage* owns the deterministic test→retry→escalate loop and
+re-invokes this agent with a distilled failure diagnosis when the suite
+fails. No separate implement sub-agent — that layer just re-explored
+everything and never converged.
 
 ``run_coordinator`` is the seam ``coding.run_implement_agent`` drives
 (name kept for the stage/tests).
@@ -11,6 +14,7 @@ sub-agent — that layer just re-explored everything and never converged.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -70,6 +74,50 @@ class ImplementResult(BaseModel):
         return data
 
 
+class ValidationResult(BaseModel):
+    """Deterministic routing decision for one implement iteration.
+
+    Produced by the implement *stage* after each test-gate run (NOT by
+    the model). It is the single routing authority — it decides whether
+    to deliver (``proceed``), re-invoke the coordinator (``retry``), or
+    block the ticket (``escalate``).
+    """
+
+    passed: bool
+    next_action: Literal["proceed", "retry", "escalate"]
+    failure_summary: str = ""
+    iterations_used: int = 0
+
+    @classmethod
+    def decide(
+        cls,
+        *,
+        passed: bool,
+        iterations: int,
+        max_iters: int,
+        feedback: str = "",
+    ) -> "ValidationResult":
+        """Route deterministically from a test-gate outcome.
+
+        ``passed`` → ``proceed``; a failure with attempts remaining →
+        ``retry``; a failure on the last allowed attempt → ``escalate``.
+        No LLM is involved — for any ``(passed, iterations, max_iters)``
+        triple the result is fixed.
+        """
+        if passed:
+            next_action: Literal["proceed", "retry", "escalate"] = "proceed"
+        elif iterations < max_iters:
+            next_action = "retry"
+        else:
+            next_action = "escalate"
+        return cls(
+            passed=passed,
+            next_action=next_action,
+            failure_summary="" if passed else feedback,
+            iterations_used=iterations,
+        )
+
+
 _SYSTEM_PROMPT = """\
 You are a senior engineer implementing ONE ticket in a git repo.
 
@@ -77,12 +125,17 @@ Procedure:
 1. `explore` to orient; `read_file` the specific files you'll change.
 2. Make the smallest change that fully satisfies the spec (prefer
    `edit_file` over `write_file`); add/adjust tests for the behaviour.
-3. `run_tests`. On PASS, stop and reply with a 1–3 sentence summary.
-4. On FAIL, use `run_command` to narrow the problem — re-run just
-   the failing test, check with a linter, inspect `git diff` — then
-   fix and `run_tests` again; at most {max_iters} test cycles. If
-   still failing, stop and reply starting with "UNRESOLVED:" and a
-   short reason.
+3. Use `run_command` for focused checks while you work — run a single
+   test, a linter, inspect `git diff`.
+4. When the change is complete, stop and reply with a 1-3 sentence
+   summary of what you did.
+
+The full test suite is run for you automatically once you stop. You do
+NOT run the whole suite yourself, and you do NOT decide when to give
+up — that routing is handled deterministically outside this
+conversation. If the suite fails you will be invoked again with a
+short diagnosis inside a `<test_failure>` block: fix exactly that and
+stop.
 
 Keep your context lean: prefer `explore` over wide reading; never
 paste whole files into your reasoning. Do not commit/push/touch git.
@@ -106,21 +159,6 @@ After the run, update the memory in your `updated_memory` field:
 """
 
 
-def make_run_tests_tool(settings: Settings, repo_dir: Path):
-    def run_tests() -> str:
-        """Run the project's test suite (isolated sandbox) via the test
-        sub-agent. Returns 'PASS' or 'FAIL' followed by a short,
-        actionable diagnosis — never the raw log."""
-        from .testing import run_test_agent
-
-        passed, feedback = run_test_agent(
-            settings=settings, repo_dir=repo_dir
-        )
-        return f"{'PASS' if passed else 'FAIL'}: {feedback}"
-
-    return run_tests
-
-
 def run_coordinator(
     *,
     settings: Settings,
@@ -128,9 +166,18 @@ def run_coordinator(
     spec: str,
     memory: str = "",
     model_name: str | None = None,
+    feedback: str | None = None,
 ) -> ImplementResult:
-    """Drive explore → read → implement → test → loop. Returns the
-    structured result. The seam tests monkeypatch this."""
+    """Run ONE explore→read→edit pass for the ticket and return the
+    structured result.
+
+    The implement *stage* owns the deterministic test→retry→escalate
+    loop; when it re-invokes after a failed test gate it passes
+    ``feedback`` — a distilled diagnosis of the previous run's failure —
+    which is appended to the prompt as a ``<test_failure>`` block. The
+    partial edits from earlier passes persist on disk in ``repo_dir``,
+    so a retry continues from the current working tree. The seam tests
+    monkeypatch this."""
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
@@ -140,23 +187,20 @@ def run_coordinator(
     from .retry import call_with_retry
 
     fs = build_fs_tools(repo_dir, settings)
-    # the main agent reads + writes itself and includes run_command
-    # for focused diagnosis between run_tests cycles (re-run a single
-    # failing test, run a linter, inspect git diff, etc.).
+    # the main agent reads + writes itself and includes run_command for
+    # focused diagnosis (re-run a single failing test, run a linter,
+    # inspect git diff, etc.). The full suite is run by the stage.
     fs_tools = [
         t for t in fs if t.__name__ in
         ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
     ]
     agent = build_agent(
         settings,
-        system_prompt=_SYSTEM_PROMPT.format(
-            max_iters=settings.max_fix_iterations
-        ),
+        system_prompt=_SYSTEM_PROMPT,
         output_type=PromptedOutput(ImplementResult),
         tools=[
             make_explore_tool(settings, repo_dir),
             *fs_tools,
-            make_run_tests_tool(settings, repo_dir),
         ],
         web=True,  # adds the cheap web_research tool
         model_name=model_name if model_name is not None else settings.model,  # the capable implement model
@@ -168,6 +212,15 @@ def run_coordinator(
             f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
             f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
         )
+        if feedback:
+            user_prompt += (
+                "\n\n<test_failure>\n"
+                "Your previous edit pass is already on disk, but the test "
+                "suite then failed. Diagnosis:\n"
+                f"{feedback}\n"
+                "</test_failure>\n\n"
+                "Fix exactly this failure and stop."
+            )
         result = call_with_retry(
             lambda: agent.run_sync(user_prompt, usage_limits=limits),
             settings=settings, what="implement",

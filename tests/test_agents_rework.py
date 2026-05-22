@@ -8,7 +8,7 @@ import pytest
 
 from robotsix_mill.agents import coordinating, testing
 from robotsix_mill.agents import openrouter_cost as oc
-from robotsix_mill.agents.coordinating import ImplementResult
+from robotsix_mill.agents.coordinating import ImplementResult, ValidationResult
 from robotsix_mill.config import Settings
 
 
@@ -45,8 +45,9 @@ def fake_ai(monkeypatch):
 
 def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     """The main agent uses MILL_MODEL and gets explore (scout) + its
-    OWN fs tools + run_tests + web_research — no implement sub-agent,
-    no raw run_command (tests go via the test sub-agent)."""
+    OWN fs tools (incl. run_command for focused diagnosis) +
+    web_research. There is NO run_tests tool — the implement stage owns
+    the test→retry→escalate loop and runs the suite itself."""
     s = _settings(
         tmp_path, MILL_MODEL="main/cap",
         MILL_COORDINATOR_REQUEST_LIMIT="9",
@@ -59,7 +60,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "delete_file", "edit_file", "explore", "list_dir", "read_file",
-        "report_issue", "run_command", "run_tests", "web_research", "write_file",
+        "report_issue", "run_command", "web_research", "write_file",
     ]
     assert fake_ai["name"] == "implement"
 
@@ -220,3 +221,38 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
     assert cap["tools"] == [
         "explore", "list_dir", "read_file", "run_command", "web_research",
     ]
+
+
+def test_validation_result_decide_proceed():
+    """A passing gate routes to proceed regardless of iteration count."""
+    vr = ValidationResult.decide(
+        passed=True, iterations=1, max_iters=8, feedback="",
+    )
+    assert vr.passed is True
+    assert vr.next_action == "proceed"
+    assert vr.failure_summary == ""
+    assert vr.iterations_used == 1
+
+
+def test_validation_result_decide_retry():
+    """A failing gate with attempts remaining routes to retry and
+    carries the diagnosis as failure_summary."""
+    vr = ValidationResult.decide(
+        passed=False, iterations=1, max_iters=8, feedback="boom in test_x",
+    )
+    assert vr.passed is False
+    assert vr.next_action == "retry"
+    assert vr.failure_summary == "boom in test_x"
+    assert vr.iterations_used == 1
+
+
+def test_validation_result_decide_escalate():
+    """A failing gate on the last allowed attempt routes to escalate —
+    no LLM involvement, the bound is enforced here."""
+    vr = ValidationResult.decide(
+        passed=False, iterations=3, max_iters=3, feedback="still broken",
+    )
+    assert vr.next_action == "escalate"
+    assert vr.passed is False
+    assert vr.failure_summary == "still broken"
+    assert vr.iterations_used == 3
