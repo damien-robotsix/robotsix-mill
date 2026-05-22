@@ -15,10 +15,12 @@ from .implement import ImplementStage
 from .merge import MergeStage
 from .refine import RefineStage
 from .retrospect import RetrospectStage
+from .review import ReviewStage
 
 _REGISTERED: list[type[Stage]] = [
     RefineStage,
     ImplementStage,
+    ReviewStage,
     DeliverStage,
     MergeStage,
     CIFixStage,

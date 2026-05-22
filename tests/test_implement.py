@@ -459,3 +459,21 @@ def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch)
 
     out = ImplementStage().run(t, ctx)
     assert out.next_state is State.DELIVERABLE
+
+
+def test_success_to_code_review_when_review_enabled(ctx_factory, tmp_path, monkeypatch):
+    """When MILL_REVIEW_ENABLED=true, implement transitions to CODE_REVIEW."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="true",
+    )
+    monkeypatch.setattr(
+        coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
+    )
+    t = _ticket(ctx)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.CODE_REVIEW

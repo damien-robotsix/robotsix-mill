@@ -35,7 +35,8 @@ class State(StrEnum):
     DRAFT = "draft"            # raw idea, awaiting refinement
     HUMAN_ISSUE_APPROVAL = "human_issue_approval"  # refined; awaiting human approval
     READY = "ready"           # actionable; awaiting implementation
-    DELIVERABLE = "deliverable"  # implemented; awaiting MR delivery
+    CODE_REVIEW = "code_review"  # implemented; awaiting automated code review
+    DELIVERABLE = "deliverable"  # reviewed; awaiting MR delivery
     HUMAN_MR_APPROVAL = "human_mr_approval"   # PR/MR open; awaiting human merge
     REBASING = "rebasing"     # conflicting PR; rebase agent in progress
     FIXING_CI = "fixing_ci"   # PR open + failing CI; auto-fix in progress
@@ -54,9 +55,10 @@ TRANSITIONS: dict[State, set[State]] = {
     # human_issue_approval is a human-wait state; the human approves → ready,
     # rejects back to draft with comments, or escalates → blocked/failed.
     State.HUMAN_ISSUE_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},
-    # implement routes straight to deliverable (the PR itself is the
-    # review — no separate pre-deliver code-review state).
-    State.READY: {State.DELIVERABLE, State.ERRORED, State.BLOCKED},
+    # implement routes to code_review when review is enabled, otherwise
+    # straight to deliverable.
+    State.READY: {State.CODE_REVIEW, State.DELIVERABLE, State.ERRORED, State.BLOCKED},
+    State.CODE_REVIEW: {State.DELIVERABLE, State.READY, State.ERRORED, State.BLOCKED},
     State.DELIVERABLE: {State.HUMAN_MR_APPROVAL, State.ERRORED, State.BLOCKED},
     # PR open: merge stage polls -> merged=done, closed-unmerged=blocked,
     # conflicting=rebasing (auto-rebase cycle), failing CI=fixing_ci.
@@ -90,6 +92,7 @@ TRANSITIONS: dict[State, set[State]] = {
 STAGE_FOR_STATE: dict[State, str] = {
     State.DRAFT: "refine",
     State.READY: "implement",
+    State.CODE_REVIEW: "review",
     State.DELIVERABLE: "deliver",
     State.HUMAN_MR_APPROVAL: "merge",
     State.REBASING: "merge",

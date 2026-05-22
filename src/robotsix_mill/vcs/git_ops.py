@@ -200,3 +200,13 @@ def recent_commits(repo: Path, n: int) -> list[dict]:
         sha, _, subject = line.partition(" ")
         commits.append({"sha": sha, "subject": subject})
     return commits
+
+
+def diff_base(repo: Path, target_branch: str) -> str:
+    """Return the unified diff of all commits on the current branch
+    vs origin/<target_branch>. Fetches first so the diff is current."""
+    _git(repo, "fetch", "origin", target_branch)
+    return subprocess.run(
+        ["git", "-C", str(repo), "diff", f"origin/{target_branch}..HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout

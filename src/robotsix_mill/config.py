@@ -277,6 +277,20 @@ class Settings(BaseSettings):
         default=True, alias="MILL_REQUIRE_APPROVAL"
     )
 
+    # --- dual-model review gate (implement → deliver) ---
+    # When true, the implement stage transitions to code_review instead of
+    # deliverable. A dedicated review agent audits the diff blind before the
+    # deliver stage pushes + opens the PR. Default False (opt-in).
+    review_enabled: bool = Field(
+        default=False, alias="MILL_REVIEW_ENABLED"
+    )
+    # Model for the review agent. Defaults to the capable coordinator model.
+    # Override to use a *different* model for a genuinely independent review
+    # perspective (the dual-model benefit).
+    review_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_REVIEW_MODEL"
+    )
+
     # --- retrospect stage (done -> reviewed) ---
     # When True, retrospect may file an improvement DRAFT. Until the
     # human-gate-after-refine exists, that draft auto-flows to done and

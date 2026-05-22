@@ -90,6 +90,18 @@ class ImplementStage(Stage):
         feedback: str | None = None
         summary = ""
 
+        # If we're re-entering after a code review REQUEST_CHANGES, feed the
+        # review comments as feedback so the coordinator can address them.
+        review_feedback: str | None = None
+        if ticket.blocked_from is None:  # not a BLOCKED resume
+            comments = ctx.service.list_comments(ticket.id)
+            if comments:
+                review_feedback = "\n".join(
+                    f"[REVIEW {c.created_at.isoformat()}] {c.body}"
+                    for c in comments
+                )
+                feedback = review_feedback
+
         for attempt in range(1, max_iters + 1):
             try:
                 summary, _, updated_memory = coding.run_implement_agent(
@@ -144,8 +156,9 @@ class ImplementStage(Stage):
                 ImplementStage._finalize(
                     ctx, ticket, repo_dir, branch, summary, ok=True
                 )
+                next_state = State.CODE_REVIEW if settings.review_enabled else State.DELIVERABLE
                 return Outcome(
-                    State.DELIVERABLE, summary[:200] or "implemented"
+                    next_state, summary[:200] or "implemented"
                 )
 
             if decision.next_action == "escalate":

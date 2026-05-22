@@ -12,7 +12,7 @@ from robotsix_mill.core.states import (
 )
 
 # Known stage names that STAGE_FOR_STATE values must belong to.
-VALID_STAGE_NAMES = {"refine", "implement", "deliver", "merge", "ci_fix", "retrospect", "answer"}
+VALID_STAGE_NAMES = {"refine", "implement", "review", "deliver", "merge", "ci_fix", "retrospect", "answer"}
 
 # States that should NOT appear as keys in STAGE_FOR_STATE.
 NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.HUMAN_ISSUE_APPROVAL, State.ANSWERED}
@@ -180,3 +180,43 @@ def test_errored_as_destination():
         assert can_transition(src, State.ERRORED) is True, (
             f"{src.value} → ERRORED should be valid"
         )
+
+
+# ---------------------------------------------------------------------------
+# CODE_REVIEW spot-checks
+# ---------------------------------------------------------------------------
+
+def test_ready_to_code_review():
+    assert can_transition(State.READY, State.CODE_REVIEW) is True
+
+
+def test_code_review_to_deliverable():
+    assert can_transition(State.CODE_REVIEW, State.DELIVERABLE) is True
+
+
+def test_code_review_to_ready():
+    assert can_transition(State.CODE_REVIEW, State.READY) is True
+
+
+def test_code_review_to_blocked():
+    assert can_transition(State.CODE_REVIEW, State.BLOCKED) is True
+
+
+def test_code_review_to_errored():
+    assert can_transition(State.CODE_REVIEW, State.ERRORED) is True
+
+
+def test_stage_for_state_code_review():
+    assert STAGE_FOR_STATE[State.CODE_REVIEW] == "review"
+
+
+def test_code_review_not_undeclared_source():
+    """Transitions FROM CODE_REVIEW to undeclared states are False."""
+    for dst in (State.HUMAN_MR_APPROVAL, State.DONE, State.HUMAN_ISSUE_APPROVAL, State.DRAFT):
+        assert can_transition(State.CODE_REVIEW, dst) is False, (
+            f"CODE_REVIEW → {dst.value} should be invalid"
+        )
+
+
+def test_blocked_resume_to_code_review():
+    assert can_transition(State.BLOCKED, State.CODE_REVIEW, blocked_from=State.CODE_REVIEW) is True
