@@ -33,7 +33,7 @@ Return the minimum that orients the caller.
 
 SCOPE DISCIPLINE — always follow these limits:
 - GREP BEFORE READ: for any symbol-lookup, string-search, or
-  pattern-matching task, use `run_command("grep -rn 'pattern'")`
+  pattern-matching task, use run_command("grep -rn 'pattern'")
   BEFORE reading files.  Only reach for read_file when you need
   surrounding context beyond what the grep match line provides.
   Examples:
