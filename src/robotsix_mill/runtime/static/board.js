@@ -512,7 +512,7 @@ async function open_(id){
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+renderMD(e.note):""}</div>`).join("")+
    `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
-   ((cs&&cs.length)?cs.map(c=>`<div class="ev"><b class="muted">${c.created_at}</b><br>${renderMD(c.body)}</div>`).join("")
+   ((cs&&cs.length)?cs.map(c=>`<div class="ev"><b class="muted">${c.created_at}</b> · <b>${esc(c.author)}</b><br>${renderMD(c.body)}</div>`).join("")
                    :`<div class="muted" style="font-size:11px">No comments yet.</div>`)+
    ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"")+
    `<h3>description.md</h3><div class="md-body">${renderMD((d&&d.description)||"")}</div>`;
