@@ -58,14 +58,20 @@ class ToolRegistry:
         )
 
     @classmethod
-    def describe_for_prompt(cls) -> str:
+    def describe_for_prompt(cls, tool_names: set[str] | None = None) -> str:
         """Return a concise Markdown table of all registered tools,
         grouped by category, suitable for injection into a system prompt.
+
+        When *tool_names* is provided, only tools whose name is in the
+        set are included.  When ``None`` (default, backward-compatible),
+        all registered tools are returned.
 
         When the registry is empty, returns a short message instead of
         an empty table that would confuse the model.
         """
         tools = cls.list_tools()
+        if tool_names is not None:
+            tools = [t for t in tools if t.name in tool_names]
         if not tools:
             return (
                 "## Available tools\n\n"

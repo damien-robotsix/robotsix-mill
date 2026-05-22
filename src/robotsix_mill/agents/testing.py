@@ -53,13 +53,23 @@ def run_test_agent(
     from pydantic_ai.usage import UsageLimits
 
     from .base import build_agent, _safe_close
+    from .explore import make_explore_tool
+    from .fs_tools import build_fs_tools
     from .retry import call_with_retry
+
+    all_fs = build_fs_tools(repo_dir, settings)
+    ro_fs_tools = [
+        t for t in all_fs
+        if t.__name__ in ("read_file", "list_dir", "run_command")
+    ]
+    explore_tool = make_explore_tool(settings, repo_dir)
 
     agent = build_agent(
         settings,
         system_prompt=_SYSTEM_PROMPT,
         model_name=settings.test_model,
         name="run_tests",
+        tools=[*ro_fs_tools, explore_tool],
     )
     limits = UsageLimits(request_limit=settings.test_request_limit)
     try:

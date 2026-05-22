@@ -106,6 +106,9 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     class FakeAgent:
         def __init__(self, **kw):
             cap["name"] = kw.get("name")
+            cap["tools"] = sorted(
+                t.__name__ for t in (kw.get("tools") or [])
+            )
 
         def run_sync(self, prompt, *, usage_limits=None, **kw):
             cap["got_output"] = "assert 1 == 2" in prompt
@@ -120,6 +123,16 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
     assert cap["model"] == "test/cheap" and cap["got_output"]
     assert cap["name"] == "run_tests"
+
+    # AC4: run_tests agent has read-only diagnostic tools
+    assert "read_file" in cap["tools"]
+    assert "list_dir" in cap["tools"]
+    assert "run_command" in cap["tools"]
+    assert "explore" in cap["tools"]
+    assert "report_issue" in cap["tools"]
+    assert "write_file" not in cap["tools"]
+    assert "edit_file" not in cap["tools"]
+    assert "delete_file" not in cap["tools"]
 
 
 def test_test_agent_no_command_is_pass(tmp_path):
@@ -154,6 +167,60 @@ def test_build_agent_forwards_name(tmp_path, monkeypatch):
         s, system_prompt="test", name="test-agent",
     )
     assert cap["name"] == "test-agent"
+
+
+def test_build_agent_prompt_only_lists_owned_tools(tmp_path, monkeypatch):
+    """AC3: Register a tool in ToolRegistry that is NOT passed to
+    build_agent. The system prompt must NOT mention the un-owned tool."""
+    from robotsix_mill.agents.base import build_agent
+    from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
+
+    s = _settings(tmp_path)
+
+    # Register a tool that won't be given to the agent
+    ToolRegistry.register(ToolInfo(
+        name="write_file", description="Write a file.",
+        category="fs", parameters={"path": "str", "content": "str"},
+    ))
+
+    def dummy_tool():
+        """A dummy tool."""
+        pass
+
+    # Also register dummy_tool so it appears in the prompt when owned
+    ToolRegistry.register(ToolInfo(
+        name="dummy_tool", description="A dummy tool.",
+        category="fs", parameters={},
+    ))
+
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            cap["system_prompt"] = kw.get("system_prompt", "")
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            return type("R", (), {"output": "ok"})()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    agent = build_agent(
+        s,
+        system_prompt="test prompt",
+        tools=[dummy_tool],
+    )
+    agent.close()
+
+    # The prompt should mention dummy_tool (it's in the agent's tool set)
+    assert "dummy_tool" in cap["system_prompt"]
+    # But NOT write_file (it's registered but not given to this agent)
+    assert "write_file" not in cap["system_prompt"]
 
 
 def test_build_agent_without_name_is_compatible(tmp_path, monkeypatch):
