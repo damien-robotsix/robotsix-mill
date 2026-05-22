@@ -1,6 +1,6 @@
 """Rebase agent: resolves merge conflicts on a stale PR branch.
 
-Runs ``git fetch origin && git rebase origin/<target>`` inside the
+Runs ``git rebase origin/<target>`` inside the
 ticket's existing workspace clone. On conflict it reads the conflicted
 files, edits them in place, and continues the rebase.  Returns ``True``
 iff the rebase completed cleanly.
@@ -59,10 +59,9 @@ def run_rebase_agent(
 
     system_prompt = f"""You are a rebase specialist. Your ONLY job:
 
-1. Run:  git fetch origin
-2. Run:  git rebase origin/{target}
-3. If the rebase applies cleanly, report DONE with a brief summary.
-4. If there are conflicts:
+1. Run:  git rebase origin/{target}
+2. If the rebase applies cleanly, report DONE with a brief summary.
+3. If there are conflicts:
    - Use read_file to inspect EVERY conflicted file (git will list them).
    - Edit each conflicted file IN PLACE with write_file to resolve the
      conflicts.  Keep the PR's intent — preserve its changes while
@@ -70,7 +69,7 @@ def run_rebase_agent(
      unrelated edits from the target branch.
    - After resolving all files, run:  git add <resolved files...>
    - Then run:  git rebase --continue
-   - If more conflicts appear, repeat step 4.
+   - If more conflicts appear, repeat step 3.
    - If git asks you to edit a commit message during --continue, just
      accept the existing message (do NOT change it).
 

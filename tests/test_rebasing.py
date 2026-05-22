@@ -167,7 +167,7 @@ def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
     )
 
     prompt = captured_prompt[0]
-    assert "git fetch origin" in prompt
+    assert "git fetch origin" not in prompt
     assert "git rebase origin/" in prompt
     assert "git rebase --continue" in prompt
     assert "DONE" in prompt

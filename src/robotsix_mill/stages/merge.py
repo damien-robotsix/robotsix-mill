@@ -28,6 +28,7 @@ no history spam, no busy loop.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from ..agents.rebasing import run_rebase_agent
 from ..core.models import Ticket
@@ -194,6 +195,16 @@ class MergeStage(Stage):
             # invisible in the per-ticket session total.)
             with tracing.start_ticket_root_span(ticket.id), \
                     tracing.trace_stage("rebase"):
+                # Refresh origin/<target> so the agent rebases onto
+                # current main, not the stale ref frozen at clone time.
+                # The sandbox has --network none; git fetch MUST run
+                # here, outside the container.
+                git_ops.fetch(
+                    Path(repo_dir),
+                    remote_url=s.forge_remote_url,
+                    token=github_token(s),
+                    branch=target,
+                )
                 memory_text = load_memory(s.rebase_memory_file)
                 result = run_rebase_agent(
                     settings=s,
@@ -206,7 +217,7 @@ class MergeStage(Stage):
                 if result.updated_memory:
                     persist_memory(s.rebase_memory_file, result.updated_memory)
         except Exception as e:  # noqa: BLE001
-            log.exception("%s: rebase agent crashed: %s", ticket.id, e)
+            log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False
 
         if ok:
@@ -215,7 +226,8 @@ class MergeStage(Stage):
             # right after any push (while it recomputes); pushing an
             # unchanged branch re-triggers CI + another recompute →
             # endless REBASING↔IN_REVIEW ping-pong on a healthy PR (and
-            # an ntfy every cycle). The agent ran `git fetch origin`, so
+            # an ntfy every cycle). The merge stage fetched
+            # origin/<branch> before invoking the agent, so
             # origin/<branch> is fresh.
             try:
                 local = git_ops.head_sha(repo_dir)

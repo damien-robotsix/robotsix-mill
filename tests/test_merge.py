@@ -201,6 +201,10 @@ def test_rebasing_clean_rebase_returns_to_in_review(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
     )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
 
     push_calls = {}
 
@@ -232,6 +236,10 @@ def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
         lambda **k: RebaseResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
     )
     sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     monkeypatch.setattr(
@@ -265,6 +273,10 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
         lambda **k: RebaseResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
     )
     sha = "cafebabecafebabecafebabecafebabecafebabe"
     monkeypatch.setattr(
@@ -310,6 +322,10 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
     )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
 
     t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -336,6 +352,10 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
     )
 
     push_called = []
@@ -378,6 +398,10 @@ def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
     )
     push_calls = {}
 
@@ -434,6 +458,10 @@ def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
     )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
 
     t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -462,6 +490,10 @@ def test_rebase_agent_crash_is_treated_as_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", boom,
     )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
 
     t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -482,6 +514,10 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
     )
 
     push_called = []
@@ -511,6 +547,10 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
     )
 
     def boom_push(repo, branch, remote_url, token):
@@ -550,6 +590,10 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
     )
 
     def fake_push(repo, branch, remote_url, token):
@@ -608,6 +652,10 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
     )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
 
     push_args = {}
 
@@ -654,6 +702,10 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
         lambda **k: RebaseResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.github_token", lambda s: "MINTED-APP-TOK"
@@ -842,3 +894,69 @@ def test_closed_pr_skips_check_status(tmp_path, monkeypatch):
     out = MergeStage().run(_in_review(ctx), ctx)
     assert out.next_state is State.BLOCKED
     assert check_calls == []
+
+
+# --- New: fetch-before-rebase-agent tests ---
+
+def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
+    """git_ops.fetch is called before run_rebase_agent in _handle_conflict."""
+    ctx = _gh(tmp_path)
+    calls = []
+
+    def fake_fetch(repo, *, remote_url, token, branch):
+        calls.append("fetch")
+
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        calls.append("agent")
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch", fake_fetch,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push",
+        lambda *a, **k: None,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    MergeStage().run(t, ctx)
+    assert calls == ["fetch", "agent"]
+
+
+def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
+    """When git_ops.fetch raises CalledProcessError, the agent is not invoked."""
+    import subprocess
+
+    ctx = _gh(tmp_path)
+    agent_called = []
+
+    def fake_fetch(repo, *, remote_url, token, branch):
+        raise subprocess.CalledProcessError(1, "git fetch")
+
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        agent_called.append(1)
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch", fake_fetch,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert agent_called == []
+    # With default max_attempts (3), a failed attempt stays in REBASING
+    assert out.next_state is State.REBASING
