@@ -222,6 +222,7 @@ def run_refine_agent(
     repo_dir: Path | None = None,
     reviewer_comments: str | None = None,
     memory: str = "",
+    epic_context: str = "",
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -263,7 +264,10 @@ def run_refine_agent(
     )
 
     # Build user prompt: title, draft, memory, and optionally reviewer feedback.
-    user_prompt = (
+    user_prompt = ""
+    if epic_context:
+        user_prompt += f"{epic_context}\n\n"
+    user_prompt += (
         f"<title>{title}</title>\n<draft>\n{draft}\n</draft>\n\n"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
     )

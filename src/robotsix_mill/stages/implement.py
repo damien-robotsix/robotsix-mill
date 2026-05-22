@@ -84,6 +84,9 @@ class ImplementStage(Stage):
         """
         ws = ctx.service.workspace(ticket)
         spec = ws.read_description()
+        epic_ctx = ctx.service.get_epic_context(ticket)
+        if epic_ctx:
+            spec = epic_ctx + "\n\n" + spec
         memory_text = load_memory(settings.implement_memory_file)
         max_iters = max(1, settings.max_fix_iterations)
 

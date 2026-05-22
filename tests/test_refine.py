@@ -56,7 +56,7 @@ def test_empty_title_and_draft_blocks(ctx, service):
 
 
 def test_no_api_key_blocks(ctx, service, monkeypatch):
-    def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     monkeypatch.setattr(refining, "run_refine_agent", boom)
@@ -71,7 +71,7 @@ def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
     refine_called = False
 
     def fake_refine(
-        *, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""
+        *, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""
     ):
         nonlocal refine_called
         refine_called = True
@@ -219,7 +219,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
         seen["clone"] += 1
         (dest / ".git").mkdir(parents=True)
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         seen["repo_dir"] = repo_dir
         return _single("## Problem\nx\n## Scope\n- y\n")
 
@@ -252,7 +252,7 @@ def test_refine_clone_failure_falls_back_to_draft_only(ctx, service, monkeypatch
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         got["repo_dir"] = repo_dir
         return _single("## Problem\nx\n")
 
@@ -316,7 +316,7 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -352,7 +352,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -388,7 +388,7 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -484,7 +484,7 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -966,7 +966,7 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     # Step 3: Now run RefineStage on child A — it should skip the agent.
     refine_called = False
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         nonlocal refine_called
         refine_called = True
         return _single(draft)
@@ -1014,7 +1014,7 @@ def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
     refine_called = False
     expected_spec = "## Problem\nrefined improvement\n## Scope\n- do it\n"
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory=""):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         nonlocal refine_called
         refine_called = True
         assert draft == raw_draft
@@ -1348,3 +1348,76 @@ def test_sendback_prompt_includes_reviewer_feedback_reference():
     # Must NOT contain the lengthy split heuristics (from SYSTEM_PROMPT)
     assert "≥4 distinct source files" not in REVIEWER_SENDBACK_PROMPT
     assert "backend↔frontend boundary" not in REVIEWER_SENDBACK_PROMPT
+
+
+# --- epic context -------------------------------------------------------
+
+def test_epic_context_passed_to_refine_agent(ctx, service, monkeypatch):
+    """When a ticket has an epic parent, epic_context is passed to
+    run_refine_agent and contains the epic description."""
+    epic = service.create("Global Epic", "High-level: unify UX", kind="epic")
+    child = service.create(
+        "Add dark mode", "Please add dark mode toggle",
+        parent_id=epic.id,
+    )
+
+    seen_epic_context: list[str] = []
+
+    def fake_refine(
+        *, settings, title, draft, repo_dir=None,
+        reviewer_comments=None, memory="", epic_context="",
+    ):
+        seen_epic_context.append(epic_context)
+        return _single("## Problem\nspec\n")
+
+    monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
+
+    out = RefineStage().run(child, ctx)
+    assert out.next_state in (State.HUMAN_ISSUE_APPROVAL, State.READY)
+    assert len(seen_epic_context) == 1
+    assert "High-level: unify UX" in seen_epic_context[0]
+    assert seen_epic_context[0].startswith("<epic_context>")
+
+
+def test_epic_context_empty_for_non_epic_parent_in_refine(ctx, service, monkeypatch):
+    """Refine: ticket with non-epic parent → epic_context is empty."""
+    parent = service.create("Parent task", "Ordinary task", kind="task")
+    child = service.create(
+        "Child of task", "Do a sub-thing",
+        parent_id=parent.id,
+    )
+
+    seen_epic_context: list[str] = []
+
+    def fake_refine(
+        *, settings, title, draft, repo_dir=None,
+        reviewer_comments=None, memory="", epic_context="",
+    ):
+        seen_epic_context.append(epic_context)
+        return _single("## Problem\nspec\n")
+
+    monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
+
+    RefineStage().run(child, ctx)
+    assert len(seen_epic_context) == 1
+    assert seen_epic_context[0] == ""
+
+
+def test_epic_context_empty_for_no_parent_in_refine(ctx, service, monkeypatch):
+    """Refine: ticket without parent → epic_context is empty."""
+    t = service.create("Standalone", "Just a draft")
+
+    seen_epic_context: list[str] = []
+
+    def fake_refine(
+        *, settings, title, draft, repo_dir=None,
+        reviewer_comments=None, memory="", epic_context="",
+    ):
+        seen_epic_context.append(epic_context)
+        return _single("## Problem\nspec\n")
+
+    monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
+
+    RefineStage().run(t, ctx)
+    assert len(seen_epic_context) == 1
+    assert seen_epic_context[0] == ""

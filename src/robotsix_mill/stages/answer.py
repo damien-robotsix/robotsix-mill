@@ -27,6 +27,9 @@ class AnswerStage(Stage):
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         ws = ctx.service.workspace(ticket)
         question = ws.read_description().strip()
+        epic_ctx = ctx.service.get_epic_context(ticket)
+        if epic_ctx:
+            question = epic_ctx + "\n\n" + question
         title = ticket.title.strip()
         if not title and not question:
             return Outcome(State.BLOCKED, "empty title and question — nothing to answer")

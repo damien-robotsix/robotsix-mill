@@ -42,6 +42,7 @@ class RefineStage(Stage):
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:  # noqa: C901  # TODO: split dedup, clone, refine into sub-functions (ticket: split_refine_stage)
         ws = ctx.service.workspace(ticket)
         draft = ws.read_description().strip()
+        epic_ctx = ctx.service.get_epic_context(ticket)
         title = ticket.title.strip()
         if not title and not draft:
             return Outcome(State.BLOCKED, "empty title and draft — nothing to refine")
@@ -194,6 +195,7 @@ class RefineStage(Stage):
                 repo_dir=repo_dir,
                 reviewer_comments=reviewer_comments,
                 memory=memory_text,
+                epic_context=epic_ctx,
             )
 
             if result.updated_memory:
