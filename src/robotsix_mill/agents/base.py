@@ -19,7 +19,6 @@ from typing import Any
 
 from ..config import Settings
 from .report_issue import make_report_issue_tool
-from .skills import load_skills
 from .web_research import make_web_research_tool
 
 
@@ -92,7 +91,7 @@ def _model_name(settings: Settings) -> str:
 
 
 def _compose_prompt(settings: Settings, system_prompt: str) -> str:
-    return system_prompt + load_skills(settings.skills_dir)
+    return system_prompt
 
 
 def build_agent(

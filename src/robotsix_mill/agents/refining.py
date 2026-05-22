@@ -22,7 +22,7 @@ from ..config import Settings
 
 
 class ChildSpec(BaseModel):
-    """A single child spec produced by a split."""
+    """A split child."""
 
     title: str
     spec_markdown: str
@@ -30,7 +30,7 @@ class ChildSpec(BaseModel):
 
 
 class RefineResult(BaseModel):
-    """Structured output from the refine agent."""
+    """Refine agent output."""
 
     split: bool = False
     spec_markdown: str | None = None
