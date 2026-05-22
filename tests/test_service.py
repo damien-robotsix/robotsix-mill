@@ -441,3 +441,63 @@ def test_migration_idempotent(settings):
     from robotsix_mill.core.db import _run_migrations
     _run_migrations(settings)
     _run_migrations(settings)  # second call must not raise
+
+
+# ---------------------------------------------------------------------------
+# Epic tests
+# ---------------------------------------------------------------------------
+
+def test_create_epic(service):
+    """Creating with kind='epic' sets state to EPIC_OPEN."""
+    t = service.create("My Epic", "Big picture", kind="epic")
+    assert t.state == State.EPIC_OPEN
+    assert t.kind == "epic"
+
+
+def test_create_child_with_parent_id(service):
+    """Creating a child with parent_id links it to the epic."""
+    epic = service.create("Epic", "Overview", kind="epic")
+    child = service.create("Child", "Detail", kind="task", parent_id=epic.id)
+    assert child.parent_id == epic.id
+    # Verify persisted
+    reloaded = service.get(child.id)
+    assert reloaded.parent_id == epic.id
+
+
+def test_create_child_nonexistent_parent(service):
+    """parent_id pointing to a missing ticket raises ValueError."""
+    with pytest.raises(ValueError, match="does not exist"):
+        service.create("Orphan", "desc", parent_id="nonexistent-id")
+
+
+def test_get_epic_context_returns_description(service):
+    """get_epic_context returns the parent epic description wrapped in tags."""
+    epic = service.create("Epic", "Big picture description", kind="epic")
+    child = service.create("Child", "detail", kind="task", parent_id=epic.id)
+    ctx = service.get_epic_context(child)
+    assert ctx == "<epic_context>\nBig picture description\n</epic_context>"
+
+
+def test_get_epic_context_no_parent(service):
+    """get_epic_context returns '' for a ticket without a parent."""
+    t = service.create("Standalone")
+    assert service.get_epic_context(t) == ""
+
+
+def test_get_epic_context_parent_not_epic(service):
+    """get_epic_context returns '' when parent is not an epic."""
+    parent = service.create("Regular parent", kind="task")
+    child = service.create("Child", "desc", kind="task", parent_id=parent.id)
+    assert service.get_epic_context(child) == ""
+
+
+def test_list_children(service):
+    """list_children returns all tickets with the given parent_id."""
+    epic = service.create("Epic", "Overview", kind="epic")
+    c1 = service.create("Child 1", kind="task", parent_id=epic.id)
+    c2 = service.create("Child 2", kind="task", parent_id=epic.id)
+    c3 = service.create("Child 3", kind="task", parent_id=epic.id)
+    children = service.list_children(epic.id)
+    assert len(children) == 3
+    child_ids = {c.id for c in children}
+    assert child_ids == {c1.id, c2.id, c3.id}

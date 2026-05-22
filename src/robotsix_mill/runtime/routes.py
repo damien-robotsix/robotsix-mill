@@ -64,6 +64,7 @@ def create_ticket(
             source=body.source,
             depends_on=body.depends_on,
             kind=body.kind,
+            parent_id=body.parent_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -254,6 +255,42 @@ def request_changes(
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc)}
+
+
+@router.post("/epics", response_model=TicketRead, status_code=201)
+def create_epic(
+    body: dict,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Create a new epic — accepts ``{"title": str, "description": str}``."""
+    title = body.get("title", "")
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    description = body.get("description", "")
+    try:
+        ticket = svc.create(title=title, description=description, kind="epic")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return enrich_ticket_read(ticket, settings, svc)
+
+
+@router.get(
+    "/tickets/{ticket_id}/children",
+    response_model=list[TicketRead],
+)
+def list_children(
+    ticket_id: str,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> list[TicketRead]:
+    """Return all tickets whose ``parent_id`` equals *ticket_id*."""
+    if svc.get(ticket_id) is None:
+        raise HTTPException(404, "ticket not found")
+    return [
+        enrich_ticket_read(t, settings, svc, blocking_cost=False, fetch_pr_url=False)
+        for t in svc.list_children(ticket_id)
+    ]
 
 
 @router.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)

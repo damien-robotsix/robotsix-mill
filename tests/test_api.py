@@ -950,3 +950,43 @@ def test_get_deep_review_404_when_not_found(client):
     """GET /deep-review/{trace_id} returns 404 when not in memory or store."""
     r = client.get("/deep-review/no-such-trace")
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Epic API tests
+# ---------------------------------------------------------------------------
+
+def test_create_epic_via_api(client):
+    """POST /epics returns 201 with state='epic_open', kind='epic'."""
+    r = client.post("/epics", json={"title": "My Epic", "description": "Big picture"})
+    assert r.status_code == 201
+    data = r.json()
+    assert data["state"] == "epic_open"
+    assert data["kind"] == "epic"
+
+
+def test_create_ticket_with_parent(client, service):
+    """POST /tickets with parent_id set links child to epic."""
+    epic = service.create("Epic", kind="epic")
+    r = client.post("/tickets", json={
+        "title": "Child Task",
+        "description": "detail",
+        "parent_id": epic.id,
+    })
+    assert r.status_code == 201
+    data = r.json()
+    assert data["parent_id"] == epic.id
+
+
+def test_list_children_endpoint(client, service):
+    """GET /tickets/{epic_id}/children returns children."""
+    epic = service.create("Epic", kind="epic")
+    c1 = service.create("Child 1", kind="task", parent_id=epic.id)
+    c2 = service.create("Child 2", kind="task", parent_id=epic.id)
+
+    r = client.get(f"/tickets/{epic.id}/children")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 2
+    child_ids = {c["id"] for c in data}
+    assert child_ids == {c1.id, c2.id}
