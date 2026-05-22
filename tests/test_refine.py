@@ -1175,6 +1175,35 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
     assert "Borderline drafts stay as one spec" in prompt
 
 
+def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
+    """The refine system prompt must contain tool-strategy guidance
+    steering the agent toward direct tools for simple lookups and
+    batching explore calls."""
+    from robotsix_mill.agents import base as base_mod
+
+    seen_system_prompt: list[str] = []
+
+    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+        seen_system_prompt.append(system_prompt)
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": _single("## Problem\nok\n")})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    refining.run_refine_agent(settings=s, title="Test", draft="draft")
+
+    assert len(seen_system_prompt) == 1
+    prompt = seen_system_prompt[0]
+    assert "## Tool strategy" in prompt
+    assert "`read_file` / `list_dir` / `run_command`" in prompt
+    assert "free — no sub-agent spawned" in prompt
+    assert "use only for complex, multi-step" in prompt
+    assert "consolidate related questions into ONE call" in prompt
+
+
 def test_borderline_draft_not_split(ctx, service, monkeypatch):
     """A borderline draft (single endpoint, two files, same layer)
     must NOT be split — the new prompt must not trigger aggressive
