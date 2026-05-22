@@ -81,8 +81,8 @@ When the user prompt contains a ``<prior_context>`` block:
   you made based on incomplete diff context), explicitly acknowledge the
   withdrawal and drop that comment.  Do NOT re-raise withdrawn issues.
 
-You have access to read-only filesystem tools (``read_file``,
-``list_dir``, ``run_command``) on the real repo clone.  Use them:
+You have access to read-only filesystem tools (``read_file`` and
+``list_dir``) on the real repo clone.  Use them:
 - Verify "missing import", "undefined symbol", "duplicated code", or
   similar claims against the real file content *before* raising them.
 - If you cannot verify a claim from the diff alone, either verify it
@@ -123,9 +123,10 @@ def run_review_agent(
     resolved issues.
 
     When *repo_dir* is provided, the agent receives read-only
-    filesystem tools (``read_file``, ``list_dir``, ``run_command``)
-    sandboxed to that directory, allowing it to verify claims before
-    raising them."""
+    filesystem tools (``read_file`` and ``list_dir``) sandboxed to
+    that directory, allowing it to verify claims before raising them.
+    ``run_command`` is deliberately excluded — even sandboxed, executing
+    shell is not read-only."""
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
@@ -137,7 +138,10 @@ def run_review_agent(
         from .fs_tools import build_fs_tools
 
         all_fs_tools = build_fs_tools(repo_dir, settings)
-        readonly_names = {"read_file", "list_dir", "run_command"}
+        # run_command is deliberately NOT included — even sandboxed, executing
+        # shell is not read-only. The reviewer can verify file content via
+        # read_file + list_dir without arbitrary command execution.
+        readonly_names = {"read_file", "list_dir"}
         tools = [t for t in all_fs_tools if t.__name__ in readonly_names]
 
     agent = build_agent(
