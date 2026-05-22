@@ -1,4 +1,4 @@
-const ST=["draft","human_issue_approval","ready","deliverable","human_mr_approval","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered"];
+const ST=["draft","human_issue_approval","ready","documenting","code_review","deliverable","human_mr_approval","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered","epic_open","epic_closed"];
 const LBL={ready:"implementing"};   // display label only; state value stays "ready"
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
@@ -60,7 +60,7 @@ async function refresh(){
  // terminal, so its updated_at IS its closed_at; DONE is the
  // retrospect-in-flight window. Active columns keep creation-order
  // (oldest queued at top — natural FIFO of work).
- ["closed","done"].forEach(s=>{
+ ["closed","done","epic_closed"].forEach(s=>{
   if(by[s]) by[s].sort((a,b)=>(b.updated_at||"").localeCompare(a.updated_at||""));
  });
  document.getElementById("meta").textContent=

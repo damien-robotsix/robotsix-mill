@@ -57,6 +57,8 @@ border-radius:6px;padding:10px;overflow-x:auto}
 .s-deliverable{--c:#eab308}
 .s-done{--c:#22c55e}.s-closed{--c:#14b8a6}.s-blocked{--c:#f97316}
 .s-errored{--c:#ef4444}
+.s-documenting{--c:#0891b2}.s-code_review{--c:#6366f1}
+.s-epic_open{--c:#9333ea}.s-epic_closed{--c:#6d28d9}
 /* deep-review elements */
 .dr-filters{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
 .dr-filters input{font-size:11px;background:#1d212c;border:1px solid #262b36;color:#cfd3db;border-radius:4px;padding:3px 6px}
