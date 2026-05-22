@@ -36,8 +36,9 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
 def test_explore_subagent_is_read_only_and_uses_explore_model(
     tmp_path, monkeypatch
 ):
-    """The sub-agent gets ONLY read_file/list_dir (never write_file or
-    run_command) and runs on its own explore_model, bounded."""
+    """The sub-agent gets ONLY read_file/list_dir/run_command (never
+    write_file/edit_file/delete_file) and runs on its own explore_model,
+    bounded."""
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
         tmp_path, OPENROUTER_API_KEY="k",
