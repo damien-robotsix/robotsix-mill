@@ -82,8 +82,7 @@ def run_health_pass(root: str | None = None) -> HealthPassResult:
     session_id = make_session_id("health")
     log.info("health pass starting (session %s)", session_id)
     try:
-        with tracing.start_ticket_root_span(session_id), \
-                tracing.trace_stage("health"):
+        with tracing.start_ticket_root_span(session_id, "health"):
             from functools import partial
             from .pass_runner import run_agent_pass
 

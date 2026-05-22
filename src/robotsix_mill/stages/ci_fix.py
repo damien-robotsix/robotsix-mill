@@ -175,8 +175,7 @@ class CIFixStage(Stage):
             # ticket's Langfuse session (session.id = ticket.id) — same
             # reason as the rebase agent: keep its cost/traces attributed
             # to the ticket instead of an orphan root trace.
-            with tracing.start_ticket_root_span(ticket.id), \
-                    tracing.trace_stage("ci_fix"):
+            with tracing.start_ticket_root_span(ticket.id, "ci_fix"):
                 memory_text = load_memory(s.ci_fix_memory_file)
                 result = run_ci_fix_agent(
                     settings=s,

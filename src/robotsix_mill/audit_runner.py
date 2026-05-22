@@ -84,8 +84,7 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
     session_id = make_session_id("audit")
     log.info("audit pass starting (session %s)", session_id)
     try:
-        with tracing.start_ticket_root_span(session_id), \
-                tracing.trace_stage("audit"):
+        with tracing.start_ticket_root_span(session_id, "audit"):
             agent_fn = partial(auditing.run_audit_agent, repo_dir=repo_dir)
             result = run_agent_pass(
                 agent_fn=agent_fn,
