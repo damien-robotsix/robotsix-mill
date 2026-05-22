@@ -457,6 +457,17 @@ class TicketService:
             s.add(ticket)
             s.commit()
 
+    def set_review_rounds(self, ticket_id: str, value: int) -> None:
+        """Set the ``review_rounds`` counter on *ticket_id*."""
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.review_rounds = value
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def set_depends_on(self, ticket_id: str, depends_on_ids: list[str]) -> None:
         """Set the ``depends_on`` field for *ticket_id* to a JSON-encoded
         list of ticket IDs.  Raises :class:`ValueError` if *ticket_id*

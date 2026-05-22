@@ -323,6 +323,13 @@ class Settings(BaseSettings):
     review_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_REVIEW_MODEL"
     )
+    # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
+    # round-trips before escalating to DELIVERABLE for human merge approval.
+    # A value ≤ 0 means escalate on the first REQUEST_CHANGES (the loop is
+    # effectively disabled). Default 3.
+    review_max_rounds: int = Field(
+        default=3, alias="MILL_REVIEW_MAX_ROUNDS"
+    )
 
     # Model for the documentation agent. Defaults to the capable
     # coordinator model.

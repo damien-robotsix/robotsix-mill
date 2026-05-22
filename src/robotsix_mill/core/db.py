@@ -124,6 +124,9 @@ def _run_migrations(settings: Settings) -> None:
         _add_column_if_missing(
             conn, "ticket", "kind", "TEXT NOT NULL", "'task'"
         )
+        _add_column_if_missing(
+            conn, "ticket", "review_rounds", "INTEGER NOT NULL", "0"
+        )
 
         _add_column_if_missing(
             conn, "comment", "author", "TEXT NOT NULL", "'user'"

@@ -289,3 +289,112 @@ def test_auto_merge_eligible_defaults_false(ctx_factory, monkeypatch):
 
     verdict = ReviewVerdict(**PartialVerdict().model_dump())
     assert verdict.auto_merge_eligible is False
+
+
+# --- review round cap --------------------------------------------------
+
+def test_request_changes_under_cap(ctx_factory, monkeypatch):
+    """REQUEST_CHANGES with review_rounds < max → READY, counter incremented."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    ctx.service.set_review_rounds(t.id, 1)  # 1 round already used
+    t = ctx.service.get(t.id)  # refresh in-memory object
+
+    def _fake_review(*, settings, diff, spec, model_name=None):
+        del settings, diff, spec, model_name
+        return ReviewVerdict(verdict="REQUEST_CHANGES", comments="fix X")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    # Counter incremented from 1 → 2
+    t2 = ctx.service.get(t.id)
+    assert t2.review_rounds == 2
+
+    # Comment stored
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].body == "fix X"
+
+
+def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
+    """When review_rounds hits the cap, REQUEST_CHANGES → DELIVERABLE."""
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL="file:///dummy",
+        MILL_REVIEW_ENABLED="true",
+        MILL_REVIEW_MAX_ROUNDS="3",
+    )
+    t = _ticket(ctx)
+    ctx.service.set_review_rounds(t.id, 2)  # round 3 is the cap
+    t = ctx.service.get(t.id)  # refresh in-memory object
+
+    def _fake_review(*, settings, diff, spec, model_name=None):
+        del settings, diff, spec, model_name
+        return ReviewVerdict(verdict="REQUEST_CHANGES", comments="still broken")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert "exhausted" in out.note
+
+    # Counter reset to 0
+    t2 = ctx.service.get(t.id)
+    assert t2.review_rounds == 0
+
+    # Escalation comment stored
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert "cap exhausted" in comments[0].body
+    assert "3/3" in comments[0].body
+
+
+def test_approve_resets_counter(ctx_factory, monkeypatch):
+    """APPROVE resets review_rounds to 0."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    ctx.service.set_review_rounds(t.id, 2)
+    t = ctx.service.get(t.id)  # refresh in-memory object
+
+    def _fake_review(*, settings, diff, spec, model_name=None):
+        del settings, diff, spec, model_name
+        return ReviewVerdict(verdict="APPROVE", comments="lgtm")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert "approved" in out.note
+
+    t2 = ctx.service.get(t.id)
+    assert t2.review_rounds == 0
+
+
+def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
+    """NEEDS_DISCUSSION does NOT reset the review_rounds counter."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    ctx.service.set_review_rounds(t.id, 1)
+    t = ctx.service.get(t.id)  # refresh in-memory object
+
+    def _fake_review(*, settings, diff, spec, model_name=None):
+        del settings, diff, spec, model_name
+        return ReviewVerdict(verdict="NEEDS_DISCUSSION", comments="questionable")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+
+    t2 = ctx.service.get(t.id)
+    assert t2.review_rounds == 1  # unchanged

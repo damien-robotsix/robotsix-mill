@@ -76,8 +76,25 @@ class ReviewStage(Stage):
 
         # Route based on verdict.
         if verdict.verdict == "APPROVE":
+            ctx.service.set_review_rounds(ticket.id, 0)
             return Outcome(State.DELIVERABLE, "review approved")
         elif verdict.verdict == "REQUEST_CHANGES":
+            rounds = ticket.review_rounds + 1
+            ctx.service.set_review_rounds(ticket.id, rounds)
+            if rounds >= s.review_max_rounds:
+                ctx.service.add_comment(
+                    ticket.id,
+                    f"Review round cap exhausted ({rounds}/{s.review_max_rounds} "
+                    f"REQUEST_CHANGES rounds). Escalating to DELIVERABLE for "
+                    f"human merge approval.\n\nLast review verdict:\n{verdict.comments}",
+                    author="review",
+                )
+                ctx.service.set_review_rounds(ticket.id, 0)
+                return Outcome(
+                    State.DELIVERABLE,
+                    f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
+                )
+            # under cap: normal REQUEST_CHANGES path
             ctx.service.add_comment(ticket.id, verdict.comments, author="review")
             return Outcome(
                 State.READY,
