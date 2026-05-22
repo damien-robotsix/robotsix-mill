@@ -136,4 +136,13 @@ def make_explore_tool(settings: Settings, repo_dir: Path):
             settings=settings, repo_dir=repo_dir, question=question
         )
 
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(ToolInfo(
+        name="explore",
+        description="Ask a fresh, context-isolated sub-agent a complex, multi-step question about the repository.",
+        category="exploration",
+        parameters={"question": "str"},
+    ))
+
     return explore

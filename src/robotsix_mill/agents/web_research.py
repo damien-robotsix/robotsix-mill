@@ -88,4 +88,13 @@ def make_web_research_tool(settings: Settings):
         answer."""
         return run_web_research(settings=settings, query=query)
 
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(ToolInfo(
+        name="web_research",
+        description="Research a question on the web and return a concise factual conclusion with inline source URLs.",
+        category="web",
+        parameters={"query": "str"},
+    ))
+
     return web_research

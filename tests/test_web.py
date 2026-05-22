@@ -108,11 +108,22 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
     assert captured["name"] == "web_research"
 
 
-def test_compose_prompt_no_longer_appends_skills(tmp_path):
-    s = _settings(tmp_path, MILL_SKILLS_DIR="skills")
-    p = _compose_prompt(s, "BASE PROMPT")
-    assert p == "BASE PROMPT"
-    assert "Web Fetch" not in p
+def test_compose_prompt_injects_capability_table(tmp_path):
+    """_compose_prompt now injects ToolRegistry.describe_for_prompt()
+    into every agent's system prompt.  When tools are registered, the
+    table appears; when empty, a placeholder message is appended."""
+    from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
+
+    s = _settings(tmp_path)
+    ToolRegistry._tools.clear()
+    try:
+        # With no tools registered, we still get the placeholder table.
+        p = _compose_prompt(s, "BASE PROMPT")
+        assert p.startswith("BASE PROMPT")
+        assert "## Available tools" in p
+        assert "No tools have been registered yet" in p
+    finally:
+        ToolRegistry._tools.clear()
 
 
 # --- web_fetch tool -----------------------------------------------------
