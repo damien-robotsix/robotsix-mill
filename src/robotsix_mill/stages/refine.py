@@ -6,7 +6,7 @@ artifact for traceability. Empty draft or missing OpenRouter key ->
 BLOCKED with a clear note (not a crash).
 
 When ``require_approval`` is true (the default), the refined ticket
-enters ``awaiting_approval`` instead of ``ready`` — a human must approve
+enters ``human_issue_approval`` instead of ``ready`` — a human must approve
 before the implement stage picks it up.
 
 Before the expensive refine agent runs, a cheap **dedup / already-done
@@ -172,7 +172,7 @@ class RefineStage(Stage):
                             encoding="utf-8",
                         )
                     next_state = (
-                        State.AWAITING_APPROVAL if ctx.settings.require_approval
+                        State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
                         else State.READY
                     )
                     return Outcome(next_state, "split child — spec already refined")
@@ -217,7 +217,7 @@ class RefineStage(Stage):
                     ticket.id,
                 )
                 next_state = (
-                    State.AWAITING_APPROVAL if ctx.settings.require_approval
+                    State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
                     else State.READY
                 )
                 return Outcome(next_state, "refined (empty spec — kept original draft)")
@@ -226,7 +226,7 @@ class RefineStage(Stage):
             ctx.service.set_content_hash(ticket.id, new_hash)
 
             next_state = (
-                State.AWAITING_APPROVAL if ctx.settings.require_approval
+                State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
                 else State.READY
             )
             return Outcome(next_state, "refined")
@@ -244,7 +244,7 @@ class RefineStage(Stage):
                     ticket.id,
                 )
                 next_state = (
-                    State.AWAITING_APPROVAL if ctx.settings.require_approval
+                    State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
                     else State.READY
                 )
                 return Outcome(
@@ -254,7 +254,7 @@ class RefineStage(Stage):
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
             next_state = (
-                State.AWAITING_APPROVAL if ctx.settings.require_approval
+                State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
                 else State.READY
             )
             return Outcome(next_state, "refined (split degraded — no valid children)")
@@ -287,7 +287,7 @@ class RefineStage(Stage):
             # Also update the ticket title to the child's title.
             ctx.service.set_title(ticket.id, child["title"])
             next_state = (
-                State.AWAITING_APPROVAL if ctx.settings.require_approval
+                State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
                 else State.READY
             )
             return Outcome(next_state, "refined (single child, no split)")
@@ -313,9 +313,9 @@ class RefineStage(Stage):
                 if resolved:
                     ctx.service.set_depends_on(child_ids[i], resolved)
 
-        # Transition each child to AWAITING_APPROVAL or READY.
+        # Transition each child to HUMAN_ISSUE_APPROVAL or READY.
         child_next_state = (
-            State.AWAITING_APPROVAL if ctx.settings.require_approval
+            State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
             else State.READY
         )
         for cid in child_ids:

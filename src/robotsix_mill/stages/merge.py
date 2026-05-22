@@ -1,24 +1,24 @@
-"""Merge stage: IN_REVIEW -> DONE (merged) | BLOCKED (closed unmerged)
+"""Merge stage: HUMAN_MR_APPROVAL -> DONE (merged) | BLOCKED (closed unmerged)
                                     -> REBASING (conflicting, deferred)
                                     -> FIXING_CI (failing CI, deferred).
 
 The PR is the review. This stage is re-run by the worker's lightweight
-poll while the ticket sits in IN_REVIEW, REBASING, or FIXING_CI; it
+poll while the ticket sits in HUMAN_MR_APPROVAL, REBASING, or FIXING_CI; it
 checks the forge:
 
-IN_REVIEW:
+HUMAN_MR_APPROVAL:
 - merged            -> DONE
 - closed, unmerged  -> BLOCKED (resumable)
 - open, mergeable   -> check CI status:
     - failing CI    -> FIXING_CI (auto-fix agent)
-    - green CI      -> IN_REVIEW (no-op; re-poll)
-    - pending CI    -> IN_REVIEW (no-op; re-poll)
+    - green CI      -> HUMAN_MR_APPROVAL (no-op; re-poll)
+    - pending CI    -> HUMAN_MR_APPROVAL (no-op; re-poll)
 - open, conflicting -> REBASING (deferred; the rebase agent runs on
                        the next poll via the REBASING path, not inline).
 
 REBASING:
 - invokes rebase agent; on success force-pushes the ticket branch and
-  returns to IN_REVIEW; on failure with attempts remaining stays in
+  returns to HUMAN_MR_APPROVAL; on failure with attempts remaining stays in
   REBASING for a retry; on exhaustion → BLOCKED.
 
 Returning the *same* state is the worker's "leave it, re-poll" signal —
@@ -68,7 +68,7 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
 
 class MergeStage(Stage):
     name = "merge"
-    input_state = State.IN_REVIEW
+    input_state = State.HUMAN_MR_APPROVAL
     traced = False
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
@@ -84,16 +84,16 @@ class MergeStage(Stage):
         if ticket.state is State.REBASING:
             return self._run_rebase(ticket, ctx)
 
-        # IN_REVIEW path: poll PR status.
+        # HUMAN_MR_APPROVAL path: poll PR status.
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         try:
             pr = get_forge(s).pr_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient: retry next poll
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
-            return Outcome(State.IN_REVIEW)  # no-op
+            return Outcome(State.HUMAN_MR_APPROVAL)  # no-op
 
         if pr is None:
-            return Outcome(State.IN_REVIEW)  # not visible yet — re-poll
+            return Outcome(State.HUMAN_MR_APPROVAL)  # not visible yet — re-poll
         if pr.get("merged"):
             ctx.service.workspace(ticket).artifacts_dir.joinpath(
                 "merge.md"
@@ -111,7 +111,7 @@ class MergeStage(Stage):
         if mergeable is False:
             # PR is open and conflicting → defer to the REBASING state.
             # The (expensive, LLM-driven) rebase agent runs on the next
-            # poll via the REBASING path — keeping the IN_REVIEW poll
+            # poll via the REBASING path — keeping the HUMAN_MR_APPROVAL poll
             # cheap and the rebase activity visible (#26). Running it
             # inline here regressed that and starved the worker pool.
             log.info(
@@ -140,11 +140,11 @@ class MergeStage(Stage):
             log.warning(
                 "%s: check_status failed (retry): %s", ticket.id, e
             )
-            return Outcome(State.IN_REVIEW)
+            return Outcome(State.HUMAN_MR_APPROVAL)
 
         if ci_status is None:
             # No PR or no data — standard wait.
-            return Outcome(State.IN_REVIEW)
+            return Outcome(State.HUMAN_MR_APPROVAL)
 
         conclusion = ci_status.get("conclusion")
         if conclusion == "failure":
@@ -152,7 +152,7 @@ class MergeStage(Stage):
             return Outcome(State.FIXING_CI)
 
         # success, pending, or None — standard wait.
-        return Outcome(State.IN_REVIEW)
+        return Outcome(State.HUMAN_MR_APPROVAL)
 
     def _run_rebase(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Execute the rebase agent for a ticket already in REBASING."""
@@ -224,7 +224,7 @@ class MergeStage(Stage):
             # exact commit. GitHub reports mergeable=False transiently
             # right after any push (while it recomputes); pushing an
             # unchanged branch re-triggers CI + another recompute →
-            # endless REBASING↔IN_REVIEW ping-pong on a healthy PR (and
+            # endless REBASING↔HUMAN_MR_APPROVAL ping-pong on a healthy PR (and
             # an ntfy every cycle). The merge stage fetched
             # origin/<branch> before invoking the agent, so
             # origin/<branch> is fresh.
@@ -261,7 +261,7 @@ class MergeStage(Stage):
                     "rebase is a no-op yet GitHub still reports the PR "
                     "conflicting — the local clone's base is likely stale "
                     "or the conflict needs manual resolution. "
-                    "Resume-blocked to retry from in_review.",
+                    "Resume-blocked to retry from human_mr_approval.",
                 )
 
             # Remote is behind / missing → genuine push needed.
@@ -283,19 +283,19 @@ class MergeStage(Stage):
             # (git rebase rewrites SHAs every run, so "pushed" happens
             # even when the rebase keeps failing to truly resolve and
             # GitHub still reports the PR conflicting). Only an actually
-            # mergeable PR clears the counter (in the IN_REVIEW path).
+            # mergeable PR clears the counter (in the HUMAN_MR_APPROVAL path).
             # So persist the attempt and bound the loop here too.
             log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
             if attempt < max_attempts:
                 _write_counter(counter_path, attempt)
-                return Outcome(State.IN_REVIEW)  # re-check; may now merge
+                return Outcome(State.HUMAN_MR_APPROVAL)  # re-check; may now merge
             _write_counter(counter_path, 0)  # reset for a future resume
             return Outcome(
                 State.BLOCKED,
                 f"rebased and force-pushed {max_attempts}x but GitHub "
                 "still reports the PR conflicting — the local clone's "
                 "base is likely stale or the conflict is unresolvable "
-                "automatically. Resume-blocked to retry from in_review.",
+                "automatically. Resume-blocked to retry from human_mr_approval.",
             )
 
         # Agent failed.
@@ -313,5 +313,5 @@ class MergeStage(Stage):
             State.BLOCKED,
             f"rebase failed after {max_attempts} attempt(s) — "
             "manual conflict resolution required. "
-            "Resume-blocked to retry from in_review.",
+            "Resume-blocked to retry from human_mr_approval.",
         )

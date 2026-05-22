@@ -46,25 +46,25 @@ def test_transition_records_history(service):
 def test_illegal_transition_rejected(service):
     t = service.create("x")
     with pytest.raises(TransitionError):
-        # draft -> in_review is not allowed (drafts can't jump onto a PR).
+        # draft -> human_mr_approval is not allowed (drafts can't jump onto a PR).
         # draft -> done IS allowed (refine's dedup-discard path uses it).
-        service.transition(t.id, State.IN_REVIEW)
+        service.transition(t.id, State.HUMAN_MR_APPROVAL)
 
 
 def test_state_machine_edges():
-    # draft → ready → deliverable → in_review(PR) → done(merged) → reviewed
+    # draft → ready → deliverable → human_mr_approval(PR) → done(merged) → reviewed
     assert can_transition(State.DRAFT, State.READY)
     assert can_transition(State.READY, State.DELIVERABLE)
-    assert can_transition(State.DELIVERABLE, State.IN_REVIEW)
-    assert can_transition(State.IN_REVIEW, State.DONE)      # merged
-    assert can_transition(State.IN_REVIEW, State.BLOCKED)   # closed unmerged
-    assert can_transition(State.IN_REVIEW, State.REBASING)  # conflicting
-    assert can_transition(State.REBASING, State.IN_REVIEW)  # rebase success
+    assert can_transition(State.DELIVERABLE, State.HUMAN_MR_APPROVAL)
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.DONE)      # merged
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.BLOCKED)   # closed unmerged
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.REBASING)  # conflicting
+    assert can_transition(State.REBASING, State.HUMAN_MR_APPROVAL)  # rebase success
     assert can_transition(State.REBASING, State.BLOCKED)    # rebase exhausted
     assert can_transition(State.REBASING, State.ERRORED)    # rebase crash
     assert can_transition(State.DONE, State.CLOSED)       # retrospected
     assert not can_transition(State.CLOSED, State.DONE)   # terminal
-    assert not can_transition(State.DELIVERABLE, State.DONE)  # via in_review
+    assert not can_transition(State.DELIVERABLE, State.DONE)  # via human_mr_approval
     assert not can_transition(State.READY, State.DONE)
 
 
@@ -117,10 +117,10 @@ def test_blocked_resume_wrong_state_rejected():
 
 def test_can_transition_covers_rebasing():
     """Verify all new edges involving REBASING."""
-    # IN_REVIEW → REBASING
-    assert can_transition(State.IN_REVIEW, State.REBASING)
-    # REBASING → IN_REVIEW
-    assert can_transition(State.REBASING, State.IN_REVIEW)
+    # HUMAN_MR_APPROVAL → REBASING
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.REBASING)
+    # REBASING → HUMAN_MR_APPROVAL
+    assert can_transition(State.REBASING, State.HUMAN_MR_APPROVAL)
     # REBASING → ERRORED
     assert can_transition(State.REBASING, State.ERRORED)
     # REBASING → BLOCKED
@@ -131,7 +131,7 @@ def test_can_transition_covers_rebasing():
     )
     # BLOCKED → REBASING without blocked_from → False
     assert not can_transition(State.BLOCKED, State.REBASING)
-    # REBASING → DONE is NOT allowed (must go through IN_REVIEW)
+    # REBASING → DONE is NOT allowed (must go through HUMAN_MR_APPROVAL)
     assert not can_transition(State.REBASING, State.DONE)
 
 
@@ -169,7 +169,7 @@ def test_resume_blocked_after_retrospect_failure(service):
     # Walk through the pipeline to DONE
     service.transition(t.id, State.READY, note="refined")
     service.transition(t.id, State.DELIVERABLE, note="implemented")
-    service.transition(t.id, State.IN_REVIEW, note="PR opened")
+    service.transition(t.id, State.HUMAN_MR_APPROVAL, note="PR opened")
     service.transition(t.id, State.DONE, note="merged")
     # Now retrospect fails → BLOCKED
     service.transition(t.id, State.BLOCKED, note="retrospect failed")
@@ -261,8 +261,8 @@ def test_transition_table_consistency():
 
     # Every active state must be able to reach BLOCKED and ERRORED
     for src in [
-        State.DRAFT, State.AWAITING_APPROVAL, State.READY,
-        State.DELIVERABLE, State.IN_REVIEW, State.REBASING, State.DONE,
+        State.DRAFT, State.HUMAN_ISSUE_APPROVAL, State.READY,
+        State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.REBASING, State.DONE,
     ]:
         assert State.BLOCKED in TRANSITIONS[src], (
             f"{src} missing BLOCKED escalation edge"
@@ -373,7 +373,7 @@ def test_unmet_dependencies_all_satisfied(service):
     dep = service.create("Dep ticket")
     service.transition(dep.id, State.READY)
     service.transition(dep.id, State.DELIVERABLE)
-    service.transition(dep.id, State.IN_REVIEW)
+    service.transition(dep.id, State.HUMAN_MR_APPROVAL)
     service.transition(dep.id, State.DONE)
     service.transition(dep.id, State.CLOSED)
 
@@ -388,7 +388,7 @@ def test_unmet_dependencies_some_unmet(service):
     # Close dep_a, leave dep_b in DRAFT
     service.transition(dep_a.id, State.READY)
     service.transition(dep_a.id, State.DELIVERABLE)
-    service.transition(dep_a.id, State.IN_REVIEW)
+    service.transition(dep_a.id, State.HUMAN_MR_APPROVAL)
     service.transition(dep_a.id, State.DONE)
     service.transition(dep_a.id, State.CLOSED)
 

@@ -169,7 +169,7 @@ class Worker:
         would otherwise be re-billed to the LLM on every requeue,
         silently. After ``max_stuck_cycles`` such cycles, escalate to
         BLOCKED (resumable) and notify. Poll stages (merge/deliver,
-        traced=False) are exempt: in_review/rebasing legitimately waits
+        traced=False) are exempt: human_mr_approval/rebasing legitimately waits
         on a PR or rebase cycle."""
 
         # --- dollar-cap safety net: check before the state-change
@@ -237,7 +237,7 @@ class Worker:
         ticket that has an automated stage (STAGE_FOR_STATE) and isn't
         already in flight.
 
-        Originally this only re-enqueued in_review/rebasing for the
+        Originally this only re-enqueued human_mr_approval/rebasing for the
         merge/rebase cycle. But drafts created out-of-band — by the
         audit runner, the retrospect stage, and the report_issue tool
         (they call service.create() directly, not the API endpoint that
@@ -248,7 +248,7 @@ class Worker:
         (enqueue() dedupes via _pending), cheap (the process_ticket
         chain carries each ticket as far as it can in one pass), and
         robust to any current/future draft-creating path. States with
-        no automated stage (e.g. awaiting_approval) are untouched —
+        no automated stage (e.g. human_issue_approval) are untouched —
         they correctly wait for a human."""
         interval = max(15, self.ctx.settings.merge_poll_seconds)
         while True:

@@ -244,7 +244,7 @@ def request_changes(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> dict:
-    """Add a comment AND transition from awaiting_approval back to draft
+    """Add a comment AND transition from human_issue_approval back to draft
     in one atomic operation."""
     try:
         comment, ticket = svc.request_changes(ticket_id, body.body)

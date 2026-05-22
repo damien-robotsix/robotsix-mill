@@ -78,8 +78,8 @@ def with_cost(ticket: Ticket, settings: Settings, *, blocking: bool = True) -> T
 
 
 _REVIEW_STATES: frozenset[State] = frozenset({
-    State.IN_REVIEW,
-    State.AWAITING_APPROVAL,
+    State.HUMAN_MR_APPROVAL,
+    State.HUMAN_ISSUE_APPROVAL,
     State.FIXING_CI,
     State.REBASING,
     State.READY,

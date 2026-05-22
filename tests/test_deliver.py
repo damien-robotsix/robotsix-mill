@@ -167,7 +167,7 @@ def test_success_pushes_and_opens_pr(tmp_path, monkeypatch):
 
     out = DeliverStage().run(t, ctx)
 
-    assert out.next_state is State.IN_REVIEW  # PR opened, awaiting merge
+    assert out.next_state is State.HUMAN_MR_APPROVAL  # PR opened, awaiting merge
     assert "https://github.com/o/r/pull/42" in out.note
     assert seen["source_branch"] == branch
     assert t.id in seen["title"]
@@ -255,7 +255,7 @@ def test_zero_diff_guard_happy_path_unaffected(tmp_path, monkeypatch):
 
     out = DeliverStage().run(t, ctx)
 
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.HUMAN_MR_APPROVAL
     assert "https://github.com/o/r/pull/42" in out.note
     assert seen["source_branch"] == branch
     assert t.id in seen["title"]

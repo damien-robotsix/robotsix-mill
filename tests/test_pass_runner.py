@@ -321,15 +321,15 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
         s.add(TicketEvent(ticket_id=tb.id, state=State.CLOSED, note="closed"))
         s.commit()
 
-    # Ticket C: IN_REVIEW → resolution "in-flight"
+    # Ticket C: HUMAN_MR_APPROVAL → resolution "in-flight"
     tc = service.create(
         "Gap C", "body C\n\n<!-- audit-gap-id: gap_gamma -->",
         source="audit",
     )
     with db.session(settings) as s:
         ticket = s.get(type(tc), tc.id)
-        ticket.state = State.IN_REVIEW
-        s.add(TicketEvent(ticket_id=tc.id, state=State.IN_REVIEW, note="reviewing"))
+        ticket.state = State.HUMAN_MR_APPROVAL
+        s.add(TicketEvent(ticket_id=tc.id, state=State.HUMAN_MR_APPROVAL, note="reviewing"))
         s.commit()
 
     memory_file = tmp_path / "audit_memory.md"
@@ -365,7 +365,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
     assert "declined (closed directly)" in prompt
     assert "in-flight" in prompt
     assert "CLOSED" in prompt
-    assert "IN_REVIEW" in prompt
+    assert "HUMAN_MR_APPROVAL" in prompt
 
     db.reset_engine()
 

@@ -1,4 +1,4 @@
-"""Deliver stage: DELIVERABLE -> IN_REVIEW.
+"""Deliver stage: DELIVERABLE -> HUMAN_MR_APPROVAL.
 
 Push the ticket's branch to the configured forge and open a PR/MR
 against ``FORGE_TARGET_BRANCH``. The forge adapter only does the API
@@ -90,4 +90,4 @@ class DeliverStage(Stage):
         )
         log.info("%s: delivered → %s", ticket.id, url)
         # PR opened — await human merge (the merge stage polls for it)
-        return Outcome(State.IN_REVIEW, f"PR: {url}")
+        return Outcome(State.HUMAN_MR_APPROVAL, f"PR: {url}")
