@@ -39,8 +39,12 @@ fi
 cd "$REPO" || { log "ERROR: cannot cd to $REPO"; exit 1; }
 
 # Never clobber manual WIP — bail on uncommitted TRACKED changes.
-# (Untracked files are ignored: they don't block a fast-forward.)
-if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+# `.env` is excluded: it is tracked (a committed config template) but
+# the local copy legitimately holds the user's own config/secrets, so
+# it is effectively always "modified". It is backed up and preserved
+# specially around the merge below. Untracked files are ignored (they
+# don't block a fast-forward).
+if [ -n "$(git status --porcelain --untracked-files=no | grep -v '^.. \.env$')" ]; then
   log "working tree has uncommitted changes — skipping pull/rebuild"
   exit 0
 fi
@@ -117,9 +121,30 @@ if ! wait_until_idle "$PRE_BUILD_WAIT"; then
   exit 0
 fi
 
+# Protect the user's .env across the merge. .env is tracked, but the
+# local copy holds the user's real config/secrets and must survive the
+# pull. If origin/main changes .env, a plain `git merge --ff-only`
+# would abort ("local changes would be overwritten"). So: snapshot the
+# current .env, detach it from the merge, then restore it verbatim.
+# Origin's .env changes are NOT auto-merged — the backup lets the user
+# reconcile any new keys by hand.
+env_restore=""
+if [ -f .env ] && ! git diff --quiet HEAD origin/main -- .env; then
+  env_restore="$STATE_DIR/.env.autoupdate-bak-$(date +%Y%m%dT%H%M%S)"
+  cp .env "$env_restore"
+  git checkout --quiet -- .env   # clean .env so the fast-forward applies
+  log "origin/main changes .env — saved current .env to $env_restore"
+fi
+
 if ! git merge --ff-only origin/main >>"$LOG" 2>&1; then
   log "ERROR: ff-only merge failed (local diverged from origin/main) — skipping"
+  [ -n "$env_restore" ] && cp "$env_restore" .env
   exit 1
+fi
+
+if [ -n "$env_restore" ]; then
+  cp "$env_restore" .env         # restore the user's .env verbatim
+  log "restored your .env — review $env_restore vs the new committed .env for new keys"
 fi
 
 export DOCKER_GID
