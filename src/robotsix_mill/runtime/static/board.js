@@ -410,6 +410,7 @@ let deepReviewPollTimer=null;
 let deepReviewPollCount=0;
 let deepReviewPollStart=0;
 let deepReviewFindings=[];  // [{category, text}] for ticket creation
+let lastReviewsCache=[];
 async function openDeepReview(){
  if(deepReviewOpen){close_();return}
  if(sel){close_()}
@@ -423,6 +424,10 @@ async function openDeepReview(){
  if(lim)lim.value='10';
  if(minc)minc.value='';
  if(maxc)maxc.value='';
+ // lazy-load last-reviews count
+ jget("/deep-review").then(function(arr){
+  if(Array.isArray(arr)){lastReviewsCache=arr;var el=document.getElementById("lr-count");if(el)el.textContent=arr.length}
+ }).catch(function(){var el=document.getElementById("lr-count");if(el)el.textContent='?'});
  await renderTraceList();
 }
 async function renderTraceList(){
@@ -436,6 +441,10 @@ async function renderTraceList(){
  if(minCost!==null)url+='&min_cost='+encodeURIComponent(minCost);
  if(maxCost!==null)url+='&max_cost='+encodeURIComponent(maxCost);
  document.getElementById("d").innerHTML='<h3>Deep Review</h3>'+
+  '<button onclick="renderLastReviewsList()" class="dr-btn"'+
+  ' style="font-size:11px;padding:3px 10px;background:#1a2a3b;color:#60c0fa;'+
+  'border:1px solid #2a3a4b;border-radius:4px;cursor:pointer;margin-bottom:10px">'+
+  'Last reviews (<span id="lr-count">…</span>)</button>'+
   '<div class="dr-filters">'+
    '<label>Show <input type="number" id="dr-limit" value="'+limit+'" min="1" max="50" style="width:4em"></label>'+
    '<label>Min cost $ <input type="number" id="dr-min-cost" value="'+(minCost!==null?minCost:'')+'" step="0.0001" placeholder="0.0000" style="width:7em"></label>'+
@@ -469,6 +478,44 @@ async function renderTraceList(){
    ` onclick="startDeepReview()" style="font-size:11px;padding:5px 14px;background:#1a2a3b;color:#60c0fa;border:1px solid #2a3a4b;border-radius:4px;cursor:pointer">`+
    `Start Deep Review</button></div>`;
  document.getElementById("trace-list").innerHTML=html;
+}
+async function renderLastReviewsList(){
+ const arr=await jget("/deep-review");
+ if(Array.isArray(arr))lastReviewsCache=arr; else lastReviewsCache=[];
+ const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
+ let html='<h3>Last Deep Reviews</h3><div id="last-reviews-list">';
+ if(!lastReviewsCache.length){
+  html+='<div class="muted" style="padding:12px 0">No completed deep reviews yet. Run one from the trace picker.</div>';
+ } else {
+  lastReviewsCache.forEach(function(entry){
+   const finished=entry.finished_at?new Date(entry.finished_at).toLocaleString():'—';
+   const n_te=(entry.tool_errors||[]).length;
+   const n_al=(entry.agent_limitations||[]).length;
+   const n_opt=(entry.optimizations||[]).length;
+   const status=entry.status||'ok';
+   const statusHtml=status==='error'?
+    '<span style="color:#f87171">error</span>':
+    '<span class="src-badge src-deep-review">'+escT(status)+'</span>';
+   html+='<div class="trace-row" onclick="viewStoredReview(\''+escT(entry.trace_id)+'\')">'+
+    '<div class="trace-name">'+escT(entry.source_trace_name||entry.trace_id)+'</div>'+
+    '<div class="trace-meta">'+
+    finished+' · '+n_te+' T / '+n_al+' L / '+n_opt+' O · '+
+    statusHtml+
+    '</div></div>';
+  });
+ }
+ html+='</div>'+
+  '<button onclick="openDeepReview()"'+
+  ' style="font-size:11px;padding:3px 10px;background:#2a2f3a;color:#aab0bd;'+
+  'border:1px solid #3a3f4a;border-radius:4px;cursor:pointer;margin-top:12px">'+
+  '← Back to trace picker</button>';
+ document.getElementById("d").innerHTML=html;
+}
+function viewStoredReview(traceId){
+ const entry=lastReviewsCache.find(function(e){return e.trace_id===traceId});
+ if(!entry)return;
+ deepReviewTraceId=entry.trace_id;
+ renderDeepReviewResult(entry, renderLastReviewsList);
 }
 function selectTrace(tid){
  deepReviewTraceId=tid;
@@ -565,7 +612,7 @@ function resumeDeepReviewPolling(){
  schedulePollDeepReview(2000);
  pollDeepReviewResult();
 }
-function renderDeepReviewResult(res){
+function renderDeepReviewResult(res, backFn){
  const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
  let html=`<h3>Deep Review: ${escT(deepReviewTraceId)}</h3>`;
  if(res.status==="error"){
@@ -616,7 +663,8 @@ function renderDeepReviewResult(res){
  const byCat={"tool_error":[],"agent_limitation":[],"optimization":[]};
  findings.forEach(f=>{(byCat[f.category]=byCat[f.category]||[]).push(f)});
  ["tool_error","agent_limitation","optimization"].forEach(cat=>{html+=renderSectionStructured(cat,byCat[cat]||[])});
- html+=`<div style="margin-top:16px"><button onclick="openDeepReview()"`+
+ const back=backFn || openDeepReview;
+ html+=`<div style="margin-top:16px"><button onclick="${back.name}()"`+
    ` style="font-size:11px;padding:3px 10px;background:#2a2f3a;color:#aab0bd;border:1px solid #3a3f4a;border-radius:4px;cursor:pointer">← Back to traces</button></div>`;
  document.getElementById("d").innerHTML=html;
 }
