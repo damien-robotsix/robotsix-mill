@@ -237,14 +237,25 @@ def run_coordinator(
             f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
         )
         if feedback:
-            user_prompt += (
-                "\n\n<test_failure>\n"
-                "Your previous edit pass is already on disk, but the test "
-                "suite then failed. Diagnosis:\n"
-                f"{feedback}\n"
-                "</test_failure>\n\n"
-                "Fix exactly this failure and stop."
-            )
+            if feedback.startswith("[REVIEW"):
+                # Review feedback — prepend to the spec so the coordinator
+                # addresses the flagged issues first.
+                user_prompt = (
+                    "<review_feedback>\n"
+                    "The code review flagged issues. Address these review "
+                    "comments before proceeding:\n"
+                    f"{feedback}\n"
+                    "</review_feedback>\n\n"
+                ) + user_prompt
+            else:
+                user_prompt += (
+                    "\n\n<test_failure>\n"
+                    "Your previous edit pass is already on disk, but the test "
+                    "suite then failed. Diagnosis:\n"
+                    f"{feedback}\n"
+                    "</test_failure>\n\n"
+                    "Fix exactly this failure and stop."
+                )
         result = call_with_retry(
             lambda: agent.run_sync(user_prompt, usage_limits=limits),
             settings=settings, what="implement",
