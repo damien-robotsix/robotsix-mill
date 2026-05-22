@@ -66,19 +66,27 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
         """
         try:
             p = _safe(root, path)
+        except (ValueError, OSError) as e:
+            return f"error: {e}"
+
+        # Normalize offset for the stub check (offset ≤ 0 is treated as 1).
+        _offset = offset if offset >= 1 else 1
+
+        # Full-file stub: only when offset=1 AND limit=None (the common case).
+        if _offset == 1 and limit is None:
+            if p.resolve() in _file_cache:
+                return "already in context above — unchanged"
+
+        # Otherwise: read (or refresh) via _read_cached, then slice.
+        try:
             text = _read_cached(p)
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
         lines = text.splitlines(keepends=True)
-
-        if offset < 1:
-            offset = 1
-
-        if offset > len(lines) and offset > 1:
+        if _offset > len(lines) and _offset > 1:
             return f"(file has {len(lines)} lines; offset {offset} is beyond end)"
-
-        start = offset - 1
+        start = _offset - 1
         end = start + limit if limit is not None else None
         return "".join(lines[start:end])
 
