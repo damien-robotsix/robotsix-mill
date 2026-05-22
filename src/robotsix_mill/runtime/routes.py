@@ -335,6 +335,10 @@ def generate_children(
                 )
                 created_ids.append(child.id)
 
+            # Build linear dependency chain: C0 ← C1 ← C2 ← ...
+            for i in range(1, len(created_ids)):
+                svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
+
             summary = (
                 f"Created {len(created_ids)} children: "
                 f"{', '.join(created_ids[:5])}"
