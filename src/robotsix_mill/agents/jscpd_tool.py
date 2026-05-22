@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 
@@ -79,8 +80,6 @@ def _parse_jscpd_output(stdout: str) -> str:
     except json.JSONDecodeError as exc:
         return f"ERROR: could not parse jscpd JSON output — {exc}"
 
-    statistics: dict[str, Any] = data.get("statistics") or data.get("statistic", {})
-    total_clones: int = statistics.get("total", {}).get("clones", 0)
     duplications: list[dict[str, Any]] = data.get("duplications", [])
 
     if not duplications:
@@ -90,7 +89,7 @@ def _parse_jscpd_output(stdout: str) -> str:
         )
 
     lines: list[str] = [
-        f"jscpd scan complete — **{total_clones} clone pair(s) detected**",
+        f"jscpd scan complete — **{len(duplications)} clone pair(s) detected**",
         "",
     ]
 
@@ -125,7 +124,7 @@ def _parse_jscpd_output(stdout: str) -> str:
     return "\n".join(lines)
 
 
-def make_jscpd_tool(repo_dir: Path):
+def make_jscpd_tool(repo_dir: Path) -> Callable[[], str]:
     """Create the ``detect_duplication`` tool closure.
 
     Follows the same factory pattern as ``make_explore_tool``:
