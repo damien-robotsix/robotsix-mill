@@ -364,6 +364,14 @@ class Settings(BaseSettings):
     prune_clone_on_close: bool = Field(
         default=True, alias="MILL_PRUNE_CLONE_ON_CLOSE"
     )
+    # Maximum number of terminal-state tickets (CLOSED, ANSWERED,
+    # EPIC_CLOSED) to retain.  When a ticket transitions to a terminal
+    # state and the total exceeds this cap, the oldest terminal tickets
+    # (by created_at) are purged — unless they are the parent of an
+    # active (non-terminal) child.  Set to 0 to disable purging.
+    max_archived_tickets: int = Field(
+        default=100, alias="MILL_MAX_ARCHIVED_TICKETS"
+    )
 
     # --- merge stage: auto-rebase of stale PRs ---
     # When a PR in human_mr_approval becomes conflicting (other PRs merged to

@@ -501,3 +501,134 @@ def test_list_children(service):
     assert len(children) == 3
     child_ids = {c.id for c in children}
     assert child_ids == {c1.id, c2.id, c3.id}
+
+
+# --- archived-ticket purge ---------------------------------------------
+
+
+def _close_ticket(service, ticket):
+    """Transition a DRAFT task to CLOSED."""
+    service.transition(ticket.id, State.DONE)
+    service.transition(ticket.id, State.CLOSED)
+
+
+def _answer_ticket(service, ticket):
+    """Transition an ASKED inquiry to ANSWERED."""
+    service.transition(ticket.id, State.ANSWERED)
+
+
+def _close_epic(service, ticket):
+    """Transition an EPIC_OPEN epic to EPIC_CLOSED."""
+    service.transition(ticket.id, State.EPIC_CLOSED)
+
+
+def _terminal_count(service):
+    """Return the number of terminal-state tickets in the DB."""
+    return len(service.list(
+        exclude_states=[
+            s for s in State
+            if s not in {State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
+        ]
+    ))
+
+
+class TestArchivedPurge:
+    """Tests for insertion-driven purge of terminal (archived) tickets."""
+
+    def test_no_op_when_under_cap(self, service, settings):
+        """No tickets are deleted when the terminal count is under the cap."""
+        settings.max_archived_tickets = 10
+        for i in range(5):
+            t = service.create(f"task {i}")
+            _close_ticket(service, t)
+        assert _terminal_count(service) == 5
+
+    def test_deletes_oldest_on_cap_exceeded(self, service, settings):
+        """When closing ticket N+1 exceeds the cap, the oldest terminal
+        ticket is deleted."""
+        settings.max_archived_tickets = 3
+        tickets = []
+        for i in range(4):
+            t = service.create(f"task {i}")
+            _close_ticket(service, t)
+            tickets.append(t)
+
+        # The oldest (tickets[0]) should have been purged.
+        assert service.get(tickets[0].id) is None
+        # The other three should still exist.
+        for t in tickets[1:]:
+            assert service.get(t.id) is not None
+        assert _terminal_count(service) == 3
+
+    def test_answered_triggers_purge(self, service, settings):
+        """Answering an inquiry (ANSWERED) also triggers the purge."""
+        settings.max_archived_tickets = 2
+        inquiries = []
+        for i in range(3):
+            t = service.create(f"inquiry {i}", kind="inquiry")
+            _answer_ticket(service, t)
+            inquiries.append(t)
+
+        # Oldest should be purged.
+        assert service.get(inquiries[0].id) is None
+        assert service.get(inquiries[1].id) is not None
+        assert service.get(inquiries[2].id) is not None
+        assert _terminal_count(service) == 2
+
+    def test_epic_closed_triggers_purge(self, service, settings):
+        """Closing an epic (EPIC_CLOSED) also triggers the purge."""
+        settings.max_archived_tickets = 2
+        epics = []
+        for i in range(3):
+            t = service.create(f"epic {i}", kind="epic")
+            _close_epic(service, t)
+            epics.append(t)
+
+        assert service.get(epics[0].id) is None
+        assert service.get(epics[1].id) is not None
+        assert service.get(epics[2].id) is not None
+        assert _terminal_count(service) == 2
+
+    def test_skip_parent_of_active_child(self, service, settings):
+        """A terminal ticket that is the parent of an active child is
+        skipped during purge; the next-oldest eligible ticket is
+        deleted instead."""
+        settings.max_archived_tickets = 2
+
+        # Create 3 terminal tickets.
+        t1 = service.create("oldest task")
+        _close_ticket(service, t1)
+
+        t2 = service.create("parent task")
+        _close_ticket(service, t2)
+
+        t3 = service.create("youngest task")
+        _close_ticket(service, t3)
+
+        # t2 has an active (non-terminal) child.
+        child = service.create("active child", parent_id=t2.id)
+        assert child.state == State.DRAFT  # active
+
+        # Now trigger purge by closing a 4th ticket.
+        t4 = service.create("overflow task")
+        _close_ticket(service, t4)
+
+        # t2 (parent of active child) should survive.
+        assert service.get(t2.id) is not None
+        # t1 (oldest, no active children) should be purged.
+        assert service.get(t1.id) is None
+        # t3 (next oldest after t1) also has no children, so it is
+        # purged to bring the count down to the cap of 2.
+        assert service.get(t3.id) is None
+        # t4 (just closed) survives.
+        assert service.get(t4.id) is not None
+        # Terminal count is 2: t2 (skipped parent) + t4.
+        assert _terminal_count(service) == 2
+
+    def test_max_archived_zero_disables_purge(self, service, settings):
+        """Setting max_archived_tickets = 0 disables purging entirely."""
+        settings.max_archived_tickets = 0
+        for i in range(50):
+            t = service.create(f"task {i}")
+            _close_ticket(service, t)
+        assert _terminal_count(service) == 50
