@@ -218,8 +218,155 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
             if result.note:
                 new_hash = svc.workspace(epic).write_description(result.note)
                 svc.set_content_hash(epic_id, new_hash)
+        # Apply child-ticket changes (new_children, child_rescopes, child_closures).
+        _reconcile_child_changes(svc, epic_id, result)
+
     except Exception:
         log.exception("epic %s: re-evaluation failed", epic_id)
+
+
+def _fetch_draft_child(svc, child_id: str, operation: str, epic_id: str):
+    """Fetch a child ticket and verify it is in DRAFT state.
+
+    Returns the child ticket if safe to mutate, or ``None`` if the
+    child is missing or not in DRAFT (with a warning logged).
+    """
+    from ..core.states import State as S
+
+    child = svc.get(child_id)
+    if child is None:
+        log.warning(
+            "epic %s: %s — child %s not found, skipping",
+            epic_id, operation, child_id,
+        )
+        return None
+    if child.state != S.DRAFT:
+        log.warning(
+            "epic %s: %s — child %s is in state %s (not DRAFT), skipping",
+            epic_id, operation, child_id, child.state.value,
+        )
+        return None
+    return child
+
+
+def _reconcile_child_changes(svc, epic_id: str, result) -> None:
+    """Apply proposed child-ticket changes with safe reconciliation.
+
+    - *new_children* are always created.
+    - *child_rescopes* and *child_closures* only apply to DRAFT children;
+      in-flight / terminal children are skipped with a warning.
+    - Each child operation is wrapped in its own try/except so one
+      failure does not halt the rest.
+    """
+    from ..core.states import State as S
+
+    # --- new_children --------------------------------------------------
+    if result.new_children:
+        for i, child_spec in enumerate(result.new_children):
+            if not isinstance(child_spec, dict):
+                log.warning(
+                    "epic %s: new_children[%d] is not a dict, skipping",
+                    epic_id, i,
+                )
+                continue
+            title = child_spec.get("title", "")
+            body = child_spec.get("body", "")
+            if not isinstance(title, str) or not title.strip():
+                log.warning(
+                    "epic %s: new_children[%d] missing non-empty 'title', skipping",
+                    epic_id, i,
+                )
+                continue
+            if not isinstance(body, str) or not body.strip():
+                log.warning(
+                    "epic %s: new_children[%d] missing non-empty 'body', skipping",
+                    epic_id, i,
+                )
+                continue
+            try:
+                child = svc.create(
+                    title=title.strip(),
+                    description=body.strip(),
+                    kind="task",
+                    parent_id=epic_id,
+                )
+                log.info(
+                    "epic %s: created new child %s ('%s')",
+                    epic_id, child.id, title,
+                )
+            except Exception:
+                log.exception(
+                    "epic %s: failed to create new child '%s'",
+                    epic_id, title,
+                )
+
+    # --- child_rescopes ------------------------------------------------
+    if result.child_rescopes:
+        for child_id, updates in result.child_rescopes.items():
+            if not isinstance(updates, dict):
+                log.warning(
+                    "epic %s: child_rescopes[%s] is not a dict, skipping",
+                    epic_id, child_id,
+                )
+                continue
+            new_title = updates.get("title")
+            new_body = updates.get("body")
+            has_title = isinstance(new_title, str) and new_title.strip()
+            has_body = isinstance(new_body, str) and new_body.strip()
+            if not has_title and not has_body:
+                log.warning(
+                    "epic %s: child_rescopes[%s] has no non-empty 'title' or 'body', skipping",
+                    epic_id, child_id,
+                )
+                continue
+
+            child = _fetch_draft_child(svc, child_id, "rescope", epic_id)
+            if child is None:
+                continue
+
+            try:
+                if has_title:
+                    svc.set_title(child_id, new_title.strip())
+                    log.info(
+                        "epic %s: rescoped child %s title -> '%s'",
+                        epic_id, child_id, new_title.strip(),
+                    )
+                if has_body:
+                    new_hash = svc.workspace(child).write_description(new_body.strip())
+                    svc.set_content_hash(child_id, new_hash)
+                    log.info(
+                        "epic %s: rescoped child %s body", epic_id, child_id,
+                    )
+            except Exception:
+                log.exception(
+                    "epic %s: failed to rescope child %s", epic_id, child_id,
+                )
+
+    # --- child_closures ------------------------------------------------
+    if result.child_closures:
+        for child_id in result.child_closures:
+            if not isinstance(child_id, str) or not child_id.strip():
+                log.warning(
+                    "epic %s: child_closures entry %r is not a non-empty string, skipping",
+                    epic_id, child_id,
+                )
+                continue
+            child = _fetch_draft_child(svc, child_id, "closure", epic_id)
+            if child is None:
+                continue
+            try:
+                svc.transition(
+                    child_id, S.CLOSED,
+                    note="Obsoleted by epic re-evaluation after sibling merge",
+                )
+                log.info(
+                    "epic %s: closed child %s (obsoleted by sibling merge)",
+                    epic_id, child_id,
+                )
+            except Exception:
+                log.exception(
+                    "epic %s: failed to close child %s", epic_id, child_id,
+                )
 
 
 def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:

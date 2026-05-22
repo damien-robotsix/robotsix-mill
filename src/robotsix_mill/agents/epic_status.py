@@ -20,9 +20,12 @@ project. Your job is to examine an epic's goal (title + description)
 and the current state of ALL its child tickets, and decide what should
 happen to the epic.
 
-You are called whenever a child ticket reaches DONE (merged).  Your
-task is to determine whether the epic goal is now satisfied, still in
-progress, or needs its description updated to reflect remaining work.
+You are called whenever a child ticket reaches DONE (merged).  Given
+what the merged child actually delivered, you must **actively
+reconsider the strategy**: is the remaining plan (epic description +
+open children) still the right approach?  Do not just check whether
+the goal is met — re-evaluate whether the strategy itself needs
+revision.
 
 Each child may have a `depends_on` field: a list of prerequisite
 ticket IDs that must reach `CLOSED` or `DONE` before that child can
@@ -36,10 +39,12 @@ Decision rules:
   state (`DRAFT`, `READY`, `CODE_REVIEW`, `DELIVERABLE`,
   `HUMAN_MR_APPROVAL`, `REBASING`, `FIXING_CI`, `ASKED`, `BLOCKED`,
   `ERRORED`) AND the epic goal is not yet met. No change to the epic.
-- **`update_description`** — some children are done, but the epic
-  description no longer accurately reflects the remaining scope. Write
-  a revised description that captures what's done and what remains.
-  Use this sparingly — only when the description is genuinely stale.
+- **`update_description`** — the epic description must always reflect
+  the current strategic plan.  If it is vague, generic, or no longer
+  captures what is done and what remains, rewrite it.  A vague
+  one-liner that does not lay out the global strategy IS a reason to
+  rewrite.  Write a revised description that is strategic and
+  specific.
 - **`update_deps`** — the current dependency chain is blocking
   progress (e.g. a mid-chain child is stuck in `BLOCKED`/`ERRORED`,
   but a downstream child could proceed independently).  Provide a
@@ -47,8 +52,25 @@ Decision rules:
   rationale.  Only use this when you are *confident* the change
   improves forward progress without breaking real prerequisites.
 
-Be decisive: only choose `close` when you are confident the goal is
-achieved.  When in doubt, prefer `keep_open`.
+Be decisive.  If the strategy needs revision, revise it.  If the
+description is vague or generic, rewrite it.
+
+In addition to your main `decision`, you may also propose changes to
+the child-ticket structure.  These are proposals; children that are
+not in DRAFT state will be safely skipped by the worker.  You can
+propose these regardless of your main `decision` (e.g. you can
+`keep_open` and also propose new children):
+
+- **`new_children`** — list of new child tickets to create.  Each must
+  have a non-empty `title` and `body`.  Use this when the merged child
+  reveals work that was not anticipated in the original breakdown.
+- **`child_rescopes`** — map of child_id to `{"title": … (optional),
+  "body": … (optional)}`.  At least one of `title` or `body` must be
+  non-empty per entry.  Use this when an existing child's title or
+  description is now wrong or obsolete given what just merged.
+- **`child_closures`** — list of child_ids to close (transition to
+  CLOSED).  Use this when a child is made obsolete by what just merged
+  and should be retired.
 
 Your `note` field must be:
 - If `close`: a brief justification of why the goal is achieved (this
@@ -65,6 +87,9 @@ class EpicStatusResult(BaseModel):
     decision: Literal["close", "keep_open", "update_description", "update_deps"]
     note: str = ""
     dep_updates: dict[str, list[str] | None] | None = Field(default=None)
+    new_children: list[dict[str, str]] | None = Field(default=None)
+    child_rescopes: dict[str, dict[str, str]] | None = Field(default=None)
+    child_closures: list[str] | None = Field(default=None)
 
 
 def run_epic_status_agent(
