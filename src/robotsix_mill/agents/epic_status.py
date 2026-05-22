@@ -24,6 +24,10 @@ You are called whenever a child ticket reaches DONE (merged).  Your
 task is to determine whether the epic goal is now satisfied, still in
 progress, or needs its description updated to reflect remaining work.
 
+Each child may have a `depends_on` field: a list of prerequisite
+ticket IDs that must reach `CLOSED` or `DONE` before that child can
+leave `READY` and be implemented.  This enforces a dependency chain.
+
 Decision rules:
 - **`close`** — ALL children are in terminal states (`DONE`, `CLOSED`,
   `ANSWERED`) AND the epic's stated goal appears fully satisfied. The
@@ -36,6 +40,12 @@ Decision rules:
   description no longer accurately reflects the remaining scope. Write
   a revised description that captures what's done and what remains.
   Use this sparingly — only when the description is genuinely stale.
+- **`update_deps`** — the current dependency chain is blocking
+  progress (e.g. a mid-chain child is stuck in `BLOCKED`/`ERRORED`,
+  but a downstream child could proceed independently).  Provide a
+  `dep_updates` dict and a human-readable `note` explaining the
+  rationale.  Only use this when you are *confident* the change
+  improves forward progress without breaking real prerequisites.
 
 Be decisive: only choose `close` when you are confident the goal is
 achieved.  When in doubt, prefer `keep_open`.
@@ -46,12 +56,15 @@ Your `note` field must be:
 - If `keep_open`: a brief note explaining what's still outstanding.
 - If `update_description`: the FULL revised epic description (this
   becomes the new `description.md` content).
+- If `update_deps`: a human-readable explanation of which deps were
+  changed and why (this becomes the new `description.md` content).
 """
 
 
 class EpicStatusResult(BaseModel):
-    decision: Literal["close", "keep_open", "update_description"]
+    decision: Literal["close", "keep_open", "update_description", "update_deps"]
     note: str = ""
+    dep_updates: dict[str, list[str] | None] | None = Field(default=None)
 
 
 def run_epic_status_agent(

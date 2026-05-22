@@ -186,6 +186,7 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
                 "title": child.title,
                 "state": child.state.value,
                 "description": child_desc,
+                "depends_on": TicketService._parse_depends_on(child),
             })
 
         result = run_epic_status_agent(
@@ -204,6 +205,19 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
             new_hash = svc.workspace(epic).write_description(result.note)
             svc.set_content_hash(epic_id, new_hash)
             log.info("epic %s: agent updated description", epic_id)
+        elif result.decision == "update_deps":
+            if result.dep_updates is not None:
+                log.info(
+                    "epic %s: agent requested dependency updates for %d children",
+                    epic_id, len(result.dep_updates),
+                )
+                for child_id, new_deps in result.dep_updates.items():
+                    if new_deps is None:
+                        new_deps = []
+                    svc.set_depends_on(child_id, new_deps)
+            if result.note:
+                new_hash = svc.workspace(epic).write_description(result.note)
+                svc.set_content_hash(epic_id, new_hash)
     except Exception:
         log.exception("epic %s: re-evaluation failed", epic_id)
 
