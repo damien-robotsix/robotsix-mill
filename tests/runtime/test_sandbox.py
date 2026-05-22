@@ -177,3 +177,54 @@ def test_repo_mount_rejects_non_existent_source(tmp_path):
     )
     with pytest.raises(sandbox.SandboxError, match="repo directory does not exist"):
         sandbox._repo_mount(Path("/data/work/repo"), s2)
+
+
+def test_sandbox_injects_pythonpath_for_src_layout(tmp_path, monkeypatch):
+    """When repo_dir has a src/ subdirectory, sandbox.run injects
+    -e PYTHONPATH=src so the mounted source takes priority over any
+    stale copy baked into the sandbox image's site-packages."""
+    repo = tmp_path / "ticket"
+    repo.mkdir()
+    (repo / "src").mkdir()
+
+    s = _settings(
+        tmp_path, MILL_DATA_DIR=str(tmp_path),
+        MILL_SANDBOX_DATA_MOUNT=str(tmp_path),
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("pytest -q", repo_dir=repo, settings=s)
+
+    a = seen["argv"]
+    pairs = list(zip(a, a[1:]))
+    assert ("-e", "PYTHONPATH=src") in pairs, (
+        f"-e PYTHONPATH=src not found as a flag pair in argv: {a}"
+    )
+
+
+def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
+    """When repo_dir has no src/ subdirectory, no PYTHONPATH env var is
+    injected into the Docker argv."""
+    repo = tmp_path / "ticket"
+    repo.mkdir()
+
+    s = _settings(
+        tmp_path, MILL_DATA_DIR=str(tmp_path),
+        MILL_SANDBOX_DATA_MOUNT=str(tmp_path),
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("pytest -q", repo_dir=repo, settings=s)
+
+    a = seen["argv"]
+    assert not any("PYTHONPATH" in str(x) for x in a)

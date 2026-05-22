@@ -128,7 +128,7 @@ COPY . /app
 # Layer dev tooling (pytest, mypy, ruff, bandit) on top of the
 # site-packages inherited from base.
 ARG INSTALL_EXTRAS=dev,tracing
-RUN pip install --no-cache-dir --root-user-action=ignore ".[${INSTALL_EXTRAS}]" \
+RUN pip install --no-cache-dir --root-user-action=ignore -e ".[${INSTALL_EXTRAS}]" \
     && chown -R mill:mill /app
 
 USER mill

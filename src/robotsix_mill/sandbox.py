@@ -93,6 +93,7 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
     """Execute ``command`` against ``repo_dir`` in a disposable
     container. Returns ``(exit_code, combined_output)``. Raises
     :class:`SandboxError` on isolation-infrastructure failure."""
+    repo_dir = Path(repo_dir)  # callers (e.g. the merge stage) may pass a str
     name = f"mill-sbx-{uuid.uuid4().hex[:12]}"
     argv = [
         "docker", "run", "--rm", "--name", name,
@@ -102,11 +103,18 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
         "--memory", settings.sandbox_memory,
         "--tmpfs", "/tmp",
         "-e", "HOME=/tmp",
-        *_repo_mount(Path(repo_dir), settings),
+        *_repo_mount(repo_dir, settings),
         "-w", str(repo_dir),
     ]
     if settings.sandbox_readonly:
         argv.append("--read-only")
+    # When the mounted repo has a src/ layout, put its source first on
+    # PYTHONPATH so the command runs against the MOUNTED code — not a
+    # stale copy of the package baked into the sandbox image's
+    # site-packages. Without this the in-sandbox test gate silently
+    # validates the image's old code instead of the ticket's edits.
+    if (repo_dir / "src").is_dir():
+        argv += ["-e", "PYTHONPATH=src"]
     # Override the image ENTRYPOINT: images like robotsix/mill have one
     # (it starts the server) which would otherwise swallow our command.
     argv += ["--entrypoint", "sh", settings.sandbox_image, "-lc", command]
