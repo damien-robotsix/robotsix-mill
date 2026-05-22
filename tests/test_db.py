@@ -321,3 +321,118 @@ def test_fresh_db_has_origin_session_column(tmp_path):
     columns = {row[1] for row in cur.fetchall()}
     assert "origin_session" in columns
     conn.close()
+
+
+# --- full migration integration (oldest supported schema → current) ---
+
+_OLD_STATE_ROWS = (
+    # ticket rows with old enum names
+    "INSERT INTO ticket (id, title, state, workspace_path, created_at, "
+    "updated_at) VALUES "
+    "('t-in-review', 'Old IN_REVIEW', 'IN_REVIEW', '/tmp/ws', "
+    "'2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z')",
+    "INSERT INTO ticket (id, title, state, workspace_path, created_at, "
+    "updated_at) VALUES "
+    "('t-awaiting', 'Old AWAITING_APPROVAL', 'AWAITING_APPROVAL', '/tmp/ws', "
+    "'2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z')",
+)
+
+_OLD_EVENT_ROWS = (
+    "INSERT INTO ticketevent (ticket_id, state, at) VALUES "
+    "('t-in-review', 'IN_REVIEW', '2025-01-01T00:00:00Z')",
+    "INSERT INTO ticketevent (ticket_id, state, at) VALUES "
+    "('t-awaiting', 'AWAITING_APPROVAL', '2025-01-01T00:00:00Z')",
+)
+
+
+def test_full_migration_integration(tmp_path):
+    """Materialise a DB at the oldest supported prior schema (no additive
+    columns, old state enum names) and assert init_db migrates every
+    column and state rename correctly."""
+    db.reset_engine()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    s = Settings(MILL_DATA_DIR=str(data_dir))
+
+    db_path = str(s.db_path)
+    conn = sqlite3.connect(db_path)
+    # Oldest supported schema: ticket DDL without source, blocked_from,
+    # origin_session, cost_usd, depends_on, or kind.
+    conn.execute(_PRE_MIGRATION_TICKET_DDL)
+    conn.execute(_EVENT_DDL)
+    for stmt in _OLD_STATE_ROWS:
+        conn.execute(stmt)
+    for stmt in _OLD_EVENT_ROWS:
+        conn.execute(stmt)
+    conn.commit()
+    conn.close()
+
+    # -- run the migration -------------------------------------------------
+    db.reset_engine()
+    db.init_db(s)
+
+    # -- assert all additive columns are present ---------------------------
+    conn = sqlite3.connect(db_path)
+    columns = {
+        row[1]: row[2]
+        for row in conn.execute("PRAGMA table_info('ticket')")
+    }
+    for col in (
+        "source", "blocked_from", "origin_session", "cost_usd",
+        "depends_on", "kind",
+    ):
+        assert col in columns, f"Column '{col}' missing after migration"
+
+    # -- assert state values were renamed in ticket table ------------------
+    cur = conn.execute("SELECT id, state FROM ticket ORDER BY id")
+    ticket_states = {row[0]: row[1] for row in cur.fetchall()}
+    assert ticket_states["t-in-review"] == "HUMAN_MR_APPROVAL", (
+        f"Expected HUMAN_MR_APPROVAL, got {ticket_states['t-in-review']}"
+    )
+    assert ticket_states["t-awaiting"] == "HUMAN_ISSUE_APPROVAL", (
+        f"Expected HUMAN_ISSUE_APPROVAL, got {ticket_states['t-awaiting']}"
+    )
+
+    # -- assert state values were renamed in ticketevent table -------------
+    cur = conn.execute(
+        "SELECT ticket_id, state FROM ticketevent ORDER BY ticket_id"
+    )
+    event_states = {row[0]: row[1] for row in cur.fetchall()}
+    assert event_states["t-in-review"] == "HUMAN_MR_APPROVAL"
+    assert event_states["t-awaiting"] == "HUMAN_ISSUE_APPROVAL"
+
+    # -- assert defaults on existing row -----------------------------------
+    cur = conn.execute(
+        "SELECT source, kind, cost_usd, blocked_from, origin_session, "
+        "depends_on FROM ticket WHERE id = 't-in-review'"
+    )
+    row = cur.fetchone()
+    assert row is not None
+    assert row[0] == "user", f"source default: expected 'user', got {row[0]}"
+    assert row[1] == "task", f"kind default: expected 'task', got {row[1]}"
+    assert row[2] == 0.0, f"cost_usd default: expected 0.0, got {row[2]}"
+    assert row[3] is None, f"blocked_from default: expected NULL, got {row[3]}"
+    assert row[4] is None, f"origin_session default: expected NULL, got {row[4]}"
+    assert row[5] is None, f"depends_on default: expected NULL, got {row[5]}"
+
+    conn.close()
+
+    # -- assert idempotency: a second init_db does not error ---------------
+    db.reset_engine()
+    db.init_db(s)
+
+    # Spot-check: columns still present, state values still correct.
+    conn = sqlite3.connect(db_path)
+    columns2 = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info('ticket')")
+    }
+    for col in (
+        "source", "blocked_from", "origin_session", "cost_usd",
+        "depends_on", "kind",
+    ):
+        assert col in columns2, f"Column '{col}' missing after second init_db"
+
+    cur = conn.execute("SELECT id, state FROM ticket WHERE id = 't-in-review'")
+    assert cur.fetchone()[1] == "HUMAN_MR_APPROVAL"
+    conn.close()
