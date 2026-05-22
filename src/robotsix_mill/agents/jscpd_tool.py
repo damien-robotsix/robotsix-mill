@@ -19,7 +19,7 @@ def run_jscpd(repo_dir: Path) -> str:
     """Run jscpd and return a structured summary of clone pairs.
 
     Returns a human-readable string with, for each clone pair: both
-    file paths, line ranges (``startLoc``–``endLoc``), duplicated line
+    file paths, line ranges (``start``–``end``), duplicated line
     count, and token count.  If jscpd is unavailable or fails, returns
     a descriptive error string instead of raising.
     """
@@ -53,7 +53,7 @@ def run_jscpd(repo_dir: Path) -> str:
     except OSError as exc:
         return f"ERROR: could not run jscpd — {exc}"
 
-    # jscpd exits non-zero when clones are found (or on execution errors).
+    # jscpd exits non-zero when clones are found (behaves like a linter).
     # Treat empty stdout + non-zero as a genuine error; non-empty stdout
     # (even with non-zero exit) is parseable JSON with findings.
     if result.returncode != 0 and not result.stdout.strip():
@@ -104,11 +104,11 @@ def _parse_jscpd_output(stdout: str) -> str:
         second_file = clone.get("secondFile", {})
 
         fa_name = first_file.get("name", "?")
-        fa_start = first_file.get("start", first_file.get("startLoc", "?"))
-        fa_end = first_file.get("end", first_file.get("endLoc", "?"))
+        fa_start = first_file.get("start", "?")
+        fa_end = first_file.get("end", "?")
         fb_name = second_file.get("name", "?")
-        fb_start = second_file.get("start", second_file.get("startLoc", "?"))
-        fb_end = second_file.get("end", second_file.get("endLoc", "?"))
+        fb_start = second_file.get("start", "?")
+        fb_end = second_file.get("end", "?")
 
         lines.append(
             f"- `{fa_name}:{fa_start}-{fa_end}` ↔ "
