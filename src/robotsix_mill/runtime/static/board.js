@@ -598,13 +598,14 @@ function createTicketFromFinding(idx,event){
  const backdrop=document.createElement("div");
  backdrop.className="modal-backdrop";
  const modal=document.createElement("div");
- modal.className="modal modal-wide";
+ modal.className="modal";
  modal.innerHTML=
-  `<h2>Create Ticket from Finding</h2>
+  `<h2>New Ticket from Deep Review</h2>
+   <span class="dr-source-badge">🔍 deep review</span>
    <label class="modal-label">Title <span class="modal-req">*</span></label>
    <input type="text" class="modal-input" id="modal-title" placeholder="What needs doing?" autocomplete="off">
    <div class="modal-field-error" id="modal-title-err"></div>
-   <label class="modal-label">Description</label>
+   <label class="modal-label">Description (auto-generated from findings)</label>
    <textarea class="modal-textarea" id="modal-desc" rows="8"></textarea>
    <div class="modal-buttons">
     <span class="modal-submit-error" id="modal-submit-err"></span>
@@ -621,7 +622,7 @@ function createTicketFromFinding(idx,event){
  const createBtn=document.getElementById("modal-create");
 
  titleEl.value="Deep review: "+itemText.substring(0,80);
- descEl.value="Finding from deep review of trace "+deepReviewTraceId+":\n\n["+category+"] "+itemText;
+ descEl.value="**Symptom:** "+(finding.symptom||"")+"\n\n**Root cause:** "+(finding.root_cause||"")+"\n\n**Proposed solution:** "+(finding.proposed_solution||"")+"\n\n**Confidence:** "+(finding.confidence||"medium")+"\n\n**Source trace:** "+deepReviewTraceId;
 
  function close(){
   document.body.removeChild(backdrop);

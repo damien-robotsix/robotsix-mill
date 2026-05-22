@@ -115,3 +115,5 @@ border-left:3px solid #2563eb;border-radius:3px}
 .modal-btn-create:disabled{opacity:.5;cursor:default}
 .inquiry-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
 margin-top:3px;background:#1e2a3a;color:#38bdf8;text-transform:uppercase;letter-spacing:.04em}
+.dr-source-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
+  margin-bottom:10px;background:#1a2a3b;color:#60c0fa;text-transform:uppercase;letter-spacing:.04em}
