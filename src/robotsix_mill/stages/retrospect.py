@@ -26,6 +26,11 @@ from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
 
+# States that count as "done with" for dedup purposes — ticket titles
+# that match an existing ticket in one of these states are considered
+# already resolved/filed and won't block re-filing.
+_DONE_WITH = {"closed", "done"}
+
 # Word-to-number mapping for parsing count claims like "Eleven tickets".
 _WORD_TO_NUM: dict[str, int] = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -258,6 +263,46 @@ class RetrospectStage(Stage):
                 log.info("%s: retrospect spawned draft %s", ticket.id, spawned)
         return spawned
 
+    def _maybe_spawn_follow_up(
+        self,
+        res: RetrospectResult,
+        ticket: Ticket,
+        settings: Settings,
+        ctx: StageContext,
+    ) -> str | None:
+        """Conditionally file a concrete incomplete-work follow-up ticket.
+
+        Returns the spawned draft ID, or None if no follow-up was created.
+        """
+        if not res.follow_up_title or not res.follow_up_body:
+            return None
+
+        follow_up_title = res.follow_up_title.strip()
+        follow_up_body = res.follow_up_body
+
+        # Dedup: skip if an open (non-closed, non-done) ticket with the
+        # same case-insensitive title already exists.
+        norm = follow_up_title.casefold()
+        for t in ctx.service.list():
+            if (
+                t.title.strip().casefold() == norm
+                and t.state.value not in _DONE_WITH
+            ):
+                log.info(
+                    "%s: retrospect follow-up already filed as %s (state=%s) — not duplicating",
+                    ticket.id, t.id, t.state.value,
+                )
+                return None
+
+        draft = ctx.service.create(
+            follow_up_title, follow_up_body,
+            source="retrospect",
+            origin_session=current_session(),
+        )
+        ctx.service.set_parent(draft.id, ticket.id)
+        log.info("%s: retrospect spawned follow-up %s", ticket.id, draft.id)
+        return draft.id
+
     # ------------------------------------------------------------------
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
@@ -326,11 +371,13 @@ class RetrospectStage(Stage):
                 log.warning("%s: could not write memory file %s", ticket.id, memory_file)
 
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
+        follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)
 
         (ws.artifacts_dir / "retrospect.md").write_text(
             f"# Retrospect\nlangfuse: "
             f"{'yes' if lf else 'workflow-only'}\n"
-            f"spawned draft: {spawned or '—'}\n\n{res.findings}\n",
+            f"spawned draft: {spawned or '—'}\n"
+            f"follow-up: {follow_up or '—'}\n\n{res.findings}\n",
             encoding="utf-8",
         )
 
@@ -348,4 +395,6 @@ class RetrospectStage(Stage):
             note = f"{note} — improvement draft {spawned}"
         elif res.propose_draft and not s.retrospect_spawn_drafts:
             note = f"{note} — draft proposed (spawning disabled)"
+        if follow_up:
+            note = f"{note} — follow-up {follow_up}"
         return Outcome(State.CLOSED, note)
