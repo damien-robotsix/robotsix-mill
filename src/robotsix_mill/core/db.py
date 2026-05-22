@@ -125,6 +125,11 @@ def _run_migrations(settings: Settings) -> None:
             conn, "ticket", "kind", "TEXT NOT NULL", "'task'"
         )
 
+        # New State enum values (e.g. DOCUMENTING) are additive-only and
+        # require no data migration — existing rows simply use the new
+        # value on future transitions.
+        pass
+
         # State renames (PR #143): existing rows still store the old
         # enum NAMES; an ORM load of such a row raises LookupError and
         # crashes startup. Rename the stored values in place.

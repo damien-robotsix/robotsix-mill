@@ -69,6 +69,7 @@ def _ticket(ctx, body="Add feature.txt"):
     _git(repo_dir, "add", "-A")
     _git(repo_dir, "commit", "-q", "-m", "implement feature")
     ctx.service.set_branch(t.id, f"mill/{t.id}")
+    ctx.service.transition(t.id, State.DOCUMENTING)
     ctx.service.transition(t.id, State.CODE_REVIEW)
     return ctx.service.get(t.id)
 
@@ -216,6 +217,7 @@ def test_missing_repo_blocks(ctx_factory):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = ctx.service.create("No clone")
     ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DOCUMENTING)
     ctx.service.transition(t.id, State.CODE_REVIEW)
     t = ctx.service.get(t.id)
 

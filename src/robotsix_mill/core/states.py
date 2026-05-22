@@ -35,7 +35,8 @@ class State(StrEnum):
     DRAFT = "draft"            # raw idea, awaiting refinement
     HUMAN_ISSUE_APPROVAL = "human_issue_approval"  # refined; awaiting human approval
     READY = "ready"           # actionable; awaiting implementation
-    CODE_REVIEW = "code_review"  # implemented; awaiting automated code review
+    DOCUMENTING = "documenting"  # implemented; documentation agent updating docs
+    CODE_REVIEW = "code_review"  # documented; awaiting automated code review
     DELIVERABLE = "deliverable"  # reviewed; awaiting MR delivery
     HUMAN_MR_APPROVAL = "human_mr_approval"   # PR/MR open; awaiting human merge
     REBASING = "rebasing"     # conflicting PR; rebase agent in progress
@@ -59,7 +60,8 @@ TRANSITIONS: dict[State, set[State]] = {
     State.HUMAN_ISSUE_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},
     # implement routes to code_review when review is enabled, otherwise
     # straight to deliverable.
-    State.READY: {State.CODE_REVIEW, State.DELIVERABLE, State.ERRORED, State.BLOCKED},
+    State.READY: {State.DOCUMENTING, State.DELIVERABLE, State.ERRORED, State.BLOCKED},
+    State.DOCUMENTING: {State.CODE_REVIEW, State.DELIVERABLE, State.ERRORED, State.BLOCKED},
     State.CODE_REVIEW: {State.DELIVERABLE, State.READY, State.ERRORED, State.BLOCKED},
     State.DELIVERABLE: {State.HUMAN_MR_APPROVAL, State.ERRORED, State.BLOCKED},
     # PR open: merge stage polls -> merged=done, closed-unmerged=blocked,
@@ -97,6 +99,7 @@ TRANSITIONS: dict[State, set[State]] = {
 STAGE_FOR_STATE: dict[State, str] = {
     State.DRAFT: "refine",
     State.READY: "implement",
+    State.DOCUMENTING: "document",
     State.CODE_REVIEW: "review",
     State.DELIVERABLE: "deliver",
     State.HUMAN_MR_APPROVAL: "merge",

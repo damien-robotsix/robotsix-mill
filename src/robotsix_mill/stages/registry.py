@@ -11,6 +11,7 @@ from .answer import AnswerStage
 from .base import Stage
 from .ci_fix import CIFixStage
 from .deliver import DeliverStage
+from .document import DocumentStage
 from .implement import ImplementStage
 from .merge import MergeStage
 from .refine import RefineStage
@@ -20,6 +21,7 @@ from .review import ReviewStage
 _REGISTERED: list[type[Stage]] = [
     RefineStage,
     ImplementStage,
+    DocumentStage,
     ReviewStage,
     DeliverStage,
     MergeStage,
