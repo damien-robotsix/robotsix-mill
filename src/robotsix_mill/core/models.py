@@ -79,6 +79,7 @@ class Comment(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     ticket_id: str = Field(foreign_key="ticket.id", index=True)
     body: str
+    author: str = Field(default="user")
     created_at: datetime = Field(
         default_factory=_now,
         sa_column=Column(TZDateTime()),
@@ -123,10 +124,12 @@ class TicketRead(SQLModel):
 
 class CommentCreate(SQLModel):
     body: str
+    author: str = "user"
 
 
 class CommentRead(SQLModel):
     id: int
     ticket_id: str
     body: str
+    author: str
     created_at: datetime

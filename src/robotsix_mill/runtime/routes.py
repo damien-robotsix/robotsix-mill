@@ -247,7 +247,7 @@ def add_comment(
     persisted.
     """
     try:
-        comment = svc.add_comment(ticket_id, body.body)
+        comment = svc.add_comment(ticket_id, body.body, author=body.author)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
 
@@ -291,7 +291,7 @@ def request_changes(
     """Add a comment AND transition from human_issue_approval back to draft
     in one atomic operation."""
     try:
-        comment, ticket = svc.request_changes(ticket_id, body.body)
+        comment, ticket = svc.request_changes(ticket_id, body.body, author=body.author)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:

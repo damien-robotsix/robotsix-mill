@@ -78,13 +78,13 @@ class ReviewStage(Stage):
         if verdict.verdict == "APPROVE":
             return Outcome(State.DELIVERABLE, "review approved")
         elif verdict.verdict == "REQUEST_CHANGES":
-            ctx.service.add_comment(ticket.id, verdict.comments)
+            ctx.service.add_comment(ticket.id, verdict.comments, author="review")
             return Outcome(
                 State.READY,
                 verdict.comments[:200],
             )
         else:  # NEEDS_DISCUSSION
-            ctx.service.add_comment(ticket.id, verdict.comments)
+            ctx.service.add_comment(ticket.id, verdict.comments, author="review")
             return Outcome(
                 State.BLOCKED,
                 verdict.comments[:200],

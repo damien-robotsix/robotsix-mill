@@ -521,14 +521,14 @@ class TicketService:
         return unmet
 
     # --- comments ---
-    def add_comment(self, ticket_id: str, body: str) -> Comment:
+    def add_comment(self, ticket_id: str, body: str, author: str = "user") -> Comment:
         """Add a reviewer comment to a ticket. Raises ``KeyError`` if
         the ticket does not exist."""
         with db.session(self.settings) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
-            comment = Comment(ticket_id=ticket_id, body=body)
+            comment = Comment(ticket_id=ticket_id, body=body, author=author)
             s.add(comment)
             s.commit()
             s.refresh(comment)
@@ -549,7 +549,7 @@ class TicketService:
             return list(s.exec(stmt).all())
 
     def request_changes(
-        self, ticket_id: str, body: str
+        self, ticket_id: str, body: str, author: str = "user"
     ) -> tuple[Comment | None, Ticket]:
         """Transition from ``human_issue_approval`` to ``draft`` in one
         atomic operation.  When ``body`` is non-empty a ``Comment`` is
@@ -570,7 +570,7 @@ class TicketService:
                 )
             comment = None
             if body.strip():
-                comment = Comment(ticket_id=ticket_id, body=body)
+                comment = Comment(ticket_id=ticket_id, body=body, author=author)
                 s.add(comment)
             note = f"changes requested: {body}"
             ticket.state = State.DRAFT
