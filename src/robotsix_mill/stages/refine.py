@@ -179,16 +179,55 @@ class RefineStage(Stage):
                     )
                     return Outcome(next_state, "split child — spec already refined")
 
-        # --- run the refine agent ---
+        # --- gather reviewer comments (sendback guard) ---
+        reviewer_comments: str | None = None
         try:
-            # Gather reviewer comments (if the ticket was sent back to draft).
             comments = ctx.service.list_comments(ticket.id)
-            reviewer_comments: str | None = None
             if comments:
                 reviewer_comments = "\n".join(
                     f"[{c.created_at.isoformat()}] {c.body}" for c in comments
                 )
+        except Exception:
+            log.warning("%s: list_comments failed, proceeding without", ticket.id)
 
+        # --- triage: skip full refine for already-precise drafts ---
+        # A single cheap LLM call classifies the draft.  If it's
+        # already a precise, implementation-ready spec, skip the
+        # expensive refine agent entirely.  ONLY skip when:
+        # - the feature flag is enabled, AND
+        # - no reviewer sendback (human-flagged changes always refine), AND
+        # - the triage model says SKIP.
+        if (
+            s.refine_triage_enabled
+            and not reviewer_comments
+        ):
+            try:
+                triage = refining.triage_refine(
+                    settings=s, title=title, draft=draft,
+                )
+                if triage.decision == "SKIP":
+                    # The draft IS the spec — preserve it unchanged.
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    next_state = (
+                        State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
+                        else State.READY
+                    )
+                    return Outcome(
+                        next_state,
+                        f"triage SKIP: {triage.reason}",
+                    )
+            except Exception:
+                log.warning(
+                    "%s: triage failed, falling through to full refine",
+                    ticket.id, exc_info=True,
+                )
+        # --- end triage ---
+
+        # --- run the refine agent ---
+        try:
             memory_text = load_memory(s.refine_memory_file, max_chars=s.max_memory_chars)
 
             result = refining.run_refine_agent(

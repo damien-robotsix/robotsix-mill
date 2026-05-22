@@ -15,10 +15,18 @@ repo (no forge configured) it falls back to draft-only as before.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
 from ..config import Settings
+
+
+class TriageResult(BaseModel):
+    """Triage agent output — a single cheap classification call."""
+
+    decision: Literal["REFINE", "SKIP"]
+    reason: str
 
 
 class ChildSpec(BaseModel):
@@ -73,6 +81,70 @@ class RefineResult(BaseModel):
                     data["spec_markdown"] = v
                     break
         return data
+
+
+def triage_refine(
+    *,
+    settings: Settings,
+    title: str,
+    draft: str,
+) -> TriageResult:
+    """Return a ``TriageResult`` from a single cheap LLM call.
+
+    NO tools, NO web, NO explore — just a tiny prompt and a
+    structured classification.  Conservative bias: when uncertain,
+    choose REFINE (the only real risk is a wrong SKIP).
+    """
+    from pydantic_ai import PromptedOutput
+
+    from .base import build_agent, _safe_close
+    from .retry import call_with_retry
+
+    TRIAGE_PROMPT = """\
+You are a cost-saving triage classifier.  Your ONLY job: decide
+whether a ticket draft needs a full refine pass.
+
+A draft that is ALREADY precise, single-scoped, implementation-ready,
+and grounded should be SKIPped.  Examples:
+- Documentation-only changes (README, docstrings, MkDocs config).
+- Config-only changes (new env var, feature flag, field rename).
+- Tiny, obvious code changes where the draft lists exact file paths,
+  line numbers, and acceptance criteria.
+- Pure mechanical changes (rename, move files, add a one-line call).
+
+A draft that needs REFINEment has ANY of:
+- Ambiguous scope or multiple independent changes bundled together.
+- Missing acceptance criteria or no concrete file paths.
+- The agent would need to explore the codebase to ground the spec.
+- Any non-trivial code change where the draft is not already a spec.
+
+Be CONSERVATIVE: if you are unsure, say REFINE.
+A wrong SKIP (under-refining a real change) is the only real risk.
+A wrong REFINE is just status-quo cost — harmless.
+"""
+    agent = build_agent(
+        settings,
+        system_prompt=TRIAGE_PROMPT,
+        output_type=PromptedOutput(TriageResult),
+        tools=[],  # NO tools — classification only
+        web=False,  # NO web research
+        report_issue=False,
+        model_name=settings.triage_model,
+        name="triage",
+    )
+
+    user_prompt = f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
+
+    try:
+        result = call_with_retry(
+            lambda: agent.run_sync(user_prompt),
+            settings=settings,
+            what="triage",
+        )
+    finally:
+        _safe_close(agent)
+    return result.output
+
 
 SYSTEM_PROMPT = """\
 You turn a rough ticket draft into a precise, self-contained

@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     dedup_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_DEDUP_MODEL"
     )
+    # Model for the pre-refine triage pass — a single cheap call that
+    # decides whether the draft needs refinement at all.  Must be a
+    # fast, inexpensive model; classification is the only task.
+    triage_model: str = Field(
+        default="openai/gpt-4o-mini", alias="MILL_TRIAGE_MODEL"
+    )
     # Per-call request caps (bound each role's loop). Sized for slow
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
     # ~49 implement calls, so 200 leaves generous headroom; raising it
@@ -283,6 +289,13 @@ class Settings(BaseSettings):
     # deliver stage pushes + opens the PR. Default False (opt-in).
     review_enabled: bool = Field(
         default=False, alias="MILL_REVIEW_ENABLED"
+    )
+    # When True (default), a cheap triage LLM call runs before the full
+    # refine agent.  Drafts that are already precise, single-scoped, and
+    # implementation-ready skip the full refine — saving cost & latency.
+    # Set False to force full refine for all tickets without a deploy.
+    refine_triage_enabled: bool = Field(
+        default=True, alias="MILL_REFINE_TRIAGE_ENABLED"
     )
     # Model for the review agent. Defaults to the capable coordinator model.
     # Override to use a *different* model for a genuinely independent review

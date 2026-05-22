@@ -1421,3 +1421,204 @@ def test_epic_context_empty_for_no_parent_in_refine(ctx, service, monkeypatch):
     RefineStage().run(t, ctx)
     assert len(seen_epic_context) == 1
     assert seen_epic_context[0] == ""
+
+
+# ---------------------------------------------------------------------------
+# triage pass tests
+# ---------------------------------------------------------------------------
+
+
+def test_triage_refine_agent_config(monkeypatch, tmp_path):
+    """triage_refine builds an agent with zero tools, web=False, and
+    the correct triage_model."""
+    from robotsix_mill.agents import base as base_mod
+    from robotsix_mill.agents.refining import triage_refine, TriageResult
+
+    seen_kwargs: dict = {}
+
+    def fake_build_agent(settings, system_prompt, output_type, tools, web, report_issue, model_name, name, **kwargs):
+        seen_kwargs.update(
+            tools=tools, web=web, report_issue=report_issue,
+            model_name=model_name, name=name,
+        )
+        class FakeAgent:
+            def run_sync(self, msg):
+                return type("R", (), {"output": TriageResult(decision="REFINE", reason="test")})()
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
+
+    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_TRIAGE_MODEL="test/triage-model")
+    result = triage_refine(settings=s, title="Test", draft="do x in foo.py")
+
+    assert result.decision == "REFINE"
+    assert seen_kwargs["tools"] == []
+    assert seen_kwargs["web"] is False
+    assert seen_kwargs["report_issue"] is False
+    assert seen_kwargs["model_name"] == "test/triage-model"
+    assert seen_kwargs["name"] == "triage"
+
+
+def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
+    """When triage returns SKIP, run_refine_agent is NOT called,
+    the draft is preserved, and the ticket goes to READY."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    refine_called = False
+
+    def fake_triage(*, settings, title, draft):
+        return TriageResult(decision="SKIP", reason="doc-only change, no exploration needed")
+
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
+        nonlocal refine_called
+        refine_called = True
+        return _single("should not be called")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
+
+    t = service.create("Update README", "Change the version badge in README.md line 5.")
+    out = RefineStage().run(t, ctx)
+
+    assert not refine_called
+    assert out.next_state is State.READY
+    assert "triage SKIP:" in out.note
+    assert "doc-only change" in out.note
+
+
+def test_triage_skip_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatch):
+    """When triage returns SKIP and require_approval=True, the ticket
+    transitions to HUMAN_ISSUE_APPROVAL."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    monkeypatch.setattr(
+        refining, "triage_refine",
+        lambda **_: TriageResult(decision="SKIP", reason="config-only"),
+    )
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("unused"))
+
+    t = service.create("Add env var", "Add FOO=bar to config.py line 42.")
+
+    from robotsix_mill.config import Settings as S
+    gated = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REQUIRE_APPROVAL="true")
+    gated_ctx = StageContext(settings=gated, service=service)
+    out = RefineStage().run(t, gated_ctx)
+
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert "triage SKIP:" in out.note
+
+
+def test_triage_refine_calls_full_refine(ctx, service, monkeypatch):
+    """When triage returns REFINE, run_refine_agent IS called normally."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    refine_called = False
+
+    def fake_triage(*, settings, title, draft):
+        return TriageResult(decision="REFINE", reason="ambiguous scope, needs exploration")
+
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
+        nonlocal refine_called
+        refine_called = True
+        return _single("## Problem\nrefined\n")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Add feature X", "make it work with the thing")
+    out = RefineStage().run(t, ctx)
+
+    assert refine_called
+    assert out.next_state is State.READY
+    assert out.note == "refined"
+
+
+def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch):
+    """When refine_triage_enabled=False, triage_refine is never called
+    and full refine runs."""
+    refine_called = False
+    triage_called = False
+
+    def fake_triage(*, settings, title, draft):
+        nonlocal triage_called
+        triage_called = True
+        from robotsix_mill.agents.refining import TriageResult
+        return TriageResult(decision="SKIP", reason="should not be reached")
+
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
+        nonlocal refine_called
+        refine_called = True
+        return _single("## Problem\nrefined\n")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Update README", "Change the version badge in README.md line 5.")
+
+    from robotsix_mill.config import Settings as S
+    disabled = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REFINE_TRIAGE_ENABLED="false", MILL_REQUIRE_APPROVAL="false")
+    disabled_ctx = StageContext(settings=disabled, service=service)
+    out = RefineStage().run(t, disabled_ctx)
+
+    assert not triage_called
+    assert refine_called
+    assert out.next_state is State.READY
+
+
+def test_triage_sendback_always_refines(ctx, service, monkeypatch):
+    """When the ticket has reviewer comments (sendback), triage is
+    skipped and full refine runs even though the draft looks trivial."""
+    from robotsix_mill.agents.refining import TriageResult
+
+    refine_called = False
+    triage_called = False
+
+    def fake_triage(*, settings, title, draft):
+        nonlocal triage_called
+        triage_called = True
+        return TriageResult(decision="SKIP", reason="should not be reached")
+
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
+        nonlocal refine_called
+        refine_called = True
+        # Verify reviewer comments were passed through.
+        assert reviewer_comments is not None
+        assert "please fix x" in reviewer_comments
+        return _single("## Problem\nrefined with feedback\n")
+
+    monkeypatch.setattr(refining, "triage_refine", fake_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Update README", "Change the version badge in README.md line 5.")
+    # Add a reviewer comment to simulate sendback.
+    service.add_comment(t.id, "please fix x")
+
+    out = RefineStage().run(t, ctx)
+
+    assert not triage_called
+    assert refine_called
+    assert out.next_state is State.READY
+
+
+def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
+    """When triage_refine raises, a warning is logged and full refine
+    proceeds normally."""
+    refine_called = False
+
+    def boom_triage(*, settings, title, draft):
+        raise RuntimeError("triage model down")
+
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
+        nonlocal refine_called
+        refine_called = True
+        return _single("## Problem\nrefined\n")
+
+    monkeypatch.setattr(refining, "triage_refine", boom_triage)
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Add X", "make x happen")
+    out = RefineStage().run(t, ctx)
+
+    assert refine_called
+    assert out.next_state is State.READY
+    assert out.note == "refined"
