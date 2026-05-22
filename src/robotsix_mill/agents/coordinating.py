@@ -127,6 +127,7 @@ def run_coordinator(
     repo_dir: Path,
     spec: str,
     memory: str = "",
+    model_name: str | None = None,
 ) -> ImplementResult:
     """Drive explore → read → implement → test → loop. Returns the
     structured result. The seam tests monkeypatch this."""
@@ -158,7 +159,7 @@ def run_coordinator(
             make_run_tests_tool(settings, repo_dir),
         ],
         web=True,  # adds the cheap web_research tool
-        model_name=settings.model,  # the capable implement model
+        model_name=model_name if model_name is not None else settings.model,  # the capable implement model
         name="implement",
     )
     try:

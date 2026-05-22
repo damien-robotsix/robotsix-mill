@@ -104,6 +104,7 @@ def build_agent(
     report_issue: bool = True,
     model_name: str | None = None,
     name: str | None = None,
+    retries: int = 2,
 ):
     """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
     role passes its own ``model_name`` (see Settings per-agent models);
@@ -149,6 +150,7 @@ def build_agent(
         system_prompt=_compose_prompt(settings, system_prompt),
         output_type=output_type,
         tools=all_tools,
+        retries=retries,
     )
     if name is not None:
         agent_kwargs["name"] = name
