@@ -296,6 +296,72 @@ async function newEpic(){
  // Auto-focus title
  titleEl.focus();
 }
+async function newChildTicket(epicId){
+ // Build modal DOM
+ const backdrop=document.createElement("div");
+ backdrop.className="modal-backdrop";
+ const modal=document.createElement("div");
+ modal.className="modal";
+ modal.innerHTML=
+  `<h2>Add Ticket to Epic</h2>
+   <label class="modal-label">Title <span class="modal-req">*</span></label>
+   <input type="text" class="modal-input" id="modal-title" placeholder="What needs doing?" autocomplete="off">
+   <div class="modal-field-error" id="modal-title-err"></div>
+   <label class="modal-label">Description</label>
+   <textarea class="modal-textarea" id="modal-desc" rows="8" placeholder="Rough idea, context, constraints…"></textarea>
+   <div class="modal-buttons">
+    <span class="modal-submit-error" id="modal-submit-err"></span>
+    <button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>
+    <button type="button" class="modal-btn-create" id="modal-create">Create</button>
+   </div>`;
+ backdrop.appendChild(modal);
+ document.body.appendChild(backdrop);
+
+ const titleEl=document.getElementById("modal-title");
+ const titleErr=document.getElementById("modal-title-err");
+ const descEl=document.getElementById("modal-desc");
+ const submitErr=document.getElementById("modal-submit-err");
+ const createBtn=document.getElementById("modal-create");
+
+ function close(){
+  document.body.removeChild(backdrop);
+ }
+
+ function showTitleErr(msg){titleErr.textContent=msg}
+ function clearTitleErr(){titleErr.textContent=""}
+ function showSubmitErr(msg){submitErr.textContent=msg}
+ function clearSubmitErr(){submitErr.textContent=""}
+
+ async function doSubmit(){
+  const title=titleEl.value.trim();
+  if(!title){showTitleErr("Title is required");titleEl.focus();return}
+  clearTitleErr();clearSubmitErr();
+  createBtn.disabled=true;createBtn.textContent="Creating…";
+  const r=await jpost("/tickets",{title:title,description:descEl.value,parent_id:epicId,kind:"task"});
+  if(!r.ok){const e=await r.text();showSubmitErr("create failed: "+e);
+   createBtn.disabled=false;createBtn.textContent="Create"}
+  else{close();open_(epicId)}
+ }
+
+ // Backdrop click → close
+ backdrop.addEventListener("click",function(e){if(e.target===backdrop)close()});
+
+ // Cancel button
+ document.getElementById("modal-cancel").addEventListener("click",close);
+
+ // Create button
+ createBtn.addEventListener("click",doSubmit);
+
+ // Keyboard handling
+ modal.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){e.preventDefault();close();return}
+  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();doSubmit();return}
+  if(e.key==="Enter"&&e.target===titleEl){e.preventDefault();descEl.focus();return}
+ });
+
+ // Auto-focus title
+ titleEl.focus();
+}
 async function del_(id){
  if(!confirm("Delete ticket "+id+"? This is irreversible (row, history, workspace)."))return;
  const r=await jdel("/tickets/"+id);
@@ -422,7 +488,7 @@ async function open_(id){
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
    (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id)}</span></p>`:"")+
    (ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">${ch.map(c=>`<div class="child-ticket"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")}</div>`:"")+
-   (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button></p>`:"")+
+   (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button> <button class="add-comment-btn" style="background:#2563eb;color:#fff" onclick="newChildTicket('${t.id}')">Add Ticket</button></p>`:"")+
    `<h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+esc(e.note):""}</div>`).join("")+
