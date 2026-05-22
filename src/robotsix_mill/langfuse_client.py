@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import logging
 import time
+from datetime import datetime, timedelta
 
 from .config import Settings
 
@@ -362,3 +363,88 @@ def list_all_traces_since(
     except Exception:  # noqa: BLE001 — never crash the caller
         log.exception("failed to list Langfuse traces since %s", from_timestamp)
         return []
+
+
+def aggregate_cost_by_name(
+    settings: Settings,
+    lookback_hours: float = 24,
+) -> list[dict]:
+    """Return cost aggregated by trace name for Langfuse traces within
+    the last *lookback_hours*.
+
+    Graceful: returns ``[]`` when tracing is disabled or the API errors.
+    Examines at most 500 traces to bound API calls.
+    """
+    if not settings.tracing_enabled:
+        return []
+
+    from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+
+    auth = base64.b64encode(
+        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}"
+        .encode()
+    ).decode()
+    host = (settings.langfuse_base_url or "").rstrip("/")
+
+    PAGE_SIZE = 100
+    EXAMINE_CAP = 500
+    all_traces: list[dict] = []
+
+    try:
+        import httpx
+
+        page = 1
+        with httpx.Client(timeout=20) as c:
+            while len(all_traces) < EXAMINE_CAP:
+                r = c.get(
+                    f"{host}/api/public/traces",
+                    params={
+                        "fromTimestamp": from_timestamp,
+                        "limit": PAGE_SIZE,
+                        "page": page,
+                    },
+                    headers={"Authorization": f"Basic {auth}"},
+                )
+                if r.status_code != 200:
+                    log.warning(
+                        "aggregate_cost_by_name: Langfuse returned %d on page %d",
+                        r.status_code,
+                        page,
+                    )
+                    break
+
+                body = r.json()
+                data = body.get("data", [])
+                all_traces.extend(data)
+
+                meta = body.get("meta", {})
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
+
+    except Exception:
+        log.exception("aggregate_cost_by_name failed")
+        return []
+
+    # Truncate to cap
+    traces = all_traces[:EXAMINE_CAP]
+
+    # Aggregate by name
+    agg: dict[str, dict] = {}
+    for t in traces:
+        name = (t.get("name") or "").strip()
+        if not name:
+            continue
+        cost = float(t.get("totalCost") or 0)
+        if name not in agg:
+            agg[name] = {"total_cost": 0.0, "trace_count": 0}
+        agg[name]["total_cost"] += cost
+        agg[name]["trace_count"] += 1
+
+    result = [
+        {"name": name, "total_cost": entry["total_cost"], "trace_count": entry["trace_count"]}
+        for name, entry in agg.items()
+    ]
+    result.sort(key=lambda x: x["total_cost"], reverse=True)
+    return result
