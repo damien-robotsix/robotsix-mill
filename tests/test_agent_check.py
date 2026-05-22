@@ -56,7 +56,7 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
     for kw in ("metadata", "report_issue", "name", "model_name"):
         assert kw in p, f"agent-check prompt missing metadata cue: {kw}"
     # Dimension D: Agent Registration Completeness
-    for kw in ("registration", "all_roles", "scouting"):
+    for kw in ("registration", "_model", "consuming"):
         assert kw in p, f"agent-check prompt missing registration cue: {kw}"
     # Dimension E: Prompt Self-Consistency
     for kw in ("self-consistency", "copy-paste", "drift"):

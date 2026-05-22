@@ -43,11 +43,11 @@ class TestRunRegistry:
     def test_start_persists_to_file(self, tmp_path: Path):
         path = tmp_path / "runs.json"
         registry = RunRegistry(path)
-        registry.start("scout")
+        registry.start("health")
         assert path.exists()
         data = json.loads(path.read_text())
         assert len(data) == 1
-        assert data[0]["kind"] == "scout"
+        assert data[0]["kind"] == "health"
 
     def test_finish_ok_transitions(self, tmp_path: Path):
         registry = RunRegistry(tmp_path / "runs.json")
@@ -78,7 +78,7 @@ class TestRunRegistry:
         registry = RunRegistry(tmp_path / "runs.json")
         a = registry.start("audit")
         time.sleep(0.01)
-        b = registry.start("scout")
+        b = registry.start("health")
         time.sleep(0.01)
         c = registry.start("trace-health")
 
@@ -105,8 +105,8 @@ class TestRunRegistry:
         r1 = RunRegistry(path)
         a = r1.start("audit")
         r1.finish_ok(a, "audit done")
-        b = r1.start("scout")
-        r1.finish_error(b, "scout failed")
+        b = r1.start("health")
+        r1.finish_error(b, "health failed")
 
         # Fresh registry reading same file
         r2 = RunRegistry(path)
@@ -114,7 +114,7 @@ class TestRunRegistry:
         assert len(entries) == 2
         # newest first: b, a
         assert _ids(entries) == [b, a]
-        assert entries[0]["kind"] == "scout"
+        assert entries[0]["kind"] == "health"
         assert entries[0]["status"] == "error"
         assert entries[1]["kind"] == "audit"
         assert entries[1]["status"] == "ok"
@@ -169,7 +169,7 @@ class TestRunRegistry:
     def test_multiple_running_entries(self, tmp_path: Path):
         registry = RunRegistry(tmp_path / "runs.json")
         a = registry.start("audit")
-        b = registry.start("scout")
+        b = registry.start("health")
         assert len(_running_ids(registry.list_all())) == 2
         registry.finish_ok(a, "ok")
         assert len(_running_ids(registry.list_all())) == 1
@@ -222,17 +222,17 @@ class TestGetRunsEndpoint:
         registry = client.app.state.run_registry
         a = registry.start("audit")
         registry.finish_ok(a, "audit summary")
-        b = registry.start("scout")
-        registry.finish_error(b, "scout error")
+        b = registry.start("health")
+        registry.finish_error(b, "health error")
 
         r = client.get("/runs")
         assert r.status_code == 200
         data = r.json()
         assert len(data) == 2
         assert data[0]["id"] == b
-        assert data[0]["kind"] == "scout"
+        assert data[0]["kind"] == "health"
         assert data[0]["status"] == "error"
-        assert data[0]["error"] == "scout error"
+        assert data[0]["error"] == "health error"
         assert data[1]["id"] == a
         assert data[1]["kind"] == "audit"
         assert data[1]["status"] == "ok"
@@ -263,8 +263,8 @@ class TestGetRunsEndpoint:
             assert key in entry
 
 
-class TestAuditScoutTraceHealthEndpoints:
-    """Regression: the three endpoints return 202 and record runs."""
+class TestAuditTraceHealthEndpoints:
+    """Regression: the pass endpoints return 202 and record runs."""
 
     @pytest.fixture
     def client(self, settings):
@@ -294,29 +294,6 @@ class TestAuditScoutTraceHealthEndpoints:
         assert run["kind"] == "audit"
         assert run["status"] == "ok"
         assert "Created 1 drafts: abc" in run["summary"]
-
-    def test_scout_records_run_and_returns_202(self, client, monkeypatch):
-        from robotsix_mill import scout_runner
-
-        class _R:
-            drafts_created: list = [{"id": "s1", "title": "y"}]
-            updated_memory: str = "mem"
-
-        monkeypatch.setattr(scout_runner, "run_scout_pass", lambda: _R())
-
-        r = client.post("/scout")
-        assert r.status_code == 202
-        assert r.json() == {"status": "started"}
-
-        import time
-        time.sleep(0.1)
-
-        runs = client.get("/runs").json()
-        assert len(runs) >= 1
-        run = runs[0]
-        assert run["kind"] == "scout"
-        assert run["status"] == "ok"
-        assert "Created 1 drafts: s1" in run["summary"]
 
     def test_trace_health_records_run(self, client, monkeypatch):
         from robotsix_mill import trace_health_runner

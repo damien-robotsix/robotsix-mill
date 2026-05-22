@@ -5,7 +5,7 @@ let sel=null;
 let runsOpen=false;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="scout"?"scout":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
 // HTTP helpers built on XMLHttpRequest, not fetch().
 // `fetch` is wrapped by SES / hardened-JS extensions (MetaMask, some
 // privacy/wallet add-ons) and can fail with "NetworkError when
@@ -245,20 +245,6 @@ async function runAudit(){
    btn.disabled=false; btn.textContent='Run Audit';
  }
 }
-async function runScout(){
- const btn=event.target;
- btn.disabled=true; btn.textContent='Running...';
- try {
-   const r=await jpost("/scout");
-   if(!r.ok){throw new Error(await r.text())}
-   alert("Scout started — it runs for a few minutes; new draft tickets will appear on the board when it finishes.");
-   setTimeout(refresh,4000);
- } catch(e) {
-   alert("Scout failed to start: "+e);
- } finally {
-   btn.disabled=false; btn.textContent='Run Scout';
- }
-}
 async function runTraceHealth(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
@@ -347,7 +333,7 @@ async function renderRuns(){
    const min=Math.floor(sec/60);
    const sss=sec%60;
    const elapsed=f?(min+'m '+sss+'s'):'running…';
-   const kc=r.kind==='audit'?'#059669':r.kind==='scout'?'#7c3aed':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':'#6b7280';
+   const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':'#6b7280';
    const sc=r.status==='running'?'#eab308':r.status==='ok'?'#22c55e':'#ef4444';
    const st=r.status==='running'?'running…':r.status;
    return `<div style="padding:8px 0;border-bottom:1px solid #262b36">
@@ -361,7 +347,7 @@ async function renderRuns(){
     ${r.error?`<div style="font-size:11px;color:#f87171;margin-top:2px">${esc(r.error)}</div>`:''}
    </div>`
   }).join("")
-  :`<div class="muted">No runs yet. Click Run Audit, Run Scout, or Trace Health to start one.</div>`;
+  :`<div class="muted">No runs yet. Click Run Audit or Trace Health to start one.</div>`;
 }
 async function toggleRuns(){
  if(runsOpen){close_();return}

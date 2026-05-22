@@ -434,7 +434,7 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
 def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
     """POST /agent-check returns 202 immediately and runs the
     agent-check agent in the background — same fire-and-forget
-    contract as /audit, /scout, /health-check, /trace-health."""
+    contract as /audit, /health-check, /trace-health."""
     import threading
 
     from robotsix_mill import agent_check_runner

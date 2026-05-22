@@ -1,7 +1,8 @@
 """Shared agent-pass runner.
 
-Extracts the common boilerplate from audit_runner and scout_runner:
-read memory, invoke agent, write memory, create draft tickets.
+Extracts the common boilerplate shared by the periodic-pass runners
+(audit, health, agent-check): read memory, invoke agent, write memory,
+create draft tickets.
 Agent modules are NOT imported here — the caller provides a callable.
 """
 
@@ -178,7 +179,7 @@ def run_agent_pass(
                   kwargs (e.g. ``repo_dir``) via ``functools.partial``.
         memory_file: Path to the memory/ledger file.
         source_label: Label for draft ticket ``source`` field (e.g.
-                      ``"audit"``, ``"scout"``).
+                      ``"audit"``, ``"health"``).
         service: ``TicketService`` for creating draft tickets.
         settings: Mill settings (passed through to the agent callable).
         origin_session: Value for ``origin_session`` on created tickets.

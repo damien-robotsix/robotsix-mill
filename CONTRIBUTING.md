@@ -35,9 +35,9 @@ Here's how the key directories relate:
   per-role model. Agent modules are pure logic (no I/O orchestration).
 - **`stages/`** — Pipeline steps (refine → implement → deliver →
   merge → retrospect). Stages call agents and handle workspace I/O.
-- **`*_runner.py`** — Periodic pass orchestration (audit, scout,
-  trace-health). Each runner reads a memory ledger, invokes an agent,
-  writes back, and emits draft tickets.
+- **`*_runner.py`** — Periodic pass orchestration (audit, health,
+  agent-check, trace-health). Each runner reads a memory ledger, invokes
+  an agent, writes back, and emits draft tickets.
 - **`core/`** — DB models, state machine, ticket service, workspace.
 - **`runtime/`** — FastAPI app, worker pool, poll loops, tracing.
 
@@ -71,13 +71,13 @@ hits a problem). When `web=True`, it also attaches a `web_research`
 tool backed by a cheap sub-agent — the main model never uses
 OpenRouter's `:online` surcharge.
 
-Each agent role (coordinator, refiner, auditor, scout, etc.) gets its
+Each agent role (coordinator, refiner, auditor, explore, etc.) gets its
 own model name from `Settings` — only the prompt, tools, and model
 differ. See [`agents/`](src/robotsix_mill/agents/) for the full set.
 
 ## Adding a new periodic agent
 
-Three artifacts are needed. Use **audit** and **scout** as reference
+Three artifacts are needed. Use **audit** and **health** as reference
 implementations (they are the simplest end-to-end examples):
 
 1. **Agent module** — `agents/<name>.py`
@@ -88,7 +88,7 @@ implementations (they are the simplest end-to-end examples):
    - Read the memory ledger → run the agent → write back → emit draft
      tickets via `TicketService`.
    - See [`audit_runner.py`](src/robotsix_mill/audit_runner.py) and
-     [`scout_runner.py`](src/robotsix_mill/scout_runner.py).
+     [`health_runner.py`](src/robotsix_mill/health_runner.py).
 
 3. **Wiring** — three touchpoints:
    - **CLI**: add a subcommand in [`cli.py`](src/robotsix_mill/cli.py)

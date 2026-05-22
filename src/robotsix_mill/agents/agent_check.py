@@ -67,8 +67,6 @@ Use `read_file` on:
 - `src/robotsix_mill/agents/fs_tools.py` — tool names are
   `read_file`, `write_file`, `edit_file`, `list_dir`, `run_command`.
 - `src/robotsix_mill/agents/explore.py` — tool name is `explore`.
-- `src/robotsix_mill/agents/scouting.py` — the `ALL_ROLES` list
-  mapping agent attributes to env vars.
 - `src/robotsix_mill/agents/skills.py` — how skills are loaded.
 - `src/robotsix_mill/config.py` — per-agent model fields.
 
@@ -132,11 +130,11 @@ For each agent that receives tools:
   `settings.model` instead.
 
 #### D. Agent Registration Completeness
-- The `ALL_ROLES` list in `scouting.py` tracks every agent role.
-  Verify that every `Settings` per-agent model field (ending in
-  `_model`) appears in `ALL_ROLES`.  Known gaps:
-  `health_model` is missing from `ALL_ROLES` (pre-existing).
-  Flag new gaps.
+- Every `Settings` per-agent model field (ending in `_model`) should
+  have a corresponding agent module under `src/robotsix_mill/agents/`
+  that actually reads it. Flag a `*_model` field with no consuming
+  agent (dead config) or an agent that hardcodes `settings.model`
+  when a dedicated field exists for its role.
 
 #### E. Prompt Self-Consistency
 - Check that the agent's `SYSTEM_PROMPT` describes a role matching

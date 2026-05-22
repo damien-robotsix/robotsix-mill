@@ -41,7 +41,7 @@ _current_session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 def make_session_id(kind: str) -> str:
     """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid6>``.
 
-    Use for non-ticket-driven flows (audit, health, scout, agent-check,
+    Use for non-ticket-driven flows (audit, health, agent-check,
     trace-health, deep-review).  Ticket-driven flows pass the ticket id
     directly to ``start_ticket_root_span`` — the ticket id is already a
     self-unique ``<ts>-<slug>-<hash>`` and serves as its own session id.

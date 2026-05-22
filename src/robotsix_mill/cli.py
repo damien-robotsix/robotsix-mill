@@ -8,7 +8,6 @@
     robotsix-mill ticket resume-blocked <id>
     robotsix-mill inquire --title T [--description-file F | -]
     robotsix-mill audit                        # run an audit pass
-    robotsix-mill scout                        # run a scout pass
     robotsix-mill trace-health                 # run a trace-health check
     robotsix-mill health                        # run a health pass
 
@@ -37,12 +36,6 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "module": "audit_runner",
         "function": "run_audit_pass",
         "label": "Audit pass",
-        "format": "memory_drafts",
-    },
-    "scout": {
-        "module": "scout_runner",
-        "function": "run_scout_pass",
-        "label": "Scout pass",
         "format": "memory_drafts",
     },
     "health": {
@@ -168,16 +161,6 @@ def main(argv: list[str] | None = None) -> int:
         "audit", help="run an audit pass and emit gap drafts"
     )
     p_audit.add_argument(
-        "--json",
-        action="store_true",
-        help="output full JSON result (default: summary)",
-    )
-
-    # --- scout command ---
-    p_scout = sub.add_parser(
-        "scout", help="run a scout pass and emit model-improvement drafts"
-    )
-    p_scout.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",

@@ -50,7 +50,7 @@ def _fake_trace_with_errors() -> str:
 def _fake_trace_clean() -> str:
     trace = {
         "id": "trace-clean",
-        "name": "scout",
+        "name": "refine",
         "observations": [
             {
                 "id": "obs-1",

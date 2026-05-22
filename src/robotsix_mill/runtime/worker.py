@@ -122,7 +122,6 @@ class Worker:
         self._tasks: list[asyncio.Task] = []
         self._poll_task: asyncio.Task | None = None
         self._audit_task: asyncio.Task | None = None
-        self._scout_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
@@ -246,10 +245,10 @@ class Worker:
     async def _run_periodic_pass(
         self, label: str, runner_fn, interval: int,
     ) -> None:
-        """Shared periodic pass loop for audit, scout, etc.
+        """Shared periodic pass loop for audit, agent-check, etc.
 
         Args:
-            label: Pass identifier (``"audit"``, ``"scout"``).
+            label: Pass identifier (``"audit"``, ``"agent_check"``).
             runner_fn: Zero-arg callable that returns a result with a
                        ``drafts_created`` field.
             interval: Seconds between passes.
@@ -506,19 +505,6 @@ class Worker:
                 "Periodic audit enabled: interval %ds",
                 self.ctx.settings.audit_interval_seconds,
             )
-        # Opt-in periodic scout
-        if self.ctx.settings.scout_periodic and self._scout_task is None:
-            from ..scout_runner import run_scout_pass
-            self._scout_task = asyncio.create_task(
-                self._run_periodic_pass(
-                    "scout", run_scout_pass,
-                    max(60, self.ctx.settings.scout_interval_seconds),
-                )
-            )
-            log.info(
-                "Periodic scout enabled: interval %ds",
-                self.ctx.settings.scout_interval_seconds,
-            )
         # Opt-in periodic trace-health
         if self.ctx.settings.trace_health_periodic and self._trace_health_task is None:
             self._trace_health_task = asyncio.create_task(
@@ -564,7 +550,7 @@ class Worker:
     async def stop(self) -> None:
         tasks = list(self._tasks)
         for attr in (
-            "_poll_task", "_audit_task", "_scout_task",
+            "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
             "_agent_check_task",
         ):

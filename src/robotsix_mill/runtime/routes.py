@@ -349,42 +349,6 @@ def agent_check_pass(
     return {"status": "started"}
 
 
-@router.post("/scout", status_code=202)
-def scout_pass(
-    registry=Depends(get_run_registry),
-) -> dict:
-    """Trigger a scout pass in the BACKGROUND: reads memory, evaluates
-    OpenRouter models, writes updated memory, creates draft tickets for
-    model improvements.
-    """
-    from ..scout_runner import run_scout_pass
-
-    run_id = registry.start("scout")
-
-    def _run() -> None:
-        try:
-            result = run_scout_pass()
-            draft_ids = [d["id"] for d in result.drafts_created[:5]]
-            summary = (
-                f"Created {len(result.drafts_created)} drafts: "
-                f"{', '.join(draft_ids)}"
-                f"{'…' if len(result.drafts_created) > 5 else ''}"
-            )
-            registry.finish_ok(run_id, summary)
-            log.info(
-                "scout pass done: %d draft(s)",
-                len(result.drafts_created),
-            )
-        except Exception as e:  # noqa: BLE001 — background; just log
-            log.exception("scout pass failed")
-            registry.finish_error(run_id, str(e))
-
-    threading.Thread(
-        target=_run, name="scout-pass", daemon=True
-    ).start()
-    return {"status": "started"}
-
-
 @router.post("/trace-health", status_code=202)
 def trace_health_check(
     registry=Depends(get_run_registry),
@@ -681,7 +645,7 @@ def health_check_pass(
     response made the browser fetch drop ("NetworkError"). New draft
     tickets appear on the board when it finishes.
 
-    Mirrors the audit/scout/trace-health pattern: registers the run on
+    Mirrors the audit/trace-health pattern: registers the run on
     start so the /runs panel shows it in-flight, and on finish so it
     flips to ok/error with a summary. Without this the run is silently
     happening behind the scenes — the Langfuse trace exists but the

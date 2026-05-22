@@ -30,7 +30,6 @@ it directly); the DB row only holds the pointer + a content hash.
     repo/                      # git clone (removed on close by default)
   retrospect_memory.md          # agent-maintained issue ledger
   audit_memory.md              # audit agent's gap ledger
-  scout_memory.md              # scout agent's model-evaluation ledger
 
 emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   draft ─refine▶ awaiting_approval ─approve▶ ready ─implement▶ deliverable
@@ -64,12 +63,6 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   against web-sourced best practices, identifies gaps in quality/security
   tooling coverage, and emits improvement draft tickets. Uses a
   Markdown memory ledger (`MILL_AUDIT_MEMORY_PATH`) for dedup.
-- **Scout agent:** a standing draft-only agent that queries the
-  OpenRouter API to evaluate models per agent role on provider count,
-  health, stability, capability, price, and latency. Emits model-switch
-  draft tickets when a materially better option exists or a configured
-  model regresses. Uses a Markdown memory ledger (`MILL_SCOUT_MEMORY_PATH`)
-  for dedup.
 - **Trace-health check:** a deterministic, no-LLM check that scans
   Langfuse for traces lacking a `sessionId` (unsessioned) in the last
   24 hours and files a single draft alert ticket when any are found.
@@ -87,7 +80,6 @@ retrospect agent, the audit agent, or a future emitter — in a free-form
 | `"user"` | `POST /tickets` (CLI `ticket new`, API, web) | blue **user** |
 | `"retrospect"` | Retrospect stage when spawning an improvement draft | amber **retrospect** |
 | `"audit"` | Audit agent when emitting a gap improvement draft | green **audit** |
-| `"scout"` | Scout agent when emitting a model-switch draft | violet **scout** |
 | `"trace-health"` | Trace-health check when unsessioned traces detected | cyan **trace-health** |
 | (future) | Any future agent or emitter | grey |
 
@@ -166,8 +158,6 @@ docker compose exec mill robotsix-mill ticket approve <id>
 docker compose exec mill robotsix-mill ticket resume-blocked <id>
 # Run an audit pass to identify tooling gaps:
 docker compose exec mill robotsix-mill audit
-# Run a scout pass to evaluate models:
-docker compose exec mill robotsix-mill scout
 # Run a trace-health check to detect unsessioned traces:
 docker compose exec mill robotsix-mill trace-health
 ```
@@ -189,8 +179,6 @@ make dev                    # service with hot-reload on http://127.0.0.1:8077
 .venv/bin/robotsix-mill ticket resume-blocked <id>
 # Run an audit pass:
 .venv/bin/robotsix-mill audit
-# Run a scout pass:
-.venv/bin/robotsix-mill scout
 # Run a trace-health check:
 .venv/bin/robotsix-mill trace-health
 make test                   # run the suite
@@ -506,93 +494,6 @@ MILL_AUDIT_INTERVAL_SECONDS=3600  # 1 hour
 - All repo-side output is draft tickets that must go through the
   approval gate (`awaiting_approval` → `ready` → `implement`).
 
-## Scout agent
-
-The scout agent is a **drafts-only** model evaluator that queries the
-OpenRouter REST API (`/api/v1/models` and `/api/v1/models/{id}/endpoints`)
-and, for each agent role, evaluates the currently configured model
-against better candidates. It reasons per role about:
-
-- **Provider count & health** — number of serving providers,
-  per-endpoint `status` and `uptime_last_30m`; strongly prefers
-  multi-provider so a single provider's 429/latency has a fallback.
-- **Preview/stability** — `*-preview` or dated ids likely to change
-  or vanish.
-- **Capability fit** — tool-calling support for coordinator/refine/
-  retrospect/audit roles; price/latency for cheap explore/test/
-  web-research roles.
-- **Price & latency** — `prompt`/`completion` $/1M pricing.
-
-It emits an improvement **draft** when, for any role, a materially
-better option exists OR a configured model regressed (left preview /
-id changed / lost providers / sole provider degraded). The draft
-names the role, the candidate, the evidence, and the precise
-`MILL_*_MODEL` / `.env.example` change — **never auto-switches**,
-never edits config itself. All drafts flow through the normal pipeline
-(refine → approval gate → implement → PR → human merge).
-
-### How it works
-
-1. **Reads memory:** Reads its Markdown memory ledger
-   (`MILL_SCOUT_MEMORY_PATH`, default `<MILL_DATA_DIR>/scout_memory.md`).
-   Missing file → empty ledger, never fails.
-
-2. **Fetches model data:** Queries OpenRouter's `/api/v1/models` for
-   pricing/context_length and `/api/v1/models/{id}/endpoints` for
-   per-provider status/uptime/tool-call support.
-
-3. **Evaluates per role:** Scores the current model and a pool of
-   candidates on provider count, uptime, stability, capability fit,
-   and price.
-
-4. **Emits drafts:** When a materially better candidate exists (score
-   delta > 10) or the current model regressed, creates one draft
-   ticket per role (`source="scout"`).
-
-5. **Updates memory:** Records proposals in the memory ledger so the
-   same switch is never re-proposed.
-
-### Usage
-
-**CLI:**
-```sh
-robotsix-mill scout              # summary output
-robotsix-mill scout --json      # full JSON result
-```
-
-**API:**
-```sh
-curl -X POST http://localhost:8077/scout
-```
-
-**Web board:** Click the "Run Scout" button on the board page.
-
-**Periodic polling (opt-in):**
-```sh
-# In .env:
-MILL_SCOUT_PERIODIC=true
-MILL_SCOUT_INTERVAL_SECONDS=86400  # 1 day
-```
-
-### Configuration
-
-| Variable | Default | Description |
-|---|---|---|
-| `MILL_SCOUT_PERIODIC` | `false` | Enable periodic scout passes |
-| `MILL_SCOUT_INTERVAL_SECONDS` | `86400` | Seconds between automatic scouts |
-| `MILL_SCOUT_MEMORY_PATH` | (empty) | Override path for the scout memory ledger; falls back to `<data_dir>/scout_memory.md` |
-
-### Important notes
-
-- The scout agent does **NOT** use an LLM — it makes direct REST calls
-  to the OpenRouter API. No `:online` suffix, no pydantic-ai model.
-- The scout does **NOT** auto-switch models or edit config — its only
-  output is draft tickets (and its own memory ledger).
-- A single-provider or preview-only candidate is flagged **Fragile** in
-  the draft body.
-- All drafts must go through the approval gate
-  (`awaiting_approval` → `ready` → `implement`).
-
 ## Trace-health check
 
 The trace-health check is a **deterministic, no-LLM** check that scans
@@ -721,16 +622,14 @@ execution is isolated from the mill process:
 | `core/models.py` | SQLModel tables + API schemas |
 | `core/db.py` · `core/service.py` | DB lifecycle + management-plane operations |
 | `core/workspace.py` | per-ticket file workspace (file-canonical body) |
-| `runtime/worker.py` | event-driven queue + stage chaining (+ audit/scout/trace-health/cost-sync poll) |
-| `runtime/api.py` | FastAPI app (API + worker lifespan + audit/scout/trace-health route) |
+| `runtime/worker.py` | event-driven queue + stage chaining (+ audit/trace-health/cost-sync poll) |
+| `runtime/api.py` | FastAPI app (API + worker lifespan + audit/trace-health route) |
 | `runtime/tracing.py` | Langfuse tracing + OpenRouter cost ✅ |
 | `sandbox.py` | isolated command execution (always containerized) |
 | `stages/` refine·implement·deliver·merge·retrospect | ✅ all real |
 | `audit_runner.py` | audit pass orchestration |
-| `scout_runner.py` | scout pass orchestration |
 | `trace_health_runner.py` | trace-health check orchestration |
 | `agents/auditing.py` | audit agent (meta-audit for gaps) |
-| `agents/scouting.py` | scout agent (model evaluation against OpenRouter) |
 | `forge/github.py` · `forge/auth.py` | GitHub PR/status + PAT/App-bot auth ✅ |
 | `langfuse_client.py` | read-side session summary + trace listing + session total cost (retrospect + trace-health + cost sync) |
 | `agents/coding.py` · `fs_tools.py` · `retrospecting.py` | agents + sandboxed tools |
@@ -752,12 +651,6 @@ repo for quality/security coverage gaps and emits improvement drafts.
 Enable with `MILL_AUDIT_PERIODIC=true` for automatic periodic passes,
 or trigger on-demand via CLI (`robotsix-mill audit`), API (`POST /audit`),
 or the web board button.
-
-**New:** The **scout agent** (`agents/scouting.py`) evaluates
-OpenRouter models per agent role on provider count, health, stability,
-capability, price, and latency. Enable with `MILL_SCOUT_PERIODIC=true`
-for automatic periodic passes, or trigger on-demand via CLI
-(`robotsix-mill scout`), API (`POST /scout`), or the web board button.
 
 **New:** The **trace-health check** (`trace_health_runner.py`)
 scans Langfuse for unsessioned traces and files an alert draft when

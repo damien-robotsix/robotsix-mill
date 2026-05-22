@@ -122,7 +122,7 @@ def test_missing_memory_file_first_run(tmp_path, monkeypatch):
     result = run_agent_pass(
         agent_fn,
         memory_file=memory_file,
-        source_label="scout",
+        source_label="health",
         service=service,
         settings=settings,
     )

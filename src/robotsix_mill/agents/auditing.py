@@ -47,7 +47,7 @@ dimension continuously: it inspects the repo on its own cadence and
 emits its own targeted remediation drafts. Your proposal for it
 specifies: what it inspects, the heuristics/thresholds it applies,
 what drafts it emits, and how it is triggered (model it on the
-existing periodic/sandboxed agent pattern: audit/scout/trace-health,
+existing periodic/sandboxed agent pattern: audit/trace-health,
 or the rebase/ci-fix sandboxed agents). One agent proposal per
 dimension — not the dimension's findings enumerated as tickets.
 
