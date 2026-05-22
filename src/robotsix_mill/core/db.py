@@ -121,6 +121,9 @@ def _run_migrations(settings: Settings) -> None:
         _add_column_if_missing(
             conn, "ticket", "depends_on", "TEXT", "NULL"
         )
+        _add_column_if_missing(
+            conn, "ticket", "kind", "TEXT NOT NULL", "'task'"
+        )
 
         # State renames (PR #143): existing rows still store the old
         # enum NAMES; an ORM load of such a row raises LookupError and
