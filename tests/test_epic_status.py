@@ -86,7 +86,7 @@ async def test_hook_does_not_fire_for_non_epic_parent(ctx, service, monkeypatch)
 
 
 async def test_hook_does_not_fire_for_non_done_transition(ctx, service, monkeypatch):
-    """Worker hook: when the outcome is not DONE (e.g. CODE_REVIEW),
+    """Worker hook: when the outcome is not DONE (e.g. DELIVERABLE),
     _spawn_epic_reeval is NOT called."""
     called_with: list = []
 
@@ -102,7 +102,10 @@ async def test_hook_does_not_fire_for_non_done_transition(ctx, service, monkeypa
         input_state = State.READY
 
         def run(self, _t, _c):
-            return Outcome(State.CODE_REVIEW, "review time")
+            # A legal, non-DONE outcome from READY (READY -> CODE_REVIEW
+            # is not a direct edge; the path is READY -> DOCUMENTING ->
+            # CODE_REVIEW). DELIVERABLE exercises the same "not DONE" case.
+            return Outcome(State.DELIVERABLE, "deliverable")
 
     monkeypatch.setitem(registry.STAGES, "implement", ReviewStage())
 
