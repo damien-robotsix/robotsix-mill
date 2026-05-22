@@ -42,10 +42,10 @@ def _resolve_next_state(
 
     Encapsulates the decision: if approval is not required → READY;
     if auto-approve is disabled → HUMAN_ISSUE_APPROVAL; otherwise run
-    the cheap auto-approve triage on the spec → READY on OBVIOUS,
-    HUMAN_ISSUE_APPROVAL otherwise (or on error).  Empty/whitespace
-    specs skip the triage entirely and go to HUMAN_ISSUE_APPROVAL
-    when gated, mirroring the original behaviour.
+    the auto-approve triage on the spec → READY on APPROVE (no design
+    decision found), HUMAN_ISSUE_APPROVAL otherwise (or on error).
+    Empty/whitespace specs skip the triage entirely and go to
+    HUMAN_ISSUE_APPROVAL when gated, mirroring the original behaviour.
 
     Every triage outcome carries a structured note so the auto-approve
     decision is visible in ticket history.  Triage failures or
@@ -63,8 +63,8 @@ def _resolve_next_state(
         result = refining.triage_auto_approve(
             settings=ctx.settings, spec=spec,
         )
-        if result.decision == "OBVIOUS":
-            return State.READY, f"auto-approve: OBVIOUS — {result.reason}"
+        if result.decision == "APPROVE":
+            return State.READY, f"auto-approve: APPROVE — {result.reason}"
         # NEEDS_APPROVAL — return the reason as a structured history
         # note (no side-effect comment; this is the sole surface).
         return State.HUMAN_ISSUE_APPROVAL, f"auto-approve: NEEDS_APPROVAL — {result.reason}"

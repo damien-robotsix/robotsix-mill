@@ -30,15 +30,17 @@ class TriageResult(BaseModel):
 
 
 class AutoApproveResult(BaseModel):
-    """Auto-approve triage output — a conservative safety check.
+    """Auto-approve triage output — gates on genuine design decisions.
 
-    Returns OBVIOUS only when the refined spec describes changes that
-    are trivially, obviously safe: cosmetic, doc-only, single-file,
-    no logic changes.  The bias is conservative: when uncertain,
-    return NEEDS_APPROVAL to defer to a human.
+    Returns APPROVE when the spec is precise, unambiguous, and free of
+    design/architecture decisions that a human would want to review.
+    Returns NEEDS_APPROVAL when the spec contains a genuine design
+    decision, is ambiguous, or is security-sensitive.  The bias is
+    conservative: when unsure whether a real decision exists, return
+    NEEDS_APPROVAL.
     """
 
-    decision: Literal["OBVIOUS", "NEEDS_APPROVAL"]
+    decision: Literal["APPROVE", "NEEDS_APPROVAL"]
     reason: str
 
 
@@ -186,11 +188,12 @@ def triage_auto_approve(
 ) -> AutoApproveResult:
     """Return an ``AutoApproveResult`` from a single cheap LLM call.
 
-    Inspects the refined spec's ``## Scope`` and ``## Acceptance
-    criteria`` sections.  Returns OBVIOUS only when the described
-    change is trivially, obviously safe — cosmetic, doc-only,
-    single-file, no logic changes.  The bias is conservative: when
-    uncertain, returns NEEDS_APPROVAL.
+    Inspects the refined spec and decides whether a genuine design
+    decision exists that a human should review.  Returns APPROVE when
+    the spec is precise, unambiguous, and free of design/architecture
+    decisions.  Returns NEEDS_APPROVAL when a real decision is
+    present.  The bias is conservative: when unsure whether a genuine
+    decision exists, returns NEEDS_APPROVAL.
 
     NO tools, NO web, NO explore — just a tiny prompt and a
     structured classification.
@@ -201,30 +204,41 @@ def triage_auto_approve(
     from .retry import call_with_retry
 
     AUTO_APPROVE_PROMPT = """\
-You are a conservative safety triage classifier.  Your ONLY job:
-inspect a refined engineering spec and decide whether the described
-change is "obviously safe" to implement WITHOUT human approval.
+You are a design-decision triage classifier.  Your ONLY job: inspect a
+refined engineering spec and decide whether it contains a genuine
+design or architecture decision that a human should review.
 
-Return OBVIOUS only when ALL of these hold:
-- Changes are confined to a single file or a small, well-defined surface.
-- Changes are cosmetic / documentation / formatting / trivial config only.
-- No business logic, API contract, database schema, or security-sensitive
-  code is touched.
-- The acceptance criteria are simple and mechanical (e.g. "the docstring
-  matches the function signature", "the README badge is updated").
+Return APPROVE when ALL of these hold:
+- The spec is precise and unambiguous — the implementer would not have
+  to guess at intent, scope, or approach.
+- No genuine design/architecture decisions are present: no new
+  abstractions, no new module boundaries, no API contract changes, no
+  DB schema changes, no new dependencies, no public-interface changes.
+- The change is not security-sensitive, destructive, or irreversible
+  (no auth, no secrets, no data deletion, no sandbox/isolation changes).
+- No product/UX behaviour a stakeholder would want to weigh in on.
+- The spec is consistent with existing design — doesn't conflict with
+  or redirect it.
+- Not a high-blast-radius change where several reasonable approaches
+  exist and the choice matters.
 
-Return NEEDS_APPROVAL when ANY of these are true:
-- Multiple files across different subsystems are affected.
-- Any logic, behaviour, or data-flow change is described.
-- The spec mentions new features, refactored code, API changes, or
-  database migrations.
-- The acceptance criteria involve testing complex behaviour or
-  integration scenarios.
-- The spec is ambiguous about scope or impact.
+The above criteria apply REGARDLESS of how many files are touched,
+whether logic changes, or whether the change is a bug fix or refactor.
 
-Be CONSERVATIVE: if you are unsure, return NEEDS_APPROVAL.
-The only real risk is a wrong OBVIOUS (auto-approving a real change).
-A wrong NEEDS_APPROVAL just adds a human click — harmless.
+Return NEEDS_APPROVAL when ANY design-decision signal is present:
+- Ambiguous scope, unclear acceptance criteria, or the implementer
+  would have to guess.
+- A new abstraction, module boundary, API contract, DB schema,
+  dependency, or public interface is introduced or changed.
+- Security-sensitive, destructive, or irreversible operations.
+- Product/UX behaviour changes a stakeholder would want to review.
+- A conflict with or redirection of existing design.
+- A high-blast-radius choice where approach matters.
+
+TIE-BREAKER: when unsure whether a genuine design decision exists,
+return NEEDS_APPROVAL.  The only real risk is a wrong APPROVE
+(auto-approving a design decision).  A wrong NEEDS_APPROVAL just adds
+a human click — harmless.
 """
     agent = build_agent(
         settings,
