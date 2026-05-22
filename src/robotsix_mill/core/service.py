@@ -416,21 +416,21 @@ class TicketService:
     def request_changes(
         self, ticket_id: str, body: str
     ) -> tuple[Comment, Ticket]:
-        """Add a comment AND transition from ``awaiting_approval`` to
+        """Add a comment AND transition from ``human_issue_approval`` to
         ``draft`` in one atomic operation.
 
         Returns the new ``(Comment, Ticket)`` pair. Raises ``KeyError``
         if the ticket does not exist, ``TransitionError`` if it is not
-        in ``awaiting_approval``.
+        in ``human_issue_approval``.
         """
         with db.session(self.settings) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
-            if ticket.state is not State.AWAITING_APPROVAL:
+            if ticket.state is not State.HUMAN_ISSUE_APPROVAL:
                 raise TransitionError(
                     f"{ticket_id}: cannot request changes — "
-                    f"not awaiting_approval (currently {ticket.state})"
+                    f"not human_issue_approval (currently {ticket.state})"
                 )
             comment = Comment(ticket_id=ticket_id, body=body)
             s.add(comment)

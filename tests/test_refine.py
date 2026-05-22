@@ -120,8 +120,8 @@ def test_empty_spec_proceeds_to_ready(ctx, service, monkeypatch):
     assert (service.workspace(t).artifacts_dir / "draft-original.md").read_text() == "draft"
 
 
-def test_empty_spec_proceeds_to_awaiting_approval_when_gated(ctx, service, monkeypatch, tmp_path):
-    """Whitespace-only spec + gated → AWAITING_APPROVAL."""
+def test_empty_spec_proceeds_to_human_issue_approval_when_gated(ctx, service, monkeypatch, tmp_path):
+    """Whitespace-only spec + gated → HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
@@ -129,7 +129,7 @@ def test_empty_spec_proceeds_to_awaiting_approval_when_gated(ctx, service, monke
     gated_ctx = StageContext(settings=gated_settings, service=service)
     t = service.create("x", "draft")
     out = RefineStage().run(t, gated_ctx)
-    assert out.next_state is State.AWAITING_APPROVAL
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
     assert service.workspace(t).read_description() == "draft"
 
 
@@ -154,8 +154,8 @@ async def test_chains_draft_to_implement(ctx, service, monkeypatch):
 # --- approval gate tests ---
 
 
-def test_refine_goes_to_awaiting_approval_when_gated(ctx, service, monkeypatch, tmp_path):
-    """When require_approval=true, refine transitions to awaiting_approval."""
+def test_refine_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatch, tmp_path):
+    """When require_approval=true, refine transitions to human_issue_approval."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     gated_settings = Settings(
@@ -166,7 +166,7 @@ def test_refine_goes_to_awaiting_approval_when_gated(ctx, service, monkeypatch, 
 
     out = RefineStage().run(t, gated_ctx)
 
-    assert out.next_state is State.AWAITING_APPROVAL
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
     assert service.get(t.id).state is State.DRAFT  # worker hasn't applied transition
 
 
@@ -181,8 +181,8 @@ def test_refine_goes_to_ready_when_autonomous(ctx, service, monkeypatch):
     assert out.next_state is State.READY
 
 
-async def test_awaiting_approval_pauses_chain(ctx, service, monkeypatch):
-    """When require_approval=true, the worker pauses at awaiting_approval
+async def test_human_issue_approval_pauses_chain(ctx, service, monkeypatch):
+    """When require_approval=true, the worker pauses at human_issue_approval
     (no stage owns it), so the ticket is not picked up by implement."""
     monkeypatch.setattr(
         refining, "run_refine_agent", lambda **_: _single("## Problem\nspec\n")
@@ -195,12 +195,12 @@ async def test_awaiting_approval_pauses_chain(ctx, service, monkeypatch):
     outcome = RefineStage().run(t, gated_ctx)
     service.transition(t.id, outcome.next_state, outcome.note)
 
-    # now the ticket is in awaiting_approval — worker should stop here
+    # now the ticket is in human_issue_approval — worker should stop here
     await process_ticket(t.id, gated_ctx)
 
     reloaded = service.get(t.id)
-    assert reloaded.state is State.AWAITING_APPROVAL
-    # worker didn't advance past awaiting_approval
+    assert reloaded.state is State.HUMAN_ISSUE_APPROVAL
+    # worker didn't advance past human_issue_approval
     history_states = [e.state for e in service.history(t.id)]
     assert State.READY not in history_states
 
@@ -259,7 +259,7 @@ def test_refine_clone_failure_falls_back_to_draft_only(ctx, service, monkeypatch
     monkeypatch.setattr(git_ops, "clone", boom_clone)
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
     out = RefineStage().run(service.create("x", "do a thing"), ctx)
-    assert out.next_state in (State.AWAITING_APPROVAL, State.READY)
+    assert out.next_state in (State.HUMAN_ISSUE_APPROVAL, State.READY)
     assert got["repo_dir"] is None             # degraded to draft-only
 
 
@@ -549,7 +549,7 @@ def test_dedup_clone_failure_passes_none_commits(ctx, service, monkeypatch):
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state in (State.AWAITING_APPROVAL, State.READY)
+    assert out.next_state in (State.HUMAN_ISSUE_APPROVAL, State.READY)
     assert seen_commits is None
 
 
@@ -856,10 +856,10 @@ def test_split_empty_children_proceeds(ctx, service, monkeypatch):
     assert service.workspace(t).read_description() == "draft"
 
 
-def test_split_empty_children_proceeds_to_awaiting_approval_when_gated(
+def test_split_empty_children_proceeds_to_human_issue_approval_when_gated(
     ctx, service, monkeypatch, tmp_path
 ):
-    """No children in split + gated → AWAITING_APPROVAL."""
+    """No children in split + gated → HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
         lambda **_: RefineResult(split=True, children=[]),
@@ -872,7 +872,7 @@ def test_split_empty_children_proceeds_to_awaiting_approval_when_gated(
 
     t = service.create("Empty split gated", "draft")
     out = RefineStage().run(t, gated_ctx)
-    assert out.next_state is State.AWAITING_APPROVAL
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
     assert service.workspace(t).read_description() == "draft"
 
 
@@ -902,7 +902,7 @@ def test_split_malformed_children_skipped(ctx, service, monkeypatch):
 
 
 def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tmp_path):
-    """When require_approval=true, children go to AWAITING_APPROVAL."""
+    """When require_approval=true, children go to HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
         lambda **_: _split(
@@ -925,7 +925,7 @@ def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tm
 
     for cid in ids_in_note:
         child = service.get(cid)
-        assert child.state is State.AWAITING_APPROVAL, f"{cid} should be awaiting_approval"
+        assert child.state is State.HUMAN_ISSUE_APPROVAL, f"{cid} should be human_issue_approval"
 
 
 def test_split_child_skips_re_refinement(ctx, service, monkeypatch):

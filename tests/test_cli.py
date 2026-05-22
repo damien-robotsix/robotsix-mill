@@ -7,7 +7,7 @@ from robotsix_mill.core.states import State
 def test_approve_success(settings, service):
     """CLI `ticket approve <id>` exits 0 on success with human-readable output."""
     t = service.create("Approve me via CLI")
-    service.transition(t.id, State.AWAITING_APPROVAL, note="refined")
+    service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
 
     # Override api_url so the CLI hits the test server instead of localhost.
     # We can't easily run the full server in a CLI test, so we test the

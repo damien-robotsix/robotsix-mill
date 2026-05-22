@@ -1,4 +1,4 @@
-const ST=["draft","awaiting_approval","ready","deliverable","in_review","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered"];
+const ST=["draft","human_issue_approval","ready","deliverable","human_mr_approval","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered"];
 const LBL={ready:"implementing"};   // display label only; state value stays "ready"
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
@@ -72,7 +72,7 @@ async function refresh(){
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
-   (s==="awaiting_approval"?
+   (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
    `</div>`)

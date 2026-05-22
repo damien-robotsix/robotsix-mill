@@ -1,4 +1,4 @@
-"""Tests for the CIFixStage (FIXING_CI → IN_REVIEW | BLOCKED)."""
+"""Tests for the CIFixStage (FIXING_CI → HUMAN_MR_APPROVAL | BLOCKED)."""
 
 import pytest
 
@@ -27,7 +27,7 @@ def _ctx(tmp_path, **env):
 
 def _fixing_ci(ctx):
     t = ctx.service.create("x", "y")
-    for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW, State.FIXING_CI):
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.FIXING_CI):
         ctx.service.transition(t.id, st)
     ctx.service.set_branch(t.id, f"mill/{t.id}")
     return ctx.service.get(t.id)
@@ -48,9 +48,9 @@ def _setup_repo(ctx, ticket):
     return str(repo_dir)
 
 
-# --- E.27: Fix success + push success → IN_REVIEW ---
+# --- E.27: Fix success + push success → HUMAN_MR_APPROVAL ---
 
-def test_fix_success_push_success_returns_in_review(tmp_path, monkeypatch):
+def test_fix_success_push_success_returns_human_mr_approval(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -81,7 +81,7 @@ def test_fix_success_push_success_returns_in_review(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.HUMAN_MR_APPROVAL
     assert push_seen["branch"] == f"mill/{t.id}"
 
     # Counter reset to 0.
@@ -121,7 +121,7 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
     assert "force-push failed" in out.note
 
 
-# --- E.29: Fix failure, attempts remaining → IN_REVIEW ---
+# --- E.29: Fix failure, attempts remaining → HUMAN_MR_APPROVAL ---
 
 def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="3")
@@ -152,9 +152,9 @@ def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
     counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
 
-    # Attempt 1: fails → IN_REVIEW, counter=1
+    # Attempt 1: fails → HUMAN_MR_APPROVAL, counter=1
     out1 = CIFixStage().run(t, ctx)
-    assert out1.next_state is State.IN_REVIEW
+    assert out1.next_state is State.HUMAN_MR_APPROVAL
     assert _read_counter(counter) == 1
     assert push_calls == []  # never pushed on failure
 
@@ -187,9 +187,9 @@ def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
     counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
 
-    # Attempt 1: fails → IN_REVIEW
+    # Attempt 1: fails → HUMAN_MR_APPROVAL
     out1 = CIFixStage().run(t, ctx)
-    assert out1.next_state is State.IN_REVIEW
+    assert out1.next_state is State.HUMAN_MR_APPROVAL
 
     # Attempt 2: fails → BLOCKED (exhausted)
     out2 = CIFixStage().run(t, ctx)
@@ -283,10 +283,10 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     assert push_args["branch"] != "main"
 
 
-# --- CI green/pending while in FIXING_CI → back to IN_REVIEW ---
+# --- CI green/pending while in FIXING_CI → back to HUMAN_MR_APPROVAL ---
 
-def test_ci_green_while_in_fixing_ci_returns_in_review(tmp_path, monkeypatch):
-    """If CI turns green while we're in FIXING_CI, go back to IN_REVIEW."""
+def test_ci_green_while_in_fixing_ci_returns_human_mr_approval(tmp_path, monkeypatch):
+    """If CI turns green while we're in FIXING_CI, go back to HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -297,10 +297,10 @@ def test_ci_green_while_in_fixing_ci_returns_in_review(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.HUMAN_MR_APPROVAL
 
 
-def test_ci_pending_while_in_fixing_ci_returns_in_review(tmp_path, monkeypatch):
+def test_ci_pending_while_in_fixing_ci_returns_human_mr_approval(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -311,11 +311,11 @@ def test_ci_pending_while_in_fixing_ci_returns_in_review(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.HUMAN_MR_APPROVAL
 
 
 def test_check_status_returns_none_while_in_fixing_ci(tmp_path, monkeypatch):
-    """PR disappeared → back to IN_REVIEW."""
+    """PR disappeared → back to HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -326,11 +326,11 @@ def test_check_status_returns_none_while_in_fixing_ci(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.HUMAN_MR_APPROVAL
 
 
 def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
-    """Transient error → back to IN_REVIEW for re-poll."""
+    """Transient error → back to HUMAN_MR_APPROVAL for re-poll."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -341,7 +341,7 @@ def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.HUMAN_MR_APPROVAL
 
 
 # --- Counter location ---
@@ -496,4 +496,4 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.IN_REVIEW
+    assert out.next_state is State.HUMAN_MR_APPROVAL

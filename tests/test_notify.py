@@ -72,16 +72,16 @@ def test_posts_to_url(settings, service, monkeypatch):
     monkeypatch.setattr(httpx, "post", rec)
 
     t = service.create("Add feature")
-    send_notification(t, State.AWAITING_APPROVAL, "refined spec", settings)
+    send_notification(t, State.HUMAN_ISSUE_APPROVAL, "refined spec", settings)
 
     assert len(rec.calls) == 1
     c = rec.calls[0]
     assert c["url"] == "https://ntfy.sh/test"
-    assert c["headers"]["X-Title"] == "mill: awaiting_approval - Add feature"
+    assert c["headers"]["X-Title"] == "mill: human_issue_approval - Add feature"
     assert c["headers"]["Content-Type"] == "text/plain"
     assert "Authorization" not in c["headers"]
     assert f"Ticket: {t.id}" in c["content"]
-    assert "State: awaiting_approval" in c["content"]
+    assert "State: human_issue_approval" in c["content"]
     assert "Note: refined spec" in c["content"]
     assert "Board: http://127.0.0.1:8077" in c["content"]
     assert c["timeout"] is not None
@@ -97,13 +97,13 @@ def test_xtitle_header_is_ascii_safe(settings, service, monkeypatch):
     monkeypatch.setattr(httpx, "post", rec)
 
     t = service.create("Café — naïve ☕ build")  # non-ASCII title
-    send_notification(t, State.IN_REVIEW, "PR opened", settings)  # must not raise
+    send_notification(t, State.HUMAN_MR_APPROVAL, "PR opened", settings)  # must not raise
 
     assert len(rec.calls) == 1
     xt = rec.calls[0]["headers"]["X-Title"]
     xt.encode("ascii")          # the actual failure mode — must not raise
     assert "—" not in xt        # em-dash gone
-    assert xt.startswith("mill: in_review - ")
+    assert xt.startswith("mill: human_mr_approval - ")
 
 
 def test_note_none_renders_placeholder(settings, service, monkeypatch):
@@ -125,7 +125,7 @@ def test_token_sent_as_bearer(settings, service, monkeypatch):
     monkeypatch.setattr(httpx, "post", rec)
 
     t = service.create("x")
-    send_notification(t, State.IN_REVIEW, "PR opened", settings)
+    send_notification(t, State.HUMAN_MR_APPROVAL, "PR opened", settings)
     assert rec.calls[0]["headers"]["Authorization"] == "Bearer tk_secret"
 
 
@@ -173,20 +173,20 @@ def _notify_settings(settings):
     return settings
 
 
-async def test_notifies_on_awaiting_approval(ctx, service, monkeypatch, _notify_settings, _recording):
-    """Worker-driven transition into awaiting_approval fires a notification."""
+async def test_notifies_on_human_issue_approval(ctx, service, monkeypatch, _notify_settings, _recording):
+    """Worker-driven transition into human_issue_approval fires a notification."""
     class TriggerStage(Stage):
         name = "refine"
         input_state = State.DRAFT
 
         def run(self, _t, _c):
-            return Outcome(State.AWAITING_APPROVAL, "refined")
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined")
 
     monkeypatch.setitem(registry.STAGES, "refine", TriggerStage())
     t = service.create("trigger test")
     await process_ticket(t.id, ctx)
 
-    assert service.get(t.id).state == State.AWAITING_APPROVAL
+    assert service.get(t.id).state == State.HUMAN_ISSUE_APPROVAL
     assert len(_recording.calls) == 1
 
 
@@ -207,9 +207,9 @@ async def test_notifies_on_blocked(ctx, service, monkeypatch, _notify_settings, 
     assert len(_recording.calls) == 1
 
 
-async def test_notifies_on_in_review(ctx, service, monkeypatch, _notify_settings, _recording):
-    """Worker-driven transition into in_review fires a notification.
-    The valid path is deliverable -> in_review; mock the deliver stage
+async def test_notifies_on_human_mr_approval(ctx, service, monkeypatch, _notify_settings, _recording):
+    """Worker-driven transition into human_mr_approval fires a notification.
+    The valid path is deliverable -> human_mr_approval; mock the deliver stage
     and pre-transition through draft -> ready -> deliverable."""
     # Mock refine and implement as no-ops so they don't interfere.
     class NoOp(Stage):
@@ -227,7 +227,7 @@ async def test_notifies_on_in_review(ctx, service, monkeypatch, _notify_settings
         input_state = State.DELIVERABLE
 
         def run(self, _t, _c):
-            return Outcome(State.IN_REVIEW, "PR opened")
+            return Outcome(State.HUMAN_MR_APPROVAL, "PR opened")
 
     monkeypatch.setitem(registry.STAGES, "deliver", DeliverStage())
     t = service.create("in-review test")
@@ -235,7 +235,7 @@ async def test_notifies_on_in_review(ctx, service, monkeypatch, _notify_settings
     service.transition(t.id, State.DELIVERABLE)
     await process_ticket(t.id, ctx)
 
-    assert service.get(t.id).state == State.IN_REVIEW
+    assert service.get(t.id).state == State.HUMAN_MR_APPROVAL
     assert len(_recording.calls) == 1
 
 
@@ -316,13 +316,13 @@ async def test_notification_exception_does_not_fail_worker(
         input_state = State.DRAFT
 
         def run(self, _t, _c):
-            return Outcome(State.AWAITING_APPROVAL, "should still work")
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "should still work")
 
     monkeypatch.setitem(registry.STAGES, "refine", FailingNotifyStage())
     t = service.create("resilient test")
     await process_ticket(t.id, ctx)
 
-    assert service.get(t.id).state == State.AWAITING_APPROVAL
+    assert service.get(t.id).state == State.HUMAN_ISSUE_APPROVAL
     assert rec.calls
     assert "ntfy notification failed" in caplog.text
 
@@ -338,11 +338,11 @@ async def test_no_notification_when_url_unset_in_worker(
         input_state = State.DRAFT
 
         def run(self, _t, _c):
-            return Outcome(State.AWAITING_APPROVAL, "refined")
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined")
 
     monkeypatch.setitem(registry.STAGES, "refine", ApproveStage())
     t = service.create("no-url test")
     await process_ticket(t.id, ctx)
 
-    assert service.get(t.id).state == State.AWAITING_APPROVAL
+    assert service.get(t.id).state == State.HUMAN_ISSUE_APPROVAL
     assert len(_recording.calls) == 0

@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     p_show.add_argument("id")
 
     p_approve = tsub.add_parser(
-        "approve", help="approve a ticket in awaiting_approval state"
+        "approve", help="approve a ticket in human_issue_approval state"
     )
     p_approve.add_argument("id")
 

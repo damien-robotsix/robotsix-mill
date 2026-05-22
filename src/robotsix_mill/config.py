@@ -206,7 +206,7 @@ class Settings(BaseSettings):
     # this many times without ever progressing (e.g. its run keeps being
     # interrupted, or a stage churns), the worker escalates it to BLOCKED
     # + notifies instead of silently re-billing the LLM forever. Poll
-    # stages (merge/deliver) are exempt — in_review legitimately waits.
+    # stages (merge/deliver) are exempt — human_mr_approval legitimately waits.
     max_stuck_cycles: int = Field(default=3, alias="MILL_MAX_STUCK_CYCLES")
     # Dollar-cap safety net: if a ticket's cumulative Langfuse-traced
     # LLM spend exceeds this value (across all stages), the worker
@@ -271,7 +271,7 @@ class Settings(BaseSettings):
 
     # --- human approval gate (refine -> implement) ---
     # When true (default), the refine stage transitions to
-    # awaiting_approval instead of ready — a human must approve before
+    # human_issue_approval instead of ready — a human must approve before
     # the implement stage kicks in. Set false for fully-autonomous mode.
     require_approval: bool = Field(
         default=True, alias="MILL_REQUIRE_APPROVAL"
@@ -308,7 +308,7 @@ class Settings(BaseSettings):
     retrospect_memory_path: Path | None = Field(
         default=None, alias="MILL_RETROSPECT_MEMORY_PATH"
     )
-    # in_review (PR open) re-check cadence. mill has no scheduler; this
+    # human_mr_approval (PR open) re-check cadence. mill has no scheduler; this
     # timer exists only to observe the external merge event.
     merge_poll_seconds: int = Field(
         default=120, alias="MILL_MERGE_POLL_SECONDS"
@@ -320,7 +320,7 @@ class Settings(BaseSettings):
     )
 
     # --- merge stage: auto-rebase of stale PRs ---
-    # When a PR in in_review becomes conflicting (other PRs merged to
+    # When a PR in human_mr_approval becomes conflicting (other PRs merged to
     # the target branch), the merge stage invokes the rebase agent to
     # resolve conflicts automatically.  This is the max number of
     # rebase attempts per ticket before escalating to BLOCKED.
@@ -329,7 +329,7 @@ class Settings(BaseSettings):
     )
 
     # --- merge stage: auto-fix of failing remote CI ---
-    # When a PR in in_review has failing CI checks, the merge stage
+    # When a PR in human_mr_approval has failing CI checks, the merge stage
     # transitions to fixing_ci and invokes the ci-fix agent to resolve
     # the failures automatically.  This is the max number of ci-fix
     # attempts per ticket before escalating to BLOCKED.

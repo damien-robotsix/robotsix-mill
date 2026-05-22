@@ -22,7 +22,7 @@ def _ctx(tmp_path, **env):
 
 def _done(ctx):
     t = ctx.service.create("Add X", "spec body")
-    for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(t.id, st)
     return ctx.service.get(t.id)
 
@@ -808,7 +808,7 @@ def test_verified_state_block_in_memory(tmp_path, monkeypatch):
     # Transition it to DONE then CLOSED (simulates a merged draft).
     ctx.service.transition(draft.id, State.READY)
     ctx.service.transition(draft.id, State.DELIVERABLE)
-    ctx.service.transition(draft.id, State.IN_REVIEW)
+    ctx.service.transition(draft.id, State.HUMAN_MR_APPROVAL)
     ctx.service.transition(draft.id, State.DONE)
     ctx.service.transition(draft.id, State.CLOSED)
 
@@ -842,7 +842,7 @@ def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path
     # Create a retrospect-sourced ticket with NO gap-id marker.
     ticket = svc.create("Old retrospect draft", "No marker here.", source="retrospect")
     # Move it to CLOSED (with DONE in history).
-    for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW, State.DONE, State.CLOSED):
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
         svc.transition(ticket.id, st)
 
     result = _verify_prior_proposals(svc, s, "retrospect")

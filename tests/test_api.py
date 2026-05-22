@@ -26,7 +26,7 @@ def test_board_serves_html(client):
     assert '<div id="drawer">' in body
     # state labels live in the external JS; verify they're served there
     js = client.get("/static/board.js").text
-    for s in ("draft", "awaiting_approval", "ready", "deliverable", "done", "blocked"):
+    for s in ("draft", "human_issue_approval", "ready", "deliverable", "done", "blocked"):
         assert s in js
     assert "/tickets" in js  # board polls the JSON API
 
@@ -168,21 +168,21 @@ def test_get_missing_404(client):
 
 def test_illegal_transition_409(client):
     tid = client.post("/tickets", json={"title": "T"}).json()["id"]
-    # draft -> in_review is not a legal edge (drafts can't jump onto a PR).
+    # draft -> human_mr_approval is not a legal edge (drafts can't jump onto a PR).
     # NOTE: draft -> done IS legal — refine's dedup-discard path uses it so
     # the discarded draft still passes through retrospect.
-    r = client.post(f"/tickets/{tid}/transition", json={"state": "in_review"})
+    r = client.post(f"/tickets/{tid}/transition", json={"state": "human_mr_approval"})
     assert r.status_code == 409
 
 
 # --- approve endpoint tests ---
 
 
-def test_approve_transitions_awaiting_approval_to_ready(client, service):
-    """POST /tickets/{id}/approve moves awaiting_approval -> ready."""
+def test_approve_transitions_human_issue_approval_to_ready(client, service):
+    """POST /tickets/{id}/approve moves human_issue_approval -> ready."""
     t = service.create("Approve me")
-    service.transition(t.id, State.AWAITING_APPROVAL, note="refined")
-    assert service.get(t.id).state is State.AWAITING_APPROVAL
+    service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
+    assert service.get(t.id).state is State.HUMAN_ISSUE_APPROVAL
 
     r = client.post(f"/tickets/{t.id}/approve")
     assert r.status_code == 200
@@ -198,7 +198,7 @@ def test_approve_missing_ticket_404(client):
 
 
 def test_approve_wrong_state_409(client, service):
-    """POST /tickets/{id}/approve on a non-awaiting_approval ticket returns 409."""
+    """POST /tickets/{id}/approve on a non-human_issue_approval ticket returns 409."""
     t = service.create("Already ready")
     service.transition(t.id, State.READY, note="refined (autonomous)")
 
@@ -213,7 +213,7 @@ def test_approve_enqueues_implement(client, service):
     from robotsix_mill.core.states import STAGE_FOR_STATE
 
     t = service.create("Enqueue test")
-    service.transition(t.id, State.AWAITING_APPROVAL, note="refined")
+    service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
 
     r = client.post(f"/tickets/{t.id}/approve")
     assert r.status_code == 200
@@ -246,7 +246,7 @@ def test_resume_blocked_from_done(client, service):
     t = service.create("Retrospect resume via API")
     service.transition(t.id, State.READY, note="refined")
     service.transition(t.id, State.DELIVERABLE, note="implemented")
-    service.transition(t.id, State.IN_REVIEW, note="PR opened")
+    service.transition(t.id, State.HUMAN_MR_APPROVAL, note="PR opened")
     service.transition(t.id, State.DONE, note="merged")
     service.transition(t.id, State.BLOCKED, note="retrospect failed")
 

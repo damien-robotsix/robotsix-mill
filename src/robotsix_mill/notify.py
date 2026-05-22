@@ -1,7 +1,7 @@
 """Best-effort ntfy notification on human-attention states.
 
 Fires a push notification when the worker transitions a ticket into one
-of the four human-attention states (``awaiting_approval``, ``in_review``,
+of the four human-attention states (``human_issue_approval``, ``human_mr_approval``,
 ``blocked``, ``errored``).  Network errors / timeouts are caught and
 logged — the notification is fire-and-forget and never interferes with
 ticket processing.
@@ -23,8 +23,8 @@ _TIMEOUT = httpx.Timeout(5.0, read=10.0)
 
 #: States whose worker-driven transitions trigger a notification.
 _TRIGGER_STATES: set[State] = {
-    State.AWAITING_APPROVAL,
-    State.IN_REVIEW,
+    State.HUMAN_ISSUE_APPROVAL,
+    State.HUMAN_MR_APPROVAL,
     State.BLOCKED,
     State.ERRORED,
 }

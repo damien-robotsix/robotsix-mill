@@ -15,7 +15,7 @@ from robotsix_mill.core.states import (
 VALID_STAGE_NAMES = {"refine", "implement", "deliver", "merge", "ci_fix", "retrospect", "answer"}
 
 # States that should NOT appear as keys in STAGE_FOR_STATE.
-NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.AWAITING_APPROVAL, State.ANSWERED}
+NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.HUMAN_ISSUE_APPROVAL, State.ANSWERED}
 
 # All states for iteration.
 ALL_STATES = list(State)
@@ -107,7 +107,7 @@ def test_closed_is_terminal():
 # ---------------------------------------------------------------------------
 
 def test_stage_for_state_keys():
-    """Every State that is NOT CLOSED/ERRORED/BLOCKED/AWAITING_APPROVAL
+    """Every State that is NOT CLOSED/ERRORED/BLOCKED/HUMAN_ISSUE_APPROVAL
     must appear as a key in STAGE_FOR_STATE."""
     for state in ALL_STATES:
         if state in NON_STAGE_STATES:
@@ -156,16 +156,16 @@ def test_stage_for_state_asked():
 def test_answered_not_in_stage_for_state():
     assert State.ANSWERED not in STAGE_FOR_STATE
 
-def test_draft_to_awaiting_approval():
-    assert can_transition(State.DRAFT, State.AWAITING_APPROVAL) is True
+def test_draft_to_human_issue_approval():
+    assert can_transition(State.DRAFT, State.HUMAN_ISSUE_APPROVAL) is True
 
 
-def test_in_review_to_fixing_ci():
-    assert can_transition(State.IN_REVIEW, State.FIXING_CI) is True
+def test_human_mr_approval_to_fixing_ci():
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.FIXING_CI) is True
 
 
-def test_fixing_ci_to_in_review():
-    assert can_transition(State.FIXING_CI, State.IN_REVIEW) is True
+def test_fixing_ci_to_human_mr_approval():
+    assert can_transition(State.FIXING_CI, State.HUMAN_MR_APPROVAL) is True
 
 
 def test_fixing_ci_to_blocked():
@@ -174,8 +174,8 @@ def test_fixing_ci_to_blocked():
 
 def test_errored_as_destination():
     """States that declare ERRORED in TRANSITIONS can reach it."""
-    for src in (State.DRAFT, State.AWAITING_APPROVAL, State.READY,
-                State.DELIVERABLE, State.IN_REVIEW, State.REBASING,
+    for src in (State.DRAFT, State.HUMAN_ISSUE_APPROVAL, State.READY,
+                State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.REBASING,
                 State.FIXING_CI, State.DONE, State.ASKED):
         assert can_transition(src, State.ERRORED) is True, (
             f"{src.value} → ERRORED should be valid"

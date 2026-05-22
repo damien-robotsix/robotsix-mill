@@ -4,18 +4,19 @@ Each *active* state is owned by exactly one stage, which consumes
 tickets in that state and transitions them onward. ``ERRORED`` and
 ``BLOCKED`` are side states reachable from any active state when a stage
 errors or escalates; they require human attention before re-entering the
-pipeline. ``AWAITING_APPROVAL`` is a human-wait state between refine and
-implement — it has no stage owner and pauses the chain until a human
-approves. ``REBASING`` is an active state between ``IN_REVIEW`` and
-``IN_REVIEW``: the merge stage detects a conflicting PR and transitions
-to ``REBASING``, then on the next poll runs the rebase agent and
-force-pushes the ticket branch. On success it returns to ``IN_REVIEW``;
-on temporary failure it stays in ``REBASING`` for a retry; on exhaustion
-it escalates to ``BLOCKED``. ``FIXING_CI`` is an active state between
-``IN_REVIEW`` and ``IN_REVIEW``: the merge stage detects a mergeable PR
-with failing CI and transitions to ``FIXING_CI``, then on the next poll
-runs the CI-fix agent. On success it returns to ``IN_REVIEW``; on
-failure it escalates to ``BLOCKED``.
+pipeline. ``HUMAN_ISSUE_APPROVAL`` is a human-wait state between refine
+and implement — it has no stage owner and pauses the chain until a human
+approves. ``REBASING`` is an active state between ``HUMAN_MR_APPROVAL``
+and ``HUMAN_MR_APPROVAL``: the merge stage detects a conflicting PR and
+transitions to ``REBASING``, then on the next poll runs the rebase agent
+and force-pushes the ticket branch. On success it returns to
+``HUMAN_MR_APPROVAL``; on temporary failure it stays in ``REBASING`` for
+a retry; on exhaustion it escalates to ``BLOCKED``. ``FIXING_CI`` is an
+active state between ``HUMAN_MR_APPROVAL`` and ``HUMAN_MR_APPROVAL``:
+the merge stage detects a mergeable PR with failing CI and transitions
+to ``FIXING_CI``, then on the next poll runs the CI-fix agent. On
+success it returns to ``HUMAN_MR_APPROVAL``; on failure it escalates to
+``BLOCKED``.
 
 When a ticket is blocked, the state it was blocked *from* is recorded
 (``Ticket.blocked_from``). A human can **resume** the blocked ticket
@@ -32,10 +33,10 @@ from enum import StrEnum
 
 class State(StrEnum):
     DRAFT = "draft"            # raw idea, awaiting refinement
-    AWAITING_APPROVAL = "awaiting_approval"  # refined; awaiting human approval
+    HUMAN_ISSUE_APPROVAL = "human_issue_approval"  # refined; awaiting human approval
     READY = "ready"           # actionable; awaiting implementation
     DELIVERABLE = "deliverable"  # implemented; awaiting MR delivery
-    IN_REVIEW = "in_review"   # PR/MR open; awaiting human merge
+    HUMAN_MR_APPROVAL = "human_mr_approval"   # PR/MR open; awaiting human merge
     REBASING = "rebasing"     # conflicting PR; rebase agent in progress
     FIXING_CI = "fixing_ci"   # PR open + failing CI; auto-fix in progress
     DONE = "done"             # PR/MR merged; awaiting retrospect
@@ -49,28 +50,28 @@ class State(StrEnum):
 #: state -> the set of states it may transition to (the "happy path"
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {
-    State.DRAFT: {State.READY, State.AWAITING_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED, State.DONE},
-    # awaiting_approval is a human-wait state; the human approves → ready,
+    State.DRAFT: {State.READY, State.HUMAN_ISSUE_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED, State.DONE},
+    # human_issue_approval is a human-wait state; the human approves → ready,
     # rejects back to draft with comments, or escalates → blocked/failed.
-    State.AWAITING_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},
+    State.HUMAN_ISSUE_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},
     # implement routes straight to deliverable (the PR itself is the
     # review — no separate pre-deliver code-review state).
     State.READY: {State.DELIVERABLE, State.ERRORED, State.BLOCKED},
-    State.DELIVERABLE: {State.IN_REVIEW, State.ERRORED, State.BLOCKED},
+    State.DELIVERABLE: {State.HUMAN_MR_APPROVAL, State.ERRORED, State.BLOCKED},
     # PR open: merge stage polls -> merged=done, closed-unmerged=blocked,
     # conflicting=rebasing (auto-rebase cycle), failing CI=fixing_ci.
-    State.IN_REVIEW: {
+    State.HUMAN_MR_APPROVAL: {
         State.DONE,
         State.REBASING,
         State.FIXING_CI,
         State.ERRORED,
         State.BLOCKED,
     },
-    # rebasing: merge stage runs rebase agent -> back to in_review on
+    # rebasing: merge stage runs rebase agent -> back to human_mr_approval on
     # success, retry on failure, block on exhaustion.
-    State.REBASING: {State.IN_REVIEW, State.ERRORED, State.BLOCKED},
-    # ci fix: on success -> in_review; on failure -> blocked; on crash -> errored.
-    State.FIXING_CI: {State.IN_REVIEW, State.BLOCKED, State.ERRORED},
+    State.REBASING: {State.HUMAN_MR_APPROVAL, State.ERRORED, State.BLOCKED},
+    # ci fix: on success -> human_mr_approval; on failure -> blocked; on crash -> errored.
+    State.FIXING_CI: {State.HUMAN_MR_APPROVAL, State.BLOCKED, State.ERRORED},
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED},
     State.CLOSED: set(),
@@ -90,7 +91,7 @@ STAGE_FOR_STATE: dict[State, str] = {
     State.DRAFT: "refine",
     State.READY: "implement",
     State.DELIVERABLE: "deliver",
-    State.IN_REVIEW: "merge",
+    State.HUMAN_MR_APPROVAL: "merge",
     State.REBASING: "merge",
     State.FIXING_CI: "ci_fix",
     State.DONE: "retrospect",

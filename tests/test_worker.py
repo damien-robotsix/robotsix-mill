@@ -121,7 +121,7 @@ async def test_untraced_noop_stage_emits_no_trace(ctx, service, monkeypatch):
         traced = True
 
         def run(self, _t, _c):
-            return Outcome(State.AWAITING_APPROVAL, "refined")
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined")
 
     class UntracedNoop(Stage):
         name = "refine"
@@ -160,7 +160,7 @@ async def test_done_is_not_terminal_retrospect_runs(ctx, service, monkeypatch):
 
     monkeypatch.setitem(registry.STAGES, "retrospect", FakeRetrospect())
     t = service.create("x")
-    for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
         service.transition(t.id, st)
     await process_ticket(t.id, ctx)
     assert service.get(t.id).state is State.CLOSED
@@ -186,15 +186,15 @@ def test_no_progress_guard_blocks_traced_stage(ctx, service):
 
 
 def test_no_progress_guard_exempts_poll_stage(ctx, service):
-    """in_review (merge, traced=False) legitimately waits on an open PR
+    """human_mr_approval (merge, traced=False) legitimately waits on an open PR
     across many poll cycles — it must NEVER be auto-blocked."""
     w = Worker(ctx)
     t = service.create("x")
-    for st in (State.READY, State.DELIVERABLE, State.IN_REVIEW):
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL):
         service.transition(t.id, st)
     for _ in range(ctx.settings.max_stuck_cycles + 3):
-        w._check_progress(t.id, State.IN_REVIEW, State.IN_REVIEW)
-    assert service.get(t.id).state is State.IN_REVIEW
+        w._check_progress(t.id, State.HUMAN_MR_APPROVAL, State.HUMAN_MR_APPROVAL)
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
 
 
 async def test_dep_gated_ticket_does_not_invoke_stage_or_trace(ctx, service, monkeypatch):
@@ -273,7 +273,7 @@ def test_no_progress_counter_resets_on_advance(ctx, service):
     w._check_progress(t.id, State.READY, State.DELIVERABLE)  # progressed
     assert t.id not in w._stuck
     service.transition(t.id, State.DELIVERABLE)
-    service.transition(t.id, State.IN_REVIEW)
+    service.transition(t.id, State.HUMAN_MR_APPROVAL)
     service.transition(t.id, State.DONE)  # retrospect (traced) stage
     for _ in range(ctx.settings.max_stuck_cycles - 1):
         w._check_progress(t.id, State.DONE, State.DONE)
@@ -321,7 +321,7 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
             with lock:
                 live["now"] -= 1
                 live["done"] += 1
-            return Outcome(State.AWAITING_APPROVAL, "refined")
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined")
 
     monkeypatch.setitem(registry.STAGES, "refine", SlowRefine())
     ctx.settings.max_concurrency = 4
@@ -339,7 +339,7 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
     assert live["done"] == 4              # each processed exactly once
     assert live["max"] >= 2               # genuinely overlapped
     assert all(
-        service.get(i).state is State.AWAITING_APPROVAL for i in ids
+        service.get(i).state is State.HUMAN_ISSUE_APPROVAL for i in ids
     )
 
 
