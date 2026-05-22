@@ -128,6 +128,10 @@ def _run_migrations(settings: Settings) -> None:
         # New State enum values (e.g. DOCUMENTING) are additive-only and
         # require no data migration — existing rows simply use the new
         # value on future transitions.
+        #
+        # parent_title on TicketRead is a runtime-computed field (API
+        # hydrates it from the parent ticket), not a DB column — no
+        # schema migration needed.
         pass
 
         # State renames (PR #143): existing rows still store the old

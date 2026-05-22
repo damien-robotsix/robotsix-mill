@@ -72,7 +72,7 @@ async function refresh(){
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
    ${t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:""}
-   ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_id.slice(0,8))}…</span>`:""}
+   ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:""}
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
@@ -420,7 +420,7 @@ async function open_(id){
    created ${t.created_at} · updated ${t.updated_at}</p>`+
    (t.depends_on?`<p><b>depends on:</b> ${esc(t.depends_on)}</p>`:"")+
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
-   (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_id)}</span></p>`:"")+
+   (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id)}</span></p>`:"")+
    (ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">${ch.map(c=>`<div class="child-ticket"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")}</div>`:"")+
    (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button></p>`:"")+
    `<h3>History</h3>`+
