@@ -17,6 +17,7 @@ import json
 import logging
 import re
 import time
+from datetime import datetime, timezone
 
 from ..langfuse_client import session_cost
 from ..stages import StageContext, get_stage
@@ -32,13 +33,13 @@ log = logging.getLogger("robotsix_mill.worker")
 _TERMINAL = {State.CLOSED, State.ERRORED, State.BLOCKED}
 
 
-async def process_ticket(ticket_id: str, ctx: StageContext) -> None:
+async def process_ticket(ticket_id: str, ctx: StageContext, active_map: dict | None = None) -> None:
     """Drive one ticket through as many stages as possible, in order,
     until it reaches a terminal/waiting state or a stub stops the chain."""
-    await _process_ticket_inner(ticket_id, ctx)
+    await _process_ticket_inner(ticket_id, ctx, active_map=active_map)
 
 
-async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
+async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: dict | None = None) -> None:
     while True:
         ticket = ctx.service.get(ticket_id)
         if ticket is None:
@@ -91,10 +92,17 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
                 token_id = _current_conversation_id.set(ticket_id)
                 try:
                     # stage.run is sync (LLM/tool) — keep the loop responsive
+                    if active_map is not None:
+                        active_map[ticket_id] = {
+                            "stage": stage_name,
+                            "started_at": datetime.now(timezone.utc).isoformat(),
+                        }
                     outcome = await asyncio.to_thread(
                         stage.run, ticket, ctx
                     )
                 finally:
+                    if active_map is not None:
+                        active_map.pop(ticket_id, None)
                     _current_context_store.reset(token_store)
                     _current_conversation_id.reset(token_id)
         except NotImplementedError as e:
@@ -484,6 +492,8 @@ class Worker:
         # processed by two workers at once (the merge poll, emit, and
         # requeue can all enqueue the same id).
         self._pending: set[str] = set()
+        # ticket_id -> {"stage": str, "started_at": str} while stage.run() is executing
+        self._active: dict[str, dict] = {}
 
     def enqueue(self, ticket_id: str) -> None:
         # asyncio is single-threaded; enqueue is only ever called from
@@ -499,7 +509,7 @@ class Worker:
             try:
                 before = self.ctx.service.get(ticket_id)
                 before_state = before.state if before else None
-                await process_ticket(ticket_id, self.ctx)
+                await process_ticket(ticket_id, self.ctx, active_map=self._active)
                 after = self.ctx.service.get(ticket_id)
                 self._check_progress(
                     ticket_id, before_state,
@@ -511,6 +521,7 @@ class Worker:
                 # drop from in-flight FIRST so a re-enqueue (e.g. next
                 # merge-poll cycle) is accepted again.
                 self._pending.discard(ticket_id)
+                self._active.pop(ticket_id, None)
                 self.queue.task_done()
 
     def _check_progress(self, ticket_id: str, before, after) -> None:

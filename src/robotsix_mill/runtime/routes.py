@@ -557,6 +557,15 @@ def list_runs(
     return registry.list_all()
 
 
+@router.get("/active")
+def list_active(worker=Depends(get_worker)) -> list[dict]:
+    """Return tickets currently being processed by a pipeline stage."""
+    return [
+        {"ticket_id": tid, "stage": info["stage"], "started_at": info["started_at"]}
+        for tid, info in worker._active.items()
+    ]
+
+
 @router.get("/costs/by-agent")
 def cost_by_agent(
     lookback_hours: float = 24,
