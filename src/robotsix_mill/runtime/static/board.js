@@ -7,6 +7,7 @@ let costDashboardOpen=false;
 let costLookbackHours=24;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const renderMD = s => { if (!s) return ""; return marked.parse(s); };
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="test_gap"?"test-gap":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
 // HTTP helpers built on XMLHttpRequest, not fetch().
 // `fetch` is wrapped by SES / hardened-JS extensions (MetaMask, some
@@ -425,9 +426,9 @@ async function open_(id){
    (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button></p>`:"")+
    `<h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
-     ${e.note?"<br>"+esc(e.note):""}</div>`).join("")+
+     ${e.note?"<br>"+renderMD(e.note):""}</div>`).join("")+
    `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
-   ((cs&&cs.length)?cs.map(c=>`<div class="ev"><b class="muted">${c.created_at}</b><br>${esc(c.body)}</div>`).join("")
+   ((cs&&cs.length)?cs.map(c=>`<div class="ev"><b class="muted">${c.created_at}</b><br>${renderMD(c.body)}</div>`).join("")
                    :`<div class="muted" style="font-size:11px">No comments yet.</div>`)+
    ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"")+
    `<h3>description.md</h3><div class="md-body">${renderMD((d&&d.description)||"")}</div>`;
@@ -860,4 +861,3 @@ function createTicketFromFinding(idx,event){
 }
 // -- end deep review ----------------------------------------------------
 refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);
-{}/* poll active */},5000);
