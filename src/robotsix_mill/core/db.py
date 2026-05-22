@@ -125,6 +125,10 @@ def _run_migrations(settings: Settings) -> None:
             conn, "ticket", "kind", "TEXT NOT NULL", "'task'"
         )
 
+        _add_column_if_missing(
+            conn, "comment", "author", "TEXT NOT NULL", "'user'"
+        )
+
         # New State enum values (e.g. DOCUMENTING) are additive-only and
         # require no data migration — existing rows simply use the new
         # value on future transitions.
