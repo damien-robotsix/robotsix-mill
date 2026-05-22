@@ -183,6 +183,49 @@ def test_memory_passed_to_agent(tmp_path, monkeypatch):
     assert captured_memory == ["## Issue: slow tests\n- ticket-A: 3 retries\n"]
 
 
+def test_comments_passed_to_agent(tmp_path, monkeypatch):
+    """Comments on the ticket are passed to the agent."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    t = _done(ctx)
+    ctx.service.add_comment(t.id, "Looks good, but check the tests")
+    ctx.service.add_comment(t.id, "Fixed in rebase")
+
+    captured_comments = []
+
+    def capture(**kwargs):
+        captured_comments.append(kwargs.get("comments_text", ""))
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+    RetrospectStage().run(t, ctx)
+    text = captured_comments[0]
+    assert "Looks good, but check the tests" in text
+    assert "Fixed in rebase" in text
+    # Each comment line follows the YYYY-MM-DD HH:MM | body pattern
+    import re
+    assert re.match(
+        r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} \|", text.split("\n")[0]
+    ), f"unexpected first line format: {text.split(chr(10))[0]!r}"
+
+
+def test_no_comments_passes_empty_string(tmp_path, monkeypatch):
+    """When a ticket has no comments, comments_text is empty string."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    captured_comments = []
+
+    def capture(**kwargs):
+        captured_comments.append(kwargs.get("comments_text", "NOT_FOUND"))
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+    RetrospectStage().run(_done(ctx), ctx)
+    assert captured_comments == [""]
+
+
 def test_updated_memory_written_back(tmp_path, monkeypatch):
     """The agent's updated_memory is written back to the file verbatim."""
     ctx = _ctx(tmp_path)

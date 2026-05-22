@@ -14,7 +14,8 @@ from ..config import Settings
 SYSTEM_PROMPT = """\
 You are a retrospective auditor for an autonomous ticket pipeline.
 Given a finished ticket's workflow (state history + notes), its spec,
-a summary of its Langfuse traces (cost, latency, retries, errors), and
+a summary of its Langfuse traces (cost, latency, retries, errors),
+any comments left on the ticket during review, and
 the current retrospect memory (a Markdown ledger of issues observed
 across past tickets), do the following:
 
@@ -241,6 +242,7 @@ def run_retrospect_agent(
     history_text: str,
     langfuse_summary: str | None,
     memory: str = "",
+    comments_text: str = "",
     deep_analysis: bool = False,
     trace_ids: list[str] | None = None,
 ) -> RetrospectResult:
@@ -277,6 +279,7 @@ def run_retrospect_agent(
         f"<ticket>\n{ticket_summary}\n</ticket>\n\n"
         f"<workflow>\n{history_text}\n</workflow>\n\n"
         f"<langfuse>\n{lf}\n</langfuse>\n\n"
+        f"<comments>\n{comments_text or '(no comments)'}\n</comments>\n\n"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
     )
     if deep_analysis and trace_ids:
