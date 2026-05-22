@@ -110,6 +110,13 @@ def test_build_headers():
     ("git@gitlab.com:ns/project", "ns/project"),
     ("https://gitlab.com/group/subgroup/proj.git", "group/subgroup/proj"),
     ("git@gitlab.com:group/subgroup/proj.git", "group/subgroup/proj"),
+    # Self-hosted GitLab instances
+    ("https://gitlab.mycompany.com/ns/project.git", "ns/project"),
+    ("https://gitlab.mycompany.com/ns/project", "ns/project"),
+    ("git@gitlab.mycompany.com:ns/project.git", "ns/project"),
+    ("git@gitlab.mycompany.com:ns/project", "ns/project"),
+    ("https://gitlab.internal.example.com/group/subgroup/proj.git", "group/subgroup/proj"),
+    ("git@gitlab.internal.example.com:group/subgroup/proj.git", "group/subgroup/proj"),
 ])
 def test_parse_gitlab_project_path_valid(url, expected):
     assert _parse_gitlab_project_path(url) == expected
@@ -118,8 +125,8 @@ def test_parse_gitlab_project_path_valid(url, expected):
 @pytest.mark.parametrize("url", [
     "",
     "not-a-url",
-    "https://github.com/o/r.git",
-    "git@github.com:o/r.git",
+    "/absolute/path/to/repo.git",
+    "git://invalid-protocol.example.com/ns/project.git",
 ])
 def test_parse_gitlab_project_path_invalid_raises_runtimeerror(url):
     with pytest.raises(RuntimeError, match="cannot parse GitLab project path"):

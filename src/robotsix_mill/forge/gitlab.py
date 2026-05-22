@@ -19,17 +19,18 @@ def _build_headers(token: str) -> dict:
 def _parse_gitlab_project_path(remote_url: str) -> str:
     """Extract namespace/project path from a GitLab remote URL.
 
-    Accepts HTTPS (https://gitlab.com/ns/project.git) and
-    SSH (git@gitlab.com:ns/project.git). Returns the path as-is
+    Supports any GitLab host (gitlab.com, self-hosted instances, etc.).
+    Accepts HTTPS (https://<host>/ns/project.git) and
+    SSH (git@<host>:ns/project.git). Returns the path as-is
     (no URL encoding — callers encode when building URLs).
     """
     remote = remote_url or ""
-    # HTTPS: https://gitlab.com/ns/project.git
-    m = re.match(r"https://gitlab\.com/(?P<path>.+?)(?:\.git)?$", remote)
+    # HTTPS: https://<host>/ns/project.git
+    m = re.match(r"https://(?P<host>[^/]+)/(?P<path>.+?)(?:\.git)?$", remote)
     if m:
         return m.group("path")
-    # SSH: git@gitlab.com:ns/project.git
-    m = re.match(r"git@gitlab\.com:(?P<path>.+?)(?:\.git)?$", remote)
+    # SSH: git@<host>:ns/project.git
+    m = re.match(r"git@(?P<host>[^:]+):(?P<path>.+?)(?:\.git)?$", remote)
     if m:
         return m.group("path")
     raise RuntimeError(f"cannot parse GitLab project path from {remote_url!r}")
