@@ -21,6 +21,7 @@ _engine = None
 
 
 def get_engine(settings: Settings):
+    """Return the process-wide SQLite engine, creating it on first call."""
     global _engine
     if _engine is None:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -133,6 +134,7 @@ def _run_migrations(settings: Settings) -> None:
 
 
 def init_db(settings: Settings) -> None:
+    """Create tables (if missing) and run idempotent column migrations."""
     # import models so SQLModel.metadata is populated before create_all
     from . import models  # noqa: F401
 
@@ -141,6 +143,7 @@ def init_db(settings: Settings) -> None:
 
 
 def session(settings: Settings) -> Session:
+    """Return a new SQLModel Session bound to the process-wide engine."""
     return Session(get_engine(settings))
 
 
