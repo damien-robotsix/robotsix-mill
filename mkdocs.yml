@@ -1,0 +1,37 @@
+site_name: robotsix-mill
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Configuration & Deployment:
+      - Configuration reference: configuration.md
+      - Continuous deployment: deployment.md
+      - Docker architecture: docker-architecture.md
+      - GitHub App / PAT: github-app.md
+      - Security model: security.md
+  - Pipeline:
+      - Agent catalog: agents.md
+      - Approval gate: approval-gate.md
+      - Dedup guard: dedup-guard.md
+      - Merge stage: merge-stage.md
+  - Agents & Internals:
+      - Audit agent: audit-agent.md
+      - Blocked ticket recovery: blocked-ticket-recovery.md
+      - Retrospect memory: retrospect-memory.md
+      - Trace-health check: trace-health.md
+  - Operations:
+      - Cost controls & resilience: cost-and-resilience.md
+      - Notifications: notifications.md
+      - Ticket provenance: ticket-provenance.md
+      - Workspace cleanup: workspace-cleanup.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
