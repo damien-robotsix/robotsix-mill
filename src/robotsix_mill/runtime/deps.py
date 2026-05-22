@@ -133,6 +133,11 @@ def enrich_ticket_read(
     authoritative when the user actually opens a ticket.
     """
     with_cost(ticket, settings, blocking=blocking_cost)
+    parent_title: str | None = None
+    if ticket.parent_id:
+        parent = service.get(ticket.parent_id)
+        if parent:
+            parent_title = parent.title
     return TicketRead(
         id=ticket.id,
         title=ticket.title,
@@ -140,6 +145,7 @@ def enrich_ticket_read(
         kind=ticket.kind,
         branch=ticket.branch,
         parent_id=ticket.parent_id,
+        parent_title=parent_title,
         source=ticket.source,
         origin_session=ticket.origin_session,
         origin_session_url=_origin_session_url(ticket, settings),

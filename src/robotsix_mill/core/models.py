@@ -109,6 +109,7 @@ class TicketRead(SQLModel):
     kind: str
     branch: str | None
     parent_id: str | None
+    parent_title: str | None = None
     source: str
     origin_session: str | None
     origin_session_url: str | None
