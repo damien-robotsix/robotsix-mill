@@ -159,3 +159,28 @@ margin-top:3px;background:#1e1a2a;color:#a78bfa;letter-spacing:.03em}
 .child-state{font-size:10px;padding:1px 4px;border-radius:3px;text-transform:uppercase;letter-spacing:.03em;border-left:3px solid var(--c);padding-left:5px}
 .child-title{color:#eef0f4;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .child-id{font-size:10px}
+.live-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+  background: #1d3a2f;
+  color: #4ade80;
+  text-transform: lowercase;
+  letter-spacing: 0.03em;
+}
+.live-spinner {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid #4ade80;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: live-spin 0.8s linear infinite;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+@keyframes live-spin {
+  to { transform: rotate(360deg); }
+}

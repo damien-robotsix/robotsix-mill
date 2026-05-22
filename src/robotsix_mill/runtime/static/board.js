@@ -1,11 +1,21 @@
 const ST=["draft","human_issue_approval","ready","documenting","code_review","deliverable","human_mr_approval","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered","epic_open","epic_closed"];
-const LBL={ready:"implementing"};   // display label only; state value stays "ready"
 let showClosed=false;               // empty cols hidden; CLOSED and EPIC_CLOSED also hidden unless toggled
 let sel=null;
 let runsOpen=false;
 let costDashboardOpen=false;
 let costLookbackHours=24;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
+let activeMap={};
+const ACTIVE_LABEL={
+  refine: "refining…",
+  implement: "implementing…",
+  document: "documenting…",
+  review: "reviewing…",
+  deliver: "delivering…",
+  merge: "merging…",
+  ci_fix: "fixing CI…",
+  retrospect: "retrospecting…"
+};
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const renderMD = s => { if (!s) return ""; return marked.parse(s); };
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="test_gap"?"test-gap":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
@@ -51,7 +61,11 @@ async function refresh(){
  const wantClosed=showClosed;
  const tok=++refreshSeq;
  const url=wantClosed?"/tickets":"/tickets?include_closed=false";
- const ts=await jget(url); if(!ts)return;
+ const [ts, activeList]=await Promise.all([jget(url), jget("/active")]);
+ if(!ts)return;
+ const active={};
+ if(activeList) activeList.forEach(a=>{ active[a.ticket_id]=a; });
+ activeMap=active;
  if(tok!==refreshSeq)return;        // a newer refresh started — drop stale
  const by={}; ST.forEach(s=>by[s]=[]);
  ts.forEach(t=>(by[t.state]=by[t.state]||[]).push(t));
@@ -67,7 +81,7 @@ async function refresh(){
  document.getElementById("meta").textContent=
    ts.length+" tickets · "+new Date().toLocaleTimeString();
  document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed)).map(s=>`<div class="col">
-  <h2>${LBL[s]||s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
+  <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <button class="del-btn" title="Delete ticket" onclick="event.stopPropagation();del_('${t.id}')">✕</button>
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
@@ -75,6 +89,7 @@ async function refresh(){
    ${t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:""}
    ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:""}
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
+   `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…"}</span>` : ""}`+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
