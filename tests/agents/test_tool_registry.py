@@ -125,6 +125,31 @@ def test_tool_registry_empty_describe():
     assert "tool registry is empty" in out
 
 
+def test_describe_for_prompt_filters_by_tool_names():
+    """AC1: Register read_file, run_command, report_issue. Call with
+    tool_names={"report_issue"}. Assert output contains report_issue
+    but NOT read_file or run_command."""
+    ToolRegistry.register(ToolInfo(
+        name="read_file", description="Read a file.",
+        category="fs", parameters={"path": "str"},
+    ))
+    ToolRegistry.register(ToolInfo(
+        name="run_command", description="Run a shell command.",
+        category="shell", parameters={"command": "str"},
+    ))
+    ToolRegistry.register(ToolInfo(
+        name="report_issue", description="File a draft.",
+        category="reporting", parameters={"title": "str"},
+    ))
+
+    out = ToolRegistry.describe_for_prompt(tool_names={"report_issue"})
+
+    # Table rows: report_issue appears as a tool, read_file/run_command do not
+    assert "| report_issue |" in out
+    assert "| read_file |" not in out
+    assert "| run_command |" not in out
+
+
 def test_all_tools_registered(tmp_path, monkeypatch):
     """Construct an agent via build_agent() with web=True and a full
     tool set (mimicking the coordinator's tool assembly), then assert
@@ -189,7 +214,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
 def test_compose_prompt_includes_capability_table(tmp_path):
     """Call _compose_prompt after registering at least one tool, assert
     the result starts with the original prompt and contains the
-    capability table."""
+    capability table. Also test that tool_names filters correctly."""
     from robotsix_mill.agents.base import _compose_prompt
 
     s = _settings(tmp_path)
@@ -204,3 +229,14 @@ def test_compose_prompt_includes_capability_table(tmp_path):
     assert "## Available tools" in result
     assert "| read_file | fs | Read a file. |" in result
     assert "Prefer direct tools" in result
+
+    # AC2: tool_names filter
+    ToolRegistry.register(ToolInfo(
+        name="report_issue", description="File a draft.",
+        category="reporting", parameters={"title": "str"},
+    ))
+    result2 = _compose_prompt(
+        s, "test prompt", tool_names={"report_issue"}
+    )
+    assert "| report_issue |" in result2
+    assert "| read_file |" not in result2

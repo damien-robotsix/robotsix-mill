@@ -90,10 +90,16 @@ def _model_name(settings: Settings) -> str:
     return settings.model
 
 
-def _compose_prompt(settings: Settings, system_prompt: str) -> str:
+def _compose_prompt(
+    settings: Settings,
+    system_prompt: str,
+    tool_names: set[str] | None = None,
+) -> str:
     from .tool_registry import ToolRegistry
 
-    return system_prompt + "\n\n" + ToolRegistry.describe_for_prompt()
+    return system_prompt + "\n\n" + ToolRegistry.describe_for_prompt(
+        tool_names=tool_names
+    )
 
 
 def build_agent(
@@ -147,9 +153,13 @@ def build_agent(
         # sub-agent does the searching and hands back only a conclusion.
         all_tools.append(make_web_research_tool(settings))
 
+    tool_names = {t.__name__ for t in all_tools}
+
     agent_kwargs: dict[str, Any] = dict(
         model=model,
-        system_prompt=_compose_prompt(settings, system_prompt),
+        system_prompt=_compose_prompt(
+            settings, system_prompt, tool_names=tool_names
+        ),
         output_type=output_type,
         tools=all_tools,
         retries=retries,
