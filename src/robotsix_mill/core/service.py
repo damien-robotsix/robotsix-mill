@@ -511,13 +511,14 @@ class TicketService:
 
     def request_changes(
         self, ticket_id: str, body: str
-    ) -> tuple[Comment, Ticket]:
-        """Add a comment AND transition from ``human_issue_approval`` to
-        ``draft`` in one atomic operation.
+    ) -> tuple[Comment | None, Ticket]:
+        """Transition from ``human_issue_approval`` to ``draft`` in one
+        atomic operation.  When ``body`` is non-empty a ``Comment`` is
+        also created.
 
-        Returns the new ``(Comment, Ticket)`` pair. Raises ``KeyError``
-        if the ticket does not exist, ``TransitionError`` if it is not
-        in ``human_issue_approval``.
+        Returns the ``(Comment | None, Ticket)`` pair. Raises
+        ``KeyError`` if the ticket does not exist, ``TransitionError``
+        if it is not in ``human_issue_approval``.
         """
         with db.session(self.settings) as s:
             ticket = s.get(Ticket, ticket_id)
@@ -528,8 +529,10 @@ class TicketService:
                     f"{ticket_id}: cannot request changes — "
                     f"not human_issue_approval (currently {ticket.state})"
                 )
-            comment = Comment(ticket_id=ticket_id, body=body)
-            s.add(comment)
+            comment = None
+            if body.strip():
+                comment = Comment(ticket_id=ticket_id, body=body)
+                s.add(comment)
             note = f"changes requested: {body}"
             ticket.state = State.DRAFT
             ticket.updated_at = datetime.now(timezone.utc)
@@ -540,6 +543,7 @@ class TicketService:
                 )
             )
             s.commit()
-            s.refresh(comment)
+            if comment is not None:
+                s.refresh(comment)
             s.refresh(ticket)
             return comment, ticket

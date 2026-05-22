@@ -224,6 +224,70 @@ def test_approve_enqueues_implement(client, service):
     assert State.READY in STAGE_FOR_STATE
 
 
+# --- request-changes endpoint tests ---
+
+
+def test_request_changes_empty_body_returns_200(client, service):
+    """POST /tickets/{id}/request-changes with {"body": ""} returns 200, no comment created."""
+    t = service.create("RC test")
+    service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
+
+    r = client.post(f"/tickets/{t.id}/request-changes", json={"body": ""})
+    assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+    data = r.json()
+    assert data["comment"] is None
+    assert data["ticket"]["state"] == "draft"
+
+    comments = service.list_comments(t.id)
+    assert len(comments) == 0
+
+
+def test_request_changes_nonempty_body_creates_comment(client, service):
+    """POST /tickets/{id}/request-changes with a body creates a comment and transitions."""
+    t = service.create("RC test")
+    service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
+
+    r = client.post(f"/tickets/{t.id}/request-changes", json={"body": "please fix"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["comment"] is not None
+    assert data["comment"]["body"] == "please fix"
+    assert data["ticket"]["state"] == "draft"
+
+    comments = service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].body == "please fix"
+
+
+def test_request_changes_whitespace_body_treated_as_empty(client, service):
+    """Whitespace-only body creates no comment."""
+    t = service.create("RC test")
+    service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
+
+    r = client.post(f"/tickets/{t.id}/request-changes", json={"body": "   "})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["comment"] is None
+
+    comments = service.list_comments(t.id)
+    assert len(comments) == 0
+
+
+def test_request_changes_wrong_state_409(client, service):
+    """POST /tickets/{id}/request-changes on non-human_issue_approval returns 409."""
+    t = service.create("wrong state")
+    service.transition(t.id, State.READY, note="refined (autonomous)")
+
+    r = client.post(f"/tickets/{t.id}/request-changes", json={"body": "x"})
+    assert r.status_code == 409
+
+
+def test_request_changes_missing_ticket_404(client):
+    """POST /tickets/{id}/request-changes with bogus id returns 404."""
+    r = client.post("/tickets/nonexistent/request-changes", json={"body": "x"})
+    assert r.status_code == 404
+
+
 # --- resume-blocked endpoint tests ---
 
 

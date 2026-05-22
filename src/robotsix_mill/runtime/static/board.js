@@ -88,7 +88,10 @@ async function approve(id){
 async function requestChanges(id){
  const body=prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
  if(body===null)return;
- if(!body.trim()){alert("A comment is required when requesting changes");return}
+ if(!body.trim()){
+  const existing=await jget("/tickets/"+id+"/comments");
+  if(!existing||!existing.length){alert("A comment is required when requesting changes");return}
+ }
  const r=await jpost("/tickets/"+id+"/request-changes",{body:body.trim()});
  if(!r.ok){const e=await r.text();alert("request-changes failed: "+e)}else{refresh();if(sel===id)open_(id)}
 }
