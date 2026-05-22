@@ -4,7 +4,7 @@ PYTHON ?= python3.14
 VENV   := .venv
 BIN    := $(VENV)/bin
 
-.PHONY: install test serve dev docker clean
+.PHONY: install test serve dev docker clean docs-serve docs-build
 
 $(BIN)/activate:
 	$(PYTHON) -m venv $(VENV)
@@ -30,6 +30,16 @@ dev: install
 # Build + run the container instead.
 docker:
 	docker compose up -d --build
+
+# Live-preview docs at http://127.0.0.1:8000
+docs-serve: install
+	$(BIN)/pip install -q -e '.[docs]'
+	$(BIN)/mkdocs serve
+
+# Build static site into site/
+docs-build: install
+	$(BIN)/pip install -q -e '.[docs]'
+	$(BIN)/mkdocs build
 
 clean:
 	rm -rf $(VENV) .mill-data .pytest_cache
