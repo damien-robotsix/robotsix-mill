@@ -15,12 +15,12 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <span class="muted">auto-refresh 5s</span>
 <button onclick="runAudit()" style="font-size:11px;padding:3px 10px;
 background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">
-  Run Audit
+  Audit
 </button>
 <button onclick="runHealth()" style="font-size:11px;padding:3px 10px;
 background:#0d9488;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
-  Run Health Check
+  Health Check
 </button>
 <button onclick="runTestGap()" style="font-size:11px;padding:3px 10px;
 background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
@@ -35,7 +35,7 @@ margin-left:4px">
 <button onclick="runAgentCheck()" style="font-size:11px;padding:3px 10px;
 background:#db2777;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
-  Run Agent Check
+  Agent Check
 </button>
 <button onclick="runSurvey()" style="font-size:11px;padding:3px 10px;
 background:#f59e0b;color:#000;border:none;border-radius:4px;cursor:pointer;
