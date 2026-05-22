@@ -49,10 +49,10 @@ def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None)
         category: str = "other",
         evidence: str = "",
     ) -> str:
-        """File a draft when something blocks or degrades your run.
+        """File a draft only for blocking issues that prevent completing the current task.
 
-        Use for meta issues: missing tools, unrecoverable errors, workflow
-        improvements, or missing inputs. Never for normal task output.
+        Do NOT file for: cosmetic observations, style nits, nice-to-have
+        improvements, or non-blocking observations. When in doubt, do NOT file.
         category: missing-tool|error|workflow-improvement|missing-input|other.
         Never raises."""
         try:
@@ -134,7 +134,7 @@ def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None)
 
     ToolRegistry.register(ToolInfo(
         name="report_issue",
-        description="File a draft when something blocks or degrades your run.",
+        description="File a draft only for blocking issues preventing task completion.",
         category="reporting",
         parameters={"title": "str", "body": "str = \"\"", "category": "str = \"other\"", "evidence": "str = \"\""},
     ))
