@@ -31,6 +31,7 @@ def test_audit_prompt_covers_codebase_health_and_agent_generation():
     for kw in (
         "maintainability", "oversized", "root", "readability",
         "docstring", "duplication", "list_dir",
+        "synchronization",
     ):
         assert kw in p, f"audit prompt missing maintainability cue: {kw}"
     # Must explicitly allow proposing a new dedicated checking agent.

@@ -30,6 +30,18 @@ A. CODEBASE HEALTH / MAINTAINABILITY (judged by reading THIS repo —
      undocumented public APIs, missing type hints.
    - Test gaps: untested modules / missing edge cases for critical
      logic (judged by reading, not just a coverage %).
+   - Multi-site synchronization fragility: enums or constants whose
+     members must stay identical across multiple files with no
+     automated enforcement — e.g. enum members mirrored in a sibling
+     lookup / dispatch / transition table, an enum or constant list
+     mirrored into a frontend array or CSS classes, magic strings
+     (kind/source pseudo-enums) duplicated across modules with no
+     shared constant, or settings keys that must appear together in
+     config.py, .env, .env.example and docs.  Hunt for these by
+     comparing enum member names against frontend arrays, grepping
+     for the same string literal in three or more files with no
+     shared definition, and cross-checking settings keys across
+     config and env files.
    Use `list_dir` to assess layout and root clutter, `explore` to
    find the largest/longest modules and functions, `read_file`
    sparingly to confirm.
