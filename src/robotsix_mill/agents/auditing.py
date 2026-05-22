@@ -39,8 +39,8 @@ A. CODEBASE HEALTH / MAINTAINABILITY (judged by reading THIS repo —
      shared constant, or settings keys that must appear together in
      config.py, .env, .env.example and docs.
    Use `detect_duplication` to get deterministic clone-pair data
-   (file paths, line ranges, duplication %) for copy-paste
-   detection — do not rely on visual inspection alone.
+   (file paths, line ranges, duplicated line/token counts) for
+   copy-paste detection — do not rely on visual inspection alone.
    Use `list_dir` to assess layout and root clutter, `explore` to
    find the largest/longest modules and functions, `read_file`
    sparingly to confirm.

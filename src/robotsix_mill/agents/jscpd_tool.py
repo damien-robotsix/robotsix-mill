@@ -32,6 +32,8 @@ def run_jscpd(repo_dir: Path) -> str:
                 ".jscpd.json",
                 "--reporters",
                 "json",
+                "--mode",
+                "strict",
                 ".",
             ],
             capture_output=True,

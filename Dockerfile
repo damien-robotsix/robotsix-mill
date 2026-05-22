@@ -74,16 +74,17 @@ FROM python:3.14-slim@sha256:7d8de339aa8619f9b25e7d474d687ae4f6ef9704adad90a136a
 # python:3.14-slim (check /etc/os-release in the base image).  Wildcard
 # suffixes allow patch-level updates without changing the Dockerfile;
 # bump these pins when the base image moves to a new Debian release.
-# nodejs and npm are left unpinned — the Trixie versions change
-# frequently; jscpd only needs a reasonably recent Node.
+# nodejs and npm are pinned with wildcard suffixes so patch-level
+# updates don't break the build; verify version strings against
+# Debian Trixie when bumping the base image.
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && apt-get update \
     && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
         git=1:2.47.3-* \
         ca-certificates=20250419 \
-        nodejs \
-        npm \
+        nodejs=22.17.1-* \
+        npm=10.9.4-* \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only the artifacts built in the builder stage — no source tree.
