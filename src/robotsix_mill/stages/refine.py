@@ -333,6 +333,16 @@ class RefineStage(Stage):
             encoding="utf-8",
         )
 
+        # --- write file map artifact ---
+        if result.file_map:
+            (ws.artifacts_dir / "file_map.json").write_text(
+                json.dumps(
+                    [{"file": e.file, "note": e.note} for e in result.file_map],
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
         # --- normal single-scope path ---
         if not result.split:
             spec = result.spec_markdown or ""
