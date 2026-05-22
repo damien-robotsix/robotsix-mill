@@ -138,6 +138,19 @@ def push(repo: Path, branch: str, remote_url: str, token: str | None) -> None:
     )
 
 
+def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> None:
+    """Fetch ``branch`` from ``remote_url`` (token-auth for https) and
+    update ``refs/remotes/origin/<branch>``.  Uses an explicit refspec
+    so the remote-tracking ref is refreshed even when fetching from
+    an explicit URL rather than the clone's origin remote."""
+    _git(
+        repo,
+        "fetch",
+        _authed_url(remote_url, token),
+        f"+refs/heads/{branch}:refs/remotes/origin/{branch}",
+    )
+
+
 def branch_is_ahead_of_main(repo: Path) -> bool:
     """Return True when HEAD has commits not in origin/main.
 
