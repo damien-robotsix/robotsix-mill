@@ -523,6 +523,48 @@ def test_dedup_never_flags_self(ctx, service, monkeypatch):
     assert t.id not in candidate_ids
 
 
+def test_dedup_candidate_bodies_included(ctx, service, monkeypatch):
+    """Candidate entries passed to dedup must include a ``body`` field
+    with the full content of each candidate ticket's description.md."""
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+
+    # Create the current ticket (will be excluded from candidates).
+    t = service.create("my ticket", "my draft body")
+
+    # Create two candidate tickets with distinctive bodies.
+    t_a = service.create("candidate A", "body of ticket A\nline two")
+    t_b = service.create("candidate B", "body of ticket B")
+
+    seen_candidates = None
+
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
+                   candidates_json, recent_commits_json):
+        nonlocal seen_candidates
+        import json
+        seen_candidates = json.loads(candidates_json)
+        return {"duplicate_of": None, "already_done": None, "reason": "no match"}
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    RefineStage().run(t, ctx)
+
+    assert seen_candidates is not None
+    # Build a lookup by ticket id.
+    by_id = {c["id"]: c for c in seen_candidates}
+
+    assert t_a.id in by_id
+    assert by_id[t_a.id]["body"] == "body of ticket A\nline two"
+
+    assert t_b.id in by_id
+    assert by_id[t_b.id]["body"] == "body of ticket B"
+
+    # All candidates must have the "body" key (never missing).
+    for entry in seen_candidates:
+        assert "body" in entry
+        assert isinstance(entry["body"], str)
+
+
 def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     """Dedup check raises → refine proceeds normally."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"

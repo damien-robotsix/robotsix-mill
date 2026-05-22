@@ -48,15 +48,28 @@ When unsure, return nulls.
    "cleanup") are NOT a match.
 4. When you are less than ~90% confident, return null for both fields.
 
-## Commit verification
+## Ticket verification (primary)
 
-When `<recent_commits>` is available and a commit subject sounds like a
-plausible match, use `read_file` and `list_dir` to inspect the
-repository on disk before flagging `already_done`.  A commit subject
-can sound like a match when the actual code change is unrelated —
-verify that the change described by the draft is truly present.
-Remember: this guard is conservative.  "When unsure, return nulls"
-still applies.
+Each entry in `<candidates>` now includes a `body` field — the full
+specification that was (or is being) implemented.  Use this as your
+primary signal for `already_done`:
+
+1. Scan candidate titles first.  If a CLOSED ticket's title suggests
+   overlapping intent, read its `body` and compare the described
+   change against the draft's `<title>` and `<body>`.
+2. Only flag `already_done` when the completed ticket's body describes
+   the same concrete change — not just the same area or component.
+3. Non-terminal candidates (DRAFT, READY, ...) are for `duplicate_of`
+   detection; their bodies help confirm that two open tickets ask for
+   the identical change.
+
+## Commit verification (supplementary)
+
+When `<recent_commits>` is available, use commit subjects as a
+supplementary signal — e.g. a commit whose subject clearly matches
+the draft AND whose author references a recently-CLOSED ticket.
+Without a ticket body to anchor the comparison, commit subjects
+alone are too vague to warrant `already_done` on their own.
 """
 
 
