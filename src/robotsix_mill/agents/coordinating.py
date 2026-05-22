@@ -159,6 +159,30 @@ After the run, update the memory in your `updated_memory` field:
 """
 
 
+def make_run_tests_tool(settings: Settings, repo_dir: Path):
+    def run_tests() -> str:
+        """Run the project's test suite (isolated sandbox) via the test
+        sub-agent. Returns 'PASS' or 'FAIL' followed by a short,
+        actionable diagnosis — never the raw log."""
+        from .testing import run_test_agent
+
+        passed, feedback = run_test_agent(
+            settings=settings, repo_dir=repo_dir
+        )
+        return f"{'PASS' if passed else 'FAIL'}: {feedback}"
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(ToolInfo(
+        name="run_tests",
+        description="Run the project's test suite (isolated sandbox) via the test sub-agent.",
+        category="testing",
+        parameters={},
+    ))
+
+    return run_tests
+
+
 def run_coordinator(
     *,
     settings: Settings,

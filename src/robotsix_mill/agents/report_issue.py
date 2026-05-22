@@ -130,4 +130,13 @@ def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None)
         except Exception as e:  # noqa: BLE001 — never abort the agent run
             return f"report_issue: could not file ticket ({e!r})"
 
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(ToolInfo(
+        name="report_issue",
+        description="File a draft when something blocks or degrades your run.",
+        category="reporting",
+        parameters={"title": "str", "body": "str = \"\"", "category": "str = \"other\"", "evidence": "str = \"\""},
+    ))
+
     return report_issue

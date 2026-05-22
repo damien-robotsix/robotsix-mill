@@ -91,7 +91,9 @@ def _model_name(settings: Settings) -> str:
 
 
 def _compose_prompt(settings: Settings, system_prompt: str) -> str:
-    return system_prompt
+    from .tool_registry import ToolRegistry
+
+    return system_prompt + "\n\n" + ToolRegistry.describe_for_prompt()
 
 
 def build_agent(

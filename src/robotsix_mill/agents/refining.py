@@ -102,22 +102,6 @@ questions.
 - Stay faithful to the draft's intent; invent nothing unrelated. Be
   concrete and testable.
 
-## Tool strategy
-
-You have four repo tools. Choose the cheapest one for the job:
-
-- **`read_file` / `list_dir` / `run_command`** — use these directly for
-  simple, single-step lookups (e.g. checking one file's content,
-  listing a known directory, re-running a failing test). These are
-  free — no sub-agent spawned.
-- **`explore`** — use only for complex, multi-step questions that
-  require navigating several files to answer (e.g. "trace how auth
-  middleware flows through the app"). When you do use `explore`,
-  consolidate related questions into ONE call instead of making
-  separate calls per file. Each `explore` call spawns a fresh LLM
-  invocation — three separate calls cost ~3× more than one batched
-  call.
-
 ## Memory
 
 You are given a `<memory>` block containing a Markdown ledger of

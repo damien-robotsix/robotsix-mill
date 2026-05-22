@@ -143,4 +143,44 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
             return f"sandbox error: {e}"
         return f"exit={rc}\n{out}"
 
+    # Register every fs/shell tool in the system-wide capability catalog.
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(ToolInfo(
+        name="read_file",
+        description="Return the text content of a file in the repository.",
+        category="fs",
+        parameters={"path": "str", "offset": "int = 1", "limit": "int | None = None"},
+    ))
+    ToolRegistry.register(ToolInfo(
+        name="write_file",
+        description="Create or overwrite a file in the repository with ``content``.",
+        category="fs",
+        parameters={"path": "str", "content": "str"},
+    ))
+    ToolRegistry.register(ToolInfo(
+        name="edit_file",
+        description="Replace a unique string in a file.",
+        category="fs",
+        parameters={"path": "str", "old_string": "str", "new_string": "str"},
+    ))
+    ToolRegistry.register(ToolInfo(
+        name="delete_file",
+        description="Delete a file from the repository.",
+        category="fs",
+        parameters={"path": "str"},
+    ))
+    ToolRegistry.register(ToolInfo(
+        name="list_dir",
+        description="List entries of a directory in the repository (dirs end '/').",
+        category="fs",
+        parameters={"path": "str = \".\""},
+    ))
+    ToolRegistry.register(ToolInfo(
+        name="run_command",
+        description="Run a shell command against the repository (tests, linters, build steps, generators, ...).",
+        category="shell",
+        parameters={"command": "str"},
+    ))
+
     return [read_file, write_file, edit_file, delete_file, list_dir, run_command]

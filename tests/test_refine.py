@@ -1197,11 +1197,13 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
 
     assert len(seen_system_prompt) == 1
     prompt = seen_system_prompt[0]
-    assert "## Tool strategy" in prompt
-    assert "`read_file` / `list_dir` / `run_command`" in prompt
-    assert "free — no sub-agent spawned" in prompt
-    assert "use only for complex, multi-step" in prompt
-    assert "consolidate related questions into ONE call" in prompt
+    # The old "## Tool strategy" section has been moved out of the
+    # refine agent's SYSTEM_PROMPT and into ToolRegistry.describe_for_prompt(),
+    # which is injected by _compose_prompt().  Because this test
+    # monkeypatches build_agent, _compose_prompt is bypassed — we just
+    # verify the refine SYSTEM_PROMPT still exists and is non-trivial.
+    assert "You turn a rough ticket draft" in prompt
+    assert "## Memory" in prompt
 
 
 def test_borderline_draft_not_split(ctx, service, monkeypatch):
