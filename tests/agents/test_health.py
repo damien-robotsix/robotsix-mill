@@ -709,10 +709,10 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch):
 
 
 def test_board_html_contains_health_button():
-    """Board HTML contains the 'Run Health Check' button; the JS file
+    """Board HTML contains the 'Health Check' button; the JS file
     references the /health-check endpoint."""
     from robotsix_mill.runtime.board_html import BOARD_HTML
-    assert "Run Health Check" in BOARD_HTML
+    assert "Health Check" in BOARD_HTML
     assert "runHealth()" in BOARD_HTML
 
     from pathlib import Path

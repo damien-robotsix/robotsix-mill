@@ -312,7 +312,7 @@ async function runAudit(){
  } catch(e) {
    alert("Audit failed to start: "+e);
  } finally {
-   btn.disabled=false; btn.textContent='Run Audit';
+   btn.disabled=false; btn.textContent='Audit';
  }
 }
 async function runTraceHealth(){
@@ -340,7 +340,7 @@ async function runHealth(){
  } catch(e) {
    alert("Health check failed to start: "+e);
  } finally {
-   btn.disabled=false; btn.textContent='Run Health Check';
+   btn.disabled=false; btn.textContent='Health Check';
  }
 }
 async function runTestGap(){
@@ -368,7 +368,7 @@ async function runAgentCheck(){
  } catch(e) {
    alert("Agent-check failed to start: "+e);
  } finally {
-   btn.disabled=false; btn.textContent='Run Agent Check';
+   btn.disabled=false; btn.textContent='Agent Check';
  }
 }
 async function runSurvey(){

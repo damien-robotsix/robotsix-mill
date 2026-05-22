@@ -522,11 +522,11 @@ def test_deep_review_session_id_format(client, monkeypatch):
 
 
 def test_board_html_includes_agent_check_button(client):
-    """The board exposes a 'Run Agent Check' button wired to
+    """The board exposes an 'Agent Check' button wired to
     runAgentCheck() in the JS. Without it the user can't see the
     agent-check feature exists, and only the CLI is discoverable."""
     body = client.get("/").text
-    assert "Run Agent Check" in body
+    assert "Agent Check" in body
     assert "runAgentCheck()" in body
     js = client.get("/static/board.js").text
     assert "runAgentCheck" in js
