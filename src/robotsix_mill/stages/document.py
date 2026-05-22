@@ -111,6 +111,7 @@ class DocumentStage(Stage):
         repo_dir,
         diff: str,
         spec: str,
+        model_name: str | None = None,
     ) -> DocResult:
         """Run the documentation agent to classify the diff and update docs.
 
@@ -124,4 +125,5 @@ class DocumentStage(Stage):
             repo_dir=repo_dir,
             diff=diff,
             spec=spec,
+            model_name=model_name,
         )
