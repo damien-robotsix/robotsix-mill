@@ -47,11 +47,7 @@ background:#1a2a3b;color:#60c0fa;border:1px solid #2a3a4b;border-radius:4px;curs
 margin-left:4px">
   Deep Review
 </button>
-<button onclick="toggleRuns()" style="font-size:11px;padding:3px 10px;
-background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
-margin-left:4px">
-  Runs
-</button>
+<span style="border-left:1px solid #2a2e37;align-self:stretch;margin-left:8px"></span>
 <button onclick="newInquiry()" style="font-size:11px;padding:3px 10px;
 background:#0891b2;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
@@ -66,6 +62,12 @@ margin-left:4px">
 background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   + New Ticket
+</button>
+<span style="border-left:1px solid #2a2e37;align-self:stretch;margin-left:8px"></span>
+<button onclick="toggleRuns()" style="font-size:11px;padding:3px 10px;
+background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Runs
 </button>
 <button onclick="openCostDashboard()" style="font-size:11px;padding:3px 10px;
 background:#0d9488;color:#fff;border:none;border-radius:4px;cursor:pointer;
