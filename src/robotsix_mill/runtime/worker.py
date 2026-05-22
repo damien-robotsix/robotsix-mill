@@ -111,6 +111,86 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext) -> None:
             if ticket is not None:
                 send_notification(ticket, outcome.next_state, outcome.note, ctx.settings)
 
+        # After a ticket reaches DONE, re-evaluate its parent epic if any.
+        if outcome.next_state == State.DONE:
+            ticket = ctx.service.get(ticket_id)
+            if ticket is not None and ticket.parent_id is not None:
+                parent = ctx.service.get(ticket.parent_id)
+                if parent is not None and parent.kind == "epic":
+                    _spawn_epic_reeval(parent.id, ctx)
+
+
+def _spawn_epic_reeval(epic_id: str, ctx: StageContext) -> None:
+    """Fire-and-forget epic re-evaluation in a daemon thread.
+
+    The daemon thread creates a fresh ``TicketService`` from
+    ``ctx.settings``, calls the epic-status agent, and transitions
+    the epic based on the agent's decision.  Failures are logged at
+    warning level and never raised into the worker loop.
+    """
+    import threading
+
+    t = threading.Thread(
+        target=_run_epic_reeval, args=(epic_id, ctx.settings), daemon=True
+    )
+    t.start()
+
+
+def _run_epic_reeval(epic_id: str, settings) -> None:
+    """Background runner for epic re-evaluation.
+
+    1. Creates a fresh ``TicketService`` (the worker's ``ctx.service``
+       is bound to a shared DB session and not thread-safe).
+    2. Fetches the epic, reads its description, gathers all children
+       with their descriptions.
+    3. Calls :func:`~.agents.epic_status.run_epic_status_agent`.
+    4. Transitions the epic (close), updates its description, or does
+       nothing (keep_open) based on the agent's decision.
+    """
+    from ..core.service import TicketService
+    from ..agents.epic_status import run_epic_status_agent
+
+    svc = TicketService(settings)
+    try:
+        epic = svc.get(epic_id)
+        if epic is None:
+            log.warning("epic %s vanished before re-evaluation", epic_id)
+            return
+
+        epic_desc = svc.workspace(epic).read_description()
+        children = svc.list_children(epic_id)
+
+        child_summaries: list[dict] = []
+        for child in children:
+            child_desc = svc.workspace(child).read_description()
+            if len(child_desc) > 2000:
+                child_desc = child_desc[:2000] + "\n...(truncated)"
+            child_summaries.append({
+                "id": child.id,
+                "title": child.title,
+                "state": child.state.value,
+                "description": child_desc,
+            })
+
+        result = run_epic_status_agent(
+            settings=settings,
+            epic_title=epic.title,
+            epic_description=epic_desc,
+            children=child_summaries,
+        )
+
+        if result.decision == "close":
+            svc.transition(epic_id, State.EPIC_CLOSED, note=result.note)
+            log.info("epic %s: agent decided close — transitioned to EPIC_CLOSED", epic_id)
+        elif result.decision == "keep_open":
+            log.debug("epic %s: agent decided keep_open — no change", epic_id)
+        elif result.decision == "update_description":
+            new_hash = svc.workspace(epic).write_description(result.note)
+            svc.set_content_hash(epic_id, new_hash)
+            log.info("epic %s: agent updated description", epic_id)
+    except Exception:
+        log.exception("epic %s: re-evaluation failed", epic_id)
+
 
 class Worker:
     """In-process queue + consumer task, owned by the API service."""
