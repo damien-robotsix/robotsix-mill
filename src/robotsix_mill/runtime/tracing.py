@@ -39,7 +39,7 @@ _current_session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 
 def make_session_id(kind: str) -> str:
-    """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid6>``.
+    """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid8>``.
 
     Use for non-ticket-driven flows (audit, health, agent-check,
     trace-health, deep-review).  Ticket-driven flows pass the ticket id
@@ -48,7 +48,7 @@ def make_session_id(kind: str) -> str:
     """
     return (
         f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-"
-        f"{uuid.uuid4().hex[:6]}"
+        f"{uuid.uuid4().hex[:8]}"
     )
 
 
