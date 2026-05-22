@@ -235,9 +235,15 @@ class GitLabForge(Forge):
                 return r.json()["web_url"]
             if r.status_code == 409:
                 # MR already exists — find it and return its web_url
-                existing = self._find_mr(
-                    project_path=project_path, source_branch=source_branch
-                )
+                try:
+                    existing = self._find_mr(
+                        project_path=project_path, source_branch=source_branch
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"GitLab MR create failed: 409 (conflict); "
+                        f"lookup for existing MR also failed: {exc}"
+                    ) from exc
                 if existing:
                     return existing["web_url"]
             raise RuntimeError(

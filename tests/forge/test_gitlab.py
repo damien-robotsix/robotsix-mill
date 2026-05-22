@@ -203,6 +203,28 @@ def test_create_mr_409_no_existing_mr_raises(tmp_path, monkeypatch):
         )
 
 
+def test_create_mr_409_find_mr_raises_propagates_as_runtimeerror(tmp_path, monkeypatch):
+    """409 + _find_mr raises → RuntimeError (not a raw HTTPStatusError)."""
+    project_json = {"id": 42}
+    post_409 = _make_response(409, {}, "already exists")
+    # _find_mr calls GET merge_requests → 500 triggers raise_for_status
+    get_map = {
+        "merge_requests": _make_response(500, {}, "internal error"),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=post_409,
+    )
+
+    forge = _forge(tmp_path)
+    with pytest.raises(RuntimeError, match="GitLab MR create failed"):
+        forge.open_merge_request(
+            source_branch="feature/x", title="t", body="b"
+        )
+
+
 def test_create_mr_unexpected_status_raises(tmp_path, monkeypatch):
     """Any non-201/409 status → RuntimeError."""
     project_json = {"id": 42}
