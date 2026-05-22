@@ -242,7 +242,6 @@ def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
 def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
-    repo_dir = ctx.service.workspace(t).dir / "repo"
 
     def _fake_doc(self, *, settings, repo_dir, diff, spec):
         del self, settings, diff, spec
