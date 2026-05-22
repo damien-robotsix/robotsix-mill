@@ -314,6 +314,16 @@ class RetrospectStage(Stage):
             f"{e.at:%Y-%m-%d %H:%M} {e.state} {e.note or ''}".rstrip()
             for e in history
         )
+        # Fetch comments
+        comments = ctx.service.list_comments(ticket.id)
+        if comments:
+            comments_text = "\n".join(
+                f"{c.created_at:%Y-%m-%d %H:%M} | {c.body}".rstrip()
+                for c in comments
+            )
+        else:
+            comments_text = ""
+
         desc = ws.read_description()
         if desc:
             desc = truncate_at_boundary(desc, 6000)
@@ -349,6 +359,7 @@ class RetrospectStage(Stage):
                 history_text=history_text,
                 langfuse_summary=lf,
                 memory=memory_text,
+                comments_text=comments_text,
                 deep_analysis=deep_analysis,
                 trace_ids=trace_ids,
             )
