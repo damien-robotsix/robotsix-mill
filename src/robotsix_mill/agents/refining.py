@@ -29,6 +29,19 @@ class TriageResult(BaseModel):
     reason: str
 
 
+class AutoApproveResult(BaseModel):
+    """Auto-approve triage output — a conservative safety check.
+
+    Returns OBVIOUS only when the refined spec describes changes that
+    are trivially, obviously safe: cosmetic, doc-only, single-file,
+    no logic changes.  The bias is conservative: when uncertain,
+    return NEEDS_APPROVAL to defer to a human.
+    """
+
+    decision: Literal["OBVIOUS", "NEEDS_APPROVAL"]
+    reason: str
+
+
 class ChildSpec(BaseModel):
     """A split child."""
 
@@ -141,6 +154,77 @@ A wrong REFINE is just status-quo cost — harmless.
             lambda: agent.run_sync(user_prompt),
             settings=settings,
             what="triage",
+        )
+    finally:
+        _safe_close(agent)
+    return result.output
+
+
+def triage_auto_approve(
+    *,
+    settings: Settings,
+    spec: str,
+) -> AutoApproveResult:
+    """Return an ``AutoApproveResult`` from a single cheap LLM call.
+
+    Inspects the refined spec's ``## Scope`` and ``## Acceptance
+    criteria`` sections.  Returns OBVIOUS only when the described
+    change is trivially, obviously safe — cosmetic, doc-only,
+    single-file, no logic changes.  The bias is conservative: when
+    uncertain, returns NEEDS_APPROVAL.
+
+    NO tools, NO web, NO explore — just a tiny prompt and a
+    structured classification.
+    """
+    from pydantic_ai import PromptedOutput
+
+    from .base import build_agent, _safe_close
+    from .retry import call_with_retry
+
+    AUTO_APPROVE_PROMPT = """\
+You are a conservative safety triage classifier.  Your ONLY job:
+inspect a refined engineering spec and decide whether the described
+change is "obviously safe" to implement WITHOUT human approval.
+
+Return OBVIOUS only when ALL of these hold:
+- Changes are confined to a single file or a small, well-defined surface.
+- Changes are cosmetic / documentation / formatting / trivial config only.
+- No business logic, API contract, database schema, or security-sensitive
+  code is touched.
+- The acceptance criteria are simple and mechanical (e.g. "the docstring
+  matches the function signature", "the README badge is updated").
+
+Return NEEDS_APPROVAL when ANY of these are true:
+- Multiple files across different subsystems are affected.
+- Any logic, behaviour, or data-flow change is described.
+- The spec mentions new features, refactored code, API changes, or
+  database migrations.
+- The acceptance criteria involve testing complex behaviour or
+  integration scenarios.
+- The spec is ambiguous about scope or impact.
+
+Be CONSERVATIVE: if you are unsure, return NEEDS_APPROVAL.
+The only real risk is a wrong OBVIOUS (auto-approving a real change).
+A wrong NEEDS_APPROVAL just adds a human click — harmless.
+"""
+    agent = build_agent(
+        settings,
+        system_prompt=AUTO_APPROVE_PROMPT,
+        output_type=PromptedOutput(AutoApproveResult),
+        tools=[],          # NO tools — classification only
+        web=False,         # NO web research
+        report_issue=False,
+        model_name=settings.auto_approve_model,
+        name="auto-approve",
+    )
+
+    user_prompt = f"<spec>\n{spec}\n</spec>"
+
+    try:
+        result = call_with_retry(
+            lambda: agent.run_sync(user_prompt),
+            settings=settings,
+            what="auto-approve triage",
         )
     finally:
         _safe_close(agent)

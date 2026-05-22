@@ -35,6 +35,36 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.refine")
 
 
+def _resolve_next_state(ctx: StageContext, spec: str) -> tuple[State, str | None]:
+    """Return (next_state, auto_approve_reason_or_None).
+
+    Encapsulates the decision: if approval is not required → READY;
+    if auto-approve is disabled → HUMAN_ISSUE_APPROVAL; otherwise run
+    the cheap auto-approve triage on the spec → READY on OBVIOUS,
+    HUMAN_ISSUE_APPROVAL otherwise (or on error).  Empty/whitespace
+    specs skip the triage entirely and go to HUMAN_ISSUE_APPROVAL
+    when gated, mirroring the original behaviour.
+    """
+    if not ctx.settings.require_approval:
+        return State.READY, None
+    if not spec or not spec.strip():
+        return State.HUMAN_ISSUE_APPROVAL, None
+    if not ctx.settings.auto_approve_enabled:
+        return State.HUMAN_ISSUE_APPROVAL, None
+    try:
+        result = refining.triage_auto_approve(
+            settings=ctx.settings, spec=spec,
+        )
+        if result.decision == "OBVIOUS":
+            return State.READY, result.reason
+    except Exception:
+        log.warning(
+            "auto-approve triage failed, falling back to human approval",
+            exc_info=True,
+        )
+    return State.HUMAN_ISSUE_APPROVAL, None
+
+
 class RefineStage(Stage):
     name = "refine"
     input_state = State.DRAFT
@@ -173,11 +203,11 @@ class RefineStage(Stage):
                             "(split child — spec written by parent's refine agent)",
                             encoding="utf-8",
                         )
-                    next_state = (
-                        State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
-                        else State.READY
-                    )
-                    return Outcome(next_state, "split child — spec already refined")
+                    next_state, auto_reason = _resolve_next_state(ctx, spec)
+                    note = "split child — spec already refined"
+                    if auto_reason:
+                        note += f" (auto-approved: {auto_reason})"
+                    return Outcome(next_state, note)
 
         # --- gather reviewer comments (sendback guard) ---
         reviewer_comments: str | None = None
@@ -211,14 +241,11 @@ class RefineStage(Stage):
                         draft if draft else "(title-only ticket, no body provided)",
                         encoding="utf-8",
                     )
-                    next_state = (
-                        State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
-                        else State.READY
-                    )
-                    return Outcome(
-                        next_state,
-                        f"triage SKIP: {triage.reason}",
-                    )
+                    next_state, auto_reason = _resolve_next_state(ctx, draft)
+                    note = f"triage SKIP: {triage.reason}"
+                    if auto_reason:
+                        note += f" (auto-approved: {auto_reason})"
+                    return Outcome(next_state, note)
             except Exception:
                 log.warning(
                     "%s: triage failed, falling through to full refine",
@@ -261,20 +288,17 @@ class RefineStage(Stage):
                     "proceeding with original draft",
                     ticket.id,
                 )
-                next_state = (
-                    State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
-                    else State.READY
-                )
+                next_state, _auto_reason = _resolve_next_state(ctx, "")
                 return Outcome(next_state, "refined (empty spec — kept original draft)")
 
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
 
-            next_state = (
-                State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
-                else State.READY
-            )
-            return Outcome(next_state, "refined")
+            next_state, auto_reason = _resolve_next_state(ctx, spec)
+            note = "refined"
+            if auto_reason:
+                note += f" (auto-approved: {auto_reason})"
+            return Outcome(next_state, note)
 
         # --- multi-scope split path ---
         children_raw = result.children
@@ -288,21 +312,18 @@ class RefineStage(Stage):
                     "proceeding with original draft",
                     ticket.id,
                 )
-                next_state = (
-                    State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
-                    else State.READY
-                )
+                next_state, _auto_reason = _resolve_next_state(ctx, "")
                 return Outcome(
                     next_state,
                     "refined (empty spec, split degraded — kept original draft)",
                 )
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
-            next_state = (
-                State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
-                else State.READY
-            )
-            return Outcome(next_state, "refined (split degraded — no valid children)")
+            next_state, auto_reason = _resolve_next_state(ctx, spec)
+            note = "refined (split degraded — no valid children)"
+            if auto_reason:
+                note += f" (auto-approved: {auto_reason})"
+            return Outcome(next_state, note)
 
         # Validate and collect valid children.
         valid_children: list[dict] = []
@@ -333,11 +354,11 @@ class RefineStage(Stage):
             # the child's title (which is a fallback).
             if not (result.title and result.title.strip()):
                 ctx.service.set_title(ticket.id, child["title"])
-            next_state = (
-                State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
-                else State.READY
-            )
-            return Outcome(next_state, "refined (single child, no split)")
+            next_state, auto_reason = _resolve_next_state(ctx, child["spec_markdown"])
+            note = "refined (single child, no split)"
+            if auto_reason:
+                note += f" (auto-approved: {auto_reason})"
+            return Outcome(next_state, note)
 
         # Create child tickets.
         child_ids: list[str] = []
@@ -361,15 +382,14 @@ class RefineStage(Stage):
                     ctx.service.set_depends_on(child_ids[i], resolved)
 
         # Transition each child to HUMAN_ISSUE_APPROVAL or READY.
-        child_next_state = (
-            State.HUMAN_ISSUE_APPROVAL if ctx.settings.require_approval
-            else State.READY
-        )
-        for cid in child_ids:
-            ctx.service.transition(
-                cid, child_next_state,
-                note=f"split from {ticket.id}",
+        for i, cid in enumerate(child_ids):
+            child_state, auto_reason = _resolve_next_state(
+                ctx, valid_children[i]["spec_markdown"],
             )
+            child_note = f"split from {ticket.id}"
+            if auto_reason:
+                child_note += f" (auto-approved: {auto_reason})"
+            ctx.service.transition(cid, child_state, note=child_note)
 
         # Close the original ticket.
         ids_note = ", ".join(child_ids)
