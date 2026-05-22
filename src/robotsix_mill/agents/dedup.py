@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
 from pydantic import BaseModel
 
@@ -46,6 +47,16 @@ When unsure, return nulls.
    same change the draft is asking for.  Vague subjects (e.g. "fix",
    "cleanup") are NOT a match.
 4. When you are less than ~90% confident, return null for both fields.
+
+## Commit verification
+
+When `<recent_commits>` is available and a commit subject sounds like a
+plausible match, use `read_file` and `list_dir` to inspect the
+repository on disk before flagging `already_done`.  A commit subject
+can sound like a match when the actual code change is unrelated —
+verify that the change described by the draft is truly present.
+Remember: this guard is conservative.  "When unsure, return nulls"
+still applies.
 """
 
 
@@ -83,6 +94,7 @@ def run_dedup_check(
     draft_body: str,
     candidates_json: str,
     recent_commits_json: str | None,
+    repo_dir: Path | None = None,
 ) -> dict:
     """Return ``{"duplicate_of": ..., "already_done": ..., "reason": ...}``.
 
@@ -95,12 +107,22 @@ def run_dedup_check(
 
     from .retry import call_with_retry
 
+    # Build filesystem tools when a repo_dir is available; the dedup
+    # agent is read-only — only read_file and list_dir are exposed.
+    tools: list = []
+    if repo_dir is not None:
+        from .fs_tools import build_fs_tools
+
+        fs = build_fs_tools(repo_dir, settings)
+        tools = [t for t in fs if t.__name__ in ("read_file", "list_dir")]
+
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
         output_type=PromptedOutput(DedupResult),
         model_name=settings.dedup_model,
         name="dedup",
+        tools=tools,
     )
     # request_limit must be passed via usage_limits=UsageLimits(...),
     # NOT as a bare run_sync kwarg — the bare kwarg raises

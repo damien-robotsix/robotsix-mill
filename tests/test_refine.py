@@ -303,7 +303,7 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     t_a = service.create("Add dark mode toggle", "Add dark mode toggle.")
     t_b = service.create("Add dark mode toggle", "Add dark mode toggle.")
 
-    def fake_dedup(*, settings, draft_title, draft_body,
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
         return {
             "duplicate_of": t_a.id,
@@ -339,7 +339,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
 
     t = service.create("Add X", "make x happen")
 
-    def fake_dedup(*, settings, draft_title, draft_body,
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
         return {
             "duplicate_of": None,
@@ -375,7 +375,7 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
 
     t = service.create("Add X", "make x happen")
 
-    def fake_dedup(*, settings, draft_title, draft_body,
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
         return {
             "duplicate_of": None,
@@ -405,7 +405,7 @@ def test_dedup_skipped_for_empty_title_and_draft(ctx, service, monkeypatch):
     """When both title and draft are empty, blocks BEFORE dedup check."""
     dedup_called = False
 
-    def fake_dedup(*, settings, draft_title, draft_body,
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
         nonlocal dedup_called
         dedup_called = True
@@ -426,7 +426,7 @@ def test_dedup_runs_for_title_only(ctx, service, monkeypatch):
 
     dedup_called = False
 
-    def fake_dedup(*, settings, draft_title, draft_body,
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
         nonlocal dedup_called
         dedup_called = True
@@ -452,7 +452,7 @@ def test_dedup_never_flags_self(ctx, service, monkeypatch):
 
     seen_candidates = None
 
-    def fake_dedup(*, settings, draft_title, draft_body,
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
         nonlocal seen_candidates
         import json
@@ -506,7 +506,7 @@ def test_dedup_no_forge_passes_none_commits(ctx, service, monkeypatch):
 
     seen_commits = "unset"
 
-    def fake_dedup(*, settings, draft_title, draft_body,
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
         nonlocal seen_commits
         seen_commits = recent_commits_json
@@ -536,7 +536,7 @@ def test_dedup_clone_failure_passes_none_commits(ctx, service, monkeypatch):
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
-    def fake_dedup(*, settings, draft_title, draft_body,
+    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
         nonlocal seen_commits
         seen_commits = recent_commits_json

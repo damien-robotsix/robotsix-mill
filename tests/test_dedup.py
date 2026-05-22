@@ -79,3 +79,60 @@ def test_non_dedup_result_output_is_handled(settings, monkeypatch):
     )
     assert out["duplicate_of"] is None
     assert "unexpected type" in out["reason"]
+
+
+def test_fs_tools_passed_when_repo_dir_provided(settings, monkeypatch):
+    """When repo_dir is set, build_agent receives read_file+list_dir
+    fs tools; when None, no tools are passed."""
+
+    # Controlled fs mocks with __name__
+    def _read_file(*a, **k):
+        pass
+    _read_file.__name__ = "read_file"
+
+    def _list_dir(*a, **k):
+        pass
+    _list_dir.__name__ = "list_dir"
+
+    def _write_file(*a, **k):
+        pass
+    _write_file.__name__ = "write_file"
+
+    fs_mocks = [_read_file, _write_file, _list_dir]
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.fs_tools.build_fs_tools",
+        lambda root, s: fs_mocks,
+    )
+
+    captured_tools: list | None = None
+
+    def _capture_agent(*a, tools=None, **k):
+        nonlocal captured_tools
+        captured_tools = tools
+        return _FakeAgent()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent", _capture_agent
+    )
+
+    # Case 1: repo_dir provided → fs tools should be filtered in
+    from pathlib import Path
+
+    dedup.run_dedup_check(
+        settings=settings, draft_title="t", draft_body="b",
+        candidates_json="[]", recent_commits_json=None,
+        repo_dir=Path("/fake/repo"),
+    )
+    assert captured_tools is not None
+    tool_names = {t.__name__ for t in captured_tools}
+    assert tool_names == {"read_file", "list_dir"}
+
+    # Case 2: repo_dir=None → no fs tools
+    captured_tools = None
+    dedup.run_dedup_check(
+        settings=settings, draft_title="t", draft_body="b",
+        candidates_json="[]", recent_commits_json=None,
+        repo_dir=None,
+    )
+    assert captured_tools == []
