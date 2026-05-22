@@ -624,6 +624,44 @@ def test_merge_pr_unexpected_error_status(tmp_path, monkeypatch):
 # merge_pr payload shape
 # ---------------------------------------------------------------------------
 
+def test_merge_pr_find_mr_raises_returns_graceful_dict(tmp_path, monkeypatch):
+    """When _find_mr raises (e.g. project lookup 500), merge_pr returns
+    {"merged": False, "reason": ...} instead of propagating the exception."""
+    # Project lookup returns 500 → _resolve_project_id raises RuntimeError
+    get_map = {
+        "projects/ns%2Fproject": _make_response(500, {}, "internal error"),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.merge_pr(source_branch="feature/x")
+    assert result["merged"] is False
+    assert "GitLab project lookup failed" in result["reason"]
+    assert "500" in result["reason"]
+
+
+def test_pr_status_api_error_returns_none(tmp_path, monkeypatch):
+    """When project lookup fails, pr_status returns None instead of raising."""
+    get_map = {
+        "projects/ns%2Fproject": _make_response(500, {}, "internal error"),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.pr_status(source_branch="feature/x") is None
+
+
+def test_check_status_api_error_returns_none(tmp_path, monkeypatch):
+    """When project lookup fails, check_status returns None instead of raising."""
+    get_map = {
+        "projects/ns%2Fproject": _make_response(500, {}, "internal error"),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.check_status(source_branch="feature/x") is None
+
+
 def test_merge_pr_payload_includes_squash_and_mwps(tmp_path, monkeypatch):
     """Verify the PUT payload has merge_when_pipeline_succeeds, squash, should_remove_source_branch."""
     project_json = {"id": 42}

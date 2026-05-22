@@ -55,48 +55,57 @@ class GitLabForge(Forge):
         )
 
     def pr_status(self, *, source_branch: str) -> dict | None:
-        s = self.settings
-        project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
-        mr = self._find_mr(project_path=project_path, source_branch=source_branch)
-        if mr is None:
+        try:
+            s = self.settings
+            project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+            if mr is None:
+                return None
+            return {
+                "merged": mr["state"] == "merged",
+                "state": mr["state"],
+                "url": mr["web_url"],
+                "mergeable": _map_merge_status(mr.get("merge_status", "")),
+                "sha": (mr.get("diff_refs") or {}).get("head_sha")
+                       or mr.get("sha", ""),
+                "number": mr["iid"],
+            }
+        except Exception:
             return None
-        return {
-            "merged": mr["state"] == "merged",
-            "state": mr["state"],
-            "url": mr["web_url"],
-            "mergeable": _map_merge_status(mr.get("merge_status", "")),
-            "sha": (mr.get("diff_refs") or {}).get("head_sha")
-                   or mr.get("sha", ""),
-            "number": mr["iid"],
-        }
 
     def check_status(self, *, source_branch: str) -> dict | None:
-        s = self.settings
-        project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
-        mr = self._find_mr(project_path=project_path, source_branch=source_branch)
-        if mr is None:
+        try:
+            s = self.settings
+            project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+            if mr is None:
+                return None
+
+            pipeline = self._get_latest_pipeline(project_path, mr["iid"])
+            if pipeline is None:
+                return {"conclusion": None, "failing": []}
+
+            status = pipeline.get("status", "")
+            conclusion = _map_pipeline_status(status)
+
+            failing: list[dict] = []
+            if conclusion == "failure":
+                failing = self._get_failed_jobs(project_path, pipeline["id"])
+
+            return {"conclusion": conclusion, "failing": failing}
+        except Exception:
             return None
 
-        pipeline = self._get_latest_pipeline(project_path, mr["iid"])
-        if pipeline is None:
-            return {"conclusion": None, "failing": []}
-
-        status = pipeline.get("status", "")
-        conclusion = _map_pipeline_status(status)
-
-        failing: list[dict] = []
-        if conclusion == "failure":
-            failing = self._get_failed_jobs(project_path, pipeline["id"])
-
-        return {"conclusion": conclusion, "failing": failing}
-
     def merge_pr(self, *, source_branch: str) -> dict:
-        s = self.settings
-        project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
-        mr = self._find_mr(project_path=project_path, source_branch=source_branch)
-        if mr is None:
-            return {"merged": False, "reason": "MR not found"}
-        return self._merge_mr(project_path, mr["iid"])
+        try:
+            s = self.settings
+            project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+            if mr is None:
+                return {"merged": False, "reason": "MR not found"}
+            return self._merge_mr(project_path, mr["iid"])
+        except Exception as e:
+            return {"merged": False, "reason": str(e)}
 
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
