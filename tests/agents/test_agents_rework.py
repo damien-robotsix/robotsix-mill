@@ -286,7 +286,8 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
     auditing.run_audit_agent(settings=s, repo_dir=tmp_path, memory="")
 
     assert cap["tools"] == [
-        "explore", "list_dir", "read_file", "run_command", "web_research",
+        "detect_duplication", "explore", "list_dir",
+        "read_file", "run_command", "web_research",
     ]
 
 

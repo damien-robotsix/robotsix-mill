@@ -80,6 +80,8 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && apt-get install -y --no-install-recommends \
         git=1:2.47.3-* \
         ca-certificates=20250419 \
+        nodejs=22.17.1-* \
+        npm=10.9.4-* \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only the artifacts built in the builder stage — no source tree.

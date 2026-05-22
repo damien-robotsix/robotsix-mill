@@ -38,6 +38,9 @@ A. CODEBASE HEALTH / MAINTAINABILITY (judged by reading THIS repo —
      (kind/source pseudo-enums) duplicated across modules with no
      shared constant, or settings keys that must appear together in
      config.py, .env, .env.example and docs.
+   Use `detect_duplication` to get deterministic clone-pair data
+   (file paths, line ranges, duplication %) for copy-paste
+   detection — do not rely on visual inspection alone.
    Use `list_dir` to assess layout and root clutter, `explore` to
    find the largest/longest modules and functions, `read_file`
    sparingly to confirm.
@@ -203,12 +206,13 @@ def run_audit_agent(
     if repo_dir is not None:
         from .explore import make_explore_tool
         from .fs_tools import build_fs_tools
+        from .jscpd_tool import make_jscpd_tool
 
         ro = [
             t for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
-        tools = [make_explore_tool(settings, repo_dir), *ro]
+        tools = [make_explore_tool(settings, repo_dir), make_jscpd_tool(repo_dir), *ro]
 
     agent = build_agent(
         settings,
