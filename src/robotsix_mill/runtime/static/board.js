@@ -429,8 +429,8 @@ async function open_(id){
    `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
    ((cs&&cs.length)?cs.map(c=>`<div class="ev"><b class="muted">${c.created_at}</b><br>${esc(c.body)}</div>`).join("")
                    :`<div class="muted" style="font-size:11px">No comments yet.</div>`)+
-   ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><pre>${esc(rt.retrospect)}</pre>`:"")+
-   `<h3>description.md</h3><pre>${esc((d&&d.description)||"")}</pre>`;
+   ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"")+
+   `<h3>description.md</h3><div class="md-body">${renderMD((d&&d.description)||"")}</div>`;
  document.getElementById("drawer").classList.add("open");
 }
 function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
@@ -860,3 +860,4 @@ function createTicketFromFinding(idx,event){
 }
 // -- end deep review ----------------------------------------------------
 refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);
+{}/* poll active */},5000);

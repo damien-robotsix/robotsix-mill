@@ -75,4 +75,5 @@ margin-left:4px">
 </header>
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js"></script>
 <script src="/static/board.js"></script></body></html>"""
