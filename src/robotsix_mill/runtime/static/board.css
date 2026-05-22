@@ -25,6 +25,7 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .cost{font-size:10px;color:#7d828c;margin-left:6px}
 .src-trace-health{background:#1a2a3b;color:#60c0fa}
 .src-health{background:#1a3b2f;color:#34d399}
+.src-test_gap{background:#2e1065;color:#c084fc}
 .src-agent{background:#3b1a1a;color:#f87171}
 .src-deep-review{background:#1a2a3b;color:#60c0fa}
 .origin-link{color:var(--c);text-decoration:underline}

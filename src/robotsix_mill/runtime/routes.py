@@ -691,6 +691,38 @@ def health_check_pass(
     return {"status": "started"}
 
 
+@router.post("/test-gap", status_code=202)
+def test_gap_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a test-gap inspection pass in the BACKGROUND."""
+    from ..test_gap_runner import run_test_gap_pass
+
+    run_id = registry.start("test-gap")
+
+    def _run() -> None:
+        try:
+            r = run_test_gap_pass()
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "test-gap pass done: %d draft(s)", len(r.drafts_created)
+            )
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("test-gap pass failed")
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="test-gap-pass", daemon=True
+    ).start()
+    return {"status": "started"}
+
+
 @router.post("/survey", status_code=202)
 def survey_pass(
     registry=Depends(get_run_registry),

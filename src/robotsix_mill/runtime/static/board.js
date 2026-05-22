@@ -7,7 +7,7 @@ let costDashboardOpen=false;
 let costLookbackHours=24;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="test_gap"?"test-gap":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
 // HTTP helpers built on XMLHttpRequest, not fetch().
 // `fetch` is wrapped by SES / hardened-JS extensions (MetaMask, some
 // privacy/wallet add-ons) and can fail with "NetworkError when
@@ -273,6 +273,20 @@ async function runHealth(){
    alert("Health check failed to start: "+e);
  } finally {
    btn.disabled=false; btn.textContent='Run Health Check';
+ }
+}
+async function runTestGap(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/test-gap");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Test-gap inspection started — new draft tickets will appear on the board if gaps are found.");
+   setTimeout(refresh,3000);
+ } catch(e) {
+   alert("Test-gap check failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Test Gaps';
  }
 }
 async function runAgentCheck(){

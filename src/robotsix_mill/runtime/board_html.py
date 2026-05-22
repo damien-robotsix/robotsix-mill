@@ -22,6 +22,11 @@ background:#0d9488;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Run Health Check
 </button>
+<button onclick="runTestGap()" style="font-size:11px;padding:3px 10px;
+background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Test Gaps
+</button>
 <button onclick="runTraceHealth()" style="font-size:11px;padding:3px 10px;
 background:#0ea5e9;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">

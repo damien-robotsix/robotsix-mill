@@ -50,6 +50,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Agent-check pass",
         "format": "memory_drafts",
     },
+    "test-gap": {
+        "module": "test_gap_runner",
+        "function": "run_test_gap_pass",
+        "label": "Test-gap pass",
+        "format": "memory_drafts",
+    },
     "trace-health": {
         "module": "trace_health_runner",
         "function": "run_trace_health_check",
@@ -192,6 +198,16 @@ def main(argv: list[str] | None = None) -> int:
         "agent-check", help="run an agent definition coherence check"
     )
     p_agent_check.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- test-gap command ---
+    p_test_gap = sub.add_parser(
+        "test-gap", help="run a test-gap coverage inspection pass"
+    )
+    p_test_gap.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
