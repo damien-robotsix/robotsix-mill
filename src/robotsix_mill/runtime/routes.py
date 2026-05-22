@@ -404,6 +404,19 @@ def list_runs(
     return registry.list_all()
 
 
+@router.get("/costs/by-agent")
+def cost_by_agent(
+    lookback_hours: float = 24,
+    settings=Depends(get_settings),
+) -> list[dict]:
+    """Return cost aggregated by agent/stage name for recent Langfuse
+    traces within *lookback_hours* (clamped 1–168)."""
+    from ..langfuse_client import aggregate_cost_by_name
+
+    lookback_hours = max(1.0, min(lookback_hours, 168.0))
+    return aggregate_cost_by_name(settings, lookback_hours)
+
+
 # -- deep-review --------------------------------------------------------
 
 
