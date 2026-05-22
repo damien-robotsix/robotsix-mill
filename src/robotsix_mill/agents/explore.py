@@ -19,7 +19,7 @@ from ..config import Settings
 
 _SYSTEM_PROMPT = """\
 You are a code-orientation scout for ONE git repository. You have
-read-only tools (read_file, list_dir). The caller will read the files
+read-only tools (run_command, read_file, list_dir). The caller will read the files
 it needs itself — your job is only to point it there fast.
 
 Reply with a TIGHT answer:
@@ -32,6 +32,14 @@ job and wastes the caller's context. No speculation, no preamble.
 Return the minimum that orients the caller.
 
 SCOPE DISCIPLINE — always follow these limits:
+- GREP BEFORE READ: for any symbol-lookup, string-search, or
+  pattern-matching task, use ``run_command("grep -rn 'pattern'")``
+  BEFORE reading files.  Only reach for read_file when you need
+  surrounding context beyond what the grep match line provides.
+  Examples:
+    run_command("grep -rn 'UnexpectedModelBehavior'")
+    run_command("grep -rn 'def build_fs_tools' src/")
+    run_command("grep -n '^## ' README.md")
 - FILE BUDGET: read at most 5 files per answer. If you need more, stop
   and return the most relevant files found so far, with a note that
   more exist.
@@ -61,9 +69,9 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     from .fs_tools import build_fs_tools
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
-    # read-only subset of the fs tools (no write_file / run_command)
+    # read-only subset of the fs tools (no write_file / edit_file / delete_file)
     all_fs = build_fs_tools(repo_dir, settings)
-    ro_tools = [t for t in all_fs if t.__name__ in ("read_file", "list_dir")]
+    ro_tools = [t for t in all_fs if t.__name__ in ("read_file", "list_dir", "run_command")]
 
     from .base import _close_async_client, timeout_http_client
 
