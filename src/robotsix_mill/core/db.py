@@ -52,6 +52,32 @@ def _add_column_if_missing(
     log.info("migration: added %s column to %s table", col, table)
 
 
+def _rename_state_value(
+    conn: sqlite3.Connection, old: str, new: str,
+) -> None:
+    """Rename a stored ``state`` enum value in every table that
+    persists it (``ticket`` and ``ticketevent``).
+
+    Needed when a :class:`~..states.State` member is renamed in code:
+    existing rows still store the *old* enum name, and an ORM load of
+    such a row raises ``LookupError`` and crashes startup. Raw SQL only
+    — the ORM enum no longer knows the old name. Idempotent: a second
+    run matches no rows.
+    """
+    renamed = 0
+    for table in ("ticket", "ticketevent"):
+        cur = conn.execute(
+            f"UPDATE {table} SET state = ? WHERE state = ?", (new, old)
+        )
+        renamed += cur.rowcount
+    if renamed:
+        conn.commit()
+        log.info(
+            "migration: renamed state %s -> %s in %d row(s)",
+            old, new, renamed,
+        )
+
+
 def _run_migrations(settings: Settings) -> None:
     """Run idempotent schema migrations on the existing database.
 
@@ -93,6 +119,14 @@ def _run_migrations(settings: Settings) -> None:
         )
         _add_column_if_missing(
             conn, "ticket", "depends_on", "TEXT", "NULL"
+        )
+
+        # State renames (PR #143): existing rows still store the old
+        # enum NAMES; an ORM load of such a row raises LookupError and
+        # crashes startup. Rename the stored values in place.
+        _rename_state_value(conn, "IN_REVIEW", "HUMAN_MR_APPROVAL")
+        _rename_state_value(
+            conn, "AWAITING_APPROVAL", "HUMAN_ISSUE_APPROVAL"
         )
     finally:
         conn.close()
