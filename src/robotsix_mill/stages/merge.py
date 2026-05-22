@@ -153,6 +153,39 @@ class MergeStage(Stage):
             return Outcome(State.FIXING_CI)
 
         # success, pending, or None — standard wait.
+        # Auto-merge gate: when all conditions are met, merge without
+        # waiting for a human.
+        if (
+            conclusion == "success"
+            and s.auto_merge_enabled
+            and s.review_enabled  # hard dependency on review gate
+        ):
+            review_artifact = (
+                ctx.service.workspace(ticket).artifacts_dir / "review.md"
+            )
+            if review_artifact.exists():
+                review_text = review_artifact.read_text(encoding="utf-8")
+                if "auto_merge_eligible: true" in review_text:
+                    result = get_forge(s).merge_pr(source_branch=branch)
+                    if result.get("merged"):
+                        ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                            "merge.md"
+                        ).write_text(
+                            f"auto-merged: {pr.get('url', '')}\n",
+                            encoding="utf-8",
+                        )
+                        log.info("%s: auto-merged → done", ticket.id)
+                        return Outcome(
+                            State.DONE,
+                            f"auto-merged: {pr.get('url', '')}",
+                        )
+                    log.warning(
+                        "%s: auto-merge failed: %s — falling back to human",
+                        ticket.id, result.get("reason", "unknown"),
+                    )
+                    # Fall through to standard HUMAN_MR_APPROVAL re-poll
+
+        # success, pending, or None — standard wait.
         return Outcome(State.HUMAN_MR_APPROVAL)
 
     def _run_rebase(self, ticket: Ticket, ctx: StageContext) -> Outcome:

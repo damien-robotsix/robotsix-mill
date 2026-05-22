@@ -232,6 +232,7 @@ def test_get_pr_found_returns_expected_dict(tmp_path, monkeypatch):
         "url": "http://pr/7",
         "mergeable": True,
         "sha": "abc123",
+        "number": 7,
     }
 
 
@@ -602,3 +603,129 @@ def test_ansi_regex_strips_color():
 
 def test_ansi_regex_plain_text_unchanged():
     assert _ANSI_RE.sub("", "hello world") == "hello world"
+
+
+# ---------------------------------------------------------------------------
+# _merge_pr (internal seam) and merge_pr (public method)
+# ---------------------------------------------------------------------------
+
+def test_merge_pr_success(tmp_path, monkeypatch):
+    """200 response → {"merged": True, "reason": "merged"}."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    merge_resp = {"sha": "abc", "merged": True, "message": "Pull Request successfully merged"}
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    captured = _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    # Monkey-patch _merge_pr to simulate the HTTP seam
+    monkeypatch.setattr(
+        forge, "_merge_pr",
+        lambda *, owner, repo, pull_number: {"merged": True, "reason": "merged"},
+    )
+    result = forge.merge_pr(source_branch="feature/x")
+    assert result == {"merged": True, "reason": "merged"}
+
+
+def test_merge_pr_405_not_allowed(tmp_path, monkeypatch):
+    """405 → {"merged": False} with branch-protection reason."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge, "_merge_pr",
+        lambda *, owner, repo, pull_number: {
+            "merged": False, "reason": "merge not allowed (branch protection?)",
+        },
+    )
+    result = forge.merge_pr(source_branch="feature/x")
+    assert result["merged"] is False
+    assert "branch protection" in result["reason"]
+
+
+def test_merge_pr_409_conflict(tmp_path, monkeypatch):
+    """409 → {"merged": False} with not-mergeable reason."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge, "_merge_pr",
+        lambda *, owner, repo, pull_number: {
+            "merged": False, "reason": "PR is not mergeable",
+        },
+    )
+    result = forge.merge_pr(source_branch="feature/x")
+    assert result["merged"] is False
+    assert "not mergeable" in result["reason"]
+
+
+def test_merge_pr_network_error(tmp_path, monkeypatch):
+    """Network error → {"merged": False} (no raise)."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(
+        forge, "_merge_pr",
+        lambda *, owner, repo, pull_number: {"merged": False, "reason": "connection refused"},
+    )
+    result = forge.merge_pr(source_branch="feature/x")
+    assert result["merged"] is False
+
+
+def test_merge_pr_not_found(tmp_path, monkeypatch):
+    """PR not found → {"merged": False, "reason": "PR not found"}."""
+    get_map = {"repos/o/r/pulls": _make_response(200, [])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.merge_pr(source_branch="feature/x")
+    assert result == {"merged": False, "reason": "PR not found"}

@@ -24,6 +24,16 @@ class ReviewVerdict(BaseModel):
                     "specific, actionable issues. For NEEDS_DISCUSSION, "
                     "explain what requires human judgment."
     )
+    auto_merge_eligible: bool = Field(
+        default=False,
+        description=(
+            "Set to True ONLY when you are highly confident the change is "
+            "safe to auto-merge without human review. The change must be "
+            "small, self-contained, well-tested by existing tests, and "
+            "carry no architectural risk. When in ANY doubt, leave False — "
+            "the PR will wait for a human merge."
+        ),
+    )
 
 
 SYSTEM_PROMPT = """\
@@ -58,6 +68,17 @@ Return your verdict:
 - NEEDS_DISCUSSION: you see something that requires human judgment
   (ambiguous design trade-off, unclear spec interpretation). Explain
   what needs discussion in comments.
+
+The ``auto_merge_eligible`` field:
+Set this to ``true`` ONLY when the change meets ALL of these criteria:
+- The diff is small and focused (single concern, few files).
+- Existing tests cover the changed code paths (no new untested logic).
+- No new infrastructure, framework, or architectural pattern is introduced.
+- You see zero risk of regression or unintended side-effects.
+
+Default to ``false`` — when uncertain, choose the human path. Even an
+APPROVE verdict may have ``auto_merge_eligible: false`` if the change is
+large but correct.
 """
 
 

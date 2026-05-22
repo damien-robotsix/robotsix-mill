@@ -67,6 +67,13 @@ class ReviewStage(Stage):
                 f"review agent error — resumable: {e}",
             )
 
+        # Persist review artifact for downstream consumers (e.g. auto-merge).
+        ws.artifacts_dir.joinpath("review.md").write_text(
+            f"verdict: {verdict.verdict}\n"
+            f"auto_merge_eligible: {str(verdict.auto_merge_eligible).lower()}\n",
+            encoding="utf-8",
+        )
+
         # Route based on verdict.
         if verdict.verdict == "APPROVE":
             return Outcome(State.DELIVERABLE, "review approved")

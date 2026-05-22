@@ -104,6 +104,16 @@ class GitHubForge(Forge):
         owner, repo = _parse_owner_repo(s.forge_remote_url or "")
         return self._check_status(owner=owner, repo=repo, head=source_branch)
 
+    def merge_pr(self, *, source_branch: str) -> dict:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return {"merged": False, "reason": "PR not found"}
+        return self._merge_pr(
+            owner=owner, repo=repo, pull_number=pr["number"],
+        )
+
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict]:
@@ -151,7 +161,39 @@ class GitHubForge(Forge):
             "url": pr.get("html_url", ""),
             "mergeable": pr.get("mergeable"),  # True/False/None
             "sha": (pr.get("head") or {}).get("sha", ""),
+            "number": pr["number"],
         }
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _merge_pr(
+        self, *, owner: str, repo: str, pull_number: int,
+    ) -> dict:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s))
+        url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/merge"
+        try:
+            with httpx.Client(timeout=30) as c:
+                r = c.put(url, headers=headers, json={"merge_method": "squash"})
+                if r.status_code == 200:
+                    return {"merged": True, "reason": "merged"}
+                if r.status_code == 405:
+                    return {
+                        "merged": False,
+                        "reason": "merge not allowed (branch protection?)",
+                    }
+                if r.status_code == 409:
+                    return {"merged": False, "reason": "PR is not mergeable"}
+                return {
+                    "merged": False,
+                    "reason": f"HTTP {r.status_code}: {r.text[:200]}",
+                }
+        except Exception as e:
+            return {"merged": False, "reason": str(e)}
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _check_status(
