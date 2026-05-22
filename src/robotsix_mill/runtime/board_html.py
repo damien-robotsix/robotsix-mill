@@ -57,6 +57,11 @@ background:#0891b2;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   + Ask
 </button>
+<button onclick="newEpic()" style="font-size:11px;padding:3px 10px;
+background:#9333ea;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  + Epic
+</button>
 <button onclick="newTicket()" style="font-size:11px;padding:3px 10px;
 background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
