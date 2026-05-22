@@ -105,7 +105,7 @@ async def test_hook_does_not_fire_for_non_done_transition(ctx, service, monkeypa
             # A legal, non-DONE outcome from READY (READY -> CODE_REVIEW
             # is not a direct edge; the path is READY -> DOCUMENTING ->
             # CODE_REVIEW). DELIVERABLE exercises the same "not DONE" case.
-            return Outcome(State.DELIVERABLE, "deliverable")
+            return Outcome(State.DELIVERABLE, "deliverable time")
 
     monkeypatch.setitem(registry.STAGES, "implement", ReviewStage())
 

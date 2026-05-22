@@ -17,7 +17,7 @@
 #    MILL_SANDBOX_IMAGE is pinned to :dev here (it's a local-build
 #    artifact, only meaningful when you local-build — that's why it
 #    lives here and not in .env). All other runtime config stays in
-#    .env (single source of truth).
+#    .env / secrets.env.
 #
 # Run only the `mill` service locally (the base `watchtower` service is
 # for deployment, not dev): `docker compose up -d --build mill`.

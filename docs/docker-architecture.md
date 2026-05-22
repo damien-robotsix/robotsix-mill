@@ -99,7 +99,7 @@ disposable VM.
 ## Operational notes (durable gotchas)
 
 - **`DOCKER_GID` must match the host socket group.** Find it with
-  `stat -c %g /var/run/docker.sock` and set it in `.env`. The non-root
+  `stat -c %g /var/run/docker.sock` and set it in `.env` (or `secrets.env` if preferred). The non-root
   `mill` user is added to that gid (`group_add`) so it can use the
   socket. Wrong gid → mill can't reach the socket → sandbox fails.
 - **`MILL_SANDBOX_DATA_MOUNT`** must be the **host** absolute path of

@@ -32,8 +32,8 @@ def _no_real_http(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_dotenv(monkeypatch):
-    """Hermeticity: never let the developer's ./.env leak into tests
-    (it can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
+    """Hermeticity: never let the developer's ./.env or ./secrets.env leak into
+    tests (they can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
     the suite hit the network). Disable env_file for every Settings()
     AND clear EVERY ambient credential/endpoint var — pydantic-settings
     reads os.environ regardless of env_file, so anything exported in the

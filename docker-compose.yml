@@ -23,6 +23,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     env_file:
       - .env
+      - secrets.env
     environment:
       # sibling sandbox containers must bind the host path of ./.data
       # (the docker daemon resolves -v on the host, not in this container)
