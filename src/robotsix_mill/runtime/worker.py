@@ -127,6 +127,7 @@ class Worker:
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
         self._ci_monitor_task: asyncio.Task | None = None
+        self._test_gap_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -365,6 +366,24 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("health poll failed")
 
+    async def _test_gap_poll_loop(self) -> None:
+        """Periodic test-gap pass loop. Only runs when
+        ``MILL_TEST_GAP_PERIODIC=true``."""
+        settings = self.ctx.settings
+        interval = max(60, settings.test_gap_interval_seconds)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                log.info("Starting periodic test-gap pass")
+                from ..test_gap_runner import run_test_gap_pass
+                result = run_test_gap_pass()
+                log.info(
+                    "Test-gap pass completed, created %d draft(s)",
+                    len(result.drafts_created),
+                )
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("test-gap poll failed")
+
     async def _ci_monitor_poll_loop(self) -> None:
         """Periodic CI monitor poll: watch the forge target branch for
         completed workflow-run failures and file a ``source="ci"`` draft
@@ -572,13 +591,20 @@ class Worker:
                 "CI monitor enabled: interval %ds",
                 self.ctx.settings.ci_monitor_interval_seconds,
             )
+        # Opt-in periodic test-gap
+        if self.ctx.settings.test_gap_periodic and self._test_gap_task is None:
+            self._test_gap_task = asyncio.create_task(self._test_gap_poll_loop())
+            log.info(
+                "Periodic test-gap enabled: interval %ds",
+                self.ctx.settings.test_gap_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
         for attr in (
             "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
-            "_agent_check_task",
+            "_agent_check_task", "_test_gap_task",
         ):
             t = getattr(self, attr)
             if t is not None:

@@ -404,6 +404,29 @@ class Settings(BaseSettings):
         default=86400, alias="MILL_TRACE_HEALTH_INTERVAL_SECONDS"
     )
 
+    # --- test-gap agent (dedicated test-coverage oversight) ---
+    # Model for the test-gap agent. Defaults to the same capable model
+    # as audit/health. Override with MILL_TEST_GAP_MODEL.
+    test_gap_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_TEST_GAP_MODEL"
+    )
+    # When True, the worker runs periodic test-gap passes at the
+    # configured interval. Default False (opt-in).
+    test_gap_periodic: bool = Field(
+        default=False, alias="MILL_TEST_GAP_PERIODIC"
+    )
+    # Interval between periodic test-gap passes (seconds). Only used
+    # when MILL_TEST_GAP_PERIODIC=true.
+    test_gap_interval_seconds: int = Field(
+        default=86400, alias="MILL_TEST_GAP_INTERVAL_SECONDS"
+    )
+    # Path to the test-gap agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives
+    # <data_dir>/test_gap_memory.md.
+    test_gap_memory_path: Path | None = Field(
+        default=None, alias="MILL_TEST_GAP_MEMORY_PATH"
+    )
+
     # --- agent-check agent (agent-definition coherence) ---
     # Model for the agent-check meta-agent. Defaults to the same cheap
     # model as other read-only periodic agents. Override with
@@ -550,6 +573,13 @@ class Settings(BaseSettings):
         if self.health_memory_path is not None:
             return self.health_memory_path
         return self.data_dir / "health_memory.md"
+
+    @property
+    def test_gap_memory_file(self) -> Path:
+        """Resolved path to the test-gap agent's Markdown memory ledger."""
+        if self.test_gap_memory_path is not None:
+            return self.test_gap_memory_path
+        return self.data_dir / "test_gap_memory.md"
 
     @property
     def survey_memory_file(self) -> Path:
