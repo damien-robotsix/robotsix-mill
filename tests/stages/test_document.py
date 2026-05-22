@@ -237,6 +237,32 @@ def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
     assert "network unreachable" in out.note
 
 
+# --- commit_all failure → warn-and-pass --------------------------------
+
+def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    def _fake_doc(self, *, settings, repo_dir, diff, spec):
+        del self, settings, diff, spec
+        (Path(repo_dir) / "README.md").write_text("# Changed\n")
+        return DocResult(user_facing=True, summary="updated README")
+
+    def _failing_commit_all(repo, msg):
+        raise RuntimeError("commit failed")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.document.git_ops.commit_all",
+        _failing_commit_all,
+    )
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.CODE_REVIEW  # not BLOCKED
+    assert out.note == "updated README"
+
+
 # --- review disabled → transitions to DELIVERABLE ---------------------
 
 def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
