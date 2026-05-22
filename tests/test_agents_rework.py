@@ -59,9 +59,8 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "delete_file", "edit_file", "explore", "list_dir", "read_file",
-        "report_issue", "run_tests", "web_research", "write_file",
+        "report_issue", "run_command", "run_tests", "web_research", "write_file",
     ]
-    assert "run_command" not in fake_ai["tools"]
     assert fake_ai["name"] == "implement"
 
 
@@ -183,3 +182,41 @@ def test_build_agent_without_name_is_compatible(tmp_path, monkeypatch):
         s, system_prompt="test",
     )
     assert cap["name"] is None
+
+
+def test_audit_agent_tool_set(tmp_path, monkeypatch):
+    """AC: audit agent gets explore, list_dir, read_file, run_command,
+    and web_research — exactly five tools."""
+    from robotsix_mill.agents import auditing
+
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            cap["tools"] = sorted(
+                t.__name__ for t in (kw.get("tools") or [])
+            )
+
+        def run_sync(self, prompt, *, usage_limits=None, **kw):
+            from robotsix_mill.agents.auditing import AuditResult
+            return type("R", (), {
+                "output": AuditResult(
+                    draft_ticket_titles=[], draft_ticket_bodies=[],
+                    gap_ids=[], updated_memory="",
+                )
+            })()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    s = _settings(tmp_path)
+    auditing.run_audit_agent(settings=s, repo_dir=tmp_path, memory="")
+
+    assert cap["tools"] == [
+        "explore", "list_dir", "read_file", "run_command", "web_research",
+    ]
