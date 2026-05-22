@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 
+from ..agents.documenting import DocResult
 from ..core.models import Ticket
 from ..core.states import State
 from ..vcs import git_ops
@@ -83,10 +84,17 @@ class DocumentStage(Stage):
         next_state = State.CODE_REVIEW if s.review_enabled else State.DELIVERABLE
 
         if doc_result.user_facing:
-            if git_ops.has_changes(repo_dir):
-                git_ops.commit_all(
-                    repo_dir,
-                    f"mill(docs): {ticket.title} ({ticket.id})",
+            try:
+                if git_ops.has_changes(repo_dir):
+                    git_ops.commit_all(
+                        repo_dir,
+                        f"mill(docs): {ticket.title} ({ticket.id})",
+                    )
+            except Exception:
+                log.warning(
+                    "%s: doc commit failed — passing through",
+                    ticket.id,
+                    exc_info=True,
                 )
             return Outcome(next_state, doc_result.summary)
 
@@ -103,7 +111,7 @@ class DocumentStage(Stage):
         repo_dir,
         diff: str,
         spec: str,
-    ):
+    ) -> DocResult:
         """Run the documentation agent to classify the diff and update docs.
 
         Returns a ``DocResult`` with ``user_facing`` (bool) and ``summary``

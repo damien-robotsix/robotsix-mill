@@ -25,8 +25,9 @@ class DocResult(BaseModel):
                     "impact, test/CI-only, lint/format)."
     )
     summary: str = Field(
+        min_length=1,
         description="Summary of documentation changes made, or a note "
-                    "that no changes were needed."
+                    "that no changes were needed.",
     )
 
 
@@ -99,7 +100,7 @@ def run_doc_agent(
         output_type=PromptedOutput(DocResult),
         tools=[
             make_explore_tool(settings, repo_dir),
-            *(t for t in fs if t.__name__ in ("read_file", "write_file", "list_dir", "edit_file")),
+            *(t for t in fs if t.__name__ in {"read_file", "write_file", "list_dir", "edit_file"}),
         ],
         web=False,
         report_issue=False,

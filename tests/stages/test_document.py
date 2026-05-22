@@ -139,6 +139,31 @@ def test_internal_skips_commit(ctx_factory, monkeypatch):
     assert (repo_dir / "README.md").read_text() == "seed\n"
 
 
+# --- user-facing=True but no changes → no commit ----------------------
+
+def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    commits_before = _git_log(repo_dir).count("\n") + 1
+
+    def _fake_doc(self, *, settings, repo_dir, diff, spec):
+        del self, settings, repo_dir, diff, spec
+        # Agent claims user-facing but writes nothing.
+        return DocResult(user_facing=True, summary="updated README")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.CODE_REVIEW
+    assert out.note == "updated README"
+
+    # No new commits — agent claimed user-facing but wrote nothing.
+    commits_after = _git_log(repo_dir).count("\n") + 1
+    assert commits_after == commits_before
+
+
 # --- empty diff → pass-through without agent --------------------------
 
 def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
