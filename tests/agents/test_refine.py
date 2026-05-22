@@ -1,11 +1,12 @@
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
 
 from robotsix_mill.agents import dedup
 from robotsix_mill.agents import refining
-from robotsix_mill.agents.refining import ChildSpec, RefineResult
+from robotsix_mill.agents.refining import ChildSpec, FileMapEntry, RefineResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -13,12 +14,12 @@ from robotsix_mill.stages.refine import RefineStage
 from robotsix_mill.runtime.worker import process_ticket
 
 
-def _single(spec: str) -> RefineResult:
+def _single(spec: str, file_map=None) -> RefineResult:
     """Shorthand for a single-scope refine result."""
-    return RefineResult(split=False, spec_markdown=spec)
+    return RefineResult(split=False, spec_markdown=spec, file_map=file_map)
 
 
-def _split(*children: dict) -> RefineResult:
+def _split(*children: dict, file_map=None) -> RefineResult:
     """Shorthand for a split refine result."""
     return RefineResult(
         split=True,
@@ -30,6 +31,7 @@ def _split(*children: dict) -> RefineResult:
             )
             for c in children
         ],
+        file_map=file_map,
     )
 
 
@@ -2050,3 +2052,102 @@ def test_epic_body_applied_immediately_in_split_path(ctx, service, monkeypatch, 
 
     # The original (child) ticket is closed.
     assert service.get(child.id).state is State.CLOSED
+
+
+# --- file_map artifact tests ---
+
+
+def test_file_map_written_to_artifacts(ctx, service, monkeypatch):
+    """Non-split refine with a file_map → file_map.json exists in artifacts/,
+    contains valid JSON with file and note keys."""
+    entries = [
+        FileMapEntry(file="src/foo.py", note="main module"),
+        FileMapEntry(file="src/bar.py", note="helper utilities"),
+    ]
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: _single("## Problem\nx\n## Scope\n- y\n", file_map=entries),
+    )
+
+    t = service.create("Add X", "make x happen")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    artifact = service.workspace(t).artifacts_dir / "file_map.json"
+    assert artifact.exists()
+
+    data = json.loads(artifact.read_text(encoding="utf-8"))
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert data[0] == {"file": "src/foo.py", "note": "main module"}
+    assert data[1] == {"file": "src/bar.py", "note": "helper utilities"}
+
+
+def test_file_map_none_not_written(ctx, service, monkeypatch):
+    """file_map=None (default) → no file_map.json artifact."""
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: _single("## Problem\nx\n", file_map=None),
+    )
+
+    t = service.create("Add X", "make x happen")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    artifact = service.workspace(t).artifacts_dir / "file_map.json"
+    assert not artifact.exists()
+
+
+def test_file_map_empty_list_not_written(ctx, service, monkeypatch):
+    """file_map=[] → no file_map.json artifact (empty list is falsy)."""
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: _single("## Problem\nx\n", file_map=[]),
+    )
+
+    t = service.create("Add X", "make x happen")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    artifact = service.workspace(t).artifacts_dir / "file_map.json"
+    assert not artifact.exists()
+
+
+def test_file_map_written_in_split_path(ctx, service, monkeypatch):
+    """Split refine with file_map → file_map.json written to parent's
+    artifacts before parent is closed."""
+    entries = [
+        FileMapEntry(file="src/models.py", note="User model"),
+        FileMapEntry(file="src/routes.py", note="API routes"),
+    ]
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: _split(
+            {"title": "Child A", "spec_markdown": "## Problem\nA\n## Scope\n- a\n"},
+            {"title": "Child B", "spec_markdown": "## Problem\nB\n## Scope\n- b\n"},
+            file_map=entries,
+        ),
+    )
+
+    parent = service.create("Multi-change", "draft")
+    out = RefineStage().run(parent, ctx)
+
+    assert out.next_state is State.CLOSED
+    artifact = service.workspace(parent).artifacts_dir / "file_map.json"
+    assert artifact.exists()
+
+    data = json.loads(artifact.read_text(encoding="utf-8"))
+    assert len(data) == 2
+    assert data[0] == {"file": "src/models.py", "note": "User model"}
+    assert data[1] == {"file": "src/routes.py", "note": "API routes"}
+
+
+def test_file_map_present_in_system_prompt():
+    """Verifies the new file_map instruction appears in SYSTEM_PROMPT."""
+    from robotsix_mill.agents.refining import SYSTEM_PROMPT
+
+    assert "Always produce a ``file_map``" in SYSTEM_PROMPT
+    assert '``file_map=[{"file": "path/to/file.py", "note": "reason this file matters"}, ...]``' in SYSTEM_PROMPT
+    assert "Keep it to ≤ 20 files" in SYSTEM_PROMPT
+    assert "do not guess" in SYSTEM_PROMPT
+    assert "``file_map=[]``" in SYSTEM_PROMPT

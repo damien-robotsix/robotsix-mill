@@ -60,6 +60,13 @@ class ChildSpec(BaseModel):
     depends_on: list[int] = []
 
 
+class FileMapEntry(BaseModel):
+    """A file relevant to the ticket, with a one-line note on its role."""
+
+    file: str
+    note: str
+
+
 class RefineResult(BaseModel):
     """Refine agent output."""
 
@@ -69,6 +76,7 @@ class RefineResult(BaseModel):
     updated_memory: str = ""
     title: str | None = None
     epic_body: str | None = None
+    file_map: list[FileMapEntry] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -427,6 +435,14 @@ Rules for splitting:
   explaining the global strategy in a way that stays useful as
   subsequent children are refined. Keep the epic body concise and
   strategic (not a rehash of the child spec).
+- Always produce a ``file_map``: a short list of the source files
+  most relevant to this ticket, each with a one-line note on its
+  role.  Format:
+  ``file_map=[{"file": "path/to/file.py", "note": "reason this file matters"}, ...]``.
+  Keep it to ≤ 20 files.  Only include files you actually explored
+  or read — do not guess.  If no files are relevant (e.g. a pure
+  configuration change with no codebase exploration needed), return
+  ``file_map=[]``.
 """
 
 REVIEWER_SENDBACK_PROMPT = """\
@@ -478,6 +494,14 @@ that can each ship alone, split into focused children:
   in the same split that must be completed first.
 - The union of all children's scope must faithfully cover the entire
   original draft — nothing dropped, nothing added.
+- Always produce a ``file_map``: a short list of the source files
+  most relevant to this ticket, each with a one-line note on its
+  role.  Format:
+  ``file_map=[{"file": "path/to/file.py", "note": "reason this file matters"}, ...]``.
+  Keep it to ≤ 20 files.  Only include files you actually explored
+  or read — do not guess.  If no files are relevant (e.g. a pure
+  configuration change with no codebase exploration needed), return
+  ``file_map=[]``.
 """
 
 
