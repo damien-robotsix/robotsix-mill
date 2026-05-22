@@ -12,7 +12,7 @@ from robotsix_mill.core.states import (
 )
 
 # Known stage names that STAGE_FOR_STATE values must belong to.
-VALID_STAGE_NAMES = {"refine", "implement", "review", "deliver", "merge", "ci_fix", "retrospect", "answer"}
+VALID_STAGE_NAMES = {"refine", "implement", "document", "review", "deliver", "merge", "ci_fix", "retrospect", "answer"}
 
 # States that should NOT appear as keys in STAGE_FOR_STATE.
 NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.HUMAN_ISSUE_APPROVAL, State.ANSWERED, State.EPIC_OPEN, State.EPIC_CLOSED}
@@ -183,11 +183,23 @@ def test_errored_as_destination():
 
 
 # ---------------------------------------------------------------------------
-# CODE_REVIEW spot-checks
+# DOCUMENTING + CODE_REVIEW spot-checks
 # ---------------------------------------------------------------------------
 
-def test_ready_to_code_review():
-    assert can_transition(State.READY, State.CODE_REVIEW) is True
+def test_ready_to_documenting():
+    assert can_transition(State.READY, State.DOCUMENTING) is True
+
+
+def test_documenting_to_code_review():
+    assert can_transition(State.DOCUMENTING, State.CODE_REVIEW) is True
+
+
+def test_documenting_to_deliverable():
+    assert can_transition(State.DOCUMENTING, State.DELIVERABLE) is True
+
+
+def test_stage_for_state_documenting():
+    assert STAGE_FOR_STATE[State.DOCUMENTING] == "document"
 
 
 def test_code_review_to_deliverable():

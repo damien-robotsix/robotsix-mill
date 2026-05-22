@@ -241,7 +241,7 @@ def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
 
     out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
     repo = ctx.service.workspace(t).dir / "repo"
     assert (repo / "feature.txt").exists()
     head = subprocess.run(
@@ -358,7 +358,7 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     ctx.service.transition(t.id, State.READY, "retry")
     second = ImplementStage().run(ctx.service.get(t.id), ctx)
 
-    assert second.next_state is State.DELIVERABLE
+    assert second.next_state is State.DOCUMENTING
     assert n["i"] == 2                                      # coordinator re-run
     assert (repo / ".git").stat().st_ino == git_inode      # NOT re-cloned
     assert (repo / "first.txt").exists()                   # prior WIP kept
@@ -424,7 +424,7 @@ def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
 
     out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
 
 
 def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
@@ -442,7 +442,7 @@ def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     )
 
     out = ImplementStage().run(t, ctx)
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
 
 
 def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch):
@@ -458,11 +458,11 @@ def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch)
     )
 
     out = ImplementStage().run(t, ctx)
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
 
 
-def test_success_to_code_review_when_review_enabled(ctx_factory, tmp_path, monkeypatch):
-    """When MILL_REVIEW_ENABLED=true, implement transitions to CODE_REVIEW."""
+def test_success_to_documenting_when_review_enabled(ctx_factory, tmp_path, monkeypatch):
+    """Implement always transitions to DOCUMENTING regardless of review_enabled."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote,
@@ -476,7 +476,7 @@ def test_success_to_code_review_when_review_enabled(ctx_factory, tmp_path, monke
 
     out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.CODE_REVIEW
+    assert out.next_state is State.DOCUMENTING
 
 
 # --- epic context -------------------------------------------------------
@@ -508,7 +508,7 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
     out = ImplementStage().run(child, ctx)
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
     assert len(seen_spec) == 1
     expected = "<epic_context>\nHigh-level goal: unify UX\n</epic_context>"
     assert seen_spec[0].startswith(expected)

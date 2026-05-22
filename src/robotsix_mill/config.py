@@ -291,6 +291,12 @@ class Settings(BaseSettings):
         default="deepseek/deepseek-v4-pro", alias="MILL_REVIEW_MODEL"
     )
 
+    # Model for the documentation agent. Defaults to the capable
+    # coordinator model.
+    doc_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_DOC_MODEL"
+    )
+
     # --- retrospect stage (done -> reviewed) ---
     # When True, retrospect may file an improvement DRAFT. Until the
     # human-gate-after-refine exists, that draft auto-flows to done and

@@ -159,7 +159,7 @@ class ImplementStage(Stage):
                 ImplementStage._finalize(
                     ctx, ticket, repo_dir, branch, summary, ok=True
                 )
-                next_state = State.CODE_REVIEW if settings.review_enabled else State.DELIVERABLE
+                next_state = State.DOCUMENTING
                 return Outcome(
                     next_state, summary[:200] or "implemented"
                 )
