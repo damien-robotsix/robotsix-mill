@@ -44,6 +44,29 @@ adds `build: .` back to the `mill` service. Docker Compose merges the
 two files automatically. Omit `--build` to reuse a previously cached
 local image.
 
+## Enable GitHub Pages (one-time setup)
+
+The `.github/workflows/docs.yml` workflow builds the MkDocs site and
+pushes it to the `gh-pages` branch automatically on every merge to
+`main`. However, GitHub Pages must be enabled **once** on the
+repository before GitHub will serve that branch — the workflow alone
+is not enough.
+
+Two equivalent ways to enable it:
+
+- **UI:** Repository **Settings → Pages** → Source =
+  "Deploy from a branch" → Branch = `gh-pages`, Folder = `/ (root)`
+  → **Save**.
+- **CLI:**
+  ```sh
+  gh api -X POST repos/<owner>/<repo>/pages \
+    -F 'source[branch]=gh-pages' \
+    -F 'source[path]=/'
+  ```
+
+Once enabled, the existing latest `gh-pages` commit is served
+immediately at `https://<owner>.github.io/<repo>/`.
+
 ## See also
 
 - [README.md](../README.md) — project overview and quickstart

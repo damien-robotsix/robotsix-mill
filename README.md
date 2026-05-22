@@ -171,7 +171,7 @@ Docker.
 | [docs/configuration.md](docs/configuration.md) | Complete env-var reference (all `MILL_*` vars + forge/tracing/notifications) |
 | [docs/ticket-provenance.md](docs/ticket-provenance.md) | How `source` tracks which actor created each ticket |
 | [docs/cost-and-resilience.md](docs/cost-and-resilience.md) | Per-ticket cost (on-demand Langfuse read) and cost controls |
-| [docs/deployment.md](docs/deployment.md) | Continuous deployment via GitHub Actions + Watchtower |
+| [docs/deployment.md](docs/deployment.md) | Continuous deployment via GitHub Actions + Watchtower; includes one-time GitHub Pages setup |
 | [docs/approval-gate.md](docs/approval-gate.md) | Human approval gate after refine |
 | [docs/dedup-guard.md](docs/dedup-guard.md) | Pre-refine duplicate / already-done check |
 | [docs/blocked-ticket-recovery.md](docs/blocked-ticket-recovery.md) | Recovering from BLOCKED tickets without raw DB edits |
