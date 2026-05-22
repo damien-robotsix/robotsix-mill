@@ -402,6 +402,7 @@ def aggregate_cost_by_name(
                         "fromTimestamp": from_timestamp,
                         "limit": PAGE_SIZE,
                         "page": page,
+                        "orderBy": "timestamp.desc",
                     },
                     headers={"Authorization": f"Basic {auth}"},
                 )
