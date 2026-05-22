@@ -1798,7 +1798,7 @@ def test_auto_approve_obvious_skips_human_gate(ctx, service, monkeypatch, tmp_pa
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.READY
-    assert "auto-approved: doc-only typo fix in a single file" in out.note
+    assert "auto-approve: OBVIOUS — doc-only typo fix in a single file" in out.note
 
 
 def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tmp_path):
@@ -1825,7 +1825,7 @@ def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tm
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert "auto-approved" not in out.note
+    assert "auto-approve: NEEDS_APPROVAL — new API endpoint, logic change" in out.note
 
 
 def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp_path):
@@ -1850,7 +1850,7 @@ def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert "auto-approved" not in out.note
+    assert "auto-approve: triage failed — falling back to human approval" in out.note
 
 
 def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path):
