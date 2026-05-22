@@ -36,6 +36,11 @@ Rules:
   with what's there.  Do not refuse to produce tickets.
 - Titles should start with a verb when possible (e.g. "Add X",
   "Refactor Y", "Fix Z", "Document W").
+- Operator comments may be provided in a <operator_comments> block.
+  When present, treat them as authoritative direction: they represent
+  the human operator's explicit guidance on how to break down this
+  epic.  Follow the operator's instructions even if they contradict
+  the epic description.
 
 Return a list of child ticket titles and a parallel list of bodies
 (same length; same order).
@@ -60,6 +65,7 @@ def run_epic_breakdown_agent(
     settings: Settings,
     epic_title: str,
     epic_description: str,
+    comments: str = "",
 ) -> EpicBreakdownResult:
     """Break an epic into well-scoped child tickets.
 
@@ -67,6 +73,10 @@ def run_epic_breakdown_agent(
     filesystem access.  Returns a structured ``EpicBreakdownResult``
     with parallel ``child_titles`` and ``child_bodies`` lists, and
     an optional ``epic_body`` field with a revised epic description.
+
+    When *comments* is non-empty, the operator's comment history is
+    appended to the prompt in an ``<operator_comments>`` block so the
+    agent can follow the operator's explicit direction.
 
     The agent is constructed via :func:`~.base.build_agent` with
     ``PromptedOutput(EpicBreakdownResult)``, ``web=False``,
@@ -92,9 +102,13 @@ def run_epic_breakdown_agent(
     )
     prompt = (
         f"<epic_title>{epic_title}</epic_title>\n\n"
-        f"<epic_description>\n{epic_description}\n</epic_description>\n\n"
-        "Break this epic into well-scoped child tickets."
+        f"<epic_description>\n{epic_description}\n</epic_description>"
     )
+    if comments:
+        prompt += (
+            f"\n\n<operator_comments>\n{comments}\n</operator_comments>"
+        )
+    prompt += "\n\nBreak this epic into well-scoped child tickets."
     try:
         result = call_with_retry(
             lambda: agent.run_sync(prompt),

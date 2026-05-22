@@ -1141,3 +1141,203 @@ def test_generate_children_applies_epic_body(client, service, monkeypatch):
     epic_desc = service.workspace(epic).read_description()
     assert "Revised epic strategy" in epic_desc
     assert "auth, roles, audit" in epic_desc
+
+
+# ---------------------------------------------------------------------------
+# add_comment → epic re-processing tests
+# ---------------------------------------------------------------------------
+
+
+def test_add_comment_on_epic_triggers_reprocess(client, service, monkeypatch):
+    """Comment on an epic spawns a background thread that calls the
+    breakdown agent and creates new children."""
+    import time
+
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
+    epic = service.create("Epic to comment on", "Epic desc", kind="epic")
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        lambda **kw: EpicBreakdownResult(
+            child_titles=["New child from comment"],
+            child_bodies=["Body from comment"],
+        ),
+    )
+
+    r = client.post(
+        f"/tickets/{epic.id}/comments",
+        json={"body": "Break this into a new child please"},
+    )
+    assert r.status_code == 201
+    comment = r.json()
+    assert comment["body"] == "Break this into a new child please"
+
+    # Agent runs in background; poll for children.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        children = client.get(f"/tickets/{epic.id}/children").json()
+        if len(children) >= 1:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("children were not created within timeout")
+
+    assert len(children) == 1
+    assert children[0]["title"] == "New child from comment"
+
+
+def test_add_comment_on_non_epic_does_not_trigger_reprocess(
+    client, service, monkeypatch,
+):
+    """Comment on a task ticket does NOT invoke the breakdown agent."""
+    import threading
+
+    agent_called = threading.Event()
+
+    def fake_agent(**kw):
+        agent_called.set()
+        from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+        return EpicBreakdownResult()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        fake_agent,
+    )
+
+    task = service.create("A task ticket", kind="task")
+    r = client.post(
+        f"/tickets/{task.id}/comments",
+        json={"body": "This should not trigger anything"},
+    )
+    assert r.status_code == 201
+    assert r.json()["body"] == "This should not trigger anything"
+
+    # The agent must NOT have been called.
+    assert not agent_called.wait(1), (
+        "breakdown agent was called for a non-epic ticket"
+    )
+
+
+def test_add_comment_on_epic_skips_duplicate_children(
+    client, service, monkeypatch,
+):
+    """When the agent proposes a child whose title already exists
+    (case-insensitive), it is skipped — no duplicate created."""
+    import time
+
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
+    epic = service.create("Epic with existing child", kind="epic")
+    service.create("Add auth module", kind="task", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        lambda **kw: EpicBreakdownResult(
+            child_titles=["Add auth module", "Add payment module"],
+            child_bodies=["Body auth", "Body payment"],
+        ),
+    )
+
+    r = client.post(
+        f"/tickets/{epic.id}/comments",
+        json={"body": "Add payment module"},
+    )
+    assert r.status_code == 201
+
+    # Poll for children to be created.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        children = client.get(f"/tickets/{epic.id}/children").json()
+        if len(children) >= 2:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("children were not created within timeout")
+
+    titles = {c["title"] for c in children}
+    assert titles == {"Add auth module", "Add payment module"}
+    # Exactly one new child created, not two.
+    assert len(children) == 2
+
+
+def test_add_comment_on_epic_response_is_immediate(client, service, monkeypatch):
+    """The HTTP response for add_comment returns 201 immediately —
+    the agent runs in a daemon thread and does not block the response."""
+    import threading
+
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
+    epic = service.create("Slow epic", kind="epic")
+
+    ran = threading.Event()
+    release = threading.Event()
+
+    def slow_agent(**kw):
+        ran.set()
+        release.wait(5)
+        return EpicBreakdownResult()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        slow_agent,
+    )
+
+    r = client.post(
+        f"/tickets/{epic.id}/comments",
+        json={"body": "Trigger slow agent"},
+    )
+    assert r.status_code == 201
+    assert r.json()["body"] == "Trigger slow agent"
+    assert ran.wait(5), "agent did not start in background"
+
+    # Clean up: let the daemon finish.
+    release.set()
+
+
+def test_add_comment_comment_history_reaches_agent(client, service, monkeypatch):
+    """When comments exist on an epic, the full history is passed to
+    the breakdown agent via the *comments* parameter."""
+    import time
+
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
+    epic = service.create("Epic with history", "Epic desc", kind="epic")
+    service.add_comment(epic.id, "First comment")
+    service.add_comment(epic.id, "Second comment")
+
+    agent_comments: list[str] = []
+
+    def capture_agent(**kw):
+        agent_comments.append(kw.get("comments", ""))
+        return EpicBreakdownResult(
+            child_titles=["Child 1"],
+            child_bodies=["Body 1"],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        capture_agent,
+    )
+
+    r = client.post(
+        f"/tickets/{epic.id}/comments",
+        json={"body": "Third comment — the trigger"},
+    )
+    assert r.status_code == 201
+
+    # Poll for the child to appear (agent ran in background).
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        children = client.get(f"/tickets/{epic.id}/children").json()
+        if len(children) >= 1:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("child was not created within timeout")
+
+    assert len(agent_comments) == 1
+    comments_str = agent_comments[0]
+    assert "First comment" in comments_str
+    assert "Second comment" in comments_str
+    assert "Third comment" in comments_str

@@ -222,6 +222,99 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
         log.exception("epic %s: re-evaluation failed", epic_id)
 
 
+def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
+    """Background runner for epic re-processing triggered by a comment.
+
+    1. Creates a fresh ``TicketService`` (the route's ``svc`` is bound
+       to a request-scoped session and not thread-safe).
+    2. Fetches the epic, reads its description, and gathers the full
+       comment history.
+    3. Calls :func:`~.agents.epic_breakdown.run_epic_breakdown_agent`
+       with the operator comments included in the prompt.
+    4. Reconciles the agent's proposed children against existing
+       children: skips duplicates (case-insensitive title match),
+       creates only net-new children.
+    5. Chains new children linearly, appended after the last existing
+       child.
+    """
+    from ..core.service import TicketService
+    from ..agents.epic_breakdown import run_epic_breakdown_agent
+
+    svc = TicketService(settings)
+    try:
+        epic = svc.get(epic_id)
+        if epic is None:
+            log.warning("epic %s vanished before re-processing", epic_id)
+            return
+
+        epic_desc = svc.workspace(epic).read_description()
+
+        # Build chronological comment history for the agent prompt.
+        all_comments = svc.list_comments(epic_id)
+        comment_lines: list[str] = []
+        for c in all_comments:
+            ts = c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "unknown"
+            comment_lines.append(f"[{ts}] {c.body}")
+        comments_prompt = "\n".join(comment_lines)
+
+        result = run_epic_breakdown_agent(
+            settings=settings,
+            epic_title=epic.title,
+            epic_description=epic_desc,
+            comments=comments_prompt,
+        )
+
+        # Reconcile: compare proposed titles against existing children.
+        existing = svc.list_children(epic_id)
+        existing_titles_lower = {
+            child.title.strip().lower() for child in existing
+        }
+
+        new_titles: list[str] = []
+        new_bodies: list[str] = []
+        for title, body in zip(result.child_titles, result.child_bodies):
+            if title.strip().lower() in existing_titles_lower:
+                log.debug(
+                    "epic %s: skipping duplicate child '%s'", epic_id, title
+                )
+                continue
+            new_titles.append(title)
+            new_bodies.append(body)
+
+        if not new_titles:
+            log.info(
+                "epic %s: re-processed — no new children (all %d proposed "
+                "were duplicates)", epic_id, len(result.child_titles),
+            )
+            return
+
+        created_ids: list[str] = []
+        for title, body in zip(new_titles, new_bodies):
+            child = svc.create(
+                title=title,
+                description=body,
+                kind="task",
+                parent_id=epic_id,
+            )
+            created_ids.append(child.id)
+
+        # Build linear dependency chain: new children chained
+        # together, appended after the last existing child.
+        if existing:
+            last_existing_id = existing[-1].id
+            if created_ids:
+                svc.set_depends_on(created_ids[0], [last_existing_id])
+        for i in range(1, len(created_ids)):
+            svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
+
+        log.info(
+            "epic %s: re-processed — created %d new children: %s",
+            epic_id, len(created_ids), ", ".join(created_ids),
+        )
+    except Exception:
+        log.exception("epic %s: re-processing failed", epic_id)
+
+
 class Worker:
     """In-process queue + consumer task, owned by the API service."""
 

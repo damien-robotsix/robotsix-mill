@@ -235,12 +235,33 @@ def add_comment(
     ticket_id: str,
     body: CommentCreate,
     svc=Depends(get_service),
+    settings=Depends(get_settings),
 ) -> Comment:
-    """Add a comment to a ticket (any state). Does NOT change state."""
+    """Add a comment to a ticket (any state).
+
+    For epic tickets, the comment triggers a background re-processing:
+    the epic is re-broken-down by the breakdown agent with the full
+    comment history as operator direction, and net-new children are
+    created.  Non-epic tickets are unaffected — the comment is simply
+    persisted.
+    """
     try:
-        return svc.add_comment(ticket_id, body.body)
+        comment = svc.add_comment(ticket_id, body.body)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
+
+    # Fire-and-forget: re-process the epic in a daemon thread.
+    ticket = svc.get(ticket_id)
+    if ticket is not None and ticket.kind == "epic":
+        from .worker import _run_epic_reprocess
+
+        threading.Thread(
+            target=_run_epic_reprocess,
+            args=(ticket_id, body.body, settings),
+            daemon=True,
+        ).start()
+
+    return comment
 
 
 @router.get(
