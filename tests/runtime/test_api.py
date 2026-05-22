@@ -610,6 +610,23 @@ def test_board_has_new_inquiry_affordance(client):
     )
 
 
+def test_board_has_manual_child_ticket_affordance(client):
+    """The board exposes an 'Add Ticket' button inside epic drawers so users
+    can manually create child tickets without relying on the LLM breakdown."""
+    js = client.get("/static/board.js").text
+    assert "newChildTicket" in js, "board.js must define newChildTicket()"
+    assert "Add Ticket" in js, "board.js must render an Add Ticket button"
+    assert 'parent_id:epicId' in js, (
+        "newChildTicket() must pass parent_id to POST /tickets"
+    )
+    assert 'kind:"task"' in js, (
+        "newChildTicket() must create child tickets as kind='task'"
+    )
+    assert 'open_(epicId)' in js, (
+        "newChildTicket() must re-render the epic drawer on success, not refresh()"
+    )
+
+
 def test_post_tickets_creates_user_draft(client):
     """The control's backend: POST /tickets -> a DRAFT, source=user."""
     r = client.post("/tickets", json={"title": "From the board", "description": "idea"})
