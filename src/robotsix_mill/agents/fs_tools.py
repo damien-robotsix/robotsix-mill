@@ -9,10 +9,19 @@ hints + docstrings — pydantic-ai derives the schema from those.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+from pydantic_ai import RunContext
 
 from ..config import Settings
 from .. import sandbox
+
+log = logging.getLogger(__name__)
+
+# Placeholder swapped in for a now-stale read_file result in the live
+# pydantic-ai message history once the same file is read fresh again.
+_PRUNED_PLACEHOLDER = "[content pruned — more recent content above]"
 
 
 def _safe(root: Path, rel: str) -> Path:
@@ -47,11 +56,77 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
         _file_cache[key] = text
         return text
 
+    def _prune_stale_file_content(
+        ctx: RunContext[None], current_path: Path
+    ) -> None:
+        """Replace earlier ``read_file`` results for *current_path* in the
+        live pydantic-ai message history with a short placeholder.
+
+        A fresh full-file read makes every prior full-content copy of the
+        same file redundant — they only bloat the context window. This
+        rewrites those stale ``ToolReturnPart`` contents in place; the
+        small ``ToolCallPart``s are left untouched so pydantic-ai's
+        turn-boundary invariants stay valid.
+
+        Best-effort: pruning is a pure optimisation, so any failure is
+        swallowed rather than allowed to break the agent run.
+        """
+        try:
+            messages = getattr(ctx, "messages", None)
+            if not messages:
+                return
+            current_canonical = current_path.resolve()
+
+            # Pass 1 — tool_call_ids of earlier read_file calls for this file.
+            stale_ids: set[str] = set()
+            for msg in messages:
+                if getattr(msg, "kind", None) != "response":
+                    continue
+                for part in getattr(msg, "parts", []):
+                    if getattr(part, "part_kind", None) != "tool-call":
+                        continue
+                    if getattr(part, "tool_name", None) != "read_file":
+                        continue
+                    try:
+                        arg_path = part.args_as_dict().get("path")
+                        if not isinstance(arg_path, str):
+                            continue
+                        resolved = (root / arg_path).resolve()
+                    except Exception:
+                        continue
+                    if resolved == current_canonical:
+                        tool_call_id = getattr(part, "tool_call_id", None)
+                        if tool_call_id:
+                            stale_ids.add(tool_call_id)
+
+            if not stale_ids:
+                return
+
+            # Pass 2 — replace the matching read_file ToolReturnPart contents.
+            for msg in messages:
+                if getattr(msg, "kind", None) != "request":
+                    continue
+                for part in getattr(msg, "parts", []):
+                    if getattr(part, "part_kind", None) != "tool-return":
+                        continue
+                    if getattr(part, "tool_name", None) != "read_file":
+                        continue
+                    if getattr(part, "tool_call_id", None) in stale_ids:
+                        part.content = _PRUNED_PLACEHOLDER
+        except Exception:
+            log.debug(
+                "read_file: message-history pruning skipped", exc_info=True
+            )
+
     # Tools return errors as strings so the model can self-correct
     # (try another path, list the dir, ...) instead of the whole agent
     # run aborting on an exception.
     def read_file(
-        path: str, offset: int = 1, limit: int | None = None
+        ctx: RunContext[None] = None,
+        *,
+        path: str,
+        offset: int = 1,
+        limit: int | None = None,
     ) -> str:
         """Return the text content of a file in the repository.
 
@@ -71,17 +146,23 @@ def build_fs_tools(root: Path, settings: Settings) -> list:
 
         # Normalize offset for the stub check (offset ≤ 0 is treated as 1).
         _offset = offset if offset >= 1 else 1
+        is_full_read = _offset == 1 and limit is None
 
         # Full-file stub: only when offset=1 AND limit=None (the common case).
-        if _offset == 1 and limit is None:
-            if p.resolve() in _file_cache:
-                return "already in context above — unchanged"
+        if is_full_read and p.resolve() in _file_cache:
+            return "already in context above — unchanged"
 
         # Otherwise: read (or refresh) via _read_cached, then slice.
         try:
             text = _read_cached(p)
         except (ValueError, OSError) as e:
             return f"error: {e}"
+
+        # A fresh full-file read (cache miss) makes every earlier copy of
+        # this file in the message history redundant — prune them so the
+        # stale content stops costing context-window tokens.
+        if ctx is not None and is_full_read:
+            _prune_stale_file_content(ctx, p)
 
         lines = text.splitlines(keepends=True)
         if _offset > len(lines) and _offset > 1:

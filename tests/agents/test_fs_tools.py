@@ -3,10 +3,21 @@ for every agent."""
 
 import os
 import sys
+import types
 
 import pytest
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    ToolCallPart,
+    ToolReturnPart,
+)
 
-from robotsix_mill.agents.fs_tools import build_fs_tools, _safe
+from robotsix_mill.agents.fs_tools import (
+    _PRUNED_PLACEHOLDER,
+    _safe,
+    build_fs_tools,
+)
 from robotsix_mill import sandbox
 
 
@@ -128,13 +139,13 @@ class TestReadFile:
         root.mkdir()
         _make_file(root, "hello.txt", "world\n")
         tools = _build(root, settings)
-        assert tools["read_file"]("hello.txt") == "world\n"
+        assert tools["read_file"](path="hello.txt") == "world\n"
 
     def test_read_nonexistent(self, tmp_path, settings):
         root = tmp_path / "repo"
         root.mkdir()
         tools = _build(root, settings)
-        result = tools["read_file"]("nope.txt")
+        result = tools["read_file"](path="nope.txt")
         assert isinstance(result, str)
         assert "error" in result.lower()
 
@@ -142,14 +153,14 @@ class TestReadFile:
         root = tmp_path / "repo"
         root.mkdir()
         tools = _build(root, settings)
-        result = tools["read_file"]("../../../etc/passwd")
+        result = tools["read_file"](path="../../../etc/passwd")
         assert isinstance(result, str)
         assert "error" in result.lower()
 
     def test_read_root_not_cloned(self, tmp_path, settings):
         root = tmp_path / "nonexistent"
         tools = _build(root, settings)
-        result = tools["read_file"]("any.txt")
+        result = tools["read_file"](path="any.txt")
         assert isinstance(result, str)
         assert "not been cloned yet" in result.lower()
 
@@ -165,7 +176,7 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "hello.txt", "line1\nline2\n")
         tools = _build(root, settings)
-        result = tools["read_file"]("hello.txt")
+        result = tools["read_file"](path="hello.txt")
         assert result == "line1\nline2\n"
 
     def test_default_args_empty_file(self, tmp_path, settings):
@@ -174,7 +185,7 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "empty.txt", "")
         tools = _build(root, settings)
-        result = tools["read_file"]("empty.txt")
+        result = tools["read_file"](path="empty.txt")
         assert result == ""
 
     def test_default_args_trailing_newline(self, tmp_path, settings):
@@ -183,7 +194,7 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "f.txt", "a\n")
         tools = _build(root, settings)
-        assert tools["read_file"]("f.txt") == "a\n"
+        assert tools["read_file"](path="f.txt") == "a\n"
 
     def test_default_args_no_trailing_newline(self, tmp_path, settings):
         """File without trailing newline preserved."""
@@ -191,28 +202,28 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "f.txt", "a")
         tools = _build(root, settings)
-        assert tools["read_file"]("f.txt") == "a"
+        assert tools["read_file"](path="f.txt") == "a"
 
     def test_basic_offset_limit(self, tmp_path, settings):
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "line1\nline2\nline3\nline4\n")
         tools = _build(root, settings)
-        assert tools["read_file"]("f.txt", offset=2, limit=2) == "line2\nline3\n"
+        assert tools["read_file"](path="f.txt", offset=2, limit=2) == "line2\nline3\n"
 
     def test_offset_to_eof(self, tmp_path, settings):
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "line1\nline2\nline3\nline4\n")
         tools = _build(root, settings)
-        assert tools["read_file"]("f.txt", offset=3) == "line3\nline4\n"
+        assert tools["read_file"](path="f.txt", offset=3) == "line3\nline4\n"
 
     def test_offset_past_eof_returns_note(self, tmp_path, settings):
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "a\nb\nc\n")
         tools = _build(root, settings)
-        result = tools["read_file"]("f.txt", offset=5)
+        result = tools["read_file"](path="f.txt", offset=5)
         assert "(file has 3 lines; offset 5 is beyond end)" in result
 
     def test_offset_past_eof_with_limit_returns_note(self, tmp_path, settings):
@@ -220,7 +231,7 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "f.txt", "a\nb\nc\n")
         tools = _build(root, settings)
-        result = tools["read_file"]("f.txt", offset=4, limit=1)
+        result = tools["read_file"](path="f.txt", offset=4, limit=1)
         assert "(file has 3 lines; offset 4 is beyond end)" in result
 
     def test_zero_offset_normalized_to_1(self, tmp_path, settings):
@@ -228,8 +239,8 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "f.txt", "line1\nline2\nline3\n")
         tools = _build(root, settings)
-        a = tools["read_file"]("f.txt", offset=0, limit=1)
-        b = tools["read_file"]("f.txt", offset=1, limit=1)
+        a = tools["read_file"](path="f.txt", offset=0, limit=1)
+        b = tools["read_file"](path="f.txt", offset=1, limit=1)
         assert a == b == "line1\n"
 
     def test_negative_offset_normalized_to_1(self, tmp_path, settings):
@@ -237,7 +248,7 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "f.txt", "line1\nline2\n")
         tools = _build(root, settings)
-        result = tools["read_file"]("f.txt", offset=-5, limit=2)
+        result = tools["read_file"](path="f.txt", offset=-5, limit=2)
         assert result == "line1\nline2\n"
 
     def test_limit_exceeds_remaining_clips_silently(self, tmp_path, settings):
@@ -245,7 +256,7 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "f.txt", "a\nb\nc\n")
         tools = _build(root, settings)
-        result = tools["read_file"]("f.txt", offset=2, limit=10)
+        result = tools["read_file"](path="f.txt", offset=2, limit=10)
         assert result == "b\nc\n"
 
     def test_limit_none_with_offset_reads_to_eof(self, tmp_path, settings):
@@ -253,7 +264,7 @@ class TestReadFileOffsetLimit:
         root.mkdir()
         _make_file(root, "f.txt", "a\nb\nc\nd\n")
         tools = _build(root, settings)
-        result = tools["read_file"]("f.txt", offset=2, limit=None)
+        result = tools["read_file"](path="f.txt", offset=2, limit=None)
         assert result == "b\nc\nd\n"
 
     def test_error_paths_unchanged(self, tmp_path, settings):
@@ -261,12 +272,12 @@ class TestReadFileOffsetLimit:
         root = tmp_path / "repo"
         root.mkdir()
         tools = _build(root, settings)
-        assert "error" in tools["read_file"]("nope.txt").lower()
-        assert "error" in tools["read_file"]("../../../etc/passwd").lower()
+        assert "error" in tools["read_file"](path="nope.txt").lower()
+        assert "error" in tools["read_file"](path="../../../etc/passwd").lower()
 
         root2 = tmp_path / "nonexistent"
         tools2 = _build(root2, settings)
-        assert "not been cloned yet" in tools2["read_file"]("any.txt", offset=2, limit=1).lower()
+        assert "not been cloned yet" in tools2["read_file"](path="any.txt", offset=2, limit=1).lower()
 
     def test_docstring_visible(self, tmp_path, settings):
         """Docstring is pydantic-ai-visible on the closure."""
@@ -285,9 +296,9 @@ class TestReadFileOffsetLimit:
         _make_file(root, "f.txt", "line1\nline2\nline3\n")
         tools = _build(root, settings)
         # default: byte-identical
-        assert tools["read_file"]("f.txt") == "line1\nline2\nline3\n"
+        assert tools["read_file"](path="f.txt") == "line1\nline2\nline3\n"
         # offset/limit preserves line endings
-        assert tools["read_file"]("f.txt", offset=2, limit=1) == "line2\n"
+        assert tools["read_file"](path="f.txt", offset=2, limit=1) == "line2\n"
 
 
 # ===================================================================
@@ -564,7 +575,7 @@ class TestNeverRaises:
         root = tmp_path / "repo"
         root.mkdir()
         tools = _build(root, settings)
-        result = tools["read_file"]("no-such-file.txt")
+        result = tools["read_file"](path="no-such-file.txt")
         assert isinstance(result, str)
         assert "error" in result.lower()
 
@@ -624,7 +635,7 @@ class TestNeverRaises:
         # All six tools, every failure path returns a string
         for name, tool in tools.items():
             if name == "read_file":
-                r = tool("f.txt")
+                r = tool(path="f.txt")
             elif name == "write_file":
                 r = tool("f.txt", "x")
             elif name == "edit_file":
@@ -657,10 +668,10 @@ class TestFileReadCache:
         _make_file(root, "f.txt", "original\n")
         tools = _build(root, settings)
 
-        first = tools["read_file"]("f.txt")
+        first = tools["read_file"](path="f.txt")
         assert first == "original\n"
 
-        second = tools["read_file"]("f.txt")
+        second = tools["read_file"](path="f.txt")
         assert second == "already in context above — unchanged"
 
     def test_offset_limit_still_hits_cache(self, tmp_path, settings):
@@ -672,13 +683,13 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # Populate cache with full read.
-        tools["read_file"]("f.txt")
+        tools["read_file"](path="f.txt")
 
         # Mutate on disk.
         (root / "f.txt").write_text("x\ny\nz\n", encoding="utf-8")
 
         # Offset/limit read should still return cached original.
-        result = tools["read_file"]("f.txt", offset=2, limit=1)
+        result = tools["read_file"](path="f.txt", offset=2, limit=1)
         assert result == "line2\n"
 
     def test_write_file_invalidates(self, tmp_path, settings):
@@ -689,12 +700,12 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # Populate cache.
-        assert tools["read_file"]("f.txt") == "old\n"
+        assert tools["read_file"](path="f.txt") == "old\n"
 
         # Write new content.
         tools["write_file"]("f.txt", "new\n")
         # Read must see the new content.
-        assert tools["read_file"]("f.txt") == "new\n"
+        assert tools["read_file"](path="f.txt") == "new\n"
 
     def test_edit_file_invalidates(self, tmp_path, settings):
         """After edit_file, a subsequent read_file sees the edited content."""
@@ -704,12 +715,12 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # Populate cache.
-        assert tools["read_file"]("f.txt") == "hello world\n"
+        assert tools["read_file"](path="f.txt") == "hello world\n"
 
         # Edit.
         tools["edit_file"]("f.txt", "hello", "HELLO")
         # Read must see edited content.
-        assert tools["read_file"]("f.txt") == "HELLO world\n"
+        assert tools["read_file"](path="f.txt") == "HELLO world\n"
 
     def test_delete_file_invalidates(self, tmp_path, settings):
         """After delete_file, the cache entry is removed.  A subsequent
@@ -721,14 +732,14 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # Populate cache.
-        assert tools["read_file"]("f.txt") == "first\n"
+        assert tools["read_file"](path="f.txt") == "first\n"
 
         # Delete.
         tools["delete_file"]("f.txt")
 
         # Create a fresh file at the same path.
         _make_file(root, "f.txt", "second\n")
-        assert tools["read_file"]("f.txt") == "second\n"
+        assert tools["read_file"](path="f.txt") == "second\n"
 
     def test_equivalent_paths_same_cache_entry(self, tmp_path, settings):
         """``read_file("foo/bar.py")`` and ``read_file("./foo/bar.py")``
@@ -740,11 +751,11 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # First read via a path with a dot prefix.
-        first = tools["read_file"]("./sub/file.txt")
+        first = tools["read_file"](path="./sub/file.txt")
         assert first == "cached\n"
 
         # Second read via the normal path — must hit cache → stub.
-        second = tools["read_file"]("sub/file.txt")
+        second = tools["read_file"](path="sub/file.txt")
         assert second == "already in context above — unchanged"
 
     def test_parent_dotdot_paths_same_cache_entry(self, tmp_path, settings):
@@ -757,10 +768,10 @@ class TestFileReadCache:
         _make_file(root, "sub/file.txt", "cached\n")
         tools = _build(root, settings)
 
-        first = tools["read_file"]("sub/file.txt")
+        first = tools["read_file"](path="sub/file.txt")
         assert first == "cached\n"
 
-        second = tools["read_file"]("sub/../sub/file.txt")
+        second = tools["read_file"](path="sub/../sub/file.txt")
         assert second == "already in context above — unchanged"
 
     def test_error_returns_not_cached(self, tmp_path, settings):
@@ -772,12 +783,12 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # First call on a nonexistent file → error, not cached.
-        result = tools["read_file"]("nonexistent.txt")
+        result = tools["read_file"](path="nonexistent.txt")
         assert "error" in result.lower()
 
         # Create the file and read — must read from disk.
         _make_file(root, "nonexistent.txt", "now exists\n")
-        assert tools["read_file"]("nonexistent.txt") == "now exists\n"
+        assert tools["read_file"](path="nonexistent.txt") == "now exists\n"
 
     def test_escape_error_not_cached(self, tmp_path, settings):
         """read_file of a path outside root returns an error string and
@@ -786,13 +797,13 @@ class TestFileReadCache:
         root.mkdir()
         tools = _build(root, settings)
 
-        result = tools["read_file"]("../../../etc/passwd")
+        result = tools["read_file"](path="../../../etc/passwd")
         assert "error" in result.lower()
 
         # A subsequent read of a valid file with name "passwd" in root
         # must not be poisoned by the prior error.
         _make_file(root, "passwd", "local\n")
-        assert tools["read_file"]("passwd") == "local\n"
+        assert tools["read_file"](path="passwd") == "local\n"
 
     def test_repeat_full_read_returns_stub(self, tmp_path, settings):
         """First full-file read returns content; second returns stub."""
@@ -801,10 +812,10 @@ class TestFileReadCache:
         _make_file(root, "f.txt", "hello\n")
         tools = _build(root, settings)
 
-        first = tools["read_file"]("f.txt")
+        first = tools["read_file"](path="f.txt")
         assert first == "hello\n"
 
-        second = tools["read_file"]("f.txt")
+        second = tools["read_file"](path="f.txt")
         assert second == "already in context above — unchanged"
 
     def test_offset_limit_read_not_stubbed(self, tmp_path, settings):
@@ -816,10 +827,10 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # Populate cache with full read.
-        tools["read_file"]("f.txt")
+        tools["read_file"](path="f.txt")
 
         # Offset/limit read returns slice from cache.
-        result = tools["read_file"]("f.txt", offset=2, limit=1)
+        result = tools["read_file"](path="f.txt", offset=2, limit=1)
         assert result == "line2\n"
 
     def test_after_edit_subsequent_read_returns_stub(self, tmp_path, settings):
@@ -831,16 +842,16 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # Read → content.
-        assert tools["read_file"]("f.txt") == "hello world\n"
+        assert tools["read_file"](path="f.txt") == "hello world\n"
 
         # Edit → invalidates.
         tools["edit_file"]("f.txt", "hello", "HELLO")
 
         # First read after edit → fresh content from disk.
-        assert tools["read_file"]("f.txt") == "HELLO world\n"
+        assert tools["read_file"](path="f.txt") == "HELLO world\n"
 
         # Second read → stub.
-        assert tools["read_file"]("f.txt") == "already in context above — unchanged"
+        assert tools["read_file"](path="f.txt") == "already in context above — unchanged"
 
     def test_after_write_subsequent_read_returns_stub(self, tmp_path, settings):
         """After write_file invalidates cache, first read returns new
@@ -851,13 +862,256 @@ class TestFileReadCache:
         tools = _build(root, settings)
 
         # Read → content.
-        assert tools["read_file"]("f.txt") == "old\n"
+        assert tools["read_file"](path="f.txt") == "old\n"
 
         # Write → invalidates.
         tools["write_file"]("f.txt", "new\n")
 
         # First read after write → fresh content from disk.
-        assert tools["read_file"]("f.txt") == "new\n"
+        assert tools["read_file"](path="f.txt") == "new\n"
 
         # Second read → stub.
-        assert tools["read_file"]("f.txt") == "already in context above — unchanged"
+        assert tools["read_file"](path="f.txt") == "already in context above — unchanged"
+
+
+# ===================================================================
+# read_file message-history pruning
+# ===================================================================
+
+def _read_call(path, tool_call_id):
+    """A ModelResponse carrying a single read_file ToolCallPart."""
+    return ModelResponse(parts=[
+        ToolCallPart(
+            tool_name="read_file",
+            args={"path": path},
+            tool_call_id=tool_call_id,
+        )
+    ])
+
+
+def _read_return(content, tool_call_id):
+    """A read_file ToolReturnPart (returned bare so a test can assert
+    on its ``.content`` after pruning)."""
+    return ToolReturnPart(
+        tool_name="read_file", content=content, tool_call_id=tool_call_id,
+    )
+
+
+class TestFileReadPruning:
+    """``read_file`` prunes now-stale full-file content from the live
+    pydantic-ai message history on a fresh full read."""
+
+    def test_prune_after_edit(self, tmp_path, settings):
+        """Read A, edit A, read A again → the old full-content message
+        for A is replaced with the pruned placeholder."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "original A\n")
+        tools = _build(root, settings)
+
+        a_return = _read_return("original A\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            _read_call("A.txt", "call-A"),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        # Edit A → invalidates the cache.
+        tools["edit_file"]("A.txt", "original", "edited")
+
+        # Fresh full read → fresh content returned, stale copy pruned.
+        result = tools["read_file"](ctx, path="A.txt")
+        assert result == "edited A\n"
+        assert a_return.content == _PRUNED_PLACEHOLDER
+
+    def test_prune_after_write(self, tmp_path, settings):
+        """write_file also makes the prior read stale and prunable."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "v1\n")
+        tools = _build(root, settings)
+
+        a_return = _read_return("v1\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            _read_call("A.txt", "call-A"),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        tools["write_file"]("A.txt", "v2\n")
+
+        result = tools["read_file"](ctx, path="A.txt")
+        assert result == "v2\n"
+        assert a_return.content == _PRUNED_PLACEHOLDER
+
+    def test_unrelated_file_untouched(self, tmp_path, settings):
+        """Read A, read B, edit A, read A → A is pruned; B's ToolCallPart
+        and ToolReturnPart are both left intact."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "A original\n")
+        _make_file(root, "B.txt", "B original\n")
+        tools = _build(root, settings)
+
+        a_return = _read_return("A original\n", "call-A")
+        b_call = ToolCallPart(
+            tool_name="read_file", args={"path": "B.txt"},
+            tool_call_id="call-B",
+        )
+        b_return = _read_return("B original\n", "call-B")
+        ctx = types.SimpleNamespace(messages=[
+            _read_call("A.txt", "call-A"),
+            ModelRequest(parts=[a_return]),
+            ModelResponse(parts=[b_call]),
+            ModelRequest(parts=[b_return]),
+        ])
+
+        tools["edit_file"]("A.txt", "original", "edited")
+        tools["read_file"](ctx, path="A.txt")
+
+        assert a_return.content == _PRUNED_PLACEHOLDER
+        assert b_return.content == "B original\n"
+        assert b_call.args_as_dict() == {"path": "B.txt"}
+
+    def test_non_read_file_results_untouched(self, tmp_path, settings):
+        """Only read_file ToolReturnParts are pruned — run_command and
+        other tool results are never touched."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "v1\n")
+        tools = _build(root, settings)
+
+        cmd_return = ToolReturnPart(
+            tool_name="run_command", content="exit=0\nbig output",
+            tool_call_id="cmd-1",
+        )
+        a_return = _read_return("v1\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            ModelResponse(parts=[ToolCallPart(
+                tool_name="run_command", args={"command": "ls"},
+                tool_call_id="cmd-1",
+            )]),
+            ModelRequest(parts=[cmd_return]),
+            _read_call("A.txt", "call-A"),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        tools["write_file"]("A.txt", "v2\n")
+        tools["read_file"](ctx, path="A.txt")
+
+        assert a_return.content == _PRUNED_PLACEHOLDER
+        assert cmd_return.content == "exit=0\nbig output"
+
+    def test_no_prune_on_stub(self, tmp_path, settings):
+        """A cache-hit stub read returns the stub and does NOT mutate
+        the message history."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "content\n")
+        tools = _build(root, settings)
+
+        # Populate the cache with a full read (no ctx → no pruning).
+        assert tools["read_file"](path="A.txt") == "content\n"
+
+        a_return = _read_return("content\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            _read_call("A.txt", "call-A"),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        # Cache hit → stub → no pruning.
+        result = tools["read_file"](ctx, path="A.txt")
+        assert result == "already in context above — unchanged"
+        assert a_return.content == "content\n"
+
+    def test_no_prune_on_partial_read(self, tmp_path, settings):
+        """An offset/limit read never triggers pruning."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\n")
+        tools = _build(root, settings)
+
+        a_return = _read_return("l1\nl2\nl3\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            _read_call("A.txt", "call-A"),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
+        assert result == "l2\n"
+        assert a_return.content == "l1\nl2\nl3\n"
+
+    def test_no_prune_on_error(self, tmp_path, settings):
+        """An error read (missing file) never triggers pruning."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        a_return = _read_return("stale", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            _read_call("missing.txt", "call-A"),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        result = tools["read_file"](ctx, path="missing.txt")
+        assert "error" in result.lower()
+        assert a_return.content == "stale"
+
+    def test_no_prune_when_ctx_none(self, tmp_path, settings):
+        """Called without a RunContext (the unit-test default), read_file
+        returns content and skips pruning entirely — no crash."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "content\n")
+        tools = _build(root, settings)
+
+        assert tools["read_file"](path="A.txt") == "content\n"
+
+    def test_prune_path_canonicalization(self, tmp_path, settings):
+        """A stale read recorded as './sub/file.txt' is matched when the
+        fresh read uses 'sub/file.txt' — both resolve to one path."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "sub").mkdir()
+        _make_file(root, "sub/file.txt", "v1\n")
+        tools = _build(root, settings)
+
+        a_return = _read_return("v1\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            _read_call("./sub/file.txt", "call-A"),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        tools["edit_file"]("sub/file.txt", "v1", "v2")
+        result = tools["read_file"](ctx, path="sub/file.txt")
+        assert result == "v2\n"
+        assert a_return.content == _PRUNED_PLACEHOLDER
+
+    def test_history_structure_intact_after_prune(self, tmp_path, settings):
+        """Pruning replaces only the stale ToolReturnPart content — the
+        ToolCallPart and the message-list shape are untouched, and a
+        follow-up read still works."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "v1\n")
+        tools = _build(root, settings)
+
+        a_call_msg = _read_call("A.txt", "call-A")
+        a_return = _read_return("v1\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            a_call_msg,
+            ModelRequest(parts=[a_return]),
+        ])
+
+        tools["write_file"]("A.txt", "v2\n")
+        tools["read_file"](ctx, path="A.txt")
+
+        # Same number of messages; ToolCallPart untouched.
+        assert len(ctx.messages) == 2
+        assert ctx.messages[0] is a_call_msg
+        assert a_call_msg.parts[0].args_as_dict() == {"path": "A.txt"}
+        assert a_return.content == _PRUNED_PLACEHOLDER
+
+        # A follow-up read still behaves correctly (cache hit → stub).
+        assert (
+            tools["read_file"](ctx, path="A.txt")
+            == "already in context above — unchanged"
+        )
