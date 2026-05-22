@@ -84,14 +84,14 @@ def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
         tmp_path, s
     )
     assert "wrote" in write_file("a/b.txt", "hi")
-    assert read_file("a/b.txt") == "hi"
+    assert read_file(path="a/b.txt") == "hi"
     assert "a/" in list_dir(".")
     assert "exit=0" in run_command("echo ok")
     # errors come back as strings (so the model can self-correct), and
     # the path-escape guard still refuses the op
-    esc = read_file("../escape.txt")
+    esc = read_file(path="../escape.txt")
     assert esc.startswith("error:") and "escapes" in esc
-    assert read_file("nope.txt").startswith("error:")  # missing file
+    assert read_file(path="nope.txt").startswith("error:")  # missing file
 
 
 def test_write_file_unchanged(tmp_path, fake_sandbox):
@@ -101,7 +101,7 @@ def test_write_file_unchanged(tmp_path, fake_sandbox):
     s = Settings(MILL_DATA_DIR=str(tmp_path))
     read_file, write_file, *_ = build_fs_tools(tmp_path, s)
     assert "wrote" in write_file("x.txt", "hello world")
-    assert read_file("x.txt") == "hello world"
+    assert read_file(path="x.txt") == "hello world"
 
 
 def test_edit_file_replaces_unique_substring_preserves_rest(tmp_path, fake_sandbox):
@@ -212,7 +212,7 @@ def test_fs_tools_non_existent_root_returns_clear_error(tmp_path, fake_sandbox):
     )
     msg = "workspace repo directory does not exist"
 
-    assert msg in read_file("anything.txt")
+    assert msg in read_file(path="anything.txt")
     assert msg in write_file("x.txt", "content")
     assert msg in edit_file("x.txt", "a", "b")
     assert msg in delete_file("x.txt")
