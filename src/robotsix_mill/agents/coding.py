@@ -1,17 +1,16 @@
 """Implement seam.
 
 ``run_implement_agent`` is the single seam the implement *stage* drives
-(tests monkeypatch it). It delegates to the **coordinator** (see
+(tests monkeypatch it). It runs ONE coordinator pass (see
 :mod:`.coordinating`): a capable model that explores via cheap
-sub-agents, plans, delegates the edit to the stateless implement
-sub-agent with precise instructions, runs the cheap test sub-agent,
-and loops — keeping its own history short.
+sub-agents and edits the repo itself. The deterministic
+test→retry→escalate loop lives in the implement *stage*, which
+re-invokes this seam with a distilled ``feedback`` diagnosis after a
+failed test gate.
 
 Budget/agent failures raise :class:`AgentBudgetError` /
 :class:`AgentRunError` so the stage blocks-as-resumable (a resume just
 re-runs the coordinator fresh — it re-explores, no transcript needed).
-``dump_history``/``load_history`` are kept for the stage's artifact
-plumbing (the transcript is now empty — resume = fresh coordinator).
 """
 
 from __future__ import annotations
@@ -49,11 +48,15 @@ def run_implement_agent(
     history: list | None = None,
     memory: str = "",
 ) -> tuple[str, list, str]:
-    """Drive the coordinator for this ticket. Returns
-    ``(summary, [], updated_memory)``. ``feedback``/``history`` are
-    accepted for the stage's signature but unused — the coordinator
-    owns the explore→implement→test loop and a resume re-runs it
-    fresh."""
+    """Run ONE coordinator pass for this ticket. Returns
+    ``(summary, [], updated_memory)``.
+
+    ``feedback`` — set by the implement stage when it re-invokes after a
+    failed test gate — is a distilled diagnosis of that failure,
+    forwarded to the coordinator so the next pass fixes exactly it.
+    ``history`` is accepted for the stage seam signature but unused: a
+    retry re-runs the coordinator fresh and the partial edits persist on
+    disk in ``repo_dir``."""
     from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
     from .coordinating import run_coordinator
@@ -61,6 +64,7 @@ def run_implement_agent(
     try:
         result = run_coordinator(
             settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
+            feedback=feedback,
         )
     except UsageLimitExceeded as e:
         raise AgentBudgetError(str(e), []) from e
@@ -73,7 +77,7 @@ def run_implement_agent(
         try:
             result = run_coordinator(
                 settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
-                model_name="deepseek/deepseek-v4-flash",
+                feedback=feedback, model_name="deepseek/deepseek-v4-flash",
             )
         except Exception as fallback_e:
             raise AgentRunError(
@@ -86,12 +90,7 @@ def run_implement_agent(
     except Exception as e:  # noqa: BLE001 — block-as-resumable
         raise AgentRunError(str(e), []) from e
 
-    summary = result.summary
-    if summary.strip().upper().startswith("UNRESOLVED"):
-        raise AgentRunError(
-            f"coordinator could not converge: {summary[:300]}", []
-        )
-    return summary, [], result.updated_memory
+    return result.summary, [], result.updated_memory
 
 
 

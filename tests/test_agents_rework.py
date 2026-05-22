@@ -45,8 +45,9 @@ def fake_ai(monkeypatch):
 
 def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     """The main agent uses MILL_MODEL and gets explore (scout) + its
-    OWN fs tools + run_tests + web_research — no implement sub-agent,
-    no raw run_command (tests go via the test sub-agent)."""
+    OWN fs tools (incl. run_command for focused diagnosis) +
+    web_research. There is NO run_tests tool — the implement stage owns
+    the test→retry→escalate loop and runs the suite itself."""
     s = _settings(
         tmp_path, MILL_MODEL="main/cap",
         MILL_COORDINATOR_REQUEST_LIMIT="9",
@@ -59,7 +60,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "delete_file", "edit_file", "explore", "list_dir", "read_file",
-        "report_issue", "run_command", "run_tests", "web_research", "write_file",
+        "report_issue", "run_command", "web_research", "write_file",
     ]
     assert fake_ai["name"] == "implement"
 
@@ -222,91 +223,36 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
     ]
 
 
-def test_run_tests_tool_proceed(tmp_path, monkeypatch):
-    """Tool returns proceed when tests pass."""
-    from robotsix_mill import sandbox
-
-    s = _settings(tmp_path)
-    monkeypatch.setattr(
-        sandbox, "run", lambda cmd, *, repo_dir, settings: (0, "ok")
+def test_validation_result_decide_proceed():
+    """A passing gate routes to proceed regardless of iteration count."""
+    vr = ValidationResult.decide(
+        passed=True, iterations=1, max_iters=8, feedback="",
     )
-    tool = coordinating.make_run_tests_tool(s, tmp_path)
-    result = tool()
-    assert result.passed is True
-    assert result.next_action == "proceed"
-    assert result.failure_summary == ""
-    assert result.iterations_used == 1
+    assert vr.passed is True
+    assert vr.next_action == "proceed"
+    assert vr.failure_summary == ""
+    assert vr.iterations_used == 1
 
 
-def test_run_tests_tool_retry(tmp_path, monkeypatch):
-    """Tool returns retry when tests fail but iterations remain."""
-    from robotsix_mill import sandbox
-
-    s = _settings(tmp_path, MILL_TEST_MODEL="test/cheap")
-    monkeypatch.setattr(
-        sandbox, "run", lambda cmd, *, repo_dir, settings: (1, "fail")
+def test_validation_result_decide_retry():
+    """A failing gate with attempts remaining routes to retry and
+    carries the diagnosis as failure_summary."""
+    vr = ValidationResult.decide(
+        passed=False, iterations=1, max_iters=8, feedback="boom in test_x",
     )
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
-
-    class FakeAgent:
-        def __init__(self, **kw):
-            pass
-
-        def run_sync(self, prompt, *, usage_limits=None, **kw):
-            return type("R", (), {"output": "fix the thing"})()
-
-    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
-
-    tool = coordinating.make_run_tests_tool(s, tmp_path)
-    result = tool()
-    assert result.passed is False
-    assert result.next_action == "retry"
-    assert result.failure_summary == "fix the thing"
-    assert result.iterations_used == 1
+    assert vr.passed is False
+    assert vr.next_action == "retry"
+    assert vr.failure_summary == "boom in test_x"
+    assert vr.iterations_used == 1
 
 
-def test_run_tests_tool_escalate(tmp_path, monkeypatch):
-    """Tool returns escalate when max iterations exhausted."""
-    from robotsix_mill import sandbox
-
-    s = _settings(
-        tmp_path, MILL_MAX_FIX_ITERATIONS="3", MILL_TEST_MODEL="test/cheap",
+def test_validation_result_decide_escalate():
+    """A failing gate on the last allowed attempt routes to escalate —
+    no LLM involvement, the bound is enforced here."""
+    vr = ValidationResult.decide(
+        passed=False, iterations=3, max_iters=3, feedback="still broken",
     )
-    monkeypatch.setattr(
-        sandbox, "run", lambda cmd, *, repo_dir, settings: (1, "fail")
-    )
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            pass
-
-    class FakeAgent:
-        def __init__(self, **kw):
-            pass
-
-        def run_sync(self, prompt, *, usage_limits=None, **kw):
-            return type("R", (), {"output": "still broken"})()
-
-    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
-    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
-
-    tool = coordinating.make_run_tests_tool(s, tmp_path)
-
-    # first 3 calls: retry
-    for i in range(3):
-        result = tool()
-        assert result.next_action == "retry", f"call {i+1}"
-        assert result.iterations_used == i + 1
-
-    # 4th call: escalate
-    result = tool()
-    assert result.next_action == "escalate"
-    assert result.iterations_used == 4
-    assert result.passed is False
-    assert result.failure_summary == "still broken"
+    assert vr.next_action == "escalate"
+    assert vr.passed is False
+    assert vr.failure_summary == "still broken"
+    assert vr.iterations_used == 3
