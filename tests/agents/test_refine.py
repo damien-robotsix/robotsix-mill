@@ -1423,6 +1423,98 @@ def test_epic_context_empty_for_no_parent_in_refine(ctx, service, monkeypatch):
     assert seen_epic_context[0] == ""
 
 
+# --- title refinement tests ---
+
+
+def test_refine_updates_title_when_agent_provides_one(ctx, service, monkeypatch):
+    """Agent returns a title → set_title is called with it."""
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(split=False, spec_markdown=spec, title="Better Title"),
+    )
+
+    t = service.create("Fix the thing", "make x happen")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert service.get(t.id).title == "Better Title"
+
+
+def test_refine_keeps_original_title_when_agent_returns_none(ctx, service, monkeypatch):
+    """Agent returns no title → set_title is NOT called."""
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(split=False, spec_markdown=spec),
+    )
+
+    t = service.create("Fix the thing", "make x happen")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert service.get(t.id).title == "Fix the thing"
+
+
+def test_refine_keeps_original_title_when_agent_returns_empty(ctx, service, monkeypatch):
+    """Agent returns empty/whitespace title → set_title is NOT called."""
+    for empty_title in ("", "   "):
+        monkeypatch.setattr(
+            refining, "run_refine_agent",
+            lambda **_: RefineResult(split=False, spec_markdown="## Problem\nx\n", title=empty_title),
+        )
+
+        t = service.create("Fix the thing", "make x happen")
+        out = RefineStage().run(t, ctx)
+
+        assert out.next_state is State.READY
+        assert service.get(t.id).title == "Fix the thing"
+
+
+def test_refine_split_applies_title_to_parent(ctx, service, monkeypatch):
+    """Split with agent title → set_title called on parent before close."""
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(
+            split=True,
+            title="Better Epic Name",
+            children=[
+                ChildSpec(title="Child A", spec_markdown="## Problem\nA\n## Scope\n- a\n"),
+                ChildSpec(title="Child B", spec_markdown="## Problem\nB\n## Scope\n- b\n"),
+            ],
+        ),
+    )
+
+    parent = service.create("Fix the thing", "multi-change draft")
+    out = RefineStage().run(parent, ctx)
+
+    assert out.next_state is State.CLOSED
+    # Parent title should be updated before close.
+    assert service.get(parent.id).title == "Better Epic Name"
+
+
+def test_refine_split_single_child_prefers_agent_title(ctx, service, monkeypatch):
+    """Single-child fallback: agent title beats child title."""
+    child_spec = "## Problem\nSingle change\n## Scope\n- one thing\n"
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(
+            split=True,
+            title="Agent Title",
+            children=[
+                ChildSpec(title="Child Title", spec_markdown=child_spec),
+            ],
+        ),
+    )
+
+    t = service.create("Fix the thing", "just one thing")
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert "single child" in out.note
+    assert service.get(t.id).title == "Agent Title"
+
+
 # ---------------------------------------------------------------------------
 # triage pass tests
 # ---------------------------------------------------------------------------
