@@ -138,8 +138,10 @@ class GitLabForge(Forge):
                 f"{r.text[:300]}"
             )
 
-    def _find_mr(self, project_path: str, source_branch: str) -> dict | None:
-        """GET /projects/:id/merge_requests?source_branch=…&state=all&per_page=1."""
+    def _find_mr(
+        self, project_path: str, source_branch: str, state: str = "all"
+    ) -> dict | None:
+        """GET /projects/:id/merge_requests?source_branch=…&state=…&per_page=1."""
         import httpx
 
         s = self.settings
@@ -152,7 +154,7 @@ class GitLabForge(Forge):
                 headers=headers,
                 params={
                     "source_branch": source_branch,
-                    "state": "all",
+                    "state": state,
                     "per_page": 1,
                 },
             )
@@ -246,7 +248,9 @@ class GitLabForge(Forge):
                 # MR already exists — find it and return its web_url
                 try:
                     existing = self._find_mr(
-                        project_path=project_path, source_branch=source_branch
+                        project_path=project_path,
+                        source_branch=source_branch,
+                        state="opened",
                     )
                 except Exception as exc:
                     raise RuntimeError(
