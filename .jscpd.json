@@ -11,7 +11,7 @@
     "**/build/**",
     "**/*.egg-info/**"
   ],
-  "formats": ["python", "javascript", "css"],
+  "format": ["python", "javascript", "css"],
   "reporters": ["consoleFull"],
   "output": "/tmp/jscpd-report",
   "gitignore": true

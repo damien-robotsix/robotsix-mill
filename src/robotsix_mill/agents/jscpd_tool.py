@@ -31,8 +31,6 @@ def run_jscpd(repo_dir: Path) -> str:
                 ".jscpd.json",
                 "--reporters",
                 "json",
-                "--mode",
-                "strict",
                 ".",
             ],
             capture_output=True,
@@ -85,8 +83,8 @@ def _parse_jscpd_output(stdout: str) -> str:
 
     if total_clones == 0 or not duplications:
         return (
-            f"jscpd scan complete — **no clone pairs detected** "
-            f"above the configured thresholds (minLines=5, minTokens=40)."
+            "jscpd scan complete — **no clone pairs detected** "
+            "above the configured thresholds (minLines=5, minTokens=40)."
         )
 
     lines: list[str] = [
