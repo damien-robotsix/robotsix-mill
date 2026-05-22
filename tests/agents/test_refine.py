@@ -55,6 +55,59 @@ def test_empty_title_and_draft_blocks(ctx, service):
     assert "empty title and draft" in out.note
 
 
+def test_dep_gated_ticket_is_not_refined(ctx, service, monkeypatch):
+    """A DRAFT ticket with an unmet dependency is NOT refined."""
+    parent = service.create("Parent ticket", "parent draft")
+    dependent = service.create("Dependent ticket", "dependent draft")
+    service.set_depends_on(dependent.id, [parent.id])
+    # Re-read so the in-memory ticket object has the persisted depends_on.
+    dependent = service.get(dependent.id)
+
+    refine_called = False
+
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
+        nonlocal refine_called
+        refine_called = True
+        return _single("## Problem\nx\n")
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    out = RefineStage().run(dependent, ctx)
+
+    assert not refine_called
+    assert out.next_state is State.DRAFT
+    assert service.get(dependent.id).state is State.DRAFT
+
+
+def test_dep_satisfied_ticket_is_refined(ctx, service, monkeypatch):
+    """Once the dependency reaches a terminal state (CLOSED/DONE),
+    the refine runs normally."""
+    parent = service.create("Parent ticket", "parent draft")
+    dependent = service.create("Dependent ticket", "dependent draft")
+    service.set_depends_on(dependent.id, [parent.id])
+
+    # Transition parent to DONE → CLOSED (terminal).
+    service.transition(parent.id, State.DONE, "done")
+    service.transition(parent.id, State.CLOSED, "closed")
+
+    # Re-read so the in-memory ticket object has the persisted depends_on.
+    dependent = service.get(dependent.id)
+
+    refine_called = False
+
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
+        nonlocal refine_called
+        refine_called = True
+        return _single("## Problem\nx\n")
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    out = RefineStage().run(dependent, ctx)
+
+    assert refine_called
+    assert out.next_state is State.READY
+
+
 def test_no_api_key_blocks(ctx, service, monkeypatch):
     def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context=""):
         raise RuntimeError("OPENROUTER_API_KEY is not set")
