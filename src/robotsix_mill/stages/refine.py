@@ -112,6 +112,7 @@ class RefineStage(Stage):
                 draft_body=draft,
                 candidates_json=candidates_json,
                 recent_commits_json=recent_commits_json,
+                repo_dir=repo_dir,
             )
         except Exception:
             log.warning(
