@@ -87,6 +87,7 @@ class ReviewStage(Stage):
                     f"Review round cap exhausted ({rounds}/{s.review_max_rounds} "
                     f"REQUEST_CHANGES rounds). Escalating to DELIVERABLE for "
                     f"human merge approval.\n\nLast review verdict:\n{verdict.comments}",
+                    author="review",
                 )
                 ctx.service.set_review_rounds(ticket.id, 0)
                 return Outcome(
