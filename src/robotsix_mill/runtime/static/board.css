@@ -115,6 +115,10 @@ border-left:3px solid #2563eb;border-radius:3px}
 .modal-btn-create:disabled{opacity:.5;cursor:default}
 .inquiry-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
 margin-top:3px;background:#1e2a3a;color:#38bdf8;text-transform:uppercase;letter-spacing:.04em}
+.epic-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
+margin-top:3px;background:#2a1a3b;color:#c084fc;text-transform:uppercase;letter-spacing:.04em}
+.epic-ref{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
+margin-top:3px;background:#1e1a2a;color:#a78bfa;letter-spacing:.03em}
 .dr-source-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
   margin-bottom:10px;background:#1a2a3b;color:#60c0fa;text-transform:uppercase;letter-spacing:.04em}
 /* cost dashboard */
@@ -130,3 +134,9 @@ margin-top:3px;background:#1e2a3a;color:#38bdf8;text-transform:uppercase;letter-
 .cost-bar-track{flex:1;height:14px;background:#1a1e27;border-radius:7px;overflow:hidden;min-width:20px}
 .cost-bar-fill{height:100%;border-radius:7px;transition:width .3s;min-width:2px}
 .cost-bar-amount{width:80px;text-align:right;font-size:12px;color:#eef0f4;font-variant-numeric:tabular-nums;flex-shrink:0}
+/* epic children list */
+.children-list{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.child-ticket{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#1d212c;border:1px solid #262b36;border-radius:4px;font-size:12px}
+.child-state{font-size:10px;padding:1px 4px;border-radius:3px;text-transform:uppercase;letter-spacing:.03em;border-left:3px solid var(--c);padding-left:5px}
+.child-title{color:#eef0f4;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.child-id{font-size:10px}

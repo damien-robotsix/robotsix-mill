@@ -71,6 +71,8 @@ async function refresh(){
    <button class="del-btn" title="Delete ticket" onclick="event.stopPropagation();del_('${t.id}')">✕</button>
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
+   ${t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:""}
+   ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_id.slice(0,8))}…</span>`:""}
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
@@ -228,6 +230,72 @@ async function newInquiry(){
  // Auto-focus title
  titleEl.focus();
 }
+async function newEpic(){
+ // Build modal DOM
+ const backdrop=document.createElement("div");
+ backdrop.className="modal-backdrop";
+ const modal=document.createElement("div");
+ modal.className="modal";
+ modal.innerHTML=
+  `<h2>New Epic</h2>
+   <label class="modal-label">Title <span class="modal-req">*</span></label>
+   <input type="text" class="modal-input" id="modal-title" placeholder="Epic title / goal" autocomplete="off">
+   <div class="modal-field-error" id="modal-title-err"></div>
+   <label class="modal-label">Description</label>
+   <textarea class="modal-textarea" id="modal-desc" rows="8" placeholder="Scope, outcome, notes… (optional)"></textarea>
+   <div class="modal-buttons">
+    <span class="modal-submit-error" id="modal-submit-err"></span>
+    <button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>
+    <button type="button" class="modal-btn-create" id="modal-create">Create</button>
+   </div>`;
+ backdrop.appendChild(modal);
+ document.body.appendChild(backdrop);
+
+ const titleEl=document.getElementById("modal-title");
+ const titleErr=document.getElementById("modal-title-err");
+ const descEl=document.getElementById("modal-desc");
+ const submitErr=document.getElementById("modal-submit-err");
+ const createBtn=document.getElementById("modal-create");
+
+ function close(){
+  document.body.removeChild(backdrop);
+ }
+
+ function showTitleErr(msg){titleErr.textContent=msg}
+ function clearTitleErr(){titleErr.textContent=""}
+ function showSubmitErr(msg){submitErr.textContent=msg}
+ function clearSubmitErr(){submitErr.textContent=""}
+
+ async function doSubmit(){
+  const title=titleEl.value.trim();
+  if(!title){showTitleErr("Title is required");titleEl.focus();return}
+  clearTitleErr();clearSubmitErr();
+  createBtn.disabled=true;createBtn.textContent="Creating…";
+  const r=await jpost("/epics",{title:title,description:descEl.value});
+  if(!r.ok){const e=await r.text();showSubmitErr("create failed: "+e);
+   createBtn.disabled=false;createBtn.textContent="Create"}
+  else{close();refresh()}
+ }
+
+ // Backdrop click → close
+ backdrop.addEventListener("click",function(e){if(e.target===backdrop)close()});
+
+ // Cancel button
+ document.getElementById("modal-cancel").addEventListener("click",close);
+
+ // Create button
+ createBtn.addEventListener("click",doSubmit);
+
+ // Keyboard handling
+ modal.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){e.preventDefault();close();return}
+  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();doSubmit();return}
+  if(e.key==="Enter"&&e.target===titleEl){e.preventDefault();descEl.focus();return}
+ });
+
+ // Auto-focus title
+ titleEl.focus();
+}
 async function del_(id){
  if(!confirm("Delete ticket "+id+"? This is irreversible (row, history, workspace)."))return;
  const r=await jdel("/tickets/"+id);
@@ -319,15 +387,16 @@ async function runSurvey(){
 }
 async function open_(id){
  sel=id;
- const [t,h,d,cs,rt]=await Promise.all([jget("/tickets/"+id),
+ const [t,h,d,cs,rt,ch]=await Promise.all([jget("/tickets/"+id),
    jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
-   jget("/tickets/"+id+"/comments"),jget("/tickets/"+id+"/retrospect")]);
+   jget("/tickets/"+id+"/comments"),jget("/tickets/"+id+"/retrospect"),
+   jget("/tickets/"+id+"/children")]);
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
    <div class="muted">${t.id}</div>
    <p>state <b class="s-${t.state}" style="border-left:3px solid var(--c);
-      padding-left:6px">${t.state}</b>${t.kind==="inquiry"?` <span class="inquiry-badge">🔍 inquiry</span>`:""} · branch ${esc(t.branch)||"—"}<br>
+      padding-left:6px">${t.state}</b>${t.kind==="inquiry"?` <span class="inquiry-badge">🔍 inquiry</span>`:""}${t.kind==="epic"?` <span class="epic-badge">📋 epic</span>`:""} · branch ${esc(t.branch)||"—"}<br>
    source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
    (t.origin_session_url?` · origin <a href="${esc(t.origin_session_url)}" target="_blank" rel="noopener" class="origin-link">${esc(t.origin_session)}</a>`:
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
@@ -337,6 +406,8 @@ async function open_(id){
    created ${t.created_at} · updated ${t.updated_at}</p>`+
    (t.depends_on?`<p><b>depends on:</b> ${esc(t.depends_on)}</p>`:"")+
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
+   (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_id)}</span></p>`:"")+
+   (ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">${ch.map(c=>`<div class="child-ticket"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")}</div>`:"")+
    `<h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+esc(e.note):""}</div>`).join("")+
