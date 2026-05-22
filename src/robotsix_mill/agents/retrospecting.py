@@ -126,6 +126,38 @@ tickets. Vague or "just in case" observations -> false.
 
 Return the full, updated memory document in `updated_memory`.  If the
 incoming memory is empty, you are starting a fresh ledger.
+
+**Concrete incomplete-work detection**
+
+In addition to the systemic-pattern analysis above, inspect this ticket for
+CONCRETE incomplete work — definite, verifiable gaps, not speculative
+patterns. Look for:
+
+- A stub, placeholder, `NotImplementedError`, or `TODO` the implementation
+  shipped (visible in the ticket description, workflow notes, or trace
+  output).
+- A follow-up the ticket's spec or summary explicitly promised ("a follow-up
+  will…", "TODO in a future ticket…", "the real X will be wired later") that
+  was never filed — check the `## Prior proposals — verified state` table
+  to confirm no equivalent ticket exists.
+- An implementation that materially under-delivered its spec (e.g. the spec
+  required X, but the workflow history shows only Y was done).
+
+When you find a concrete gap, set `follow_up_title` to a concise,
+self-contained ticket title and `follow_up_body` to a clear description of
+what's missing and what needs to happen. The body MUST cite evidence — the
+specific file, function name, or spec section where the gap is visible.
+
+This is INDEPENDENT of `propose_draft`. A single ticket can have BOTH a
+systemic proposal AND a concrete follow-up, or just one, or neither. The
+concrete follow-up does NOT need corroboration across tickets — it is a
+definite gap in THIS ticket. Only set `follow_up_title` when you have clear,
+specific evidence; a clean, fully-delivered ticket should leave both null.
+
+The follow-up title should be a self-contained ticket title a human could
+understand without reading the retrospect output — include the specific
+function or component name (e.g. "Wire real doc agent in
+DocumentStage._run_doc_agent" not "Complete the stub").
 """
 
 _DEEP_ANALYSIS_ADDENDUM = """\
@@ -159,6 +191,8 @@ class RetrospectResult(BaseModel):
     draft_body: str | None = None
     updated_memory: str = ""
     draft_gap_id: str | None = None
+    follow_up_title: str | None = None
+    follow_up_body: str | None = None
 
     @model_validator(mode="before")
     @classmethod

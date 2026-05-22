@@ -912,3 +912,173 @@ class TestRetrospectPruneConversation:
         # Don't create a conversation file — should not error.
         outcome = stage.run(ticket, ctx)
         assert outcome.next_state is State.CLOSED
+
+
+# ---------------------------------------------------------------------------
+# follow-up (concrete incomplete-work detection) tests
+# ---------------------------------------------------------------------------
+
+
+def test_follow_up_spawned_for_stub(tmp_path, monkeypatch):
+    """Agent returns follow_up_title/follow_up_body → stage creates a
+    DRAFT with source='retrospect' and parent_id set to the completed ticket."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="stub found",
+            conclusion="follow-up filed",
+            follow_up_title="Wire real doc agent in DocumentStage._run_doc_agent",
+            follow_up_body="The _run_doc_agent method is a no-op stub. Wire the real agent.",
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 1
+    assert drafts[0].source == "retrospect"
+    assert drafts[0].parent_id == t.id
+    assert drafts[0].title == "Wire real doc agent in DocumentStage._run_doc_agent"
+
+
+def test_follow_up_dedup_skips_duplicate(tmp_path, monkeypatch):
+    """A non-terminal ticket with the same title (case-insensitive)
+    already exists → _maybe_spawn_follow_up returns None, no duplicate."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    # Pre-create an open ticket with the same title (different case).
+    existing = ctx.service.create(
+        "Wire real doc agent in DocumentStage._run_doc_agent",
+        "Existing stub ticket.",
+    )
+    # Leave in DRAFT (default) — an open, non-terminal ticket.
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="stub found",
+            conclusion="follow-up already filed",
+            follow_up_title="WIRE REAL DOC AGENT IN DocumentStage._run_doc_agent",
+            follow_up_body="The _run_doc_agent method is a no-op stub.",
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    # Only the pre-existing ticket + the completed ticket, no extra draft.
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 1
+    assert drafts[0].id == existing.id
+
+
+def test_follow_up_not_spawned_for_clean_ticket(tmp_path, monkeypatch):
+    """Agent returns no follow-up (both fields None) → nothing created,
+    board stays clean."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="clean run",
+            conclusion="closed",
+            follow_up_title=None,
+            follow_up_body=None,
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    assert len(ctx.service.list()) == 1  # only the completed ticket
+
+
+def test_follow_up_in_artifact_and_note(tmp_path, monkeypatch):
+    """When a follow-up is spawned, its ID appears in retrospect.md and
+    the transition note."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="stub found",
+            conclusion="follow-up filed",
+            follow_up_title="Wire real doc agent in DocumentStage._run_doc_agent",
+            follow_up_body="The _run_doc_agent method is a no-op stub.",
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    # Transition note includes follow-up ID.
+    assert "follow-up" in out.note
+
+    # Artifact includes follow-up line.
+    artifact = (ctx.service.workspace(t).artifacts_dir / "retrospect.md").read_text()
+    assert "follow-up:" in artifact
+    assert "—" not in artifact.split("follow-up:")[1].split("\n")[0]
+
+
+def test_follow_up_dedup_allows_refile_when_closed(tmp_path, monkeypatch):
+    """An existing ticket with the same title is CLOSED → dedup does NOT
+    block (regression is worth re-filing)."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    # Create a CLOSED ticket with the same title.
+    closed_ticket = ctx.service.create(
+        "Wire real doc agent in DocumentStage._run_doc_agent",
+        "Already closed.",
+    )
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
+        ctx.service.transition(closed_ticket.id, st)
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="stub still present",
+            conclusion="follow-up re-filed",
+            follow_up_title="Wire real doc agent in DocumentStage._run_doc_agent",
+            follow_up_body="The stub is still there.",
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    # A new draft should be created (re-filed) because the matching one was CLOSED.
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 1
+    assert drafts[0].parent_id == t.id  # the new follow-up
+
+
+def test_systemic_proposals_still_work(tmp_path, monkeypatch):
+    """Regression: propose_draft path still creates drafts exactly as
+    before — no interaction between the two mechanisms."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "parent-ticket-session-id",
+    )
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="wastes tokens",
+            conclusion="improvement draft filed",
+            propose_draft=True,
+            draft_title="Cut retry tokens",
+            draft_body="do the thing",
+            follow_up_title=None,
+            follow_up_body=None,
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    assert "draft" in out.note
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 1
+    assert drafts[0].parent_id == t.id
+    assert drafts[0].title == "Cut retry tokens"
+    assert drafts[0].source == "retrospect"
