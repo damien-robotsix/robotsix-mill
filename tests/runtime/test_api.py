@@ -791,32 +791,35 @@ def test_create_inquiry_with_depends_on_is_rejected(client):
     )
 
 
-def test_list_tickets_include_closed_hides_only_closed_keeps_done(client, service):
-    """include_closed=false must hide CLOSED but ALWAYS return DONE —
-    DONE is the transient retrospect-in-flight window and needs to
-    stay visible so the board can show retrospect work without the
-    user toggling 'Show closed.'"""
+def test_list_tickets_include_closed_hides_closed_and_epic_closed_keeps_done(client, service):
+    """include_closed=false must hide CLOSED and EPIC_CLOSED but ALWAYS
+    return DONE — DONE is the transient retrospect-in-flight window and
+    needs to stay visible so the board can show retrospect work without
+    the user toggling 'Show closed.'"""
     # Create via the service (not the API) to bypass maybe_enqueue —
     # the worker would otherwise refine these tickets and BLOCK them
     # on the missing API key, racing the transitions below.
     closed = service.create("C-closed")
     done = service.create("C-done")
     draft = service.create("C-draft")
+    epic = service.create("C-epic", kind="epic")
     # Walk via legal edges: DRAFT -> DONE (refine's dedup-discard route),
-    # DONE -> CLOSED (retrospect's edge).
+    # DONE -> CLOSED (retrospect's edge), EPIC_OPEN -> EPIC_CLOSED.
     service.transition(closed.id, State.DONE)
     service.transition(closed.id, State.CLOSED)
     service.transition(done.id, State.DONE)
+    service.transition(epic.id, State.EPIC_CLOSED)
 
     # include_closed=true → everything visible.
     ids_all = {t["id"] for t in client.get("/tickets").json()}
-    assert {closed.id, done.id, draft.id} <= ids_all
+    assert {closed.id, done.id, draft.id, epic.id} <= ids_all
 
-    # include_closed=false → CLOSED hidden, DONE + DRAFT still visible.
+    # include_closed=false → CLOSED + EPIC_CLOSED hidden, DONE + DRAFT still visible.
     ids = {t["id"] for t in client.get("/tickets?include_closed=false").json()}
     assert done.id in ids, "DONE must stay visible (retrospect-in-flight)"
     assert draft.id in ids
     assert closed.id not in ids, "CLOSED must be hidden by the toggle"
+    assert epic.id not in ids, "EPIC_CLOSED must be hidden by the toggle"
 
 
 def test_get_retrospect_returns_artifact_or_empty(client, service, tmp_path):

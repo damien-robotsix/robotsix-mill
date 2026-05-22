@@ -90,12 +90,13 @@ def list_tickets(
     # Per-ticket detail GETs keep both authoritative — when the user
     # opens the drawer they see real cost and a real PR link.
     #
-    # include_closed=false hides CLOSED (the volume case) but keeps
-    # DONE visible — DONE is the transient retrospect-in-flight window
-    # and we want to watch retrospect work without toggling.
+    # include_closed=false hides CLOSED and EPIC_CLOSED (the volume
+    # cases) but keeps DONE visible — DONE is the transient
+    # retrospect-in-flight window and we want to watch retrospect work
+    # without toggling.
     exclude = None
     if not include_closed:
-        exclude = {State.CLOSED}
+        exclude = {State.CLOSED, State.EPIC_CLOSED}
     return [
         enrich_ticket_read(
             t, settings, svc, blocking_cost=False, fetch_pr_url=False
