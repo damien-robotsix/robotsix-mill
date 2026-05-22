@@ -47,6 +47,10 @@ class Ticket(SQLModel, table=True):
     # cumulative LLM spend in USD, synced from Langfuse session totals
     # by the periodic cost-sync loop. Zero when Langfuse is unconfigured.
     cost_usd: float = Field(default=0.0)
+    # Count of consecutive REQUEST_CHANGES verdicts inside the current
+    # review session.  Reset on APPROVE or when the cap is hit; persists
+    # across the CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW loop.
+    review_rounds: int = Field(default=0)
     # optional JSON list of ticket IDs that must reach CLOSED/DONE before
     # this ticket can leave READY (implement-stage gate).
     depends_on: str | None = Field(default=None)
