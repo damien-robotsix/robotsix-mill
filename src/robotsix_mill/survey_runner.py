@@ -75,8 +75,7 @@ def run_survey_pass() -> SurveyPassResult:
     session_id = make_session_id("survey")
     log.info("survey pass starting (session %s)", session_id)
     try:
-        with tracing.start_ticket_root_span(session_id), \
-                tracing.trace_stage("survey"):
+        with tracing.start_ticket_root_span(session_id, "survey"):
             agent_fn = partial(surveying.run_survey_agent, repo_dir=repo_dir)
             result = run_agent_pass(
                 agent_fn=agent_fn,

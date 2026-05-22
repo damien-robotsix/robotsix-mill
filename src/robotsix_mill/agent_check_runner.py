@@ -85,8 +85,7 @@ def run_agent_check_pass(root: str | None = None) -> AgentCheckPassResult:
     session_id = make_session_id("agent-check")
     log.info("agent-check pass starting (session %s)", session_id)
     try:
-        with tracing.start_ticket_root_span(session_id), \
-                tracing.trace_stage("agent-check"):
+        with tracing.start_ticket_root_span(session_id, "agent-check"):
             agent_fn = partial(
                 agent_check.run_agent_check_agent, repo_dir=repo_dir
             )

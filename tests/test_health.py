@@ -463,12 +463,8 @@ def test_run_health_pass_opens_langfuse_session(tmp_path, monkeypatch):
     seen = {}
 
     @contextlib.contextmanager
-    def fake_root(sid):
+    def fake_root(sid, name=None):
         seen["session_id"] = sid
-        yield
-
-    @contextlib.contextmanager
-    def fake_stage(name):
         seen["stage"] = name
         yield
 
@@ -479,7 +475,6 @@ def test_run_health_pass_opens_langfuse_session(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(tracing, "start_ticket_root_span", fake_root)
-    monkeypatch.setattr(tracing, "trace_stage", fake_stage)
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr(
         "robotsix_mill.health_runner.Settings", lambda: settings

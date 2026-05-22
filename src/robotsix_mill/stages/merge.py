@@ -193,8 +193,7 @@ class MergeStage(Stage):
             # traces are attributed to the ticket, not an orphan root
             # trace. (This is what made the overnight rebase cost
             # invisible in the per-ticket session total.)
-            with tracing.start_ticket_root_span(ticket.id), \
-                    tracing.trace_stage("rebase"):
+            with tracing.start_ticket_root_span(ticket.id, "rebase"):
                 # Refresh origin/<target> so the agent rebases onto
                 # current main, not the stale ref frozen at clone time.
                 # The sandbox has --network none; git fetch MUST run
