@@ -478,6 +478,7 @@ class Worker:
         self._agent_check_task: asyncio.Task | None = None
         self._ci_monitor_task: asyncio.Task | None = None
         self._test_gap_task: asyncio.Task | None = None
+        self._survey_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -948,13 +949,26 @@ class Worker:
                 "Periodic test-gap enabled: interval %ds",
                 self.ctx.settings.test_gap_interval_seconds,
             )
+        # Opt-in periodic survey
+        if self.ctx.settings.survey_periodic and self._survey_task is None:
+            from ..survey_runner import run_survey_pass
+            self._survey_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "survey", run_survey_pass,
+                    max(60, self.ctx.settings.survey_interval_seconds),
+                )
+            )
+            log.info(
+                "Periodic survey enabled: interval %ds",
+                self.ctx.settings.survey_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
         for attr in (
             "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
-            "_agent_check_task", "_test_gap_task",
+            "_agent_check_task", "_test_gap_task", "_survey_task",
         ):
             t = getattr(self, attr)
             if t is not None:
