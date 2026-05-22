@@ -273,6 +273,23 @@ class RefineStage(Stage):
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))
 
+        # --- epic body handling (non-split path) ---
+        # In autonomous mode: apply immediately to the epic.
+        # In gated mode: store as artifact in child workspace for
+        # later application on approval.
+        if result.epic_body and result.epic_body.strip() and epic_ctx:
+            parent = ctx.service.get(ticket.parent_id)
+            if parent is not None and parent.kind == "epic":
+                if not ctx.settings.require_approval:
+                    new_hash = ctx.service.workspace(parent).write_description(
+                        result.epic_body.strip()
+                    )
+                    ctx.service.set_content_hash(parent.id, new_hash)
+                else:
+                    (ws.artifacts_dir / "epic-body-proposed.md").write_text(
+                        result.epic_body.strip(), encoding="utf-8"
+                    )
+
         # --- preserve the raw draft (always, for traceability) ---
         (ws.artifacts_dir / "draft-original.md").write_text(
             draft if draft else "(title-only ticket, no body provided)",
@@ -390,6 +407,18 @@ class RefineStage(Stage):
             if auto_reason:
                 child_note += f" (auto-approved: {auto_reason})"
             ctx.service.transition(cid, child_state, note=child_note)
+
+        # Apply epic body immediately in split path regardless of
+        # require_approval — the children each go through their own
+        # approval flow, and the original ticket is closed so there
+        # is no single approval event to gate on.
+        if result.epic_body and result.epic_body.strip() and epic_ctx:
+            parent = ctx.service.get(ticket.parent_id)
+            if parent is not None and parent.kind == "epic":
+                new_hash = ctx.service.workspace(parent).write_description(
+                    result.epic_body.strip()
+                )
+                ctx.service.set_content_hash(parent.id, new_hash)
 
         # Close the original ticket.
         ids_note = ", ".join(child_ids)

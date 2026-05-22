@@ -58,6 +58,7 @@ class RefineResult(BaseModel):
     children: list[ChildSpec] | None = None
     updated_memory: str = ""
     title: str | None = None
+    epic_body: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -322,6 +323,13 @@ Rules for splitting:
   the refined scope, set ``title`` to a concise, descriptive
   alternative. Leave it unset (None) when the original title is
   already accurate — don't rename just for the sake of renaming.
+
+- When the user prompt contains ``<epic_context>``, also produce an
+  ``epic_body`` field: a revised epic description that integrates the
+  original epic goal with the concrete child spec you just produced,
+  explaining the global strategy in a way that stays useful as
+  subsequent children are refined. Keep the epic body concise and
+  strategic (not a rehash of the child spec).
 """
 
 REVIEWER_SENDBACK_PROMPT = """\
@@ -398,6 +406,8 @@ def run_refine_agent(
       - ``spec_markdown``: single-scope spec (when split=False)
       - ``children``: list of ``ChildSpec`` (when split=True)
       - ``updated_memory``: updated memory ledger
+      - ``epic_body``: revised epic description when ``<epic_context>``
+        was provided, otherwise ``None``
     """
     from pydantic_ai import PromptedOutput
 

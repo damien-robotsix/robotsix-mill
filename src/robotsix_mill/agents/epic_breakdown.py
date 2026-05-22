@@ -39,12 +39,20 @@ Rules:
 
 Return a list of child ticket titles and a parallel list of bodies
 (same length; same order).
+
+After producing the child ticket lists, also produce an ``epic_body``
+field: a revised epic description that explains the global breakdown
+strategy at a high level. It should help a reviewer understand why the
+epic was split into these particular children and what each child
+contributes to the overall goal. Keep it concise — a short paragraph
+or two.
 """
 
 
 class EpicBreakdownResult(BaseModel):
     child_titles: list[str] = Field(default_factory=list)
     child_bodies: list[str] = Field(default_factory=list)
+    epic_body: str | None = None
 
 
 def run_epic_breakdown_agent(
@@ -57,7 +65,8 @@ def run_epic_breakdown_agent(
 
     The agent receives only the epic title + description — no
     filesystem access.  Returns a structured ``EpicBreakdownResult``
-    with parallel ``child_titles`` and ``child_bodies`` lists.
+    with parallel ``child_titles`` and ``child_bodies`` lists, and
+    an optional ``epic_body`` field with a revised epic description.
 
     The agent is constructed via :func:`~.base.build_agent` with
     ``PromptedOutput(EpicBreakdownResult)``, ``web=False``,

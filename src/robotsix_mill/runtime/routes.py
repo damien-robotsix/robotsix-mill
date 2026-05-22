@@ -201,6 +201,27 @@ def approve_ticket(
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
+
+    # If this ticket has an epic parent, check for a proposed epic body
+    # artifact and apply it to the epic on approval.
+    try:
+        if ticket.parent_id:
+            parent = svc.get(ticket.parent_id)
+            if parent is not None and parent.kind == "epic":
+                artifact = (
+                    svc.workspace(ticket).artifacts_dir
+                    / "epic-body-proposed.md"
+                )
+                if artifact.exists():
+                    epic_body = artifact.read_text(encoding="utf-8").strip()
+                    if epic_body:
+                        new_hash = svc.workspace(parent).write_description(
+                            epic_body
+                        )
+                        svc.set_content_hash(parent.id, new_hash)
+    except Exception:
+        pass  # best-effort: approval always succeeds
+
     maybe_enqueue(ticket, worker)  # implement picks it up from ready
     return enrich_ticket_read(ticket, settings, svc)
 
@@ -338,6 +359,14 @@ def generate_children(
             # Build linear dependency chain: C0 ← C1 ← C2 ← ...
             for i in range(1, len(created_ids)):
                 svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
+
+            # Apply the revised epic body to the epic immediately
+            # (generate-children is a one-shot manual trigger).
+            if result.epic_body and result.epic_body.strip():
+                new_hash = svc.workspace(ticket).write_description(
+                    result.epic_body.strip()
+                )
+                svc.set_content_hash(ticket_id, new_hash)
 
             summary = (
                 f"Created {len(created_ids)} children: "

@@ -1083,3 +1083,44 @@ def test_generate_children_creates_children(client, service, monkeypatch):
     assert len(children) == 2, f"expected 2 children, got {len(children)}"
     child_titles = {c["title"] for c in children}
     assert child_titles == {"Child A", "Child B"}
+
+
+def test_generate_children_applies_epic_body(client, service, monkeypatch):
+    """POST /tickets/{id}/generate-children writes the agent's epic_body
+    back to the epic's description.md."""
+    import threading
+
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
+    epic = service.create("Break me down", "Original epic description", kind="epic")
+
+    # Signal when the background thread has written the epic body.
+    epic_updated = threading.Event()
+    app_svc = client.app.state.service
+    orig_set_hash = app_svc.set_content_hash
+
+    def tracking_set_hash(ticket_id, new_hash):
+        orig_set_hash(ticket_id, new_hash)
+        if ticket_id == epic.id:
+            epic_updated.set()
+
+    monkeypatch.setattr(app_svc, "set_content_hash", tracking_set_hash)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        lambda **kw: EpicBreakdownResult(
+            child_titles=["Child A"],
+            child_bodies=["Body A"],
+            epic_body="Revised epic strategy: break into auth, roles, audit.",
+        ),
+    )
+
+    r = client.post(f"/tickets/{epic.id}/generate-children")
+    assert r.status_code == 202
+
+    # Wait for the background thread to apply the epic body.
+    assert epic_updated.wait(5), "epic body was not applied in time"
+
+    # Epic description should now contain the revised body.
+    epic_desc = service.workspace(epic).read_description()
+    assert "Revised epic strategy" in epic_desc
+    assert "auth, roles, audit" in epic_desc
