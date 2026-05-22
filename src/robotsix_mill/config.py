@@ -538,6 +538,19 @@ class Settings(BaseSettings):
     survey_memory_path: Path | None = Field(
         default=None, alias="MILL_SURVEY_MEMORY_PATH"
     )
+    # Opt-in periodic survey pass. Defaults to True (on by default —
+    # "default yes"). Flip to false to disable the automatic weekly
+    # cadence while still allowing on-demand POST /survey and
+    # board-button triggers.
+    survey_periodic: bool = Field(
+        default=True, alias="MILL_SURVEY_PERIODIC"
+    )
+    # Seconds between automatic survey passes when
+    # MILL_SURVEY_PERIODIC=true. Default 604800 (7 days). Minimum
+    # enforced at 60s in the worker loop.
+    survey_interval_seconds: int = Field(
+        default=604800, alias="MILL_SURVEY_INTERVAL_SECONDS"
+    )
 
     # --- action-agent memory paths ---
     # Path to the implement agent's Markdown memory ledger. Override to
