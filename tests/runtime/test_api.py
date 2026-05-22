@@ -1044,10 +1044,26 @@ def test_generate_children_202_fire_and_forget(client, service, monkeypatch):
 def test_generate_children_creates_children(client, service, monkeypatch):
     """POST /tickets/{id}/generate-children creates child tickets with
     the titles and bodies returned by the agent."""
+    import threading
+
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
 
     epic = service.create("Break me down", kind="epic")
 
+    # Signal when the background thread has created both children.
+    children_created = threading.Event()
+    child_count = [0]
+    app_svc = client.app.state.service
+    orig_create = app_svc.create
+
+    def tracking_create(title, **kwargs):
+        result = orig_create(title, **kwargs)
+        child_count[0] += 1
+        if child_count[0] >= 2:
+            children_created.set()
+        return result
+
+    monkeypatch.setattr(app_svc, "create", tracking_create)
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
         lambda **kw: EpicBreakdownResult(
@@ -1059,17 +1075,10 @@ def test_generate_children_creates_children(client, service, monkeypatch):
     r = client.post(f"/tickets/{epic.id}/generate-children")
     assert r.status_code == 202
 
-    # The background thread is daemon — it should finish quickly since
-    # the agent is monkeypatched to return instantly.
-    import time
-    deadline = time.monotonic() + 2
-    children = []
-    while time.monotonic() < deadline:
-        children = client.get(f"/tickets/{epic.id}/children").json()
-        if len(children) == 2:
-            break
-        time.sleep(0.02)
+    # Wait for the background thread to finish creating children.
+    assert children_created.wait(5), "children were not created in time"
 
+    children = client.get(f"/tickets/{epic.id}/children").json()
     assert len(children) == 2, f"expected 2 children, got {len(children)}"
     child_titles = {c["title"] for c in children}
     assert child_titles == {"Child A", "Child B"}

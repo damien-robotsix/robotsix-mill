@@ -8,11 +8,16 @@ from robotsix_mill.agents.epic_breakdown import (
 
 def test_epic_breakdown_prompt_covers_rules():
     """SYSTEM_PROMPT must include all documented breakdown rules so
-    that prompt edits cannot silently drop a constraint."""
+    that prompt edits cannot silently drop a constraint.
+
+    Uses direct substring checks against the known rule formulations
+    in the prompt rather than loose keyword matching, so that
+    rewording is detected as a failure.
+    """
     p = SYSTEM_PROMPT.lower()
 
-    # 2–8 children range.
-    assert "2–8 children" in p or "2-8 children" in p or "2-8" in p
+    # Break the epic into 2–8 children.
+    assert "2–8 children" in p or "2-8 children" in p
 
     # Self-contained tickets.
     assert "self-contained" in p
@@ -21,15 +26,16 @@ def test_epic_breakdown_prompt_covers_rules():
     assert "full scope" in p
     assert "union" in p
 
-    # Verb-led titles.
-    assert "verb" in p
+    # Verb-led titles (exact phrase from prompt).
+    assert "start with a verb" in p
 
-    # No fabricated dependencies.
-    assert "do not fabricate dependencies" in p or "do not fabricate" in p
+    # No fabricated dependencies (exact phrase from prompt).
+    assert "do not fabricate dependencies" in p
 
-    # No priorities or estimates.
-    assert "priorities" in p
-    assert "estimates" in p or "estimate effort" in p
+    # No priorities or estimates (exact phrases from the prompt rule
+    # "Do NOT assign priorities or estimate effort").
+    assert "do not assign priorities" in p
+    assert "estimate effort" in p
 
 
 def test_epic_breakdown_result_model():
