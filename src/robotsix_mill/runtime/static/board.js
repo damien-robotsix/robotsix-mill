@@ -759,4 +759,4 @@ function createTicketFromFinding(idx,event){
  titleEl.focus();
 }
 // -- end deep review ----------------------------------------------------
-refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);else if(costDashboardOpen)renderCostDashboard();if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);
+refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);
