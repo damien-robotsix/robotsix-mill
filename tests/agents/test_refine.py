@@ -1827,3 +1827,173 @@ def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path)
 
     assert not auto_approve_called
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+
+
+# --- epic body tests ---
+
+
+def test_epic_body_applied_immediately_in_autonomous_mode(ctx, service, monkeypatch):
+    """When require_approval=false, epic_body is written to the parent
+    epic's description.md immediately after refine."""
+    epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
+    child = service.create("Add login", "draft", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(
+            split=False,
+            spec_markdown="## Problem\nAdd login\n## Scope\n- login form\n",
+            epic_body="Revised epic strategy: login first, then roles.",
+        ),
+    )
+
+    out = RefineStage().run(child, ctx)
+    assert out.next_state is State.READY
+
+    # Epic description should now contain the revised body.
+    epic_desc = service.workspace(epic).read_description()
+    assert "Revised epic strategy" in epic_desc
+    assert "login first, then roles" in epic_desc
+
+
+def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, tmp_path):
+    """When require_approval=true, epic_body is stored as an artifact
+    in the child's workspace, NOT written to the epic yet."""
+    epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
+    child = service.create("Add login", "draft", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(
+            split=False,
+            spec_markdown="## Problem\nAdd login\n## Scope\n- login form\n",
+            epic_body="Revised epic strategy: login first.",
+        ),
+    )
+
+    gated_settings = Settings(
+        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+    )
+    gated_ctx = StageContext(settings=gated_settings, service=service)
+
+    out = RefineStage().run(child, gated_ctx)
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+
+    # Epic should NOT have been modified.
+    epic_desc = service.workspace(epic).read_description()
+    assert epic_desc == "Add authentication"
+    assert "Revised epic strategy" not in epic_desc
+
+    # Child workspace should contain the proposed artifact.
+    artifact = service.workspace(child).artifacts_dir / "epic-body-proposed.md"
+    assert artifact.exists()
+    assert artifact.read_text(encoding="utf-8") == "Revised epic strategy: login first."
+
+
+def test_epic_body_applied_on_approval_in_gated_mode(ctx, service, monkeypatch, tmp_path):
+    """When require_approval=true, the epic body is applied to the
+    epic only when the child ticket is approved."""
+    epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
+    child = service.create("Add login", "draft", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(
+            split=False,
+            spec_markdown="## Problem\nAdd login\n## Scope\n- login form\n",
+            epic_body="Revised epic strategy: login first.",
+        ),
+    )
+
+    gated_settings = Settings(
+        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+    )
+    gated_ctx = StageContext(settings=gated_settings, service=service)
+
+    out = RefineStage().run(child, gated_ctx)
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+
+    # Apply the refine outcome (simulate worker transition).
+    service.transition(child.id, out.next_state, out.note)
+
+    # Epic should still be unchanged before approval.
+    epic_desc = service.workspace(epic).read_description()
+    assert epic_desc == "Add authentication"
+
+    # Simulate approval: transition + apply epic body artifact.
+    ticket = service.transition(child.id, State.READY, note="approved by human")
+
+    # Now apply the epic body artifact (mimicking the approve route logic).
+    artifact = service.workspace(child).artifacts_dir / "epic-body-proposed.md"
+    if artifact.exists():
+        epic_body = artifact.read_text(encoding="utf-8").strip()
+        if epic_body:
+            new_hash = service.workspace(epic).write_description(epic_body)
+            service.set_content_hash(epic.id, new_hash)
+
+    # Epic should now contain the revised body.
+    epic_desc = service.workspace(epic).read_description()
+    assert "Revised epic strategy" in epic_desc
+    assert "login first" in epic_desc
+
+
+def test_epic_body_not_applied_when_no_epic_parent(ctx, service, monkeypatch):
+    """When the ticket has no epic parent, epic_body is silently ignored."""
+    t = service.create("Standalone ticket", "draft")
+
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(
+            split=False,
+            spec_markdown="## Problem\nStandalone\n## Scope\n- thing\n",
+            epic_body="This should be ignored.",
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    # No crash, spec written as normal.
+    assert service.workspace(t).read_description() == "## Problem\nStandalone\n## Scope\n- thing\n"
+
+    # No artifact created.
+    artifact = service.workspace(t).artifacts_dir / "epic-body-proposed.md"
+    assert not artifact.exists()
+
+
+def test_epic_body_applied_immediately_in_split_path(ctx, service, monkeypatch, tmp_path):
+    """In the split path, epic_body is applied immediately even when
+    require_approval=true, because the original ticket is closed."""
+    epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
+    child = service.create("Multi-change", "draft with multiple changes", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda **_: RefineResult(
+            split=True,
+            children=[
+                ChildSpec(title="Add login", spec_markdown="## Problem\nlogin\n## Scope\n- login\n"),
+                ChildSpec(title="Add roles", spec_markdown="## Problem\nroles\n## Scope\n- roles\n"),
+            ],
+            epic_body="Revised epic strategy: login then roles, each independent.",
+        ),
+    )
+
+    gated_settings = Settings(
+        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+    )
+    gated_ctx = StageContext(settings=gated_settings, service=service)
+
+    out = RefineStage().run(child, gated_ctx)
+    assert out.next_state is State.CLOSED
+
+    # Apply the transition so the original ticket is actually closed.
+    service.transition(child.id, out.next_state, out.note)
+
+    # Epic should be updated immediately despite gated mode.
+    epic_desc = service.workspace(epic).read_description()
+    assert "Revised epic strategy" in epic_desc
+    assert "login then roles" in epic_desc
+
+    # The original (child) ticket is closed.
+    assert service.get(child.id).state is State.CLOSED
