@@ -432,6 +432,18 @@ class Settings(BaseSettings):
         default=None, alias="MILL_HEALTH_MEMORY_PATH"
     )
 
+    # --- survey agent (OSS project discovery) ---
+    # Model for the survey agent. Defaults to the same capable model as
+    # audit. Override with MILL_SURVEY_MODEL.
+    survey_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_SURVEY_MODEL"
+    )
+    # Path to the survey agent's Markdown memory ledger. Override to pin
+    # a specific path; unset (default) derives <data_dir>/survey_memory.md.
+    survey_memory_path: Path | None = Field(
+        default=None, alias="MILL_SURVEY_MEMORY_PATH"
+    )
+
     # --- action-agent memory paths ---
     # Path to the implement agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/implement_memory.md.
@@ -518,6 +530,13 @@ class Settings(BaseSettings):
         if self.health_memory_path is not None:
             return self.health_memory_path
         return self.data_dir / "health_memory.md"
+
+    @property
+    def survey_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained survey memory ledger."""
+        if self.survey_memory_path is not None:
+            return self.survey_memory_path
+        return self.data_dir / "survey_memory.md"
 
     @property
     def implement_memory_file(self) -> Path:
