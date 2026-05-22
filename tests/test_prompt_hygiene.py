@@ -83,6 +83,8 @@ def test_health_prompt_no_tool_signatures():
     assert "use `explore`" in p
     assert "use `web_research`" in p
     assert "module size" in p  # dimension coverage
+    assert "test-suite organization" in p  # dimension 7
+    assert "documentation structure" in p  # dimension 8
 
 
 def test_auditing_prompt_no_tool_signatures():
