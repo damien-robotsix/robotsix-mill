@@ -29,11 +29,19 @@ _CATEGORIES = (
 )
 
 
-def make_report_issue_tool(settings: Settings):
+def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None):
     """Return the ``report_issue`` closure bound to *settings*.
 
     Lazily constructs a ``TicketService`` per call so this stays cheap
-    to attach to every agent and hermetic for tests."""
+    to attach to every agent and hermetic for tests.
+
+    Args:
+        settings: The application settings instance.
+        agent_name: If provided, stamped into the ticket body so the
+            originating agent is identifiable at a glance (e.g.
+            ``"run_tests"``).  When ``None`` or empty, the generic
+            wording is used.
+    """
 
     def report_issue(
         title: str,
@@ -99,10 +107,17 @@ def make_report_issue_tool(settings: Settings):
                         f"(state={t.state.value}) — not duplicating"
                     )
 
-            full_body = (
-                f"**Reported by an agent** (category: {cat})\n\n"
-                f"{(body or '').strip()}\n"
-            )
+            if agent_name:
+                full_body = (
+                    f"**Reported by the `{agent_name}` agent** "
+                    f"(category: {cat})\n\n"
+                    f"{(body or '').strip()}\n"
+                )
+            else:
+                full_body = (
+                    f"**Reported by an agent** (category: {cat})\n\n"
+                    f"{(body or '').strip()}\n"
+                )
 
             evidence = (evidence or "").strip()
             if evidence:

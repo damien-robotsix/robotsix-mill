@@ -139,7 +139,7 @@ def build_agent(
         # Every agent can self-report a blocking/degrading issue (missing
         # tool, error, workflow gap, missing input) as a draft ticket.
         # Dedup-guarded so a looping agent can't spam identical tickets.
-        all_tools.append(make_report_issue_tool(settings))
+        all_tools.append(make_report_issue_tool(settings, agent_name=name))
     if web:
         # Not ":online", not web_fetch on the main agent — a cheap
         # sub-agent does the searching and hands back only a conclusion.

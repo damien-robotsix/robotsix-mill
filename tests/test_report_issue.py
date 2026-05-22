@@ -291,3 +291,41 @@ def test_empty_evidence_whitespace_only_treated_as_no_evidence(settings):
 
     desc = workspace.read_description()
     assert "Raw evidence attached at artifacts/evidence.txt" not in desc
+
+
+def test_agent_name_stamped_in_body(settings):
+    """When agent_name is given, the ticket body includes it."""
+    tool = make_report_issue_tool(settings, agent_name="run_tests")
+    out = tool("Missing read tool", "agent needs a read_file tool", "missing-tool")
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    desc = svc.workspace(t).read_description()
+    assert "**Reported by the `run_tests` agent** (category: missing-tool)" in desc
+    assert "agent needs a read_file tool" in desc
+
+
+def test_agent_name_none_falls_back_to_generic(settings):
+    """When agent_name is None (the default), the generic wording is used."""
+    tool = make_report_issue_tool(settings, agent_name=None)
+    out = tool("Generic agent report", "some body", "error")
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    desc = svc.workspace(t).read_description()
+    assert "**Reported by an agent** (category: error)" in desc
+    assert "`None`" not in desc
+
+
+def test_agent_name_empty_string_falls_back(settings):
+    """When agent_name is an empty string, the generic wording is used."""
+    tool = make_report_issue_tool(settings, agent_name="")
+    out = tool("Empty name agent", "body", "workflow-improvement")
+    assert out.startswith("report_issue: filed draft ")
+
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    desc = svc.workspace(t).read_description()
+    assert "**Reported by an agent** (category: workflow-improvement)" in desc
