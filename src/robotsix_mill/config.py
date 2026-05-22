@@ -208,6 +208,12 @@ class Settings(BaseSettings):
     # + notifies instead of silently re-billing the LLM forever. Poll
     # stages (merge/deliver) are exempt — in_review legitimately waits.
     max_stuck_cycles: int = Field(default=3, alias="MILL_MAX_STUCK_CYCLES")
+    # Dollar-cap safety net: if a ticket's cumulative Langfuse-traced
+    # LLM spend exceeds this value (across all stages), the worker
+    # escalates it to BLOCKED. 0.0 disables the cap entirely.
+    max_spend_usd_per_ticket: float = Field(
+        default=0.0, alias="MILL_MAX_SPEND_USD_PER_TICKET"
+    )
 
     # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain

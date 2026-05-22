@@ -18,6 +18,7 @@ import logging
 import re
 import time
 
+from ..langfuse_client import session_cost
 from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
 from ..notify import send_notification, _TRIGGER_STATES
@@ -170,6 +171,31 @@ class Worker:
         BLOCKED (resumable) and notify. Poll stages (merge/deliver,
         traced=False) are exempt: in_review/rebasing legitimately waits
         on a PR or rebase cycle."""
+
+        # --- dollar-cap safety net: check before the state-change
+        # early-return so the cap fires even when the ticket is making
+        # forward progress (cost accumulates across all stages). ---
+        if self.ctx.settings.max_spend_usd_per_ticket > 0.0:
+            cost = session_cost(self.ctx.settings, ticket_id)
+            if cost > self.ctx.settings.max_spend_usd_per_ticket:
+                note = (
+                    f"Cost cap exceeded: ${cost:.2f} spent "
+                    f"(limit ${self.ctx.settings.max_spend_usd_per_ticket:.2f}). "
+                    "Escalated to BLOCKED to stop further LLM billing. "
+                    "Use resume-blocked to override and continue."
+                )
+                log.error("%s: %s", ticket_id, note)
+                self.ctx.service.transition(
+                    ticket_id, State.BLOCKED, note=note[:200]
+                )
+                self._stuck.pop(ticket_id, None)
+                t = self.ctx.service.get(ticket_id)
+                if t is not None:
+                    send_notification(
+                        t, State.BLOCKED, note[:200], self.ctx.settings
+                    )
+                return
+
         if after is None or after != before:
             self._stuck.pop(ticket_id, None)
             return
