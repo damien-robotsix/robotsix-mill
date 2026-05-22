@@ -52,6 +52,8 @@ class TransitionError(RuntimeError):
 
 
 class TicketService:
+    _ARCHIVABLE_STATES: set[State] = {State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
+
     def __init__(self, settings: Settings) -> None:
         """Create a service backed by the given :class:`Settings`.
 
@@ -128,6 +130,52 @@ class TicketService:
             self.settings.workspaces_dir / ticket_id, ignore_errors=True
         )
         return True
+
+    def _maybe_purge_archived(self) -> None:
+        """Purge oldest terminal tickets when the cap is exceeded.
+
+        Reads ``max_archived_tickets`` from settings.  If <= 0 the
+        purge is disabled.  Queries all tickets in ``_ARCHIVABLE_STATES``
+        ordered by ``created_at`` ascending and deletes the oldest until
+        the count is within the cap — but skips any terminal ticket that
+        is the parent of at least one child in a non-archivable state.
+        """
+        max_archived = self.settings.max_archived_tickets
+        if max_archived <= 0:
+            return
+
+        with db.session(self.settings) as s:
+            stmt = (
+                select(Ticket)
+                .where(Ticket.state.in_(list(self._ARCHIVABLE_STATES)))
+                .order_by(Ticket.created_at)
+            )
+            candidates = list(s.exec(stmt).all())
+
+        if len(candidates) <= max_archived:
+            return
+
+        excess = len(candidates) - max_archived
+        deleted = 0
+        for ticket in candidates:
+            if deleted >= excess:
+                break
+            # Skip if this terminal ticket is the parent of any
+            # child still in a non-archivable (active) state.
+            if self._has_active_child(ticket.id):
+                continue
+            self.delete(ticket.id)
+            deleted += 1
+
+    def _has_active_child(self, ticket_id: str) -> bool:
+        """Return True if *ticket_id* has at least one child whose
+        state is NOT in ``_ARCHIVABLE_STATES``."""
+        with db.session(self.settings) as s:
+            stmt = select(Ticket).where(
+                Ticket.parent_id == ticket_id,
+                Ticket.state.notin_(list(self._ARCHIVABLE_STATES)),
+            ).limit(1)
+            return s.exec(stmt).first() is not None
 
     def create(
         self, title: str, description: str = "", source: str = "user",
@@ -250,6 +298,9 @@ class TicketService:
             s.add(TicketEvent(ticket_id=ticket_id, state=dst, note=note))
             s.commit()
             s.refresh(ticket)
+            # Purge oldest terminal tickets if we just crossed the cap.
+            if dst in self._ARCHIVABLE_STATES:
+                self._maybe_purge_archived()
             return ticket
 
     def resume_blocked(self, ticket_id: str) -> Ticket:
