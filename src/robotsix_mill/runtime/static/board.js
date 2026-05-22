@@ -3,6 +3,8 @@ const LBL={ready:"implementing"};   // display label only; state value stays "re
 let showClosed=false;               // empty cols hidden; CLOSED also hidden unless toggled
 let sel=null;
 let runsOpen=false;
+let costDashboardOpen=false;
+let costLookbackHours=24;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
@@ -317,7 +319,7 @@ async function open_(id){
    `<h3>description.md</h3><pre>${esc((d&&d.description)||"")}</pre>`;
  document.getElementById("drawer").classList.add("open");
 }
-function close_(){sel=null;runsOpen=false;
+function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
  if(deepReviewPollTimer){clearInterval(deepReviewPollTimer);deepReviewPollTimer=null}
  deepReviewOpen=false;deepReviewTraceId=null;deepReviewFindings=[];
  document.getElementById("drawer").classList.remove("open")}
@@ -355,6 +357,51 @@ async function toggleRuns(){
  await renderRuns();
  runsOpen=true;
  document.getElementById("drawer").classList.add("open");
+}
+// -- cost dashboard -----------------------------------------------------
+async function openCostDashboard(){
+ if(costDashboardOpen){close_();return}
+ if(sel){close_()}
+ costDashboardOpen=true;
+ document.getElementById("drawer").classList.add("open");
+ await renderCostDashboard();
+}
+async function renderCostDashboard(){
+ const selOpt=lookback=>lookback==costLookbackHours?' selected':'';
+ document.getElementById("d").innerHTML='<h3>💰 Cost Dashboard</h3>'+
+  '<div class="cost-lookback">'+
+   '<label>Last <select id="cost-lookback" onchange="costLookbackHours=parseInt(this.value);renderCostDashboard()">'+
+    '<option value="1"'+selOpt(1)+'>1 hour</option>'+
+    '<option value="6"'+selOpt(6)+'>6 hours</option>'+
+    '<option value="24"'+selOpt(24)+'>24 hours</option>'+
+    '<option value="72"'+selOpt(72)+'>3 days</option>'+
+    '<option value="168"'+selOpt(168)+'>7 days</option>'+
+   '</select></label>'+
+  '</div><div id="cost-chart">loading…</div>';
+ const data=await jget("/costs/by-agent?lookback_hours="+costLookbackHours);
+ if(!data||!data.length){
+  document.getElementById("cost-chart").innerHTML='<div class="muted">No cost data available for this period.</div>';
+  return;
+ }
+ const colors=["#3b82f6","#8b5cf6","#22c55e","#eab308","#ef4444","#f97316","#06b6d4","#ec4899","#14b8a6","#a855f7"];
+ const maxCost=Math.max(...data.map(d=>d.total_cost),0.0001);
+ const grandTotal=data.reduce((s,d)=>s+d.total_cost,0);
+ let html='<div class="cost-summary">'+data.length+' agents · $'+grandTotal.toFixed(4)+' total</div>';
+ data.forEach((d,i)=>{
+  const pct=Math.max((d.total_cost/maxCost)*100,1);
+  const color=colors[i%colors.length];
+  html+='<div class="cost-bar-row">'+
+   '<div class="cost-bar-label">'+
+    '<span class="cost-bar-name">'+esc(d.name)+'</span>'+
+    '<span class="cost-bar-count">'+d.trace_count+' traces</span>'+
+   '</div>'+
+   '<div class="cost-bar-track">'+
+    '<div class="cost-bar-fill" style="width:'+pct+'%;background:'+color+'"></div>'+
+   '</div>'+
+   '<div class="cost-bar-amount">$'+d.total_cost.toFixed(4)+'</div>'+
+  '</div>';
+ });
+ document.getElementById("cost-chart").innerHTML=html;
 }
 // -- deep review --------------------------------------------------------
 let deepReviewOpen=false;
@@ -650,4 +697,4 @@ function createTicketFromFinding(idx,event){
  titleEl.focus();
 }
 // -- end deep review ----------------------------------------------------
-refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);
+refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);else if(costDashboardOpen)renderCostDashboard();if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);

@@ -116,3 +116,16 @@ border-left:3px solid #2563eb;border-radius:3px}
 margin-top:3px;background:#1e2a3a;color:#38bdf8;text-transform:uppercase;letter-spacing:.04em}
 .dr-source-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
   margin-bottom:10px;background:#1a2a3b;color:#60c0fa;text-transform:uppercase;letter-spacing:.04em}
+/* cost dashboard */
+.cost-lookback{margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.cost-lookback label{font-size:11px;color:#aab0bd}
+.cost-lookback select{font-size:11px;background:#1d212c;border:1px solid #2c313d;color:#cfd3db;border-radius:4px;padding:3px 6px}
+.cost-summary{color:#7d828c;font-size:11px;margin-bottom:10px}
+.cost-bar-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+.cost-bar-row:last-child{border-bottom:none}
+.cost-bar-label{width:130px;flex-shrink:0;display:flex;flex-direction:column}
+.cost-bar-name{color:#cfd3db;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cost-bar-count{color:#7d828c;font-size:10px}
+.cost-bar-track{flex:1;height:14px;background:#1a1e27;border-radius:7px;overflow:hidden;min-width:20px}
+.cost-bar-fill{height:100%;border-radius:7px;transition:width .3s;min-width:2px}
+.cost-bar-amount{width:80px;text-align:right;font-size:12px;color:#eef0f4;font-variant-numeric:tabular-nums;flex-shrink:0}

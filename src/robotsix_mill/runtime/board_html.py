@@ -52,6 +52,11 @@ background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   + New Ticket
 </button>
+<button onclick="openCostDashboard()" style="font-size:11px;padding:3px 10px;
+background:#0d9488;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  💰 Cost
+</button>
 </header>
 <div id="board"></div>
 <div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
