@@ -82,7 +82,7 @@ def _parse_jscpd_output(stdout: str) -> str:
     except json.JSONDecodeError as exc:
         return f"ERROR: could not parse jscpd JSON output — {exc}"
 
-    duplications: list[dict[str, Any]] = data.get("duplications", [])
+    duplications: list[dict[str, Any]] = data.get("duplicates", [])
 
     if not duplications:
         return (
