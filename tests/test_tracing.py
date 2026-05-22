@@ -183,7 +183,7 @@ class _FakeUuidModule:
 
 
 def test_make_session_id_format(monkeypatch):
-    """make_session_id returns <kind>-<UTC-ts>-<6hex>."""
+    """make_session_id returns <kind>-<UTC-ts>-<8hex>."""
     monkeypatch.setattr(
         "robotsix_mill.runtime.tracing.datetime", _FakeDatetime,
     )
@@ -191,7 +191,7 @@ def test_make_session_id_format(monkeypatch):
         "robotsix_mill.runtime.tracing.uuid", _FakeUuidModule,
     )
 
-    assert tracing.make_session_id("audit") == "audit-20260521T143025Z-a1b2c3"
+    assert tracing.make_session_id("audit") == "audit-20260521T143025Z-a1b2c300"
 
 
 def test_make_session_id_all_unique():
