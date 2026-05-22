@@ -1341,3 +1341,72 @@ def test_add_comment_comment_history_reaches_agent(client, service, monkeypatch)
     assert "First comment" in comments_str
     assert "Second comment" in comments_str
     assert "Third comment" in comments_str
+
+
+# ---------------------------------------------------------------------------
+# Cumulative cost tests
+# ---------------------------------------------------------------------------
+
+
+def test_epic_detail_cost_is_cumulative(client, service, monkeypatch):
+    """GET /tickets/{epic_id} returns cost_usd = epic own cost + all children."""
+    epic = service.create("Epic", kind="epic")
+    c1 = service.create("Child 1", kind="task", parent_id=epic.id)
+    c2 = service.create("Child 2", kind="task", parent_id=epic.id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_cost",
+        lambda settings, sid: {
+            epic.id: 0.01,
+            c1.id: 0.10,
+            c2.id: 0.20,
+        }.get(sid, 0.0),
+    )
+
+    r = client.get(f"/tickets/{epic.id}").json()
+    assert r["cost_usd"] == pytest.approx(0.31)  # 0.01 + 0.10 + 0.20
+
+
+def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
+    """GET /tickets must NOT call blocking session_cost for epic children."""
+    epic = service.create("Epic", kind="epic")
+    c1 = service.create("Child 1", kind="task", parent_id=epic.id)
+    c2 = service.create("Child 2", kind="task", parent_id=epic.id)
+
+    called = []
+
+    def fake_session_cost(settings, sid):
+        called.append(sid)
+        return 0.999
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_cost",
+        fake_session_cost,
+    )
+
+    ts = client.get("/tickets").json()
+    epic_entry = [x for x in ts if x["id"] == epic.id]
+    assert len(epic_entry) == 1
+    # Cold cache → children contribute 0.0, only epic own cost may be 0.0 too.
+    assert epic_entry[0]["cost_usd"] == 0.0
+    # session_cost must NOT have been called for any child id.
+    child_calls = [x for x in called if x in (c1.id, c2.id)]
+    assert child_calls == [], f"blocking session_cost called for children: {child_calls}"
+
+
+def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
+    """Epic → sub-epic → task: top epic cost includes all three."""
+    e1 = service.create("E1", kind="epic")
+    e2 = service.create("E2", kind="epic", parent_id=e1.id)
+    t = service.create("T", kind="task", parent_id=e2.id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_cost",
+        lambda settings, sid: {e1.id: 0.01, e2.id: 0.02, t.id: 0.30}.get(sid, 0.0),
+    )
+
+    r1 = client.get(f"/tickets/{e1.id}").json()
+    assert r1["cost_usd"] == pytest.approx(0.33)  # 0.01 + 0.02 + 0.30
+
+    r2 = client.get(f"/tickets/{e2.id}").json()
+    assert r2["cost_usd"] == pytest.approx(0.32)  # 0.02 + 0.30

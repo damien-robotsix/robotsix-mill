@@ -133,6 +133,10 @@ def enrich_ticket_read(
     authoritative when the user actually opens a ticket.
     """
     with_cost(ticket, settings, blocking=blocking_cost)
+    if ticket.kind == "epic":
+        ticket.cost_usd = service.cumulative_cost(
+            ticket.id, settings, blocking=blocking_cost
+        )
     parent_title: str | None = None
     if ticket.parent_id:
         parent = service.get(ticket.parent_id)
