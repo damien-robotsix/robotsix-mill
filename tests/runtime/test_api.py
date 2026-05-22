@@ -990,3 +990,95 @@ def test_list_children_endpoint(client, service):
     assert len(data) == 2
     child_ids = {c["id"] for c in data}
     assert child_ids == {c1.id, c2.id}
+
+
+# --- generate-children endpoint tests ---
+
+
+def test_generate_children_404_nonexistent(client):
+    """POST /tickets/nonexistent/generate-children returns 404."""
+    r = client.post("/tickets/nonexistent/generate-children")
+    assert r.status_code == 404
+
+
+def test_generate_children_400_non_epic(client, service):
+    """POST /tickets/{id}/generate-children on a task returns 400."""
+    t = service.create("Not an epic", kind="task")
+    r = client.post(f"/tickets/{t.id}/generate-children")
+    assert r.status_code == 400
+    assert "ticket is not an epic" in r.json()["detail"]
+
+
+def test_generate_children_202_fire_and_forget(client, service, monkeypatch):
+    """POST /tickets/{id}/generate-children returns 202 immediately and
+    runs the agent in the background — the HTTP response must not
+    block on the LLM call."""
+    import threading
+
+    epic = service.create("Fire and forget epic", kind="epic")
+
+    ran = threading.Event()
+    release = threading.Event()
+
+    def slow_agent(*, settings, epic_title, epic_description):
+        ran.set()
+        release.wait(5)
+        return type(
+            "FakeResult",
+            (),
+            {"child_titles": [], "child_bodies": []},
+        )()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        slow_agent,
+    )
+
+    r = client.post(f"/tickets/{epic.id}/generate-children")
+    assert r.status_code == 202
+    assert r.json() == {"status": "started"}
+    assert ran.wait(5), "agent did not start in background"
+    release.set()  # let the daemon thread finish
+
+
+def test_generate_children_creates_children(client, service, monkeypatch):
+    """POST /tickets/{id}/generate-children creates child tickets with
+    the titles and bodies returned by the agent."""
+    import threading
+
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
+    epic = service.create("Break me down", kind="epic")
+
+    # Signal when the background thread has created both children.
+    children_created = threading.Event()
+    child_count = [0]
+    app_svc = client.app.state.service
+    orig_create = app_svc.create
+
+    def tracking_create(title, **kwargs):
+        result = orig_create(title, **kwargs)
+        child_count[0] += 1
+        if child_count[0] >= 2:
+            children_created.set()
+        return result
+
+    monkeypatch.setattr(app_svc, "create", tracking_create)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+        lambda **kw: EpicBreakdownResult(
+            child_titles=["Child A", "Child B"],
+            child_bodies=["Body A", "Body B"],
+        ),
+    )
+
+    r = client.post(f"/tickets/{epic.id}/generate-children")
+    assert r.status_code == 202
+
+    # Wait for the background thread to finish creating children.
+    assert children_created.wait(5), "children were not created in time"
+
+    children = client.get(f"/tickets/{epic.id}/children").json()
+    assert len(children) == 2, f"expected 2 children, got {len(children)}"
+    child_titles = {c["title"] for c in children}
+    assert child_titles == {"Child A", "Child B"}
