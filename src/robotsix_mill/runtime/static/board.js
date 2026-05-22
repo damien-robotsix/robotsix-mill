@@ -289,6 +289,20 @@ async function runAgentCheck(){
    btn.disabled=false; btn.textContent='Run Agent Check';
  }
 }
+async function runSurvey(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/survey");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Survey started — it discovers similar OSS projects and proposes improvements. New draft tickets appear on the board when it finishes.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Survey failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Survey';
+ }
+}
 async function open_(id){
  sel=id;
  const [t,h,d,cs,rt]=await Promise.all([jget("/tickets/"+id),
@@ -335,7 +349,7 @@ async function renderRuns(){
    const min=Math.floor(sec/60);
    const sss=sec%60;
    const elapsed=f?(min+'m '+sss+'s'):'running…';
-   const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':'#6b7280';
+   const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':r.kind==='survey'?'#f59e0b':'#6b7280';
    const sc=r.status==='running'?'#eab308':r.status==='ok'?'#22c55e':'#ef4444';
    const st=r.status==='running'?'running…':r.status;
    return `<div style="padding:8px 0;border-bottom:1px solid #262b36">

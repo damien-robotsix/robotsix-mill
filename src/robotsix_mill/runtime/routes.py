@@ -689,3 +689,40 @@ def health_check_pass(
         target=_run, name="health-pass", daemon=True
     ).start()
     return {"status": "started"}
+
+
+@router.post("/survey", status_code=202)
+def survey_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a survey pass in the BACKGROUND and return at once.
+
+    The survey agent discovers similar open-source projects, studies
+    their approaches, and proposes concrete improvements as draft
+    tickets. New drafts appear on the board when it finishes.
+    """
+    from ..survey_runner import run_survey_pass
+
+    run_id = registry.start("survey")
+
+    def _run() -> None:
+        try:
+            r = run_survey_pass()
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "survey pass done: %d draft(s)", len(r.drafts_created)
+            )
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("survey pass failed")
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="survey-pass", daemon=True
+    ).start()
+    return {"status": "started"}
