@@ -41,6 +41,11 @@ services:
     volumes:
       - ./.data:/data
       - /var/run/docker.sock:/var/run/docker.sock
+      # GitHub App auth: bind the private key into the container at the
+      # SAME path it has on the host, so GITHUB_APP_PRIVATE_KEY_PATH (a
+      # host path, set in .env) is a valid path inside the container
+      # too. Falls back to /dev/null when App auth is not used.
+      - ${GITHUB_APP_PRIVATE_KEY_PATH:-/dev/null}:${GITHUB_APP_PRIVATE_KEY_PATH:-/dev/null}:ro
     ports:
       - "127.0.0.1:8077:8077"   # ticket board + API at http://localhost:8077
 
