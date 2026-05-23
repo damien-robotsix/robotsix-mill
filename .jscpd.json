@@ -1,0 +1,18 @@
+{
+  "mode": "strict",
+  "minLines": 5,
+  "minTokens": 40,
+  "ignore": [
+    "**/tests/**",
+    "**/__pycache__/**",
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/*.egg-info/**"
+  ],
+  "format": ["python", "javascript", "css"],
+  "reporters": ["consoleFull"],
+  "output": "/tmp/jscpd-report",
+  "gitignore": true
+}

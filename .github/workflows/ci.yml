@@ -20,6 +20,9 @@ jobs:
       - name: Install dev deps
         run: pip install -e '.[dev]'
 
+      - name: Run jscpd (report-only)
+        run: npx jscpd@4 --config .jscpd.json . || true
+
       - name: Run tests
         env:
           GIT_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
