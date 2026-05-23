@@ -1,5 +1,53 @@
 # Docker architecture
 
+## Conceptual architecture
+
+**Management plane (smart, DB-backed).** A single service in the
+container owns a **SQLite** DB (via SQLModel): ticket metadata, state,
+history, queue. It exposes an **HTTP API** (FastAPI) — the CLI is a thin
+client, and a future web frontend uses the same API.
+
+**Work plane (filesystem, agent-owned).** Each ticket gets a workspace
+dir on the volume. `description.md` is **file-canonical** (agents edit
+it directly); the DB row only holds the pointer + a content hash.
+
+```
+/data/
+  mill.db                       # management plane (SQLite)
+  workspaces/<ticket-id>/
+    description.md              # canonical body (agent-editable)
+    artifacts/                 # per-stage output
+    repo/                      # git clone (removed on close by default)
+  retrospect_memory.md          # agent-maintained issue ledger
+  audit_memory.md              # audit agent's gap ledger
+
+emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
+  draft ─refine▶ awaiting_approval ─approve▶ ready ─implement▶ deliverable
+        ─deliver▶ in_review ─(PR merged; merge-poll)▶ done ─retrospect▶ closed
+  in_review = PR open (the PR is the review); merge poll flips it.
+  retrospect audits the run + Langfuse and may spawn an improvement draft.
+  closed = terminal. errored = a stage threw; blocked = needs a human
+  (both resumable: a human transition re-enqueues).
+
+  BLOCKED recovery (no raw-DB editing ever needed):
+    BLOCKED ─resume-blocked▶ <blocked_from>   (re-run only the failed stage)
+    BLOCKED → READY | DRAFT                    (manual override: full re-run)
+  awaiting_approval is a human gate (configurable via MILL_REQUIRE_APPROVAL).
+```
+
+- **Engine:** `pydantic-ai` over OpenRouter.
+- **Event-driven:** ticket emission / state change enqueues; an
+  in-process **pool** (`MILL_MAX_CONCURRENCY`, default 4) picks it up at
+  once and **chains** stages until a terminal state. Distinct tickets
+  run in parallel (one ticket's stages stay ordered; a dedupe set stops
+  the same ticket running twice). No cron, no polling (except merge
+  check).
+- **Delivery:** pluggable forge adapter (GitHub / GitLab), invoked only
+  by the `deliver` stage.
+- **Tracing:** optional Langfuse; a no-op unless `LANGFUSE_*` is set.
+
+## Container topology
+
 How command execution is isolated when the pipeline runs. The confusing
 part: the sandbox is a **sibling** container, not a nested one.
 

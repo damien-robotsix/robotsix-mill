@@ -59,7 +59,7 @@ Shared modules used to build and equip agents.
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home
 - [docs/configuration.md](configuration.md) — full env-var reference (maps every model var to its agent)
 - [docs/audit-agent.md](audit-agent.md) — audit agent deep dive
 - [docs/trace-health.md](trace-health.md) — trace-health check deep dive

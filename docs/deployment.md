@@ -69,5 +69,5 @@ immediately at `https://<owner>.github.io/<repo>/`.
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home
 - [docs/docker-architecture.md](docker-architecture.md) — container topology

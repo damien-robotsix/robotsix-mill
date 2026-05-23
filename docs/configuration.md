@@ -280,7 +280,7 @@ These are consumed by `Settings` but use conventional names without the `MILL_` 
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home
 - [docs/agents.md](agents.md) — maps every model var to its agent
 - [`.env`](../.env) — committed canonical config with production defaults
 - [`secrets.env.example`](../secrets.env.example) — credentials template

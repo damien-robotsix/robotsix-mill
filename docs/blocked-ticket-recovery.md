@@ -22,4 +22,4 @@ Implemented in `service.py:resume_blocked` and `states.py:TRANSITIONS`.
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home

@@ -27,7 +27,28 @@ Install pre-commit hooks (Ruff, mypy, Bandit):
 
 ## Project structure
 
-The [Layout table in README.md](README.md#layout) is the canonical map.
+## Layout
+
+| Path | Role |
+|---|---|
+| `config.py` | settings (env / .env / secrets.env) |
+| `core/states.py` | state machine (single source of truth) |
+| `core/models.py` | SQLModel tables + API schemas |
+| `core/db.py` · `core/service.py` | DB lifecycle + management-plane operations |
+| `core/workspace.py` | per-ticket file workspace (file-canonical body) |
+| `runtime/worker.py` | event-driven queue + stage chaining (+ audit/trace-health/cost-sync poll) |
+| `runtime/api.py` | FastAPI app (API + worker lifespan + audit/trace-health route) |
+| `runtime/tracing.py` | Langfuse tracing + OpenRouter cost ✅ |
+| `sandbox.py` | isolated command execution (always containerized) |
+| `stages/` refine·implement·deliver·merge·retrospect | ✅ all real |
+| `audit_runner.py` | audit pass orchestration |
+| `trace_health_runner.py` | trace-health check orchestration |
+| `agents/auditing.py` | audit agent (meta-audit for gaps) |
+| `forge/github.py` · `forge/auth.py` | GitHub PR/status + PAT/App-bot auth ✅ |
+| `langfuse_client.py` | read-side session summary + trace listing + session total cost (retrospect + trace-health + cost sync) |
+| `agents/coding.py` · `fs_tools.py` · `retrospecting.py` | agents + sandboxed tools |
+| `vcs/git_ops.py` | clone / branch / commit / push helpers |
+
 Here's how the key directories relate:
 
 - **`agents/`** — LLM-driven logic. Each agent is built by

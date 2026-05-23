@@ -22,5 +22,5 @@ ticket is finished (for post-mortem debugging).
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home
 - [docs/configuration.md](configuration.md) — full env-var reference

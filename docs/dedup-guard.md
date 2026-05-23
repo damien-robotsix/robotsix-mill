@@ -24,5 +24,5 @@ Implemented in `agents/dedup.py:run_dedup_check`.
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home
 - [docs/configuration.md](configuration.md) — full env-var reference
