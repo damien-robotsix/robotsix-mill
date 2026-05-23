@@ -73,6 +73,6 @@ MILL_AUDIT_INTERVAL_SECONDS=3600  # 1 hour
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home
 - [docs/agents.md](agents.md) — agent catalog
 - [docs/configuration.md](configuration.md) — full env-var reference

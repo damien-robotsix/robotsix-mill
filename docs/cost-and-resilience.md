@@ -92,6 +92,6 @@ across all agent runs.
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home
 - [docs/configuration.md](configuration.md) — full env-var reference
 - [docs/agents.md](agents.md) — agent catalog with model-var mapping

@@ -22,6 +22,6 @@ execution is isolated from the mill process:
 
 ## See also
 
-- [README.md](../README.md) — project overview and quickstart
+- [index.md](index.md) — documentation home
 - [docs/docker-architecture.md](docker-architecture.md) — container topology
 - [docs/github-app.md](github-app.md) — delivery identity setup
