@@ -215,7 +215,7 @@ def test_compose_prompt_includes_capability_table(tmp_path):
     """Call _compose_prompt after registering at least one tool, assert
     the result starts with the original prompt and contains the
     capability table. Also test that tool_names filters correctly."""
-    from robotsix_mill.agents.base import _compose_prompt
+    from robotsix_mill.agents.base import compose_prompt
 
     s = _settings(tmp_path)
 
@@ -224,7 +224,7 @@ def test_compose_prompt_includes_capability_table(tmp_path):
         category="fs", parameters={"path": "str"},
     ))
 
-    result = _compose_prompt(s, "test prompt")
+    result = compose_prompt(s, "test prompt")
     assert result.startswith("test prompt")
     assert "## Available tools" in result
     assert "| read_file | fs | Read a file. |" in result
@@ -235,7 +235,7 @@ def test_compose_prompt_includes_capability_table(tmp_path):
         name="report_issue", description="File a draft.",
         category="reporting", parameters={"title": "str"},
     ))
-    result2 = _compose_prompt(
+    result2 = compose_prompt(
         s, "test prompt", tool_names={"report_issue"}
     )
     assert "| report_issue |" in result2

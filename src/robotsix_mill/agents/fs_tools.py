@@ -37,12 +37,15 @@ def _safe(root: Path, rel: str) -> Path:
     return p
 
 
-def build_fs_tools(root: Path, settings: Settings) -> list:
+def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str] | None = None) -> list:
     root = Path(root).resolve()
 
     # In-memory file-content cache shared by all closures in this
     # build_fs_tools call.  Lifetime = one agent invocation.
     _file_cache: dict[Path, str] = {}
+
+    if pre_seeded:
+        _file_cache.update(pre_seeded)
 
     def _read_cached(p: Path) -> str:
         """Read *p* and cache the result.  *p* is already sandbox-safe

@@ -200,6 +200,8 @@ def run_coordinator(
     model_name: str | None = None,
     feedback: str | None = None,
     epic_context: str = "",
+    reference_files: list[dict] | None = None,
+    message_history: list | None = None,
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -214,12 +216,24 @@ def run_coordinator(
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
-    from .base import build_agent, _safe_close
+    from .base import build_agent, _safe_close, compose_prompt
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import call_with_retry
 
-    fs = build_fs_tools(repo_dir, settings)
+    # Pre-seed fs_tools cache and build synthetic message_history when
+    # reference files are provided (first invocation only, not a retry).
+    pre_seeded: dict[str, str] | None = None
+    final_message_history: list | None = message_history
+
+    if reference_files and message_history is None:
+        # Build pre_seeded mapping for _file_cache seeding (resolved Paths).
+        pre_seeded = {
+            (repo_dir / rf["path"]).resolve(): rf["content"]
+            for rf in reference_files
+        }
+
+    fs = build_fs_tools(repo_dir, settings, pre_seeded=pre_seeded)
     # the main agent reads + writes itself and includes run_command for
     # focused diagnosis (re-run a single failing test, run a linter,
     # inspect git diff, etc.). The full suite is run by the stage.
@@ -227,6 +241,41 @@ def run_coordinator(
         t for t in fs if t.__name__ in
         ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
     ]
+
+    # Build synthetic message_history on first pass (no feedback set).
+    if reference_files and message_history is None and feedback is None:
+        tool_names = {t.__name__ for t in fs_tools}
+        tool_names.add("explore")
+        tool_names.add("report_issue")
+        tool_names.add("web_research")
+        composed_system = compose_prompt(
+            settings, _SYSTEM_PROMPT, tool_names=tool_names
+        )
+
+        from pydantic_ai.messages import (
+            ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart,
+        )
+        synthetic: list = [
+            ModelRequest(parts=[TextPart(content=composed_system)]),
+        ]
+        for rf in reference_files:
+            tc_id = f"preload_{rf['path']}"
+            synthetic.append(ModelResponse(parts=[
+                ToolCallPart(
+                    tool_name="read_file",
+                    args={"path": rf["path"], "offset": 1, "limit": None},
+                    tool_call_id=tc_id,
+                )
+            ]))
+            synthetic.append(ModelRequest(parts=[
+                ToolReturnPart(
+                    tool_name="read_file",
+                    content=rf["content"],
+                    tool_call_id=tc_id,
+                )
+            ]))
+        final_message_history = synthetic
+
     agent = build_agent(
         settings,
         system_prompt=_SYSTEM_PROMPT,
@@ -269,7 +318,11 @@ def run_coordinator(
                     "Fix exactly this failure and stop."
                 )
         result = call_with_retry(
-            lambda: agent.run_sync(user_prompt, usage_limits=limits),
+            lambda: agent.run_sync(
+                user_prompt,
+                message_history=final_message_history,
+                usage_limits=limits,
+            ),
             settings=settings, what="implement",
         )
     finally:

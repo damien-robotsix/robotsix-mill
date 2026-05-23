@@ -45,7 +45,8 @@ def run_implement_agent(
     repo_dir: Path,
     spec: str,
     feedback: str | None = None,
-    history: list | None = None,
+    reference_files: list[dict] | None = None,
+    message_history: list | None = None,
     memory: str = "",
     epic_context: str = "",
 ) -> tuple[str, list, str]:
@@ -55,9 +56,12 @@ def run_implement_agent(
     ``feedback`` — set by the implement stage when it re-invokes after a
     failed test gate — is a distilled diagnosis of that failure,
     forwarded to the coordinator so the next pass fixes exactly it.
-    ``history`` is accepted for the stage seam signature but unused: a
-    retry re-runs the coordinator fresh and the partial edits persist on
-    disk in ``repo_dir``."""
+    ``reference_files`` — pre-loaded file content from the refine stage
+    (``reference_files.json``), injected as synthetic read_file messages
+    on the first coordinator pass so the model starts with those files
+    already "read."
+    ``message_history`` — advanced/test use: pre-built pydantic-ai
+    message history passed through to the coordinator unchanged."""
     from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
     from .coordinating import run_coordinator
@@ -66,6 +70,8 @@ def run_implement_agent(
         result = run_coordinator(
             settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
             feedback=feedback, epic_context=epic_context,
+            reference_files=reference_files,
+            message_history=message_history,
         )
     except UsageLimitExceeded as e:
         raise AgentBudgetError(str(e), []) from e
@@ -80,6 +86,8 @@ def run_implement_agent(
                 settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
                 feedback=feedback, model_name="deepseek/deepseek-v4-flash",
                 epic_context=epic_context,
+                reference_files=reference_files,
+                message_history=message_history,
             )
         except Exception as fallback_e:
             raise AgentRunError(
