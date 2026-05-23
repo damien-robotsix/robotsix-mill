@@ -16,8 +16,6 @@ The board renders a small coloured badge on every card. Fallback: if
 `source` is missing or empty, the board treats it as `"user"`.
 
 Stored in the `ticket` table as `source TEXT NOT NULL DEFAULT 'user'`.
-An idempotent migration in `db.init_db` adds the column to existing
-databases that lack it.
 
 ## See also
 

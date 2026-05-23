@@ -445,13 +445,6 @@ def test_unmet_dependencies_no_deps_returns_empty(service):
     assert service.unmet_dependencies(t) == []
 
 
-def test_migration_idempotent(settings):
-    """Calling _run_migrations twice should not crash."""
-    from robotsix_mill.core.db import _run_migrations
-    _run_migrations(settings)
-    _run_migrations(settings)  # second call must not raise
-
-
 # ---------------------------------------------------------------------------
 # Epic tests
 # ---------------------------------------------------------------------------
