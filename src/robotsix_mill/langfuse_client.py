@@ -123,9 +123,6 @@ def fetch_trace_detail(settings: Settings, trace_id: str) -> dict | None:
     return _langfuse_api_get(settings, f"/api/public/traces/{trace_id}")
 
 
-# Backward-compatible alias used internally by fetch_session_summary.
-_fetch_single_trace = fetch_trace_detail
-
 
 def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
     """Return a short text summary of the session's traces grouped by
@@ -188,7 +185,7 @@ def fetch_session_summary(settings: Settings, session_id: str) -> str | None:
         trace_id = t.get("id")
         if not trace_id:
             continue
-        detail = _fetch_single_trace(settings, trace_id)
+        detail = fetch_trace_detail(settings, trace_id)
         if detail is None:
             continue
         observations = detail.get("observations") or []

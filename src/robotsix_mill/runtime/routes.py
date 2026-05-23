@@ -733,18 +733,15 @@ def deep_review_trace(
                 "trace_id": trace_id,
                 "findings": [f.model_dump() for f in result.findings],
                 "error": result.error,
-                "tool_errors": result.tool_errors,
-                "agent_limitations": result.agent_limitations,
-                "optimizations": result.optimizations,
             }
             data["source_trace_name"] = detail.get("name", "(unnamed)")
             state.deep_review_results[trace_id] = data
             state.deep_review_store.put(trace_id, data)
 
             n_findings = len(result.findings)
-            n_te = len(result.tool_errors)
-            n_al = len(result.agent_limitations)
-            n_opt = len(result.optimizations)
+            n_te = sum(1 for f in result.findings if f.category == "tool_error")
+            n_al = sum(1 for f in result.findings if f.category == "agent_limitation")
+            n_opt = sum(1 for f in result.findings if f.category == "optimization")
             if result.error:
                 summary = f"deep review of trace {trace_id}: {result.error[:120]}"
                 registry.finish_error(run_id, result.error[:300])
@@ -762,9 +759,6 @@ def deep_review_trace(
                 "error": str(e),
                 "findings": [],
                 "source_trace_name": "(unnamed)",
-                "tool_errors": [],
-                "agent_limitations": [],
-                "optimizations": [],
             }
             state.deep_review_results[trace_id] = data
             state.deep_review_store.put(trace_id, data)
