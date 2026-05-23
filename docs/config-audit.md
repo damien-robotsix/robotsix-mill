@@ -273,7 +273,12 @@ other code depends on.
 | `ci_fix_memory_file` | `ci_fix_memory_path or data_dir / "ci_fix_memory.md"` | `Path` | CI-fix agent | |
 | `rebase_memory_file` | `rebase_memory_path or data_dir / "rebase_memory.md"` | `Path` | Rebase agent | |
 
-### 1.23  Non-Settings vars (outside `config.py`)
+### 1.23  Compose/CI overrides and non-Settings vars
+
+This table covers vars that appear outside `config.py` — either as
+compose `environment:` overrides of Settings fields (rows 5–7), a
+Settings field also consumed by compose variable substitution (row 2),
+or genuinely non-Settings vars consumed only by tooling/CI (rows 1, 3, 4).
 
 | Env var | Source | Default | Where set | Sensitivity | `.env` | Consumers | Notes |
 |---|---|---|---|---|---|---|---|
@@ -328,7 +333,7 @@ in `docs/configuration.md`:
 | `LANGFUSE_BASE_URL` | `src/robotsix_mill/runtime/tracing.py` | L83 (`os.environ.get`) | OTLP endpoint base; defaults to `https://cloud.langfuse.com` |
 | `SKIP_MIGRATION_GUARD` | `tests/test_migration_guard.py` | L48 (`os.environ.get`) | Escape hatch for CI migration guard |
 | `GIT_BASE_REF` | `tests/test_migration_guard.py` | L54 (`os.environ.get`) | Base ref for git diff in CI |
-| `PYTHONPATH` | `tests/runtime/test_tracing.py` | L140 | Subprocess environment; test-only |
+| `PYTHONPATH` | `tests/runtime/test_tracing.py` | L140 | Subprocess environment; test-only. Standard Python runtime variable, not an app-config concern. |
 
 ### 2.4  Dual-source vars (read from both `Settings` AND raw `os.environ`)
 
@@ -469,10 +474,12 @@ Each environment needs a clear strategy:
 
 `src/robotsix_mill/runtime/tracing.py` reads `LANGFUSE_PUBLIC_KEY`,
 `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` directly from `os.environ`
-**without importing or instantiating `Settings`**. This is a deliberate
-performance choice (the file avoids importing heavy OTel packages unless
-tracing is enabled, and checking `os.environ` is faster than constructing a
-`Settings` object). However, it creates a **dual-source problem**:
+**without instantiating `Settings`** (the import at L26 exists only for
+`init()`'s type annotation; `_tracing_enabled()` and `_ensure_tracing()`
+both reach directly into `os.environ`). This is a deliberate performance
+choice (the file avoids importing heavy OTel packages unless tracing is
+enabled, and checking `os.environ` is faster than constructing a `Settings`
+object). However, it creates a **dual-source problem**:
 
 - `Settings.tracing_enabled` depends on `self.langfuse_public_key` etc.
   (from the `Settings` model, populated by pydantic-settings).
