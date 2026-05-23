@@ -20,6 +20,7 @@ branch + opening the MR happens later, in the deliver stage.
 
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import subprocess
@@ -90,6 +91,12 @@ class ImplementStage(Stage):
         memory_text = load_memory(settings.implement_memory_file)
         max_iters = max(1, settings.max_fix_iterations)
 
+        # Load pre-loaded file content from the refine stage (if available).
+        reference_files = None
+        ref_files_path = ws.artifacts_dir / "reference_files.json"
+        if ref_files_path.exists():
+            reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
+
         feedback: str | None = None
         summary = ""
 
@@ -110,6 +117,7 @@ class ImplementStage(Stage):
                 summary, _, updated_memory = coding.run_implement_agent(
                     settings=settings, repo_dir=repo_dir, spec=spec,
                     feedback=feedback, memory=memory_text,
+                    reference_files=reference_files,
                 )
             except AgentBudgetError as e:
                 ImplementStage._finalize(

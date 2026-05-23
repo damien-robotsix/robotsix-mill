@@ -4,7 +4,7 @@ import pytest
 
 from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
-from robotsix_mill.agents.base import _compose_prompt, _model_name
+from robotsix_mill.agents.base import compose_prompt, _model_name
 from robotsix_mill.agents.web_research import make_web_research_tool
 from robotsix_mill.agents.web_tools import make_web_fetch
 from robotsix_mill.config import Settings
@@ -118,7 +118,7 @@ def test_compose_prompt_injects_capability_table(tmp_path):
     ToolRegistry._tools.clear()
     try:
         # With no tools registered, we still get the placeholder table.
-        p = _compose_prompt(s, "BASE PROMPT")
+        p = compose_prompt(s, "BASE PROMPT")
         assert p.startswith("BASE PROMPT")
         assert "## Available tools" in p
         assert "No tools have been registered yet" in p

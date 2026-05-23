@@ -90,7 +90,7 @@ def _model_name(settings: Settings) -> str:
     return settings.model
 
 
-def _compose_prompt(
+def compose_prompt(
     settings: Settings,
     system_prompt: str,
     tool_names: set[str] | None = None,
@@ -157,7 +157,7 @@ def build_agent(
 
     agent_kwargs: dict[str, Any] = dict(
         model=model,
-        system_prompt=_compose_prompt(
+        system_prompt=compose_prompt(
             settings, system_prompt, tool_names=tool_names
         ),
         output_type=output_type,
