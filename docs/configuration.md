@@ -147,7 +147,7 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 |---|---|---|---|---|
 | `MILL_AUDIT_MODEL` | `audit_model` | `deepseek/deepseek-v4-pro` | `str` | Audit agent model (see §1) |
 | `MILL_AUDIT_PERIODIC` | `audit_periodic` | `false` | `bool` | Enable periodic audit passes |
-| `MILL_AUDIT_INTERVAL_SECONDS` | `audit_interval_seconds` | `3600` | `int` | Seconds between automatic audit passes |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `audit_interval_seconds` | `86400` | `int` | Seconds between automatic audit passes |
 | `MILL_AUDIT_MEMORY_PATH` | `audit_memory_path` | `None` | `Path \| None` | Override path for audit memory ledger; defaults to `<data_dir>/audit_memory.md` |
 
 ---
@@ -200,6 +200,7 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 |---|---|---|---|---|
 | `MILL_SURVEY_MODEL` | `survey_model` | `deepseek/deepseek-v4-pro` | `str` | Survey agent model (see §1) |
 | `MILL_SURVEY_MEMORY_PATH` | `survey_memory_path` | `None` | `Path \| None` | Override path for survey memory ledger; defaults to `<data_dir>/survey_memory.md` |
+| `MILL_SURVEY_INTERVAL_SECONDS` | `survey_interval_seconds` | `86400` | `int` | Seconds between automatic survey passes |
 
 ---
 
@@ -241,7 +242,7 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 | Env var | Python field | Default | Type | Description |
 |---|---|---|---|---|
 | `MILL_CI_MONITOR_PERIODIC` | `ci_monitor_periodic` | `false` | `bool` | Enable periodic target-branch CI failure monitoring |
-| `MILL_CI_MONITOR_INTERVAL_SECONDS` | `ci_monitor_interval_seconds` | `3600` | `int` | Seconds between CI monitor polls |
+| `MILL_CI_MONITOR_INTERVAL_SECONDS` | `ci_monitor_interval_seconds` | `86400` | `int` | Seconds between CI monitor polls |
 | `MILL_CI_LOG_MAX_BYTES` | `ci_log_max_bytes` | `65536` | `int` | Max bytes fetched per CI job log |
 
 ---
