@@ -240,7 +240,7 @@ def test_audit_config_defaults():
     """Audit config has correct defaults."""
     s = Settings()
     assert s.audit_periodic is False
-    assert s.audit_interval_seconds == 3600
+    assert s.audit_interval_seconds == 86400
     assert s.audit_memory_path is None
 
 

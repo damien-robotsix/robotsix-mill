@@ -423,7 +423,7 @@ class Settings(BaseSettings):
     # Interval between CI monitor polls (seconds). Only used when
     # MILL_CI_MONITOR_PERIODIC=true.
     ci_monitor_interval_seconds: int = Field(
-        default=3600, alias="MILL_CI_MONITOR_INTERVAL_SECONDS"
+        default=86400, alias="MILL_CI_MONITOR_INTERVAL_SECONDS"
     )
     # Per-job log tail cap (bytes) when fetching workflow job logs for
     # CI-fix context and the CI monitor draft body.
@@ -445,7 +445,7 @@ class Settings(BaseSettings):
     # Interval between periodic audit passes (seconds). Only used when
     # MILL_AUDIT_PERIODIC=true.
     audit_interval_seconds: int = Field(
-        default=3600, alias="MILL_AUDIT_INTERVAL_SECONDS"
+        default=86400, alias="MILL_AUDIT_INTERVAL_SECONDS"
     )
     # Path to the audit agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/audit_memory.md.
@@ -549,17 +549,17 @@ class Settings(BaseSettings):
         default=None, alias="MILL_SURVEY_MEMORY_PATH"
     )
     # Opt-in periodic survey pass. Defaults to True (on by default —
-    # "default yes"). Flip to false to disable the automatic weekly
+    # "default yes"). Flip to false to disable the automatic daily
     # cadence while still allowing on-demand POST /survey and
     # board-button triggers.
     survey_periodic: bool = Field(
         default=True, alias="MILL_SURVEY_PERIODIC"
     )
     # Seconds between automatic survey passes when
-    # MILL_SURVEY_PERIODIC=true. Default 604800 (7 days). Minimum
+    # MILL_SURVEY_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     survey_interval_seconds: int = Field(
-        default=604800, alias="MILL_SURVEY_INTERVAL_SECONDS"
+        default=86400, alias="MILL_SURVEY_INTERVAL_SECONDS"
     )
 
     # --- action-agent memory paths ---

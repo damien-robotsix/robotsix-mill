@@ -48,7 +48,7 @@ curl -X POST http://localhost:8077/audit
 ```sh
 # In .env:
 MILL_AUDIT_PERIODIC=true
-MILL_AUDIT_INTERVAL_SECONDS=3600  # 1 hour
+MILL_AUDIT_INTERVAL_SECONDS=86400  # 1 day
 ```
 
 ## Configuration
@@ -56,7 +56,7 @@ MILL_AUDIT_INTERVAL_SECONDS=3600  # 1 hour
 | Variable | Default | Description |
 |---|---|---|
 | `MILL_AUDIT_PERIODIC` | `false` | Enable periodic audit passes |
-| `MILL_AUDIT_INTERVAL_SECONDS` | `3600` | Seconds between automatic audits |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `86400` | Seconds between automatic audits |
 | `MILL_AUDIT_MEMORY_PATH` | (empty) | Override path for the audit memory ledger; falls back to `<data_dir>/audit_memory.md` |
 
 ## Important notes
