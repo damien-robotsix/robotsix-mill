@@ -196,6 +196,10 @@ class Settings(BaseSettings):
     github_api_url: str = Field(
         default="https://api.github.com", alias="MILL_GITHUB_API_URL"
     )
+    # GitLab API base (override for self-hosted GitLab instances).
+    gitlab_api_url: str = Field(
+        default="https://gitlab.com/api/v4", alias="MILL_GITLAB_API_URL"
+    )
 
     # --- implement stage ---
     # Command run to verify the implementation; empty string skips the
