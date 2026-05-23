@@ -152,6 +152,17 @@ class Settings(BaseSettings):
     max_memory_chars: int = Field(
         default=8000, alias="MILL_MAX_MEMORY_CHARS"
     )
+    # Maximum number of files whose full content the refine stage stores
+    # as reference_files.json for the implement coordinator to pre-load.
+    reference_files_max_count: int = Field(
+        default=5, alias="MILL_REFERENCE_FILES_MAX_COUNT"
+    )
+    # Maximum total lines across all selected reference files. When the
+    # cumulative line count would exceed this, files beyond the limit are
+    # dropped (top-N priority order preserved).
+    reference_files_max_total_lines: int = Field(
+        default=3000, alias="MILL_REFERENCE_FILES_MAX_TOTAL_LINES"
+    )
     # How many days back closed tickets are considered as duplicate
     # candidates by the pre-refine dedup check.
     dedup_lookback_days: int = Field(
