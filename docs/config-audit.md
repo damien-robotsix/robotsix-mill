@@ -52,7 +52,7 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | `.env` | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_MODEL` | `model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | active | §1 | All agent files via `Settings()` | Coordinator |
-| `MILL_EXPLORE_MODEL` | `explore_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | commented-out | §1 | `stages/implement.py`, explore sub-agent | |
+| `MILL_EXPLORE_MODEL` | `explore_model` | `deepseek/deepseek-v4-flash` | `str` | Settings | non-sensitive | commented-out | §1 | `stages/implement.py`, explore sub-agent | ⚠️ `.env` (L12) and `docs/configuration.md` §1 both state the wrong default (`deepseek/deepseek-v4-pro`); the code default is `-flash`. |
 | `MILL_TEST_MODEL` | `test_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | commented-out | §1 | Test distillation sub-agent | |
 | `MILL_REFINE_MODEL` | `refine_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | commented-out | §1 | `stages/refine.py` | |
 | `MILL_ANSWER_MODEL` | `answer_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | absent | §1 | `stages/answer.py` | |
