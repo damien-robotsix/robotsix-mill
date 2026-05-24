@@ -32,7 +32,7 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 #   curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-29.5.1.tgz | tar -xzO docker/docker | sha256sum
 #   curl -sL https://download.docker.com/linux/static/stable/aarch64/docker-29.5.1.tgz | tar -xzO docker/docker | sha256sum
 ARG DOCKER_CLI_VERSION=29.5.1
-ARG DOCKER_CLI_SHA256_amd64
+ARG DOCKER_CLI_SHA256_amd64=ae01aca0e05d07e39bc5e8fbbee698ce365c417e36c90b3c9803b3af5f344742
 ARG DOCKER_CLI_SHA256_arm64=fac73e803fdbebd28b75eda6963f5a6ea0b3944039396befd443a0b23cb28091
 RUN ARCH="$(dpkg --print-architecture)" \
     && case "$ARCH" in \
