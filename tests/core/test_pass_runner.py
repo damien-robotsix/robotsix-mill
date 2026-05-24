@@ -9,7 +9,7 @@ from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
-from robotsix_mill.core.models import TicketEvent
+from robotsix_mill.core.models import SourceKind, TicketEvent
 
 
 class _FakeAgentResult:
@@ -73,7 +73,7 @@ def test_happy_path_drafts_created_and_memory_persisted(tmp_path, monkeypatch):
     result = run_agent_pass(
         agent_fn,
         memory_file=memory_file,
-        source_label="audit",
+        source_label=SourceKind.AUDIT,
         service=service,
         settings=settings,
         origin_session="test-session-1",
@@ -156,7 +156,7 @@ def test_agent_returns_zero_drafts(tmp_path, monkeypatch):
     result = run_agent_pass(
         agent_fn,
         memory_file=memory_file,
-        source_label="audit",
+        source_label=SourceKind.AUDIT,
         service=service,
         settings=settings,
     )
@@ -190,7 +190,7 @@ def test_updated_memory_differs_from_input(tmp_path, monkeypatch):
     result = run_agent_pass(
         agent_fn,
         memory_file=memory_file,
-        source_label="audit",
+        source_label=SourceKind.AUDIT,
         service=service,
         settings=settings,
     )
@@ -229,7 +229,7 @@ def test_service_create_raises_error_swallowed(tmp_path, monkeypatch):
     result = run_agent_pass(
         agent_fn,
         memory_file=memory_file,
-        source_label="audit",
+        source_label=SourceKind.AUDIT,
         service=service,
         settings=settings,
     )
@@ -272,7 +272,7 @@ def test_memory_write_ioerror_swallowed(tmp_path, monkeypatch):
     result = run_agent_pass(
         agent_fn,
         memory_file=memory_file,
-        source_label="audit",
+        source_label=SourceKind.AUDIT,
         service=service,
         settings=settings,
     )
@@ -300,7 +300,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
     # Ticket A: CLOSED with DONE event → resolution "merged"
     ta = service.create(
         "Gap A", "body A\n\n<!-- audit-gap-id: gap_alpha -->",
-        source="audit",
+        source=SourceKind.AUDIT,
     )
     with db.session(settings) as s:
         ticket = s.get(type(ta), ta.id)
@@ -313,7 +313,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
     # Ticket B: CLOSED without DONE → resolution "declined"
     tb = service.create(
         "Gap B", "body B\n\n<!-- audit-gap-id: gap_beta -->",
-        source="audit",
+        source=SourceKind.AUDIT,
     )
     with db.session(settings) as s:
         ticket = s.get(type(tb), tb.id)
@@ -324,7 +324,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
     # Ticket C: HUMAN_MR_APPROVAL → resolution "in-flight"
     tc = service.create(
         "Gap C", "body C\n\n<!-- audit-gap-id: gap_gamma -->",
-        source="audit",
+        source=SourceKind.AUDIT,
     )
     with db.session(settings) as s:
         ticket = s.get(type(tc), tc.id)
@@ -351,7 +351,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
     run_agent_pass(
         echo_agent,
         memory_file=memory_file,
-        source_label="audit",
+        source_label=SourceKind.AUDIT,
         service=service,
         settings=settings,
     )
@@ -424,10 +424,10 @@ def test_no_marker_ticket_not_in_mapping(tmp_path):
     # Create a ticket WITH the correct source but NO gap-id marker.
     service.create(
         "Old draft", "No marker here, just old pre-rollout.",
-        source="audit",
+        source=SourceKind.AUDIT,
     )
 
-    mapping = _verify_prior_proposals(service, settings, "audit")
+    mapping = _verify_prior_proposals(service, settings, SourceKind.AUDIT)
     assert mapping == {}
 
     db.reset_engine()
@@ -455,7 +455,7 @@ def test_missing_gap_ids_no_crash(tmp_path):
     result = run_agent_pass(
         agent_fn,
         memory_file=memory_file,
-        source_label="audit",
+        source_label=SourceKind.AUDIT,
         service=service,
         settings=settings,
     )

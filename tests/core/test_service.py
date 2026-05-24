@@ -2,6 +2,7 @@ import pytest
 
 from robotsix_mill.core.service import TransitionError
 from robotsix_mill.core.states import State, can_transition
+from robotsix_mill.core.models import SourceKind
 
 
 def test_create_writes_db_and_workspace(service):
@@ -20,8 +21,8 @@ def test_default_source_is_user(service):
 
 
 def test_explicit_source_is_stored(service):
-    t = service.create("Explicit source", source="retrospect")
-    assert t.source == "retrospect"
+    t = service.create("Explicit source", source=SourceKind.RETROSPECT)
+    assert t.source == SourceKind.RETROSPECT
 
 
 def test_list_filters_by_state(service):
@@ -661,3 +662,4 @@ def test_all_descendants_is_cycle_safe(service):
     result = service._all_descendants("cyc-A")
     assert len(result) == 1
     assert result[0].id == "cyc-B"
+

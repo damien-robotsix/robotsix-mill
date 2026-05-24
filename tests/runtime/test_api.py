@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from robotsix_mill.core.states import State
+from robotsix_mill.core.models import SourceKind
 from robotsix_mill.runtime.api import create_app
 
 
@@ -52,7 +53,7 @@ def test_create_ticket_source_is_user(client):
     r = client.post("/tickets", json={"title": "Source check"})
     assert r.status_code == 201
     data = r.json()
-    assert data["source"] == "user"
+    assert data["source"] == SourceKind.USER
 
 
 def test_get_tickets_includes_source(client):
@@ -63,7 +64,7 @@ def test_get_tickets_includes_source(client):
     assert len(ts) >= 2
     for t in ts:
         assert "source" in t
-        assert t["source"] == "user"
+        assert t["source"] == SourceKind.USER
 
 
 def test_get_tickets_includes_origin_session(client):
@@ -692,7 +693,7 @@ def test_post_tickets_creates_user_draft(client):
     assert r.status_code == 201
     d = r.json()
     assert d["state"] == "draft"
-    assert d["source"] == "user"
+    assert d["source"] == SourceKind.USER
 
 
 def test_post_tickets_with_kind_inquiry_creates_asked_inquiry(client):
@@ -708,7 +709,7 @@ def test_post_tickets_with_kind_inquiry_creates_asked_inquiry(client):
     d = r.json()
     assert d["state"] == "asked"  # inquiries start in ASKED, not DRAFT
     assert d["kind"] == "inquiry"
-    assert d["source"] == "user"
+    assert d["source"] == SourceKind.USER
 
 
 # --- depends_on API ----------------------------------------------------
