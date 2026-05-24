@@ -788,9 +788,9 @@ class TestValidationInvalid:
 class TestFactories:
     """Integration tests for ``load_settings()`` and ``load_secrets()``."""
 
-    def test_load_settings_returns_settings_with_yaml_defaults(self):
+    def test_load_settings_returns_settings_with_python_defaults(self):
         """``load_settings()`` returns a ``Settings`` with values from
-        YAML defaults."""
+        Python-level Field(default=...)."""
         from robotsix_mill.config import load_settings
 
         s = load_settings()

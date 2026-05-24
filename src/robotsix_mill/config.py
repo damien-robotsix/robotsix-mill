@@ -15,17 +15,12 @@ from __future__ import annotations
 import inspect
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from robotsix_mill.config_loader import (
-    ConfigError,
-    flatten_yaml_config,
-    load_secrets_yaml,
-    load_yaml_config,
-)
+from robotsix_mill.config_loader import load_secrets_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -1062,159 +1057,66 @@ class Settings(BaseSettings):
 # ---------------------------------------------------------------------------
 
 
-class Secrets:
+class Secrets(BaseModel):
     """Secrets loaded from ``config/secrets.yaml``.
 
-    Never merged into ``Settings`` — secrets are a separate object with
-    access logging and redacted serialisation.  Import ``Secrets``
-    explicitly when you need a secret; do not read them from
-    ``Settings`` attributes.
+    Never merged into ``Settings`` — secrets are a separate Pydantic
+    ``BaseModel`` with access logging and redacted serialisation.
+    Import ``Secrets`` explicitly when you need a secret; do not read
+    them from ``Settings`` attributes.
 
     Design: `docs/rfc-config-v2.md` §5 (Secrets handling).
     """
 
-    __slots__ = (
-        "_openrouter_api_key",
-        "_forge_token",
-        "_github_app_id",
-        "_github_app_private_key",
-        "_langfuse_public_key",
-        "_langfuse_secret_key",
-        "_langfuse_base_url",
-        "_langfuse_project_id",
-        "_ntfy_url",
-        "_ntfy_token",
+    model_config = ConfigDict(extra="ignore")
+
+    openrouter_api_key: str | None = None
+    forge_token: str | None = None
+    github_app_id: str | None = None
+    github_app_private_key: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_base_url: str | None = None
+    langfuse_project_id: str | None = None
+    ntfy_url: str | None = None
+    ntfy_token: str | None = None
+
+    _REDACTED: ClassVar[str] = "***"
+    _FIELD_NAMES: ClassVar[tuple[str, ...]] = (
+        "openrouter_api_key",
+        "forge_token",
+        "github_app_id",
+        "github_app_private_key",
+        "langfuse_public_key",
+        "langfuse_secret_key",
+        "langfuse_base_url",
+        "langfuse_project_id",
+        "ntfy_url",
+        "ntfy_token",
     )
 
-    _REDACTED = "***"
-
-    def __init__(
-        self,
-        *,
-        openrouter_api_key: str | None = None,
-        forge_token: str | None = None,
-        github_app_id: str | None = None,
-        github_app_private_key: str | None = None,
-        langfuse_public_key: str | None = None,
-        langfuse_secret_key: str | None = None,
-        langfuse_base_url: str | None = None,
-        langfuse_project_id: str | None = None,
-        ntfy_url: str | None = None,
-        ntfy_token: str | None = None,
-        _secrets_file: str | None = None,
-    ):
-        # Load from YAML file first, then override with explicit kwargs
+    def __init__(self, **data):
+        _secrets_file = data.pop("_secrets_file", None)
         secrets_dict = load_secrets_yaml(_secrets_file)
-        self._openrouter_api_key = (
-            openrouter_api_key
-            if openrouter_api_key is not None
-            else secrets_dict.get("openrouter_api_key")
-        )
-        self._forge_token = (
-            forge_token
-            if forge_token is not None
-            else secrets_dict.get("forge_token")
-        )
-        self._github_app_id = (
-            github_app_id
-            if github_app_id is not None
-            else secrets_dict.get("github_app_id")
-        )
-        self._github_app_private_key = (
-            github_app_private_key
-            if github_app_private_key is not None
-            else secrets_dict.get("github_app_private_key")
-        )
-        self._langfuse_public_key = (
-            langfuse_public_key
-            if langfuse_public_key is not None
-            else secrets_dict.get("langfuse_public_key")
-        )
-        self._langfuse_secret_key = (
-            langfuse_secret_key
-            if langfuse_secret_key is not None
-            else secrets_dict.get("langfuse_secret_key")
-        )
-        self._langfuse_base_url = (
-            langfuse_base_url
-            if langfuse_base_url is not None
-            else secrets_dict.get("langfuse_base_url")
-        )
-        self._langfuse_project_id = (
-            langfuse_project_id
-            if langfuse_project_id is not None
-            else secrets_dict.get("langfuse_project_id")
-        )
-        self._ntfy_url = (
-            ntfy_url
-            if ntfy_url is not None
-            else secrets_dict.get("ntfy_url")
-        )
-        self._ntfy_token = (
-            ntfy_token
-            if ntfy_token is not None
-            else secrets_dict.get("ntfy_token")
-        )
+        # YAML values serve as defaults; explicit kwargs take priority.
+        for k in self._FIELD_NAMES:
+            if k not in data and k in secrets_dict:
+                data[k] = secrets_dict[k]
+        super().__init__(**data)
 
-    # -- logged property accessors --
-
-    @property
-    def openrouter_api_key(self) -> str | None:
-        self._log_access("openrouter_api_key")
-        return self._openrouter_api_key
-
-    @property
-    def forge_token(self) -> str | None:
-        self._log_access("forge_token")
-        return self._forge_token
-
-    @property
-    def github_app_id(self) -> str | None:
-        self._log_access("github_app_id")
-        return self._github_app_id
-
-    @property
-    def github_app_private_key(self) -> str | None:
-        self._log_access("github_app_private_key")
-        return self._github_app_private_key
-
-    @property
-    def langfuse_public_key(self) -> str | None:
-        self._log_access("langfuse_public_key")
-        return self._langfuse_public_key
-
-    @property
-    def langfuse_secret_key(self) -> str | None:
-        self._log_access("langfuse_secret_key")
-        return self._langfuse_secret_key
-
-    @property
-    def langfuse_base_url(self) -> str | None:
-        self._log_access("langfuse_base_url")
-        return self._langfuse_base_url
-
-    @property
-    def langfuse_project_id(self) -> str | None:
-        self._log_access("langfuse_project_id")
-        return self._langfuse_project_id
-
-    @property
-    def ntfy_url(self) -> str | None:
-        self._log_access("ntfy_url")
-        return self._ntfy_url
-
-    @property
-    def ntfy_token(self) -> str | None:
-        self._log_access("ntfy_token")
-        return self._ntfy_token
+    def __getattribute__(self, name: str):
+        # Log access for secret field names (skip private / Pydantic attrs).
+        if name in Secrets._FIELD_NAMES:
+            self._log_access(name)
+        return super().__getattribute__(name)
 
     def _log_access(self, name: str) -> None:
         """Log every secret access at DEBUG level with caller module."""
         caller_module = "<unknown>"
         frame = inspect.currentframe()
         if frame is not None:
-            # Walk up: _log_access → property → caller
-            frame = frame.f_back  # property
+            # Walk up: _log_access → __getattribute__ → caller
+            frame = frame.f_back  # __getattribute__
             if frame is not None:
                 frame = frame.f_back  # actual caller
             if frame is not None:
@@ -1226,12 +1128,11 @@ class Secrets:
     def __repr__(self) -> str:
         return "Secrets({})".format(
             ", ".join(
-                f"{name}='{self._REDACTED}'"
-                for name in self.__slots__
+                f"{name}='{self._REDACTED}'" for name in self._FIELD_NAMES
             )
         )
 
-    def model_dump(self, redact: bool = True) -> dict[str, str | None]:
+    def model_dump(self, *, redact: bool = True, **kwargs) -> dict[str, str | None]:
         """Return a dict of all secret values.
 
         Args:
@@ -1239,14 +1140,12 @@ class Secrets:
                 ``"***"``.  Set ``False`` only when intentionally
                 writing to ``secrets.yaml`` during migration.
         """
-        result: dict[str, str | None] = {}
-        for name in self.__slots__:
-            attr = name.lstrip("_")  # _openrouter_api_key -> openrouter_api_key
-            if redact:
-                result[attr] = self._REDACTED
-            else:
-                result[attr] = getattr(self, attr)
-        return result
+        if redact:
+            return {f: self._REDACTED for f in self._FIELD_NAMES}
+        # Bypass __getattribute__ to avoid DEBUG logging every field access.
+        return {
+            f: object.__getattribute__(self, f) for f in self._FIELD_NAMES
+        }
 
 
 def load_settings() -> Settings:

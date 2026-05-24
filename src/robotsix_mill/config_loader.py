@@ -134,9 +134,17 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
     Malformed YAML → raises ``ConfigError`` with the file path and
     parse error details.
     """
-    path_str = secrets_file or os.environ.get("MILL_SECRETS_FILE", "")
-    if not path_str:
+    # Determine the path: explicit arg > env var > default.
+    # An explicit empty string means "no file" (used by the test suite).
+    if secrets_file is not None:
+        path_str = secrets_file
+    else:
+        path_str = os.environ.get("MILL_SECRETS_FILE")
+
+    if path_str is None:
         path_str = str(_YAML_DIR / "secrets.yaml")
+    elif path_str == "":
+        return {}
     path = Path(path_str)
 
     if not path.exists():
