@@ -21,8 +21,12 @@ def test_token_mode_requires_pat(tmp_path):
 
 
 def test_app_mode_requires_app_config(tmp_path):
-    with pytest.raises(RuntimeError, match="GITHUB_APP_ID"):
-        auth.github_token(S(tmp_path, FORGE_AUTH="app"))
+    # The cross-field validator now catches this at Settings
+    # construction time (ValidationError), before the auth module
+    # has a chance to raise RuntimeError.
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="FORGE_AUTH=app requires"):
+        S(tmp_path, FORGE_AUTH="app")
 
 
 def test_app_mode_mints_and_caches(tmp_path, monkeypatch):

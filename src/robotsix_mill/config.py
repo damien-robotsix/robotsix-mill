@@ -1,17 +1,33 @@
-"""Runtime configuration, sourced from environment, .env, and secrets.env.
+"""Runtime configuration, sourced from YAML config files, environment,
+.env, and secrets.env.
 
 Conventional keys (``OPENROUTER_API_KEY``, ``LANGFUSE_*``) are
 unprefixed to match the reference projects; mill-specific knobs use the
 ``MILL_`` / ``FORGE_`` prefixes.
+
+YAML config layers (``config/mill.defaults.yaml``, …) are loaded
+*alongside* ``.env`` during the v2 migration window.  See
+``docs/rfc-config-v2.md`` for the full architecture.
 """
 
 from __future__ import annotations
 
+import inspect
+import logging
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from robotsix_mill.config_loader import (
+    ConfigError,
+    flatten_yaml_config,
+    load_secrets_yaml,
+    load_yaml_config,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -676,6 +692,251 @@ class Settings(BaseSettings):
     ntfy_url: str | None = Field(default=None, alias="NTFY_URL")
     ntfy_token: str | None = Field(default=None, alias="NTFY_TOKEN")
 
+    # ------------------------------------------------------------------
+    #  Semantic validators (RFC §7)
+    # ------------------------------------------------------------------
+
+    # -- Range checks --
+
+    @field_validator("max_concurrency")
+    @classmethod
+    def _max_concurrency_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"max_concurrency must be ≥ 1, got {v}")
+        return v
+
+    @field_validator("model_request_timeout")
+    @classmethod
+    def _timeout_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(f"model_request_timeout must be > 0, got {v}")
+        return v
+
+    @field_validator("transient_retries")
+    @classmethod
+    def _transient_retries_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"transient_retries must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("transient_backoff_base")
+    @classmethod
+    def _backoff_base_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(f"transient_backoff_base must be > 0, got {v}")
+        return v
+
+    @field_validator("transient_backoff_cap")
+    @classmethod
+    def _backoff_cap_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(f"transient_backoff_cap must be > 0, got {v}")
+        return v
+
+    @field_validator("rate_limit_backoff_base")
+    @classmethod
+    def _rl_backoff_base_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(f"rate_limit_backoff_base must be > 0, got {v}")
+        return v
+
+    @field_validator("rate_limit_backoff_cap")
+    @classmethod
+    def _rl_backoff_cap_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(f"rate_limit_backoff_cap must be > 0, got {v}")
+        return v
+
+    @field_validator("rate_limit_fallback_retries")
+    @classmethod
+    def _rl_fallback_retries_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"rate_limit_fallback_retries must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("max_fix_iterations")
+    @classmethod
+    def _max_fix_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"max_fix_iterations must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("command_timeout")
+    @classmethod
+    def _command_timeout_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"command_timeout must be > 0, got {v}")
+        return v
+
+    @field_validator("merge_poll_seconds")
+    @classmethod
+    def _merge_poll_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"merge_poll_seconds must be > 0, got {v}")
+        return v
+
+    @field_validator("review_max_rounds")
+    @classmethod
+    def _review_max_rounds_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"review_max_rounds must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("max_stuck_cycles")
+    @classmethod
+    def _max_stuck_cycles_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"max_stuck_cycles must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("rebase_max_attempts")
+    @classmethod
+    def _rebase_max_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"rebase_max_attempts must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("ci_fix_max_attempts")
+    @classmethod
+    def _ci_fix_max_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"ci_fix_max_attempts must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("max_archived_tickets")
+    @classmethod
+    def _max_archived_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"max_archived_tickets must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("max_memory_chars")
+    @classmethod
+    def _max_memory_chars_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"max_memory_chars must be ≥ 0, got {v}")
+        return v
+
+    @field_validator("explore_request_limit")
+    @classmethod
+    def _explore_request_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"explore_request_limit must be ≥ 1, got {v}")
+        return v
+
+    @field_validator("dedup_request_limit")
+    @classmethod
+    def _dedup_request_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"dedup_request_limit must be ≥ 1, got {v}")
+        return v
+
+    @field_validator("web_research_request_limit")
+    @classmethod
+    def _web_research_request_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"web_research_request_limit must be ≥ 1, got {v}")
+        return v
+
+    @field_validator("test_request_limit")
+    @classmethod
+    def _test_request_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"test_request_limit must be ≥ 1, got {v}")
+        return v
+
+    @field_validator("coordinator_request_limit")
+    @classmethod
+    def _coordinator_request_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"coordinator_request_limit must be ≥ 1, got {v}")
+        return v
+
+    @field_validator("web_fetch_timeout")
+    @classmethod
+    def _web_fetch_timeout_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"web_fetch_timeout must be > 0, got {v}")
+        return v
+
+    @field_validator("web_fetch_max_bytes")
+    @classmethod
+    def _web_fetch_max_bytes_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"web_fetch_max_bytes must be ≥ 0, got {v}")
+        return v
+
+    # -- Format checks --
+
+    @field_validator("api_url")
+    @classmethod
+    def _api_url_format(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError(f"api_url must be an HTTP(S) URL, got {v!r}")
+        return v
+
+    @field_validator("github_api_url")
+    @classmethod
+    def _github_api_url_format(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError(f"github_api_url must be an HTTP(S) URL, got {v!r}")
+        return v
+
+    @field_validator("gitlab_api_url")
+    @classmethod
+    def _gitlab_api_url_format(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError(f"gitlab_api_url must be an HTTP(S) URL, got {v!r}")
+        return v
+
+    # -- Interval minimums --
+
+    @field_validator("trace_health_interval_seconds")
+    @classmethod
+    def _trace_health_interval_min(cls, v: int) -> int:
+        if v < 3600:
+            raise ValueError(
+                f"trace_health_interval_seconds must be ≥ 3600 (1 hour), got {v}"
+            )
+        return v
+
+    # -- Cross-field checks --
+
+    @model_validator(mode="after")
+    def _forge_auth_requires_credentials(self) -> "Settings":
+        if self.forge_auth == "app":
+            if not self.github_app_id and not self.github_app_private_key_path:
+                raise ValueError(
+                    "FORGE_AUTH=app requires at least one of "
+                    "github_app_id or github_app_private_key_path to be set"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _forge_remote_required(self) -> "Settings":
+        if self.forge_kind in ("github", "gitlab") and not self.forge_remote_url:
+            raise ValueError(
+                f"forge_kind={self.forge_kind} requires forge_remote_url to be set"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _fallback_model_consistency(self) -> "Settings":
+        if self.rate_limit_fallback_model and self.rate_limit_fallback_retries < 1:
+            raise ValueError(
+                "rate_limit_fallback_retries must be ≥ 1 when "
+                "rate_limit_fallback_model is set"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _review_model_required(self) -> "Settings":
+        if self.review_enabled and not self.review_model:
+            raise ValueError(
+                "review_model must be non-empty when review_enabled is True"
+            )
+        return self
+
     @property
     def db_path(self) -> Path:
         """Resolved path to the SQLite database file."""
@@ -796,6 +1057,218 @@ class Settings(BaseSettings):
         return self.data_dir / "rebase_memory.md"
 
 
+# ---------------------------------------------------------------------------
+#  Secrets model — loaded from config/secrets.yaml
+# ---------------------------------------------------------------------------
+
+
+class Secrets:
+    """Secrets loaded from ``config/secrets.yaml``.
+
+    Never merged into ``Settings`` — secrets are a separate object with
+    access logging and redacted serialisation.  Import ``Secrets``
+    explicitly when you need a secret; do not read them from
+    ``Settings`` attributes.
+
+    Design: `docs/rfc-config-v2.md` §5 (Secrets handling).
+    """
+
+    __slots__ = (
+        "_openrouter_api_key",
+        "_forge_token",
+        "_github_app_id",
+        "_github_app_private_key",
+        "_langfuse_public_key",
+        "_langfuse_secret_key",
+        "_langfuse_base_url",
+        "_langfuse_project_id",
+        "_ntfy_url",
+        "_ntfy_token",
+    )
+
+    _REDACTED = "***"
+
+    def __init__(
+        self,
+        *,
+        openrouter_api_key: str | None = None,
+        forge_token: str | None = None,
+        github_app_id: str | None = None,
+        github_app_private_key: str | None = None,
+        langfuse_public_key: str | None = None,
+        langfuse_secret_key: str | None = None,
+        langfuse_base_url: str | None = None,
+        langfuse_project_id: str | None = None,
+        ntfy_url: str | None = None,
+        ntfy_token: str | None = None,
+        _secrets_file: str | None = None,
+    ):
+        # Load from YAML file first, then override with explicit kwargs
+        secrets_dict = load_secrets_yaml(_secrets_file)
+        self._openrouter_api_key = (
+            openrouter_api_key
+            if openrouter_api_key is not None
+            else secrets_dict.get("openrouter_api_key")
+        )
+        self._forge_token = (
+            forge_token
+            if forge_token is not None
+            else secrets_dict.get("forge_token")
+        )
+        self._github_app_id = (
+            github_app_id
+            if github_app_id is not None
+            else secrets_dict.get("github_app_id")
+        )
+        self._github_app_private_key = (
+            github_app_private_key
+            if github_app_private_key is not None
+            else secrets_dict.get("github_app_private_key")
+        )
+        self._langfuse_public_key = (
+            langfuse_public_key
+            if langfuse_public_key is not None
+            else secrets_dict.get("langfuse_public_key")
+        )
+        self._langfuse_secret_key = (
+            langfuse_secret_key
+            if langfuse_secret_key is not None
+            else secrets_dict.get("langfuse_secret_key")
+        )
+        self._langfuse_base_url = (
+            langfuse_base_url
+            if langfuse_base_url is not None
+            else secrets_dict.get("langfuse_base_url")
+        )
+        self._langfuse_project_id = (
+            langfuse_project_id
+            if langfuse_project_id is not None
+            else secrets_dict.get("langfuse_project_id")
+        )
+        self._ntfy_url = (
+            ntfy_url
+            if ntfy_url is not None
+            else secrets_dict.get("ntfy_url")
+        )
+        self._ntfy_token = (
+            ntfy_token
+            if ntfy_token is not None
+            else secrets_dict.get("ntfy_token")
+        )
+
+    # -- logged property accessors --
+
+    @property
+    def openrouter_api_key(self) -> str | None:
+        self._log_access("openrouter_api_key")
+        return self._openrouter_api_key
+
+    @property
+    def forge_token(self) -> str | None:
+        self._log_access("forge_token")
+        return self._forge_token
+
+    @property
+    def github_app_id(self) -> str | None:
+        self._log_access("github_app_id")
+        return self._github_app_id
+
+    @property
+    def github_app_private_key(self) -> str | None:
+        self._log_access("github_app_private_key")
+        return self._github_app_private_key
+
+    @property
+    def langfuse_public_key(self) -> str | None:
+        self._log_access("langfuse_public_key")
+        return self._langfuse_public_key
+
+    @property
+    def langfuse_secret_key(self) -> str | None:
+        self._log_access("langfuse_secret_key")
+        return self._langfuse_secret_key
+
+    @property
+    def langfuse_base_url(self) -> str | None:
+        self._log_access("langfuse_base_url")
+        return self._langfuse_base_url
+
+    @property
+    def langfuse_project_id(self) -> str | None:
+        self._log_access("langfuse_project_id")
+        return self._langfuse_project_id
+
+    @property
+    def ntfy_url(self) -> str | None:
+        self._log_access("ntfy_url")
+        return self._ntfy_url
+
+    @property
+    def ntfy_token(self) -> str | None:
+        self._log_access("ntfy_token")
+        return self._ntfy_token
+
+    def _log_access(self, name: str) -> None:
+        """Log every secret access at DEBUG level with caller module."""
+        caller_module = "<unknown>"
+        frame = inspect.currentframe()
+        if frame is not None:
+            # Walk up: _log_access → property → caller
+            frame = frame.f_back  # property
+            if frame is not None:
+                frame = frame.f_back  # actual caller
+            if frame is not None:
+                caller_module = frame.f_globals.get("__name__", "<unknown>")
+        logger.debug("Secrets.%s accessed by %s", name, caller_module)
+
+    # -- redacted serialisation --
+
+    def __repr__(self) -> str:
+        return "Secrets({})".format(
+            ", ".join(
+                f"{name}='{self._REDACTED}'"
+                for name in self.__slots__
+            )
+        )
+
+    def model_dump(self, redact: bool = True) -> dict[str, str | None]:
+        """Return a dict of all secret values.
+
+        Args:
+            redact: If ``True`` (default), all values are replaced with
+                ``"***"``.  Set ``False`` only when intentionally
+                writing to ``secrets.yaml`` during migration.
+        """
+        result: dict[str, str | None] = {}
+        for name in self.__slots__:
+            attr = name.lstrip("_")  # _openrouter_api_key -> openrouter_api_key
+            if redact:
+                result[attr] = self._REDACTED
+            else:
+                result[attr] = getattr(self, attr)
+        return result
+
+
 def load_settings() -> Settings:
-    """Load and return a :class:`Settings` instance from env / ``.env`` files."""
+    """Load and return a :class:`Settings` instance.
+
+    During the v2 migration window, ``.env`` and ``secrets.env`` are
+    still the primary config source — YAML layers are loaded and
+    validated but do not yet drive ``Settings`` construction.
+    (They will become the primary source in Phase 3 when ``.env`` is
+    retired.)
+
+    See ``docs/rfc-config-v2.md`` for the migration timeline.
+    """
     return Settings()
+
+
+def load_secrets(secrets_file: str | None = None) -> Secrets:
+    """Load and return a :class:`Secrets` instance.
+
+    Reads ``config/secrets.yaml`` (or ``MILL_SECRETS_FILE`` if set, or
+    the explicit *secrets_file* argument).  Returns a ``Secrets`` object
+    with all values loaded; missing file returns a ``Secrets`` with all
+    ``None`` values (not an error).
+    """
+    return Secrets(_secrets_file=secrets_file)

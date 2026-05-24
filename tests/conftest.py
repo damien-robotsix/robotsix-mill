@@ -43,8 +43,16 @@ def _no_dotenv(monkeypatch):
     hermetic tests assert wrong or hit the network — which made the
     full-suite implement gate fail in-container (76 env-driven
     failures) and BLOCK essentially every ticket. The suite must be
-    identical green on a clean machine and inside the container."""
+    identical green on a clean machine and inside the container.
+
+    Also blocks YAML overlay files (``config/mill.local.yaml``,
+    ``config/mill.production.yaml``, ``config/secrets.yaml``) by
+    setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty
+    so only the committed ``config/mill.defaults.yaml`` is loaded."""
     monkeypatch.setitem(Settings.model_config, "env_file", None)
+    # Block YAML overlays — only defaults.yaml is loaded in tests.
+    monkeypatch.setenv("MILL_CONFIG_FILE", "")
+    monkeypatch.setenv("MILL_SECRETS_FILE", "")
     for var in (
         "OPENROUTER_API_KEY",
         "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL",
