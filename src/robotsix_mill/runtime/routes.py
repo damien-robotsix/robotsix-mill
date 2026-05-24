@@ -580,6 +580,49 @@ def cost_by_agent(
     return aggregate_cost_by_name(settings, lookback_hours)
 
 
+@router.get("/costs/most-expensive-ticket")
+def most_expensive_ticket_endpoint(
+    lookback_hours: float = 24,
+    settings=Depends(get_settings),
+    svc=Depends(get_service),
+):
+    """Return the ticket with the highest total LLM cost in the last
+    *lookback_hours* (clamped 1–168).  Returns ``null`` when there is
+    no data, tracing is disabled, or the session has no matching ticket
+    in the database."""
+    from ..langfuse_client import most_expensive_ticket
+
+    lookback_hours = max(1.0, min(lookback_hours, 168.0))
+    result = most_expensive_ticket(settings, lookback_hours)
+    if result is None:
+        return None
+
+    session_id = result["session_id"]
+    ticket = svc.get(session_id)
+    if ticket is None:
+        return None
+
+    return {
+        "ticket_id": ticket.id,
+        "title": ticket.title,
+        "cost_usd": result["total_cost"],
+    }
+
+
+@router.get("/costs/most-expensive-trace")
+def most_expensive_trace_endpoint(
+    lookback_hours: float = 24,
+    settings=Depends(get_settings),
+):
+    """Return the single most expensive trace in the last
+    *lookback_hours* (clamped 1–168).  Returns ``null`` when there is
+    no data or tracing is disabled."""
+    from ..langfuse_client import most_expensive_trace
+
+    lookback_hours = max(1.0, min(lookback_hours, 168.0))
+    return most_expensive_trace(settings, lookback_hours)
+
+
 # -- deep-review --------------------------------------------------------
 
 
