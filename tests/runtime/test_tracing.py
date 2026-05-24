@@ -17,11 +17,6 @@ def _clear_env(monkeypatch):
     tracing._tracing_ready = None
 
 
-def test_init_is_noop(settings):
-    """init() must not trigger any imports or side effects."""
-    tracing.init(settings)  # should not raise
-
-
 def test_ensure_tracing_disabled():
     """_ensure_tracing must set _tracing_ready=False when env vars absent."""
     assert tracing._tracing_ready is None
@@ -44,7 +39,7 @@ def test_flush_tracing_noop_before_ensure():
 def test_start_ticket_root_span_noop():
     """start_ticket_root_span must yield without error when tracing is off."""
     tracing._tracing_ready = False
-    with tracing.start_ticket_root_span("test-ticket-id"):
+    with tracing.start_ticket_root_span("test-ticket-id", "test"):
         assert True  # body executed
     # Should not have imported anything
 
@@ -63,7 +58,7 @@ def test_session_contextvar_only_set_when_tracing_ready():
     The var must also be cleanly reset after the block."""
     tracing._tracing_ready = False
     assert tracing._current_session.get() is None
-    with tracing.start_ticket_root_span("sess-xyz"):
+    with tracing.start_ticket_root_span("sess-xyz", "test"):
         assert tracing._current_session.get() is None  # untouched (off)
     assert tracing._current_session.get() is None
 

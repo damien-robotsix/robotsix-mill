@@ -688,9 +688,9 @@ async function renderLastReviewsList(){
  } else {
   lastReviewsCache.forEach(function(entry){
    const finished=entry.finished_at?new Date(entry.finished_at).toLocaleString():'—';
-   const n_te=(entry.tool_errors||[]).length;
-   const n_al=(entry.agent_limitations||[]).length;
-   const n_opt=(entry.optimizations||[]).length;
+   const n_te=(entry.findings||[]).filter(f=>f.category==="tool_error").length;
+   const n_al=(entry.findings||[]).filter(f=>f.category==="agent_limitation").length;
+   const n_opt=(entry.findings||[]).filter(f=>f.category==="optimization").length;
    const status=entry.status||'ok';
    const statusHtml=status==='error'?
     '<span style="color:#f87171">error</span>':
@@ -820,16 +820,8 @@ function renderDeepReviewResult(res, backFn){
   return;
  }
  // New schema: res.findings is a list of {category, symptom, root_cause,
- // proposed_solution, confidence}. The legacy three-list response shape
- // is also handled below as a fallback for any in-flight pre-upgrade
- // results sitting in app.state.
- let findings=Array.isArray(res.findings)?res.findings:null;
- if(!findings){
-  findings=[];
-  (res.tool_errors||[]).forEach(s=>findings.push({category:"tool_error",symptom:s,root_cause:"",proposed_solution:"",confidence:"medium"}));
-  (res.agent_limitations||[]).forEach(s=>findings.push({category:"agent_limitation",symptom:s,root_cause:"",proposed_solution:"",confidence:"medium"}));
-  (res.optimizations||[]).forEach(s=>findings.push({category:"optimization",symptom:s,root_cause:"",proposed_solution:"",confidence:"medium"}));
- }
+ // proposed_solution, confidence}.
+ let findings=Array.isArray(res.findings)?res.findings:[];
  deepReviewFindings=findings.slice();
  if(!findings.length){
   html+=`<div class="muted" style="padding:12px 0">(no issues found in this trace)</div>`;

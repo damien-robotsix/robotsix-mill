@@ -392,7 +392,7 @@ def test_fetch_session_summary_warnings_errors(settings, monkeypatch):
 
 
 def test_fetch_session_summary_per_trace_fetch_fails_gracefully(settings, monkeypatch):
-    """When _fetch_single_trace returns None, the trace still appears in
+    """When fetch_trace_detail returns None, the trace still appears in
     ``## By stage`` but contributes no warnings/errors."""
     from robotsix_mill.langfuse_client import fetch_session_summary
 

@@ -403,7 +403,7 @@ class MergeStage(Stage):
             # traces for the same logical rebase operation.
             stack = contextlib.ExitStack()
             if attempt == 1:
-                stack.enter_context(tracing.start_ticket_root_span(ticket.id))
+                stack.enter_context(tracing.start_ticket_root_span(ticket.id, "rebase"))
             stack.enter_context(tracing.trace_stage("rebase"))
             with stack:
                 # Refresh origin/<target> so the agent rebases onto

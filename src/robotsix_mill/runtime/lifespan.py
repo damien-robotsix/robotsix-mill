@@ -67,7 +67,6 @@ def create_lifespan(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         db.init_db(settings)
-        tracing.init(settings)
         service = TicketService(settings)
         ctx = StageContext(settings=settings, service=service)
         run_registry = RunRegistry(settings.data_dir / "runs.json")

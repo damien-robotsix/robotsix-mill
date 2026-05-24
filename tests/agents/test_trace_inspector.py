@@ -150,9 +150,7 @@ class TestRunTraceInspector:
         result = trace_inspector_mod.run_trace_inspector(
             settings=settings, trace_data=_fake_trace_with_errors()
         )
-        assert result.tool_errors == []
-        assert result.agent_limitations == []
-        assert result.optimizations == []
+        assert result.error
         assert "OPENROUTER_API_KEY" in result.error
 
     def test_returns_result_with_errors_found(self, monkeypatch):
@@ -178,8 +176,9 @@ class TestRunTraceInspector:
             settings=Settings(openrouter_api_key="sk-test"),
             trace_data=_fake_trace_with_errors(),
         )
-        assert len(result.tool_errors) == 2
-        assert "pytest" in result.tool_errors[0]
+        assert len(result.findings) == 2
+        assert all(f.category == "tool_error" for f in result.findings)
+        assert "pytest" in result.findings[0].symptom
 
     def test_returns_empty_result_on_clean_trace(self, monkeypatch):
         """Clean trace → empty lists (no false positives)."""
@@ -192,9 +191,7 @@ class TestRunTraceInspector:
             settings=Settings(openrouter_api_key="sk-test"),
             trace_data=_fake_trace_clean(),
         )
-        assert result.tool_errors == []
-        assert result.agent_limitations == []
-        assert result.optimizations == []
+        assert result.findings == []
 
     def test_detects_agent_loop_pattern(self, monkeypatch):
         """A trace with repeated edit→test→fail cycles should flag limitations."""
@@ -214,8 +211,9 @@ class TestRunTraceInspector:
             settings=Settings(openrouter_api_key="sk-test"),
             trace_data=_fake_trace_loop(),
         )
-        assert len(result.agent_limitations) == 1
-        assert "fix loop" in result.agent_limitations[0]
+        assert len(result.findings) == 1
+        assert result.findings[0].category == "agent_limitation"
+        assert "fix loop" in result.findings[0].symptom
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +294,7 @@ class TestMakeTraceInspectTool:
         assert "(no issues found in this trace)" in output
 
     def test_tool_partial_result_one_category(self, monkeypatch):
-        """When only tool_errors are present, only that section appears."""
+        """When only tool_error findings are present, only that section appears."""
         settings = Settings(openrouter_api_key="sk-test")
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
@@ -344,15 +342,6 @@ class TestFetchTraceDetail:
         )
         assert fetch_trace_detail(settings, "any-id") is None
 
-    def test_backward_compat_alias(self):
-        """_fetch_single_trace still works and is the same function."""
-        from robotsix_mill.langfuse_client import (
-            _fetch_single_trace,
-            fetch_trace_detail,
-        )
-
-        assert _fetch_single_trace is fetch_trace_detail
-
 
 # ---------------------------------------------------------------------------
 # TraceInspectResult model tests
@@ -362,9 +351,7 @@ class TestFetchTraceDetail:
 class TestTraceInspectResult:
     def test_defaults_are_empty_lists(self):
         result = TraceInspectResult()
-        assert result.tool_errors == []
-        assert result.agent_limitations == []
-        assert result.optimizations == []
+        assert result.findings == []
 
     def test_json_roundtrip(self):
         from robotsix_mill.agents.trace_inspector import TraceFinding
@@ -379,9 +366,12 @@ class TestTraceInspectResult:
         ])
         data = result.model_dump_json()
         parsed = TraceInspectResult.model_validate_json(data)
-        assert parsed.tool_errors == ["e1", "e2"]
-        assert parsed.agent_limitations == ["a1"]
-        assert parsed.optimizations == []
+        te = [f.symptom for f in parsed.findings if f.category == "tool_error"]
+        al = [f.symptom for f in parsed.findings if f.category == "agent_limitation"]
+        opt = [f.symptom for f in parsed.findings if f.category == "optimization"]
+        assert te == ["e1", "e2"]
+        assert al == ["a1"]
+        assert opt == []
         # Round-trip preserves solution + confidence.
         assert parsed.findings[0].proposed_solution == "sol"
         assert parsed.findings[2].confidence == "high"

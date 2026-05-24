@@ -123,21 +123,6 @@ class TraceInspectResult(BaseModel):
     # findings WITH an error means the analysis didn't happen.
     error: str = ""
 
-    # Backwards-compat accessors so callers (and especially the
-    # retrospect tool's text renderer) can still ask for the three
-    # legacy lists by category without restructuring.
-    @property
-    def tool_errors(self) -> list[str]:
-        return [f.symptom for f in self.findings if f.category == "tool_error"]
-
-    @property
-    def agent_limitations(self) -> list[str]:
-        return [f.symptom for f in self.findings if f.category == "agent_limitation"]
-
-    @property
-    def optimizations(self) -> list[str]:
-        return [f.symptom for f in self.findings if f.category == "optimization"]
-
 
 def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
     """Shrink a serialised Langfuse trace so a real implement-run trace

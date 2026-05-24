@@ -139,14 +139,6 @@ def _ensure_tracing() -> None:
     _tracing_ready = True
 
 
-def init(settings: Settings) -> None:
-    """Backward-compatible entry point — no-op (everything is lazy now).
-
-    Called during API startup for side-effect parity with the old
-    Langfuse SDK. Does *not* trigger OTel imports.
-    """
-    pass
-
 
 def current_session() -> str | None:
     """Return the Langfuse session id currently in scope, or ``None``.
@@ -174,7 +166,7 @@ def flush_tracing() -> None:
 @contextmanager
 def start_ticket_root_span(
     ticket_id: str,
-    stage_name: str | None = None,
+    stage_name: str,
     extra_attributes: dict[str, str] | None = None,
 ) -> Iterator[None]:
     """Open a root OTel span for one stage of a ticket, named after the
@@ -186,10 +178,6 @@ def start_ticket_root_span(
     in the Langfuse UI, which made the deep-review trace picker show a
     long list of identically-named rows. Naming the root span after the
     stage makes traces self-describing at a glance.
-
-    The optional ``stage_name=None`` path keeps the legacy ``"ticket"``
-    name as a back-compat shim — call sites that need explicit stage
-    naming pass it; anything else still works.
 
     ``extra_attributes`` — optional dict of additional span attributes
     to merge into the root span (e.g. ``{"source_trace_id": "..."}``).
@@ -217,7 +205,7 @@ def start_ticket_root_span(
         if extra_attributes:
             attrs.update(extra_attributes)
         with tracer.start_as_current_span(
-            stage_name or "ticket",
+            stage_name,
             attributes=attrs,
         ):
             yield
