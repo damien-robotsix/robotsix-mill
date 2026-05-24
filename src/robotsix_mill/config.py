@@ -13,21 +13,55 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+
+class YamlSettingsSource(PydanticBaseSettingsSource):
+    """Pydantic-settings source that loads YAML config via the existing
+    ``load_yaml_config()`` + ``flatten_yaml_config()`` pipeline.
+
+    Called at ``Settings()`` construction time (not import time), so
+    test monkeypatching of ``_DEFAULTS_FILE`` / ``_LOCAL_FILE`` /
+    ``MILL_CONFIG_FILE`` works reliably.
+
+    Returns an alias-keyed ``{alias: value}`` dict (e.g.
+    ``{"MILL_MAX_CONCURRENCY": 4}``), matching the convention used by
+    ``EnvSettingsSource`` / ``DotEnvSettingsSource`` in
+    pydantic-settings, so ``populate_by_name`` is not required.
+
+    Only fields whose env-var alias appears in the flattened YAML output
+    are included — all others fall through to subsequent (lower-priority)
+    sources or Field defaults.
+    """
+
+    def get_field_value(self, field, field_name):
+        # Not used — __call__ is overridden directly.
+        raise NotImplementedError
+
+    def __call__(self) -> dict[str, Any]:
+        from .config_loader import flatten_yaml_config, load_yaml_config
+
+        yaml_config = load_yaml_config()
+        flat: dict[str, object] = flatten_yaml_config(yaml_config)  # alias → value
+        result: dict[str, Any] = {}
+        for field_name, field_info in self.settings_cls.model_fields.items():
+            alias: str | None = field_info.alias
+            key = alias if alias is not None else field_name
+            if key in flat:
+                # Return alias-keyed dict so pydantic-settings recognises the
+                # values — the framework passes source dicts directly as
+                # ``super().__init__(**state)``, and pydantic only accepts
+                # alias names (not Python field names) when
+                # ``populate_by_name`` is False (the default).
+                result[key] = flat[key]
+        return result
 
 
 class Settings(BaseSettings):
     """Central Pydantic configuration model for robotsix-mill.
 
-    Values are resolved in this order (later sources override earlier):
-
-    1. ``Field(default=...)`` — Python-level fallback
-    2. YAML layers (``mill.defaults.yaml`` → ``mill.local.yaml`` →
-       ``mill.production.yaml``)
-    3. ``.env`` / ``secrets.env`` files
-    4. ``os.environ``
-    5. Constructor kwargs (e.g. ``Settings(MILL_MAX_CONCURRENCY=99)``)
-
+    All fields are sourced from environment variables and ``.env`` /
+    ``secrets.env`` files (loaded automatically by pydantic-settings).
     Conventional keys like ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are
     unprefixed to remain compatible with the reference projects.
     Mill-specific settings use the ``MILL_`` / ``FORGE_`` prefix
@@ -38,47 +72,32 @@ class Settings(BaseSettings):
         env_file=[".env", "secrets.env"], env_file_encoding="utf-8", extra="ignore"
     )
 
-    def __init__(
-        self,
-        _config_file: str | None = None,
-        _skip_local: bool = False,
-        **data: Any,
-    ) -> None:
-        # Step 1: normal pydantic-settings resolution
-        # (env_file → os.environ → kwargs)
-        super().__init__(**data)
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Insert YAML source with second-lowest priority (above only
+        Field defaults), so ``.env`` and ``os.environ`` still override it.
 
-        # Step 2: load YAML layers
-        from .config_loader import flatten_yaml_config, load_yaml_config
-
-        yaml_config = load_yaml_config(
-            config_file=_config_file,
-            skip_local=_skip_local,
+        Precedence (highest to lowest):
+        1. explicit ``Settings(k=v)`` kwargs
+        2. ``os.environ``
+        3. ``.env`` / ``secrets.env`` files
+        4. ``config/*.yaml`` layered YAML (new)
+        5. Field(default=…) static defaults
+        """
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            YamlSettingsSource(settings_cls),
         )
-        yaml_values = flatten_yaml_config(yaml_config)
-
-        # Step 3: build alias→field_name lookup once
-        alias_to_field: dict[str, str] = {}
-        for field_name, field_info in type(self).model_fields.items():
-            if field_info.alias:
-                alias_to_field[field_info.alias] = field_name
-
-        # Step 4: apply YAML value ONLY if field is still at its Field default
-        # (i.e. was NOT set by .env, os.environ, or constructor kwargs)
-        from pydantic import TypeAdapter
-
-        for alias, yaml_value in yaml_values.items():
-            field_name = alias_to_field.get(alias)
-            if field_name is None:
-                continue
-            field_info = type(self).model_fields[field_name]
-            if getattr(self, field_name) == field_info.default:
-                try:
-                    ta = TypeAdapter(field_info.annotation)
-                    value = ta.validate_python(yaml_value)
-                except Exception:
-                    continue
-                object.__setattr__(self, field_name, value)
 
     # --- core ---
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
@@ -1083,11 +1102,7 @@ class Settings(BaseSettings):
 
 
 def load_settings() -> Settings:
-    """Load and return a :class:`Settings` instance.
-
-    Loads YAML layers (defaults → local → production), then overlays
-    ``.env`` / ``secrets.env`` / environment variables on top.
-    """
+    """Load and return a :class:`Settings` instance from env / ``.env`` files."""
     return Settings()
 
 
