@@ -264,9 +264,9 @@ class ImplementStage(Stage):
         # origin/<target> can silently revert newer commits.
         if not git_ops.try_rebase_onto(repo_dir, settings.forge_target_branch):
             return Outcome(
-                State.BLOCKED,
+                State.REBASING,
                 f"rebase onto origin/{settings.forge_target_branch} "
-                "failed — resolve conflicts manually",
+                "failed — handing to rebase agent",
             )
 
         # Hard invariant: NEVER run the agent / sandbox without a

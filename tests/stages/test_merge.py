@@ -222,6 +222,16 @@ def test_rebasing_clean_rebase_returns_to_human_mr_approval(tmp_path, monkeypatc
         "robotsix_mill.stages.merge.git_ops.push", fake_push,
     )
 
+    # Post-rebase routing checks whether a PR exists; mock so the
+    # forge reports a PR → route stays HUMAN_MR_APPROVAL (regression).
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+
     t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
@@ -232,7 +242,45 @@ def test_rebasing_clean_rebase_returns_to_human_mr_approval(tmp_path, monkeypatc
     assert push_calls["branch"] == f"mill/{t.id}"
 
 
-# --- REBASING: no-op rebase (branch already current) skips force-push ---
+def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
+    """Rebase agent succeeds, force-pushes, but no PR exists for the
+    branch → route to READY so the ticket re-enters implement."""
+    ctx = _gh(tmp_path)
+
+    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+
+    push_calls = {}
+
+    def fake_push(repo, branch, remote_url, token):
+        push_calls.update(branch=branch, remote_url=remote_url)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+    )
+
+    # pr_status returns None → no PR exists → route to READY.
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: None,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.READY
+    assert push_calls["branch"] == f"mill/{t.id}"
 
 def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     """Rebase agent succeeds but the remote already has this exact
@@ -433,6 +481,16 @@ def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
     ctx.service.transition(t.id, State.REBASING, note="conflicting")
     t = ctx.service.get(t.id)
 
+    # Switch pr_status to report a PR exists (mergeable=True) so the
+    # post-rebase routing stays HUMAN_MR_APPROVAL.
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+
     # Step 2: REBASING → rebase agent runs, succeeds → HUMAN_MR_APPROVAL.
     out2 = MergeStage().run(t, ctx)
     assert calls["branch"] == f"mill/{t.id}"
@@ -602,6 +660,15 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
         "robotsix_mill.stages.merge.git_ops.fetch",
         lambda *a, **k: None,
     )
+    # pr_status mock needed because step 2 rebase succeeds+pushes and
+    # the post-rebase routing checks whether a PR exists.
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
 
     def fake_push(repo, branch, remote_url, token):
         pass
@@ -632,13 +699,6 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
 
     # Now the HUMAN_MR_APPROVAL poll sees a genuinely mergeable PR → the
     # conflict is really gone → counter resets to 0.
-    monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
-        lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
-            "mergeable": True,
-        },
-    )
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
         lambda self, *, source_branch: {"conclusion": "success"},
