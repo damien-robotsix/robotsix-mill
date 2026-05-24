@@ -1187,8 +1187,8 @@ def test_auto_merge_skipped_when_not_eligible(tmp_path, monkeypatch):
 
 
 def test_auto_merge_skipped_when_ci_pending(tmp_path, monkeypatch):
-    """CI conclusion is 'pending', not 'success' → HUMAN_MR_APPROVAL
-    (auto-merge gate never entered)."""
+    """CI conclusion is 'pending', not 'success' → WAITING_AUTO_MERGE
+    (auto-merge gate entered, waiting for CI to go green)."""
     ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -1212,8 +1212,8 @@ def test_auto_merge_skipped_when_ci_pending(tmp_path, monkeypatch):
     _write_review_artifact(ctx, t)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-    assert merge_called == []
+    assert out.next_state is State.WAITING_AUTO_MERGE
+    assert merge_called == []  # merge_pr not called for pending CI
 
 
 def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
@@ -1326,3 +1326,368 @@ def test_auto_merge_writes_merge_artifact(tmp_path, monkeypatch):
     assert merge_artifact.exists()
     content = merge_artifact.read_text(encoding="utf-8")
     assert "auto-merged: https://gh/o/r/pull/42" in content
+
+
+# ============================================================
+# F. WAITING_AUTO_MERGE — new state and comment routing
+# ============================================================
+
+def test_eligible_pending_ci_goes_to_waiting_auto_merge(
+    tmp_path, monkeypatch
+):
+    """Eligible + CI pending → WAITING_AUTO_MERGE."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.WAITING_AUTO_MERGE
+    assert merge_called == []  # merge_pr never called
+
+
+def test_eligible_success_auto_merges_to_done(tmp_path, monkeypatch):
+    """Eligible + CI success → DONE (already covered, ensure it still passes)."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_eligible_forge_merge_failed_stays_human_mr_approval_with_comment(
+    tmp_path, monkeypatch
+):
+    """Eligible + CI success + forge rejects → HUMAN_MR_APPROVAL + comment."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: {
+            "merged": False, "reason": "branch protection",
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].author == "merge"
+    assert "forge merge failed: branch protection" in comments[0].body
+
+
+def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
+    tmp_path, monkeypatch
+):
+    """auto_merge_enabled=false → HUMAN_MR_APPROVAL + comment."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="false", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].author == "merge"
+    assert "auto-merge disabled in config" in comments[0].body
+
+
+def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
+    tmp_path, monkeypatch
+):
+    """review_enabled=false → HUMAN_MR_APPROVAL + comment."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="false")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].author == "merge"
+    assert "review gate disabled" in comments[0].body
+
+
+def test_not_eligible_artifact_missing_stays_human_mr_approval_with_comment(
+    tmp_path, monkeypatch
+):
+    """No review artifact → HUMAN_MR_APPROVAL + comment."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    # NO review artifact
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].author == "merge"
+    assert "no review artifact" in comments[0].body
+
+
+def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
+    tmp_path, monkeypatch
+):
+    """auto_merge_eligible: false → HUMAN_MR_APPROVAL + comment."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t, eligible=False)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].author == "merge"
+    assert "not auto-merge eligible" in comments[0].body
+
+
+def test_comment_dedup_same_reason_no_duplicate(tmp_path, monkeypatch):
+    """Two polls with the same reason → exactly 1 comment."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="false", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    # First poll → writes comment.
+    MergeStage().run(t, ctx)
+    assert len(ctx.service.list_comments(t.id)) == 1
+
+    # Second poll — same conditions, same reason → no new comment.
+    MergeStage().run(t, ctx)
+    assert len(ctx.service.list_comments(t.id)) == 1
+
+
+def test_comment_dedup_different_reason_new_comment(
+    tmp_path, monkeypatch
+):
+    """Reason changes → new comment fires."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="false", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    # First poll → disabled flag comment.
+    MergeStage().run(t, ctx)
+    assert len(ctx.service.list_comments(t.id)) == 1
+
+    # Hack: change the stored reason to simulate a prior different
+    # reason (e.g., was CI pending, now CI succeeded but still not
+    # eligible). Then re-run — the new reason text differs.
+    reason_path = (
+        ctx.service.workspace(t).artifacts_dir / "merge_reason.txt"
+    )
+    reason_path.write_text("old different reason", encoding="utf-8")
+
+    MergeStage().run(t, ctx)
+    assert len(ctx.service.list_comments(t.id)) == 2
+
+
+def test_waiting_auto_merge_becomes_fixing_ci_on_ci_failure(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE poll where CI now fails → FIXING_CI."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "failure", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    # Transition to WAITING_AUTO_MERGE manually (simulate previous poll).
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE poll where artifact now says not eligible
+    → HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    # First write the artifact as eligible so the WAITING_AUTO_MERGE
+    # transition is plausible.
+    _write_review_artifact(ctx, t, eligible=True)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    # Now change the artifact to not eligible.
+    _write_review_artifact(ctx, t, eligible=False)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert "not auto-merge eligible" in comments[0].body
+
+
+def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
+    """WAITING_AUTO_MERGE poll where CI is now green → DONE."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE

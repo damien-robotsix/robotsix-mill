@@ -44,6 +44,7 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.merge")
 
 _REBASE_COUNTER = "rebase_attempts.txt"
+_MERGE_REASON = "merge_reason.txt"
 
 
 def _read_counter(path) -> int:
@@ -56,6 +57,18 @@ def _read_counter(path) -> int:
 def _write_counter(path, value: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(value), encoding="utf-8")
+
+
+def _read_reason(path) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
+
+
+def _write_reason(path, reason: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(reason, encoding="utf-8")
 
 
 def _workspace_repo_dir(ctx, ticket) -> str | None:
@@ -84,6 +97,10 @@ class MergeStage(Stage):
         # REBASING path: skip PR status, go straight to rebase execution.
         if ticket.state is State.REBASING:
             return self._run_rebase(ticket, ctx)
+
+        # WAITING_AUTO_MERGE path: re-poll CI, try auto-merge when green.
+        if ticket.state is State.WAITING_AUTO_MERGE:
+            return self._poll_waiting_auto_merge(ticket, ctx)
 
         # HUMAN_MR_APPROVAL path: poll PR status.
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
@@ -152,41 +169,192 @@ class MergeStage(Stage):
             log.info("%s: mergeable PR has failing CI → fixing_ci", ticket.id)
             return Outcome(State.FIXING_CI)
 
-        # success, pending, or None — standard wait.
-        # Auto-merge gate: when all conditions are met, merge without
-        # waiting for a human.
-        if (
-            conclusion == "success"
-            and s.auto_merge_enabled
-            and s.review_enabled  # hard dependency on review gate
-        ):
-            review_artifact = (
-                ctx.service.workspace(ticket).artifacts_dir / "review.md"
-            )
-            if review_artifact.exists():
-                review_text = review_artifact.read_text(encoding="utf-8")
-                if "auto_merge_eligible: true" in review_text:
-                    result = get_forge(s).merge_pr(source_branch=branch)
-                    if result.get("merged"):
-                        ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                            "merge.md"
-                        ).write_text(
-                            f"auto-merged: {pr.get('url', '')}\n",
-                            encoding="utf-8",
-                        )
-                        log.info("%s: auto-merged → done", ticket.id)
-                        return Outcome(
-                            State.DONE,
-                            f"auto-merged: {pr.get('url', '')}",
-                        )
-                    log.warning(
-                        "%s: auto-merge failed: %s — falling back to human",
-                        ticket.id, result.get("reason", "unknown"),
-                    )
-                    # Fall through to standard HUMAN_MR_APPROVAL re-poll
+        # success, pending, or None — evaluate auto-merge eligibility.
+        eligible, eligibility_reason = self._auto_merge_eligible(ticket, ctx)
 
-        # success, pending, or None — standard wait.
+        if conclusion == "success":
+            if eligible:
+                # CI green + eligible → auto-merge now.
+                result = get_forge(s).merge_pr(source_branch=branch)
+                if result.get("merged"):
+                    ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                        "merge.md"
+                    ).write_text(
+                        f"auto-merged: {pr.get('url', '')}\n",
+                        encoding="utf-8",
+                    )
+                    log.info("%s: auto-merged → done", ticket.id)
+                    return Outcome(
+                        State.DONE,
+                        f"auto-merged: {pr.get('url', '')}",
+                    )
+                # Forge rejected the merge.
+                reason_text = (
+                    f"forge merge failed: {result.get('reason', 'unknown')}"
+                )
+                self._maybe_comment(ticket, ctx, reason_text)
+                log.warning(
+                    "%s: auto-merge failed: %s — falling back to human",
+                    ticket.id, result.get("reason", "unknown"),
+                )
+                return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
+            else:
+                # CI green but not eligible → human approval needed.
+                self._maybe_comment(ticket, ctx, eligibility_reason)
+                return Outcome(State.HUMAN_MR_APPROVAL)
+
+        # pending or None — not yet green.
+        if eligible:
+            self._maybe_comment(ticket, ctx, "CI pending — will auto-merge when green")
+            return Outcome(State.WAITING_AUTO_MERGE)
+
+        # Not eligible + CI pending → standard human wait.
+        self._maybe_comment(ticket, ctx, eligibility_reason)
         return Outcome(State.HUMAN_MR_APPROVAL)
+
+    def _auto_merge_eligible(self, ticket: Ticket, ctx: StageContext) -> tuple[bool, str]:
+        """Return ``(eligible, reason)`` for auto-merge.
+
+        *eligible* is True when ALL of the following hold:
+        1. ``settings.auto_merge_enabled`` is True
+        2. ``settings.review_enabled`` is True
+        3. Review artifact exists at ``{workspace}/artifacts/review.md``
+        4. Artifact contains the literal string ``"auto_merge_eligible: true"``
+
+        *reason* explains the blocking condition when eligible is False.
+        """
+        s = ctx.settings
+        if not s.auto_merge_enabled:
+            return False, "auto-merge disabled in config"
+        if not s.review_enabled:
+            return False, "review gate disabled — human approval required"
+
+        review_artifact = (
+            ctx.service.workspace(ticket).artifacts_dir / "review.md"
+        )
+        if not review_artifact.exists():
+            return False, "no review artifact — human approval required"
+
+        review_text = review_artifact.read_text(encoding="utf-8")
+        if "auto_merge_eligible: true" not in review_text:
+            # Try to read the verdict line for context.
+            verdict_note = ""
+            for line in review_text.splitlines():
+                if line.startswith("verdict:"):
+                    verdict_note = " (" + line[len("verdict:"):].strip()[:200] + ")"
+                    break
+            return False, "reviewer marked not auto-merge eligible" + verdict_note
+
+        return True, "eligible"
+
+    def _maybe_comment(self, ticket: Ticket, ctx: StageContext, reason: str) -> None:
+        """Write a de-duplicated comment naming the auto-merge blocking condition.
+
+        Reads ``merge_reason.txt`` from the workspace; skips the comment
+        if the stored reason matches *reason* exactly. Otherwise writes
+        the comment, then persists the new reason.
+        """
+        reason_path = (
+            ctx.service.workspace(ticket).artifacts_dir / _MERGE_REASON
+        )
+        stored = _read_reason(reason_path)
+        if stored == reason:
+            return  # already commented — de-dupe
+        ctx.service.add_comment(ticket.id, reason, author="merge")
+        _write_reason(reason_path, reason)
+
+    def _poll_waiting_auto_merge(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Re-poll CI for a ticket in WAITING_AUTO_MERGE.
+
+        The ticket was already determined eligible for auto-merge; CI was
+        pending. On each poll:
+        - CI success → try auto-merge (DONE or HUMAN_MR_APPROVAL on forge reject)
+        - CI failure → FIXING_CI
+        - CI still pending → WAITING_AUTO_MERGE (same-state no-op)
+        - Eligibility lost → HUMAN_MR_APPROVAL with comment
+        """
+        s = ctx.settings
+        branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
+
+        # First, re-check eligibility (review artifact may have changed).
+        eligible, reason = self._auto_merge_eligible(ticket, ctx)
+        if not eligible:
+            self._maybe_comment(ticket, ctx, reason)
+            return Outcome(State.HUMAN_MR_APPROVAL, reason)
+
+        # Re-check PR status (could have become conflicting).
+        try:
+            pr = get_forge(s).pr_status(source_branch=branch)
+        except Exception as e:  # noqa: BLE001 — transient
+            log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
+            return Outcome(State.WAITING_AUTO_MERGE)
+
+        if pr is None:
+            return Outcome(State.WAITING_AUTO_MERGE)
+        if pr.get("merged"):
+            ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                "merge.md"
+            ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
+            log.info("%s: PR merged → done", ticket.id)
+            return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
+        if pr.get("state") == "closed":
+            return Outcome(
+                State.BLOCKED,
+                f"PR closed without merge — resumable: {pr.get('url', '')}",
+            )
+        mergeable = pr.get("mergeable")
+        if mergeable is False:
+            log.info(
+                "%s: PR became conflicting while waiting for CI → REBASING",
+                ticket.id,
+            )
+            return Outcome(State.REBASING, "PR is now conflicting")
+
+        # Check CI.
+        try:
+            ci_status = get_forge(s).check_status(source_branch=branch)
+        except Exception as e:  # noqa: BLE001 — transient
+            log.warning("%s: check_status failed (retry): %s", ticket.id, e)
+            return Outcome(State.WAITING_AUTO_MERGE)
+
+        if ci_status is None:
+            # No CI data yet — keep waiting.
+            self._maybe_comment(ticket, ctx, "CI pending — will auto-merge when green")
+            return Outcome(State.WAITING_AUTO_MERGE)
+
+        conclusion = ci_status.get("conclusion")
+        if conclusion == "failure":
+            log.info("%s: CI failed while waiting for auto-merge → fixing_ci", ticket.id)
+            self._maybe_comment(ticket, ctx, "CI failed — auto-fixing")
+            return Outcome(State.FIXING_CI)
+
+        if conclusion == "success":
+            # CI is green — attempt auto-merge.
+            result = get_forge(s).merge_pr(source_branch=branch)
+            if result.get("merged"):
+                ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                    "merge.md"
+                ).write_text(
+                    f"auto-merged: {pr.get('url', '')}\n",
+                    encoding="utf-8",
+                )
+                log.info("%s: auto-merged → done", ticket.id)
+                return Outcome(
+                    State.DONE,
+                    f"auto-merged: {pr.get('url', '')}",
+                )
+            # Forge rejected the merge.
+            reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
+            self._maybe_comment(ticket, ctx, reason_text)
+            log.warning(
+                "%s: auto-merge failed: %s — falling back to human",
+                ticket.id, result.get("reason", "unknown"),
+            )
+            return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
+
+        # Pending or None — keep waiting.
+        self._maybe_comment(ticket, ctx, "CI pending — will auto-merge when green")
+        return Outcome(State.WAITING_AUTO_MERGE)
 
     def _run_rebase(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Execute the rebase agent for a ticket already in REBASING."""
