@@ -11,3 +11,31 @@ __pycache__
 *.egg-info
 dist
 build
+
+# Documentation (not needed at runtime — the image runs `robotsix-mill`,
+# not a doc server).
+docs/
+mkdocs.yml
+AGENT.md
+CONTRIBUTING.md
+SECURITY.md
+LICENSE
+
+# Build & CI configuration (not needed in the image).
+Dockerfile
+.dockerignore
+.github/
+.hadolint.yaml
+.jscpd.json
+.pre-commit-config.yaml
+.trivyignore
+Makefile
+
+# Example / dev configs (not needed at runtime).
+docker-compose.override.example.yml
+secrets.env.example
+dev/
+
+# Test coverage artifact (NOT tests/ — the dev stage doubles as the
+# sandbox image and needs tests/ for the in-sandbox pytest gate).
+.coverage
