@@ -38,9 +38,9 @@ def test_default_numeric_limits():
 
 
 def test_doc_request_limit_default():
-    """MILL_DOC_REQUEST_LIMIT defaults to 4."""
+    """MILL_DOC_REQUEST_LIMIT defaults to 8."""
     s = Settings()
-    assert s.doc_request_limit == 4
+    assert s.doc_request_limit == 8
 
 
 def test_doc_request_limit_env(monkeypatch):
