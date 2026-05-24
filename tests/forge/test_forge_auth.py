@@ -2,13 +2,30 @@ import time
 
 import pytest
 
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, Secrets, _reset_secrets
 from robotsix_mill.forge import auth
+
+
+def _set_secrets(**kw):
+    """Populate the Secrets singleton for tests."""
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(**kw)
 
 
 def S(tmp_path, **e):
     e.setdefault("MILL_DATA_DIR", str(tmp_path))
-    return Settings(**e)
+    s = Settings(**e)
+    # Mirror secret fields into Secrets so get_secrets() works
+    secrets_kw = {}
+    for key in ("forge_token", "github_app_id", "github_app_private_key",
+                "github_app_private_key_path"):
+        val = e.get(key.upper())
+        if val is not None:
+            secrets_kw[key] = val
+    if secrets_kw:
+        _set_secrets(**secrets_kw)
+    return s
 
 
 def test_token_mode_returns_pat(tmp_path):

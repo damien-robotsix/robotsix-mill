@@ -8,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, Secrets, _reset_secrets
 from robotsix_mill.langfuse_client import (
     _cost_cache,
     _langfuse_api_get,
@@ -23,10 +23,22 @@ from robotsix_mill.langfuse_client import (
 
 
 def _langfuse_settings(**overrides):
-    """Return a Settings with tracing enabled (Langfuse keys configured)."""
+    """Return a Settings with tracing enabled via Secrets.
+
+    Constructs a Settings from overrides AND sets the Secrets
+    singleton so that tracing_enabled and the Langfuse API helpers
+    find the credentials."""
     overrides.setdefault("LANGFUSE_BASE_URL", "https://lf.example.com")
     overrides.setdefault("LANGFUSE_PUBLIC_KEY", "pk-test")
     overrides.setdefault("LANGFUSE_SECRET_KEY", "sk-test")
+    # Populate Secrets so get_secrets() returns matching values
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(
+        langfuse_base_url=overrides.get("LANGFUSE_BASE_URL"),
+        langfuse_public_key=overrides.get("LANGFUSE_PUBLIC_KEY"),
+        langfuse_secret_key=overrides.get("LANGFUSE_SECRET_KEY"),
+    )
     return Settings(**overrides)
 
 

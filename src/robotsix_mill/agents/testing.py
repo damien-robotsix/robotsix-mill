@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..config import Settings
+from ..config import Settings, get_secrets
 
 
 def run_test_agent(
@@ -41,7 +41,7 @@ def run_test_agent(
         return True, "all tests passed"
 
     tail = out[-6000:]
-    if not settings.openrouter_api_key:
+    if not get_secrets().openrouter_api_key:
         return False, f"tests failed (rc={rc}); raw tail:\n{tail[-1500:]}"
 
     from .yaml_loader import load_agent_definition

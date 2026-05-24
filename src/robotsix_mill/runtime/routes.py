@@ -23,6 +23,7 @@ from ..core.models import (
     TicketRead,
     TicketTransition,
 )
+from ..config import get_secrets
 from ..core.service import TransitionError
 from ..core.states import State
 from .board_html import BOARD_HTML
@@ -720,7 +721,7 @@ def deep_review_trace(
                     else:
                         git_ops.clone(
                             settings.forge_remote_url, cand,
-                            settings.forge_target_branch, settings.forge_token,
+                            settings.forge_target_branch, get_secrets().forge_token,
                         )
                         repo_dir = cand
                 except subprocess.CalledProcessError as e:

@@ -16,7 +16,7 @@ conclusion. Raw search results / pages never reach the main agent.
 
 from __future__ import annotations
 
-from ..config import Settings
+from ..config import Settings, get_secrets
 
 _SYSTEM_PROMPT = """\
 You are a focused web research assistant. Given a single query, search
@@ -33,7 +33,7 @@ def run_web_research(*, settings: Settings, query: str) -> str:
     its conclusion string. Bounded by ``web_research_request_limit``.
     Never raises out — research failure degrades to a short message so
     the main agent can carry on."""
-    if not settings.openrouter_api_key:
+    if not get_secrets().openrouter_api_key:
         return "web research unavailable: OPENROUTER_API_KEY is not set"
 
     # lazy: keep core import-light / the suite hermetic
@@ -50,7 +50,7 @@ def run_web_research(*, settings: Settings, query: str) -> str:
     model = CostInstrumentedOpenRouterModel(
         f"{settings.web_research_model}{online}",
         provider=OpenRouterProvider(
-            api_key=settings.openrouter_api_key,
+            api_key=get_secrets().openrouter_api_key,
             http_client=client,
         ),
     )

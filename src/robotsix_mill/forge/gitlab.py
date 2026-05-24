@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 
+from ..config import get_secrets
 from .base import Forge
 
 
@@ -136,7 +137,7 @@ class GitLabForge(Forge):
 
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(s.forge_token or "")
+        headers = _build_headers(get_secrets().forge_token or "")
         encoded = quote(project_path, safe="")
         with httpx.Client(timeout=30) as c:
             r = c.get(f"{api}/projects/{encoded}", headers=headers)
@@ -155,7 +156,7 @@ class GitLabForge(Forge):
 
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(s.forge_token or "")
+        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         with httpx.Client(timeout=30) as c:
             r = c.get(
@@ -181,7 +182,7 @@ class GitLabForge(Forge):
 
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(s.forge_token or "")
+        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         with httpx.Client(timeout=30) as c:
             r = c.get(
@@ -203,7 +204,7 @@ class GitLabForge(Forge):
 
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(s.forge_token or "")
+        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         with httpx.Client(timeout=30) as c:
             r = c.get(
@@ -237,7 +238,7 @@ class GitLabForge(Forge):
 
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(s.forge_token or "")
+        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         payload = {
             "source_branch": source_branch,
@@ -279,7 +280,7 @@ class GitLabForge(Forge):
 
         s = self.settings
         api = s.gitlab_api_url.rstrip("/")
-        headers = _build_headers(s.forge_token or "")
+        headers = _build_headers(get_secrets().forge_token or "")
         pid = self._resolve_project_id(project_path)
         payload = {
             "merge_when_pipeline_succeeds": True,

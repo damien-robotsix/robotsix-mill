@@ -2,11 +2,17 @@
 
 from robotsix_mill.agents import explore
 from robotsix_mill.agents.explore import make_explore_tool
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
 def _settings(tmp_path, **env):
     env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    # Mirror openrouter_api_key into Secrets so get_secrets() works
+    key = env.get("OPENROUTER_API_KEY")
+    if key is not None:
+        import robotsix_mill.config as _cfg
+        _reset_secrets()
+        _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**env)
 
 

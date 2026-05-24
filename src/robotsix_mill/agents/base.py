@@ -17,7 +17,7 @@ import asyncio
 import weakref
 from typing import Any
 
-from ..config import Settings
+from ..config import Settings, get_secrets
 from .report_issue import make_report_issue_tool
 from .web_research import make_web_research_tool
 
@@ -173,7 +173,7 @@ def build_agent(
     Note: for a structured ``output_type`` on a model whose provider
     rejects forced ``tool_choice``, wrap it in ``PromptedOutput`` at
     the call site (the default ``ToolOutput`` mode 404s there)."""
-    if not settings.openrouter_api_key:
+    if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     # lazy: keeps core import-light and the test suite hermetic
@@ -186,7 +186,7 @@ def build_agent(
     model = CostInstrumentedOpenRouterModel(
         model_name or _model_name(settings),
         provider=OpenRouterProvider(
-            api_key=settings.openrouter_api_key,
+            api_key=get_secrets().openrouter_api_key,
             http_client=http_client,
         ),
     )

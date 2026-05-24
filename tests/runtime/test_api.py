@@ -415,14 +415,13 @@ def test_board_css_includes_origin_link_style(client):
     assert ".origin-link" in css
 
 
-def test_origin_session_url_computed_when_config_set(service, settings):
+def test_origin_session_url_computed_when_config_set(service, settings, secrets_set):
     """enrich_ticket_read computes origin_session_url when all config
     ingredients are present."""
     from robotsix_mill.runtime.deps import enrich_ticket_read
 
     t = service.create("URL test", origin_session="sess-abc")
-    settings.langfuse_base_url = "https://cloud.langfuse.com"
-    settings.langfuse_project_id = "proj-xyz"
+    secrets_set(langfuse_base_url="https://cloud.langfuse.com", langfuse_project_id="proj-xyz")
 
     tr = enrich_ticket_read(t, settings, service)
     assert tr.origin_session == "sess-abc"

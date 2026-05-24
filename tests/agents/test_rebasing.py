@@ -9,12 +9,18 @@ import pytest
 
 from robotsix_mill.agents import openrouter_cost as oc
 from robotsix_mill.agents.rebasing import RebaseResult, run_rebase_agent
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
 def _s(tmp_path, **kw):
     kw.setdefault("OPENROUTER_API_KEY", "k")
     kw.setdefault("MILL_DATA_DIR", str(tmp_path))
+    # Mirror openrouter_api_key into Secrets so get_secrets() works
+    key = kw.get("OPENROUTER_API_KEY")
+    if key is not None:
+        import robotsix_mill.config as _cfg
+        _reset_secrets()
+        _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**kw)
 
 

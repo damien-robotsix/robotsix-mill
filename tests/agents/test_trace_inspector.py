@@ -9,7 +9,24 @@ from robotsix_mill.agents.trace_inspector import (
     TraceInspectResult,
     make_trace_inspect_tool,
 )
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, Secrets, _reset_secrets
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+def _set_secrets(**kw):
+    """Populate the Secrets singleton for tests."""
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(**kw)
+
+
+def _settings_with_api_key(api_key="sk-test", **kw):
+    """Return a Settings and set the matching secret."""
+    _set_secrets(openrouter_api_key=api_key)
+    return Settings(openrouter_api_key=api_key, **kw)
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +163,7 @@ class TestRunTraceInspector:
         cause surfaced in ``error`` (rather than indistinguishable empty
         findings — the user couldn't tell 'no key configured' from 'no
         issues found' before this change)."""
-        settings = Settings(openrouter_api_key=None)
+        settings = _settings_with_api_key(api_key=None)
         result = trace_inspector_mod.run_trace_inspector(
             settings=settings, trace_data=_fake_trace_with_errors()
         )
@@ -173,7 +190,7 @@ class TestRunTraceInspector:
             ]),
         )
         result = trace_inspector_mod.run_trace_inspector(
-            settings=Settings(openrouter_api_key="sk-test"),
+            settings=_settings_with_api_key(),
             trace_data=_fake_trace_with_errors(),
         )
         assert len(result.findings) == 2
@@ -188,7 +205,7 @@ class TestRunTraceInspector:
             lambda **kwargs: TraceInspectResult(),
         )
         result = trace_inspector_mod.run_trace_inspector(
-            settings=Settings(openrouter_api_key="sk-test"),
+            settings=_settings_with_api_key(),
             trace_data=_fake_trace_clean(),
         )
         assert result.findings == []
@@ -208,7 +225,7 @@ class TestRunTraceInspector:
             ]),
         )
         result = trace_inspector_mod.run_trace_inspector(
-            settings=Settings(openrouter_api_key="sk-test"),
+            settings=_settings_with_api_key(),
             trace_data=_fake_trace_loop(),
         )
         assert len(result.findings) == 1
@@ -228,7 +245,7 @@ class TestMakeTraceInspectTool:
 
     def test_tool_returns_formatted_summary(self, monkeypatch):
         """The tool closure returns a Markdown-formatted summary."""
-        settings = Settings(openrouter_api_key="sk-test")
+        settings = _settings_with_api_key()
 
         # Inject synthetic trace detail via fetch_trace_detail
         monkeypatch.setattr(
@@ -268,7 +285,7 @@ class TestMakeTraceInspectTool:
     def test_tool_degradation_trace_unavailable(self, monkeypatch):
         """When fetch_trace_detail returns None, the tool returns a
         degradation message instead of raising."""
-        settings = Settings(openrouter_api_key="sk-test")
+        settings = _settings_with_api_key()
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
             lambda s, tid: None,
@@ -279,7 +296,7 @@ class TestMakeTraceInspectTool:
 
     def test_tool_clean_trace_no_issues(self, monkeypatch):
         """When no issues found, a short 'no issues' message is included."""
-        settings = Settings(openrouter_api_key="sk-test")
+        settings = _settings_with_api_key()
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
             lambda s, tid: {"id": tid, "name": "clean", "observations": []},
@@ -295,7 +312,7 @@ class TestMakeTraceInspectTool:
 
     def test_tool_partial_result_one_category(self, monkeypatch):
         """When only tool_error findings are present, only that section appears."""
-        settings = Settings(openrouter_api_key="sk-test")
+        settings = _settings_with_api_key()
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
             lambda s, tid: {"id": tid, "name": "partial", "observations": []},

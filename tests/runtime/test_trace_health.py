@@ -43,6 +43,15 @@ def _settings(tmp_path, **overrides):
     overrides.setdefault("LANGFUSE_BASE_URL", "https://lf.example.com")
     overrides.setdefault("LANGFUSE_PUBLIC_KEY", "pk-test")
     overrides.setdefault("LANGFUSE_SECRET_KEY", "sk-test")
+    # Populate Secrets so get_secrets() returns matching values
+    from robotsix_mill.config import Secrets, _reset_secrets
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(
+        langfuse_base_url=overrides.get("LANGFUSE_BASE_URL"),
+        langfuse_public_key=overrides.get("LANGFUSE_PUBLIC_KEY"),
+        langfuse_secret_key=overrides.get("LANGFUSE_SECRET_KEY"),
+    )
     return __import__("robotsix_mill.config", fromlist=["Settings"]).Settings(
         **overrides
     )
@@ -52,6 +61,18 @@ def _init_db_for_test(settings):
     """Reset the cached engine so each test gets a clean, isolated DB."""
     db.reset_engine()
     db.init_db(settings)
+
+
+def _enable_tracing_secrets():
+    """Populate Secrets with Langfuse credentials so tracing is enabled."""
+    from robotsix_mill.config import Secrets, _reset_secrets
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(
+        langfuse_base_url="https://lf.example.com",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
 
 
 def _make_traces(n, with_session=True):
@@ -500,6 +521,7 @@ def test_list_all_traces_since_pagination(monkeypatch):
 
     from robotsix_mill.config import Settings
 
+    _enable_tracing_secrets()
     s = Settings(
         LANGFUSE_BASE_URL="https://lf.example.com",
         LANGFUSE_PUBLIC_KEY="pk",
@@ -547,6 +569,7 @@ def test_list_all_traces_since_http_error_returns_empty(monkeypatch):
 
     from robotsix_mill.config import Settings
 
+    _enable_tracing_secrets()
     s = Settings(
         LANGFUSE_BASE_URL="https://lf.example.com",
         LANGFUSE_PUBLIC_KEY="pk",
@@ -578,6 +601,7 @@ def test_list_all_traces_since_exception_returns_empty(monkeypatch):
 
     from robotsix_mill.config import Settings
 
+    _enable_tracing_secrets()
     s = Settings(
         LANGFUSE_BASE_URL="https://lf.example.com",
         LANGFUSE_PUBLIC_KEY="pk",

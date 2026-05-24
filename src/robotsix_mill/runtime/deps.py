@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from ..config import Settings
+from ..config import Settings, get_secrets
 from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE, State
@@ -49,8 +49,9 @@ def _origin_session_url(ticket: Ticket, settings: Settings) -> str | None:
     Returns ``None`` when any ingredient is missing — no broken links.
     """
     origin = ticket.origin_session
-    base = settings.langfuse_base_url
-    project_id = settings.langfuse_project_id
+    secrets = get_secrets()
+    base = secrets.langfuse_base_url
+    project_id = secrets.langfuse_project_id
     if origin and base and project_id:
         return f"{base.rstrip('/')}/project/{project_id}/sessions/{origin}"
     return None

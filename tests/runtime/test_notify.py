@@ -50,24 +50,23 @@ def ctx(settings, service):
 # ---------------------------------------------------------------------------
 
 
-def test_noop_when_url_unset(settings, service):
+def test_noop_when_url_unset(settings, service, secrets_set):
     """When NTFY_URL is None / empty, send_notification returns immediately."""
-    settings.ntfy_url = None
+    secrets_set(ntfy_url=None)
     t = service.create("x")
     send_notification(t, State.ERRORED, "boom", settings)
 
 
-def test_noop_when_url_empty(settings, service):
+def test_noop_when_url_empty(settings, service, secrets_set):
     """Empty string is treated same as None."""
-    settings.ntfy_url = ""
+    secrets_set(ntfy_url="")
     t = service.create("x")
     send_notification(t, State.ERRORED, "boom", settings)
 
 
-def test_posts_to_url(settings, service, monkeypatch):
+def test_posts_to_url(settings, service, monkeypatch, secrets_set):
     """Happy path: a POST is made with the correct headers and body."""
-    settings.ntfy_url = "https://ntfy.sh/test"
-    settings.ntfy_token = None
+    secrets_set(ntfy_url="https://ntfy.sh/test")
     rec = _RecordingPost(200)
     monkeypatch.setattr(httpx, "post", rec)
 
@@ -87,12 +86,11 @@ def test_posts_to_url(settings, service, monkeypatch):
     assert c["timeout"] is not None
 
 
-def test_xtitle_header_is_ascii_safe(settings, service, monkeypatch):
+def test_xtitle_header_is_ascii_safe(settings, service, monkeypatch, secrets_set):
     """Regression: an em-dash (or any non-ASCII ticket title) in the
     X-Title header made httpx raise UnicodeEncodeError, silently
     breaking EVERY notification. The header must be ASCII-encodable."""
-    settings.ntfy_url = "https://ntfy.sh/test"
-    settings.ntfy_token = None
+    secrets_set(ntfy_url="https://ntfy.sh/test")
     rec = _RecordingPost(200)
     monkeypatch.setattr(httpx, "post", rec)
 
@@ -106,9 +104,9 @@ def test_xtitle_header_is_ascii_safe(settings, service, monkeypatch):
     assert xt.startswith("mill: human_mr_approval - ")
 
 
-def test_note_none_renders_placeholder(settings, service, monkeypatch):
+def test_note_none_renders_placeholder(settings, service, monkeypatch, secrets_set):
     """A None note becomes '(none)' in the body."""
-    settings.ntfy_url = "https://ntfy.sh/test"
+    secrets_set(ntfy_url="https://ntfy.sh/test")
     rec = _RecordingPost(200)
     monkeypatch.setattr(httpx, "post", rec)
 
@@ -117,10 +115,9 @@ def test_note_none_renders_placeholder(settings, service, monkeypatch):
     assert "Note: (none)" in rec.calls[0]["content"]
 
 
-def test_token_sent_as_bearer(settings, service, monkeypatch):
+def test_token_sent_as_bearer(settings, service, monkeypatch, secrets_set):
     """NTFY_TOKEN is sent as an Authorization: Bearer header."""
-    settings.ntfy_url = "https://ntfy.sh/test"
-    settings.ntfy_token = "tk_secret"
+    secrets_set(ntfy_url="https://ntfy.sh/test", ntfy_token="tk_secret")
     rec = _RecordingPost(200)
     monkeypatch.setattr(httpx, "post", rec)
 
@@ -129,9 +126,9 @@ def test_token_sent_as_bearer(settings, service, monkeypatch):
     assert rec.calls[0]["headers"]["Authorization"] == "Bearer tk_secret"
 
 
-def test_network_error_is_caught(settings, service, monkeypatch, caplog):
+def test_network_error_is_caught(settings, service, monkeypatch, caplog, secrets_set):
     """A POST exception does not propagate — it logs a warning and returns."""
-    settings.ntfy_url = "https://ntfy.sh/test"
+    secrets_set(ntfy_url="https://ntfy.sh/test")
     rec = _RecordingPost(exc=ConnectionError("refused"))
     monkeypatch.setattr(httpx, "post", rec)
 
@@ -141,9 +138,9 @@ def test_network_error_is_caught(settings, service, monkeypatch, caplog):
     assert "ntfy notification failed" in caplog.text
 
 
-def test_non_2xx_is_caught(settings, service, monkeypatch, caplog):
+def test_non_2xx_is_caught(settings, service, monkeypatch, caplog, secrets_set):
     """A 500 response is treated as a failure and logged, not raised."""
-    settings.ntfy_url = "https://ntfy.sh/test"
+    secrets_set(ntfy_url="https://ntfy.sh/test")
     rec = _RecordingPost(status_code=500)
     monkeypatch.setattr(httpx, "post", rec)
 
@@ -167,10 +164,11 @@ def _recording(monkeypatch):
 
 
 @pytest.fixture
-def _notify_settings(settings):
+def _notify_settings(secrets_set):
     """Enable ntfy for the integration tests."""
-    settings.ntfy_url = "https://ntfy.sh/mill"
-    return settings
+    secrets_set(ntfy_url="https://ntfy.sh/mill")
+    # Return nothing — the fixture just sets up secrets
+    return None
 
 
 async def test_notifies_on_human_issue_approval(ctx, service, monkeypatch, _notify_settings, _recording):
@@ -328,10 +326,10 @@ async def test_notification_exception_does_not_fail_worker(
 
 
 async def test_no_notification_when_url_unset_in_worker(
-    ctx, service, monkeypatch, _notify_settings, _recording
+    ctx, service, monkeypatch, _notify_settings, _recording, secrets_set
 ):
     """When NTFY_URL is unset, the worker path still works but does not notify."""
-    _notify_settings.ntfy_url = None
+    secrets_set(ntfy_url=None)
 
     class ApproveStage(Stage):
         name = "refine"

@@ -17,7 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from ..config import Settings
+from ..config import Settings, get_secrets
 
 
 class CiFixResult(BaseModel):
@@ -47,7 +47,7 @@ def run_ci_fix_agent(
     This is the mockable seam — tests monkeypatch it to avoid real LLM
     and Docker calls.
     """
-    if not settings.openrouter_api_key:
+    if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     from .yaml_loader import load_agent_definition

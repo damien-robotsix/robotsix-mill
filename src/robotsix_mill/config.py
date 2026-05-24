@@ -764,10 +764,11 @@ class Settings(BaseSettings):
     @property
     def tracing_enabled(self) -> bool:
         """True when all three Langfuse credentials are configured."""
+        secrets = get_secrets()
         return bool(
-            self.langfuse_base_url
-            and self.langfuse_public_key
-            and self.langfuse_secret_key
+            secrets.langfuse_base_url
+            and secrets.langfuse_public_key
+            and secrets.langfuse_secret_key
         )
 
     @property
@@ -1125,6 +1126,7 @@ class Secrets(BaseModel):
     forge_token: str | None = None
     github_app_id: str | None = None
     github_app_private_key: str | None = None
+    github_app_private_key_path: str | None = None
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_base_url: str | None = None
