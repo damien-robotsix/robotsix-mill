@@ -69,4 +69,4 @@ def test_private_key_from_path(tmp_path):
     p = tmp_path / "key.pem"
     p.write_text("-----BEGIN-----\nabc\n-----END-----\n")
     s = S(tmp_path, GITHUB_APP_PRIVATE_KEY_PATH=str(p))
-    assert "abc" in auth._private_key(s)
+    assert "abc" in auth._private_key()

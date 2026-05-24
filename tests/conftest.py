@@ -84,7 +84,7 @@ def _reset_secrets_each_test():
 
 
 @pytest.fixture
-def secrets_set(monkeypatch):
+def secrets_set():
     """Fixture that lets tests inject secret values into ``get_secrets()``.
 
     Returns a callable ``set(**overrides)`` that constructs a fresh

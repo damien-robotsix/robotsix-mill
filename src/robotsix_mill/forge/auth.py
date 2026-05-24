@@ -22,7 +22,7 @@ from .github import _parse_owner_repo
 _cache: dict[str, tuple[str, float]] = {}
 
 
-def _private_key(settings: Settings) -> str:
+def _private_key() -> str:
     if get_secrets().github_app_private_key_path:
         with open(get_secrets().github_app_private_key_path, encoding="utf-8") as f:
             return f.read()
@@ -41,7 +41,7 @@ def _mint_installation_token(settings: Settings) -> tuple[str, float]:
     now = int(time.time())
     bearer = jwt.encode(
         {"iat": now - 60, "exp": now + 9 * 60, "iss": get_secrets().github_app_id},
-        _private_key(settings),
+        _private_key(),
         algorithm="RS256",
     )
     h = {
