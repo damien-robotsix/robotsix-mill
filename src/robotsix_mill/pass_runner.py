@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import Settings
-from .core.models import SourceKind
+from .core.models import SourceKind, Ticket
 from .core.service import TicketService
 from .core.states import State
 from .core.workspace import Workspace
@@ -28,21 +28,10 @@ _GAP_ID_RE = re.compile(
 )
 
 
-def _format_recent_proposals(tickets: list) -> str:
-    """Format a ``<recent_proposals>`` block from a list of Tickets."""
-    if not tickets:
-        return "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
-    lines = []
-    for t in tickets:
-        short_id = t.id[:7]
-        lines.append(f"[{t.state.value}] {short_id} | {t.title}")
-    return "<recent_proposals>\n" + "\n".join(lines) + "\n</recent_proposals>"
-
-
 def _verify_prior_proposals(
     service: TicketService,
     settings: Settings,
-    source_label: str,
+    source_label: SourceKind,
 ) -> dict[str, dict]:
     """Query the ticket store for drafts previously spawned by the
     agent identified by *source_label*, check their state, and return a
@@ -117,6 +106,22 @@ def _render_verified_table(verified: dict[str, dict]) -> str:
         lines.append(
             f"| {gap_id} | {tid} | {info['state']} | {resolution_str} |"
         )
+    return "\n".join(lines)
+
+
+def _format_recent_proposals(tickets: list[Ticket]) -> str:
+    """Format a ``<recent_proposals>`` block for agent prompt injection.
+
+    One line per ticket: ``[STATE] short_id | title``, most recent first.
+    """
+    if not tickets:
+        return "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+    lines = ["<recent_proposals>"]
+    for t in tickets:
+        short_id = t.id[:7]
+        state_val = t.state.value if hasattr(t.state, 'value') else str(t.state)
+        lines.append(f"[{state_val}] {short_id} | {t.title}")
+    lines.append("</recent_proposals>")
     return "\n".join(lines)
 
 
@@ -208,18 +213,18 @@ def run_agent_pass(
         table = _render_verified_table(verified)
         memory_text = table + "\n\n" + memory_text
 
-    # 2.5. Build recent-proposals block for prompt injection.
+    # 3. Build the recent-proposals block for prompt injection.
     recent = service.recent_proposals_for(source_label, limit=100)
     rp_block = _format_recent_proposals(recent)
 
-    # 3. Invoke the agent callable.
+    # 4. Invoke the agent callable.
     res = agent_fn(settings=settings, memory=memory_text, recent_proposals=rp_block)
 
-    # 4. Persist the agent's updated memory verbatim.
+    # 5. Persist the agent's updated memory verbatim.
     if res.updated_memory:
         persist_memory(memory_file, res.updated_memory)
 
-    # 5. Create draft tickets for each proposal.
+    # 6. Create draft tickets for each proposal.
     gap_ids = getattr(res, 'gap_ids', [])
     created: list[dict] = []
     for i in range(min(len(res.draft_titles), len(res.draft_bodies))):

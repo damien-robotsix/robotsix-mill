@@ -93,24 +93,6 @@ class TicketService:
                 stmt = stmt.where(Ticket.state.notin_(list(exclude_states)))
             return list(s.exec(stmt).all())
 
-    def recent_proposals_for(
-        self,
-        source: SourceKind,
-        limit: int = 100,
-    ) -> list[Ticket]:
-        """Return recent tickets filed by *source*, most recent first.
-
-        Limited to *limit* entries (default 100).
-        """
-        with db.session(self.settings) as s:
-            stmt = (
-                select(Ticket)
-                .where(Ticket.source == source)
-                .order_by(Ticket.created_at.desc())
-                .limit(limit)
-            )
-            return list(s.exec(stmt).all())
-
     def history(self, ticket_id: str) -> list[TicketEvent]:
         """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``."""
         with db.session(self.settings) as s:
@@ -118,6 +100,19 @@ class TicketService:
                 select(TicketEvent)
                 .where(TicketEvent.ticket_id == ticket_id)
                 .order_by(TicketEvent.at)
+            )
+            return list(s.exec(stmt).all())
+
+    def recent_proposals_for(
+        self, source: SourceKind, limit: int = 100,
+    ) -> list[Ticket]:
+        """Return up to *limit* tickets from *source*, most recent first."""
+        with db.session(self.settings) as s:
+            stmt = (
+                select(Ticket)
+                .where(Ticket.source == source)
+                .order_by(Ticket.created_at.desc())
+                .limit(limit)
             )
             return list(s.exec(stmt).all())
 
@@ -596,49 +591,6 @@ class TicketService:
                 .order_by(Comment.created_at)
             )
             return list(s.exec(stmt).all())
-
-    def redraft(
-        self, ticket_id: str, body: str = "", author: str = "user"
-    ) -> tuple[Comment | None, Ticket]:
-        """Redraft a ticket from any active state back to DRAFT.
-
-        Creates an optional comment, resets state to DRAFT, and appends
-        a TicketEvent.  Raises :class:`KeyError` if the ticket does not
-        exist, :class:`TransitionError` if it is already DRAFT or in a
-        terminal state (CLOSED, ANSWERED, EPIC_CLOSED) or is an
-        EPIC_OPEN epic.
-        """
-        _NON_REDRAFTABLE: set[State] = {
-            State.DRAFT, State.CLOSED, State.ANSWERED,
-            State.EPIC_CLOSED, State.EPIC_OPEN,
-        }
-        with db.session(self.settings) as s:
-            ticket = s.get(Ticket, ticket_id)
-            if ticket is None:
-                raise KeyError(ticket_id)
-            if ticket.state in _NON_REDRAFTABLE:
-                raise TransitionError(
-                    f"{ticket_id}: cannot redraft — "
-                    f"state {ticket.state} is not eligible for redraft"
-                )
-            comment = None
-            if body.strip():
-                comment = Comment(ticket_id=ticket_id, body=body, author=author)
-                s.add(comment)
-            note = f"redrafted: {body}" if body else "redrafted"
-            ticket.state = State.DRAFT
-            ticket.updated_at = datetime.now(timezone.utc)
-            s.add(ticket)
-            s.add(
-                TicketEvent(
-                    ticket_id=ticket_id, state=State.DRAFT, note=note
-                )
-            )
-            s.commit()
-            if comment is not None:
-                s.refresh(comment)
-            s.refresh(ticket)
-            return comment, ticket
 
     def request_changes(
         self, ticket_id: str, body: str, author: str = "user"
