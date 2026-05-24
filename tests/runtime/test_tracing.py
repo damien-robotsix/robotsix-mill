@@ -4,15 +4,14 @@ import os
 
 import pytest
 
+from robotsix_mill.config import Secrets, _reset_secrets
 from robotsix_mill.runtime import tracing
 
 
 @pytest.fixture(autouse=True)
-def _clear_env(monkeypatch):
-    """Ensure no tracing env vars leak in."""
-    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
-    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
-    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
+def _clear_env():
+    """Ensure no tracing secrets leak in via the cached Secrets singleton."""
+    _reset_secrets()
     # Reset the module-level state so tests are independent.
     tracing._tracing_ready = None
 
@@ -100,20 +99,25 @@ def test_session_stamp_processor_stamps_from_contextvar(monkeypatch):
 
 
 def test_tracing_enabled_no_env():
-    """_tracing_enabled returns False when no vars set."""
+    """_tracing_enabled returns False when Secrets has no langfuse keys."""
     assert tracing._tracing_enabled() is False
 
 
 def test_tracing_enabled_with_vars(monkeypatch):
-    """_tracing_enabled returns True when both keys are set."""
-    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
-    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
+    """_tracing_enabled returns True when both keys are set in Secrets."""
+    monkeypatch.setattr(
+        "robotsix_mill.config._secrets",
+        Secrets(langfuse_public_key="pk-test", langfuse_secret_key="sk-test"),
+    )
     assert tracing._tracing_enabled() is True
 
 
 def test_tracing_enabled_missing_secret(monkeypatch):
-    """_tracing_enabled returns False when only public key is set."""
-    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
+    """_tracing_enabled returns False when only public key is set in Secrets."""
+    monkeypatch.setattr(
+        "robotsix_mill.config._secrets",
+        Secrets(langfuse_public_key="pk-test"),
+    )
     assert tracing._tracing_enabled() is False
 
 

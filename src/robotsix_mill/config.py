@@ -1204,3 +1204,20 @@ def load_secrets(secrets_file: str | None = None) -> Secrets:
     ``config/secrets.yaml``.
     """
     return Secrets(_secrets_file=secrets_file)
+
+
+_secrets: Secrets | None = None
+
+
+def get_secrets() -> Secrets:
+    """Return a cached :class:`Secrets` singleton, constructing it on first call."""
+    global _secrets
+    if _secrets is None:
+        _secrets = Secrets()
+    return _secrets
+
+
+def _reset_secrets() -> None:
+    """Clear the cached :class:`Secrets` singleton (for tests)."""
+    global _secrets
+    _secrets = None
