@@ -37,17 +37,17 @@ Langfuse; mill reads and briefly caches it.
 
 ### Graceful degradation
 
-When Langfuse is unconfigured (`LANGFUSE_*` env vars absent) or
-unreachable, `session_cost()` returns `0.0` — no errors, no blocked
-pipeline. The board displays `$0.0000`.
+When Langfuse is unconfigured (Langfuse secrets absent from
+`config/secrets.yaml`) or unreachable, `session_cost()` returns `0.0`
+— no errors, no blocked pipeline. The board displays `$0.0000`.
 
 ### Accuracy requirement
 
-Accurate per-ticket cost **requires Langfuse configured** with all
-three env vars (`LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`,
-`LANGFUSE_SECRET_KEY`). Session-summed cost is only complete if every
-trace carries the session id — the trace-health system enforces this
-across all agent runs.
+Accurate per-ticket cost **requires Langfuse configured** with
+`langfuse_public_key`, `langfuse_secret_key`, and `langfuse_base_url`
+set in `config/secrets.yaml`. Session-summed cost is only complete if
+every trace carries the session id — the trace-health system enforces
+this across all agent runs.
 
 ## Cost dashboard
 

@@ -9,7 +9,7 @@ them automatically.
 
 ## How it works
 
-1. **Short-circuits** when tracing is disabled (`LANGFUSE_*` not set).
+1. **Short-circuits** when tracing is disabled (Langfuse secrets not configured in `config/secrets.yaml`).
 
 2. **Fetches all traces** from the last 24 hours via the Langfuse
    public API (paginated, with graceful error handling).
@@ -49,10 +49,12 @@ curl -X POST http://localhost:8077/trace-health
 **Web board:** Click the "Trace Health" button on the board page.
 
 **Periodic polling (opt-in):**
-```sh
-# In .env:
-MILL_TRACE_HEALTH_PERIODIC=true
-MILL_TRACE_HEALTH_INTERVAL_SECONDS=86400  # 1 day
+```yaml
+# In config/mill.local.yaml:
+periodic:
+  trace_health:
+    enabled: true
+    interval_seconds: 86400  # 1 day
 ```
 
 ## Configuration
@@ -71,7 +73,8 @@ MILL_TRACE_HEALTH_INTERVAL_SECONDS=86400  # 1 day
 - The 24-hour lookback window is **hard-coded**, not configurable.
 - The minimum periodic interval is **3600s (1 hour)**, enforced in
   the worker to avoid hammering Langfuse.
-- When `LANGFUSE_*` is not configured, the check is a zero-cost no-op.
+- When Langfuse secrets are not configured in `config/secrets.yaml`,
+  the check is a zero-cost no-op.
 
 ## See also
 
