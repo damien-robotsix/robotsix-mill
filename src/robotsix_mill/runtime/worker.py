@@ -123,8 +123,8 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
             if ticket is not None:
                 send_notification(ticket, outcome.next_state, outcome.note, ctx.settings)
 
-        # After a ticket reaches a terminal state, re-evaluate its parent epic if any.
-        if outcome.next_state in (State.DONE, State.CLOSED, State.ANSWERED):
+        # After a ticket reaches DONE, re-evaluate its parent epic if any.
+        if outcome.next_state == State.DONE:
             ticket = ctx.service.get(ticket_id)
             if ticket is not None and ticket.parent_id is not None:
                 parent = ctx.service.get(ticket.parent_id)
@@ -168,9 +168,6 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
         if epic is None:
             log.warning("epic %s vanished before re-evaluation", epic_id)
             return
-        if epic.state is State.EPIC_CLOSED:
-            log.debug("epic %s: already EPIC_CLOSED — skipping re-evaluation", epic_id)
-            return
 
         epic_desc = svc.workspace(epic).read_description()
         children = svc.list_children(epic_id)
@@ -196,7 +193,7 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
         )
 
         if result.decision == "close":
-            svc.transition(epic_id, State.EPIC_CLOSED, note="[auto-closed] " + (result.note or ""))
+            svc.transition(epic_id, State.EPIC_CLOSED, note=result.note)
             log.info("epic %s: agent decided close — transitioned to EPIC_CLOSED", epic_id)
         elif result.decision == "keep_open":
             log.debug("epic %s: agent decided keep_open — no change", epic_id)
