@@ -1,25 +1,32 @@
 # Merge stage: auto-rebase & CI-fix
 
-The merge stage monitors open PRs and automatically handles two common
-failure modes: merge conflicts from a stale branch, and failing remote
-CI checks.
+The merge stage monitors open PRs and automatically handles three
+scenarios: implement-stage rebase failures, merge conflicts from a
+stale PR branch, and failing remote CI checks.
 
-## Auto-rebase of stale PRs
+## Auto-rebase
 
-When a PR sits `in_review` while other PRs merge onto the target branch,
-it may become stale and develop merge conflicts. Rather than stranding
-such PRs, the merge stage automatically invokes a **rebase agent**
-(`agents/rebasing.py`) that resolves conflicts using the LLM.
+The rebase agent (`agents/rebasing.py`) resolves git rebase conflicts
+using the LLM. It is invoked from two paths:
 
-- The forge's PR status includes a `mergeable` flag.
-- If a PR is open and **mergeable**, the existing no-op (re-poll) path
-  is preserved exactly.
-- If a PR is open and **conflicting**, the merge stage invokes
-  `run_rebase_agent` on the ticket's workspace clone.
-- On success the ticket branch is force-pushed (the ticket stays
-  `in_review` for the next poll to observe the now-mergeable PR).
-- On failure the ticket escalates to `BLOCKED` (resumable) — no
-  half-rebased state is ever pushed.
+1. **Implement-stage defensive rebase** — before the implement agent
+   runs, `try_rebase_onto` rebases the ticket branch onto the latest
+   remote target. If that rebase fails (conflict), the ticket transitions
+   to `REBASING` instead of blocking.
+
+2. **Stale-PR conflict** — when a PR sits `in_review` while other PRs
+   merge onto the target branch, it may become stale and develop merge
+   conflicts. The forge's `mergeable` flag drives this detection.
+
+In both paths, once the rebase agent runs:
+
+- On success the ticket branch is force-pushed.
+  - If a PR already exists for the branch, the ticket returns to
+    `HUMAN_MR_APPROVAL` for the next poll to observe the now-mergeable PR.
+  - If no PR exists yet (implement-stage path), the ticket routes to
+    `READY` and re-enters the implement stage on the next worker tick.
+- On failure (after exhausting retries) the ticket escalates to
+  `BLOCKED` (resumable) — no half-rebased state is ever pushed.
 
 | Variable | Default | Description |
 |---|---|---|
