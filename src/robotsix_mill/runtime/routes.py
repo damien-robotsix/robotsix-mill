@@ -567,6 +567,24 @@ def list_active(worker=Depends(get_worker)) -> list[dict]:
     ]
 
 
+@router.get("/costs/trend")
+def cost_trend(
+    lookback_hours: float = 24,
+    settings=Depends(get_settings),
+) -> dict:
+    """Return cost bucketed by time for the sparkline chart.
+
+    ``?lookback_hours=N`` is clamped to [1, 168].
+
+    Response shape: ``{"buckets": [{"ts": "...", "total_cost": ..., "trace_count": ...}, ...]}``.
+    """
+    from ..langfuse_client import aggregate_cost_trend
+
+    lookback_hours = max(1.0, min(lookback_hours, 168.0))
+    buckets = aggregate_cost_trend(settings, lookback_hours)
+    return {"buckets": buckets}
+
+
 @router.get("/costs/by-agent")
 def cost_by_agent(
     lookback_hours: float = 24,

@@ -184,3 +184,12 @@ margin-top:3px;background:#1e1a2a;color:#a78bfa;letter-spacing:.03em}
 @keyframes live-spin {
   to { transform: rotate(360deg); }
 }
+/* cost sparkline */
+#cost-sparkline{display:block;width:100%;height:64px;margin-bottom:10px;border-radius:7px}
+/* average trace cost tile */
+.cost-summary-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.cost-summary-divider{color:#3a3f4a;font-size:11px}
+.cost-avg-tile{font-size:12px;color:#cfd3db}
+.cost-avg-value{color:#eef0f4;font-variant-numeric:tabular-nums}
+/* cumulative cost badge */
+.cost-cumulative{font-size:10px;color:#aab0bd}

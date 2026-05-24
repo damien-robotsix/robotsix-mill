@@ -133,10 +133,18 @@ def enrich_ticket_read(
     authoritative when the user actually opens a ticket.
     """
     with_cost(ticket, settings, blocking=blocking_cost)
-    if ticket.kind == "epic":
-        ticket.cost_usd = service.cumulative_cost(
+
+    # Compute cumulative cost for any ticket with descendants.
+    cumulative: float | None = None
+    children = service.list_children(ticket.id)
+    if children:
+        cum = service.cumulative_cost(
             ticket.id, settings, blocking=blocking_cost
         )
+        # Only expose cumulative when it's meaningfully larger than direct.
+        if cum > ticket.cost_usd:
+            cumulative = cum
+
     parent_title: str | None = None
     if ticket.parent_id:
         parent = service.get(ticket.parent_id)
@@ -154,6 +162,7 @@ def enrich_ticket_read(
         origin_session=ticket.origin_session,
         origin_session_url=_origin_session_url(ticket, settings),
         cost_usd=ticket.cost_usd,
+        cumulative_cost=cumulative,
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
         pr_url=_pr_url(ticket, settings) if fetch_pr_url else None,

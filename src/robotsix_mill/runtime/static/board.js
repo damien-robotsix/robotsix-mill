@@ -88,7 +88,7 @@ async function refresh(){
    ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
    ${t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:""}
    ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:""}
-   <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
+   <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}`+
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…"}</span>` : ""}`+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
@@ -501,7 +501,9 @@ async function open_(id){
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
    (t.pr_url?` · <a href="${esc(t.pr_url)}" target="_blank" rel="noopener" class="pr-link">🔗 PR</a>`:"")+
    `<br>
-   · cost <b>$${(t.cost_usd||0).toFixed(4)}</b><br>
+   · cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
+   (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+
+   `<br>
    created ${t.created_at} · updated ${t.updated_at}</p>`+
    (t.depends_on?`<p><b>depends on:</b> ${esc(t.depends_on)}</p>`:"")+
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
@@ -576,15 +578,100 @@ async function renderCostDashboard(){
     '<option value="72"'+selOpt(72)+'>3 days</option>'+
     '<option value="168"'+selOpt(168)+'>7 days</option>'+
    '</select></label>'+
-  '</div><div id="cost-chart">loading…</div>'+
+  '</div>'+
+  '<canvas id="cost-sparkline" style="display:none"></canvas>'+
+  '<div id="cost-chart">loading…</div>'+
   '<div id="cost-highlights"></div>';
 
+ const trendUrl="/costs/trend?lookback_hours="+costLookbackHours;
  const baseUrl="/costs/by-agent?lookback_hours="+costLookbackHours;
  const ticketUrl="/costs/most-expensive-ticket?lookback_hours="+costLookbackHours;
  const traceUrl="/costs/most-expensive-trace?lookback_hours="+costLookbackHours;
- const [data, topTicket, topTrace]=await Promise.all([
-  jget(baseUrl), jget(ticketUrl), jget(traceUrl)
+ const [trendData, data, topTicket, topTrace]=await Promise.all([
+  jget(trendUrl), jget(baseUrl), jget(ticketUrl), jget(traceUrl)
  ]);
+
+ // -- sparkline ----------------------------------------------------------
+ const sparkCanvas=document.getElementById("cost-sparkline");
+ if(trendData&&trendData.buckets&&trendData.buckets.length>0){
+  const buckets=trendData.buckets;
+  sparkCanvas.style.display="block";
+  // Resize to match displayed width (CSS-driven) for crisp rendering.
+  const dpr=window.devicePixelRatio||1;
+  const rect=sparkCanvas.getBoundingClientRect();
+  sparkCanvas.width=rect.width*dpr;
+  sparkCanvas.height=rect.height*dpr;
+  const ctx=sparkCanvas.getContext("2d");
+  ctx.scale(dpr,dpr);
+  const w=rect.width, h=rect.height;
+  const pad={top:4,right:4,bottom:20,left:4};
+  const pw=w-pad.left-pad.right;
+  const ph=h-pad.top-pad.bottom;
+  const maxCost=Math.max(...buckets.map(b=>b.total_cost),0.0001);
+
+  // Background
+  ctx.fillStyle="#1a1e27";
+  ctx.beginPath();
+  ctx.roundRect(0,0,w,h,7);
+  ctx.fill();
+
+  if(buckets.length===1){
+   // Single bucket: draw a dot
+   const x=pad.left+pw/2;
+   const y=pad.top+ph/2;
+   ctx.fillStyle="#3b82f6";
+   ctx.beginPath();
+   ctx.arc(x,y,3,0,Math.PI*2);
+   ctx.fill();
+  } else {
+   const points=[];
+   buckets.forEach((b,i)=>{
+    const x=pad.left+(i/(buckets.length-1))*pw;
+    const y=pad.top+ph-(b.total_cost/maxCost)*ph;
+    points.push({x,y,cost:b.total_cost,ts:b.ts});
+   });
+   // Area fill
+   ctx.fillStyle="rgba(59,130,246,0.15)";
+   ctx.beginPath();
+   ctx.moveTo(points[0].x,pad.top+ph);
+   points.forEach(p=>ctx.lineTo(p.x,p.y));
+   ctx.lineTo(points[points.length-1].x,pad.top+ph);
+   ctx.closePath();
+   ctx.fill();
+   // Line
+   ctx.strokeStyle="rgba(59,130,246,0.5)";
+   ctx.lineWidth=1.5;
+   ctx.beginPath();
+   points.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+   ctx.stroke();
+   // Dots
+   ctx.fillStyle="#3b82f6";
+   points.forEach(p=>{
+    ctx.beginPath();ctx.arc(p.x,p.y,2,0,Math.PI*2);ctx.fill();
+   });
+  }
+
+  // Tooltip via title
+  let title="";
+  buckets.forEach(b=>{title+=b.ts+": $"+b.total_cost.toFixed(4)+" ("+b.trace_count+" traces)\n";});
+  sparkCanvas.title=title.trim();
+ } else {
+  sparkCanvas.style.display="block";
+  const dpr=window.devicePixelRatio||1;
+  const rect=sparkCanvas.getBoundingClientRect();
+  sparkCanvas.width=rect.width*dpr;
+  sparkCanvas.height=rect.height*dpr;
+  const ctx=sparkCanvas.getContext("2d");
+  ctx.scale(dpr,dpr);
+  ctx.fillStyle="#1a1e27";
+  ctx.beginPath();
+  ctx.roundRect(0,0,rect.width,rect.height,7);
+  ctx.fill();
+  ctx.fillStyle="#7d828c";
+  ctx.font="11px ui-monospace,monospace";
+  ctx.textAlign="center";
+  ctx.fillText("No trend data available for this period.",rect.width/2,rect.height/2);
+ }
 
  // -- per-agent bar chart -----------------------------------------------
  if(!data||!data.length){
@@ -593,7 +680,17 @@ async function renderCostDashboard(){
   const colors=["#3b82f6","#8b5cf6","#22c55e","#eab308","#ef4444","#f97316","#06b6d4","#ec4899","#14b8a6","#a855f7"];
   const maxCost=Math.max(...data.map(d=>d.total_cost),0.0001);
   const grandTotal=data.reduce((s,d)=>s+d.total_cost,0);
-  let html='<div class="cost-summary">'+data.length+' agents · $'+grandTotal.toFixed(4)+' total</div>';
+  const totalTraceCount=data.reduce((s,d)=>s+d.trace_count,0);
+  const avgTraceCost=totalTraceCount>0?grandTotal/totalTraceCount:null;
+  let html='<div class="cost-summary-row">'+
+   '<span class="cost-summary">'+data.length+' agents · $'+grandTotal.toFixed(4)+' total</span>'+
+   '<span class="cost-summary-divider">|</span>';
+  if(avgTraceCost!==null){
+   html+='<span class="cost-avg-tile">Avg <span class="cost-avg-value">$'+avgTraceCost.toFixed(4)+'</span> / trace</span>';
+  } else {
+   html+='<span class="cost-avg-tile muted">Avg — / trace</span>';
+  }
+  html+='</div>';
   data.forEach((d,i)=>{
    const pct=Math.max((d.total_cost/maxCost)*100,1);
    const color=colors[i%colors.length];

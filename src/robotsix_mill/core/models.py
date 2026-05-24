@@ -130,6 +130,7 @@ class TicketRead(SQLModel):
     origin_session: str | None
     origin_session_url: str | None
     cost_usd: float
+    cumulative_cost: float | None = None
     depends_on: str | None
     unmet_deps: list[str]
     pr_url: str | None = None

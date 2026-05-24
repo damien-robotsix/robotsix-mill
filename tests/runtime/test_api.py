@@ -1408,7 +1408,8 @@ def test_add_comment_comment_history_reaches_agent(client, service, monkeypatch)
 
 
 def test_epic_detail_cost_is_cumulative(client, service, monkeypatch):
-    """GET /tickets/{epic_id} returns cost_usd = epic own cost + all children."""
+    """GET /tickets/{epic_id} returns cost_usd = epic's own session cost,
+    and cumulative_cost = epic own cost + all children."""
     epic = service.create("Epic", kind="epic")
     c1 = service.create("Child 1", kind="task", parent_id=epic.id)
     c2 = service.create("Child 2", kind="task", parent_id=epic.id)
@@ -1423,7 +1424,8 @@ def test_epic_detail_cost_is_cumulative(client, service, monkeypatch):
     )
 
     r = client.get(f"/tickets/{epic.id}").json()
-    assert r["cost_usd"] == pytest.approx(0.31)  # 0.01 + 0.10 + 0.20
+    assert r["cost_usd"] == pytest.approx(0.01)  # epic's own session cost
+    assert r["cumulative_cost"] == pytest.approx(0.31)  # 0.01 + 0.10 + 0.20
 
 
 def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
@@ -1446,7 +1448,7 @@ def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
     ts = client.get("/tickets").json()
     epic_entry = [x for x in ts if x["id"] == epic.id]
     assert len(epic_entry) == 1
-    # Cold cache → children contribute 0.0, only epic own cost may be 0.0 too.
+    # Cold cache → epic's own cost is 0.0, cumulative_cost is None or 0.0.
     assert epic_entry[0]["cost_usd"] == 0.0
     # session_cost must NOT have been called for any child id.
     child_calls = [x for x in called if x in (c1.id, c2.id)]
@@ -1454,7 +1456,8 @@ def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
 
 
 def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
-    """Epic → sub-epic → task: top epic cost includes all three."""
+    """Epic → sub-epic → task: top epic cumulative includes all three,
+    but cost_usd stays as its own direct session cost."""
     e1 = service.create("E1", kind="epic")
     e2 = service.create("E2", kind="epic", parent_id=e1.id)
     t = service.create("T", kind="task", parent_id=e2.id)
@@ -1465,8 +1468,50 @@ def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
     )
 
     r1 = client.get(f"/tickets/{e1.id}").json()
-    assert r1["cost_usd"] == pytest.approx(0.33)  # 0.01 + 0.02 + 0.30
+    assert r1["cost_usd"] == pytest.approx(0.01)  # e1's own session cost
+    assert r1["cumulative_cost"] == pytest.approx(0.33)  # 0.01 + 0.02 + 0.30
 
     r2 = client.get(f"/tickets/{e2.id}").json()
-    assert r2["cost_usd"] == pytest.approx(0.32)  # 0.02 + 0.30
-  # 0.02 + 0.30
+    assert r2["cost_usd"] == pytest.approx(0.02)  # e2's own session cost
+    assert r2["cumulative_cost"] == pytest.approx(0.32)  # 0.02 + 0.30
+
+
+def test_ticket_with_children_has_cumulative_cost(client, service, monkeypatch):
+    """A non-epic ticket with child tickets gets cumulative_cost > cost_usd."""
+    parent = service.create("Parent task", kind="task")
+    c1 = service.create("Child 1", kind="task", parent_id=parent.id)
+    c2 = service.create("Child 2", kind="task", parent_id=parent.id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_cost",
+        lambda settings, sid: {
+            parent.id: 0.05,
+            c1.id: 0.10,
+            c2.id: 0.07,
+        }.get(sid, 0.0),
+    )
+
+    r = client.get(f"/tickets/{parent.id}").json()
+    assert r["cost_usd"] == pytest.approx(0.05)
+    assert r["cumulative_cost"] == pytest.approx(0.22)  # 0.05 + 0.10 + 0.07
+
+
+def test_leaf_ticket_cumulative_cost_is_none(client, service, monkeypatch):
+    """A ticket with no children has cumulative_cost: null in JSON."""
+    leaf = service.create("Leaf task", kind="task")
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_cost",
+        lambda settings, sid: 0.042 if sid == leaf.id else 0.0,
+    )
+
+    r = client.get(f"/tickets/{leaf.id}").json()
+    assert r["cost_usd"] == pytest.approx(0.042)
+    assert r["cumulative_cost"] is None
+
+
+def test_board_js_references_cumulative_cost(client):
+    """board.js contains references to cumulative_cost for the split
+    badge and drawer rendering."""
+    js = client.get("/static/board.js").text
+    assert "cumulative_cost" in js
