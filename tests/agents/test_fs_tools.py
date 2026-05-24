@@ -549,10 +549,11 @@ class TestRunCommand:
         tools = _build(root, settings)
         cap = {}
 
-        def _capture(command, *, repo_dir, settings):
+        def _capture(command, *, repo_dir, settings, epic_workspace_path=None):
             cap["command"] = command
             cap["repo_dir"] = repo_dir
             cap["settings"] = settings
+            cap["epic_workspace_path"] = epic_workspace_path
             return (0, "ok")
 
         monkeypatch.setattr(sandbox, "run", _capture)

@@ -22,15 +22,17 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     seen = {}
 
-    def fake(*, settings, repo_dir, question):
+    def fake(*, settings, repo_dir, question, extra_roots=None):
         seen["q"] = question
         seen["dir"] = repo_dir
+        seen["extra_roots"] = extra_roots
         return f"FOUND: {question}"
 
     monkeypatch.setattr(explore, "run_explore", fake)
     tool = make_explore_tool(s, tmp_path)
     assert tool("where is the worker?") == "FOUND: where is the worker?"
     assert seen["q"] == "where is the worker?" and seen["dir"] == tmp_path
+    assert seen["extra_roots"] is None
 
 
 def test_explore_subagent_is_read_only_and_uses_explore_model(

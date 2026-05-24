@@ -49,6 +49,7 @@ def run_implement_agent(
     message_history: list | None = None,
     memory: str = "",
     epic_context: str = "",
+    epic_workspace_path: Path | None = None,
 ) -> tuple[str, list, str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, [], updated_memory)``.
@@ -70,6 +71,7 @@ def run_implement_agent(
         result = run_coordinator(
             settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
             feedback=feedback, epic_context=epic_context,
+            epic_workspace_path=epic_workspace_path,
             reference_files=reference_files,
             message_history=message_history,
         )
@@ -86,6 +88,7 @@ def run_implement_agent(
                 settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
                 feedback=feedback, model_name="deepseek/deepseek-v4-flash",
                 epic_context=epic_context,
+                epic_workspace_path=epic_workspace_path,
                 reference_files=reference_files,
                 message_history=message_history,
             )

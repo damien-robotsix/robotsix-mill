@@ -294,12 +294,25 @@ class RefineStage(Stage):
         try:
             memory_text = load_memory(s.refine_memory_file, max_chars=s.max_memory_chars)
 
+            # Wire _epic/ if this ticket belongs to an epic
+            extra_roots: list[Path] | None = None
+            if ticket.parent_id and repo_dir is not None:
+                parent = ctx.service.get(ticket.parent_id)
+                if parent and parent.kind == "epic":
+                    from ..core.workspace import link_epic_workspace
+                    epic_workspace_path = ctx.service.epic_workspace_dir(
+                        ticket.parent_id
+                    )
+                    if link_epic_workspace(repo_dir, epic_workspace_path):
+                        extra_roots = [epic_workspace_path]
+
             result = refining.run_refine_agent(
                 settings=s, title=ticket.title, draft=draft,
                 repo_dir=repo_dir,
                 reviewer_comments=reviewer_comments,
                 memory=memory_text,
                 epic_context=epic_ctx,
+                extra_roots=extra_roots,
             )
 
             if result.updated_memory:

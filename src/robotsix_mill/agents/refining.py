@@ -528,6 +528,7 @@ def run_refine_agent(
     reviewer_comments: str | None = None,
     memory: str = "",
     epic_context: str = "",
+    extra_roots: list[Path] | None = None,
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -555,10 +556,10 @@ def run_refine_agent(
         from .fs_tools import build_fs_tools
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
             if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
-        tools = [make_explore_tool(settings, repo_dir), *ro]
+        tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots), *ro]
 
     agent = build_agent(
         settings,

@@ -89,7 +89,8 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
     ]
 
 
-def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
+def run(command: str, *, repo_dir: Path, settings: Settings,
+        epic_workspace_path: Path | None = None) -> tuple[int, str]:
     """Execute ``command`` against ``repo_dir`` in a disposable
     container. Returns ``(exit_code, combined_output)``. Raises
     :class:`SandboxError` on isolation-infrastructure failure."""
@@ -106,6 +107,31 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
         *_repo_mount(repo_dir, settings),
         "-w", str(repo_dir),
     ]
+    # Optional epic workspace bind mount: overshadows the host-side
+    # _epic/ symlink inside the container so agents can read AND write
+    # through run_command.  Must NOT be read-only even when the
+    # container is --read-only.
+    if epic_workspace_path is not None:
+        epic_target = f"{repo_dir}/_epic"
+        if settings.sandbox_data_mount:
+            host_epic_src = (
+                Path(settings.sandbox_data_mount) / "epic_workspaces"
+                / epic_workspace_path.name
+            )
+            argv += ["-v", f"{host_epic_src}:{epic_target}"]
+        else:
+            try:
+                rel = epic_workspace_path.relative_to(settings.data_dir)
+            except ValueError as e:
+                raise SandboxError(
+                    f"epic_workspace_path {epic_workspace_path} is not "
+                    f"under data_dir {settings.data_dir}; refusing to mount"
+                ) from e
+            argv += [
+                "--mount",
+                f"type=volume,src={settings.data_volume},dst={epic_target},"
+                f"volume-subpath={rel.as_posix()}",
+            ]
     if settings.sandbox_readonly:
         argv.append("--read-only")
     # When the mounted repo has a src/ layout, put its source first on

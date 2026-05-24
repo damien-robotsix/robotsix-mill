@@ -54,7 +54,8 @@ SCOPE DISCIPLINE — always follow these limits:
 """
 
 
-def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
+def run_explore(*, settings: Settings, repo_dir: Path, question: str,
+                extra_roots: list[Path] | None = None) -> str:
     """Run the read-only exploration sub-agent against ``repo_dir`` and
     return its concise findings. Degrades to a short message instead of
     raising so the driver can react."""
@@ -70,7 +71,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
     # read-only subset of the fs tools (no write_file / edit_file / delete_file)
-    all_fs = build_fs_tools(repo_dir, settings)
+    all_fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
     ro_tools = [t for t in all_fs if t.__name__ in ("read_file", "list_dir", "run_command")]
 
     from .base import _close_async_client, timeout_http_client
@@ -131,7 +132,8 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str) -> str:
     return str(result.output).strip()
 
 
-def make_explore_tool(settings: Settings, repo_dir: Path):
+def make_explore_tool(settings: Settings, repo_dir: Path,
+                      extra_roots: list[Path] | None = None):
     def explore(question: str) -> str:
         """Ask a fresh, context-isolated sub-agent a complex, multi-step
         question about the repository — questions that would require
@@ -141,7 +143,8 @@ def make_explore_tool(settings: Settings, repo_dir: Path):
         line-ranges, never whole files. Batch related questions into a
         single call where possible."""
         return run_explore(
-            settings=settings, repo_dir=repo_dir, question=question
+            settings=settings, repo_dir=repo_dir, question=question,
+            extra_roots=extra_roots,
         )
 
     from .tool_registry import ToolInfo, ToolRegistry
