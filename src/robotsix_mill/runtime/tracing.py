@@ -15,13 +15,12 @@ When the env vars are absent, every function is a cheap no-op.
 from __future__ import annotations
 
 import contextvars
-import os
 import uuid
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from typing import Iterator
 
-from ..config import Settings
+from ..config import get_secrets
 
 _tracing_ready: bool | None = None  # tri-state: None=unchecked, True/False
 
@@ -53,10 +52,10 @@ def make_session_id(kind: str) -> str:
 
 
 def _tracing_enabled() -> bool:
-    """Check env vars without importing anything."""
+    """Check secrets without importing anything heavy."""
     return bool(
-        os.environ.get("LANGFUSE_PUBLIC_KEY")
-        and os.environ.get("LANGFUSE_SECRET_KEY")
+        get_secrets().langfuse_public_key
+        and get_secrets().langfuse_secret_key
     )
 
 
@@ -80,15 +79,14 @@ def _ensure_tracing() -> None:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-    base_url = os.environ.get(
-        "LANGFUSE_BASE_URL", "https://cloud.langfuse.com"
-    ).rstrip("/")
+    secrets = get_secrets()
+    base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
     endpoint = f"{base_url}/api/public/otel/v1/traces"
 
     from base64 import b64encode as _b64encode
 
-    public_key = os.environ["LANGFUSE_PUBLIC_KEY"]
-    secret_key = os.environ["LANGFUSE_SECRET_KEY"]
+    public_key = secrets.langfuse_public_key
+    secret_key = secrets.langfuse_secret_key
 
     exporter = OTLPSpanExporter(
         endpoint=endpoint,
