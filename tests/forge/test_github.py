@@ -729,3 +729,314 @@ def test_merge_pr_not_found(tmp_path, monkeypatch):
     forge = _forge(tmp_path)
     result = forge.merge_pr(source_branch="feature/x")
     assert result == {"merged": False, "reason": "PR not found"}
+
+
+# ---------------------------------------------------------------------------
+# list_pr_comments
+# ---------------------------------------------------------------------------
+
+
+def test_list_pr_comments_happy_path(tmp_path, monkeypatch):
+    """PR exists → _list_pr_comments returns normalized dicts."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    comments_resp = [
+        {
+            "id": 1001,
+            "user": {"login": "alice"},
+            "created_at": "2025-01-15T10:00:00Z",
+            "body": "Looks good to me",
+        },
+        {
+            "id": 1002,
+            "user": {"login": "bob"},
+            "created_at": "2025-01-15T11:00:00Z",
+            "body": "",
+        },
+    ]
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+        "issues/7/comments": _make_response(200, comments_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_pr_comments(source_branch="feature/x")
+    assert len(result) == 2
+    assert result[0] == {
+        "id": 1001, "author": "alice",
+        "created_at": "2025-01-15T10:00:00Z", "body": "Looks good to me",
+    }
+    assert result[1] == {
+        "id": 1002, "author": "bob",
+        "created_at": "2025-01-15T11:00:00Z", "body": "",
+    }
+
+
+def test_list_pr_comments_no_pr(tmp_path, monkeypatch):
+    """No PR for branch → returns [] without calling the comments endpoint."""
+    get_map = {"repos/o/r/pulls": _make_response(200, [])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_pr_comments(source_branch="feature/x")
+    assert result == []
+
+
+def test_list_pr_comments_empty_response(tmp_path, monkeypatch):
+    """Endpoint returns [] → []."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+        "issues/7/comments": _make_response(200, []),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_pr_comments(source_branch="feature/x")
+    assert result == []
+
+
+def test_list_pr_comments_http_error(tmp_path, monkeypatch):
+    """Non-2xx from comments endpoint → raise_for_status propagates."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+        "issues/7/comments": _make_response(403, {}, "forbidden"),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    with pytest.raises(real_httpx.HTTPStatusError):
+        forge.list_pr_comments(source_branch="feature/x")
+
+
+# ---------------------------------------------------------------------------
+# list_pr_reviews
+# ---------------------------------------------------------------------------
+
+
+def test_list_pr_reviews_happy_path(tmp_path, monkeypatch):
+    """PR exists → _list_pr_reviews returns normalized dicts (body="" when None)."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    reviews_resp = [
+        {
+            "id": 2001,
+            "user": {"login": "alice"},
+            "submitted_at": "2025-01-15T12:00:00Z",
+            "body": "LGTM",
+            "state": "APPROVED",
+        },
+        {
+            "id": 2002,
+            "user": {"login": "bob"},
+            "submitted_at": "2025-01-15T13:00:00Z",
+            "body": None,
+            "state": "CHANGES_REQUESTED",
+        },
+    ]
+    # More-specific keys first to avoid "repos/o/r/pulls/7" matching
+    # the reviews URL (both contain "pulls/7").
+    get_map = {
+        "pulls/7/reviews": _make_response(200, reviews_resp),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_pr_reviews(source_branch="feature/x")
+    assert len(result) == 2
+    assert result[0] == {
+        "id": 2001, "author": "alice",
+        "created_at": "2025-01-15T12:00:00Z", "body": "LGTM",
+    }
+    assert result[1] == {
+        "id": 2002, "author": "bob",
+        "created_at": "2025-01-15T13:00:00Z", "body": "",
+    }
+    # state is not part of the contract — verify its absence
+    assert "state" not in result[0]
+    assert "state" not in result[1]
+
+
+def test_list_pr_reviews_no_pr(tmp_path, monkeypatch):
+    """No PR → returns []."""
+    get_map = {"repos/o/r/pulls": _make_response(200, [])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_pr_reviews(source_branch="feature/x")
+    assert result == []
+
+
+def test_list_pr_reviews_empty_response(tmp_path, monkeypatch):
+    """Endpoint returns [] → []."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "pulls/7/reviews": _make_response(200, []),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_pr_reviews(source_branch="feature/x")
+    assert result == []
+
+
+def test_list_pr_reviews_http_error(tmp_path, monkeypatch):
+    """Non-2xx from reviews endpoint → raise_for_status propagates."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "pulls/7/reviews": _make_response(403, {}, "forbidden"),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    with pytest.raises(real_httpx.HTTPStatusError):
+        forge.list_pr_reviews(source_branch="feature/x")
+
+
+# ---------------------------------------------------------------------------
+# list_review_comments
+# ---------------------------------------------------------------------------
+
+
+def test_list_review_comments_happy_path(tmp_path, monkeypatch):
+    """PR exists → _list_review_comments returns dicts with file_path, line, diff_hunk."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    comments_resp = [
+        {
+            "id": 3001,
+            "user": {"login": "alice"},
+            "created_at": "2025-01-15T14:00:00Z",
+            "body": "Consider adding a docstring here.",
+            "path": "src/foo.py",
+            "line": 42,
+            "diff_hunk": "@@ -40,6 +40,8 @@ def bar():",
+        },
+        {
+            "id": 3002,
+            "user": {"login": "bob"},
+            "created_at": "2025-01-15T15:00:00Z",
+            "body": "This line seems unused.",
+            "path": "src/baz.py",
+            "line": None,
+            "original_line": 17,
+            "diff_hunk": "@@ -15,3 +15,5 @@ def qux():",
+        },
+    ]
+    get_map = {
+        "pulls/7/comments": _make_response(200, comments_resp),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_review_comments(source_branch="feature/x")
+    assert len(result) == 2
+    assert result[0] == {
+        "id": 3001, "author": "alice",
+        "created_at": "2025-01-15T14:00:00Z",
+        "body": "Consider adding a docstring here.",
+        "file_path": "src/foo.py", "line": 42,
+        "diff_hunk": "@@ -40,6 +40,8 @@ def bar():",
+    }
+    assert result[1] == {
+        "id": 3002, "author": "bob",
+        "created_at": "2025-01-15T15:00:00Z",
+        "body": "This line seems unused.",
+        "file_path": "src/baz.py", "line": 17,
+        "diff_hunk": "@@ -15,3 +15,5 @@ def qux():",
+    }
+
+
+def test_list_review_comments_no_pr(tmp_path, monkeypatch):
+    """No PR → returns []."""
+    get_map = {"repos/o/r/pulls": _make_response(200, [])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_review_comments(source_branch="feature/x")
+    assert result == []
+
+
+def test_list_review_comments_empty_response(tmp_path, monkeypatch):
+    """Endpoint returns [] → []."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "pulls/7/comments": _make_response(200, []),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_review_comments(source_branch="feature/x")
+    assert result == []
+
+
+def test_list_review_comments_http_error(tmp_path, monkeypatch):
+    """Non-2xx from review-comments endpoint → raise_for_status propagates."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "pulls/7/comments": _make_response(403, {}, "forbidden"),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    with pytest.raises(real_httpx.HTTPStatusError):
+        forge.list_review_comments(source_branch="feature/x")
