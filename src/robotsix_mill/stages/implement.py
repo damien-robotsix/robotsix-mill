@@ -30,7 +30,6 @@ from ..agents import coding
 from ..agents.coding import AgentBudgetError, AgentRunError
 from ..agents.coordinating import ValidationResult
 from ..agents.testing import run_test_agent
-from ..config import get_secrets
 from ..core.models import Ticket
 from ..core.states import State
 from ..pass_runner import load_memory, persist_memory
@@ -251,7 +250,7 @@ class ImplementStage(Stage):
                     settings.forge_remote_url,
                     repo_dir,
                     settings.forge_target_branch,
-                    get_secrets().forge_token,
+                    settings.forge_token,
                 )
             except subprocess.CalledProcessError as e:
                 return Outcome(
@@ -281,7 +280,7 @@ class ImplementStage(Stage):
             try:
                 git_ops.clone(
                     settings.forge_remote_url, repo_dir,
-                    settings.forge_target_branch, get_secrets().forge_token,
+                    settings.forge_target_branch, settings.forge_token,
                 )
                 git_ops.create_branch(repo_dir, branch)
             except subprocess.CalledProcessError as e:
