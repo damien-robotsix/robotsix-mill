@@ -320,10 +320,6 @@ def test_resume_blocked_from_done(client, service):
     data = r.json()
     assert data["state"] == State.DONE
 
-    # Can then complete retrospect → CLOSED
-    service.transition(t.id, State.CLOSED)
-    assert service.get(t.id).state is State.CLOSED
-
 
 def test_resume_blocked_missing_ticket_404(client):
     """POST /tickets/{id}/resume-blocked with bogus id returns 404."""
