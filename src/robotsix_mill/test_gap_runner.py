@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass
 
 from .config import Settings, get_secrets
+from .core.models import SourceKind
 from .core.service import TicketService
 
 log = logging.getLogger("robotsix_mill.test_gap")
@@ -90,7 +91,7 @@ def run_test_gap_pass(root: str | None = None) -> TestGapPassResult:
             result = run_agent_pass(
                 agent_fn=agent_fn,
                 memory_file=memory_file,
-                source_label="test_gap",
+                source_label=SourceKind.TEST_GAP,
                 service=service,
                 settings=settings,
                 origin_session=session_id,

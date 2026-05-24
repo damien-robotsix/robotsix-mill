@@ -31,7 +31,7 @@ _GAP_ID_RE = re.compile(
 def _verify_prior_proposals(
     service: TicketService,
     settings: Settings,
-    source_label: str,
+    source_label: SourceKind,
 ) -> dict[str, dict]:
     """Query the ticket store for drafts previously spawned by the
     agent identified by *source_label*, check their state, and return a

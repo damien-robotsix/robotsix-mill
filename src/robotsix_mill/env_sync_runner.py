@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass
 
 from .config import Settings, get_secrets
+from .core.models import SourceKind
 from .core.service import TicketService
 
 log = logging.getLogger("robotsix_mill.env_sync")
@@ -90,7 +91,7 @@ def run_env_sync_pass(root: str | None = None) -> EnvSyncPassResult:
             result = run_agent_pass(
                 agent_fn=agent_fn,
                 memory_file=memory_file,
-                source_label="env_sync",
+                source_label=SourceKind.ENV_SYNC,
                 service=service,
                 settings=settings,
                 origin_session=session_id,

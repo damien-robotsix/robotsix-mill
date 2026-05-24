@@ -18,7 +18,7 @@ from sqlmodel import select
 
 from .config import Settings
 from .core.db import session
-from .core.models import Ticket
+from .core.models import SourceKind, Ticket
 from .core.service import TicketService
 from .core.states import State
 from .langfuse_client import list_all_traces_since
@@ -85,7 +85,7 @@ def run_trace_health_check() -> TraceHealthResult:
     with session(settings) as s:
         stmt = (
             select(Ticket)
-            .where(Ticket.source == "trace-health")
+            .where(Ticket.source == SourceKind.TRACE_HEALTH)
             .where(Ticket.state != State.CLOSED)
         )
         existing = list(s.exec(stmt).all())
@@ -127,7 +127,7 @@ def run_trace_health_check() -> TraceHealthResult:
 
     service = TicketService(settings)
     ticket = service.create(
-        title, description, source="trace-health",
+        title, description, source=SourceKind.TRACE_HEALTH,
         origin_session=session_id,
     )
     log.info(

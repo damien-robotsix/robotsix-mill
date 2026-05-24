@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from ..langfuse_client import session_cost
 from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
+from ..core.models import SourceKind
 from ..notify import send_notification, _TRIGGER_STATES
 from . import tracing
 from .run_registry import RunRegistry
@@ -870,7 +871,7 @@ class Worker:
                     # don't duplicate (the recurring failure is already
                     # being worked).
                     if any(
-                        t.source == "ci"
+                        t.source == SourceKind.CI
                         and t.title == title
                         and t.state.value not in ("closed", "done")
                         for t in existing
@@ -924,7 +925,7 @@ class Worker:
 
                     try:
                         self.ctx.service.create(
-                            title=title, description=body, source="ci",
+                            title=title, description=body, source=SourceKind.CI,
                         )
                     except Exception:
                         log.exception(
