@@ -294,7 +294,7 @@ class TestMakeTraceInspectTool:
         assert "(no issues found in this trace)" in output
 
     def test_tool_partial_result_one_category(self, monkeypatch):
-        """When only tool_errors are present, only that section appears."""
+        """When only tool_error findings are present, only that section appears."""
         settings = Settings(openrouter_api_key="sk-test")
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",

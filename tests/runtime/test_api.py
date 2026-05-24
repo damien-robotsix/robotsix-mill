@@ -562,9 +562,8 @@ def test_deep_review_session_id_format(client, monkeypatch):
     # Make the inspector return success.
     monkeypatch.setattr(
         trace_inspector, "run_trace_inspector",
-        lambda **kw: trace_inspector.TraceInspectorResult(
-            updated_memory="", findings=[], tool_errors=[],
-            agent_limitations=[], optimizations=[], error=None,
+        lambda **kw: trace_inspector.TraceInspectResult(
+            updated_memory="", findings=[], error="",
         ),
     )
 
@@ -989,9 +988,6 @@ def test_get_deep_review_falls_back_to_store(client):
         "status": "ok",
         "trace_id": "stored-trace",
         "source_trace_name": "test",
-        "tool_errors": [],
-        "agent_limitations": [],
-        "optimizations": [],
         "error": "",
         "findings": [],
     })
@@ -1013,7 +1009,6 @@ def test_get_deep_review_prefers_in_memory(client):
     store.put("dual-trace", {
         "status": "ok", "trace_id": "dual-trace",
         "source_trace_name": "store_version",
-        "tool_errors": [], "agent_limitations": [], "optimizations": [],
         "error": "", "findings": [],
     })
 
@@ -1477,3 +1472,4 @@ def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
 
     r2 = client.get(f"/tickets/{e2.id}").json()
     assert r2["cost_usd"] == pytest.approx(0.32)  # 0.02 + 0.30
+  # 0.02 + 0.30

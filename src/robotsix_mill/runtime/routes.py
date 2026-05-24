@@ -645,9 +645,6 @@ def deep_review_trace(
                     "error": "trace unavailable — could not fetch from Langfuse",
                     "findings": [],
                     "source_trace_name": "(unnamed)",
-                    "tool_errors": [],
-                    "agent_limitations": [],
-                    "optimizations": [],
                 }
                 state.deep_review_results[trace_id] = data
                 state.deep_review_store.put(trace_id, data)
