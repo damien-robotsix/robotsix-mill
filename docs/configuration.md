@@ -17,7 +17,7 @@ Settings are resolved from five layers (highest priority first):
 |----------|--------|-------------|
 | 1 (highest) | Explicit `Settings(k=v)` kwargs | Programmatic overrides from callers |
 | 2 | `os.environ` | Any `MILL_*` or unprefixed variable set in the environment |
-| 3 | YAML overlays | `config/mill.local.yaml` then `config/mill.production.yaml` (optional) |
+| 3 | YAML overlays | `config/mill.production.yaml` then `config/mill.local.yaml` (optional) |
 | 4 | YAML defaults | `config/mill.defaults.yaml` (always loaded, committed) |
 | 5 (lowest) | `Field(default=...)` | Static Python defaults in the Pydantic model |
 
@@ -136,14 +136,19 @@ if the file is group/other-readable).
    (in the appropriate group class if grouped, or on `Settings` directly).
 2. Add the default value to `config/mill.defaults.yaml` under the
    correct YAML key path.
-3. If it's a secret, add it to the `Secrets` model and to
+3. Add the dotted-path → env-var alias mapping to
+   `_YAML_PATH_TO_ALIAS` in `src/robotsix_mill/config_loader.py`.
+   Without this, the setting will be silently ignored when read from YAML.
+4. If it's a secret, add it to the `Secrets` model and to
    `config/secrets.example.yaml` instead.
-4. Access it in code: `settings.my_new_field` for settings,
+5. Access it in code: `settings.my_new_field` for settings,
    `get_secrets().my_new_secret` for secrets.
 
-Environment variable naming convention: `MILL_` prefix + uppercase
-with underscores (e.g. `MILL_MY_NEW_FIELD`). Nested YAML keys map to
-double-underscore env vars: `core.models.coordinator` → `MILL_CORE__MODELS__COORDINATOR`.
+Environment variable naming convention: use `Field(alias=...)` on the
+Pydantic model with a `MILL_` prefix + uppercase with underscores
+(e.g. `Field(alias="MILL_MY_NEW_FIELD")`).  The `_YAML_PATH_TO_ALIAS`
+dict maps the dotted YAML path to this alias — there is no automatic
+double-underscore convention.
 
 ---
 
@@ -178,7 +183,6 @@ Every setting below shows:
 | `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-pro` | Documentation agent |
 | `core.models.triage` | `MILL_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Pre-refine triage — fast/cheap classification |
 | `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `openai/gpt-4o-mini` | Model for the auto-approve triage call (must be fast and cheap) |
-| `core.models.env_sync` | `MILL_ENV_SYNC_MODEL` | `openai/gpt-4o-mini` | Env-sync agent model for config/docs drift detection |
 
 ### 2. Request limits
 
@@ -280,6 +284,8 @@ Every setting below shows:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `web.search_enabled` | `MILL_WEB_SEARCH` | `true` | Enable web-search capability (delegated to sub-agent) |
+| `web.research_model` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-pro` | Web-research sub-agent model (also reachable via `core.models.web_research`) |
+| `web.research_request_limit` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for web research (also reachable via `core.limits.web_research_requests`) |
 | `web.fetch_image` | `MILL_FETCH_IMAGE` | `curlimages/curl:8.17.0` | Docker image for isolated `web_fetch` container |
 | `web.fetch_max_bytes` | `MILL_WEB_FETCH_MAX_BYTES` | `2000000` | Max bytes fetched per URL |
 | `web.fetch_timeout` | `MILL_WEB_FETCH_TIMEOUT` | `30` | Timeout (seconds) per web fetch |
@@ -303,12 +309,15 @@ Each periodic agent shares this pattern:
 |-----------|---------|---------|-------------|
 | `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `false`¹ | Enable periodic passes |
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
-| `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger |
+| `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² |
 
 Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `env_sync`, `bc_check`.
 
 > ¹ `survey` is the exception — its default is `enabled: true`.
+>
+> ² `trace_health` and `ci_monitor` do **not** have a `memory_path`
+> field — they write no per-agent memory ledger.
 >
 > `env_sync` and `bc_check` are **env-var-only** (no YAML mapping yet).
 > Set `MILL_ENV_SYNC_PERIODIC=true`, `MILL_BC_CHECK_PERIODIC=true`, etc.
