@@ -485,9 +485,15 @@ def test_category_is_valid(monkeypatch):
 
 def test_report_issue_consistency(monkeypatch):
     """Agents with output_type set SHOULD have report_issue: false.
+
     Documented exceptions: refine (output_type=RefineResult but
     report_issue=true because RefineResult is a spec, not a ticket).
-    This is a soft check — it only warns in the assert message."""
+
+    This is a soft check — violations emit a ``UserWarning`` (visible
+    in test output) rather than failing the suite.
+    """
+    import warnings
+
     KNOWN_EXCEPTIONS = {"refine"}
 
     for var in _ENV_VAR_TO_SETTINGS_ALIAS:
@@ -495,22 +501,27 @@ def test_report_issue_consistency(monkeypatch):
 
     for yf, ad in _all_definitions():
         if ad.output_type and ad.report_issue and ad.name not in KNOWN_EXCEPTIONS:
-            # Soft-fail: output a descriptive assertion message.
-            # This is intentionally lenient — new agents may have
-            # legitimate reasons to keep report_issue=true.
-            pass  # The test passes; the message is informational.
+            warnings.warn(
+                f"{yf.name}: has output_type={ad.output_type!r} AND "
+                f"report_issue=true. Agents with structured output should "
+                f"typically set report_issue: false to avoid double-drafting. "
+                f"If this is intentional, add '{ad.name}' to KNOWN_EXCEPTIONS."
+            )
 
 
-def test_env_vars_in_model_match_settings(monkeypatch):
-    """Every ${VAR} in a YAML model field maps to a known Settings alias."""
+def test_env_vars_in_model_match_settings():
+    """Every ${VAR} in a YAML model field maps to a known Settings alias.
+
+    Reads the raw YAML *before* env-var resolution so that
+    ``${VAR}`` patterns are still present in the ``model`` field.
+    """
     import re
     var_re = re.compile(r"\$\{([^{}]+)\}")
 
-    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
-        monkeypatch.setenv(var, "mock/model")
-
-    for yf, ad in _all_definitions():
-        for match in var_re.finditer(ad.model):
+    for yf in _all_yaml_files():
+        raw = yaml.safe_load(yf.read_text())
+        raw_model = raw.get("model", "")
+        for match in var_re.finditer(raw_model):
             var_name = match.group(1)
             assert var_name in _ENV_VAR_TO_SETTINGS_ALIAS, (
                 f"{yf.name}: model references ${{{var_name}}} which "

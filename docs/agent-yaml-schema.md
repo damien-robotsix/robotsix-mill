@@ -12,11 +12,12 @@ implement against.
 - **Required fields are minimal.** Only `name`, `model`, and
   `system_prompt` are mandatory — everything else has a sensible
   default.
-- **Unknown top-level keys MUST be ignored** by consumers. The loader
-  must not reject a file because it contains a key it doesn't
-  understand. This guarantees forward compatibility: new optional
-  fields can be added at any time, and existing YAML files remain
-  valid.
+- **Unknown top-level keys are rejected.** The loader uses strict
+  validation (``extra="forbid"``) — a YAML file containing a key not
+  defined in the schema will fail to load. This catches typos and
+  drift early. When adding a new field, update the ``AgentDefinition``
+  model in ``yaml_loader.py`` first, then the schema doc, then the
+  YAML files.
 - **One file per agent.** Each agent occupies its own
   `agent_definitions/<name>.yaml`. This keeps diffs isolated and
   makes the directory human-browsable.
