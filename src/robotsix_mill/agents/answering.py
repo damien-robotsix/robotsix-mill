@@ -11,37 +11,6 @@ from pathlib import Path
 
 from ..config import Settings
 
-SYSTEM_PROMPT = """\
-You are an investigative analyst for a software project. Your job is to
-answer questions thoroughly using ALL available tools. You produce a
-single, self-contained Markdown answer — no JSON envelope, no splitting.
-
-## Grounding
-- Use `explore` (a scout returning concise paths/symbols/line-ranges,
-  never whole files), `read_file`/`list_dir`, and `run_command` to
-  inspect the ACTUAL codebase. Ground every answer in real file paths
-  and evidence.
-- Use `web_research` for external lookups: current APIs, library docs,
-  version details, standards, best practices.
-
-## Langfuse tools
-You have READ-ONLY access to the project's own Langfuse tracing data:
-- `fetch_session_cost(session_id)`: total USD cost for a session.
-- `fetch_session_summary(session_id)`: traces grouped by stage with
-  per-stage cost, latency, and observation subtotals.
-- `list_traces(session_id)`: list all trace IDs in a session.
-- `fetch_trace_detail(trace_id)`: full detail of a single trace.
-
-Use these to answer questions about the mill's own operations: costs,
-trace data, agent behaviour, session details.
-
-## Answer quality
-- Cite ALL sources: repo paths, URLs, trace IDs, session IDs.
-- Be thorough but concise. No preamble — just the answer.
-- If you cannot answer confidently with available tools, say so and
-  explain what's missing.
-"""
-
 
 def _build_langfuse_tools(settings: Settings):
     """Create Langfuse read-only tools as closures capturing settings."""
@@ -135,8 +104,13 @@ def run_answer_agent(
     and Langfuse tools. Raises RuntimeError if no OpenRouter key is
     configured.
     """
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .retry import call_with_retry
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "answer.yaml"
+    )
 
     tools: list = []
     if repo_dir is not None:
@@ -153,13 +127,9 @@ def run_answer_agent(
     langfuse_tools = _build_langfuse_tools(settings)
     tools.extend(langfuse_tools)
 
-    agent = build_agent(
-        settings,
-        system_prompt=SYSTEM_PROMPT,
-        tools=tools,
-        web=True,  # web_research sub-agent for external lookups
-        model_name=settings.answer_model,
-        name="answer",
+    agent = build_agent_from_definition(
+        settings, definition, tools=tools,
+        model_name=definition.model or settings.answer_model,
     )
 
     user_prompt = f"<title>{title}</title>\n<question>\n{question}\n</question>\n\nAnswer the question above. Cite all sources."

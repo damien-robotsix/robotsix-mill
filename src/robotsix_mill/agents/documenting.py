@@ -33,46 +33,6 @@ class DocResult(BaseModel):
     )
 
 
-SYSTEM_PROMPT = """\
-You are a senior technical writer responsible for keeping this repository's
-documentation accurate and up-to-date. You receive a ticket specification
-and the corresponding git diff.
-
-Your job has two steps:
-
-### Step 1 — Classify the change
-Determine whether this diff is **user-facing** or **internal-only**.
-
-**User-facing**: a new feature, API change, new config key, new CLI flag,
-or any behavioral change a user would notice. Even small user-facing
-changes (e.g. a new default, a renamed option) count.
-
-**Internal-only**: a pure refactor, a bug fix with no documentation
-impact, test/CI-only changes, lint/format changes, or dependency bumps
-that don't change user-visible behavior.
-
-### Step 2 — Act on the classification
-
-**If internal-only**: return immediately with `user_facing=False` and a
-summary of "no user-facing changes (internal-only)". Do NOT write any
-files or make any edits.
-
-**If user-facing**:
-1. Use `explore` to understand the repo's documentation structure
-   (what's in README.md, docs/, AGENT.md).
-2. Use `list_dir`, `read_file` to survey the existing docs.
-3. Decide which docs need updating to reflect the change.
-4. Apply **minimal, surgical edits**:
-   - Use `edit_file` with `old_string`/`new_string` for small targeted
-     changes to existing files.
-   - Use `write_file` only for new files or full rewrites.
-5. Follow the existing documentation conventions in the repo — do NOT
-   invent new structure or reorganize existing docs.
-6. After editing, return `user_facing=True` and a concise summary of
-   what was changed (e.g. "updated README.md with new config key").
-"""
-
-
 def run_doc_agent(
     *,
     settings: Settings,
@@ -88,27 +48,29 @@ def run_doc_agent(
     The agent receives the ticket spec and git diff. It surveys the
     repo's docs (README.md, docs/*, AGENT.md) and applies targeted
     edits for user-facing changes. Internal-only changes are a no-op."""
-    from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import call_with_retry
 
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "document.yaml"
+    )
+
     fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
-    agent = build_agent(
-        settings,
-        system_prompt=SYSTEM_PROMPT,
-        output_type=PromptedOutput(DocResult),
+    overrides = {}
+    if model_name is not None:
+        overrides["model_name"] = model_name
+    agent = build_agent_from_definition(
+        settings, definition,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
             *(t for t in fs if t.__name__ in ("read_file", "write_file", "list_dir", "edit_file")),
         ],
-        web=False,
-        report_issue=False,
-        model_name=model_name if model_name is not None else settings.doc_model,
-        name="document",
+        **overrides,
     )
     try:
         user_prompt = (

@@ -28,49 +28,6 @@ class DedupResult(BaseModel):
 
 log = logging.getLogger("robotsix_mill.agents.dedup")
 
-SYSTEM_PROMPT = """\
-You are a conservative duplicate detector for an engineering ticket
-pipeline.  Your job is to decide — cheaply — whether a draft ticket is
-(a) a duplicate of an existing ticket, or (b) already implemented in a
-recent commit.  You must be **conservative**: only flag a CLEAR match.
-When unsure, return nulls.
-
-## Rules
-
-1. Compare the draft's **intent / change**, not just its area.  Two
-   tickets in the same file/feature are NOT duplicates unless they
-   describe the exact same change.
-2. The draft's own ticket is NEVER a valid match — ignore it even if it
-   were to appear in the candidates (it won't, but double-check).
-3. For commits: only flag when the commit subject clearly describes the
-   same change the draft is asking for.  Vague subjects (e.g. "fix",
-   "cleanup") are NOT a match.
-4. When you are less than ~90% confident, return null for both fields.
-
-## Ticket verification (primary)
-
-Each entry in `<candidates>` now includes a `body` field — the full
-specification that was (or is being) implemented.  Use this as your
-primary signal for `already_done`:
-
-1. Scan candidate titles first.  If a CLOSED ticket's title suggests
-   overlapping intent, read its `body` and compare the described
-   change against the draft's `<title>` and `<body>`.
-2. Only flag `already_done` when the completed ticket's body describes
-   the same concrete change — not just the same area or component.
-3. Non-terminal candidates (DRAFT, READY, ...) are for `duplicate_of`
-   detection; their bodies help confirm that two open tickets ask for
-   the identical change.
-
-## Commit verification (supplementary)
-
-When `<recent_commits>` is available, use commit subjects as a
-supplementary signal — e.g. a commit whose subject clearly matches
-the draft AND whose author references a recently-CLOSED ticket.
-Without a ticket body to anchor the comparison, commit subjects
-alone are too vague to warrant `already_done` on their own.
-"""
-
 
 def _build_prompt(
     *,
@@ -113,11 +70,15 @@ def run_dedup_check(
     Degrades gracefully: on any exception, returns nulls with a failure
     reason — the guard is best-effort and never blocks the pipeline.
     """
-    from .base import build_agent, _safe_close
-    from pydantic_ai import PromptedOutput
+    from .base import build_agent_from_definition, _safe_close
     from pydantic_ai.usage import UsageLimits
 
+    from .yaml_loader import load_agent_definition
     from .retry import call_with_retry
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "dedup.yaml"
+    )
 
     # Build filesystem tools when a repo_dir is available; the dedup
     # agent is read-only — only read_file and list_dir are exposed.
@@ -128,13 +89,9 @@ def run_dedup_check(
         fs = build_fs_tools(repo_dir, settings)
         tools = [t for t in fs if t.__name__ in ("read_file", "list_dir")]
 
-    agent = build_agent(
-        settings,
-        system_prompt=SYSTEM_PROMPT,
-        output_type=PromptedOutput(DedupResult),
-        model_name=settings.dedup_model,
-        name="dedup",
-        tools=tools,
+    agent = build_agent_from_definition(
+        settings, definition, tools=tools,
+        model_name=definition.model or settings.dedup_model,
     )
     # request_limit must be passed via usage_limits=UsageLimits(...),
     # NOT as a bare run_sync kwarg — the bare kwarg raises

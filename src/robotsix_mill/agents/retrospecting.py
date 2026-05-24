@@ -7,159 +7,11 @@ the stage has a clear spawn decision.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, model_validator
 
 from ..config import Settings
-
-SYSTEM_PROMPT = """\
-You are a retrospective auditor for an autonomous ticket pipeline.
-Given a finished ticket's workflow (state history + notes), its spec,
-a summary of its Langfuse traces (cost, latency, retries, errors),
-any comments left on the ticket during review, and
-the current retrospect memory (a Markdown ledger of issues observed
-across past tickets), do the following:
-
-**BEFORE analysing this ticket**, reconcile your memory ledger against
-the `## Prior proposals — verified state` block in your input:
-- Items whose ticket reached CLOSED with resolution `merged` → mark the
-  corresponding issue in memory as resolved (append `✅ resolved —
-  draft {ticket_id} landed` or equivalent) and do **not** accumulate
-  further evidence toward it.
-- Items whose ticket reached CLOSED with resolution `declined` → mark
-  the issue as declined (`❌ declined — draft {ticket_id} closed without
-  merging`).
-- Items with resolution `in-flight` → leave active.
-
-**For each existing observation in the memory ledger that is NOT tied
-to a gap_id / draft**, re-evaluate it against the current trace evidence
-and codebase state:
-- If the pattern described is no longer observable (the code, tooling,
-  or pipeline has changed so the issue no longer exists), mark it
-  `[resolved YYYY-MM-DD]` and move it to a `## Historical` section.
-  Include a brief note on why it's no longer relevant.
-- If the pattern is still observable, keep it active.
-- This is best-effort — if you cannot determine whether the issue still
-  exists from the current ticket's trace, leave it unchanged.
-
-1. Analyse this ticket's run for the single most valuable concrete
-   improvement to the *pipeline/codebase* — a bug, a fragility, wasted
-   retries, a token/cost reduction. Fill `findings` with that analysis
-   REGARDLESS of outcome. A clean, uneventful run is a perfectly valid
-   finding — write "nothing notable; clean run" in `findings` and move
-   on. This step does NOT obligate you to propose a draft.
-
-2. Write a concise one-sentence `conclusion` summarising the outcome of
-   this ticket's audit (distinct from the full findings).
-
-3. Update the `memory` document you are given.  The memory is *yours* —
-   you own its structure and content.  For this ticket, record or merge
-   its notable observations under the relevant issue, tracking which
-   ticket ids exhibited it and how strong the evidence is.  When you
-   judge that an issue now has **enough corroboration across enough
-   distinct tickets** to act, set propose_draft=true and provide
-   draft_title, draft_body, and a stable snake_case `draft_gap_id`
-   that uniquely identifies the issue being filed (e.g.
-   `slow_test_suite`, `token_waste_in_explore`).  There is no hard
-   numeric threshold; you
-   judge sufficiency and explain your reasoning in the memory.
-
-4. When a ticket **resolves** an issue already recorded in the memory
-   ledger (e.g. the ticket's implementation directly addresses the root
-   cause), update that memory entry with a **resolution marker** —
-   record the fixing ticket ID and a brief note that the issue is now
-   resolved.  A resolved issue must **not** accumulate further evidence
-   toward a draft on any subsequent ticket, and must **not** trigger
-   `propose_draft=true`.  The format is up to you (e.g. appending
-   `✅ resolved by <ticket-id>` or a `**Resolved:** <ticket-id>` line
-   under the issue heading); what matters is that the issue is clearly
-   marked as closed.
-
-5. Once you have filed a draft for an issue, record that fact in the
-   memory and do **not** re-file the same issue on later tickets.
-
-5. Issues can also be *resolved externally* — another ticket or PR
-   (visible in this ticket's workflow, history, or evidence) already
-   fixed the underlying problem.  When you discover this, record the
-   resolution in the memory (include the ticket ID or PR that resolved
-   it) and mark the issue as resolved.  Set propose_draft=false for
-   that issue and do **not** re-propose it on future tickets.  An
-   externally-resolved issue is just as resolved as one where you
-   filed the draft yourself.
-
-6. When you write an Assessment for an issue that states a numeric
-   ticket count (e.g. "Eleven tickets now demonstrate…" or "3 tickets
-   show…"), that count MUST equal the number of distinct ticket IDs in
-   that issue's Evidence list.  If you cannot guarantee this, prefer
-   non-numeric language ("Multiple tickets", "Several tickets") or
-   count the evidence entries explicitly.  Evidence-ticket lists MUST
-   use a consistent Markdown bullet format — each ticket on its own
-   `- \`<ticket-id>\`` line — so they remain machine-parseable.
-
-7. The memory ledger is a **cross-ticket artifact** — it will be read
-   in the context of *other* tickets, not just the current one.
-   Therefore, when you write to the memory ledger you MUST use stable,
-   absolute references.  Deictic language — "this run", "this ticket",
-   "this retrospect", "here", "now" — is FORBIDDEN in memory entries
-   because it becomes stale and misleading when a different ticket's
-   run reads the ledger.  Instead, qualify every reference with the
-   relevant ticket ID.  Use patterns like:
-   - "Filed in retrospect run for `<ticket-id>`"
-   - "Draft proposed in retrospect for `<ticket-id>`"
-   - "Observed in `<ticket-id>`"
-   Additionally, when you receive existing memory that contains stale
-   deictic references (from earlier runs that predate this rule), you
-   MUST repair them — rewrite the offending phrases to use the
-   ticket-ID-qualified patterns above — so the ledger stays coherent
-   for all future readers.
-
-HARD RULE — a clean run is NOT a ticket. If there is no specific,
-actionable improvement with enough corroboration, you MUST return
-propose_draft=false and leave draft_title and draft_body null/empty.
-NEVER create a ticket that just says everything is fine — titles like
-"No notable issues - clean run", "Clean ticket, no issues to flag",
-"Nothing to report", "No improvement needed" are FORBIDDEN. Such a
-draft is noise on the board; the no-op observation belongs only in
-`findings` and the memory ledger, never as a draft. The default is
-propose_draft=false; only flip it to true when you have a real,
-implementable change a human could approve as-is (problem + concrete
-fix) AND the memory shows corroboration across enough distinct
-tickets. Vague or "just in case" observations -> false.
-
-Return the full, updated memory document in `updated_memory`.  If the
-incoming memory is empty, you are starting a fresh ledger.
-
-**Concrete incomplete-work detection**
-
-In addition to the systemic-pattern analysis above, inspect this ticket for
-CONCRETE incomplete work — definite, verifiable gaps, not speculative
-patterns. Look for:
-
-- A stub, placeholder, `NotImplementedError`, or `TODO` the implementation
-  shipped (visible in the ticket description, workflow notes, or trace
-  output).
-- A follow-up the ticket's spec or summary explicitly promised ("a follow-up
-  will…", "TODO in a future ticket…", "the real X will be wired later") that
-  was never filed — check the `## Prior proposals — verified state` table
-  to confirm no equivalent ticket exists.
-- An implementation that materially under-delivered its spec (e.g. the spec
-  required X, but the workflow history shows only Y was done).
-
-When you find a concrete gap, set `follow_up_title` to a concise,
-self-contained ticket title and `follow_up_body` to a clear description of
-what's missing and what needs to happen. The body MUST cite evidence — the
-specific file, function name, or spec section where the gap is visible.
-
-This is INDEPENDENT of `propose_draft`. A single ticket can have BOTH a
-systemic proposal AND a concrete follow-up, or just one, or neither. The
-concrete follow-up does NOT need corroboration across tickets — it is a
-definite gap in THIS ticket. Only set `follow_up_title` when you have clear,
-specific evidence; a clean, fully-delivered ticket should leave both null.
-
-The follow-up title should be a self-contained ticket title a human could
-understand without reading the retrospect output — include the specific
-function or component name (e.g. "Wire real doc agent in
-DocumentStage._run_doc_agent" not "Complete the stub").
-"""
 
 _DEEP_ANALYSIS_ADDENDUM = """\
 
@@ -246,9 +98,12 @@ def run_retrospect_agent(
     deep_analysis: bool = False,
     trace_ids: list[str] | None = None,
 ) -> RetrospectResult:
-    from pydantic_ai import PromptedOutput
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
 
-    from .base import build_agent, _safe_close
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "retrospect.yaml"
+    )
 
     extra_tools = []
     if deep_analysis:
@@ -256,7 +111,7 @@ def run_retrospect_agent(
 
         extra_tools.append(make_trace_inspect_tool(settings))
 
-    system_prompt = SYSTEM_PROMPT
+    system_prompt = definition.system_prompt
     if deep_analysis:
         system_prompt += _DEEP_ANALYSIS_ADDENDUM
 
@@ -265,14 +120,10 @@ def run_retrospect_agent(
     # ToolOutput needs (404), and it doesn't support NativeOutput
     # either — but it produces schema-valid JSON from a prompt fine.
     # This keeps retrospect on the cheap model (no deepseek cost).
-    agent = build_agent(
-        settings,
+    agent = build_agent_from_definition(
+        settings, definition, tools=extra_tools,
         system_prompt=system_prompt,
-        output_type=PromptedOutput(RetrospectResult),
-        model_name=settings.retrospect_model,
-        tools=extra_tools,
-        report_issue=False,
-        name="retrospect",
+        model_name=definition.model or settings.retrospect_model,
     )
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (

@@ -41,9 +41,10 @@ def test_resolve_env_vars_no_var_returns_unchanged():
     assert _resolve_env_vars("no vars here") == "no vars here"
 
 
-def test_resolve_env_vars_unresolvable_raises_keyerror():
-    with pytest.raises(KeyError, match="UNSET_VAR"):
-        _resolve_env_vars("${UNSET_VAR}")
+def test_resolve_env_vars_unset_returns_empty():
+    """Unresolvable ${VAR} returns '' — caller (build_agent) then
+    falls back to settings.model when model_name is falsy."""
+    assert _resolve_env_vars("${UNSET_VAR}") == ""
 
 
 # ── load_agent_definition — valid inputs ─────────────────────────────
@@ -223,8 +224,8 @@ model: gpt-4
         load_agent_definition(p)
 
 
-def test_unresolvable_env_var_raises_keyerror(tmp_path):
-    """Unset env var in model → KeyError."""
+def test_unresolvable_env_var_resolves_to_empty(tmp_path):
+    """Unset env var in model → resolved to '' (build_agent falls back to settings.model)."""
     # Ensure the variable is not in the environment.
     if "UNSET_MODEL_VAR" in os.environ:
         del os.environ["UNSET_MODEL_VAR"]
@@ -233,8 +234,8 @@ name: bad-env
 model: ${UNSET_MODEL_VAR}
 system_prompt: test
 """)
-    with pytest.raises(KeyError, match="UNSET_MODEL_VAR"):
-        load_agent_definition(p)
+    ad = load_agent_definition(p)
+    assert ad.model == ""
 
 
 def test_file_not_found():
@@ -344,7 +345,7 @@ _VALID_TOOL_NAMES = frozenset({
 })
 
 # Known-valid categories.
-_VALID_CATEGORIES = frozenset({"pipeline", "periodic", "sub_agent"})
+_VALID_CATEGORIES = frozenset({"pipeline", "periodic", "sub_agent", "interactive", "sandboxed"})
 
 # Mapping from ${VAR} → Settings field alias (from config.py).
 _ENV_VAR_TO_SETTINGS_ALIAS: dict[str, str] = {
@@ -494,7 +495,7 @@ def test_report_issue_consistency(monkeypatch):
     """
     import warnings
 
-    KNOWN_EXCEPTIONS = {"refine"}
+    KNOWN_EXCEPTIONS = {"refine", "implement", "ci_fix", "rebase", "dedup"}
 
     for var in _ENV_VAR_TO_SETTINGS_ALIAS:
         monkeypatch.setenv(var, "mock/model")

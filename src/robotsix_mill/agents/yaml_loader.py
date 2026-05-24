@@ -48,18 +48,14 @@ _ENV_VAR_RE = re.compile(r"\$\{([^{}]+)\}")
 
 def _resolve_env_vars(raw: str) -> str:
     """Replace ``${VAR}`` placeholders in *raw* with their values from
-    ``os.environ``.  Raises ``KeyError`` naming the variable if it is
-    not set.
+    ``os.environ``.  Returns ``""`` for unset variables — the caller
+    (``build_agent``) then falls back to ``settings.model`` when
+    ``model_name`` is falsy.
     """
 
     def _replacer(m: re.Match[str]) -> str:
         var = m.group(1)
-        try:
-            return os.environ[var]
-        except KeyError:
-            raise KeyError(
-                f"Environment variable {var!r} is not set"
-            ) from None
+        return os.environ.get(var, "")
 
     return _ENV_VAR_RE.sub(_replacer, raw)
 

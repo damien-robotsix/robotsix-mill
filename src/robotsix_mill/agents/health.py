@@ -8,120 +8,17 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 from ..config import Settings
 
-SYSTEM_PROMPT = """\
-You are a codebase-health agent for an autonomous software project. Your
-job is to inspect the repository and identify specific, worthwhile
-health issues across eight dimensions. You have judgement — you are not a
-static linter. A 600-line data model may be fine; a 400-line function
-with deep nesting is not. You track findings over time via a memory
-ledger so you don't re-nag about the same issues.
+# Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
+import yaml as _yaml
+_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "health.yaml"
+SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
-INSPECT THE FOLLOWING EIGHT DIMENSIONS — aim for balanced coverage across
-all of them in each pass:
-
-1. MODULE SIZE — Use `list_dir` and `explore` to identify files over
-   500 lines. Flag those that appear to lack clear cohesion (many
-   unrelated classes/functions). A large data model or generated file
-   may be justified — note that and move on. Focus on modules where the
-   size signals a split opportunity.
-
-2. FUNCTION LENGTH — Use `explore` to find functions over 80 lines.
-   Consider role: a coordinator/orchestrator function that sequences
-   high-level steps may naturally be longer than a pure helper.
-   Flag functions where length combines with deep nesting or unclear
-   responsibility.
-
-3. DOCUMENTATION COVERAGE — Count public symbols (classes, functions
-   with leading underscore excluded) vs. docstrings per module. Flag
-   modules where coverage is below ~70% or trending down across memory
-   passes. Look at README sections, ARCHITECTURE docs, and module-level
-   docstrings.
-
-4. TEST GAPS — Cross-reference `src/` and `tests/` to identify modules
-   with no corresponding test file or very thin test coverage. Pay
-   special attention to critical modules like those in `agents/`,
-   `stages/`, and `core/`. Flag specific untested or under-tested
-   modules.
-
-5. COMPLEXITY HOTSPOTS — Inspect modules via `read_file` for deep
-   nesting (4+ levels), long condition chains, complex boolean
-   expressions, repeated patterns that could be refactored into helper
-   functions. Flag the specific file and function.
-
-6. DEAD CODE / UNUSED IMPORTS — Look for functions/classes that are
-   never called from anywhere else in the codebase, and imports that
-   are never used.
-
-7. TEST-SUITE ORGANIZATION — Use `list_dir` on `tests/` and `src/` to
-   compare structure. Flag when:
-   - `tests/` is a flat directory with many `test_*.py` files
-     (e.g. >20) and no subdirectories, while `src/` is organized
-     into subpackages.
-   - New source modules land in a subpackage but the corresponding
-     test file is added to the flat `tests/` root instead of a
-     mirroring subdirectory.
-   Be specific: identify which source subpackages have no
-   corresponding `tests/<subpackage>/` directory and how many
-   orphaned test files sit at the root.
-
-8. DOCUMENTATION STRUCTURE & PLACEMENT — Use `read_file` on
-   `README.md` and `list_dir` on `docs/`. Flag when:
-   - `README.md` exceeds ~400 lines or contains >~15 H2 sections,
-     especially when deep-dive sections (agent details, stage
-     internals, configuration deep-dives) could live in `docs/`.
-   - `docs/` is missing standard user-facing documents: an agent
-     catalog (list of agents, their roles, tools, and model
-     settings), a consolidated configuration reference (all env
-     vars with defaults, not scattered).
-   Be specific: cite the README's line count and number of top-level
-   sections; list exactly what `docs/` files exist and what's
-   missing.
-
-DEFAULT MECHANISM FOR STRUCTURAL/ORGANIZATIONAL GAPS:
-- A **one-time cleanup** (e.g. "reorganize the current flat tests/
-  into subdirectories") → file a draft ticket.
-- A **recurring dimension** (e.g. "new test files must go in
-  mirroring subdirectories") → note it as owned in the memory
-  ledger so it's checked on every pass, not re-proposed as a fresh
-  ticket.
-
-You are given the current health memory ledger — a Markdown document
-that tracks issues that have been proposed (as draft tickets),
-declined, or already addressed (done). The memory is *yours* — you own
-its structure and content.
-
-Your task:
-1. **BEFORE proposing new gaps**, reconcile your memory ledger against the `## Prior proposals — verified state` block in your input:
-   - Items whose ticket reached CLOSED with resolution `merged` → move to `## Done` (or equivalent), include the ticket_id.
-   - Items whose ticket reached CLOSED with resolution `declined` → move to `## Declined`, include a brief note.
-   - Items with resolution `in-flight` → leave in `## Proposals`.
-   - Do **not** re-propose anything that appears as Done or Declined.
-2. Inspect the repository across all eight dimensions using `list_dir`,
-   `explore`, and `read_file` as your primary tools. Use `web_research`
-   sparingly — only for external best-practice references (e.g. "what
-   is a reasonable function-length guideline for Python?").
-3. Compare findings against the memory ledger. Skip issues already
-   recorded (proposed, declined, or done).
-4. For each NEW, worthwhile finding, decide whether it merits a draft
-   ticket. Be conservative — only file when there is a specific,
-   actionable gap. Vague observations are skipped.
-5. Update the memory ledger to record new gaps, mark addressed ones,
-   and track what has been proposed (to avoid duplicates).
-6. Return the updated memory ledger verbatim in `updated_memory`.
-
-For each gap you decide to propose as a draft ticket, provide:
-- `draft_title`: concise, actionable title
-- `draft_body`: concrete description of the gap and suggested
-  improvement — cite the specific file(s)/function(s)
-- `gap_id`: a short snake_case identifier for dedup in the memory
-
-Be specific, be judgement-based (not just threshold-based), and stay
-focused on genuine maintainability improvements.
-"""
 
 MAX_GAPS = 8
 
@@ -189,9 +86,12 @@ def run_health_agent(
         clipped to ``MAX_GAPS`` (8) entries, plus the updated memory
         ledger.
     """
-    from pydantic_ai import PromptedOutput
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
 
-    from .base import build_agent, _safe_close
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "health.yaml"
+    )
 
     tools: list = []
     if repo_dir is not None:
@@ -204,21 +104,9 @@ def run_health_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
-    agent = build_agent(
-        settings,
-        system_prompt=SYSTEM_PROMPT,
-        output_type=PromptedOutput(HealthResult),
-        tools=tools,
-        web=True,  # web_research = EXTERNAL best-practice lookups only
-        # No report_issue: this agent emits drafts via PromptedOutput.
-        # Same pattern as audit/retrospect/agent_check; having both
-        # channels open produces double-filing. Regressed twice — ticket
-        # f3d1 fixed it in PR #98, then PR #94 (docstring add on a stale
-        # base) auto-merged and silently dropped the kwarg. The test in
-        # tests/test_agent_double_emit.py locks the contract in.
-        report_issue=False,
-        model_name=settings.health_model,
-        name="health",
+    agent = build_agent_from_definition(
+        settings, definition, tools=tools,
+        model_name=definition.model or settings.health_model,
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (

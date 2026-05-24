@@ -15,14 +15,6 @@ from pathlib import Path
 
 from ..config import Settings
 
-_SYSTEM_PROMPT = """\
-You are given the raw output of a failing test run. Produce a SHORT,
-actionable diagnosis for the engineer who will fix it:
-- which test(s) failed and the essential error/assertion,
-- the most likely cause and the file(s) to change,
-- nothing else — no preamble, no full tracebacks, <=12 lines.
-"""
-
 
 def run_test_agent(
     *,
@@ -52,12 +44,17 @@ def run_test_agent(
     if not settings.openrouter_api_key:
         return False, f"tests failed (rc={rc}); raw tail:\n{tail[-1500:]}"
 
-    from pydantic_ai.usage import UsageLimits
-
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import call_with_retry
+
+    from pydantic_ai.usage import UsageLimits
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "tester.yaml"
+    )
 
     all_fs = build_fs_tools(repo_dir, settings)
     ro_fs_tools = [
@@ -66,12 +63,10 @@ def run_test_agent(
     ]
     explore_tool = make_explore_tool(settings, repo_dir)
 
-    agent = build_agent(
-        settings,
-        system_prompt=_SYSTEM_PROMPT,
-        model_name=settings.test_model,
-        name="run_tests",
+    agent = build_agent_from_definition(
+        settings, definition,
         tools=[*ro_fs_tools, explore_tool],
+        model_name=definition.model or settings.test_model,
     )
     limits = UsageLimits(request_limit=settings.test_request_limit)
     try:

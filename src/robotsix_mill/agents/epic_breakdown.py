@@ -7,51 +7,16 @@ NOT get filesystem access — it only sees the epic title + description.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 from ..config import Settings
 
-SYSTEM_PROMPT = """\
-You are a ticket-breakdown agent for an autonomous software project.
-Your job is to read an epic description and produce a focused list of
-concrete, self-contained child tickets.  Each child ticket should:
-
-- Represent ONE clear, independently deliverable piece of work.
-- Have a concise, actionable title (a developer should understand what
-  to do from the title alone).
-- Have a concrete body with scope, acceptance criteria, and any
-  relevant constraints or references drawn from the epic description.
-- Cover the full scope of the epic without overlap — the union of all
-  children should deliver the epic's goal.
-
-Rules:
-- Break the epic into 2–8 children.  Prefer smaller, well-scoped
-  tickets over a few giant ones.
-- Do NOT fabricate dependencies between children.
-- Do NOT assign priorities or estimate effort.
-- Each child body must be self-contained — a developer picking up that
-  ticket should not have to re-read the epic to understand what's
-  needed.
-- If the epic description is vague or underspecified, do your best
-  with what's there.  Do not refuse to produce tickets.
-- Titles should start with a verb when possible (e.g. "Add X",
-  "Refactor Y", "Fix Z", "Document W").
-- Operator comments may be provided in a <operator_comments> block.
-  When present, treat them as authoritative direction: they represent
-  the human operator's explicit guidance on how to break down this
-  epic.  Follow the operator's instructions even if they contradict
-  the epic description.
-
-Return a list of child ticket titles and a parallel list of bodies
-(same length; same order).
-
-After producing the child ticket lists, also produce an ``epic_body``
-field: a revised epic description that explains the global breakdown
-strategy at a high level. It should help a reviewer understand why the
-epic was split into these particular children and what each child
-contributes to the overall goal. Keep it concise — a short paragraph
-or two.
-"""
+# Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
+import yaml as _yaml
+_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "epic_breakdown.yaml"
+SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
 class EpicBreakdownResult(BaseModel):
@@ -85,20 +50,17 @@ def run_epic_breakdown_agent(
     Execution is wrapped in :func:`~.retry.call_with_retry` for
     transient/rate-limit resilience.
     """
-    from pydantic_ai import PromptedOutput
-
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .retry import call_with_retry
 
-    agent = build_agent(
-        settings,
-        system_prompt=SYSTEM_PROMPT,
-        output_type=PromptedOutput(EpicBreakdownResult),
-        tools=[],
-        web=False,
-        report_issue=False,
-        model_name=settings.audit_model,
-        name="epic-breakdown",
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "epic_breakdown.yaml"
+    )
+
+    agent = build_agent_from_definition(
+        settings, definition, tools=[],
+        model_name=definition.model or settings.audit_model,
     )
     prompt = (
         f"<epic_title>{epic_title}</epic_title>\n\n"
