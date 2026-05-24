@@ -412,6 +412,7 @@ class TestRunCoordinator:
         assert self.captured["web"] is True
         assert self.captured["name"] == "implement"
         assert isinstance(self.captured["output_type"], PromptedOutput)
+        assert self.captured["output_type"].outputs is ImplementResult
         assert self.captured["system_prompt"] == _SYSTEM_PROMPT
 
     # -- usage_limits ----------------------------------------------------
