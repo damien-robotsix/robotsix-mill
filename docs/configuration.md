@@ -39,6 +39,7 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 | `MILL_TEST_REQUEST_LIMIT` | `test_request_limit` | `8` | `int` | Per-call request cap for the test sub-agent |
 | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `web_research_request_limit` | `8` | `int` | Per-call request cap for the web-research sub-agent |
 | `MILL_DEDUP_REQUEST_LIMIT` | `dedup_request_limit` | `4` | `int` | Per-call request cap for the dedup check |
+| `MILL_DOC_REQUEST_LIMIT` | `doc_request_limit` | `4` | `int` | Per-run request cap for the document agent |
 | `MILL_REVIEW_REQUEST_LIMIT` | `review_request_limit` | `20` | `int` | Per-run request cap for the review agent |
 
 ---

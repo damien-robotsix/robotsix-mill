@@ -35,6 +35,19 @@ def test_default_numeric_limits():
     assert s.transient_backoff_cap == 30.0
 
 
+def test_doc_request_limit_default():
+    """MILL_DOC_REQUEST_LIMIT defaults to 4."""
+    s = Settings()
+    assert s.doc_request_limit == 4
+
+
+def test_doc_request_limit_env(monkeypatch):
+    """MILL_DOC_REQUEST_LIMIT=8 flows into the Settings field."""
+    monkeypatch.setenv("MILL_DOC_REQUEST_LIMIT", "8")
+    s = Settings()
+    assert s.doc_request_limit == 8
+
+
 def test_default_booleans():
     """Representative boolean defaults."""
     s = Settings()

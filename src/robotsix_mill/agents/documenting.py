@@ -115,7 +115,7 @@ def run_doc_agent(
             f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
             f"<git_diff>\n{diff}\n</git_diff>"
         )
-        limits = UsageLimits(request_limit=4)
+        limits = UsageLimits(request_limit=settings.doc_request_limit)
         result = call_with_retry(
             lambda: agent.run_sync(user_prompt, usage_limits=limits),
             settings=settings, what="document",
