@@ -7,10 +7,12 @@ unprefixed to match the reference projects; mill-specific knobs use the
 
 from __future__ import annotations
 
+import inspect
+import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -154,6 +156,9 @@ class Settings(BaseSettings):
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(
         default=4, alias="MILL_DEDUP_REQUEST_LIMIT"
+    )
+    doc_request_limit: int = Field(
+        default=4, alias="MILL_DOC_REQUEST_LIMIT"
     )
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped (read-side
@@ -369,13 +374,6 @@ class Settings(BaseSettings):
     # coordinator model.
     doc_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_DOC_MODEL"
-    )
-    # How many model requests the document agent may make in one run
-    # (counts each tool call + each reasoning step). Keep tight — the
-    # agent mainly reads + edits existing docs. Raise for repos with
-    # large documentation surfaces.
-    doc_request_limit: int = Field(
-        default=4, alias="MILL_DOC_REQUEST_LIMIT"
     )
 
     # --- retrospect stage (done -> reviewed) ---
@@ -795,7 +793,346 @@ class Settings(BaseSettings):
             return self.rebase_memory_path
         return self.data_dir / "rebase_memory.md"
 
+    # ------------------------------------------------------------------
+    #  Validators
+    # ------------------------------------------------------------------
+
+    # -- range checks --------------------------------------------------
+
+    @field_validator("max_concurrency")
+    @classmethod
+    def _validate_max_concurrency(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_concurrency must be ≥ 1")
+        return v
+
+    @field_validator("model_request_timeout")
+    @classmethod
+    def _validate_model_request_timeout(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("model_request_timeout must be > 0")
+        return v
+
+    @field_validator("transient_retries")
+    @classmethod
+    def _validate_transient_retries(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("transient_retries must be ≥ 0")
+        return v
+
+    @field_validator("transient_backoff_base")
+    @classmethod
+    def _validate_transient_backoff_base(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("transient_backoff_base must be > 0")
+        return v
+
+    @field_validator("transient_backoff_cap")
+    @classmethod
+    def _validate_transient_backoff_cap(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("transient_backoff_cap must be > 0")
+        return v
+
+    @field_validator("rate_limit_backoff_base")
+    @classmethod
+    def _validate_rate_limit_backoff_base(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("rate_limit_backoff_base must be > 0")
+        return v
+
+    @field_validator("rate_limit_backoff_cap")
+    @classmethod
+    def _validate_rate_limit_backoff_cap(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("rate_limit_backoff_cap must be > 0")
+        return v
+
+    @field_validator("rate_limit_fallback_retries")
+    @classmethod
+    def _validate_rate_limit_fallback_retries(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("rate_limit_fallback_retries must be ≥ 0")
+        return v
+
+    @field_validator("max_fix_iterations")
+    @classmethod
+    def _validate_max_fix_iterations(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("max_fix_iterations must be ≥ 0")
+        return v
+
+    @field_validator("command_timeout")
+    @classmethod
+    def _validate_command_timeout(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("command_timeout must be > 0")
+        return v
+
+    @field_validator("merge_poll_seconds")
+    @classmethod
+    def _validate_merge_poll_seconds(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("merge_poll_seconds must be > 0")
+        return v
+
+    @field_validator("review_max_rounds")
+    @classmethod
+    def _validate_review_max_rounds(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("review_max_rounds must be ≥ 0")
+        return v
+
+    @field_validator("max_stuck_cycles")
+    @classmethod
+    def _validate_max_stuck_cycles(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("max_stuck_cycles must be ≥ 0")
+        return v
+
+    @field_validator("rebase_max_attempts")
+    @classmethod
+    def _validate_rebase_max_attempts(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("rebase_max_attempts must be ≥ 0")
+        return v
+
+    @field_validator("ci_fix_max_attempts")
+    @classmethod
+    def _validate_ci_fix_max_attempts(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("ci_fix_max_attempts must be ≥ 0")
+        return v
+
+    @field_validator("max_archived_tickets")
+    @classmethod
+    def _validate_max_archived_tickets(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("max_archived_tickets must be ≥ 0")
+        return v
+
+    @field_validator("max_memory_chars")
+    @classmethod
+    def _validate_max_memory_chars(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("max_memory_chars must be ≥ 0")
+        return v
+
+    @field_validator("explore_request_limit")
+    @classmethod
+    def _validate_explore_request_limit(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("explore_request_limit must be ≥ 1")
+        return v
+
+    @field_validator("dedup_request_limit")
+    @classmethod
+    def _validate_dedup_request_limit(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("dedup_request_limit must be ≥ 1")
+        return v
+
+    @field_validator("web_research_request_limit")
+    @classmethod
+    def _validate_web_research_request_limit(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("web_research_request_limit must be ≥ 1")
+        return v
+
+    @field_validator("test_request_limit")
+    @classmethod
+    def _validate_test_request_limit(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("test_request_limit must be ≥ 1")
+        return v
+
+    @field_validator("coordinator_request_limit")
+    @classmethod
+    def _validate_coordinator_request_limit(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("coordinator_request_limit must be ≥ 1")
+        return v
+
+    @field_validator("web_fetch_timeout")
+    @classmethod
+    def _validate_web_fetch_timeout(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("web_fetch_timeout must be > 0")
+        return v
+
+    @field_validator("web_fetch_max_bytes")
+    @classmethod
+    def _validate_web_fetch_max_bytes(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("web_fetch_max_bytes must be ≥ 0")
+        return v
+
+    # -- format checks -------------------------------------------------
+
+    @field_validator("api_url")
+    @classmethod
+    def _validate_api_url_format(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("api_url must be an HTTP(S) URL starting with http:// or https://")
+        return v
+
+    @field_validator("github_api_url")
+    @classmethod
+    def _validate_github_api_url_format(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("github_api_url must be an HTTP(S) URL starting with http:// or https://")
+        return v
+
+    @field_validator("gitlab_api_url")
+    @classmethod
+    def _validate_gitlab_api_url_format(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("gitlab_api_url must be an HTTP(S) URL starting with http:// or https://")
+        return v
+
+    # -- interval minimums ---------------------------------------------
+
+    @field_validator("trace_health_interval_seconds")
+    @classmethod
+    def _validate_trace_health_interval(cls, v: int) -> int:
+        if v < 3600:
+            raise ValueError("trace_health_interval_seconds must be ≥ 3600")
+        return v
+
+    # -- cross-field checks --------------------------------------------
+
+    @model_validator(mode="after")
+    def _validate_cross_field(self) -> "Settings":
+        # forge_auth=app requires GitHub App credentials
+        if self.forge_auth == "app":
+            if not self.github_app_id and not self.github_app_private_key_path:
+                raise ValueError(
+                    "FORGE_AUTH=app requires at least one of github_app_id "
+                    "or github_app_private_key_path to be set"
+                )
+
+        # forge_kind needs forge_remote_url
+        if self.forge_kind in ("github", "gitlab"):
+            if not self.forge_remote_url:
+                raise ValueError(
+                    f"forge_kind={self.forge_kind} requires forge_remote_url to be set"
+                )
+
+        # rate_limit_fallback_model non-empty → retries ≥ 1
+        if self.rate_limit_fallback_model and self.rate_limit_fallback_retries < 1:
+            raise ValueError(
+                "rate_limit_fallback_retries must be ≥ 1 when rate_limit_fallback_model is set"
+            )
+
+        # review_enabled → review_model must be non-empty
+        if self.review_enabled and not self.review_model:
+            raise ValueError(
+                "review_model must be non-empty when review_enabled is True"
+            )
+
+        return self
+
 
 def load_settings() -> Settings:
     """Load and return a :class:`Settings` instance from env / ``.env`` files."""
     return Settings()
+
+
+# ---------------------------------------------------------------------------
+#  Secrets model
+# ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
+
+
+class Secrets(BaseModel):
+    """Secrets loaded from ``config/secrets.yaml``.
+
+    Never merged into ``Settings`` — secrets are kept in a separate
+    model with redacted ``repr`` / ``model_dump`` and debug-logged
+    attribute access.
+    """
+
+    openrouter_api_key: str | None = None
+    forge_token: str | None = None
+    github_app_id: str | None = None
+    github_app_private_key: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_base_url: str | None = None
+    langfuse_project_id: str | None = None
+    ntfy_url: str | None = None
+    ntfy_token: str | None = None
+
+    def __init__(self, _secrets_file: str | None = None, **data: Any) -> None:
+        """Construct a ``Secrets`` instance.
+
+        If ``_secrets_file`` is provided it is used as the YAML source;
+        otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to
+        ``config/secrets.yaml``.  YAML values are passed as field
+        defaults, which explicit ``**data`` kwargs can override.
+        """
+        from .config_loader import load_secrets_yaml
+
+        file_path: str | None = _secrets_file
+        if file_path is None:
+            import os
+
+            file_path = os.environ.get("MILL_SECRETS_FILE")
+
+        yaml_data = load_secrets_yaml(file_path)
+        merged = {**yaml_data, **data}
+        super().__init__(**merged)
+
+    def __repr__(self) -> str:
+        field_names = list(type(self).model_fields.keys())
+        inner = ", ".join(f"{name}='***'" for name in field_names)
+        return f"Secrets({inner})"
+
+    def model_dump(self, *, redact: bool = True, **kwargs: Any) -> dict[str, Any]:
+        """Dump fields to dict, redacting all values by default."""
+        d: dict[str, Any] = super().model_dump(**kwargs)
+        if redact:
+            return {k: "***" for k in d}
+        return d
+
+    def __getattribute__(self, name: str) -> Any:
+        # Log every "public" field access at DEBUG level.
+        # We must bypass our own override for private/special attrs
+        # and for the fields dict itself to avoid infinite recursion.
+        if not name.startswith("_") and name not in (
+            "model_fields",
+            "model_config",
+            "model_dump",
+            "__class__",
+            "__dict__",
+        ):
+            fields = type(self).model_fields
+            if name in fields:
+                frame = inspect.currentframe()
+                if frame is not None:
+                    caller_frame = frame.f_back
+                    if caller_frame is not None:
+                        caller_module = caller_frame.f_globals.get("__name__", "unknown")
+                    else:
+                        caller_module = "unknown"
+                else:
+                    caller_module = "unknown"
+                # Use a logger scoped to this module so tests can capture it
+                _logger = logging.getLogger(__name__)
+                _logger.debug("Secrets.%s accessed by %s", name, caller_module)
+        try:
+            return super().__getattribute__(name)
+        except AttributeError:
+            # Pydantic v2 field lookup: model_computed_fields etc.
+            return object.__getattribute__(self, name)
+
+
+def load_secrets(secrets_file: str | None = None) -> Secrets:
+    """Load and return a :class:`Secrets` instance from YAML.
+
+    If *secrets_file* is provided it is used as the YAML source;
+    otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to
+    ``config/secrets.yaml``.
+    """
+    return Secrets(_secrets_file=secrets_file)

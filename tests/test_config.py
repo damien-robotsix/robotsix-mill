@@ -1,11 +1,13 @@
 """Unit tests for src/robotsix_mill/config.py — Settings defaults, env-var
-aliases, type coercion, computed properties, and edge cases."""
+aliases, type coercion, computed properties, YAML loading, Secrets model,
+semantic validators, and edge cases."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from robotsix_mill.config import Settings, load_settings
 
@@ -141,11 +143,11 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("api_port", "MILL_API_PORT", "9090", 9090),
     ("api_url", "MILL_API_URL", "http://example.com:9999", "http://example.com:9999"),
     # --- forge ---
-    ("forge_kind", "FORGE_KIND", "gitlab", "gitlab"),
+    ("forge_kind", "FORGE_KIND", "none", "none"),
     ("forge_remote_url", "FORGE_REMOTE_URL", "https://git.example.com/repo", "https://git.example.com/repo"),
     ("forge_token", "FORGE_TOKEN", "glpat-xxxx", "glpat-xxxx"),
     ("forge_target_branch", "FORGE_TARGET_BRANCH", "develop", "develop"),
-    ("forge_auth", "FORGE_AUTH", "app", "app"),
+    ("forge_auth", "FORGE_AUTH", "token", "token"),
     ("github_app_id", "GITHUB_APP_ID", "123456", "123456"),
     ("github_app_private_key", "GITHUB_APP_PRIVATE_KEY", "pk-----", "pk-----"),
     ("github_app_private_key_path", "GITHUB_APP_PRIVATE_KEY_PATH", "/keys/app.pem", "/keys/app.pem"),
@@ -301,9 +303,9 @@ class TestTypeCoercion:
         assert isinstance(s.data_dir, Path)
 
     def test_literal_coercion(self, monkeypatch):
-        monkeypatch.setenv("FORGE_KIND", "gitlab")
+        monkeypatch.setenv("FORGE_KIND", "none")
         s = Settings()
-        assert s.forge_kind == "gitlab"
+        assert s.forge_kind == "none"
 
     def test_optional_str_from_env(self, monkeypatch):
         """str | None field populated from env is a plain str, not wrapped."""
@@ -486,3 +488,320 @@ def test_load_settings_returns_settings_instance():
     """Trivial: the module-level factory returns a Settings object."""
     s = load_settings()
     assert isinstance(s, Settings)
+
+
+# ---------------------------------------------------------------------------
+# 8. YAML config loading
+# ---------------------------------------------------------------------------
+
+class TestYamlLoading:
+    """Tests for ``config_loader.load_yaml_config`` and
+    ``config_loader.load_secrets_yaml``."""
+
+    def test_load_yaml_config_returns_nested_dict(self):
+        """``load_yaml_config()`` returns a nested dict matching the
+        defaults YAML structure when no overlays are present."""
+        from robotsix_mill.config_loader import load_yaml_config
+
+        config = load_yaml_config()
+        assert isinstance(config, dict)
+        assert "core" in config
+        assert "models" in config["core"]
+        assert config["core"]["models"]["coordinator"] == "deepseek/deepseek-v4-pro"
+        assert "service" in config
+        assert config["service"]["data_dir"] == ".mill-data"
+
+    def test_load_yaml_config_deep_merges_local_overlay(self, tmp_path, monkeypatch):
+        """``load_yaml_config()`` deep-merges a local overlay YAML over
+        defaults."""
+        from robotsix_mill.config_loader import load_yaml_config
+
+        # Write a temporary local overlay
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        # Copy the real defaults so the loader finds them
+        import shutil
+        shutil.copy("config/mill.defaults.yaml", defaults)
+        local = local_dir / "mill.local.yaml"
+        local.write_text("core:\n  limits:\n    max_concurrency: 99\n")
+
+        # Patch the module-level path to point at our temp dir
+        import robotsix_mill.config_loader as cl
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", local)
+
+        config = load_yaml_config()
+        assert config["core"]["limits"]["max_concurrency"] == 99
+        # Other values unchanged from defaults
+        assert config["core"]["models"]["coordinator"] == "deepseek/deepseek-v4-pro"
+
+    def test_load_yaml_config_missing_defaults_raises(self, monkeypatch):
+        """``load_yaml_config()`` raises ``ConfigError`` when
+        ``mill.defaults.yaml`` is missing."""
+        from robotsix_mill.config_loader import ConfigError, load_yaml_config
+        import robotsix_mill.config_loader as cl
+
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", cl.Path("/nonexistent/defaults.yaml"))
+        with pytest.raises(ConfigError, match="Required config file not found"):
+            load_yaml_config()
+
+    def test_load_secrets_yaml_returns_populated_dict(self, tmp_path):
+        """``load_secrets_yaml()`` returns a populated dict when a valid
+        secrets file exists."""
+        from robotsix_mill.config_loader import load_secrets_yaml
+
+        secrets_file = tmp_path / "secrets.yaml"
+        secrets_file.write_text(
+            "openrouter_api_key: sk-test\n"
+            "forge_token: ghp_test\n"
+            "ntfy_url: https://ntfy.example.com\n"
+        )
+        result = load_secrets_yaml(str(secrets_file))
+        assert result == {
+            "openrouter_api_key": "sk-test",
+            "forge_token": "ghp_test",
+            "ntfy_url": "https://ntfy.example.com",
+        }
+
+    def test_load_secrets_yaml_missing_returns_empty(self):
+        """``load_secrets_yaml()`` returns an empty dict when the secrets
+        file is missing (not an error)."""
+        from robotsix_mill.config_loader import load_secrets_yaml
+
+        result = load_secrets_yaml("/nonexistent/secrets.yaml")
+        assert result == {}
+
+    def test_load_secrets_yaml_malformed_raises(self, tmp_path):
+        """``load_secrets_yaml()`` raises ``ConfigError`` on malformed YAML."""
+        from robotsix_mill.config_loader import ConfigError, load_secrets_yaml
+
+        secrets_file = tmp_path / "bad.yaml"
+        secrets_file.write_text("{ invalid: yaml: : }")
+        with pytest.raises(ConfigError, match="YAML parse error"):
+            load_secrets_yaml(str(secrets_file))
+
+
+# ---------------------------------------------------------------------------
+# 9. Secrets model
+# ---------------------------------------------------------------------------
+
+class TestSecretsModel:
+    """Tests for the ``Secrets`` class."""
+
+    def test_constructed_from_yaml_populates_fields(self, tmp_path):
+        """``Secrets()`` constructed from a temp YAML file populates all
+        fields correctly."""
+        from robotsix_mill.config import Secrets
+
+        secrets_file = tmp_path / "secrets.yaml"
+        secrets_file.write_text(
+            "openrouter_api_key: sk-or-123\n"
+            "forge_token: ghp_abc\n"
+            "github_app_id: \"456\"\n"
+            "github_app_private_key: pk-data\n"
+            "langfuse_public_key: pk-lf\n"
+            "langfuse_secret_key: sk-lf\n"
+            "langfuse_base_url: https://lf.example.com\n"
+            "langfuse_project_id: proj-1\n"
+            "ntfy_url: https://ntfy.example.com\n"
+            "ntfy_token: tk-ntfy\n"
+        )
+        s = Secrets(_secrets_file=str(secrets_file))
+        assert s.openrouter_api_key == "sk-or-123"
+        assert s.forge_token == "ghp_abc"
+        assert s.github_app_id == "456"
+        assert s.github_app_private_key == "pk-data"
+        assert s.langfuse_public_key == "pk-lf"
+        assert s.langfuse_secret_key == "sk-lf"
+        assert s.langfuse_base_url == "https://lf.example.com"
+        assert s.langfuse_project_id == "proj-1"
+        assert s.ntfy_url == "https://ntfy.example.com"
+        assert s.ntfy_token == "tk-ntfy"
+
+    def test_repr_redacts_all_values(self):
+        """``repr(secrets)`` redacts all values."""
+        from robotsix_mill.config import Secrets
+
+        s = Secrets(openrouter_api_key="sk-secret", forge_token="ghp_secret")
+        r = repr(s)
+        assert "sk-secret" not in r
+        assert "ghp_secret" not in r
+        assert "***" in r
+        assert r.startswith("Secrets(")
+
+    def test_model_dump_redacts_by_default(self):
+        """``secrets.model_dump()`` redacts all values by default."""
+        from robotsix_mill.config import Secrets
+
+        s = Secrets(openrouter_api_key="sk-secret")
+        d = s.model_dump()
+        assert d["openrouter_api_key"] == "***"
+        assert "sk-secret" not in str(d)
+
+    def test_model_dump_unredacted_returns_actual_values(self):
+        """``secrets.model_dump(redact=False)`` returns actual values."""
+        from robotsix_mill.config import Secrets
+
+        s = Secrets(openrouter_api_key="sk-secret", forge_token="ghp_secret")
+        d = s.model_dump(redact=False)
+        assert d["openrouter_api_key"] == "sk-secret"
+        assert d["forge_token"] == "ghp_secret"
+
+    def test_attribute_access_logs_at_debug(self, caplog):
+        """Attribute access logs at DEBUG level with caller module."""
+        import logging
+        from robotsix_mill.config import Secrets
+
+        s = Secrets(openrouter_api_key="sk-test")
+        with caplog.at_level(logging.DEBUG, logger="robotsix_mill.config"):
+            _ = s.openrouter_api_key
+        assert "Secrets.openrouter_api_key accessed by" in caplog.text
+
+    def test_explicit_kwargs_override_yaml(self, tmp_path):
+        """Explicit constructor kwargs override YAML file values."""
+        from robotsix_mill.config import Secrets
+
+        secrets_file = tmp_path / "secrets.yaml"
+        secrets_file.write_text("openrouter_api_key: sk-from-yaml\n")
+        s = Secrets(
+            _secrets_file=str(secrets_file),
+            openrouter_api_key="sk-from-kwarg",
+        )
+        assert s.openrouter_api_key == "sk-from-kwarg"
+
+
+# ---------------------------------------------------------------------------
+# 10. Semantic validators
+# ---------------------------------------------------------------------------
+
+class TestValidationValid:
+    """Valid Settings constructions that pass all validators."""
+
+    def test_default_settings_passes(self):
+        """Default ``Settings()`` passes all validators (smoke test)."""
+        s = Settings()
+        assert s.max_concurrency == 4
+
+    def test_max_concurrency_boundary_passes(self):
+        """``max_concurrency=1`` (lower bound) passes."""
+        s = Settings(MILL_MAX_CONCURRENCY=1)
+        assert s.max_concurrency == 1
+
+    def test_forge_auth_app_with_github_app_id_passes(self):
+        """``forge_auth=app`` with ``github_app_id`` passes."""
+        s = Settings(FORGE_AUTH="app", GITHUB_APP_ID="123")
+        assert s.forge_auth == "app"
+
+    def test_forge_kind_github_with_remote_url_passes(self):
+        """``forge_kind=github`` with ``forge_remote_url`` passes."""
+        s = Settings(
+            FORGE_KIND="github",
+            FORGE_REMOTE_URL="https://github.com/o/r.git",
+        )
+        assert s.forge_kind == "github"
+
+
+class TestValidationInvalid:
+    """Invalid Settings constructions that must raise ``ValidationError``."""
+
+    def test_max_concurrency_zero_raises(self):
+        """``max_concurrency=0`` raises ValidationError."""
+        with pytest.raises(ValidationError, match="max_concurrency must be ≥ 1"):
+            Settings(MILL_MAX_CONCURRENCY=0)
+
+    def test_model_request_timeout_zero_raises(self):
+        """``model_request_timeout=0`` raises ValidationError."""
+        with pytest.raises(ValidationError, match="model_request_timeout must be > 0"):
+            Settings(MILL_MODEL_REQUEST_TIMEOUT=0)
+
+    def test_api_url_invalid_format_raises(self):
+        """``api_url`` not starting with http(s) raises ValidationError."""
+        with pytest.raises(ValidationError, match="api_url must be an HTTP"):
+            Settings(MILL_API_URL="not-a-url")
+
+    def test_github_api_url_invalid_format_raises(self):
+        """``github_api_url`` not starting with http(s) raises."""
+        with pytest.raises(ValidationError, match="github_api_url must be an HTTP"):
+            Settings(MILL_GITHUB_API_URL="ftp://bad")
+
+    def test_gitlab_api_url_invalid_format_raises(self):
+        """``gitlab_api_url`` not starting with http(s) raises."""
+        with pytest.raises(ValidationError, match="gitlab_api_url must be an HTTP"):
+            Settings(MILL_GITLAB_API_URL="ftp://bad")
+
+    def test_trace_health_interval_too_low_raises(self):
+        """``trace_health_interval_seconds=60`` raises ValidationError."""
+        with pytest.raises(
+            ValidationError, match="trace_health_interval_seconds must be ≥ 3600"
+        ):
+            Settings(MILL_TRACE_HEALTH_INTERVAL_SECONDS=60)
+
+    def test_forge_auth_app_without_credentials_raises(self):
+        """``forge_auth=app`` without credentials raises."""
+        with pytest.raises(ValidationError, match="FORGE_AUTH=app requires"):
+            Settings(FORGE_AUTH="app")
+
+    def test_forge_kind_github_without_remote_url_raises(self):
+        """``forge_kind=github`` without ``forge_remote_url`` raises."""
+        with pytest.raises(
+            ValidationError, match="forge_kind=github requires forge_remote_url"
+        ):
+            Settings(FORGE_KIND="github")
+
+    def test_fallback_model_without_retries_raises(self):
+        """``rate_limit_fallback_model`` set but retries=0 raises."""
+        with pytest.raises(
+            ValidationError,
+            match="rate_limit_fallback_retries must be ≥ 1",
+        ):
+            Settings(
+                MILL_RATE_LIMIT_FALLBACK_MODEL="gpt-4o",
+                MILL_RATE_LIMIT_FALLBACK_RETRIES=0,
+            )
+
+    def test_review_enabled_without_review_model_raises(self):
+        """``review_enabled=True`` with empty ``review_model`` raises."""
+        with pytest.raises(
+            ValidationError, match="review_model must be non-empty"
+        ):
+            Settings(MILL_REVIEW_ENABLED="true", MILL_REVIEW_MODEL="")
+
+    def test_explore_request_limit_zero_raises(self):
+        """``explore_request_limit=0`` raises ValidationError."""
+        with pytest.raises(
+            ValidationError, match="explore_request_limit must be ≥ 1"
+        ):
+            Settings(MILL_EXPLORE_REQUEST_LIMIT=0)
+
+
+# ---------------------------------------------------------------------------
+# 11. Integration: load_settings / load_secrets factories
+# ---------------------------------------------------------------------------
+
+class TestFactories:
+    """Integration tests for ``load_settings()`` and ``load_secrets()``."""
+
+    def test_load_settings_returns_settings_with_yaml_defaults(self):
+        """``load_settings()`` returns a ``Settings`` with values from
+        ``config/mill.defaults.yaml`` (merged as constructor kwargs)."""
+        from robotsix_mill.config import load_settings
+
+        s = load_settings()
+        assert s.model == "deepseek/deepseek-v4-pro"
+        assert s.max_concurrency == 4
+
+    def test_load_secrets_returns_secrets_object(self):
+        """``load_secrets()`` returns a ``Secrets`` object."""
+        from robotsix_mill.config import load_secrets, Secrets
+
+        s = load_secrets()
+        assert isinstance(s, Secrets)
+
+    def test_load_settings_env_override_yaml(self, monkeypatch):
+        """Env vars override YAML defaults in ``load_settings()``."""
+        monkeypatch.setenv("MILL_MAX_CONCURRENCY", "77")
+        from robotsix_mill.config import load_settings
+
+        s = load_settings()
+        assert s.max_concurrency == 77

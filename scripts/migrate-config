@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Migrate configuration from ``.env`` + ``secrets.env`` to YAML.
+
+Reads every active (uncommented, non-empty) line from ``.env`` and
+``secrets.env``, maps each ``MILL_*`` / ``FORGE_*`` / non-prefixed var
+to its YAML dotted path per the mapping table in RFC §4.2, and writes:
+
+- ``config/mill.production.yaml`` — non-secret overrides (values that
+  differ from the committed defaults).
+- ``config/secrets.yaml`` — all secret values.
+
+The script is idempotent — running it twice produces the same output.
+
+.. code-block:: bash
+
+    python scripts/migrate-config [--dry-run]
+
+# TODO(migration): see docs/rfc-config-v2.md §9
+# Implementation deferred to a follow-up ticket.
+"""
+
+from __future__ import annotations
+
+import sys
+
+
+def main() -> None:
+    dry_run = "--dry-run" in sys.argv
+    print("Migration script not yet implemented.")
+    print("See docs/rfc-config-v2.md §9 for the mapping table.")
+    if dry_run:
+        print("(dry run)")
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
