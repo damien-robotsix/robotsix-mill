@@ -26,4 +26,4 @@ jobs:
       - name: Run tests
         env:
           GIT_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
-        run: pytest tests/test_migration_guard.py tests/core/test_db.py -x --tb=long
+        run: pytest tests/ -x --tb=long
