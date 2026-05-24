@@ -69,7 +69,48 @@ setup and GitHub App delivery identity, see
 
 ## How the agent pattern works
 
-Every agent is constructed through a single factory:
+Every agent is defined by a YAML file in `agent_definitions/` and a
+Python module in `src/robotsix_mill/agents/`. The YAML file declares
+the prompt, tools, model binding, output type, and metadata; the
+Python module supplies the output model class and the entry function.
+
+### YAML-first workflow (preferred for new agents)
+
+1. Create `agent_definitions/<name>.yaml` with the agent's fields
+   (see [`docs/agent-yaml-schema.md`](docs/agent-yaml-schema.md) for
+   the full reference, and `agent_definitions/refine.yaml` as the
+   canonical example).
+
+2. Create `src/robotsix_mill/agents/<module>.py` with:
+   - The Pydantic output model (if `output_type` is set in the YAML)
+   - An entry function that calls `build_agent_from_definition()`
+     from `base.py`, passing optional `**overrides` for runtime
+     decisions (tools, conditional prompts).
+
+3. The entry function pattern:
+
+```python
+from robotsix_mill.agents.base import build_agent_from_definition
+from pathlib import Path
+
+_YAML = Path("agent_definitions/refine.yaml")
+
+def run_refine_agent(*, settings, title, draft, repo_dir=None, ...):
+    definition = load_agent_definition(_YAML)
+    tools = [...]  # optional: runtime-conditional tools
+    agent = build_agent_from_definition(
+        _YAML, settings,
+        tools=tools,
+        # optional overrides: model_name=..., system_prompt=...
+    )
+    ...
+```
+
+### Direct factory (legacy, for sub-agents and special cases)
+
+Some agents (sub-agents, rebase, ci-fix) still construct via
+`build_agent()` directly because they have conditional prompts or
+runtime-specific tool sets that don't map cleanly to YAML.
 
 ```python
 from robotsix_mill.agents.base import build_agent
@@ -101,17 +142,27 @@ differ. See [`agents/`](src/robotsix_mill/agents/) for the full set.
 Three artifacts are needed. Use **audit** and **health** as reference
 implementations (they are the simplest end-to-end examples):
 
-1. **Agent module** — `agents/<name>.py`
-   - Call `build_agent()` with the role's system prompt, tools, and model.
-   - Export a single `run_<name>_pass(settings, memory, ...)` async function.
+1. **YAML definition** — `agent_definitions/<name>.yaml`
+   - Declare `name`, `description`, `category`, `model`, `system_prompt`,
+     `tools`, `web`, `report_issue`, `output_type`, `module`, and `skills`.
+   - See [`agent_definitions/refine.yaml`](agent_definitions/refine.yaml)
+     for the canonical example and
+     [`docs/agent-yaml-schema.md`](docs/agent-yaml-schema.md) for the
+     field reference.
 
-2. **Runner module** — `<name>_runner.py` at the package root
+2. **Agent module** — `agents/<name>.py` (or `<module>.py` if different)
+   - Define the Pydantic output model named by `output_type`.
+   - Export a `run_<name>_agent()` function that loads the YAML via
+     `load_agent_definition()`, builds the agent via
+     `build_agent_from_definition()`, and returns the structured result.
+
+3. **Runner module** — `<name>_runner.py` at the package root
    - Read the memory ledger → run the agent → write back → emit draft
      tickets via `TicketService`.
    - See [`audit_runner.py`](src/robotsix_mill/audit_runner.py) and
      [`health_runner.py`](src/robotsix_mill/health_runner.py).
 
-3. **Wiring** — three touchpoints:
+4. **Wiring** — three touchpoints:
    - **CLI**: add a subcommand in [`cli.py`](src/robotsix_mill/cli.py)
      (e.g. `robotsix-mill audit`).
    - **API**: add a route in [`runtime/api.py`](src/robotsix_mill/runtime/api.py)

@@ -4,19 +4,20 @@ Each agent definition lives in its own `.yaml` file under
 `agent_definitions/` (e.g. `agent_definitions/refine.yaml`,
 `agent_definitions/audit.yaml`). This document specifies every field
 a YAML file may contain, its type, default, constraints, and
-semantics. It is the contract that the loader (ticket 2), migration
-(ticket 3), and runtime (ticket 4) implement against.
+semantics. It is the contract that the loader, migration, and runtime
+implement against.
 
 ## Design rules
 
-- **Required fields are minimal.** Only `name`, `description`,
-  `system_prompt`, and `category` are mandatory — everything else has
-  a sensible default.
-- **Unknown top-level keys MUST be ignored** by consumers. The loader
-  must not reject a file because it contains a key it doesn't
-  understand. This guarantees forward compatibility: new optional
-  fields can be added at any time, and existing YAML files remain
-  valid.
+- **Required fields are minimal.** Only `name`, `model`, and
+  `system_prompt` are mandatory — everything else has a sensible
+  default.
+- **Unknown top-level keys are rejected.** The loader uses strict
+  validation (``extra="forbid"``) — a YAML file containing a key not
+  defined in the schema will fail to load. This catches typos and
+  drift early. When adding a new field, update the ``AgentDefinition``
+  model in ``yaml_loader.py`` first, then the schema doc, then the
+  YAML files.
 - **One file per agent.** Each agent occupies its own
   `agent_definitions/<name>.yaml`. This keeps diffs isolated and
   makes the directory human-browsable.
@@ -40,12 +41,13 @@ all loaded agent definitions. Convention: lowercase, snake_case.
 
 ---
 
-### `description` (required)
+### `description` (optional)
 
 | Attribute | Value |
 |-----------|-------|
 | Type | `string` |
-| Required | **yes** |
+| Required | no |
+| Default | `null` |
 | Example | `"Refines a rough ticket draft into a precise, self-contained engineering spec grounded in the actual codebase"` |
 
 A one-line human-readable summary of the agent's role. Used in agent
@@ -70,12 +72,13 @@ Use YAML block-scalar syntax (`|` or `|-`) for readability.
 
 ---
 
-### `category` (required)
+### `category` (optional)
 
 | Attribute | Value |
 |-----------|-------|
 | Type | `string` (enum) |
-| Required | **yes** |
+| Required | no |
+| Default | `null` |
 | Valid values | `"pipeline"`, `"periodic"`, `"sub_agent"` |
 
 Which class of agent this is:
@@ -90,13 +93,12 @@ Which class of agent this is:
 
 ---
 
-### `model` (optional)
+### `model` (required)
 
 | Attribute | Value |
 |-----------|-------|
 | Type | `string` |
-| Required | no |
-| Default | `"deepseek/deepseek-v4-pro"` (the coordinator `model` field) |
+| Required | **yes** |
 
 The OpenRouter model identifier. Supports two forms:
 
@@ -135,8 +137,9 @@ The OpenRouter model identifier. Supports two forms:
    | `${MILL_HEALTH_MODEL}` | `health_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_SURVEY_MODEL}` | `survey_model` | `"deepseek/deepseek-v4-pro"` |
 
-The `model` field is optional. When absent, the loader falls back to
-`${MILL_MODEL}` (the coordinator default).
+The `model` field is required. Every agent YAML must specify a model,
+either as a literal identifier or as a `${VAR}` reference that the
+loader resolves via `Settings`.
 
 ---
 
@@ -258,11 +261,11 @@ skills:
   - "git-workflow"
 ```
 
-This field is **forward-looking**: no skill-loading code exists today.
-It is included in the schema from day one so that YAML files written
-now do not need to be updated when skill loading is implemented.
-Consumers that do not implement skill loading should silently ignore
-this field.
+This field is consumed by the agent factory at construction time:
+each skill name resolves to a `skills/<name>/SKILL.md` file whose
+content is injected into the system prompt.  If the `skills/` directory
+does not exist yet (or a named skill is absent), the skill is silently
+skipped.
 
 ---
 
@@ -309,12 +312,11 @@ demonstrates:
    Existing YAML files remain valid because they simply don't contain
    the new key, and the loader uses the documented default.
 
-2. **Unknown top-level keys** encountered by the loader must be
-   silently ignored, not rejected. This allows YAML files authored
-   against a newer schema to be loaded by an older loader (provided
-   the older loader doesn't depend on the new field's semantics).
+2. **Unknown top-level keys** are rejected by the strict loader
+   (`extra="forbid"`). When adding a new field, update the Pydantic
+   model in `yaml_loader.py` first, then the schema doc, then the
+   YAML files. This catches typos and drift early.
 
 3. **New required fields** must never be added. The set of required
-   fields is permanently `name`, `description`, `system_prompt`,
-   `category`. Any new concept must be optional with a sensible
-   default.
+   fields is permanently `name`, `model`, `system_prompt`. Any new
+   concept must be optional with a sensible default.
