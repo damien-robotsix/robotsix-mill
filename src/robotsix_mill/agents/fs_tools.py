@@ -152,15 +152,11 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
-        # Normalize offset for the stub check (offset ≤ 0 is treated as 1).
+        # Normalize offset (offset ≤ 0 is treated as 1).
         _offset = offset if offset >= 1 else 1
         is_full_read = _offset == 1 and limit is None
 
-        # Full-file stub: only when offset=1 AND limit=None (the common case).
-        if is_full_read and p.resolve() in _file_cache:
-            return "already in context above — unchanged"
-
-        # Otherwise: read (or refresh) via _read_cached, then slice.
+        # Read (or refresh) via _read_cached, then slice.
         try:
             text = _read_cached(p)
         except (ValueError, OSError) as e:

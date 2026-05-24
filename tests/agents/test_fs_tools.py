@@ -661,9 +661,8 @@ class TestFileReadCache:
     """Tests for the in-memory file-content cache in ``build_fs_tools``."""
 
     def test_repeated_read_hits_cache(self, tmp_path, settings):
-        """First full-file read returns content; second returns a stub
-        ("already in context above — unchanged") because the cache is
-        still populated."""
+        """First full-file read returns content; second also returns the
+        same content (served from the in-memory cache, not re-read from disk)."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "original\n")
@@ -673,7 +672,7 @@ class TestFileReadCache:
         assert first == "original\n"
 
         second = tools["read_file"](path="f.txt")
-        assert second == "already in context above — unchanged"
+        assert second == "original\n"
 
     def test_offset_limit_still_hits_cache(self, tmp_path, settings):
         """A full read populates the cache; a subsequent offset/limit
@@ -744,7 +743,8 @@ class TestFileReadCache:
 
     def test_equivalent_paths_same_cache_entry(self, tmp_path, settings):
         """``read_file("foo/bar.py")`` and ``read_file("./foo/bar.py")``
-        hit the same cache entry — the second full-file read returns a stub."""
+        hit the same cache entry — the second full-file read returns the
+        same cached content."""
         root = tmp_path / "repo"
         root.mkdir()
         (root / "sub").mkdir()
@@ -755,14 +755,14 @@ class TestFileReadCache:
         first = tools["read_file"](path="./sub/file.txt")
         assert first == "cached\n"
 
-        # Second read via the normal path — must hit cache → stub.
+        # Second read via the normal path — must hit cache.
         second = tools["read_file"](path="sub/file.txt")
-        assert second == "already in context above — unchanged"
+        assert second == "cached\n"
 
     def test_parent_dotdot_paths_same_cache_entry(self, tmp_path, settings):
         """``read_file("sub/../sub/file.txt")`` resolves to the same
         canonical path as ``read_file("sub/file.txt")`` — the second
-        full-file read returns a stub."""
+        full-file read returns the same cached content."""
         root = tmp_path / "repo"
         root.mkdir()
         (root / "sub").mkdir()
@@ -773,7 +773,7 @@ class TestFileReadCache:
         assert first == "cached\n"
 
         second = tools["read_file"](path="sub/../sub/file.txt")
-        assert second == "already in context above — unchanged"
+        assert second == "cached\n"
 
     def test_error_returns_not_cached(self, tmp_path, settings):
         """read_file of a nonexistent file returns an error string and
@@ -806,8 +806,9 @@ class TestFileReadCache:
         _make_file(root, "passwd", "local\n")
         assert tools["read_file"](path="passwd") == "local\n"
 
-    def test_repeat_full_read_returns_stub(self, tmp_path, settings):
-        """First full-file read returns content; second returns stub."""
+    def test_repeat_full_read_returns_content(self, tmp_path, settings):
+        """First full-file read returns content; second returns the same
+        cached content (not a stub)."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "hello\n")
@@ -817,7 +818,7 @@ class TestFileReadCache:
         assert first == "hello\n"
 
         second = tools["read_file"](path="f.txt")
-        assert second == "already in context above — unchanged"
+        assert second == "hello\n"
 
     def test_offset_limit_read_not_stubbed(self, tmp_path, settings):
         """Full read populates cache; offset/limit read still returns
@@ -834,9 +835,9 @@ class TestFileReadCache:
         result = tools["read_file"](path="f.txt", offset=2, limit=1)
         assert result == "line2\n"
 
-    def test_after_edit_subsequent_read_returns_stub(self, tmp_path, settings):
+    def test_after_edit_subsequent_read_returns_content(self, tmp_path, settings):
         """After edit_file invalidates cache, first read returns fresh
-        content; second read returns stub."""
+        content; second read returns the same (now cached) content."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "hello world\n")
@@ -851,12 +852,12 @@ class TestFileReadCache:
         # First read after edit → fresh content from disk.
         assert tools["read_file"](path="f.txt") == "HELLO world\n"
 
-        # Second read → stub.
-        assert tools["read_file"](path="f.txt") == "already in context above — unchanged"
+        # Second read → same cached content.
+        assert tools["read_file"](path="f.txt") == "HELLO world\n"
 
-    def test_after_write_subsequent_read_returns_stub(self, tmp_path, settings):
+    def test_after_write_subsequent_read_returns_content(self, tmp_path, settings):
         """After write_file invalidates cache, first read returns new
-        content; second read returns stub."""
+        content; second read returns the same (now cached) content."""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "f.txt", "old\n")
@@ -871,8 +872,8 @@ class TestFileReadCache:
         # First read after write → fresh content from disk.
         assert tools["read_file"](path="f.txt") == "new\n"
 
-        # Second read → stub.
-        assert tools["read_file"](path="f.txt") == "already in context above — unchanged"
+        # Second read → same cached content.
+        assert tools["read_file"](path="f.txt") == "new\n"
 
 
 # ===================================================================
@@ -1001,28 +1002,6 @@ class TestFileReadPruning:
         assert a_return.content == _PRUNED_PLACEHOLDER
         assert cmd_return.content == "exit=0\nbig output"
 
-    def test_no_prune_on_stub(self, tmp_path, settings):
-        """A cache-hit stub read returns the stub and does NOT mutate
-        the message history."""
-        root = tmp_path / "repo"
-        root.mkdir()
-        _make_file(root, "A.txt", "content\n")
-        tools = _build(root, settings)
-
-        # Populate the cache with a full read (no ctx → no pruning).
-        assert tools["read_file"](path="A.txt") == "content\n"
-
-        a_return = _read_return("content\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            _read_call("A.txt", "call-A"),
-            ModelRequest(parts=[a_return]),
-        ])
-
-        # Cache hit → stub → no pruning.
-        result = tools["read_file"](ctx, path="A.txt")
-        assert result == "already in context above — unchanged"
-        assert a_return.content == "content\n"
-
     def test_no_prune_on_partial_read(self, tmp_path, settings):
         """An offset/limit read never triggers pruning."""
         root = tmp_path / "repo"
@@ -1111,8 +1090,8 @@ class TestFileReadPruning:
         assert a_call_msg.parts[0].args_as_dict() == {"path": "A.txt"}
         assert a_return.content == _PRUNED_PLACEHOLDER
 
-        # A follow-up read still behaves correctly (cache hit → stub).
+        # A follow-up read still returns the cached content.
         assert (
             tools["read_file"](ctx, path="A.txt")
-            == "already in context above — unchanged"
+            == "v2\n"
         )
