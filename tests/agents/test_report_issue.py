@@ -64,7 +64,7 @@ def test_never_raises_on_failure(settings, monkeypatch):
     assert out.startswith("report_issue: could not file ticket")
 
 
-def test_build_agent_attaches_report_issue_by_default(settings, monkeypatch):
+def test_build_agent_attaches_report_issue_by_default(settings, monkeypatch, secrets_set):
     """Every agent built via build_agent gets report_issue without the
     caller asking for it (build_agent does lazy imports, so patch at
     the source modules)."""
@@ -84,7 +84,7 @@ def test_build_agent_attaches_report_issue_by_default(settings, monkeypatch):
         "CostInstrumentedOpenRouterModel",
         lambda *a, **k: object(),
     )
-    settings.openrouter_api_key = "k"
+    secrets_set(openrouter_api_key="k")
 
     from robotsix_mill.agents.base import build_agent
 
@@ -113,7 +113,7 @@ def test_genuine_terse_title_still_filed(settings):
     assert len(TicketService(settings).list()) == 1
 
 
-def test_build_agent_without_report_issue(settings, monkeypatch):
+def test_build_agent_without_report_issue(settings, monkeypatch, secrets_set):
     """build_agent(report_issue=False) omits the report_issue tool."""
     captured = {}
 
@@ -131,7 +131,7 @@ def test_build_agent_without_report_issue(settings, monkeypatch):
         "CostInstrumentedOpenRouterModel",
         lambda *a, **k: object(),
     )
-    settings.openrouter_api_key = "k"
+    secrets_set(openrouter_api_key="k")
 
     from robotsix_mill.agents.base import build_agent
 
@@ -140,7 +140,7 @@ def test_build_agent_without_report_issue(settings, monkeypatch):
     assert "report_issue" not in names
 
 
-def test_audit_agent_omits_report_issue(settings, monkeypatch):
+def test_audit_agent_omits_report_issue(settings, monkeypatch, secrets_set):
     """The audit agent (which emits drafts via structured output) must
     not also get the report_issue tool."""
     captured = {}
@@ -170,7 +170,7 @@ def test_audit_agent_omits_report_issue(settings, monkeypatch):
         "robotsix_mill.agents.retry.call_with_retry",
         lambda fn, *a, **k: None,
     )
-    settings.openrouter_api_key = "k"
+    secrets_set(openrouter_api_key="k")
 
     from robotsix_mill.agents.auditing import run_audit_agent
 

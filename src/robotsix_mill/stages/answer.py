@@ -12,6 +12,7 @@ import logging
 import subprocess
 
 from ..agents import answering
+from ..config import get_secrets
 from ..core.models import Ticket
 from ..core.states import State
 from ..vcs import git_ops
@@ -47,7 +48,7 @@ class AnswerStage(Stage):
                 try:
                     git_ops.clone(
                         s.forge_remote_url, cand,
-                        s.forge_target_branch, s.forge_token,
+                        s.forge_target_branch, get_secrets().forge_token,
                     )
                     repo_dir = cand
                 except subprocess.CalledProcessError as e:

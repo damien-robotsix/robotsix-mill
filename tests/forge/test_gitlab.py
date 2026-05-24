@@ -7,7 +7,7 @@ _parse_gitlab_project_path, and _build_headers directly with a mocked transport.
 import httpx as real_httpx
 import pytest
 
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, Secrets, _reset_secrets
 from robotsix_mill.forge.gitlab import (
     GitLabForge,
     _build_headers,
@@ -19,12 +19,24 @@ from robotsix_mill.forge.gitlab import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _set_secrets(**kw):
+    """Populate the Secrets singleton for tests."""
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(**kw)
+
+
 def _settings(tmp_path, **kw):
     kw.setdefault("MILL_DATA_DIR", str(tmp_path))
     kw.setdefault("FORGE_KIND", "gitlab")
     kw.setdefault("FORGE_REMOTE_URL", "https://gitlab.com/ns/project.git")
     kw.setdefault("FORGE_TOKEN", "glpat-token")
-    return Settings(**kw)
+    s = Settings(**kw)
+    # Mirror forge_token into Secrets so get_secrets() works
+    ft = kw.get("FORGE_TOKEN")
+    if ft is not None:
+        _set_secrets(forge_token=ft)
+    return s
 
 
 def _forge(tmp_path, **kw):

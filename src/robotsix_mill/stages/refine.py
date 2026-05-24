@@ -26,6 +26,7 @@ from pathlib import Path
 
 from ..agents import dedup
 from ..agents import refining
+from ..config import get_secrets
 from ..core.datetime_utils import _as_utc
 from ..core.models import Ticket
 from ..core.states import State
@@ -132,7 +133,7 @@ class RefineStage(Stage):
                 try:
                     git_ops.clone(
                         s.forge_remote_url, cand,
-                        s.forge_target_branch, s.forge_token,
+                        s.forge_target_branch, get_secrets().forge_token,
                     )
                     repo_dir = cand
                 except subprocess.CalledProcessError as e:

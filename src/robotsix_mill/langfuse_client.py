@@ -15,7 +15,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from .config import Settings
+from .config import Settings, get_secrets
 
 log = logging.getLogger("robotsix_mill.langfuse_client")
 
@@ -34,9 +34,9 @@ def _langfuse_api_get(settings: Settings, path: str, params: dict | None = None)
     unconfigured / unreachable / the request fails."""
     if not settings.tracing_enabled:
         return None
-    host = (settings.langfuse_base_url or "").rstrip("/")
+    host = (get_secrets().langfuse_base_url or "").rstrip("/")
     auth = base64.b64encode(
-        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}"
+        f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
         .encode()
     ).decode()
     try:
@@ -320,9 +320,9 @@ def list_all_traces_since(
     """
     if not settings.tracing_enabled:
         return []
-    host = (settings.langfuse_base_url or "").rstrip("/")
+    host = (get_secrets().langfuse_base_url or "").rstrip("/")
     auth = base64.b64encode(
-        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}"
+        f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
         .encode()
     ).decode()
     try:
@@ -525,10 +525,10 @@ def aggregate_cost_by_name(
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
     auth = base64.b64encode(
-        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}"
+        f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
         .encode()
     ).decode()
-    host = (settings.langfuse_base_url or "").rstrip("/")
+    host = (get_secrets().langfuse_base_url or "").rstrip("/")
 
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
@@ -614,10 +614,10 @@ def most_expensive_ticket(
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
     auth = base64.b64encode(
-        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}"
+        f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
         .encode()
     ).decode()
-    host = (settings.langfuse_base_url or "").rstrip("/")
+    host = (get_secrets().langfuse_base_url or "").rstrip("/")
 
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
@@ -704,10 +704,10 @@ def most_expensive_trace(
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
     auth = base64.b64encode(
-        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}"
+        f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
         .encode()
     ).decode()
-    host = (settings.langfuse_base_url or "").rstrip("/")
+    host = (get_secrets().langfuse_base_url or "").rstrip("/")
 
     PAGE_SIZE = 100
     EXAMINE_CAP = 500

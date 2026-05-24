@@ -6,10 +6,13 @@ import pytest
 
 from robotsix_mill.agents import openrouter_cost as oc
 from robotsix_mill.agents.ci_fixing import CiFixResult, run_ci_fix_agent
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
 def _s(tmp_path):
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(openrouter_api_key="k")
     return Settings(MILL_DATA_DIR=str(tmp_path), OPENROUTER_API_KEY="k")
 
 

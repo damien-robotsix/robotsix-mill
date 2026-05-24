@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass
 from functools import partial
 
-from .config import Settings
+from .config import Settings, get_secrets
 from .core.models import SourceKind
 from .core.service import TicketService
 from .pass_runner import run_agent_pass
@@ -69,7 +69,7 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
             try:
                 git_ops.clone(
                     settings.forge_remote_url, cand,
-                    settings.forge_target_branch, settings.forge_token,
+                    settings.forge_target_branch, get_secrets().forge_token,
                 )
                 repo_dir = cand
             except subprocess.CalledProcessError as e:

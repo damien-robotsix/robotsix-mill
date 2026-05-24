@@ -74,6 +74,35 @@ def _no_dotenv(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _reset_secrets_each_test():
+    """Clear the cached Secrets singleton before every test so no
+    test leaks secret values into another."""
+    from robotsix_mill.config import _reset_secrets
+
+    _reset_secrets()
+
+
+@pytest.fixture
+def secrets_set():
+    """Fixture that lets tests inject secret values into ``get_secrets()``.
+
+    Returns a callable ``set(**overrides)`` that constructs a fresh
+    ``Secrets`` with the given overrides and stores it directly on
+    the config module's ``_secrets`` singleton so that every module
+    that calls ``get_secrets()`` (even those that imported it at
+    module level) sees the test values.
+    """
+    from robotsix_mill.config import Secrets, _reset_secrets
+    import robotsix_mill.config as _cfg
+
+    def _set(**overrides):
+        _reset_secrets()
+        _cfg._secrets = Secrets(**overrides)
+
+    return _set
+
+
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     db.reset_engine()  # don't reuse a cached engine across tests

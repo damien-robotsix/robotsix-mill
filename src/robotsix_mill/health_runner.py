@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from .config import Settings
+from .config import Settings, get_secrets
 from .core.service import TicketService
 
 log = logging.getLogger("robotsix_mill.health")
@@ -66,7 +66,7 @@ def run_health_pass(root: str | None = None) -> HealthPassResult:
             try:
                 git_ops.clone(
                     settings.forge_remote_url, cand,
-                    settings.forge_target_branch, settings.forge_token,
+                    settings.forge_target_branch, get_secrets().forge_token,
                 )
                 repo_dir = cand
             except subprocess.CalledProcessError as e:

@@ -20,7 +20,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ..config import Settings
+from ..config import Settings, get_secrets
 
 log = logging.getLogger("robotsix_mill.trace_inspector")
 
@@ -217,7 +217,7 @@ def run_trace_inspector(
     made model-context-overflow indistinguishable from a clean
     no-findings run.
     """
-    if not settings.openrouter_api_key:
+    if not get_secrets().openrouter_api_key:
         return TraceInspectResult(error="OPENROUTER_API_KEY is not set")
 
     # Shrink the payload BEFORE sending. A full implement-run trace
@@ -254,7 +254,7 @@ def run_trace_inspector(
     model = CostInstrumentedOpenRouterModel(
         settings.trace_inspector_model,
         provider=OpenRouterProvider(
-            api_key=settings.openrouter_api_key,
+            api_key=get_secrets().openrouter_api_key,
             http_client=client,
         ),
     )

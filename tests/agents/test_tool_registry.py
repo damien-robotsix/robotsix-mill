@@ -7,7 +7,7 @@ import pytest
 from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
 from robotsix_mill.agents.coordinating import ImplementResult
 from robotsix_mill.agents import openrouter_cost as oc
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -15,6 +15,12 @@ from robotsix_mill.config import Settings
 def _settings(tmp_path, **env):
     env.setdefault("MILL_DATA_DIR", str(tmp_path))
     env.setdefault("OPENROUTER_API_KEY", "k")
+    # Mirror openrouter_api_key into Secrets so get_secrets() works
+    key = env.get("OPENROUTER_API_KEY")
+    if key is not None:
+        import robotsix_mill.config as _cfg
+        _reset_secrets()
+        _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**env)
 
 

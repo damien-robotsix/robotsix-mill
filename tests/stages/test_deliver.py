@@ -39,6 +39,13 @@ def _ctx(tmp_path, **env):
     db.reset_engine()
     env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
     s = Settings(**env)
+    # Mirror forge_token into Secrets so get_secrets() works
+    ft = env.get("FORGE_TOKEN")
+    if ft is not None:
+        from robotsix_mill.config import Secrets, _reset_secrets
+        import robotsix_mill.config as _cfg
+        _reset_secrets()
+        _cfg._secrets = Secrets(forge_token=ft)
     db.init_db(s)
     return StageContext(settings=s, service=TicketService(s))
 
@@ -99,6 +106,10 @@ def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
             return FakeResp()
 
     monkeypatch.setattr(httpx, "Client", FakeClient)
+    from robotsix_mill.config import Secrets, _reset_secrets
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(forge_token="tok")
     s = Settings(
         MILL_DATA_DIR=str(tmp_path), FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git", FORGE_TOKEN="tok",

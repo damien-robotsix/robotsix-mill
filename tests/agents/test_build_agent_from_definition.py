@@ -298,6 +298,10 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
 
     # Provide a fake API key so build_agent can construct the model
     # (model construction is local — no network call).
+    from robotsix_mill.config import Secrets, _reset_secrets
+    import robotsix_mill.config as _cfg
+    _reset_secrets()
+    _cfg._secrets = Secrets(openrouter_api_key="sk-fake")
     settings = Settings(OPENROUTER_API_KEY="sk-fake")
     agent = build_agent_from_definition(settings, definition, tools=[])
 

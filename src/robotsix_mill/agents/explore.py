@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..config import Settings
+from ..config import Settings, get_secrets
 
 _SYSTEM_PROMPT = """\
 You are a code-orientation scout for ONE git repository. You have
@@ -59,7 +59,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
     """Run the read-only exploration sub-agent against ``repo_dir`` and
     return its concise findings. Degrades to a short message instead of
     raising so the driver can react."""
-    if not settings.openrouter_api_key:
+    if not get_secrets().openrouter_api_key:
         return "explore unavailable: OPENROUTER_API_KEY is not set"
 
     # lazy: keep core import-light / the suite hermetic
@@ -80,7 +80,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
     model = CostInstrumentedOpenRouterModel(  # dedicated cheap explore model
         settings.explore_model,
         provider=OpenRouterProvider(
-            api_key=settings.openrouter_api_key,
+            api_key=get_secrets().openrouter_api_key,
             http_client=main_client,
         ),
     )
@@ -104,7 +104,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
             fallback_model = CostInstrumentedOpenRouterModel(
                 settings.rate_limit_fallback_model,
                 provider=OpenRouterProvider(
-                    api_key=settings.openrouter_api_key,
+                    api_key=get_secrets().openrouter_api_key,
                     http_client=fallback_client,
                 ),
             )

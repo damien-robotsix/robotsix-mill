@@ -13,7 +13,7 @@ import logging
 
 import httpx
 
-from .config import Settings
+from .config import Settings, get_secrets
 from .core.models import Ticket
 from .core.states import State
 
@@ -40,7 +40,7 @@ def send_notification(
 
     No-op when ``settings.NTFY_URL`` is unset / empty.
     """
-    url = settings.ntfy_url
+    url = get_secrets().ntfy_url
     if not url:
         return
 
@@ -56,8 +56,8 @@ def send_notification(
         "X-Title": title,
         "Content-Type": "text/plain",
     }
-    if settings.ntfy_token:
-        headers["Authorization"] = f"Bearer {settings.ntfy_token}"
+    if get_secrets().ntfy_token:
+        headers["Authorization"] = f"Bearer {get_secrets().ntfy_token}"
 
     body = (
         f"Ticket: {ticket.id}\n"
