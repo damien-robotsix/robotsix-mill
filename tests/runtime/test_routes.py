@@ -191,6 +191,171 @@ def test_cost_by_agent_clamp_high(client, monkeypatch):
     assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
 
 
+# -- GET /costs/most-expensive-ticket -----------------------------------
+
+def test_most_expensive_ticket_happy_path(client, service, monkeypatch):
+    """GET /costs/most-expensive-ticket returns ticket info from DB."""
+    t = service.create("Most expensive ticket test")
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_ticket",
+        lambda settings, lookback_hours: {
+            "session_id": t.id,
+            "total_cost": 1.2345,
+            "trace_count": 3,
+        },
+    )
+
+    r = client.get("/costs/most-expensive-ticket")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, dict)
+    assert data["ticket_id"] == t.id
+    assert data["cost_usd"] == 1.2345
+    assert data["title"] == "Most expensive ticket test"
+
+
+def test_most_expensive_ticket_null_when_disabled(client, monkeypatch):
+    """GET /costs/most-expensive-ticket returns null when tracing disabled."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_ticket",
+        lambda settings, lookback_hours: None,
+    )
+
+    r = client.get("/costs/most-expensive-ticket")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+def test_most_expensive_ticket_null_when_no_matching_ticket(client, monkeypatch):
+    """GET /costs/most-expensive-ticket returns null when session has no DB ticket."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_ticket",
+        lambda settings, lookback_hours: {
+            "session_id": "T-nonexistent",
+            "total_cost": 0.5,
+            "trace_count": 1,
+        },
+    )
+
+    r = client.get("/costs/most-expensive-ticket")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+def test_most_expensive_ticket_clamp_low(client, monkeypatch):
+    """GET /costs/most-expensive-ticket?lookback_hours=0 clamps to 1.0."""
+    captured: list[float] = []
+
+    def fake(settings, lookback_hours):
+        captured.append(lookback_hours)
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_ticket",
+        fake,
+    )
+
+    r = client.get("/costs/most-expensive-ticket?lookback_hours=0")
+    assert r.status_code == 200
+    assert len(captured) == 1
+    assert captured[0] == 1.0, f"expected clamped to 1.0, got {captured[0]}"
+
+
+def test_most_expensive_ticket_clamp_high(client, monkeypatch):
+    """GET /costs/most-expensive-ticket?lookback_hours=200 clamps to 168.0."""
+    captured: list[float] = []
+
+    def fake(settings, lookback_hours):
+        captured.append(lookback_hours)
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_ticket",
+        fake,
+    )
+
+    r = client.get("/costs/most-expensive-ticket?lookback_hours=200")
+    assert r.status_code == 200
+    assert len(captured) == 1
+    assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
+
+
+# -- GET /costs/most-expensive-trace ------------------------------------
+
+def test_most_expensive_trace_happy_path(client, monkeypatch):
+    """GET /costs/most-expensive-trace returns the trace dict directly."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_trace",
+        lambda settings, lookback_hours: {
+            "id": "trace-abc",
+            "name": "implement",
+            "total_cost": 0.9876,
+            "timestamp": "2025-01-01T00:00:00Z",
+            "session_id": "T-42",
+        },
+    )
+
+    r = client.get("/costs/most-expensive-trace")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, dict)
+    assert data["id"] == "trace-abc"
+    assert data["name"] == "implement"
+    assert data["total_cost"] == 0.9876
+    assert data["timestamp"] == "2025-01-01T00:00:00Z"
+    assert data["session_id"] == "T-42"
+
+
+def test_most_expensive_trace_null_when_disabled(client, monkeypatch):
+    """GET /costs/most-expensive-trace returns null when tracing disabled."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_trace",
+        lambda settings, lookback_hours: None,
+    )
+
+    r = client.get("/costs/most-expensive-trace")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+def test_most_expensive_trace_clamp_low(client, monkeypatch):
+    """GET /costs/most-expensive-trace?lookback_hours=0 clamps to 1.0."""
+    captured: list[float] = []
+
+    def fake(settings, lookback_hours):
+        captured.append(lookback_hours)
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_trace",
+        fake,
+    )
+
+    r = client.get("/costs/most-expensive-trace?lookback_hours=0")
+    assert r.status_code == 200
+    assert len(captured) == 1
+    assert captured[0] == 1.0, f"expected clamped to 1.0, got {captured[0]}"
+
+
+def test_most_expensive_trace_clamp_high(client, monkeypatch):
+    """GET /costs/most-expensive-trace?lookback_hours=200 clamps to 168.0."""
+    captured: list[float] = []
+
+    def fake(settings, lookback_hours):
+        captured.append(lookback_hours)
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_trace",
+        fake,
+    )
+
+    r = client.get("/costs/most-expensive-trace?lookback_hours=200")
+    assert r.status_code == 200
+    assert len(captured) == 1
+    assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
+
+
 # -- GET /traces/recent --------------------------------------------------
 
 def test_traces_recent_happy_path(client, monkeypatch):

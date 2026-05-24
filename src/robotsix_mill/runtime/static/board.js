@@ -576,31 +576,83 @@ async function renderCostDashboard(){
     '<option value="72"'+selOpt(72)+'>3 days</option>'+
     '<option value="168"'+selOpt(168)+'>7 days</option>'+
    '</select></label>'+
-  '</div><div id="cost-chart">loading…</div>';
- const data=await jget("/costs/by-agent?lookback_hours="+costLookbackHours);
+  '</div><div id="cost-chart">loading…</div>'+
+  '<div id="cost-highlights"></div>';
+
+ const baseUrl="/costs/by-agent?lookback_hours="+costLookbackHours;
+ const ticketUrl="/costs/most-expensive-ticket?lookback_hours="+costLookbackHours;
+ const traceUrl="/costs/most-expensive-trace?lookback_hours="+costLookbackHours;
+ const [data, topTicket, topTrace]=await Promise.all([
+  jget(baseUrl), jget(ticketUrl), jget(traceUrl)
+ ]);
+
+ // -- per-agent bar chart -----------------------------------------------
  if(!data||!data.length){
   document.getElementById("cost-chart").innerHTML='<div class="muted">No cost data available for this period.</div>';
-  return;
+ } else {
+  const colors=["#3b82f6","#8b5cf6","#22c55e","#eab308","#ef4444","#f97316","#06b6d4","#ec4899","#14b8a6","#a855f7"];
+  const maxCost=Math.max(...data.map(d=>d.total_cost),0.0001);
+  const grandTotal=data.reduce((s,d)=>s+d.total_cost,0);
+  let html='<div class="cost-summary">'+data.length+' agents · $'+grandTotal.toFixed(4)+' total</div>';
+  data.forEach((d,i)=>{
+   const pct=Math.max((d.total_cost/maxCost)*100,1);
+   const color=colors[i%colors.length];
+   html+='<div class="cost-bar-row">'+
+    '<div class="cost-bar-label">'+
+     '<span class="cost-bar-name">'+esc(d.name)+'</span>'+
+     '<span class="cost-bar-count">'+d.trace_count+' traces</span>'+
+    '</div>'+
+    '<div class="cost-bar-track">'+
+     '<div class="cost-bar-fill" style="width:'+pct+'%;background:'+color+'"></div>'+
+    '</div>'+
+    '<div class="cost-bar-amount">$'+d.total_cost.toFixed(4)+'</div>'+
+   '</div>';
+  });
+  document.getElementById("cost-chart").innerHTML=html;
  }
- const colors=["#3b82f6","#8b5cf6","#22c55e","#eab308","#ef4444","#f97316","#06b6d4","#ec4899","#14b8a6","#a855f7"];
- const maxCost=Math.max(...data.map(d=>d.total_cost),0.0001);
- const grandTotal=data.reduce((s,d)=>s+d.total_cost,0);
- let html='<div class="cost-summary">'+data.length+' agents · $'+grandTotal.toFixed(4)+' total</div>';
- data.forEach((d,i)=>{
-  const pct=Math.max((d.total_cost/maxCost)*100,1);
-  const color=colors[i%colors.length];
-  html+='<div class="cost-bar-row">'+
-   '<div class="cost-bar-label">'+
-    '<span class="cost-bar-name">'+esc(d.name)+'</span>'+
-    '<span class="cost-bar-count">'+d.trace_count+' traces</span>'+
-   '</div>'+
-   '<div class="cost-bar-track">'+
-    '<div class="cost-bar-fill" style="width:'+pct+'%;background:'+color+'"></div>'+
-   '</div>'+
-   '<div class="cost-bar-amount">$'+d.total_cost.toFixed(4)+'</div>'+
+
+ // -- highlights section ------------------------------------------------
+ let highlightsHtml='<h4 style="margin-top:16px">🔍 Highlights</h4>';
+
+ // Most Expensive Ticket
+ highlightsHtml+='<div class="cost-bar-row">'+
+  '<div class="cost-bar-label">'+
+   '<span class="cost-bar-name">Most Expensive Ticket</span>'+
   '</div>';
- });
- document.getElementById("cost-chart").innerHTML=html;
+ if(topTicket){
+  highlightsHtml+=
+   '<div class="cost-bar-track" style="display:flex;align-items:center;gap:8px">'+
+    '<a href="#" onclick="open_(\''+esc(topTicket.ticket_id)+'\');return false" style="color:#8bb4f8">'+esc(topTicket.title)+'</a>'+
+    '<span class="cost-bar-count">'+esc(topTicket.ticket_id)+'</span>'+
+   '</div>'+
+   '<div class="cost-bar-amount">$'+topTicket.cost_usd.toFixed(4)+'</div>';
+ } else {
+  highlightsHtml+=
+   '<div class="cost-bar-track"><span class="muted">No data</span></div>'+
+   '<div class="cost-bar-amount"></div>';
+ }
+ highlightsHtml+='</div>';
+
+ // Most Expensive Agent Run
+ highlightsHtml+='<div class="cost-bar-row">'+
+  '<div class="cost-bar-label">'+
+   '<span class="cost-bar-name">Most Expensive Run</span>'+
+  '</div>';
+ if(topTrace){
+  highlightsHtml+=
+   '<div class="cost-bar-track" style="display:flex;align-items:center;gap:8px">'+
+    '<span>'+esc(topTrace.name)+'</span>'+
+    '<span class="cost-bar-count">'+esc(topTrace.id)+'</span>'+
+   '</div>'+
+   '<div class="cost-bar-amount">$'+topTrace.total_cost.toFixed(4)+'</div>';
+ } else {
+  highlightsHtml+=
+   '<div class="cost-bar-track"><span class="muted">No data</span></div>'+
+   '<div class="cost-bar-amount"></div>';
+ }
+ highlightsHtml+='</div>';
+
+ document.getElementById("cost-highlights").innerHTML=highlightsHtml;
 }
 // -- deep review --------------------------------------------------------
 let deepReviewOpen=false;

@@ -446,3 +446,184 @@ def aggregate_cost_by_name(
     ]
     result.sort(key=lambda x: x["total_cost"], reverse=True)
     return result
+
+
+def most_expensive_ticket(
+    settings: Settings,
+    lookback_hours: float = 24,
+) -> dict | None:
+    """Return the session with the highest total cost within the last
+    *lookback_hours*.
+
+    Groups traces by ``sessionId``, sums ``totalCost`` per session,
+    and returns the single session with the highest total cost.
+
+    Graceful: returns ``None`` when tracing is disabled or the API
+    errors.  Examines at most 500 traces to bound API calls.
+    """
+    if not settings.tracing_enabled:
+        return None
+
+    from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+
+    auth = base64.b64encode(
+        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}"
+        .encode()
+    ).decode()
+    host = (settings.langfuse_base_url or "").rstrip("/")
+
+    PAGE_SIZE = 100
+    EXAMINE_CAP = 500
+    all_traces: list[dict] = []
+
+    try:
+        import httpx
+
+        page = 1
+        with httpx.Client(timeout=20) as c:
+            while len(all_traces) < EXAMINE_CAP:
+                r = c.get(
+                    f"{host}/api/public/traces",
+                    params={
+                        "fromTimestamp": from_timestamp,
+                        "limit": PAGE_SIZE,
+                        "page": page,
+                        "orderBy": "timestamp.desc",
+                    },
+                    headers={"Authorization": f"Basic {auth}"},
+                )
+                if r.status_code != 200:
+                    log.warning(
+                        "most_expensive_ticket: Langfuse returned %d on page %d",
+                        r.status_code,
+                        page,
+                    )
+                    break
+
+                body = r.json()
+                data = body.get("data", [])
+                all_traces.extend(data)
+
+                meta = body.get("meta", {})
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
+
+    except Exception:
+        log.exception("most_expensive_ticket failed")
+        return None
+
+    # Aggregate by session_id
+    agg: dict[str, dict] = {}
+    for t in all_traces[:EXAMINE_CAP]:
+        sid = (t.get("sessionId") or "").strip()
+        if not sid:
+            continue
+        cost = float(t.get("totalCost") or 0)
+        if sid not in agg:
+            agg[sid] = {"total_cost": 0.0, "trace_count": 0}
+        agg[sid]["total_cost"] += cost
+        agg[sid]["trace_count"] += 1
+
+    if not agg:
+        return None
+
+    # Pick the session with the highest total cost
+    best_sid, best = max(agg.items(), key=lambda item: item[1]["total_cost"])
+    return {
+        "session_id": best_sid,
+        "total_cost": best["total_cost"],
+        "trace_count": best["trace_count"],
+    }
+
+
+def most_expensive_trace(
+    settings: Settings,
+    lookback_hours: float = 24,
+) -> dict | None:
+    """Return the single trace with the highest ``totalCost`` within the
+    last *lookback_hours*.
+
+    Skips unnamed/in-flight traces (same ``_named`` filter as
+    ``list_recent_traces``).
+
+    Graceful: returns ``None`` when tracing is disabled or the API
+    errors.  Examines at most 500 traces to bound API calls.
+    """
+    if not settings.tracing_enabled:
+        return None
+
+    from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+
+    auth = base64.b64encode(
+        f"{settings.langfuse_public_key}:{settings.langfuse_secret_key}"
+        .encode()
+    ).decode()
+    host = (settings.langfuse_base_url or "").rstrip("/")
+
+    PAGE_SIZE = 100
+    EXAMINE_CAP = 500
+    all_traces: list[dict] = []
+
+    try:
+        import httpx
+
+        page = 1
+        with httpx.Client(timeout=20) as c:
+            while len(all_traces) < EXAMINE_CAP:
+                r = c.get(
+                    f"{host}/api/public/traces",
+                    params={
+                        "fromTimestamp": from_timestamp,
+                        "limit": PAGE_SIZE,
+                        "page": page,
+                        "orderBy": "timestamp.desc",
+                    },
+                    headers={"Authorization": f"Basic {auth}"},
+                )
+                if r.status_code != 200:
+                    log.warning(
+                        "most_expensive_trace: Langfuse returned %d on page %d",
+                        r.status_code,
+                        page,
+                    )
+                    break
+
+                body = r.json()
+                data = body.get("data", [])
+                all_traces.extend(data)
+
+                meta = body.get("meta", {})
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
+
+    except Exception:
+        log.exception("most_expensive_trace failed")
+        return None
+
+    # Find the single named trace with highest cost
+    best_trace: dict | None = None
+    best_cost = -1.0
+
+    for t in all_traces[:EXAMINE_CAP]:
+        name = t.get("name")
+        if not (isinstance(name, str) and name.strip() != ""):
+            continue
+        cost = float(t.get("totalCost") or 0)
+        if cost > best_cost:
+            best_cost = cost
+            best_trace = t
+
+    if best_trace is None:
+        return None
+
+    return {
+        "id": best_trace.get("id", ""),
+        "name": best_trace.get("name", ""),
+        "total_cost": best_cost,
+        "timestamp": best_trace.get("timestamp", ""),
+        "session_id": best_trace.get("sessionId") or None,
+    }
