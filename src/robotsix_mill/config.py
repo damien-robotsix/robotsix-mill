@@ -1034,8 +1034,22 @@ class Settings(BaseSettings):
 
 
 def load_settings() -> Settings:
-    """Load and return a :class:`Settings` instance from env / ``.env`` files."""
-    return Settings()
+    """Load and return a :class:`Settings` instance.
+
+    Defaults are sourced from ``config/mill.defaults.yaml`` (plus optional
+    ``config/mill.local.yaml`` and ``config/mill.production.yaml`` overlays).
+    Environment variables override the YAML-derived values.
+    """
+    import os
+
+    from robotsix_mill.config_loader import flatten_yaml_config, load_yaml_config
+
+    yaml_defaults = flatten_yaml_config(load_yaml_config())
+    # Remove any YAML key whose env var is already set — pydantic-settings
+    # gives init kwargs higher priority than os.environ, so we must not
+    # pass the YAML value as a kwarg when an env override exists.
+    yaml_kwargs = {k: v for k, v in yaml_defaults.items() if k not in os.environ}
+    return Settings(**yaml_kwargs)
 
 
 # ---------------------------------------------------------------------------
