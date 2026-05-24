@@ -2,3 +2,11 @@
 # Format: one CVE ID per line (e.g., CVE-2024-XXXXX)
 # Optional expiry annotation:
 #   CVE-2024-XXXXX  # expires: YYYY-MM-DD
+
+# CVE-2026-40355 — krb5 (MIT Kerberos 5): DoS via NULL pointer dereference
+# in NegoEx. Not exploitable in this image: we ship a Python LLM ticket
+# solver — we do not run a Kerberos server, do not negotiate NegoEx, and
+# the krb5 libraries are only present as transitive system deps that are
+# never invoked. Trivy classifies as CRITICAL despite CVSS=medium; safe
+# to suppress in our deployment model.
+CVE-2026-40355  # expires: 2026-08-24
