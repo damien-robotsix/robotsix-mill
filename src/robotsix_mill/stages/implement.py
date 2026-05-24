@@ -242,24 +242,7 @@ class ImplementStage(Stage):
         )
         if resuming:
             git_ops.checkout(repo_dir, branch)
-            # Refresh the WIP branch onto current target before running:
-            # a branch pinned to an OLD base runs the in-sandbox test
-            # gate against stale code (e.g. a pre-fix conftest) and
-            # re-BLOCKS forever even after main is fixed. If it can't
-            # rebase cleanly, discard the stale WIP and re-clone fresh
-            # (a gate-blocked WIP was against a broken gate anyway).
-            if git_ops.try_rebase_onto(repo_dir, settings.forge_target_branch):
-                log.info(
-                    "%s: resuming WIP branch (rebased onto %s)",
-                    ticket.id, settings.forge_target_branch,
-                )
-            else:
-                log.warning(
-                    "%s: WIP rebase onto %s failed — re-cloning fresh",
-                    ticket.id, settings.forge_target_branch,
-                )
-                resuming = False
-        if not resuming:
+        else:
             if repo_dir.exists():
                 shutil.rmtree(repo_dir)
             try:
@@ -274,6 +257,16 @@ class ImplementStage(Stage):
                     State.BLOCKED, f"clone failed: {e.stderr[:300]}"
                 )
             git_ops.create_branch(repo_dir, branch)
+
+        # Refresh against current origin/<target> so the agent never
+        # edits stale source — a branch based on even slightly outdated
+        # origin/<target> can silently revert newer commits.
+        if not git_ops.try_rebase_onto(repo_dir, settings.forge_target_branch):
+            return Outcome(
+                State.BLOCKED,
+                f"rebase onto origin/{settings.forge_target_branch} "
+                "failed — resolve conflicts manually",
+            )
 
         # Hard invariant: NEVER run the agent / sandbox without a
         # materialized clone.
