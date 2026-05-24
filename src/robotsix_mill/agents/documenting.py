@@ -9,6 +9,8 @@ Returns a structured ``DocResult`` with ``user_facing`` and ``summary``.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 from ..config import Settings
@@ -78,6 +80,7 @@ def run_doc_agent(
     diff: str,
     spec: str,
     model_name: str | None = None,
+    extra_roots: list[Path] | None = None,
 ) -> DocResult:
     """Build a documentation agent, classify *diff* + *spec*, and update
     docs for user-facing changes.
@@ -93,13 +96,13 @@ def run_doc_agent(
     from .fs_tools import build_fs_tools
     from .retry import call_with_retry
 
-    fs = build_fs_tools(repo_dir, settings)
+    fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
         output_type=PromptedOutput(DocResult),
         tools=[
-            make_explore_tool(settings, repo_dir),
+            make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
             *(t for t in fs if t.__name__ in ("read_file", "write_file", "list_dir", "edit_file")),
         ],
         web=False,

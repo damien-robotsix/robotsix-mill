@@ -24,10 +24,15 @@ log = logging.getLogger(__name__)
 _PRUNED_PLACEHOLDER = "[content pruned — more recent content above]"
 
 
-def _safe(root: Path, rel: str) -> Path:
+def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Path:
     p = (root / rel).resolve()
     root = root.resolve()
     if p != root and not p.is_relative_to(root):
+        # Allow paths that resolve into an extra root (e.g. _epic/)
+        if extra_roots:
+            for extra in extra_roots:
+                if p.is_relative_to(extra.resolve()):
+                    return p
         raise ValueError(f"path {rel!r} escapes the repository")
     if not root.exists():
         raise ValueError(
@@ -37,7 +42,7 @@ def _safe(root: Path, rel: str) -> Path:
     return p
 
 
-def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str] | None = None) -> list:
+def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str] | None = None, extra_roots: list[Path] | None = None) -> list:
     root = Path(root).resolve()
 
     # In-memory file-content cache shared by all closures in this
@@ -143,7 +148,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
           actual line count.
         """
         try:
-            p = _safe(root, path)
+            p = _safe(root, path, extra_roots=extra_roots)
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
@@ -177,7 +182,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
     def write_file(path: str, content: str) -> str:
         """Create or overwrite a file in the repository with ``content``."""
         try:
-            p = _safe(root, path)
+            p = _safe(root, path, extra_roots=extra_roots)
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
         except (ValueError, OSError) as e:
@@ -191,7 +196,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
         ``new_string``.  Returns a short result string — prefer this
         for surgical edits over ``write_file``."""
         try:
-            p = _safe(root, path)
+            p = _safe(root, path, extra_roots=extra_roots)
             content = _read_cached(p)
             count = content.count(old_string)
             if count == 0:
@@ -217,7 +222,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
     def delete_file(path: str) -> str:
         """Delete a file from the repository. Returns a short status string."""
         try:
-            p = _safe(root, path)
+            p = _safe(root, path, extra_roots=extra_roots)
             p.unlink()
         except (ValueError, OSError) as e:
             return f"error: {e}"
@@ -227,7 +232,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
     def list_dir(path: str = ".") -> str:
         """List entries of a directory in the repository (dirs end '/')."""
         try:
-            d = _safe(root, path)
+            d = _safe(root, path, extra_roots=extra_roots)
             return "\n".join(
                 sorted(
                     f"{e.name}/" if e.is_dir() else e.name

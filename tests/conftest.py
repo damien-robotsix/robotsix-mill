@@ -84,7 +84,7 @@ def fake_sandbox(monkeypatch):
     There is no 'local' mode to fall back on by design."""
     from robotsix_mill import sandbox
 
-    def _run(command, *, repo_dir, settings):
+    def _run(command, *, repo_dir, settings, epic_workspace_path=None):
         c = command.strip()
         if c == "false":
             return (1, "false: command failed")

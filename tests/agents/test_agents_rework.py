@@ -81,7 +81,8 @@ def test_test_agent_pass(tmp_path, monkeypatch):
 
     s = _settings(tmp_path, MILL_TEST_COMMAND="pytest")
     monkeypatch.setattr(
-        sandbox, "run", lambda cmd, *, repo_dir, settings: (0, "ok")
+        sandbox, "run", lambda cmd, *, repo_dir, settings,
+        epic_workspace_path=None: (0, "ok")
     )
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is True and "passed" in fb
@@ -95,7 +96,8 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         sandbox, "run",
-        lambda cmd, *, repo_dir, settings: (1, "E   assert 1 == 2\n" * 50),
+        lambda cmd, *, repo_dir, settings,
+        epic_workspace_path=None: (1, "E   assert 1 == 2\n" * 50),
     )
     cap = {}
 

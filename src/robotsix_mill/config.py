@@ -657,6 +657,10 @@ class Settings(BaseSettings):
         return self.data_dir / "workspaces"
 
     @property
+    def epic_workspaces_dir(self) -> Path:
+        return self.data_dir / "epic_workspaces"
+
+    @property
     def db_url(self) -> str:
         """SQLAlchemy-compatible database URL derived from :attr:`db_path`."""
         return f"sqlite:///{self.db_path}"

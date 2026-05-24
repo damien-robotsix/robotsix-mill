@@ -200,6 +200,7 @@ def run_coordinator(
     model_name: str | None = None,
     feedback: str | None = None,
     epic_context: str = "",
+    epic_workspace_path: Path | None = None,
     reference_files: list[dict] | None = None,
     message_history: list | None = None,
 ) -> ImplementResult:
@@ -233,7 +234,12 @@ def run_coordinator(
             for rf in reference_files
         }
 
-    fs = build_fs_tools(repo_dir, settings, pre_seeded=pre_seeded)
+    extra_roots: list[Path] = (
+        [epic_workspace_path] if epic_workspace_path is not None else None
+    )
+
+    fs = build_fs_tools(repo_dir, settings, pre_seeded=pre_seeded,
+                        extra_roots=extra_roots)
     # the main agent reads + writes itself and includes run_command for
     # focused diagnosis (re-run a single failing test, run a linter,
     # inspect git diff, etc.). The full suite is run by the stage.
@@ -278,7 +284,7 @@ def run_coordinator(
         system_prompt=_SYSTEM_PROMPT,
         output_type=PromptedOutput(ImplementResult),
         tools=[
-            make_explore_tool(settings, repo_dir),
+            make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
             *fs_tools,
         ],
         web=True,  # adds the cheap web_research tool
@@ -290,6 +296,13 @@ def run_coordinator(
         user_prompt = ""
         if epic_context:
             user_prompt += f"{epic_context}\n\n"
+        if epic_workspace_path is not None:
+            user_prompt += (
+                "You can read and write files under `_epic/...` to share "
+                "reference documents with other child tickets of this epic. "
+                "The epic workspace persists across tickets; the repo clone "
+                "does not.\n\n"
+            )
         user_prompt += (
             f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
             f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"

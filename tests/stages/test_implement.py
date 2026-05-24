@@ -64,8 +64,8 @@ def _ticket(ctx, title="Add feature", body="Please add feature.txt"):
 
 
 def _fake_agent(write: dict | None):
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, spec, feedback, reference_files, message_history, memory  # signature must match the seam
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path  # signature must match the seam
         if write:
             for name, content in write.items():
                 (Path(repo_dir) / name).write_text(content)
@@ -275,8 +275,8 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     )
     calls = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, spec, reference_files, message_history, memory  # seam signature
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, reference_files, message_history, memory, epic_workspace_path  # seam signature
         calls.append(feedback)
         (Path(repo_dir) / "wip.txt").write_text("did work")
         return ("tried", [], "")
@@ -311,8 +311,8 @@ def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypat
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, spec, feedback, reference_files, message_history, memory
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         (Path(repo_dir) / "partial.txt").write_text("half done")
         raise coding.AgentBudgetError("request_limit of 50", [])
 
@@ -336,8 +336,8 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
     n = {"i": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, spec, feedback, reference_files, message_history, memory
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         n["i"] += 1
         if n["i"] == 1:  # first pass: partial work, hit the cap
             (Path(repo_dir) / "first.txt").write_text("1")
@@ -385,8 +385,8 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, spec, feedback, reference_files, message_history, memory
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
         return ("done", [], "")
@@ -502,8 +502,8 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, feedback, reference_files, message_history, memory
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "")
@@ -525,8 +525,8 @@ def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, mo
     t = _ticket(ctx, title="Standalone", body="Just a task")
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, feedback, reference_files, message_history, memory
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "")
@@ -554,8 +554,8 @@ def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, mo
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, feedback, reference_files, message_history, memory
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "")
@@ -582,8 +582,8 @@ def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_p
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
-        del settings, feedback, reference_files, message_history, memory
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None):
+        del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "")
