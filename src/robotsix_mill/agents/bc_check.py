@@ -36,6 +36,7 @@ def run_bc_check_agent(
     *,
     settings: Settings,
     memory: str = "",
+    recent_proposals: str = "",
     repo_dir=None,
 ) -> BcCheckResult:
     """Run the backward-compatibility inspection pass.
@@ -89,6 +90,7 @@ def run_bc_check_agent(
         model_name=definition.model or settings.bc_check_model,
     )
     prompt = (
+        f"{recent_proposals}"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
         "Scan the repository for backward-compatibility code and return your findings."
     )

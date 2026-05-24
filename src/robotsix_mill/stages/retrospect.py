@@ -365,12 +365,16 @@ class RetrospectStage(Stage):
             log.warning("%s: could not read memory file %s", ticket.id, memory_file)
 
         # Verify prior proposals and prepend verified-state table.
-        from ..pass_runner import _verify_prior_proposals, _render_verified_table
+        from ..pass_runner import _verify_prior_proposals, _render_verified_table, _format_recent_proposals
 
         verified = _verify_prior_proposals(ctx.service, s, SourceKind.RETROSPECT)
         if verified:
             table = _render_verified_table(verified)
             memory_text = table + "\n\n" + memory_text
+
+        # Build recent-proposals block for prompt injection.
+        recent = ctx.service.recent_proposals_for(SourceKind.RETROSPECT, limit=100)
+        rp_block = _format_recent_proposals(recent)
 
         try:
             res = retrospecting.run_retrospect_agent(
@@ -382,6 +386,7 @@ class RetrospectStage(Stage):
                 comments_text=comments_text,
                 deep_analysis=deep_analysis,
                 trace_ids=trace_ids,
+                recent_proposals=rp_block,
                 epic_context=epic_ctx,
                 sibling_context=sibling_ctx,
             )

@@ -41,7 +41,7 @@ def _make_agent(updated_memory="new memory", draft_titles=None, draft_bodies=Non
     if draft_bodies is None:
         draft_bodies = []
 
-    def agent_fn(*, settings, memory):
+    def agent_fn(*, settings, memory, recent_proposals=""):
         return _FakeAgentResult(
             updated_memory=updated_memory,
             draft_titles=draft_titles,
@@ -111,7 +111,7 @@ def test_missing_memory_file_first_run(tmp_path, monkeypatch):
 
     captured_memory = []
 
-    def agent_fn(*, settings, memory):
+    def agent_fn(*, settings, memory, recent_proposals=""):
         captured_memory.append(memory)
         return _FakeAgentResult(
             updated_memory="initial memory",
@@ -340,7 +340,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
 
     captured_memory = []
 
-    def echo_agent(*, settings, memory):
+    def echo_agent(*, settings, memory, recent_proposals=""):
         captured_memory.append(memory)
         return _FakeAgentResult(
             updated_memory=memory,
@@ -381,7 +381,7 @@ def test_marker_round_trip(tmp_path):
     memory_file.write_text("old", encoding="utf-8")
 
     # Create an agent that returns gap_ids
-    def agent_with_gap_ids(*, settings, memory):
+    def agent_with_gap_ids(*, settings, memory, recent_proposals=""):
         return _FakeAgentResult(
             updated_memory="updated",
             draft_titles=["Fix Z"],
@@ -449,7 +449,7 @@ def test_missing_gap_ids_no_crash(tmp_path):
         draft_titles = ["Title"]
         draft_bodies = ["Body"]
 
-    def agent_fn(*, settings, memory):
+    def agent_fn(*, settings, memory, recent_proposals=""):
         return NoGapIdsResult()
 
     result = run_agent_pass(

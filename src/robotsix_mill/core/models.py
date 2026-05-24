@@ -26,7 +26,13 @@ class SourceKind(StrEnum):
     AUDIT = "audit"
     SURVEY = "survey"
     AGENT = "agent"
-    CI = "ci"  # forward-looking; planned CI monitor feature
+    CI = "ci"
+    HEALTH = "health"
+    ENV_SYNC = "env_sync"
+    TEST_GAP = "test_gap"
+    AGENT_CHECK = "agent_check"
+    BC_CHECK = "bc_check"
+    TRACE_HEALTH = "trace-health"
 
 
 def _now() -> datetime:

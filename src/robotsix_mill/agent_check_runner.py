@@ -14,6 +14,7 @@ from functools import partial
 from pathlib import Path
 
 from .config import Settings, get_secrets
+from .core.models import SourceKind
 from .core.service import TicketService
 from .pass_runner import run_agent_pass
 
@@ -92,7 +93,7 @@ def run_agent_check_pass(root: str | None = None) -> AgentCheckPassResult:
             result = run_agent_pass(
                 agent_fn=agent_fn,
                 memory_file=memory_file,
-                source_label="agent_check",
+                source_label=SourceKind.AGENT_CHECK,
                 service=service,
                 settings=settings,
                 origin_session=session_id,

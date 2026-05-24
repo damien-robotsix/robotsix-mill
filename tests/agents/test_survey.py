@@ -3,6 +3,7 @@
 import pytest
 
 from robotsix_mill.config import Settings
+from robotsix_mill.core import db
 
 
 def _make_settings(tmp_path, **overrides):
@@ -11,7 +12,10 @@ def _make_settings(tmp_path, **overrides):
     # Default survey_periodic to false so the negative test is clean
     if "MILL_SURVEY_PERIODIC" not in overrides:
         overrides["MILL_SURVEY_PERIODIC"] = "false"
-    return Settings(**overrides)
+    s = Settings(**overrides)
+    db.reset_engine()
+    db.init_db(s)
+    return s
 
 
 @pytest.mark.asyncio

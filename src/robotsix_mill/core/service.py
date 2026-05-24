@@ -93,6 +93,24 @@ class TicketService:
                 stmt = stmt.where(Ticket.state.notin_(list(exclude_states)))
             return list(s.exec(stmt).all())
 
+    def recent_proposals_for(
+        self,
+        source: SourceKind,
+        limit: int = 100,
+    ) -> list[Ticket]:
+        """Return recent tickets filed by *source*, most recent first.
+
+        Limited to *limit* entries (default 100).
+        """
+        with db.session(self.settings) as s:
+            stmt = (
+                select(Ticket)
+                .where(Ticket.source == source)
+                .order_by(Ticket.created_at.desc())
+                .limit(limit)
+            )
+            return list(s.exec(stmt).all())
+
     def history(self, ticket_id: str) -> list[TicketEvent]:
         """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``."""
         with db.session(self.settings) as s:

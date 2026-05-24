@@ -27,6 +27,7 @@ def run_survey_agent(
     *,
     settings: Settings,
     memory: str = "",
+    recent_proposals: str = "",
     repo_dir=None,
 ) -> SurveyResult:
     """Run the survey pass.
@@ -87,6 +88,7 @@ def run_survey_agent(
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
+        f"{recent_proposals}"
         f"<forge_remote_url>{forge_url}</forge_remote_url>\n\n"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
         "Survey similar open-source projects and return your proposals."

@@ -103,6 +103,7 @@ def run_env_sync_agent(
     *,
     settings: Settings,
     memory: str = "",
+    recent_proposals: str = "",
     repo_dir=None,
 ) -> EnvSyncResult:
     """Run the env-sync configuration drift inspection pass.
@@ -168,6 +169,7 @@ def run_env_sync_agent(
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
+        f"{recent_proposals}"
         f"<forge_remote_url>{forge_url}</forge_remote_url>\n\n"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
         "Perform the env-sync drift inspection and return your result."

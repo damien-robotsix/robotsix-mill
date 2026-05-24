@@ -36,6 +36,7 @@ def run_test_gap_agent(
     *,
     settings: Settings,
     memory: str = "",
+    recent_proposals: str = "",
     repo_dir=None,
 ) -> TestGapResult:
     """Run the test-gap coverage inspection pass.
@@ -100,6 +101,7 @@ def run_test_gap_agent(
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
+        f"{recent_proposals}"
         f"<forge_remote_url>{forge_url}</forge_remote_url>\n\n"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
         "Perform the test-gap inspection and return your result."

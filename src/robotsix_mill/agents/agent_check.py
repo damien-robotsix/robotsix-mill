@@ -35,6 +35,7 @@ def run_agent_check_agent(
     settings: Settings,
     repo_dir=None,
     memory: str = "",
+    recent_proposals: str = "",
 ) -> AgentCheckResult:
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -57,6 +58,7 @@ def run_agent_check_agent(
         model_name=definition.model or settings.agent_check_model,
     )
     prompt = (
+        f"{recent_proposals}"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
         "Inspect all agent definitions and return your coherence findings."
     )

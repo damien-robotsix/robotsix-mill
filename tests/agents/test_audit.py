@@ -16,7 +16,10 @@ from robotsix_mill.core.models import SourceKind
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
     overrides.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
-    return Settings(**overrides)
+    s = Settings(**overrides)
+    db.reset_engine()
+    db.init_db(s)
+    return s
 
 
 # --- Agent tests ---
