@@ -14,8 +14,19 @@ from datetime import datetime, timezone
 from sqlalchemy import Column
 from sqlmodel import Field, SQLModel
 
+from enum import StrEnum
+
 from .datetime_utils import TZDateTime
 from .states import State
+
+
+class SourceKind(StrEnum):
+    USER = "user"
+    RETROSPECT = "retrospect"
+    AUDIT = "audit"
+    SURVEY = "survey"
+    AGENT = "agent"
+    CI = "ci"  # forward-looking; planned CI monitor feature
 
 
 def _now() -> datetime:
@@ -36,7 +47,7 @@ class Ticket(SQLModel, table=True):
     parent_id: str | None = Field(default=None, foreign_key="ticket.id")
     # which actor created the ticket — free-form for forward compatibility
     # (e.g. "user", "retrospect", "some-future-agent")
-    source: str = Field(default="user")
+    source: str = Field(default=SourceKind.USER)
     # when blocked, which state the ticket was in before being blocked;
     # enables the BLOCKED → <originating state> resume path so only the
     # failed stage is re-run.
@@ -97,7 +108,7 @@ class TicketCreate(SQLModel):
     title: str
     description: str = ""
     depends_on: str | None = None
-    source: str = "user"
+    source: str = SourceKind.USER
     kind: str = "task"  # "task", "inquiry", or "epic"
     parent_id: str | None = None
 
