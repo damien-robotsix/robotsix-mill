@@ -80,7 +80,7 @@ class ReviewStage(Stage):
         # Empty diff → no-op implementation, approve so deliver can handle it.
         if not diff.strip():
             log.info("%s: empty diff — approving without review", ticket.id)
-            return Outcome(State.DELIVERABLE, "empty diff (no-op implementation)")
+            return Outcome(State.DOCUMENTING, "empty diff (no-op implementation)")
 
         spec = ws.read_description()
 
@@ -112,7 +112,7 @@ class ReviewStage(Stage):
         # Route based on verdict.
         if verdict.verdict == "APPROVE":
             ctx.service.set_review_rounds(ticket.id, 0)
-            return Outcome(State.DELIVERABLE, "review approved")
+            return Outcome(State.DOCUMENTING, "review approved")
         elif verdict.verdict == "REQUEST_CHANGES":
             rounds = ticket.review_rounds + 1
             ctx.service.set_review_rounds(ticket.id, rounds)
@@ -126,7 +126,7 @@ class ReviewStage(Stage):
                 )
                 ctx.service.set_review_rounds(ticket.id, 0)
                 return Outcome(
-                    State.DELIVERABLE,
+                    State.DOCUMENTING,
                     f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
                 )
             # under cap: normal REQUEST_CHANGES path

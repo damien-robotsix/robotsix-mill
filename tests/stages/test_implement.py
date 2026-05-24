@@ -233,7 +233,7 @@ def test_blocked_without_remote(ctx_factory):
 
 def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
     monkeypatch.setattr(
         coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
     )
@@ -255,7 +255,7 @@ def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
 
 def test_no_changes_blocks(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
     monkeypatch.setattr(coding, "run_implement_agent", _fake_agent(None))
     out = ImplementStage().run(_ticket(ctx), ctx)
     assert out.next_state is State.BLOCKED
@@ -309,7 +309,7 @@ def _commits(repo):
 
 def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
         del settings, spec, feedback, reference_files, message_history, memory
@@ -333,7 +333,7 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     """Resume = run the coordinator FRESH (no transcript replay), and
     crucially do NOT re-clone — the prior WIP branch is reused."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
     n = {"i": 0}
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory=""):
@@ -372,7 +372,7 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
 def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
     """Implement stage returns READY (no-op) when deps are unmet."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
     # Create the dependency ticket (in DRAFT — not terminal)
     dep = ctx.service.create("Dep ticket")
@@ -403,7 +403,7 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
 def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     """Implement stage proceeds to DELIVERABLE when dep is CLOSED."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
     # Create and close the dependency
     dep = ctx.service.create("Dep ticket")
@@ -430,7 +430,7 @@ def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
 def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     """Implement stage proceeds when a dep ID doesn't exist (treated satisfied)."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
     t = ctx.service.create("Depender", depends_on='["nonexistent-12345"]')
     ctx.service.transition(t.id, State.READY)
@@ -448,7 +448,7 @@ def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
 def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch):
     """Tickets without depends_on have zero behavioral change."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
     t = _ticket(ctx)  # creates ticket without depends_on
 
@@ -461,8 +461,8 @@ def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch)
     assert out.next_state is State.DOCUMENTING
 
 
-def test_success_to_documenting_when_review_enabled(ctx_factory, tmp_path, monkeypatch):
-    """Implement always transitions to DOCUMENTING regardless of review_enabled."""
+def test_success_to_code_review_when_review_enabled(ctx_factory, tmp_path, monkeypatch):
+    """Pipeline flip: implement routes to CODE_REVIEW when review_enabled is true."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote,
@@ -476,7 +476,7 @@ def test_success_to_documenting_when_review_enabled(ctx_factory, tmp_path, monke
 
     out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.DOCUMENTING
+    assert out.next_state is State.CODE_REVIEW
 
 
 # --- epic context -------------------------------------------------------
@@ -485,7 +485,10 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     """When a ticket has an epic parent, the spec passed to
     run_implement_agent starts with the epic context wrapper."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false",  # this test asserts the no-review path
+    )
 
     # Create an epic with rich global context
     epic = ctx.service.create("Global Epic", "High-level goal: unify UX", kind="epic")
@@ -517,7 +520,7 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
 def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, monkeypatch):
     """Ticket without a parent: no epic context in spec."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
     t = _ticket(ctx, title="Standalone", body="Just a task")
     seen_spec: list[str] = []
@@ -538,7 +541,7 @@ def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, mo
 def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, monkeypatch):
     """Ticket with a parent that is NOT an epic: no epic context."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
     # Create a regular task parent (kind="task")
     parent = ctx.service.create("Parent task", "Ordinary task", kind="task")
@@ -567,7 +570,7 @@ def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, mo
 def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_path, monkeypatch):
     """Epic with empty description: no injection."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
     epic = ctx.service.create("Empty Epic", "", kind="epic")
     child = ctx.service.create(

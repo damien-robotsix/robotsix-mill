@@ -56,7 +56,7 @@ class DocumentStage(Stage):
         if not diff.strip():
             log.info("%s: empty diff — no documentation needed", ticket.id)
             return Outcome(
-                State.CODE_REVIEW if s.review_enabled else State.DELIVERABLE,
+                State.DELIVERABLE,
                 "empty diff (no documentation needed)",
             )
 
@@ -77,11 +77,11 @@ class DocumentStage(Stage):
                 exc_info=True,
             )
             return Outcome(
-                State.CODE_REVIEW if s.review_enabled else State.DELIVERABLE,
+                State.DELIVERABLE,
                 "doc agent failed (non-blocking)",
             )
 
-        next_state = State.CODE_REVIEW if s.review_enabled else State.DELIVERABLE
+        next_state = State.DELIVERABLE
 
         if doc_result.user_facing:
             try:
