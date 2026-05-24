@@ -97,7 +97,7 @@ def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
     out = DocumentStage().run(t, ctx)
-    assert out.next_state is State.CODE_REVIEW
+    assert out.next_state is State.DELIVERABLE
     assert out.note == "updated README"
 
     # Verify the doc file was written.
@@ -128,7 +128,7 @@ def test_internal_skips_commit(ctx_factory, monkeypatch):
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
     out = DocumentStage().run(t, ctx)
-    assert out.next_state is State.CODE_REVIEW
+    assert out.next_state is State.DELIVERABLE
     assert out.note == "no user-facing changes (internal-only)"
 
     # No new commits.
@@ -156,7 +156,7 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
     out = DocumentStage().run(t, ctx)
-    assert out.next_state is State.CODE_REVIEW
+    assert out.next_state is State.DELIVERABLE
     assert out.note == "updated README"
 
     # No new commits — agent claimed user-facing but wrote nothing.
@@ -183,7 +183,7 @@ def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
     out = DocumentStage().run(t, ctx)
-    assert out.next_state is State.CODE_REVIEW
+    assert out.next_state is State.DELIVERABLE
     assert len(agent_called) == 0  # agent not called at all
 
 
@@ -214,7 +214,7 @@ def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
     out = DocumentStage().run(t, ctx)
-    assert out.next_state is State.CODE_REVIEW  # not BLOCKED
+    assert out.next_state is State.DELIVERABLE  # not BLOCKED
     assert "doc agent failed (non-blocking)" in out.note
 
 
@@ -258,7 +258,7 @@ def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
     )
 
     out = DocumentStage().run(t, ctx)
-    assert out.next_state is State.CODE_REVIEW  # not BLOCKED
+    assert out.next_state is State.DELIVERABLE  # not BLOCKED
     assert out.note == "updated README"
 
 

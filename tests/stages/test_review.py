@@ -69,7 +69,7 @@ def _ticket(ctx, body="Add feature.txt"):
     _git(repo_dir, "add", "-A")
     _git(repo_dir, "commit", "-q", "-m", "implement feature")
     ctx.service.set_branch(t.id, f"mill/{t.id}")
-    ctx.service.transition(t.id, State.DOCUMENTING)
+    # Pipeline flip: READY -> CODE_REVIEW directly (DOCUMENTING is now downstream).
     ctx.service.transition(t.id, State.CODE_REVIEW)
     return ctx.service.get(t.id)
 
@@ -89,7 +89,7 @@ def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
     )
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
     assert "approved" in out.note
 
 
@@ -207,7 +207,7 @@ def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
     )
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
     assert len(agent_called) == 0  # agent not called at all
 
 
@@ -217,7 +217,7 @@ def test_missing_repo_blocks(ctx_factory):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = ctx.service.create("No clone")
     ctx.service.transition(t.id, State.READY)
-    ctx.service.transition(t.id, State.DOCUMENTING)
+    # Pipeline flip: READY -> CODE_REVIEW directly.
     ctx.service.transition(t.id, State.CODE_REVIEW)
     t = ctx.service.get(t.id)
 
@@ -341,7 +341,7 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
     )
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
     assert "exhausted" in out.note
 
     # Counter reset to 0
@@ -371,7 +371,7 @@ def test_approve_resets_counter(ctx_factory, monkeypatch):
     )
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.DELIVERABLE
+    assert out.next_state is State.DOCUMENTING
     assert "approved" in out.note
 
     t2 = ctx.service.get(t.id)

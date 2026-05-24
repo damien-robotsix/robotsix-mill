@@ -190,8 +190,17 @@ def test_ready_to_documenting():
     assert can_transition(State.READY, State.DOCUMENTING) is True
 
 
-def test_documenting_to_code_review():
-    assert can_transition(State.DOCUMENTING, State.CODE_REVIEW) is True
+def test_documenting_not_to_code_review():
+    """Pipeline flip: doc no longer routes back into review."""
+    assert can_transition(State.DOCUMENTING, State.CODE_REVIEW) is False
+
+
+def test_ready_to_code_review():
+    assert can_transition(State.READY, State.CODE_REVIEW) is True
+
+
+def test_code_review_to_documenting():
+    assert can_transition(State.CODE_REVIEW, State.DOCUMENTING) is True
 
 
 def test_documenting_to_deliverable():
@@ -202,8 +211,10 @@ def test_stage_for_state_documenting():
     assert STAGE_FOR_STATE[State.DOCUMENTING] == "document"
 
 
-def test_code_review_to_deliverable():
-    assert can_transition(State.CODE_REVIEW, State.DELIVERABLE) is True
+def test_code_review_not_to_deliverable():
+    """Pipeline flip: review now routes to documenting (then deliverable),
+    not directly to deliverable."""
+    assert can_transition(State.CODE_REVIEW, State.DELIVERABLE) is False
 
 
 def test_code_review_to_ready():
