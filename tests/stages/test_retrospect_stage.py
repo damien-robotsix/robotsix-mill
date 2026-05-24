@@ -95,7 +95,6 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
     from robotsix_mill import langfuse_client
     from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -125,7 +124,7 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -155,7 +154,6 @@ def test_langfuse_none_workflow_only_still_succeeds(ctx_factory, monkeypatch):
     transitions to CLOSED and the artifact notes 'workflow-only'."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -181,7 +179,7 @@ def test_langfuse_none_workflow_only_still_succeeds(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -206,7 +204,6 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
     with a resumable note and no retrospect.md artifact."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -232,7 +229,7 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -261,7 +258,6 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
     from robotsix_mill import langfuse_client
     from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory(MILL_RETROSPECT_SPAWN_DRAFTS="false")
@@ -294,7 +290,7 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -324,7 +320,6 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
     from robotsix_mill import langfuse_client
     from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -357,7 +352,7 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -390,7 +385,6 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
     from robotsix_mill import langfuse_client
     from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -423,7 +417,7 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -450,7 +444,6 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
     from robotsix_mill import langfuse_client
     from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -482,7 +475,7 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -513,7 +506,6 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
     from robotsix_mill import langfuse_client
     from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -554,7 +546,7 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -581,7 +573,6 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
     from robotsix_mill import langfuse_client
     from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -616,7 +607,7 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -642,7 +633,6 @@ def test_deep_analysis_below_frequency_no_api_call(ctx_factory, monkeypatch):
     _langfuse_api_get is NOT called."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -676,7 +666,7 @@ def test_deep_analysis_below_frequency_no_api_call(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: write_calls.append(value),
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -705,7 +695,6 @@ def test_deep_analysis_at_frequency_triggers_api_call(ctx_factory, monkeypatch):
     to 0, and _langfuse_api_get is called."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -738,7 +727,7 @@ def test_deep_analysis_at_frequency_triggers_api_call(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: write_calls.append(value),
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -766,7 +755,6 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     """Agent's updated_memory is written to the retrospect_memory_file."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -794,7 +782,7 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
@@ -819,7 +807,7 @@ def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
     evidence lists 2), the stage still transitions to CLOSED."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill.core import workspace as workspace_module
+    from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
@@ -851,9 +839,8 @@ def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
         "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
-        workspace_module, "prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
-    from robotsix_mill import pass_runner
     monkeypatch.setattr(
         pass_runner, "_verify_prior_proposals",
         lambda service, settings, source_label: {},
