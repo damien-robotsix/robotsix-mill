@@ -13,6 +13,7 @@ authors = [{ name = "Damien Robotsix" }]
 dependencies = [
     "pydantic-ai-slim[openrouter,openai]>=1.0",
     "pydantic-settings>=2",
+    "pyyaml>=6",
     "sqlmodel>=0.0.22",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
