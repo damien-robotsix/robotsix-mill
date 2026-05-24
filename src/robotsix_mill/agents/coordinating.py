@@ -216,7 +216,7 @@ def run_coordinator(
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
-    from .base import build_agent, _safe_close, compose_prompt
+    from .base import build_agent, _safe_close
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import call_with_retry
@@ -243,21 +243,18 @@ def run_coordinator(
     ]
 
     # Build synthetic message_history on first pass (no feedback set).
+    # NOTE: do NOT inject a TextPart-wrapped system prompt as the first
+    # message — TextPart is only valid in ModelResponse.parts. Placing
+    # it in a ModelRequest triggers pydantic-ai's "Expected code to be
+    # unreachable" assertion and aborts the entire implement run. The
+    # system prompt is already added by build_agent below; the synthetic
+    # history starts directly with the preloaded read_file ToolCall /
+    # ToolReturn pairs, which pydantic-ai accepts.
     if reference_files and message_history is None and feedback is None:
-        tool_names = {t.__name__ for t in fs_tools}
-        tool_names.add("explore")
-        tool_names.add("report_issue")
-        tool_names.add("web_research")
-        composed_system = compose_prompt(
-            settings, _SYSTEM_PROMPT, tool_names=tool_names
-        )
-
         from pydantic_ai.messages import (
-            ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart,
+            ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
         )
-        synthetic: list = [
-            ModelRequest(parts=[TextPart(content=composed_system)]),
-        ]
+        synthetic: list = []
         for rf in reference_files:
             tc_id = f"preload_{rf['path']}"
             synthetic.append(ModelResponse(parts=[
