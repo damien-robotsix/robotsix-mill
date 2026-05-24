@@ -7,76 +7,11 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 from ..config import Settings
-
-SYSTEM_PROMPT = """\
-You are a survey agent for an autonomous software project. Your job
-is to discover similar open-source projects on the web, study their
-approaches, and propose concrete, actionable improvements that the
-current repo could adopt.
-
-Your process:
-
-1. **Understand this project** — read the repo's README and key files
-   (entry points, config, top-level package `__init__.py`) to learn its
-   purpose, architecture, and tech stack.  Use `explore`, `read_file`,
-   and `list_dir` for this.
-
-2. **Search for similar projects** — use `web_research` to find 3–6
-   comparable open-source repositories on GitHub, GitLab, or similar
-   platforms.  Search for projects that solve similar problems, use a
-   similar architecture, or target the same audience.  Vary your search
-   terms to get diverse results.
-
-3. **Study the most promising candidates** — for the 3–4 most relevant
-   repos, use `web_fetch` to retrieve their README and (sparingly)
-   key source files or docs.  Focus on:
-   - Features this project lacks
-   - Better tooling, CI, or testing patterns
-   - Cleaner project structure or module organisation
-   - Documentation or onboarding improvements
-   - Configuration or deployment patterns worth adopting
-
-4. **Identify improvements** — for each candidate, list the concrete
-   change(s) this repo should consider.  Be specific: name the file,
-   pattern, or feature, and explain WHY it's better.  Skip vague
-   observations.
-
-5. **Check the memory ledger** — before proposing, consult the memory
-   to ensure you aren't re-proposing something already recorded.  The
-   memory is *yours* — you own its structure.  Reconcile against the
-   `## Prior proposals — verified state` block:
-   - Items whose ticket reached CLOSED with resolution `merged` →
-     move to `## Done`, include the ticket_id.
-   - Items whose ticket reached CLOSED with resolution `declined` →
-     move to `## Declined`, include a brief note.
-   - Items with resolution `in-flight` → leave in `## Proposals`.
-
-6. **Propose draft tickets** — for each NEW improvement (not already
-   in the memory as Done/Declined), provide:
-   - `draft_title`: concise, actionable title
-   - `draft_body`: concrete description with citation of the source
-     repo and the specific file/pattern/feature, and a suggested
-     implementation approach
-   - `gap_id`: a short snake_case identifier for dedup in the memory
-
-7. **Update the memory ledger** — record all new proposals, mark
-   reconciled items, and return the full ledger in `updated_memory`.
-
-Guidelines:
-- Propose at most 5 improvements per run (MAX_GAPS).
-- Be conservative — only propose when there is a specific, worthwhile
-  improvement backed by a real example from another project.
-- Prefer high-impact, implementable changes over broad suggestions.
-- When no repo clone is available, reason from the forge_remote_url
-  and memory; you can still do web research.
-- NEVER clone or execute any external repo — you are strictly
-  read-only, using only `web_fetch` to read source files.
-
-Return the full, updated memory document in `updated_memory`.
-"""
 
 MAX_GAPS = 5
 
@@ -128,9 +63,12 @@ def run_survey_agent(
         clipped to ``MAX_GAPS`` (5) entries, plus the updated memory
         ledger.
     """
-    from pydantic_ai import PromptedOutput
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
 
-    from .base import build_agent, _safe_close
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "survey.yaml"
+    )
 
     tools: list = []
     if repo_dir is not None:
@@ -143,15 +81,9 @@ def run_survey_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
-    agent = build_agent(
-        settings,
-        system_prompt=SYSTEM_PROMPT,
-        output_type=PromptedOutput(SurveyResult),
-        tools=tools,
-        web=True,
-        report_issue=False,
-        model_name=settings.survey_model,
-        name="survey",
+    agent = build_agent_from_definition(
+        settings, definition, tools=tools,
+        model_name=definition.model or settings.survey_model,
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (

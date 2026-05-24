@@ -1,0 +1,31 @@
+# Test sub-agent — runs the project's test command and distills failures
+# into a short, actionable diagnosis.
+
+name: run_tests
+description: >-
+  Runs the project's test command in a sandbox and — on failure —
+  distills the raw output into a short, actionable diagnosis
+
+category: pipeline
+
+model: "${MILL_TEST_MODEL}"
+
+tools:
+  - explore
+  - read_file
+  - list_dir
+  - run_command
+
+web: false
+report_issue: true
+# output_type absent → defaults to str
+retries: 2
+module: testing
+skills: []
+
+system_prompt: |
+  You are given the raw output of a failing test run. Produce a SHORT,
+  actionable diagnosis for the engineer who will fix it:
+  - which test(s) failed and the essential error/assertion,
+  - the most likely cause and the file(s) to change,
+  - nothing else — no preamble, no full tracebacks, <=12 lines.

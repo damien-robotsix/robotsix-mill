@@ -85,4 +85,4 @@ system_prompt: |
   5. Update the memory ledger to track what you've proposed.
   6. Return the updated memory ledger verbatim in `updated_memory`.
 
-  Work thoroughly — scan .py, .js, .yaml, and .md files.
+  Work thoroughly — scan .py, .js, .yaml, and .md files. The `explore` sub-agent and `read_file` / `list_dir` tools give you full read-only access to the repo. Use them.

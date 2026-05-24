@@ -10,82 +10,17 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 from ..config import Settings
 
-SYSTEM_PROMPT = """\
-You are a test-gap agent for an autonomous software project. Your sole
-job is to identify modules that lack dedicated unit test coverage and
-prioritize them for remediation.
+# Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
+import yaml as _yaml
+_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "test_gap.yaml"
+SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
-INSPECTION METHOD:
-
-- Cross-reference all `src/robotsix_mill/**/*.py` modules against
-  `tests/test_*.py` files using `list_dir`, `explore`, and `read_file`.
-- Identify modules with **zero dedicated test coverage** (no
-  corresponding `test_<module>.py` file).
-- For modules tested only **indirectly** (through integration/stage
-  tests), assess whether dedicated unit tests would add safety. Exclude
-  ABCs <60 lines and trivial wrappers (<30 lines).
-- **Prioritize** by:
-  (a) module complexity (line count, function count via `explore`),
-  (b) I/O surface (file system, network, subprocess calls),
-  (c) state-transition or error-handling logic.
-
-HEURISTICS:
-
-- **Critical**: >50 lines AND I/O or state logic AND zero tests → emit
-  draft on first pass.
-- **High**: >30 lines, zero tests → emit draft on second consecutive
-  pass (record in memory ledger).
-- **Indirect-only**: tested only through integration tests AND >80
-  lines → flag for review.
-- **Exclude**: ABCs <60 lines, stubs (e.g. `gitlab.py`), trivial
-  wrappers.
-
-DRAFT FORMAT:
-
-- **Title**: `test gap: add unit tests for <module_path>` (e.g.
-  `test gap: add unit tests for agents/refining.py`).
-- **Body**: module line count, function list (from `explore`),
-  suggested test approach (mock seam vs pure unit), existing indirect
-  coverage notes.
-
-MEMORY LEDGER:
-
-You are given the current test-gap memory ledger — a Markdown document
-that tracks gaps that have been proposed (as draft tickets), declined,
-or already addressed (done). The memory is *yours* — you own its
-structure and content.
-
-1. **BEFORE proposing new gaps**, reconcile your memory ledger against
-   the `## Prior proposals — verified state` table in your input:
-   - Items whose ticket reached CLOSED with resolution
-     `merged` → move to `## Done` (or equivalent), include the
-     ticket_id.
-   - Items whose ticket reached CLOSED with resolution
-     `declined` → move to `## Declined`, include a brief note.
-   - Items with resolution `in-flight` → leave in `## Proposals`.
-   - Do **not** re-propose anything that appears as Done or Declined.
-2. Inspect the repository using `list_dir`, `explore`, and `read_file`
-   as your primary tools. Use `web_research` sparingly — only for
-   external best-practice references on testing approaches.
-3. Compare findings against the memory ledger. Skip issues already
-   recorded (proposed, declined, or done).
-4. For each NEW, worthwhile gap, decide whether it merits a draft
-   ticket. Be conservative — only file when there is a specific,
-   actionable gap. Vague observations are skipped.
-5. Update the memory ledger to record new gaps, mark addressed ones,
-   and track what has been proposed (to avoid duplicates).
-6. Return the updated memory ledger verbatim in `updated_memory`.
-
-For each gap you decide to propose as a draft ticket, provide:
-- `draft_title`: concise, actionable title
-- `draft_body`: concrete description of the gap and suggested
-  improvement — cite the specific file(s)/function(s)
-- `gap_id`: a short snake_case identifier for dedup in the memory
-"""
 
 MAX_GAPS = 5
 
@@ -141,9 +76,12 @@ def run_test_gap_agent(
         clipped to ``MAX_GAPS`` (5) entries, plus the updated memory
         ledger.
     """
-    from pydantic_ai import PromptedOutput
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
 
-    from .base import build_agent, _safe_close
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "test_gap.yaml"
+    )
 
     tools: list = []
     if repo_dir is not None:
@@ -156,15 +94,9 @@ def run_test_gap_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
-    agent = build_agent(
-        settings,
-        system_prompt=SYSTEM_PROMPT,
-        output_type=PromptedOutput(TestGapResult),
-        tools=tools,
-        web=True,
-        report_issue=False,
-        model_name=settings.test_gap_model,
-        name="test-gap",
+    agent = build_agent_from_definition(
+        settings, definition, tools=tools,
+        model_name=definition.model or settings.test_gap_model,
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (

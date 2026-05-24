@@ -49,64 +49,24 @@ def run_rebase_agent(
     if not settings.openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    from pydantic_ai import PromptedOutput
-
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .fs_tools import build_fs_tools
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "rebase.yaml"
+    )
 
     # Build tools confined to the ticket's own clone.
     tools = build_fs_tools(Path(repo_dir), settings)
 
-    system_prompt = f"""You are a rebase specialist. Your ONLY job:
+    system_prompt = definition.system_prompt.format(
+        repo_dir=repo_dir, target=target, branch=branch,
+    )
 
-1. Run:  git rebase origin/{target}
-2. If the rebase applies cleanly, report DONE with a brief summary.
-3. If there are conflicts:
-   - Use read_file to inspect EVERY conflicted file (git will list them).
-   - Edit each conflicted file IN PLACE with write_file to resolve the
-     conflicts.  Keep the PR's intent — preserve its changes while
-     incorporating the target branch's updates.  Do NOT pull in
-     unrelated edits from the target branch.
-   - After resolving all files, run:  git add <resolved files...>
-   - Then run:  git rebase --continue
-   - If more conflicts appear, repeat step 3.
-   - If git asks you to edit a commit message during --continue, just
-     accept the existing message (do NOT change it).
-
-IMPORTANT RULES:
-- NEVER run `git rebase --abort` or `git rebase --skip`.
-- NEVER push, fetch other remotes, or touch any branch other than the
-  current ticket branch ({branch}).
-- NEVER change the PR's intent — only merge conflict markers.
-- If the rebase cannot be resolved (e.g. unresolvable conflict,
-  unexpected git state), report FAILED with a short reason.
-
-## Memory
-
-You are given a `<memory>` block containing a Markdown ledger of
-observations from your past rebase runs. It records:
-- Common conflict types in this repo
-- File-specific merge strategies
-- Known brittle areas that frequently conflict
-
-Reference the memory to avoid re-discovering known patterns. After
-the rebase, update the memory in your `updated_memory` field:
-- Record any new conflict pattern and its resolution strategy
-- Note brittle files that frequently conflict
-- Record successful merge strategies for specific file types
-- Keep entries concise and ticket-ID-qualified
-- If nothing new was learned, return the incoming memory unchanged
-
-After the rebase completes (or you determine it cannot), set status to
-DONE or FAILED and provide a brief summary."""
-
-    agent = build_agent(
-        settings,
+    agent = build_agent_from_definition(
+        settings, definition, tools=tools,
         system_prompt=system_prompt,
-        output_type=PromptedOutput(RebaseResult),
-        tools=tools,
-        web=False,
-        name="rebase",
     )
 
     user_prompt = (

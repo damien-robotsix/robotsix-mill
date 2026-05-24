@@ -8,6 +8,8 @@ tests for the happy path, tools, or ValidationResult.decide.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic_ai import PromptedOutput
 from pydantic_ai.messages import (
@@ -19,7 +21,6 @@ from pydantic_ai.messages import (
 from pydantic_ai.usage import UsageLimits
 
 from robotsix_mill.agents.coordinating import (
-    _SYSTEM_PROMPT,
     ImplementResult,
     run_coordinator,
 )
@@ -413,7 +414,13 @@ class TestRunCoordinator:
         assert self.captured["name"] == "implement"
         assert isinstance(self.captured["output_type"], PromptedOutput)
         assert self.captured["output_type"].outputs is ImplementResult
-        assert self.captured["system_prompt"] == _SYSTEM_PROMPT
+
+        from robotsix_mill.agents.yaml_loader import load_agent_definition
+
+        definition = load_agent_definition(
+            Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
+        )
+        assert self.captured["system_prompt"] == definition.system_prompt
 
     # -- usage_limits ----------------------------------------------------
 

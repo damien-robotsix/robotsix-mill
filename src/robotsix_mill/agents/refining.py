@@ -21,6 +21,11 @@ from pydantic import BaseModel, model_validator
 
 from ..config import Settings
 
+# Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
+import yaml as _yaml
+_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
+SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
+
 
 class TriageResult(BaseModel):
     """Triage agent output — a single cheap classification call."""
@@ -132,40 +137,17 @@ def triage_refine(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .retry import call_with_retry
 
-    TRIAGE_PROMPT = """\
-You are a cost-saving triage classifier.  Your ONLY job: decide
-whether a ticket draft needs a full refine pass.
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "triage.yaml"
+    )
 
-A draft that is ALREADY precise, single-scoped, implementation-ready,
-and grounded should be SKIPped.  Examples:
-- Documentation-only changes (README, docstrings, MkDocs config).
-- Config-only changes (new env var, feature flag, field rename).
-- Tiny, obvious code changes where the draft lists exact file paths,
-  line numbers, and acceptance criteria.
-- Pure mechanical changes (rename, move files, add a one-line call).
-
-A draft that needs REFINEment has ANY of:
-- Ambiguous scope or multiple independent changes bundled together.
-- Missing acceptance criteria or no concrete file paths.
-- The agent would need to explore the codebase to ground the spec.
-- Any non-trivial code change where the draft is not already a spec.
-
-Be CONSERVATIVE: if you are unsure, say REFINE.
-A wrong SKIP (under-refining a real change) is the only real risk.
-A wrong REFINE is just status-quo cost — harmless.
-"""
-    agent = build_agent(
-        settings,
-        system_prompt=TRIAGE_PROMPT,
-        output_type=PromptedOutput(TriageResult),
-        tools=[],  # NO tools — classification only
-        web=False,  # NO web research
-        report_issue=False,
-        model_name=settings.triage_model,
-        name="triage",
+    agent = build_agent_from_definition(
+        settings, definition, tools=[],
+        model_name=definition.model or settings.triage_model,
     )
 
     user_prompt = f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
@@ -200,55 +182,17 @@ def triage_auto_approve(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .retry import call_with_retry
 
-    AUTO_APPROVE_PROMPT = """\
-You are a design-decision triage classifier.  Your ONLY job: inspect a
-refined engineering spec and decide whether it contains a genuine
-design or architecture decision that a human should review.
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "auto-approve.yaml"
+    )
 
-Return APPROVE when ALL of these hold:
-- The spec is precise and unambiguous — the implementer would not have
-  to guess at intent, scope, or approach.
-- No genuine design/architecture decisions are present: no new
-  abstractions, no new module boundaries, no API contract changes, no
-  DB schema changes, no new dependencies, no public-interface changes.
-- The change is not security-sensitive, destructive, or irreversible
-  (no auth, no secrets, no data deletion, no sandbox/isolation changes).
-- No product/UX behaviour a stakeholder would want to weigh in on.
-- The spec is consistent with existing design — doesn't conflict with
-  or redirect it.
-- Not a high-blast-radius change where several reasonable approaches
-  exist and the choice matters.
-
-The above criteria apply REGARDLESS of how many files are touched,
-whether logic changes, or whether the change is a bug fix or refactor.
-
-Return NEEDS_APPROVAL when ANY design-decision signal is present:
-- Ambiguous scope, unclear acceptance criteria, or the implementer
-  would have to guess.
-- A new abstraction, module boundary, API contract, DB schema,
-  dependency, or public interface is introduced or changed.
-- Security-sensitive, destructive, or irreversible operations.
-- Product/UX behaviour changes a stakeholder would want to review.
-- A conflict with or redirection of existing design.
-- A high-blast-radius choice where approach matters.
-
-TIE-BREAKER: when unsure whether a genuine design decision exists,
-return NEEDS_APPROVAL.  The only real risk is a wrong APPROVE
-(auto-approving a design decision).  A wrong NEEDS_APPROVAL just adds
-a human click — harmless.
-"""
-    agent = build_agent(
-        settings,
-        system_prompt=AUTO_APPROVE_PROMPT,
-        output_type=PromptedOutput(AutoApproveResult),
-        tools=[],          # NO tools — classification only
-        web=False,         # NO web research
-        report_issue=False,
-        model_name=settings.auto_approve_model,
-        name="auto-approve",
+    agent = build_agent_from_definition(
+        settings, definition, tools=[],
+        model_name=definition.model or settings.auto_approve_model,
     )
 
     user_prompt = f"<spec>\n{spec}\n</spec>"
@@ -280,62 +224,17 @@ def review_spec_for_conciseness(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .retry import call_with_retry
 
-    SPEC_REVIEW_PROMPT = """\
-You are a spec editor.  Your ONLY job: take a verbose engineering spec
-and produce a clean, concise version by stripping exploratory narrative
-while preserving all technical content exactly.
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "spec-review.yaml"
+    )
 
-RULES:
-1. PRESERVE these four sections (and their exact headings) if present:
-   - ## Problem
-   - ## Scope
-   - ## Acceptance criteria
-   - ## Out of scope
-   (Headings may include trailing text like "## Out of scope / constraints".)
-
-2. STRIP all of the following:
-   - Exploratory narrative: "I found", "I checked", "Let me look at",
-     "Looking at", "I searched", "I inspected", "I read", "I opened".
-   - File-reading summaries: "The file at ...", "Reading ...", "In
-     src/foo/bar.py we see ...", "The class has methods ...", any
-     narration about what the agent looked at.
-   - Command-run notes: "running command", "the output shows", "I ran",
-     "pytest returned".
-   - Dead-end investigations: "This didn't work because",
-     "I considered but", "I originally thought".
-   - Reasoning chains and decision rationales: "Given that ...",
-     "Since the codebase uses ...", "The pattern here suggests ...".
-   - Any content that is NOT inside one of the four canonical sections.
-   - Trailing "---" separators, "## Notes", "## Investigation", or
-     similar non-canonical sections.
-
-3. DO NOT alter or rephrase:
-   - Acceptance criteria items (bullet points, numbered lists).
-   - Technical requirements, file paths listed under ## Scope.
-   - Problem statement text.
-   - Out-of-scope constraints.
-   - Code snippets or inline references.
-
-4. The output MUST contain ONLY the four canonical sections (those
-   present in the input).  If a section is missing from the input,
-   do NOT invent one.  Remove everything else.
-
-Return the cleaned spec in `concise_spec` and a one-line summary of
-what was removed in `stripped_summary` (e.g. "Stripped 12 lines of
-exploratory narrative and 3 dead-end sections").
-"""
-    agent = build_agent(
-        settings,
-        system_prompt=SPEC_REVIEW_PROMPT,
-        output_type=PromptedOutput(SpecReviewResult),
-        tools=[],          # NO tools — transformation only
-        web=False,         # NO web research
-        report_issue=False,
-        model_name=settings.triage_model,
-        name="spec-review",
+    agent = build_agent_from_definition(
+        settings, definition, tools=[],
+        model_name=definition.model or settings.triage_model,
     )
 
     user_prompt = f"<spec>\n{spec_markdown}\n</spec>"
@@ -350,114 +249,6 @@ exploratory narrative and 3 dead-end sections").
         _safe_close(agent)
     return result.output
 
-
-SYSTEM_PROMPT = """\
-You turn a rough ticket draft into a precise, self-contained
-engineering spec an autonomous coder can implement without asking
-questions.
-
-- Ground the spec in the ACTUAL codebase — real file paths, existing
-  patterns/conventions, and constraints. Do NOT web-fetch the
-  project's own files.
-- When a traceback is truncated or you need to inspect runtime
-  behaviour (e.g. `pytest tests/test_foo.py -x --tb=long`,
-  `python -c "import module; …"`, linters), re-run with
-  `run_command`. The sandbox is read-only; you cannot mutate the repo.
-- Never guess line numbers or byte offsets. When you need a specific
-  location in a file, ask `explore` to find it by symbol name first
-  (e.g. "what line is function X defined at in path/to/file.py?").
-  Only then use `read_file` with the confirmed offset. Guessing
-  wastes calls and adds latency with zero upside.
-- When the ticket has ``artifacts/evidence.txt``, incorporate its
-  contents (e.g. the exact failing command, stdout/stderr, traceback)
-  into the refined spec so the implement agent has the raw evidence
-  to cross-check.
-- Use `web_research` ONLY for things not in the repo (a
-  library/API/standard/best practice). Skip it when unneeded.
-- The <draft> section may be empty (the user may have only provided a
-  title). In that case, derive the spec from the title's intent alone.
-- Stay faithful to the draft's intent; invent nothing unrelated. Be
-  concrete and testable.
-
-## Memory
-
-You are given a `<memory>` block containing a Markdown ledger of
-observations from your past refine runs. It records:
-- Recurring reviewer feedback patterns (e.g. "acceptance criteria
-  must be testable")
-- Split-vs-bundle heuristics for this codebase
-- Repo-specific conventions discovered during past refinements
-
-Reference the memory when deciding how to structure the spec. After
-refining, update the memory in your `updated_memory` field:
-- Record any new reviewer feedback themes you observed
-- Note split/bundle decisions and their rationale
-- Record repo-specific conventions you discovered
-- Keep entries concise and ticket-ID-qualified
-- If nothing new was learned, return the incoming memory unchanged
-
-## Output format
-
-You MUST return a structured result. When the draft describes ONE
-focused change:
-
-- split=false, spec_markdown="## Problem\\n...\\n## Scope\\n...\\n## Acceptance criteria\\n...\\n## Out of scope / constraints\\n..."
-
-When the draft bundles MULTIPLE independent, self-contained changes
-that can each ship alone, split into focused children:
-
-- split=true, children=[{"title": "Short title for change A", "spec_markdown": "## Problem\\n...", "depends_on": []}, ...]
-
-Rules for splitting:
-- **Split by spec surface, not by user framing.** A draft that sounds
-  like "one feature" may still touch many independent layers.
-  Default to splitting when the spec body exhibits any of these
-  signals:
-  * Lists **≥4 distinct source files** to modify, OR
-  * Introduces **≥3 new endpoints / routes**, OR
-  * Crosses the **backend↔frontend boundary** (e.g. Python files +
-    JS/CSS/HTML files in the same spec).
-  When splitting, build a ``depends_on`` graph across the focused
-  children.
-- **Escape clause:** do NOT split when the layers truly cannot ship
-  independently — e.g. a single new column is read by every consumer
-  and there is nothing useful to land in stages. In that case, note
-  the inseparability reason in the single spec.
-- **Borderline drafts stay as one spec.** A draft with one new
-  endpoint touching two files in the same layer (e.g. model + route
-  in the same backend) is NOT split. Over-splitting is as bad as
-  over-bundling.
-- Each child's ``spec_markdown`` must be a complete, self-contained
-  spec with ## Problem, ## Scope, ## Acceptance criteria, and
-  ## Out of scope / constraints sections.
-- ``depends_on`` is a list of zero-based indices of earlier children
-  in the same split that must be completed first.  Use only when
-  child B genuinely builds on child A (e.g. a helper added then used).
-  Sequential work that could be parallelised should have empty
-  ``depends_on``.
-- The union of all children's scope must faithfully cover the entire
-  original draft — nothing dropped, nothing added.
-
-- When the draft title is vague, misleading, or just plain wrong for
-  the refined scope, set ``title`` to a concise, descriptive
-  alternative. Leave it unset (None) when the original title is
-  already accurate — don't rename just for the sake of renaming.
-
-- When the user prompt contains ``<epic_context>``, also produce an
-  ``epic_body`` field: a revised epic description that integrates the
-  original epic goal with the concrete child spec you just produced,
-  explaining the global strategy in a way that stays useful as
-  subsequent children are refined. Keep the epic body concise and
-  strategic (not a rehash of the child spec).
-- Always produce a ``file_map``: a short list of the source files
-  most relevant to this ticket, each with a one-line note on its
-  role.  Format:
-  ``file_map=[{"file": "path/to/file.py", "note": "reason this file matters"}, ...]``.
-  Keep it to ≤ 20 files.  Only include files you actually explored
-  or read — do not guess.  If no files are relevant (e.g. a pure
-  configuration change with no codebase exploration needed), return
-  ``file_map=[]``.
-"""
 
 REVIEWER_SENDBACK_PROMPT = """\
 You are revising an existing spec per reviewer feedback. The spec
@@ -547,8 +338,13 @@ def run_refine_agent(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent, _safe_close
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
     from .retry import call_with_retry
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
+    )
 
     tools: list = []
     if repo_dir is not None:
@@ -561,14 +357,15 @@ def run_refine_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots), *ro]
 
-    agent = build_agent(
-        settings,
-        system_prompt=REVIEWER_SENDBACK_PROMPT if reviewer_comments else SYSTEM_PROMPT,
-        output_type=PromptedOutput(RefineResult),
-        tools=tools,
-        web=True,  # cheap web_research sub-agent (external lookups only)
-        model_name=settings.refine_model,
-        name="refine",
+    overrides = {}
+    if reviewer_comments:
+        overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
+    if not definition.model:
+        overrides["model_name"] = settings.refine_model
+
+    agent = build_agent_from_definition(
+        settings, definition, tools=tools,
+        **overrides,
     )
 
     # Build user prompt: title, draft, memory, and optionally reviewer feedback.
