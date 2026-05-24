@@ -205,7 +205,18 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 
 ---
 
-## 17. Dedup guard
+## 17. Env-sync agent
+
+| Env var | Python field | Default | Type | Description |
+|---|---|---|---|---|
+| `MILL_ENV_SYNC_MODEL` | `env_sync_model` | `openai/gpt-4o-mini` | `str` | Env-sync agent model (see §1) |
+| `MILL_ENV_SYNC_PERIODIC` | `env_sync_periodic` | `false` | `bool` | Enable periodic config/docs drift detection passes |
+| `MILL_ENV_SYNC_INTERVAL_SECONDS` | `env_sync_interval_seconds` | `86400` | `int` | Seconds between automatic env-sync passes |
+| `MILL_ENV_SYNC_MEMORY_PATH` | `env_sync_memory_path` | `None` | `Path \| None` | Override path for env-sync memory ledger; defaults to `<data_dir>/env_sync_memory.md` |
+
+---
+
+## 18. Dedup guard
 
 | Env var | Python field | Default | Type | Description |
 |---|---|---|---|---|
@@ -216,7 +227,7 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 
 ---
 
-## 18. Memory paths
+## 19. Memory paths
 
 | Env var | Python field | Default | Type | Description |
 |---|---|---|---|---|
@@ -228,7 +239,7 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 
 ---
 
-## 19. Delivery
+## 20. Delivery
 
 | Env var | Python field | Default | Type | Description |
 |---|---|---|---|---|
@@ -238,7 +249,7 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 
 ---
 
-## 20. CI monitor
+## 21. CI monitor
 
 | Env var | Python field | Default | Type | Description |
 |---|---|---|---|---|
@@ -248,7 +259,7 @@ production-ready defaults, `secrets.env.example` is the template for credentials
 
 ---
 
-## 21. Skills
+## 22. Skills
 
 | Env var | Python field | Default | Type | Description |
 |---|---|---|---|---|

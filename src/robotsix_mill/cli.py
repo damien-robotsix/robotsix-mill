@@ -231,6 +231,16 @@ def main(argv: list[str] | None = None) -> int:
         help="output full JSON result (default: summary)",
     )
 
+    # --- env-sync command ---
+    p_env_sync = sub.add_parser(
+        "env-sync", help="run an env-sync config/docs drift detection pass"
+    )
+    p_env_sync.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
     # --- bc-check command ---
     p_bc_check = sub.add_parser(
         "bc-check", help="run a backward-compatibility inspection pass"
