@@ -72,6 +72,11 @@ def test_coordinating_prompt_no_tool_signatures():
     # the test→retry→escalate loop. The prompt must say so.
     assert "test suite" in p
     assert "<test_failure>" in p
+    # Scope guardrails: the prompt must forbid scope creep.
+    assert "do not delete" in p
+    assert "do not rename" in p
+    assert "do not remove" in p
+    assert "out of scope" in p
 
 
 def test_health_prompt_no_tool_signatures():

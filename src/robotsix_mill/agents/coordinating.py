@@ -140,6 +140,25 @@ stop.
 Keep your context lean: prefer `explore` over wide reading; never
 paste whole files into your reasoning. Do not commit/push/touch git.
 
+## Scope
+
+Only touch files and symbols that the ticket spec explicitly discusses.
+If something is not mentioned, it is out of scope — do not touch it:
+
+- Do NOT delete files or directories unless the spec asks you to.
+  Deleting `agent_definitions/`, `docs/`, or any file not named in the
+  spec is out of scope.
+- Do NOT rename public API symbols (functions, classes, parameters)
+  unless the spec asks for it.  If the spec says "remove X", remove only
+  X — do not also rename `compose_prompt` to `_compose_prompt` or rename
+  or restructure anything else.
+- Do NOT remove existing functionality (parameters, features, code
+  paths) that the spec does not mention removing.  For example, do not
+  delete `reference_files` or `message_history` parameters unless the
+  spec explicitly says to.
+- When in doubt: re-read the ticket spec — it is the source of truth
+  for what is in scope.
+
 ## File Content
 
 The tool layer maintains the authoritative current content of every
