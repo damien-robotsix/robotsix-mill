@@ -62,6 +62,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Trace-health check",
         "format": "trace_health",
     },
+    "bc-check": {
+        "module": "bc_check_runner",
+        "function": "run_bc_check_pass",
+        "label": "BC-check pass",
+        "format": "memory_drafts",
+    },
 }
 
 
@@ -208,6 +214,16 @@ def main(argv: list[str] | None = None) -> int:
         "test-gap", help="run a test-gap coverage inspection pass"
     )
     p_test_gap.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- bc-check command ---
+    p_bc_check = sub.add_parser(
+        "bc-check", help="run a backward-compatibility inspection pass"
+    )
+    p_bc_check.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
