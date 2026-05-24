@@ -1,0 +1,334 @@
+"""Tests for the YAML agent-definition loader."""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+from robotsix_mill.agents.yaml_loader import (
+    AgentDefinition,
+    _resolve_env_vars,
+    load_agent_definition,
+)
+
+
+# ── helpers ──────────────────────────────────────────────────────────
+
+def _write_yaml(tmp_path: Path, content: str) -> Path:
+    """Write *content* to a temporary YAML file and return its path."""
+    p = tmp_path / "test_agent.yaml"
+    p.write_text(content, encoding="utf-8")
+    return p
+
+
+# ── _resolve_env_vars ────────────────────────────────────────────────
+
+def test_resolve_env_vars_replaces_single_var(monkeypatch):
+    monkeypatch.setenv("MY_MODEL", "anthropic/claude-4")
+    assert _resolve_env_vars("${MY_MODEL}") == "anthropic/claude-4"
+
+
+def test_resolve_env_vars_replaces_multiple_vars(monkeypatch):
+    monkeypatch.setenv("A", "hello")
+    monkeypatch.setenv("B", "world")
+    assert _resolve_env_vars("${A} ${B}") == "hello world"
+
+
+def test_resolve_env_vars_no_var_returns_unchanged():
+    assert _resolve_env_vars("no vars here") == "no vars here"
+
+
+def test_resolve_env_vars_unresolvable_raises_keyerror():
+    with pytest.raises(KeyError, match="UNSET_VAR"):
+        _resolve_env_vars("${UNSET_VAR}")
+
+
+# ── load_agent_definition — valid inputs ─────────────────────────────
+
+def test_valid_all_fields(tmp_path):
+    """All fields populated → correct AgentDefinition."""
+    p = _write_yaml(tmp_path, """\
+name: test-agent
+description: A test agent.
+category: pipeline
+model: test/model-v1
+system_prompt: You are a test agent.
+tools:
+  - explore
+  - read_file
+web: true
+report_issue: false
+output_type: TestResult
+retries: 3
+module: testing
+skills:
+  - foo
+  - bar
+""")
+    ad = load_agent_definition(p)
+    assert ad.name == "test-agent"
+    assert ad.description == "A test agent."
+    assert ad.category == "pipeline"
+    assert ad.model == "test/model-v1"
+    assert ad.system_prompt == "You are a test agent."
+    assert ad.tools == ["explore", "read_file"]
+    assert ad.web is True
+    assert ad.report_issue is False
+    assert ad.output_type == "TestResult"
+    assert ad.retries == 3
+    assert ad.module == "testing"
+    assert ad.skills == ["foo", "bar"]
+
+
+def test_minimal_valid_yaml(tmp_path):
+    """Only required fields → defaults applied for optionals."""
+    p = _write_yaml(tmp_path, """\
+name: minimal
+model: gpt-4
+system_prompt: Do one thing well.
+""")
+    ad = load_agent_definition(p)
+    assert ad.name == "minimal"
+    assert ad.model == "gpt-4"
+    assert ad.system_prompt == "Do one thing well."
+    assert ad.description is None
+    assert ad.category is None
+    assert ad.tools == []
+    assert ad.web is False
+    assert ad.report_issue is True
+    assert ad.output_type is None
+    assert ad.retries == 2
+    assert ad.module is None
+    assert ad.skills == []
+
+
+def test_env_var_substitution_in_model(tmp_path, monkeypatch):
+    """${VAR} in model field is resolved from environment."""
+    monkeypatch.setenv("MILL_TEST_MODEL", "anthropic/claude-sonnet")
+    p = _write_yaml(tmp_path, """\
+name: env-agent
+model: ${MILL_TEST_MODEL}
+system_prompt: test
+""")
+    ad = load_agent_definition(p)
+    assert ad.model == "anthropic/claude-sonnet"
+
+
+def test_non_model_fields_preserve_literal_env_var(tmp_path, monkeypatch):
+    """system_prompt containing ${SOMETHING} stays literal."""
+    monkeypatch.setenv("SOMETHING", "resolved")
+    p = _write_yaml(tmp_path, """\
+name: literal
+model: gpt-4
+system_prompt: "Use ${SOMETHING} as a tag."
+""")
+    ad = load_agent_definition(p)
+    assert ad.system_prompt == "Use ${SOMETHING} as a tag."
+
+
+def test_empty_tools_and_skills_get_defaults(tmp_path):
+    """Explicit empty lists → still default []."""
+    p = _write_yaml(tmp_path, """\
+name: empty-lists
+model: gpt-4
+system_prompt: test
+tools: []
+skills: []
+""")
+    ad = load_agent_definition(p)
+    assert ad.tools == []
+    assert ad.skills == []
+
+
+# ── load_agent_definition — error cases ──────────────────────────────
+
+def test_missing_required_name(tmp_path):
+    """Missing 'name' → ValidationError."""
+    p = _write_yaml(tmp_path, """\
+model: gpt-4
+system_prompt: test
+""")
+    with pytest.raises(Exception) as exc_info:  # ValidationError
+        load_agent_definition(p)
+    err_str = str(exc_info.value)
+    assert "name" in err_str.lower() or "Field required" in err_str
+
+
+def test_missing_required_model(tmp_path):
+    """Missing 'model' → ValidationError."""
+    p = _write_yaml(tmp_path, """\
+name: no-model
+system_prompt: test
+""")
+    with pytest.raises(Exception) as exc_info:
+        load_agent_definition(p)
+    err_str = str(exc_info.value)
+    assert "model" in err_str.lower() or "Field required" in err_str
+
+
+def test_missing_required_system_prompt(tmp_path):
+    """Missing 'system_prompt' → ValidationError."""
+    p = _write_yaml(tmp_path, """\
+name: no-prompt
+model: gpt-4
+""")
+    with pytest.raises(Exception) as exc_info:
+        load_agent_definition(p)
+    err_str = str(exc_info.value)
+    assert "system_prompt" in err_str.lower() or "Field required" in err_str
+
+
+def test_wrong_type_web(tmp_path):
+    """web: [1, 2, 3] (list) → ValidationError."""
+    p = _write_yaml(tmp_path, """\
+name: bad-web
+model: gpt-4
+system_prompt: test
+web:
+  - 1
+  - 2
+  - 3
+""")
+    with pytest.raises(Exception) as exc_info:
+        load_agent_definition(p)
+    err_str = str(exc_info.value)
+    assert "web" in err_str.lower() or "bool" in err_str.lower()
+
+
+def test_wrong_type_retries(tmp_path):
+    """retries: 'two' (str) → ValidationError."""
+    p = _write_yaml(tmp_path, """\
+name: bad-retries
+model: gpt-4
+system_prompt: test
+retries: "two"
+""")
+    with pytest.raises(Exception) as exc_info:
+        load_agent_definition(p)
+    err_str = str(exc_info.value)
+    assert "retries" in err_str.lower() or "int" in err_str.lower()
+
+
+def test_malformed_yaml_syntax(tmp_path):
+    """Invalid YAML → yaml.YAMLError."""
+    p = _write_yaml(tmp_path, """\
+name: bad-yaml
+model: gpt-4
+\tsystem_prompt: tab-indented  # tabs are illegal in YAML
+""")
+    with pytest.raises(yaml.YAMLError):
+        load_agent_definition(p)
+
+
+def test_unresolvable_env_var_raises_keyerror(tmp_path):
+    """Unset env var in model → KeyError."""
+    # Ensure the variable is not in the environment.
+    if "UNSET_MODEL_VAR" in os.environ:
+        del os.environ["UNSET_MODEL_VAR"]
+    p = _write_yaml(tmp_path, """\
+name: bad-env
+model: ${UNSET_MODEL_VAR}
+system_prompt: test
+""")
+    with pytest.raises(KeyError, match="UNSET_MODEL_VAR"):
+        load_agent_definition(p)
+
+
+def test_file_not_found():
+    """Non-existent path → FileNotFoundError."""
+    with pytest.raises(FileNotFoundError):
+        load_agent_definition(Path("/nonexistent/agent.yaml"))
+
+
+# ── independence from agent runtime ──────────────────────────────────
+
+def test_loader_independent_of_agent_runtime():
+    """Importing yaml_loader does NOT import build_agent, Settings,
+    pydantic_ai, or any OpenRouter/provider code."""
+    import subprocess
+    import sys
+
+    # Run in a subprocess for clean isolation.
+    code = """
+import sys
+from pathlib import Path
+
+# Add src to path.
+sys.path.insert(0, "src")
+
+from robotsix_mill.agents.yaml_loader import load_agent_definition, AgentDefinition
+
+# The forbidden modules must NOT be in sys.modules after our import.
+forbidden = {
+    "pydantic_ai",
+    "robotsix_mill.agents.base",
+    "robotsix_mill.config",
+}
+loaded = forbidden & set(sys.modules.keys())
+if loaded:
+    sys.exit(f"FORBIDDEN IMPORTS: {loaded}")
+print("OK")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    assert "OK" in result.stdout
+
+
+def test_real_refine_yaml_parses():
+    """Smoke-test: the existing agent_definitions/refine.yaml parses
+    without error (minus env-var resolution, which requires a mock)."""
+    p = Path("agent_definitions/refine.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/refine.yaml not found")
+
+    # Mock the env var so resolution succeeds.
+    import os as _os
+    _os.environ.setdefault("MILL_REFINE_MODEL", "test/model")
+
+    try:
+        ad = load_agent_definition(p)
+        assert ad.name == "refine"
+        assert ad.category == "pipeline"
+        assert ad.web is True
+        assert ad.report_issue is True
+        assert ad.output_type == "RefineResult"
+        assert ad.retries == 2
+        assert ad.module == "refining"
+        assert isinstance(ad.tools, list)
+        assert isinstance(ad.skills, list)
+    finally:
+        # Don't leak the env var if it wasn't set before.
+        if "MILL_REFINE_MODEL" not in _os.environ:
+            _os.environ.pop("MILL_REFINE_MODEL", None)
+
+
+# ── AgentDefinition pydantic model ────────────────────────────────────
+
+def test_agent_definition_model_validation():
+    """Direct model_validate with a dict → correct instance."""
+    ad = AgentDefinition.model_validate({
+        "name": "test",
+        "model": "gpt-4",
+        "system_prompt": "You are helpful.",
+    })
+    assert ad.name == "test"
+    assert ad.web is False
+    assert ad.retries == 2
+    assert ad.tools == []
+
+
+def test_agent_definition_extra_fields_rejected():
+    """Unknown keys → ValidationError."""
+    with pytest.raises(Exception):
+        AgentDefinition.model_validate({
+            "name": "test",
+            "model": "gpt-4",
+            "system_prompt": "ok",
+            "unknown_field": "nope",
+        })
