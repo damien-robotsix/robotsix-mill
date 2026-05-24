@@ -300,6 +300,26 @@ def request_changes(
     return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc)}
 
 
+@router.post("/tickets/{ticket_id}/redraft")
+def redraft(
+    ticket_id: str,
+    body: CommentCreate,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> dict:
+    """Redraft a ticket from any active state back to DRAFT with an
+    optional comment."""
+    try:
+        comment, ticket = svc.redraft(ticket_id, body.body or "", author=body.author or "user")
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    except TransitionError as e:
+        raise HTTPException(409, str(e)) from None
+    maybe_enqueue(ticket, worker)
+    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc)}
+
+
 @router.post("/epics", response_model=TicketRead, status_code=201)
 def create_epic(
     body: dict,

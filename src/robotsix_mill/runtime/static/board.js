@@ -93,6 +93,8 @@ async function refresh(){
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
+   ${!['draft','human_issue_approval','closed','answered','epic_closed','epic_open'].includes(s)?
+    `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:""}
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
@@ -380,6 +382,12 @@ async function newChildTicket(epicId){
 
  // Auto-focus title
  titleEl.focus();
+}
+async function redraft(id){
+ const body=prompt("Send this ticket back to draft. Why? (optional)");
+ if(body===null)return;
+ const r=await jpost("/tickets/"+id+"/redraft",{body:body.trim()});
+ if(!r.ok){const e=await r.text();alert("redraft failed: "+e)}else{refresh();if(sel===id)open_(id)}
 }
 async function del_(id){
  if(!confirm("Delete ticket "+id+"? This is irreversible (row, history, workspace)."))return;
