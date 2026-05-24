@@ -28,14 +28,11 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 #   docker build --build-arg DOCKER_CLI_SHA256_amd64=<sha> ...
 #
 # NOTE: Docker does NOT publish checksums for the docker binary.
-# The amd64 hash below was computed from the docker 29.5.1 binary and is
-# baked in as a default so verification runs automatically on amd64
-# builds.  For arm64 (or if you bump DOCKER_CLI_VERSION) you must supply
-# the hash manually.  To compute it on a machine with network access:
+# Compute the SHA256 of the extracted binary yourself:
 #   curl -sL https://download.docker.com/linux/static/stable/x86_64/docker-29.5.1.tgz | tar -xzO docker/docker | sha256sum
 #   curl -sL https://download.docker.com/linux/static/stable/aarch64/docker-29.5.1.tgz | tar -xzO docker/docker | sha256sum
 ARG DOCKER_CLI_VERSION=29.5.1
-ARG DOCKER_CLI_SHA256_amd64=ae01aca0e05d07e39bc5e8fbbee698ce365c417e36c90b3c9803b3af5f344742
+ARG DOCKER_CLI_SHA256_amd64
 ARG DOCKER_CLI_SHA256_arm64=fac73e803fdbebd28b75eda6963f5a6ea0b3944039396befd443a0b23cb28091
 RUN ARCH="$(dpkg --print-architecture)" \
     && case "$ARCH" in \
