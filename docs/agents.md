@@ -19,7 +19,7 @@ Run as stages on each ticket in the order: refine → approve → implement → 
 | Test | (no YAML — `agents/testing.py` constructs directly) | `agents/testing.py` | `MILL_TEST_MODEL` | Called by implement agent as `run_tests` tool | Runs test suite in sandbox; distills failures into actionable diagnosis |
 | Deliver | (no agent — `stages/deliver.py` uses forge adapter directly) | — | — | `deliver` stage (DELIVERABLE state) | Pushes branch and opens PR/MR via forge adapter |
 | Review | `agent_definitions/review.yaml` | `agents/reviewing.py` | `MILL_REVIEW_MODEL` | `review` stage (CODE_REVIEW state, opt-in via `MILL_REVIEW_ENABLED`) | Blind dual-model audit of git diff against ticket spec |
-| Merge (rebase) | (no YAML — `agents/rebasing.py` constructs directly) | `agents/rebasing.py` | `MILL_MODEL` | `merge` stage when PR is conflicting | Resolves git merge conflicts on stale PR branch |
+| Merge (rebase) | (no YAML — `agents/rebasing.py` constructs directly) | `agents/rebasing.py` | `MILL_MODEL` | `merge` stage when PR is conflicting, or when the implement-stage defensive rebase fails | Resolves git merge conflicts on stale branch |
 | Merge (CI-fix) | (no YAML — `agents/ci_fixing.py` constructs directly) | `agents/ci_fixing.py` | `MILL_MODEL` | `merge` stage when PR has failing CI (`FIXING_CI` state) | Auto-fixes failing remote CI checks on a PR branch |
 | Retrospect | `agent_definitions/retrospect.yaml` | `agents/retrospecting.py` | `MILL_RETROSPECT_MODEL` | `retrospect` stage (DONE state) | Analyses finished ticket workflow + Langfuse traces; proposes pipeline improvements |
 

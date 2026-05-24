@@ -499,8 +499,8 @@ def test_resume_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monkeypatc
 
 def test_rebase_conflict_blocks_on_resume(ctx_factory, tmp_path, monkeypatch):
     """When a WIP commit on the ticket branch conflicts with a newer
-    remote commit, the resume rebase fails → BLOCKED with a note about
-    rebase failure.  The workspace is left intact for operator inspection."""
+    remote commit, the resume rebase fails → REBASING with a note about
+    rebase failure. The workspace is left intact for operator inspection."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
@@ -534,7 +534,7 @@ def test_rebase_conflict_blocks_on_resume(ctx_factory, tmp_path, monkeypatch):
 
     second = ImplementStage().run(ctx.service.get(t.id), ctx)
 
-    assert second.next_state is State.BLOCKED
+    assert second.next_state is State.REBASING
     assert "rebase" in second.note.lower()
     assert n["i"] == 1  # agent only ran once (first pass); resume blocked before agent
 
@@ -547,7 +547,7 @@ def test_rebase_conflict_blocks_on_resume(ctx_factory, tmp_path, monkeypatch):
 
 def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch):
     """When try_rebase_onto fails on a fresh clone (e.g. fetch error),
-    the stage returns BLOCKED with a note about rebase failure."""
+    the stage returns REBASING with a note about rebase failure."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
@@ -579,7 +579,7 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
 
     out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.BLOCKED
+    assert out.next_state is State.REBASING
     assert "rebase" in out.note.lower()
     assert len(agent_called) == 0  # agent never invoked
 

@@ -68,7 +68,7 @@ TRANSITIONS: dict[State, set[State]] = {
     # straight to deliverable.
     # implement routes to code_review when review is enabled, otherwise
     # straight to documenting (then deliverable).
-    State.READY: {State.CODE_REVIEW, State.DOCUMENTING, State.DELIVERABLE, State.ERRORED, State.BLOCKED},
+    State.READY: {State.CODE_REVIEW, State.DOCUMENTING, State.DELIVERABLE, State.REBASING, State.ERRORED, State.BLOCKED},
     # review APPROVE -> documenting; REQUEST_CHANGES -> back to ready
     # (the implement<->review loop never touches documenting).
     State.CODE_REVIEW: {State.DOCUMENTING, State.READY, State.ERRORED, State.BLOCKED},
@@ -97,7 +97,7 @@ TRANSITIONS: dict[State, set[State]] = {
         State.ERRORED,
         State.BLOCKED,
     },
-    State.REBASING: {State.HUMAN_MR_APPROVAL, State.ERRORED, State.BLOCKED},
+    State.REBASING: {State.HUMAN_MR_APPROVAL, State.READY, State.ERRORED, State.BLOCKED},
     # ci fix: on success -> human_mr_approval; on failure -> blocked; on crash -> errored.
     State.FIXING_CI: {State.HUMAN_MR_APPROVAL, State.BLOCKED, State.ERRORED},
     # done = merged: retrospect analyses it -> reviewed

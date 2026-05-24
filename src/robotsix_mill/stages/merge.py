@@ -500,7 +500,13 @@ class MergeStage(Stage):
             log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
             if attempt < max_attempts:
                 _write_counter(counter_path, attempt)
-                return Outcome(State.HUMAN_MR_APPROVAL)  # re-check; may now merge
+                # Route by context: no PR yet → back to implement; PR exists → re-check merge.
+                try:
+                    pr = get_forge(s).pr_status(source_branch=branch)
+                except Exception:
+                    pr = None
+                next_state = State.READY if pr is None else State.HUMAN_MR_APPROVAL
+                return Outcome(next_state)
             _write_counter(counter_path, 0)  # reset for a future resume
             return Outcome(
                 State.BLOCKED,
