@@ -114,6 +114,36 @@ class GitHubForge(Forge):
             owner=owner, repo=repo, pull_number=pr["number"],
         )
 
+    def list_pr_comments(self, *, source_branch: str) -> list[dict]:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return []
+        return self._list_pr_comments(
+            owner=owner, repo=repo, pull_number=pr["number"],
+        )
+
+    def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return []
+        return self._list_pr_reviews(
+            owner=owner, repo=repo, pull_number=pr["number"],
+        )
+
+    def list_review_comments(self, *, source_branch: str) -> list[dict]:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return []
+        return self._list_review_comments(
+            owner=owner, repo=repo, pull_number=pr["number"],
+        )
+
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict]:
@@ -194,6 +224,87 @@ class GitHubForge(Forge):
                 }
         except Exception as e:
             return {"merged": False, "reason": str(e)}
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _list_pr_comments(
+        self, *, owner: str, repo: str, pull_number: int,
+    ) -> list[dict]:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s))
+        url = f"{api}/repos/{owner}/{repo}/issues/{pull_number}/comments"
+        with httpx.Client(timeout=30) as c:
+            r = c.get(url, headers=headers, params={"per_page": 100})
+            r.raise_for_status()
+            items = r.json()
+        return [
+            {
+                "id": item["id"],
+                "author": (item.get("user") or {}).get("login", ""),
+                "created_at": item.get("created_at", ""),
+                "body": item.get("body") or "",
+            }
+            for item in items
+        ]
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _list_pr_reviews(
+        self, *, owner: str, repo: str, pull_number: int,
+    ) -> list[dict]:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s))
+        url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
+        with httpx.Client(timeout=30) as c:
+            r = c.get(url, headers=headers, params={"per_page": 100})
+            r.raise_for_status()
+            items = r.json()
+        return [
+            {
+                "id": item["id"],
+                "author": (item.get("user") or {}).get("login", ""),
+                "created_at": item.get("submitted_at", ""),
+                "body": item.get("body") or "",
+            }
+            for item in items
+        ]
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _list_review_comments(
+        self, *, owner: str, repo: str, pull_number: int,
+    ) -> list[dict]:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s))
+        url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments"
+        with httpx.Client(timeout=30) as c:
+            r = c.get(url, headers=headers, params={"per_page": 100})
+            r.raise_for_status()
+            items = r.json()
+        return [
+            {
+                "id": item["id"],
+                "author": (item.get("user") or {}).get("login", ""),
+                "created_at": item.get("created_at", ""),
+                "body": item.get("body") or "",
+                "file_path": item.get("path", ""),
+                "line": item.get("line") or item.get("original_line"),
+                "diff_hunk": item.get("diff_hunk", ""),
+            }
+            for item in items
+        ]
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _check_status(
