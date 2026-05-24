@@ -1,300 +1,346 @@
 # Configuration reference
 
-Full reference for every `MILL_*` environment variable (and a few key
-non-prefixed vars) from `config.py:Settings`.  This mirrors
-`.env` and `secrets.env.example`; `.env` is the committed canonical inline config with
-production-ready defaults, `secrets.env.example` is the template for credentials.
+robotsix-mill uses a **YAML-first configuration pipeline**. Settings
+are loaded from committed defaults, optional local/production overlay
+files, and environment variables (highest priority). Secrets (API keys,
+tokens) live in a **separate** YAML file loaded by a dedicated
+`Secrets` model — they are never logged and their values are redacted
+in diagnostics.
 
 ---
 
-## 1. Core models
+## Configuration loading order
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_MODEL` | `model` | `deepseek/deepseek-v4-pro` | `str` | Coordinator model — reads/edits the repo, delegates to sub-agents |
-| `MILL_EXPLORE_MODEL` | `explore_model` | `deepseek/deepseek-v4-pro` | `str` | Scout sub-agent — returns concise pointers, never whole files |
-| `MILL_TEST_MODEL` | `test_model` | `deepseek/deepseek-v4-pro` | `str` | Test sub-agent — distills suite failures into diagnosis |
-| `MILL_REFINE_MODEL` | `refine_model` | `deepseek/deepseek-v4-pro` | `str` | Refine agent — authors engineering specs from drafts |
-| `MILL_ANSWER_MODEL` | `answer_model` | `deepseek/deepseek-v4-pro` | `str` | Answer agent — investigative Q&A via repo + web + traces |
-| `MILL_RETROSPECT_MODEL` | `retrospect_model` | `deepseek/deepseek-v4-pro` | `str` | Retrospect agent — audits finished tickets; proposes improvements |
-| `MILL_AUDIT_MODEL` | `audit_model` | `deepseek/deepseek-v4-pro` | `str` | Audit agent — meta-audit for quality/security coverage gaps |
-| `MILL_DEDUP_MODEL` | `dedup_model` | `deepseek/deepseek-v4-pro` | `str` | Dedup agent — pre-refine duplicate/already-done check |
-| `MILL_WEB_RESEARCH_MODEL` | `web_research_model` | `deepseek/deepseek-v4-pro` | `str` | Web-research sub-agent — web lookups, conclusion only |
-| `MILL_REVIEW_MODEL` | `review_model` | `deepseek/deepseek-v4-pro` | `str` | Review agent — blind dual-model diff audit (opt-in) |
-| `MILL_TRACE_INSPECTOR_MODEL` | `trace_inspector_model` | `deepseek/deepseek-v4-pro` | `str` | Trace-inspector sub-agent — inspects full Langfuse observation tree |
-| `MILL_TEST_GAP_MODEL` | `test_gap_model` | `deepseek/deepseek-v4-pro` | `str` | Test-gap agent — identifies modules with zero dedicated tests |
-| `MILL_AGENT_CHECK_MODEL` | `agent_check_model` | `deepseek/deepseek-v4-pro` | `str` | Agent-check agent — audits agent definitions for coherence |
-| `MILL_HEALTH_MODEL` | `health_model` | `deepseek/deepseek-v4-pro` | `str` | Health agent — codebase-health across 6 dimensions |
-| `MILL_SURVEY_MODEL` | `survey_model` | `deepseek/deepseek-v4-pro` | `str` | Survey agent — discovers OSS projects; proposes improvements |
-| `MILL_RATE_LIMIT_FALLBACK_MODEL` | `rate_limit_fallback_model` | `""` (empty = disabled) | `str` | Fallback model when rate-limit retries exhausted |
+Settings are resolved from five layers (highest priority first):
 
----
+| Priority | Source | Description |
+|----------|--------|-------------|
+| 1 (highest) | Explicit `Settings(k=v)` kwargs | Programmatic overrides from callers |
+| 2 | `os.environ` | Any `MILL_*` or unprefixed variable set in the environment |
+| 3 | YAML overlays | `config/mill.production.yaml` then `config/mill.local.yaml` (optional) |
+| 4 | YAML defaults | `config/mill.defaults.yaml` (always loaded, committed) |
+| 5 (lowest) | `Field(default=...)` | Static Python defaults in the Pydantic model |
 
-## 2. Request limits
+YAML files are merged recursively: later layers overlay deeper keys
+without replacing entire sections. The effective configuration is the
+deep-merge of defaults → local → production, with environment variables
+winning over any YAML value.
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_COORDINATOR_REQUEST_LIMIT` | `coordinator_request_limit` | `200` | `int` | Per-ticket request cap for the implement (coordinator) agent |
-| `MILL_EXPLORE_REQUEST_LIMIT` | `explore_request_limit` | `20` | `int` | Per-call request cap for the explore sub-agent |
-| `MILL_TEST_REQUEST_LIMIT` | `test_request_limit` | `8` | `int` | Per-call request cap for the test sub-agent |
-| `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `web_research_request_limit` | `8` | `int` | Per-call request cap for the web-research sub-agent |
-| `MILL_DEDUP_REQUEST_LIMIT` | `dedup_request_limit` | `4` | `int` | Per-call request cap for the dedup check |
-| `MILL_DOC_REQUEST_LIMIT` | `doc_request_limit` | `8` | `int` | Per-run request cap for the document agent |
-| `MILL_REVIEW_REQUEST_LIMIT` | `review_request_limit` | `20` | `int` | Per-run request cap for the review agent |
+**Secrets** are loaded **separately** from `config/secrets.yaml`
+(path overridable via `MILL_SECRETS_FILE` env var). They never
+participate in the Settings merge; access them via `get_secrets()`.
 
 ---
 
-## 3. Worker pool
+## File structure
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_MAX_CONCURRENCY` | `max_concurrency` | `4` | `int` | Max parallel tickets in the worker pool |
-| `MILL_MAX_FIX_ITERATIONS` | `max_fix_iterations` | `8` | `int` | Max implement→test fix loop iterations before BLOCK |
-| `MILL_MAX_STUCK_CYCLES` | `max_stuck_cycles` | `3` | `int` | Re-entries to same stage without progress before BLOCK |
-| `MILL_MAX_SPEND_USD_PER_TICKET` | `max_spend_usd_per_ticket` | `0.0` | `float` | Dollar cap per ticket (0.0 = disabled); enforced in `worker.py:_check_progress` |
-
----
-
-## 4. Transient retry & timeout
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_TRANSIENT_RETRIES` | `transient_retries` | `4` | `int` | Max retries for transient network/model failures (429, 5xx, timeouts) |
-| `MILL_TRANSIENT_BACKOFF_BASE` | `transient_backoff_base` | `2.0` | `float` | Base seconds for exponential backoff (jittered) |
-| `MILL_TRANSIENT_BACKOFF_CAP` | `transient_backoff_cap` | `30.0` | `float` | Max seconds between transient retries |
-| `MILL_RATE_LIMIT_BACKOFF_BASE` | `rate_limit_backoff_base` | `30.0` | `float` | Base seconds for rate-limit backoff (longer window) |
-| `MILL_RATE_LIMIT_BACKOFF_CAP` | `rate_limit_backoff_cap` | `120.0` | `float` | Max seconds between rate-limit retries |
-| `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `rate_limit_fallback_retries` | `3` | `int` | Consecutive rate-limit failures before switching to fallback model |
-| `MILL_RATE_LIMIT_FALLBACK_MODEL` | `rate_limit_fallback_model` | `""` | `str` | Fallback model for rate-limit exhaustion (see §1) |
-| `MILL_MODEL_REQUEST_TIMEOUT` | `model_request_timeout` | `900.0` | `float` | Hard per-call timeout in seconds for every model request |
+```
+config/
+  mill.defaults.yaml       # committed: canonical defaults (~115 fields)
+  mill.local.yaml          # gitignored: your per-developer overrides
+  mill.production.yaml     # gitignored: deployment overrides
+  secrets.yaml             # gitignored: credentials (API keys, tokens)
+  secrets.example.yaml     # committed: template for secrets.yaml
+```
 
 ---
 
-## 5. Management plane
+## Common tasks
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_DATA_DIR` | `data_dir` | `.mill-data` | `Path` | Data directory for DB, workspaces, and memory ledgers |
-| `MILL_API_HOST` | `api_host` | `127.0.0.1` | `str` | FastAPI listen address |
-| `MILL_API_PORT` | `api_port` | `8077` | `int` | FastAPI listen port |
-| `MILL_API_URL` | `api_url` | `http://127.0.0.1:8077` | `str` | Base URL the CLI client uses to reach the API |
+### Run with a custom model
 
----
+Create `config/mill.local.yaml`:
 
-## 6. Approval & review
+```yaml
+core:
+  models:
+    coordinator: anthropic/claude-sonnet-4
+```
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_REQUIRE_APPROVAL` | `require_approval` | `true` | `bool` | Pause after refine for human approval (`awaiting_approval` state) |
-| `MILL_AUTO_APPROVE_ENABLED` | `auto_approve_enabled` | `false` | `bool` | Enable conservative auto-approve triage: trivially safe specs skip the human gate |
-| `MILL_AUTO_APPROVE_MODEL` | `auto_approve_model` | `openai/gpt-4o-mini` | `str` | Model for the auto-approve triage call (must be fast and cheap) |
-| `MILL_REVIEW_ENABLED` | `review_enabled` | `false` | `bool` | Enable dual-model code review stage before deliver |
-| `MILL_REVIEW_MODEL` | `review_model` | `deepseek/deepseek-v4-pro` | `str` | Review agent model (see §1) |
+Or set an environment variable (overrides YAML):
 
----
+```sh
+export MILL_MODEL=anthropic/claude-sonnet-4
+make dev
+```
 
-## 7. Sandbox
+### Use a different database URL / data directory
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_SANDBOX_IMAGE` | `sandbox_image` | `python:3.14-slim` | `str` | Docker image for disposable sandbox containers |
-| `MILL_SANDBOX_MEMORY` | `sandbox_memory` | `2g` | `str` | Memory limit for sandbox containers |
-| `MILL_SANDBOX_PIDS_LIMIT` | `sandbox_pids_limit` | `512` | `int` | PID limit for sandbox containers |
-| `MILL_SANDBOX_READONLY` | `sandbox_readonly` | `true` | `bool` | Mount sandbox rootfs read-only (except tmpfs `/tmp`) |
-| `MILL_COMMAND_TIMEOUT` | `command_timeout` | `900` | `int` | Wall-clock cap (seconds) for sandbox shell/test commands |
-| `MILL_DATA_VOLUME` | `data_volume` | `mill_data` | `str` | Named Docker volume for data (fallback when not bind-mounted) |
-| `MILL_SANDBOX_DATA_MOUNT` | `sandbox_data_mount` | `None` | `str \| None` | Host path for bind-mounted data directory (overrides `MILL_DATA_VOLUME`) |
+```yaml
+# config/mill.local.yaml
+service:
+  data_dir: /data/mill-prod
+```
 
----
+### Enable periodic audit and trace-health checks
 
-## 8. Web research
+```yaml
+# config/mill.local.yaml
+periodic:
+  audit:
+    enabled: true
+    interval_seconds: 43200
+  trace_health:
+    enabled: true
+    interval_seconds: 86400
+```
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_WEB_SEARCH` | `web_search` | `true` | `bool` | Enable web-search capability (delegated to sub-agent) |
-| `MILL_WEB_RESEARCH_MODEL` | `web_research_model` | `deepseek/deepseek-v4-pro` | `str` | Web-research sub-agent model (see §1) |
-| `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `web_research_request_limit` | `8` | `int` | Per-call request cap for web research (see §2) |
-| `MILL_FETCH_IMAGE` | `fetch_image` | `curlimages/curl:8.17.0` | `str` | Docker image for isolated `web_fetch` container |
-| `MILL_WEB_FETCH_MAX_BYTES` | `web_fetch_max_bytes` | `2000000` | `int` | Max bytes fetched per URL |
-| `MILL_WEB_FETCH_TIMEOUT` | `web_fetch_timeout` | `30` | `int` | Timeout (seconds) per web fetch |
+### Deploy to production with overrides
 
----
+Point the `MILL_CONFIG_FILE` env var at your production overlay:
 
-## 9. Pipeline tail (merge stage)
+```yaml
+# config/mill.production.yaml
+core:
+  models:
+    coordinator: anthropic/claude-sonnet-4
+  limits:
+    max_concurrency: 2
+    max_spend_usd_per_ticket: 5.0
+forge:
+  kind: github
+  remote_url: https://github.com/your-org/your-repo
+  target_branch: main
+sandbox:
+  test_command: pytest -q --timeout=300
+```
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_MERGE_POLL_SECONDS` | `merge_poll_seconds` | `120` | `int` | Poll interval for PR merge/CI status |
-| `MILL_REBASE_MAX_ATTEMPTS` | `rebase_max_attempts` | `5` | `int` | Max rebase LLM invocations before BLOCK |
-| `MILL_CI_FIX_MAX_ATTEMPTS` | `ci_fix_max_attempts` | `2` | `int` | Max CI-fix LLM invocations before BLOCK |
+Then run:
 
----
+```sh
+MILL_CONFIG_FILE=config/mill.production.yaml docker compose up -d
+```
 
-## 10. Retrospect
+### Set up secrets
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_RETROSPECT_MODEL` | `retrospect_model` | `deepseek/deepseek-v4-pro` | `str` | Retrospect agent model (see §1) |
-| `MILL_RETROSPECT_SPAWN_DRAFTS` | `retrospect_spawn_drafts` | `true` | `bool` | Allow retrospect to file improvement draft tickets |
-| `MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY` | `retrospect_deep_analysis_frequency` | `10` | `int` | How many retrospect runs between deep trace analyses |
-| `MILL_RETROSPECT_MEMORY_PATH` | `retrospect_memory_path` | `None` | `Path \| None` | Override path for retrospect memory ledger; defaults to `<data_dir>/retrospect_memory.md` |
-| `MILL_TRACE_INSPECTOR_MODEL` | `trace_inspector_model` | `deepseek/deepseek-v4-pro` | `str` | Trace-inspector sub-agent model (see §1) |
-| `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `trace_inspector_memory_path` | `None` | `Path \| None` | Override path for trace-inspector memory; defaults to `<data_dir>/trace_inspector_memory.md` |
+```sh
+cp config/secrets.example.yaml config/secrets.yaml
+# Edit config/secrets.yaml — fill in your credentials:
+```
 
----
+```yaml
+# config/secrets.yaml
+openrouter_api_key: "sk-or-..."
+forge_token: "ghp_..."
+# langfuse tracing (optional, leave blank to disable)
+langfuse_public_key: "pk-..."
+langfuse_secret_key: "sk-..."
+```
 
-## 11. Audit agent
+File permissions should be `0600` (the YAML loader enforces a warning
+if the file is group/other-readable).
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_AUDIT_MODEL` | `audit_model` | `deepseek/deepseek-v4-pro` | `str` | Audit agent model (see §1) |
-| `MILL_AUDIT_PERIODIC` | `audit_periodic` | `false` | `bool` | Enable periodic audit passes |
-| `MILL_AUDIT_INTERVAL_SECONDS` | `audit_interval_seconds` | `86400` | `int` | Seconds between automatic audit passes |
-| `MILL_AUDIT_MEMORY_PATH` | `audit_memory_path` | `None` | `Path \| None` | Override path for audit memory ledger; defaults to `<data_dir>/audit_memory.md` |
+### Add a new setting
 
----
+1. Add the field to the Pydantic model in `src/robotsix_mill/config.py`
+   (in the appropriate group class if grouped, or on `Settings` directly).
+2. Add the default value to `config/mill.defaults.yaml` under the
+   correct YAML key path.
+3. If it's a secret, add it to the `Secrets` model and to
+   `config/secrets.example.yaml` instead.
+4. Access it in code: `settings.my_new_field` for settings,
+   `get_secrets().my_new_secret` for secrets.
 
-## 12. Trace-health
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_TRACE_HEALTH_PERIODIC` | `trace_health_periodic` | `false` | `bool` | Enable periodic trace-health checks |
-| `MILL_TRACE_HEALTH_INTERVAL_SECONDS` | `trace_health_interval_seconds` | `86400` | `int` | Seconds between checks (minimum 3600 enforced in worker) |
-
----
-
-## 13. Health agent
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_HEALTH_MODEL` | `health_model` | `deepseek/deepseek-v4-pro` | `str` | Health agent model (see §1) |
-| `MILL_HEALTH_PERIODIC` | `health_periodic` | `false` | `bool` | Enable periodic codebase-health passes |
-| `MILL_HEALTH_INTERVAL_SECONDS` | `health_interval_seconds` | `86400` | `int` | Seconds between automatic health passes |
-| `MILL_HEALTH_MEMORY_PATH` | `health_memory_path` | `None` | `Path \| None` | Override path for health memory ledger; defaults to `<data_dir>/health_memory.md` |
+Environment variable naming convention: `MILL_` prefix + uppercase
+with underscores (e.g. `MILL_MY_NEW_FIELD`). Nested YAML keys map to
+double-underscore env vars: `core.models.coordinator` → `MILL_CORE__MODELS__COORDINATOR`.
 
 ---
 
-## 14. Test-gap agent
+## Full setting reference
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_TEST_GAP_MODEL` | `test_gap_model` | `deepseek/deepseek-v4-pro` | `str` | Test-gap agent model (see §1) |
-| `MILL_TEST_GAP_PERIODIC` | `test_gap_periodic` | `false` | `bool` | Enable periodic test-gap passes |
-| `MILL_TEST_GAP_INTERVAL_SECONDS` | `test_gap_interval_seconds` | `86400` | `int` | Seconds between automatic test-gap passes |
-| `MILL_TEST_GAP_MEMORY_PATH` | `test_gap_memory_path` | `None` | `Path \| None` | Override path for test-gap memory ledger; defaults to `<data_dir>/test_gap_memory.md` |
+Every setting below shows:
+- **YAML path** — the key in `config/mill.defaults.yaml`
+- **Env var** — the environment variable override
+- **Default** — the committed default value
+- **Description** — what it controls
+
+### 1. Core models
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `core.models.coordinator` | `MILL_MODEL` | `deepseek/deepseek-v4-pro` | Coordinator model — reads/edits the repo, delegates to sub-agents |
+| `core.models.explore` | `MILL_EXPLORE_MODEL` | `deepseek/deepseek-v4-flash` | Scout sub-agent — returns concise pointers, never whole files |
+| `core.models.test` | `MILL_TEST_MODEL` | `deepseek/deepseek-v4-pro` | Test sub-agent — distills suite failures into diagnosis |
+| `core.models.refine` | `MILL_REFINE_MODEL` | `deepseek/deepseek-v4-pro` | Refine agent — authors engineering specs from drafts |
+| `core.models.answer` | `MILL_ANSWER_MODEL` | `deepseek/deepseek-v4-pro` | Answer agent — investigative Q&A via repo + web + traces |
+| `core.models.retrospect` | `MILL_RETROSPECT_MODEL` | `deepseek/deepseek-v4-pro` | Retrospect agent — audits finished tickets; proposes improvements |
+| `core.models.audit` | `MILL_AUDIT_MODEL` | `deepseek/deepseek-v4-pro` | Audit agent — meta-audit for quality/security coverage gaps |
+| `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-pro` | Dedup agent — pre-refine duplicate/already-done check |
+| `core.models.web_research` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-pro` | Web-research sub-agent — web lookups, conclusion only |
+| `core.models.review` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent — blind dual-model diff audit (opt-in) |
+| `core.models.trace_inspector` | `MILL_TRACE_INSPECTOR_MODEL` | `deepseek/deepseek-v4-pro` | Trace-inspector sub-agent — inspects full Langfuse observation tree |
+| `core.models.test_gap` | `MILL_TEST_GAP_MODEL` | `deepseek/deepseek-v4-pro` | Test-gap agent — identifies modules with zero dedicated tests |
+| `core.models.agent_check` | `MILL_AGENT_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Agent-check agent — audits agent definitions for coherence |
+| `core.models.health` | `MILL_HEALTH_MODEL` | `deepseek/deepseek-v4-pro` | Health agent — codebase-health across 6 dimensions |
+| `core.models.survey` | `MILL_SURVEY_MODEL` | `deepseek/deepseek-v4-pro` | Survey agent — discovers OSS projects; proposes improvements |
+| `core.models.rate_limit_fallback` | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `""` (disabled) | Fallback model when rate-limit retries exhausted |
+| `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `openai/gpt-4o-mini` | Model for the auto-approve triage call (must be fast and cheap) |
+| `core.models.env_sync` | `MILL_ENV_SYNC_MODEL` | `openai/gpt-4o-mini` | Env-sync agent model for config/docs drift detection |
+
+### 2. Request limits
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `core.limits.coordinator_request_limit` | `MILL_COORDINATOR_REQUEST_LIMIT` | `200` | Per-ticket request cap for the implement (coordinator) agent |
+| `core.limits.explore_request_limit` | `MILL_EXPLORE_REQUEST_LIMIT` | `20` | Per-call request cap for the explore sub-agent |
+| `core.limits.test_request_limit` | `MILL_TEST_REQUEST_LIMIT` | `8` | Per-call request cap for the test sub-agent |
+| `core.limits.web_research_request_limit` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
+| `core.limits.dedup_request_limit` | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap for the dedup check |
+| `core.limits.doc_request_limit` | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
+| `core.limits.review_request_limit` | `MILL_REVIEW_REQUEST_LIMIT` | `20` | Per-run request cap for the review agent |
+
+### 3. Worker pool & retry
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `core.limits.max_concurrency` | `MILL_MAX_CONCURRENCY` | `4` | Max parallel tickets in the worker pool |
+| `core.limits.max_fix_iterations` | `MILL_MAX_FIX_ITERATIONS` | `8` | Max implement→test fix loop iterations before BLOCK |
+| `core.limits.max_stuck_cycles` | `MILL_MAX_STUCK_CYCLES` | `3` | Re-entries to same stage without progress before BLOCK |
+| `core.limits.max_spend_usd_per_ticket` | `MILL_MAX_SPEND_USD_PER_TICKET` | `0.0` | Dollar cap per ticket (0.0 = disabled) |
+| `core.limits.transient_retries` | `MILL_TRANSIENT_RETRIES` | `4` | Max retries for transient network/model failures (429, 5xx, timeouts) |
+| `core.limits.transient_backoff_base` | `MILL_TRANSIENT_BACKOFF_BASE` | `2.0` | Base seconds for exponential backoff (jittered) |
+| `core.limits.transient_backoff_cap` | `MILL_TRANSIENT_BACKOFF_CAP` | `30.0` | Max seconds between transient retries |
+| `core.limits.rate_limit_backoff_base` | `MILL_RATE_LIMIT_BACKOFF_BASE` | `30.0` | Base seconds for rate-limit backoff (longer window) |
+| `core.limits.rate_limit_backoff_cap` | `MILL_RATE_LIMIT_BACKOFF_CAP` | `120.0` | Max seconds between rate-limit retries |
+| `core.limits.rate_limit_fallback_retries` | `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `3` | Consecutive rate-limit failures before switching to fallback model |
+| `core.limits.model_request_timeout` | `MILL_MODEL_REQUEST_TIMEOUT` | `900.0` | Hard per-call timeout in seconds for every model request |
+
+### 4. Memory
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `core.memory.max_memory_chars` | `MILL_MAX_MEMORY_CHARS` | `8000` | Max characters loaded from any memory ledger per agent pass |
+| `core.memory.implement_memory_path` | `MILL_IMPLEMENT_MEMORY_PATH` | `None` | Override path for implement memory; defaults to `<data_dir>/implement_memory.md` |
+| `core.memory.refine_memory_path` | `MILL_REFINE_MEMORY_PATH` | `None` | Override path for refine memory; defaults to `<data_dir>/refine_memory.md` |
+| `core.memory.ci_fix_memory_path` | `MILL_CI_FIX_MEMORY_PATH` | `None` | Override path for CI-fix memory; defaults to `<data_dir>/ci_fix_memory.md` |
+| `core.memory.rebase_memory_path` | `MILL_REBASE_MEMORY_PATH` | `None` | Override path for rebase memory; defaults to `<data_dir>/rebase_memory.md` |
+
+### 5. Dedup
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `core.dedup.lookback_days` | `MILL_DEDUP_LOOKBACK_DAYS` | `30` | Days back to consider closed tickets as dup candidates |
+| `core.dedup.lookback_commits` | `MILL_DEDUP_LOOKBACK_COMMITS` | `20` | Recent commits to inspect for "already done" |
+
+### 6. Service (management plane)
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `service.data_dir` | `MILL_DATA_DIR` | `.mill-data` | Data directory for DB, workspaces, and memory ledgers |
+| `service.api_host` | `MILL_API_HOST` | `127.0.0.1` | FastAPI listen address |
+| `service.api_port` | `MILL_API_PORT` | `8077` | FastAPI listen port |
+| `service.api_url` | `MILL_API_URL` | `http://127.0.0.1:8077` | Base URL the CLI client uses to reach the API |
+
+### 7. Approval & review
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `gates.require_approval` | `MILL_REQUIRE_APPROVAL` | `true` | Pause after refine for human approval (`awaiting_approval` state) |
+| `gates.auto_approve_enabled` | `MILL_AUTO_APPROVE_ENABLED` | `false` | Enable conservative auto-approve triage |
+| `gates.review_enabled` | `MILL_REVIEW_ENABLED` | `false` | Enable dual-model code review stage before deliver |
+| `gates.auto_merge` | `MILL_AUTO_MERGE` | `false` | Auto-merge PR when CI passes |
+
+### 8. Forge
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `forge.kind` | `FORGE_KIND` | `none` | Forge platform: `github`, `gitlab`, or `none` |
+| `forge.remote_url` | `FORGE_REMOTE_URL` | `None` | Remote URL for clone + push |
+| `forge.target_branch` | `FORGE_TARGET_BRANCH` | `main` | Target branch for PRs |
+| `forge.auth` | `FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App) |
+| `forge.github_api_url` | `MILL_GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (override for GitHub Enterprise) |
+
+### 9. Sandbox
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `sandbox.image` | `MILL_SANDBOX_IMAGE` | `python:3.14-slim` | Docker image for disposable sandbox containers |
+| `sandbox.memory` | `MILL_SANDBOX_MEMORY` | `2g` | Memory limit for sandbox containers |
+| `sandbox.pids_limit` | `MILL_SANDBOX_PIDS_LIMIT` | `512` | PID limit for sandbox containers |
+| `sandbox.readonly` | `MILL_SANDBOX_READONLY` | `true` | Mount sandbox rootfs read-only (except tmpfs `/tmp`) |
+| `sandbox.command_timeout` | `MILL_COMMAND_TIMEOUT` | `900` | Wall-clock cap (seconds) for sandbox shell/test commands |
+| `sandbox.data_volume` | `MILL_DATA_VOLUME` | `mill_data` | Named Docker volume for data (fallback when not bind-mounted) |
+| `sandbox.data_mount` | `MILL_SANDBOX_DATA_MOUNT` | `None` | Host path for bind-mounted data directory (overrides `data_volume`) |
+| `sandbox.test_command` | `MILL_TEST_COMMAND` | `pytest -q` | Command run to verify the implementation (empty = skip) |
+
+### 10. Web research
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `web.search` | `MILL_WEB_SEARCH` | `true` | Enable web-search capability (delegated to sub-agent) |
+| `web.fetch_image` | `MILL_FETCH_IMAGE` | `curlimages/curl:8.17.0` | Docker image for isolated `web_fetch` container |
+| `web.fetch_max_bytes` | `MILL_WEB_FETCH_MAX_BYTES` | `2000000` | Max bytes fetched per URL |
+| `web.fetch_timeout` | `MILL_WEB_FETCH_TIMEOUT` | `30` | Timeout (seconds) per web fetch |
+
+### 11. Pipeline tail (merge stage)
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `pipeline.merge_poll_seconds` | `MILL_MERGE_POLL_SECONDS` | `120` | Poll interval for PR merge/CI status |
+| `pipeline.rebase_max_attempts` | `MILL_REBASE_MAX_ATTEMPTS` | `5` | Max rebase LLM invocations before BLOCK |
+| `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Max CI-fix LLM invocations before BLOCK |
+| `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
+
+### 12. Periodic agents
+
+Each periodic agent shares this pattern:
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `false` | Enable periodic passes |
+| `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
+| `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger |
+
+Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
+`agent_check`, `survey`, `ci_monitor`, `env_sync`.
+
+Additional fields:
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `periodic.ci_monitor.ci_log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
+| `pipeline.retrospect.spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
+| `pipeline.retrospect.deep_analysis_frequency` | `MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY` | `10` | How many retrospect runs between deep trace analyses |
+| `pipeline.retrospect.memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
+| `pipeline.retrospect.trace_inspector_memory_path` | `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `None` | Override path for trace-inspector memory |
+
+### 13. Skills
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `skills.dir` | `MILL_SKILLS_DIR` | `skills` | Directory of skill docs injected into agent system prompts |
 
 ---
 
-## 15. Agent-check
+## Secrets reference
 
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_AGENT_CHECK_MODEL` | `agent_check_model` | `deepseek/deepseek-v4-pro` | `str` | Agent-check model (see §1) |
-| `MILL_AGENT_CHECK_PERIODIC` | `agent_check_periodic` | `false` | `bool` | Enable periodic agent-check passes |
-| `MILL_AGENT_CHECK_INTERVAL_SECONDS` | `agent_check_interval_seconds` | `86400` | `int` | Seconds between checks (minimum 60 enforced in worker) |
-| `MILL_AGENT_CHECK_MEMORY_PATH` | `agent_check_memory_path` | `None` | `Path \| None` | Override path for agent-check memory ledger; defaults to `<data_dir>/agent_check_memory.md` |
+Secrets are loaded from `config/secrets.yaml` by a separate `Secrets`
+Pydantic model. They are **not** merged into `Settings` — access them
+via `get_secrets()`.
 
----
+| YAML key | Env var override | Description |
+|----------|-----------------|-------------|
+| `openrouter_api_key` | `OPENROUTER_API_KEY` | OpenRouter API key (required for any LLM call) |
+| `forge_token` | `FORGE_TOKEN` | PAT for forge authentication |
+| `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `FORGE_AUTH=app`) |
+| `github_app_private_key` | `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (inline PEM, newlines as `\n`) |
+| `langfuse_public_key` | `LANGFUSE_PUBLIC_KEY` | Langfuse public key (tracing) |
+| `langfuse_secret_key` | `LANGFUSE_SECRET_KEY` | Langfuse secret key |
+| `langfuse_base_url` | `LANGFUSE_BASE_URL` | Langfuse base URL |
+| `langfuse_project_id` | `LANGFUSE_PROJECT_ID` | Langfuse project ID (optional) |
+| `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications |
+| `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional) |
 
-## 16. Survey
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_SURVEY_MODEL` | `survey_model` | `deepseek/deepseek-v4-pro` | `str` | Survey agent model (see §1) |
-| `MILL_SURVEY_MEMORY_PATH` | `survey_memory_path` | `None` | `Path \| None` | Override path for survey memory ledger; defaults to `<data_dir>/survey_memory.md` |
-| `MILL_SURVEY_INTERVAL_SECONDS` | `survey_interval_seconds` | `86400` | `int` | Seconds between automatic survey passes |
-
----
-
-## 17. Env-sync agent
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_ENV_SYNC_MODEL` | `env_sync_model` | `openai/gpt-4o-mini` | `str` | Env-sync agent model (see §1) |
-| `MILL_ENV_SYNC_PERIODIC` | `env_sync_periodic` | `false` | `bool` | Enable periodic config/docs drift detection passes |
-| `MILL_ENV_SYNC_INTERVAL_SECONDS` | `env_sync_interval_seconds` | `86400` | `int` | Seconds between automatic env-sync passes |
-| `MILL_ENV_SYNC_MEMORY_PATH` | `env_sync_memory_path` | `None` | `Path \| None` | Override path for env-sync memory ledger; defaults to `<data_dir>/env_sync_memory.md` |
-
----
-
-## 18. Dedup guard
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_DEDUP_MODEL` | `dedup_model` | `deepseek/deepseek-v4-pro` | `str` | Dedup agent model (see §1) |
-| `MILL_DEDUP_REQUEST_LIMIT` | `dedup_request_limit` | `4` | `int` | Per-call request cap (see §2) |
-| `MILL_DEDUP_LOOKBACK_DAYS` | `dedup_lookback_days` | `30` | `int` | Days back to consider closed tickets as dup candidates |
-| `MILL_DEDUP_LOOKBACK_COMMITS` | `dedup_lookback_commits` | `20` | `int` | Recent commits to inspect for "already done" |
-
----
-
-## 19. Memory paths
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_IMPLEMENT_MEMORY_PATH` | `implement_memory_path` | `None` | `Path \| None` | Override path for implement memory; defaults to `<data_dir>/implement_memory.md` |
-| `MILL_REFINE_MEMORY_PATH` | `refine_memory_path` | `None` | `Path \| None` | Override path for refine memory; defaults to `<data_dir>/refine_memory.md` |
-| `MILL_CI_FIX_MEMORY_PATH` | `ci_fix_memory_path` | `None` | `Path \| None` | Override path for CI-fix memory; defaults to `<data_dir>/ci_fix_memory.md` |
-| `MILL_REBASE_MEMORY_PATH` | `rebase_memory_path` | `None` | `Path \| None` | Override path for rebase memory; defaults to `<data_dir>/rebase_memory.md` |
-| `MILL_MAX_MEMORY_CHARS` | `max_memory_chars` | `8000` | `int` | Max characters loaded from any memory ledger per agent pass |
-
----
-
-## 20. Delivery
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_BRANCH_PREFIX` | `branch_prefix` | `mill/` | `str` | Prefix for deliver-stage branch names |
-| `MILL_TEST_COMMAND` | `test_command` | `pytest -q` | `str` | Command run to verify the implementation (empty = skip) |
-| `MILL_GITHUB_API_URL` | `github_api_url` | `https://api.github.com` | `str` | GitHub API base URL (override for GitHub Enterprise) |
-
----
-
-## 21. CI monitor
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_CI_MONITOR_PERIODIC` | `ci_monitor_periodic` | `false` | `bool` | Enable periodic target-branch CI failure monitoring |
-| `MILL_CI_MONITOR_INTERVAL_SECONDS` | `ci_monitor_interval_seconds` | `86400` | `int` | Seconds between CI monitor polls |
-| `MILL_CI_LOG_MAX_BYTES` | `ci_log_max_bytes` | `65536` | `int` | Max bytes fetched per CI job log |
-
----
-
-## 22. Skills
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `MILL_SKILLS_DIR` | `skills_dir` | `skills` | `Path` | Directory of skill docs injected into agent system prompts |
-
----
-
-## Non-prefixed vars
-
-These are consumed by `Settings` but use conventional names without the `MILL_` prefix.
-
-| Env var | Python field | Default | Type | Description |
-|---|---|---|---|---|
-| `OPENROUTER_API_KEY` | `openrouter_api_key` | `None` | `str \| None` | OpenRouter API key (required for any LLM call) |
-| `FORGE_KIND` | `forge_kind` | `none` | `Literal["github","gitlab","none"]` | Forge platform for delivery |
-| `FORGE_REMOTE_URL` | `forge_remote_url` | `None` | `str \| None` | Remote URL for clone + push |
-| `FORGE_TOKEN` | `forge_token` | `None` | `str \| None` | PAT for forge authentication |
-| `FORGE_TARGET_BRANCH` | `forge_target_branch` | `main` | `str` | Target branch for PRs |
-| `FORGE_AUTH` | `forge_auth` | `token` | `Literal["token","app"]` | Auth mode: `token` (PAT) or `app` (GitHub App) |
-| `GITHUB_APP_ID` | `github_app_id` | `None` | `str \| None` | GitHub App ID (when `FORGE_AUTH=app`) |
-| `GITHUB_APP_PRIVATE_KEY` | `github_app_private_key` | `None` | `str \| None` | GitHub App private key (inline) |
-| `GITHUB_APP_PRIVATE_KEY_PATH` | `github_app_private_key_path` | `None` | `str \| None` | GitHub App private key (file path) |
-| `LANGFUSE_BASE_URL` | `langfuse_base_url` | `None` | `str \| None` | Langfuse base URL (tracing) |
-| `LANGFUSE_PUBLIC_KEY` | `langfuse_public_key` | `None` | `str \| None` | Langfuse public key |
-| `LANGFUSE_SECRET_KEY` | `langfuse_secret_key` | `None` | `str \| None` | Langfuse secret key |
-| `LANGFUSE_PROJECT_ID` | `langfuse_project_id` | `None` | `str \| None` | Langfuse project ID (optional) |
-| `NTFY_URL` | `ntfy_url` | `None` | `str \| None` | ntfy.sh topic URL for notifications |
-| `NTFY_TOKEN` | `ntfy_token` | `None` | `str \| None` | ntfy.sh bearer token (optional) |
+Secrets file path: `config/secrets.yaml` (overridable via
+`MILL_SECRETS_FILE` env var). Template: `config/secrets.example.yaml`.
 
 ---
 
 ## See also
 
 - [index.md](index.md) — documentation home
-- [docs/agents.md](agents.md) — maps every model var to its agent
-- [`.env`](../.env) — committed canonical config with production defaults
-- [`secrets.env.example`](../secrets.env.example) — credentials template
+- [deployment.md](deployment.md) — continuous deployment guide
+- [config-audit.md](config-audit.md) — complete inventory of every config value and its source
+- [`config/mill.defaults.yaml`](../config/mill.defaults.yaml) — committed canonical defaults
+- [`config/secrets.example.yaml`](../config/secrets.example.yaml) — secrets template

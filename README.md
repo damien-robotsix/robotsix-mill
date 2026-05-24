@@ -8,12 +8,31 @@ immediately. The only time it touches GitHub/GitLab is the final
 
 **Status:** Full pipeline runs end-to-end.
 
+## Configuration
+
+Settings are managed through a YAML pipeline (see
+[docs/configuration.md](docs/configuration.md) for full details):
+
+- **`config/mill.defaults.yaml`** — committed canonical defaults (the
+  single source of truth for every configurable knob).
+- **`config/mill.local.yaml`** — your per-developer overrides
+  (gitignored, create it if you need custom settings).
+- **`config/mill.production.yaml`** — deployment-specific overrides
+  (gitignored, path set via `MILL_CONFIG_FILE` env var).
+- **Environment variables** — any `MILL_*` variable overrides the
+  YAML value (e.g. `MILL_MODEL=anthropic/claude-sonnet-4`).
+- **`config/secrets.yaml`** — credentials (API keys, tokens).
+  Template at `config/secrets.example.yaml`.
+
+The loading order is: YAML defaults → YAML local → YAML production →
+environment variables (highest).
+
 ## Quickstart
 
 ### Docker (recommended)
 
 ```sh
-cp secrets.env.example secrets.env      # set OPENROUTER_API_KEY
+cp config/secrets.example.yaml config/secrets.yaml   # set openrouter_api_key
 docker compose up -d --build
 ```
 
@@ -31,7 +50,7 @@ docker compose exec mill robotsix-mill trace-health
 ### Local dev (no Docker)
 
 ```sh
-cp secrets.env.example secrets.env        # set OPENROUTER_API_KEY
+cp config/secrets.example.yaml config/secrets.yaml   # set openrouter_api_key
 make install                # venv + editable install
 make dev                    # hot-reload on http://127.0.0.1:8077
 ```
@@ -51,7 +70,7 @@ Running the pipeline needs Docker (agents run in disposable containers);
 
 ## Documentation
 
-- [docs/configuration.md](docs/configuration.md) — Complete env-var reference
+- [docs/configuration.md](docs/configuration.md) — Complete configuration reference (YAML schema, loading order, secrets)
 - [docs/deployment.md](docs/deployment.md) — Continuous deployment via GitHub Actions + Watchtower
 - [docs/docker-architecture.md](docs/docker-architecture.md) — Container topology & conceptual architecture
 - [docs/github-app.md](docs/github-app.md) — Delivery identity setup (PAT or GitHub App bot)

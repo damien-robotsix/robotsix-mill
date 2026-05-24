@@ -16,8 +16,9 @@
 #  - The implement test-gate sandbox must run the SAME local build, so
 #    MILL_SANDBOX_IMAGE is pinned to :dev here (it's a local-build
 #    artifact, only meaningful when you local-build — that's why it
-#    lives here and not in .env). All other runtime config stays in
-#    .env / secrets.env.
+#    lives here and not in config/mill.defaults.yaml). All other
+#    runtime config stays in config/mill.local.yaml /
+#    config/secrets.yaml.
 #
 # Run only the `mill` service locally (the base `watchtower` service is
 # for deployment, not dev): `docker compose up -d --build mill`.

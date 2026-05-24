@@ -1,7 +1,8 @@
 # Delivery identity: GitHub App bot (recommended) or PAT
 
 The `deliver` stage pushes the ticket branch and opens a Pull Request.
-Two ways to authenticate, set via `FORGE_AUTH` in `.env`:
+Two ways to authenticate, set via `FORGE_AUTH` in `config/mill.local.yaml`
+(or as an environment variable):
 
 | `FORGE_AUTH` | Identity on the PR/commits | Setup |
 |---|---|---|
@@ -15,20 +16,23 @@ identity as robotsix-project.
 
 ---
 
-## Common `.env`
+## Common forge settings
 
-```
-FORGE_KIND=github
-FORGE_REMOTE_URL=https://github.com/<owner>/<repo>.git
-FORGE_TARGET_BRANCH=main
+```yaml
+# config/mill.local.yaml
+forge:
+  kind: github
+  remote_url: https://github.com/<owner>/<repo>.git
+  target_branch: main
 ```
 
 ## Option A — PAT (quick, for testing)
 
+```yaml
+# config/secrets.yaml
+forge_token: <token>
 ```
-FORGE_AUTH=token
-FORGE_TOKEN=<token>
-```
+With `forge.auth: token` (the default) in your settings.
 
 Fine-grained PAT scoped to the repo with **Contents: Read/write** +
 **Pull requests: Read/write** (or a classic PAT with `repo`). The PR is
@@ -82,19 +86,26 @@ App page → **Install App** → install on your account → **Only select
 repositories** → pick `<owner>/<repo>` → **Install**. (mill resolves the
 installation automatically from `FORGE_REMOTE_URL`.)
 
-### 4. Configure `.env`
+### 4. Configure settings and secrets
 
+```yaml
+# config/mill.local.yaml
+forge:
+  auth: app
 ```
-FORGE_AUTH=app
-GITHUB_APP_ID=<the integer App ID>
-# Either point at the .pem file (recommended)…
-GITHUB_APP_PRIVATE_KEY_PATH=/path/to/app.pem
+
+```yaml
+# config/secrets.yaml
+github_app_id: "<the integer App ID>"
+# Either point at the .pem file (recommended via bind mount):
+# github_app_private_key: ""  # leave empty when using path
 # …or inline the PEM (newlines as literal \n):
-# GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\n...\n-----END...
+github_app_private_key: "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END..."
 ```
 
-If you point at a `.pem` **path**, make sure that path is mounted into
-the container (e.g. add a read-only bind in `docker-compose.override.yml`)
+If using a `.pem` **file**, set `GITHUB_APP_PRIVATE_KEY_PATH`
+environment variable and make sure the path is mounted into the
+container (e.g. add a read-only bind in `docker-compose.override.yml`)
 or place the key under `./.data` so it's already on the volume.
 
 ---
@@ -106,7 +117,7 @@ or place the key under `./.data` so it's already on the volume.
   implement agent runs in the separate `--network none` sandbox and
   cannot read it (see [docker-architecture.md](docker-architecture.md)).
 - `GITHUB_APP_PRIVATE_KEY*` and `FORGE_TOKEN` are secrets — keep them in
-  the gitignored `.env` (or a mounted file); never commit them.
+  the gitignored `config/secrets.yaml` (or a mounted file); never commit them.
 - GitHub Enterprise: set `MILL_GITHUB_API_URL=https://<host>/api/v3`.
 - Bot commit authorship: the PR is authored by the bot; commit author
   is mill's git identity. Setting commits to the bot too is a future

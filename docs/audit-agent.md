@@ -45,10 +45,12 @@ curl -X POST http://localhost:8077/audit
 **Web board:** Click the "Run Audit" button on the board page.
 
 **Periodic polling (opt-in):**
-```sh
-# In .env:
-MILL_AUDIT_PERIODIC=true
-MILL_AUDIT_INTERVAL_SECONDS=86400  # 1 day
+```yaml
+# In config/mill.local.yaml:
+periodic:
+  audit:
+    enabled: true
+    interval_seconds: 86400  # 1 day
 ```
 
 ## Configuration
