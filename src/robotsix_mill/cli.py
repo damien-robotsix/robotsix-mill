@@ -56,6 +56,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Test-gap pass",
         "format": "memory_drafts",
     },
+    "env-sync": {
+        "module": "env_sync_runner",
+        "function": "run_env_sync_pass",
+        "label": "Env-sync pass",
+        "format": "memory_drafts",
+    },
     "trace-health": {
         "module": "trace_health_runner",
         "function": "run_trace_health_check",
