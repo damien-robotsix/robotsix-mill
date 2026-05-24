@@ -98,6 +98,8 @@ def run_retrospect_agent(
     deep_analysis: bool = False,
     trace_ids: list[str] | None = None,
     recent_proposals: str = "",
+    epic_context: str = "",
+    sibling_context: str = "",
 ) -> RetrospectResult:
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -135,6 +137,10 @@ def run_retrospect_agent(
         f"<comments>\n{comments_text or '(no comments)'}\n</comments>\n\n"
         f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
     )
+    if epic_context:
+        prompt += f"\n\n{epic_context}"
+    if sibling_context:
+        prompt += f"\n\n{sibling_context}"
     if deep_analysis and trace_ids:
         ids_text = "\n".join(f"- {tid}" for tid in trace_ids)
         prompt += (
