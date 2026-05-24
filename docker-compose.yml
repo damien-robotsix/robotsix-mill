@@ -40,6 +40,12 @@ services:
       - "${DOCKER_GID:-999}"   # host docker socket group, so non-root mill can use it
     volumes:
       - ./.data:/data
+      # Bind-mount config/ so YAML overrides (mill.local.yaml,
+      # mill.production.yaml, secrets.yaml) are picked up without
+      # rebuilding the image. The baked defaults still exist in the
+      # image; the bind shadows them with the host's same files plus
+      # any overrides.
+      - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock
       # GitHub App auth: bind the private key into the container at the
       # SAME path it has on the host, so GITHUB_APP_PRIVATE_KEY_PATH (a
