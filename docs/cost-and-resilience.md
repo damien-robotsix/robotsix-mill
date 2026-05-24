@@ -49,6 +49,45 @@ three env vars (`LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`,
 trace carries the session id — the trace-health system enforces this
 across all agent runs.
 
+## Cost dashboard
+
+The board's **Cost Dashboard** (💰 button in the drawer header) shows
+aggregate spend across all tickets for a configurable lookback window
+(1 hour – 7 days). It calls three Langfuse-backed endpoints in
+parallel:
+
+| Endpoint | What it returns |
+|---|---|
+| `GET /costs/by-agent?lookback_hours=N` | Per-agent-name cost bars (total cost + trace count) |
+| `GET /costs/most-expensive-ticket?lookback_hours=N` | The single ticket with the highest LLM spend in the window |
+| `GET /costs/most-expensive-trace?lookback_hours=N` | The single most expensive individual agent run (trace) in the window |
+
+All three endpoints clamp `lookback_hours` to `[1, 168]` (same as the
+selector options). When tracing is disabled or no data exists, the
+most-expensive endpoints return `null` and the dashboard shows a muted
+"No data" placeholder — the per-agent bar chart continues to render
+independently.
+
+### Langfuse functions
+
+Two new functions in `langfuse_client.py` back the most-expensive
+endpoints, following the same pagination and graceful-degradation
+patterns as `aggregate_cost_by_name`:
+
+- **`most_expensive_ticket(settings, lookback_hours)`** — groups traces
+  by `sessionId`, sums `totalCost` per session, returns the session with
+  the highest total cost (or `None` when tracing is disabled / the API
+  errors). The route then looks up the matching ticket by `session_id`.
+
+- **`most_expensive_trace(settings, lookback_hours)`** — scans traces
+  for the single highest `totalCost`, skipping unnamed/in-flight traces
+  (same `_named` filter as `list_recent_traces`). Returns the trace
+  dict directly.
+
+Both functions cap examination at 500 traces (`EXAMINE_CAP`) to bound
+API calls, and catch all exceptions — returning `None` on failure
+rather than crashing the dashboard.
+
 ## Cost controls
 
 - **Implement agent + two lean sub-agents (each its own model).** A
