@@ -118,12 +118,6 @@ class ValidationResult(BaseModel):
         )
 
 
-# Re-exported for tests (test_coordinating.py, test_prompt_hygiene.py).
-# The module itself uses load_agent_definition() directly.
-import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "implement.yaml"
-_SYSTEM_PROMPT = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
-
 
 def make_run_tests_tool(settings: Settings, repo_dir: Path):
     def run_tests() -> str:

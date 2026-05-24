@@ -94,6 +94,8 @@ def run_review_agent(
     overrides = {}
     if model_name is not None:
         overrides["model_name"] = model_name
+    elif not definition.model:
+        overrides["model_name"] = settings.review_model
 
     agent = build_agent_from_definition(
         settings, definition, tools=tools,

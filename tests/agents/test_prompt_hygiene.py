@@ -3,15 +3,16 @@ pydantic-ai auto-injects, and MUST contain orchestration guidance.
 """
 
 import re
+from pathlib import Path
 
 from robotsix_mill.agents import (
     refining,
-    coordinating,
     health,
     auditing,
     retrospecting,
     agent_check,
 )
+from robotsix_mill.agents.yaml_loader import load_agent_definition
 
 
 # --- Tool-signature patterns that must NOT appear in prompts ---
@@ -61,10 +62,14 @@ def test_refining_prompt_no_tool_signatures():
 
 
 def test_coordinating_prompt_no_tool_signatures():
-    """coordinating _SYSTEM_PROMPT must not restate tool signatures."""
-    _assert_no_tool_signatures(coordinating._SYSTEM_PROMPT, "coordinating")
+    """coordinating system prompt must not restate tool signatures."""
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
+    )
+    prompt = definition.system_prompt
+    _assert_no_tool_signatures(prompt, "coordinating")
     # Must contain orchestration guidance.
-    p = coordinating._SYSTEM_PROMPT.lower()
+    p = prompt.lower()
     assert "prefer `explore`" in p
     assert "`edit_file`" in p
     assert "`write_file`" in p
