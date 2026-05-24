@@ -284,13 +284,12 @@ def test_clone_failure_falls_back_to_draft_only_refine(ctx_factory, monkeypatch)
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", MILL_REQUIRE_APPROVAL="false")
     t = _ticket(ctx, body="Add endpoint")
 
-    monkeypatch.setattr(
-        git_ops, "clone",
-        lambda remote_url, dest, branch, token: (_ for _ in ()).throw(
+    _apply_default_mocks(
+        monkeypatch,
+        clone=lambda remote_url, dest, branch, token: (_ for _ in ()).throw(
             subprocess.CalledProcessError(1, "git", stderr=b"fatal: repository not found")
         ),
     )
-    _apply_default_mocks(monkeypatch)
 
     out = RefineStage().run(t, ctx)
 
