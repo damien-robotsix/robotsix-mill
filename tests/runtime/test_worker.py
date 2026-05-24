@@ -369,3 +369,121 @@ async def test_reconcile_sweep_enqueues_out_of_band_drafts(
         await w._poll_loop()
 
     assert t.id in w._pending  # swept in despite never being enqueued
+
+
+# --- startup-aware periodic pass (last-run aware) ----------------------
+
+
+async def test_periodic_pass_fires_immediately_when_overdue(
+    ctx, service, monkeypatch, tmp_path,
+):
+    """When the last completed run is older than the interval, the
+    periodic pass must fire on startup (after ~1s settling delay),
+    not wait the full interval."""
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    from robotsix_mill.runtime.run_registry import RunRegistry
+
+    # Write a completed audit entry 25h old into runs.json.
+    db_path = tmp_path / "runs.json"
+    old_dt = datetime.now(timezone.utc) - timedelta(hours=25)
+    old_ts_str = old_dt.isoformat()
+    prior = [{
+        "id": "overdue-audit-1",
+        "kind": "audit",
+        "started_at": old_ts_str,
+        "finished_at": old_ts_str,
+        "status": "ok",
+        "summary": "old pass",
+        "error": None,
+    }]
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_path.write_text(json.dumps(prior))
+
+    registry = RunRegistry(db_path)
+
+    ctx.settings.audit_periodic = True
+    ctx.settings.audit_interval_seconds = 86400
+    ctx.settings.data_dir = str(tmp_path)
+
+    fired = {"count": 0}
+
+    def fake_pass():
+        fired["count"] += 1
+        from robotsix_mill.audit_runner import AuditResult
+        return AuditResult(drafts_created=[])
+
+    monkeypatch.setattr(
+        "robotsix_mill.audit_runner.run_audit_pass", fake_pass,
+    )
+
+    w = Worker(ctx, run_registry=registry)
+    w.start()
+    try:
+        # Wait up to 3s for the pass to fire (1s initial delay + some
+        # scheduling headroom from the asyncio event loop).
+        for _ in range(30):
+            await asyncio.sleep(0.1)
+            if fired["count"] > 0:
+                break
+        assert fired["count"] >= 1, (
+            "overdue pass did not fire within 3s of startup"
+        )
+    finally:
+        await w.stop()
+
+
+async def test_periodic_pass_waits_when_not_overdue(
+    ctx, service, monkeypatch, tmp_path,
+):
+    """When the last completed run is recent (within the interval), the
+    periodic pass must NOT fire on startup — it sleeps the remaining
+    interval time."""
+    import json
+    from datetime import datetime, timezone
+
+    from robotsix_mill.runtime.run_registry import RunRegistry
+
+    db_path = tmp_path / "runs.json"
+    recent_ts = datetime.now(timezone.utc).isoformat()
+    prior = [{
+        "id": "recent-audit-1",
+        "kind": "audit",
+        "started_at": recent_ts,
+        "finished_at": recent_ts,
+        "status": "ok",
+        "summary": "recent pass",
+        "error": None,
+    }]
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_path.write_text(json.dumps(prior))
+
+    registry = RunRegistry(db_path)
+
+    ctx.settings.audit_periodic = True
+    ctx.settings.audit_interval_seconds = 86400
+    ctx.settings.data_dir = str(tmp_path)
+
+    fired = {"count": 0}
+
+    def fake_pass():
+        fired["count"] += 1
+        from robotsix_mill.audit_runner import AuditResult
+        return AuditResult(drafts_created=[])
+
+    monkeypatch.setattr(
+        "robotsix_mill.audit_runner.run_audit_pass", fake_pass,
+    )
+
+    w = Worker(ctx, run_registry=registry)
+    w.start()
+    try:
+        # The pass should sleep the remaining ~23h — after a short
+        # wait, it must NOT have fired.
+        await asyncio.sleep(0.5)
+        assert fired["count"] == 0, (
+            "recent pass fired prematurely — should have waited"
+        )
+    finally:
+        await w.stop()

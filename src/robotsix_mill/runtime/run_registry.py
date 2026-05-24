@@ -16,7 +16,7 @@ MAX_ENTRIES = 50
 @dataclass
 class RunEntry:
     id: str
-    kind: Literal["audit", "trace-health", "health", "agent_check", "deep-review", "survey", "epic-breakdown"]
+    kind: Literal["audit", "trace-health", "health", "agent_check", "deep-review", "survey", "epic-breakdown", "test-gap"]
     started_at: str  # ISO-8601 UTC
     finished_at: str | None = None
     status: Literal["running", "ok", "error"] = "running"
@@ -124,6 +124,15 @@ class RunRegistry:
                     e.error = error
                     break
             self.flush()
+
+    def most_recent(self, kind: str) -> dict | None:
+        """Return the newest completed entry (status *not* ``"running"``)
+        of the given *kind*, or ``None`` if no such entry exists."""
+        with self._lock:
+            for e in reversed(self._entries):
+                if e.kind == kind and e.status != "running":
+                    return asdict(e)
+            return None
 
     def list_all(self) -> list[dict]:
         """Return all entries as dicts, newest first (includes running)."""

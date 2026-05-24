@@ -472,10 +472,10 @@ class Worker:
         self._trace_health_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
+        self._bc_check_task: asyncio.Task | None = None
         self._ci_monitor_task: asyncio.Task | None = None
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
-        self._bc_check_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -620,6 +620,30 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("reconcile sweep failed")
 
+    def _initial_delay(self, kind: str, interval: int) -> float:
+        """Return the seconds to sleep before the first periodic pass.
+
+        Queries ``RunRegistry.most_recent(kind)`` to decide:
+        - No registry → full ``interval`` (preserves current behaviour).
+        - Never run (``None``) → 1.0 s.
+        - Last run overdue (elapsed >= interval) → 1.0 s.
+        - Otherwise → ``interval - elapsed`` (remaining time).
+        """
+        if self.run_registry is None:
+            return float(interval)
+        entry = self.run_registry.most_recent(kind)
+        if entry is None:
+            return 1.0
+        try:
+            from datetime import datetime, timezone
+            last_ts = datetime.fromisoformat(entry["started_at"])
+            elapsed = (datetime.now(timezone.utc) - last_ts).total_seconds()
+        except Exception:
+            return 1.0
+        if elapsed >= interval:
+            return 1.0
+        return interval - elapsed
+
     async def _run_periodic_pass(
         self, label: str, runner_fn, interval: int,
     ) -> None:
@@ -631,8 +655,9 @@ class Worker:
                        ``drafts_created`` field.
             interval: Seconds between passes.
         """
+        initial = self._initial_delay(label, interval)
+        await asyncio.sleep(initial)
         while True:
-            await asyncio.sleep(interval)
             run_id = None
             try:
                 log.info("Starting periodic %s pass", label)
@@ -657,14 +682,16 @@ class Worker:
                 log.exception("%s poll failed", label)
                 if self.run_registry and run_id:
                     self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
 
     async def _trace_health_poll_loop(self) -> None:
         """Periodic trace-health check loop. Only runs when
         ``MILL_TRACE_HEALTH_PERIODIC=true``."""
         settings = self.ctx.settings
         interval = max(3600, settings.trace_health_interval_seconds)
+        initial = self._initial_delay("trace-health", interval)
+        await asyncio.sleep(initial)
         while True:
-            await asyncio.sleep(interval)
             try:
                 log.info("Starting periodic trace-health check")
                 from ..trace_health_runner import run_trace_health_check
@@ -698,42 +725,77 @@ class Worker:
                 log.exception("trace-health poll failed")
                 if self.run_registry and run_id:
                     self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
 
     async def _health_poll_loop(self) -> None:
         """Periodic health pass loop. Only runs when
         ``MILL_HEALTH_PERIODIC=true``."""
         settings = self.ctx.settings
         interval = max(60, settings.health_interval_seconds)
+        initial = self._initial_delay("health", interval)
+        await asyncio.sleep(initial)
         while True:
-            await asyncio.sleep(interval)
+            run_id = None
             try:
                 log.info("Starting periodic health pass")
+                if self.run_registry:
+                    run_id = self.run_registry.start("health")
                 from ..health_runner import run_health_pass
                 result = run_health_pass()
                 log.info(
                     "Health pass completed, created %d draft(s)",
                     len(result.drafts_created),
                 )
-            except Exception:  # noqa: BLE001 — never let the poll die
+                if self.run_registry and run_id:
+                    draft_ids = [
+                        d["id"] for d in result.drafts_created[:5]
+                    ]
+                    summary = (
+                        f"Created {len(result.drafts_created)} drafts: "
+                        f"{', '.join(draft_ids)}"
+                        f"{'…' if len(result.drafts_created) > 5 else ''}"
+                    )
+                    self.run_registry.finish_ok(run_id, summary)
+            except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("health poll failed")
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
 
     async def _test_gap_poll_loop(self) -> None:
         """Periodic test-gap pass loop. Only runs when
         ``MILL_TEST_GAP_PERIODIC=true``."""
         settings = self.ctx.settings
         interval = max(60, settings.test_gap_interval_seconds)
+        initial = self._initial_delay("test-gap", interval)
+        await asyncio.sleep(initial)
         while True:
-            await asyncio.sleep(interval)
+            run_id = None
             try:
                 log.info("Starting periodic test-gap pass")
+                if self.run_registry:
+                    run_id = self.run_registry.start("test-gap")
                 from ..test_gap_runner import run_test_gap_pass
                 result = run_test_gap_pass()
                 log.info(
                     "Test-gap pass completed, created %d draft(s)",
                     len(result.drafts_created),
                 )
-            except Exception:  # noqa: BLE001 — never let the poll die
+                if self.run_registry and run_id:
+                    draft_ids = [
+                        d["id"] for d in result.drafts_created[:5]
+                    ]
+                    summary = (
+                        f"Created {len(result.drafts_created)} drafts: "
+                        f"{', '.join(draft_ids)}"
+                        f"{'…' if len(result.drafts_created) > 5 else ''}"
+                    )
+                    self.run_registry.finish_ok(run_id, summary)
+            except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("test-gap poll failed")
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
 
     async def _ci_monitor_poll_loop(self) -> None:
         """Periodic CI monitor poll: watch the forge target branch for
@@ -933,6 +995,19 @@ class Worker:
                 "Periodic agent-check enabled: interval %ds",
                 self.ctx.settings.agent_check_interval_seconds,
             )
+        # Opt-in periodic bc-check
+        if self.ctx.settings.bc_check_periodic and self._bc_check_task is None:
+            from ..bc_check_runner import run_bc_check_pass
+            self._bc_check_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "bc_check", run_bc_check_pass,
+                    max(60, self.ctx.settings.bc_check_interval_seconds),
+                )
+            )
+            log.info(
+                "Periodic bc-check enabled: interval %ds",
+                self.ctx.settings.bc_check_interval_seconds,
+            )
         # Opt-in CI monitor
         if self.ctx.settings.ci_monitor_periodic and self._ci_monitor_task is None:
             self._ci_monitor_task = asyncio.create_task(
@@ -962,30 +1037,13 @@ class Worker:
                 "Periodic survey enabled: interval %ds",
                 self.ctx.settings.survey_interval_seconds,
             )
-        # Opt-in periodic bc-check
-        if (
-            self.ctx.settings.bc_check_periodic
-            and self._bc_check_task is None
-        ):
-            from ..bc_check_runner import run_bc_check_pass
-            self._bc_check_task = asyncio.create_task(
-                self._run_periodic_pass(
-                    "bc_check", run_bc_check_pass,
-                    max(60, self.ctx.settings.bc_check_interval_seconds),
-                )
-            )
-            log.info(
-                "Periodic bc-check enabled: interval %ds",
-                self.ctx.settings.bc_check_interval_seconds,
-            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
         for attr in (
             "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
-            "_agent_check_task", "_test_gap_task", "_survey_task",
-            "_bc_check_task",
+            "_agent_check_task", "_bc_check_task", "_test_gap_task", "_survey_task",
         ):
             t = getattr(self, attr)
             if t is not None:
