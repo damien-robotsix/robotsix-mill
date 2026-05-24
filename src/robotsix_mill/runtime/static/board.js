@@ -93,8 +93,8 @@ async function refresh(){
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
-   ${!['draft','human_issue_approval','closed','answered','epic_closed','epic_open'].includes(s)?
-    `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:""}
+   (!['draft','human_issue_approval','closed','answered','epic_closed','epic_open'].includes(s)?
+    `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
