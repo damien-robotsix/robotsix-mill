@@ -32,7 +32,7 @@ forge:
 # config/secrets.yaml
 forge_token: <token>
 ```
-With `forge.auth: token` (the default) in your settings.
+With `forge.auth_mode: token` (the default) in your settings.
 
 Fine-grained PAT scoped to the repo with **Contents: Read/write** +
 **Pull requests: Read/write** (or a classic PAT with `repo`). The PR is
@@ -91,7 +91,7 @@ installation automatically from `FORGE_REMOTE_URL`.)
 ```yaml
 # config/mill.local.yaml
 forge:
-  auth: app
+  auth_mode: app
 ```
 
 ```yaml

@@ -17,7 +17,7 @@ Settings are resolved from five layers (highest priority first):
 |----------|--------|-------------|
 | 1 (highest) | Explicit `Settings(k=v)` kwargs | Programmatic overrides from callers |
 | 2 | `os.environ` | Any `MILL_*` or unprefixed variable set in the environment |
-| 3 | YAML overlays | `config/mill.production.yaml` then `config/mill.local.yaml` (optional) |
+| 3 | YAML overlays | `config/mill.local.yaml` then `config/mill.production.yaml` (optional) |
 | 4 | YAML defaults | `config/mill.defaults.yaml` (always loaded, committed) |
 | 5 (lowest) | `Field(default=...)` | Static Python defaults in the Pydantic model |
 
@@ -175,6 +175,8 @@ Every setting below shows:
 | `core.models.health` | `MILL_HEALTH_MODEL` | `deepseek/deepseek-v4-pro` | Health agent — codebase-health across 6 dimensions |
 | `core.models.survey` | `MILL_SURVEY_MODEL` | `deepseek/deepseek-v4-pro` | Survey agent — discovers OSS projects; proposes improvements |
 | `core.models.rate_limit_fallback` | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `""` (disabled) | Fallback model when rate-limit retries exhausted |
+| `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-pro` | Documentation agent |
+| `core.models.triage` | `MILL_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Pre-refine triage — fast/cheap classification |
 | `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `openai/gpt-4o-mini` | Model for the auto-approve triage call (must be fast and cheap) |
 | `core.models.env_sync` | `MILL_ENV_SYNC_MODEL` | `openai/gpt-4o-mini` | Env-sync agent model for config/docs drift detection |
 
@@ -182,13 +184,13 @@ Every setting below shows:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `core.limits.coordinator_request_limit` | `MILL_COORDINATOR_REQUEST_LIMIT` | `200` | Per-ticket request cap for the implement (coordinator) agent |
-| `core.limits.explore_request_limit` | `MILL_EXPLORE_REQUEST_LIMIT` | `20` | Per-call request cap for the explore sub-agent |
-| `core.limits.test_request_limit` | `MILL_TEST_REQUEST_LIMIT` | `8` | Per-call request cap for the test sub-agent |
-| `core.limits.web_research_request_limit` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
-| `core.limits.dedup_request_limit` | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap for the dedup check |
-| `core.limits.doc_request_limit` | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
-| `core.limits.review_request_limit` | `MILL_REVIEW_REQUEST_LIMIT` | `20` | Per-run request cap for the review agent |
+| `core.limits.coordinator_requests` | `MILL_COORDINATOR_REQUEST_LIMIT` | `200` | Per-ticket request cap for the implement (coordinator) agent |
+| `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `20` | Per-call request cap for the explore sub-agent |
+| `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `8` | Per-call request cap for the test sub-agent |
+| `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
+| `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap for the dedup check |
+| — (env-var only) | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
+| — (env-var only) | `MILL_REVIEW_REQUEST_LIMIT` | `20` | Per-run request cap for the review agent |
 
 ### 3. Worker pool & retry
 
@@ -211,17 +213,19 @@ Every setting below shows:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.memory.max_memory_chars` | `MILL_MAX_MEMORY_CHARS` | `8000` | Max characters loaded from any memory ledger per agent pass |
-| `core.memory.implement_memory_path` | `MILL_IMPLEMENT_MEMORY_PATH` | `None` | Override path for implement memory; defaults to `<data_dir>/implement_memory.md` |
-| `core.memory.refine_memory_path` | `MILL_REFINE_MEMORY_PATH` | `None` | Override path for refine memory; defaults to `<data_dir>/refine_memory.md` |
-| `core.memory.ci_fix_memory_path` | `MILL_CI_FIX_MEMORY_PATH` | `None` | Override path for CI-fix memory; defaults to `<data_dir>/ci_fix_memory.md` |
-| `core.memory.rebase_memory_path` | `MILL_REBASE_MEMORY_PATH` | `None` | Override path for rebase memory; defaults to `<data_dir>/rebase_memory.md` |
+| `core.memory.reference_files_max_count` | `MILL_REFERENCE_FILES_MAX_COUNT` | `5` | Max files whose full content refine stores |
+| `core.memory.reference_files_max_total_lines` | `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `3000` | Max total lines across selected reference files |
+| `pipeline.implement_memory_path` | `MILL_IMPLEMENT_MEMORY_PATH` | `None` | Override path for implement memory; defaults to `<data_dir>/implement_memory.md` |
+| `pipeline.refine_memory_path` | `MILL_REFINE_MEMORY_PATH` | `None` | Override path for refine memory; defaults to `<data_dir>/refine_memory.md` |
+| `pipeline.ci_fix_memory_path` | `MILL_CI_FIX_MEMORY_PATH` | `None` | Override path for CI-fix memory; defaults to `<data_dir>/ci_fix_memory.md` |
+| `pipeline.rebase_memory_path` | `MILL_REBASE_MEMORY_PATH` | `None` | Override path for rebase memory; defaults to `<data_dir>/rebase_memory.md` |
 
 ### 5. Dedup
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `core.dedup.lookback_days` | `MILL_DEDUP_LOOKBACK_DAYS` | `30` | Days back to consider closed tickets as dup candidates |
-| `core.dedup.lookback_commits` | `MILL_DEDUP_LOOKBACK_COMMITS` | `20` | Recent commits to inspect for "already done" |
+| `core.memory.dedup_lookback_days` | `MILL_DEDUP_LOOKBACK_DAYS` | `30` | Days back to consider closed tickets as dup candidates |
+| `core.memory.dedup_lookback_commits` | `MILL_DEDUP_LOOKBACK_COMMITS` | `20` | Recent commits to inspect for "already done" |
 
 ### 6. Service (management plane)
 
@@ -238,8 +242,13 @@ Every setting below shows:
 |-----------|---------|---------|-------------|
 | `gates.require_approval` | `MILL_REQUIRE_APPROVAL` | `true` | Pause after refine for human approval (`awaiting_approval` state) |
 | `gates.auto_approve_enabled` | `MILL_AUTO_APPROVE_ENABLED` | `false` | Enable conservative auto-approve triage |
+| `gates.auto_approve_model` | `MILL_AUTO_APPROVE_MODEL` | `openai/gpt-4o-mini` | Model for auto-approve triage (fast + cheap) |
 | `gates.review_enabled` | `MILL_REVIEW_ENABLED` | `false` | Enable dual-model code review stage before deliver |
-| `gates.auto_merge` | `MILL_AUTO_MERGE` | `false` | Auto-merge PR when CI passes |
+| `gates.review_model` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent model |
+| `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
+| `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
+| `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `false` | Post-refinement spec narrative stripping |
+| `gates.auto_merge_enabled` | `MILL_AUTO_MERGE_ENABLED` | `false` | Auto-merge PR when CI passes |
 
 ### 8. Forge
 
@@ -248,8 +257,10 @@ Every setting below shows:
 | `forge.kind` | `FORGE_KIND` | `none` | Forge platform: `github`, `gitlab`, or `none` |
 | `forge.remote_url` | `FORGE_REMOTE_URL` | `None` | Remote URL for clone + push |
 | `forge.target_branch` | `FORGE_TARGET_BRANCH` | `main` | Target branch for PRs |
-| `forge.auth` | `FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App) |
+| `forge.auth_mode` | `FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App) |
 | `forge.github_api_url` | `MILL_GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (override for GitHub Enterprise) |
+| `forge.gitlab_api_url` | `MILL_GITLAB_API_URL` | `https://gitlab.com/api/v4` | GitLab API base URL (override for self-hosted GitLab) |
+| `forge.github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | `None` | Host path to GitHub App private-key `.pem` file |
 
 ### 9. Sandbox
 
@@ -268,7 +279,7 @@ Every setting below shows:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `web.search` | `MILL_WEB_SEARCH` | `true` | Enable web-search capability (delegated to sub-agent) |
+| `web.search_enabled` | `MILL_WEB_SEARCH` | `true` | Enable web-search capability (delegated to sub-agent) |
 | `web.fetch_image` | `MILL_FETCH_IMAGE` | `curlimages/curl:8.17.0` | Docker image for isolated `web_fetch` container |
 | `web.fetch_max_bytes` | `MILL_WEB_FETCH_MAX_BYTES` | `2000000` | Max bytes fetched per URL |
 | `web.fetch_timeout` | `MILL_WEB_FETCH_TIMEOUT` | `30` | Timeout (seconds) per web fetch |
@@ -281,6 +292,8 @@ Every setting below shows:
 | `pipeline.rebase_max_attempts` | `MILL_REBASE_MAX_ATTEMPTS` | `5` | Max rebase LLM invocations before BLOCK |
 | `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Max CI-fix LLM invocations before BLOCK |
 | `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
+| `pipeline.prune_clone_on_close` | `MILL_PRUNE_CLONE_ON_CLOSE` | `true` | Delete workspace repo clone on ticket close |
+| `pipeline.max_archived_tickets` | `MILL_MAX_ARCHIVED_TICKETS` | `100` | Max terminal-state tickets retained (0 = no purge) |
 
 ### 12. Periodic agents
 
@@ -288,28 +301,47 @@ Each periodic agent shares this pattern:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `false` | Enable periodic passes |
+| `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `false`¹ | Enable periodic passes |
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger |
 
 Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
-`agent_check`, `survey`, `ci_monitor`, `env_sync`.
+`agent_check`, `survey`, `ci_monitor`, `env_sync`, `bc_check`.
+
+> ¹ `survey` is the exception — its default is `enabled: true`.
+>
+> `env_sync` and `bc_check` are **env-var-only** (no YAML mapping yet).
+> Set `MILL_ENV_SYNC_PERIODIC=true`, `MILL_BC_CHECK_PERIODIC=true`, etc.
 
 Additional fields:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.ci_monitor.ci_log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
-| `pipeline.retrospect.spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
-| `pipeline.retrospect.deep_analysis_frequency` | `MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY` | `10` | How many retrospect runs between deep trace analyses |
-| `pipeline.retrospect.memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
-| `pipeline.retrospect.trace_inspector_memory_path` | `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `None` | Override path for trace-inspector memory |
+| `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
+| `pipeline.retrospect_spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
+| `pipeline.retrospect_deep_analysis_frequency` | `MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY` | `10` | How many retrospect runs between deep trace analyses |
+| `pipeline.retrospect_memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
+| `pipeline.trace_inspector_memory_path` | `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `None` | Override path for trace-inspector memory |
+
+#### Env-var-only periodic agents
+
+`env_sync` and `bc_check` have no YAML mapping yet — set them via
+environment variables only:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_ENV_SYNC_PERIODIC` | `false` | Enable periodic config/docs drift detection |
+| `MILL_ENV_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between env-sync passes |
+| `MILL_ENV_SYNC_MODEL` | `openai/gpt-4o-mini` | Env-sync agent model |
+| `MILL_BC_CHECK_PERIODIC` | `false` | Enable periodic backward-compatibility inspection |
+| `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
+| `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | BC-check agent model |
 
 ### 13. Skills
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `skills.dir` | `MILL_SKILLS_DIR` | `skills` | Directory of skill docs injected into agent system prompts |
+| `sandbox.skills_dir` | `MILL_SKILLS_DIR` | `skills` | Directory of skill docs injected into agent system prompts |
 
 ---
 
