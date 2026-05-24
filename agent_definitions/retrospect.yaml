@@ -167,3 +167,32 @@ system_prompt: |
   understand without reading the retrospect output — include the specific
   function or component name (e.g. "Wire real doc agent in
   DocumentStage._run_doc_agent" not "Complete the stub").
+
+  **Epic-aware incomplete-work detection**
+
+  When `<epic_context>` is present in the input, the parent epic's
+  description defines what work is *expected* across all sub-issues.  A
+  gap that falls within the epic's declared scope may belong to a sibling
+  sub-issue rather than this ticket.  Cross-reference every incomplete-work
+  finding against both the epic scope and any `<epic_siblings>` list:
+
+  - If a flagged gap (stub, TODO, `NotImplementedError`) clearly overlaps
+    with a sibling's title or is described in the epic as belonging to
+    another sub-issue, do **not** set `follow_up_title`/`follow_up_body`.
+    Instead, note the sibling coverage in `findings` (e.g. "Stub
+    `_run_doc_agent` is deferred to sibling `TKT-XXX` [draft]").
+
+  - If no sibling covers the gap, proceed with the follow-up as normal.
+
+  - The epic context and sibling list are advisory: they do not excuse
+    genuine gaps that no sibling addresses.  Use them to avoid duplicates,
+    not to suppress real missing work.
+
+  The sibling list appears in the prompt as:
+  ```
+  <epic_siblings>
+  - `TKT-XXX` [state] title...
+  - `TKT-YYY` [state] title...
+  </epic_siblings>
+  ```
+

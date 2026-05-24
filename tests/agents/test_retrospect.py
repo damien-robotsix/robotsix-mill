@@ -1063,3 +1063,210 @@ def test_systemic_proposals_still_work(tmp_path, monkeypatch):
     assert drafts[0].parent_id == t.id
     assert drafts[0].title == "Cut retry tokens"
     assert drafts[0].source == SourceKind.RETROSPECT
+
+
+# ---------------------------------------------------------------------------
+# epic / sibling context passthrough tests
+# ---------------------------------------------------------------------------
+
+
+def test_epic_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
+    """When a child of an epic is retrospected, epic_context is non-empty
+    and contains the parent epic's description."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    # Create an epic parent.
+    epic = ctx.service.create(
+        "Epic: Configuration system overhaul",
+        "Deliver a unified config system across all stages.",
+        kind="epic",
+    )
+    # Create a child ticket linked to the epic.
+    child = ctx.service.create(
+        "Wire config loader in refine stage",
+        "Connect the YAML loader.",
+        parent_id=epic.id,
+    )
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+        ctx.service.transition(child.id, st)
+    child = ctx.service.get(child.id)
+
+    captured = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    RetrospectStage().run(child, ctx)
+    ec = captured.get("epic_context", "")
+    assert ec, "epic_context should be non-empty for child of epic"
+    assert "<epic_context>" in ec
+    assert "unified config system" in ec
+
+
+def test_sibling_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
+    """When a child of an epic has siblings, sibling_context lists them
+    (ID, state, title) but excludes the current ticket."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    epic = ctx.service.create("Epic: Multi-stage refactor", "Big refactor.", kind="epic")
+
+    current = ctx.service.create("Refactor refine stage", "desc", parent_id=epic.id)
+    sibling_a = ctx.service.create("Refactor implement stage", "desc", parent_id=epic.id)
+    sibling_b = ctx.service.create("Refactor retrospect stage", "desc", parent_id=epic.id)
+
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+        ctx.service.transition(current.id, st)
+    current = ctx.service.get(current.id)
+
+    captured = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    RetrospectStage().run(current, ctx)
+    sc = captured.get("sibling_context", "")
+    assert sc, "sibling_context should be non-empty when siblings exist"
+    assert "<epic_siblings>" in sc
+    assert sibling_a.id in sc
+    assert sibling_b.id in sc
+    assert current.id not in sc  # current ticket excluded
+    assert "draft" in sc.lower() or "[draft]" in sc  # state listed
+
+
+def test_no_epic_context_for_standalone_ticket(tmp_path, monkeypatch):
+    """Ticket with no parent → epic_context and sibling_context are both empty."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    captured = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    RetrospectStage().run(_done(ctx), ctx)
+    assert captured.get("epic_context", "") == ""
+    assert captured.get("sibling_context", "") == ""
+
+
+def test_no_epic_context_for_non_epic_parent(tmp_path, monkeypatch):
+    """Ticket whose parent is not an epic → epic_context is empty
+    (get_epic_context returns '' for non-epic parents)."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    parent = ctx.service.create("Regular parent ticket", "Not an epic.")
+    child = ctx.service.create("Child of regular ticket", "desc", parent_id=parent.id)
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+        ctx.service.transition(child.id, st)
+    child = ctx.service.get(child.id)
+
+    captured = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    RetrospectStage().run(child, ctx)
+    assert captured.get("epic_context", "") == ""
+    # Child has no siblings, so sibling_context should be empty too.
+    assert captured.get("sibling_context", "") == ""
+
+
+def test_follow_up_suppressed_when_sibling_covers_gap(tmp_path, monkeypatch):
+    """When the agent suppresses follow_up because a sibling covers the
+    gap, no follow-up ticket is created — integration test of agent
+    decision flowing through the stage."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    epic = ctx.service.create("Epic: Doc system", "Wire doc agent + tests.", kind="epic")
+    current = ctx.service.create("Wire doc agent stub", "desc", parent_id=epic.id)
+    ctx.service.create("Doc agent unit tests", "desc", parent_id=epic.id)
+
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+        ctx.service.transition(current.id, st)
+    current = ctx.service.get(current.id)
+
+    # The agent sees a stub but notes a sibling covers it — no follow_up.
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="_run_doc_agent is a stub, deferred to sibling TKT-...",
+            conclusion="closed — gap deferred to sibling",
+            follow_up_title=None,
+            follow_up_body=None,
+        ),
+    )
+
+    out = RetrospectStage().run(current, ctx)
+    assert out.next_state is State.CLOSED
+    # No follow-up spawned as a child of the current ticket.
+    spawned = [x for x in ctx.service.list() if x.parent_id == current.id]
+    assert len(spawned) == 0
+
+
+def test_sibling_context_empty_when_no_other_children(tmp_path, monkeypatch):
+    """Epic parent with only the current child → sibling_context is empty."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    epic = ctx.service.create("Epic: Solo mission", "Just one child.", kind="epic")
+    child = ctx.service.create("The only child", "desc", parent_id=epic.id)
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+        ctx.service.transition(child.id, st)
+    child = ctx.service.get(child.id)
+
+    captured = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    RetrospectStage().run(child, ctx)
+    assert captured.get("sibling_context", "") == ""
+
+
+def test_sibling_title_truncated_at_80_chars(tmp_path, monkeypatch):
+    """Sibling titles > 80 chars are truncated with '…' in the sibling list."""
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    epic = ctx.service.create("Epic: Truncation test", "Test.", kind="epic")
+    current = ctx.service.create("Current ticket", "desc", parent_id=epic.id)
+    long_title = "A" * 100 + " suffix"
+    ctx.service.create(long_title, "desc", parent_id=epic.id)
+
+    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+        ctx.service.transition(current.id, st)
+    current = ctx.service.get(current.id)
+
+    captured = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return _default_result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
+
+    RetrospectStage().run(current, ctx)
+    sc = captured.get("sibling_context", "")
+    assert sc, "sibling_context should exist"
+    # The long title should appear in truncated form.
+    assert "AAAA" in sc
+    assert "..." in sc
+    assert "suffix" not in sc  # truncated away

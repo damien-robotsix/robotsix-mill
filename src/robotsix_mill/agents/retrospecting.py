@@ -97,6 +97,8 @@ def run_retrospect_agent(
     comments_text: str = "",
     deep_analysis: bool = False,
     trace_ids: list[str] | None = None,
+    epic_context: str = "",
+    sibling_context: str = "",
 ) -> RetrospectResult:
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -126,7 +128,12 @@ def run_retrospect_agent(
         model_name=definition.model or settings.retrospect_model,
     )
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
-    prompt = (
+    prompt = ""
+    if epic_context:
+        prompt += f"{epic_context}\n\n"
+    if sibling_context:
+        prompt += f"{sibling_context}\n\n"
+    prompt += (
         f"<ticket>\n{ticket_summary}\n</ticket>\n\n"
         f"<workflow>\n{history_text}\n</workflow>\n\n"
         f"<langfuse>\n{lf}\n</langfuse>\n\n"
