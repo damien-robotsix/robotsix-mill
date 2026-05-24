@@ -1450,6 +1450,7 @@ def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
     assert len(epic_entry) == 1
     # Cold cache → epic's own cost is 0.0, cumulative_cost is None or 0.0.
     assert epic_entry[0]["cost_usd"] == 0.0
+    assert epic_entry[0]["cumulative_cost"] is None
     # session_cost must NOT have been called for any child id.
     child_calls = [x for x in called if x in (c1.id, c2.id)]
     assert child_calls == [], f"blocking session_cost called for children: {child_calls}"

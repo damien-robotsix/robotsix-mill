@@ -335,7 +335,6 @@ def test_aggregate_cost_trend_sums_correctly(monkeypatch):
     s = _langfuse_settings()
 
     # We'll mock _langfuse_api_get directly via httpx.Client
-    import json
     from datetime import datetime, timedelta
 
     now = datetime.utcnow()
@@ -412,3 +411,53 @@ def test_aggregate_cost_trend_produces_contiguous_buckets(monkeypatch):
         assert b["trace_count"] == 0
         assert "ts" in b
         assert b["ts"].endswith("Z")
+
+
+def test_aggregate_cost_trend_buckets_daily(monkeypatch):
+    """lookback_hours > 24 → daily buckets at midnight boundaries."""
+    from robotsix_mill.langfuse_client import aggregate_cost_trend
+    from datetime import datetime, timedelta
+
+    s = _langfuse_settings()
+
+    now = datetime.utcnow()
+    # Two traces: one ~60h ago (bucket 1 of 3), one ~20h ago (bucket 2 of 3)
+    t1_ts = (now - timedelta(hours=60)).isoformat() + "Z"
+    t2_ts = (now - timedelta(hours=20)).isoformat() + "Z"
+
+    fake_page = {
+        "data": [
+            {"id": "d1", "name": "build", "timestamp": t1_ts, "totalCost": 0.30},
+            {"id": "d2", "name": "deploy", "timestamp": t2_ts, "totalCost": 0.12},
+        ],
+        "meta": {"totalPages": 1},
+    }
+
+    class _MockClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, *, params, headers):
+            return _FakeResponse(200, fake_page)
+
+    monkeypatch.setattr(httpx, "Client", _MockClient)
+
+    result = aggregate_cost_trend(s, lookback_hours=72)
+
+    # Daily path: ceil(72/24) = 3 buckets
+    assert len(result) == 3
+    # Each ts must be midnight-aligned
+    for b in result:
+        assert b["ts"].endswith("T00:00:00Z"), f"not midnight: {b['ts']}"
+    # Total cost and trace count should sum correctly
+    assert sum(b["total_cost"] for b in result) == pytest.approx(0.42)
+    assert sum(b["trace_count"] for b in result) == 2
+    # At least two buckets have non-zero cost (each trace in its own day)
+    nonzero = [b for b in result if b["total_cost"] > 0]
+    assert len(nonzero) >= 2, f"expected traces in different daily buckets, got: {nonzero}"
