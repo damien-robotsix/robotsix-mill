@@ -16,7 +16,7 @@ import re
 
 from .. import langfuse_client
 from ..agents import retrospecting
-from ..core.models import Ticket
+from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
@@ -256,7 +256,7 @@ class RetrospectStage(Stage):
                 if res.draft_gap_id:
                     body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
                 draft = ctx.service.create(res.draft_title, body,
-                                           source="retrospect",
+                                           source=SourceKind.RETROSPECT,
                                            origin_session=current_session())
                 ctx.service.set_parent(draft.id, ticket.id)
                 spawned = draft.id
@@ -296,7 +296,7 @@ class RetrospectStage(Stage):
 
         draft = ctx.service.create(
             follow_up_title, follow_up_body,
-            source="retrospect",
+            source=SourceKind.RETROSPECT,
             origin_session=current_session(),
         )
         ctx.service.set_parent(draft.id, ticket.id)
@@ -347,7 +347,7 @@ class RetrospectStage(Stage):
         # Verify prior proposals and prepend verified-state table.
         from ..pass_runner import _verify_prior_proposals, _render_verified_table
 
-        verified = _verify_prior_proposals(ctx.service, s, "retrospect")
+        verified = _verify_prior_proposals(ctx.service, s, SourceKind.RETROSPECT)
         if verified:
             table = _render_verified_table(verified)
             memory_text = table + "\n\n" + memory_text

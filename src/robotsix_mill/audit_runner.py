@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from functools import partial
 
 from .config import Settings
+from .core.models import SourceKind
 from .core.service import TicketService
 from .pass_runner import run_agent_pass
 
@@ -89,7 +90,7 @@ def run_audit_pass(root: str | None = None) -> AuditPassResult:
             result = run_agent_pass(
                 agent_fn=agent_fn,
                 memory_file=memory_file,
-                source_label="audit",
+                source_label=SourceKind.AUDIT,
                 service=service,
                 settings=settings,
                 origin_session=session_id,

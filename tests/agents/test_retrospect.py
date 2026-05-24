@@ -8,6 +8,7 @@ from robotsix_mill.core.text_utils import truncate_at_boundary
 from robotsix_mill import langfuse_client
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.core.models import SourceKind
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.retrospect import RetrospectStage
 
@@ -111,7 +112,7 @@ def test_spawned_draft_has_source_retrospect(tmp_path, monkeypatch):
     RetrospectStage().run(t, ctx)
     drafts = [x for x in ctx.service.list() if x.parent_id == t.id]
     assert len(drafts) == 1
-    assert drafts[0].source == "retrospect"
+    assert drafts[0].source == SourceKind.RETROSPECT
 
 
 def test_spawning_disabled(tmp_path, monkeypatch):
@@ -846,7 +847,7 @@ def test_verified_state_block_in_memory(tmp_path, monkeypatch):
     draft = ctx.service.create(
         "Fix slow CI",
         "Speed up CI.\n\n<!-- retrospect-gap-id: slow_ci -->",
-        source="retrospect",
+        source=SourceKind.RETROSPECT,
     )
     # Transition it to DONE then CLOSED (simulates a merged draft).
     ctx.service.transition(draft.id, State.READY)
@@ -883,12 +884,12 @@ def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path
     svc = TicketService(s)
 
     # Create a retrospect-sourced ticket with NO gap-id marker.
-    ticket = svc.create("Old retrospect draft", "No marker here.", source="retrospect")
+    ticket = svc.create("Old retrospect draft", "No marker here.", source=SourceKind.RETROSPECT)
     # Move it to CLOSED (with DONE in history).
     for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
         svc.transition(ticket.id, st)
 
-    result = _verify_prior_proposals(svc, s, "retrospect")
+    result = _verify_prior_proposals(svc, s, SourceKind.RETROSPECT)
     # The marker-less ticket must not appear.
     assert ticket.id not in [v["ticket_id"] for v in result.values()]
     # No error raised — we got here fine.
@@ -918,7 +919,7 @@ def test_follow_up_spawned_for_stub(tmp_path, monkeypatch):
     assert out.next_state is State.CLOSED
     drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
     assert len(drafts) == 1
-    assert drafts[0].source == "retrospect"
+    assert drafts[0].source == SourceKind.RETROSPECT
     assert drafts[0].parent_id == t.id
     assert drafts[0].title == "Wire real doc agent in DocumentStage._run_doc_agent"
 
@@ -1061,4 +1062,4 @@ def test_systemic_proposals_still_work(tmp_path, monkeypatch):
     assert len(drafts) == 1
     assert drafts[0].parent_id == t.id
     assert drafts[0].title == "Cut retry tokens"
-    assert drafts[0].source == "retrospect"
+    assert drafts[0].source == SourceKind.RETROSPECT

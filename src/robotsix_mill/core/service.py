@@ -21,7 +21,7 @@ from sqlmodel import select
 
 from . import db
 from ..config import Settings
-from .models import Ticket, TicketEvent, Comment
+from .models import SourceKind, Ticket, TicketEvent, Comment
 from .states import State, can_transition
 from .workspace import Workspace
 
@@ -191,7 +191,7 @@ class TicketService:
             return s.exec(stmt).first() is not None
 
     def create(
-        self, title: str, description: str = "", source: str = "user",
+        self, title: str, description: str = "", source: str = SourceKind.USER,
         origin_session: str | None = None,
         depends_on: str | None = None,
         kind: str = "task",

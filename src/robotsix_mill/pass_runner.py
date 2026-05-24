@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import Settings
+from .core.models import SourceKind
 from .core.service import TicketService
 from .core.states import State
 from .core.workspace import Workspace
@@ -166,7 +167,7 @@ def run_agent_pass(
     agent_fn: Callable[..., Any],
     *,
     memory_file: Path,
-    source_label: str,
+    source_label: SourceKind,
     service: TicketService,
     settings: Settings,
     origin_session: str | None = None,
@@ -179,7 +180,7 @@ def run_agent_pass(
                   kwargs (e.g. ``repo_dir``) via ``functools.partial``.
         memory_file: Path to the memory/ledger file.
         source_label: Label for draft ticket ``source`` field (e.g.
-                      ``"audit"``, ``"health"``).
+                      ``SourceKind.AUDIT``, ``SourceKind.AGENT``).
         service: ``TicketService`` for creating draft tickets.
         settings: Mill settings (passed through to the agent callable).
         origin_session: Value for ``origin_session`` on created tickets.

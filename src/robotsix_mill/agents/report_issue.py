@@ -17,6 +17,7 @@ already exists — it reports back that the issue is already filed.
 from __future__ import annotations
 
 from ..config import Settings
+from ..core.models import SourceKind
 
 # Tickets in these states are "done with"; an identical title may be
 # filed again (e.g. a regression of a previously-fixed issue). Any
@@ -113,7 +114,7 @@ def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None)
                 else:
                     evidence = evidence_bytes.decode("utf-8")
 
-            ticket = service.create(title, full_body, source="agent",
+            ticket = service.create(title, full_body, source=SourceKind.AGENT,
                                      origin_session=current_session())
 
             if evidence:

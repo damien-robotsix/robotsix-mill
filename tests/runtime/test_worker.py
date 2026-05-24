@@ -6,6 +6,7 @@ from robotsix_mill.stages import Outcome, StageContext
 from robotsix_mill.stages import registry
 from robotsix_mill.stages.base import Stage
 from robotsix_mill.core.states import State
+from robotsix_mill.core.models import SourceKind
 from robotsix_mill.runtime.worker import Worker, process_ticket
 
 
@@ -350,7 +351,7 @@ async def test_reconcile_sweep_enqueues_out_of_band_drafts(
     runner / retrospect / report_issue) — NOT via the API enqueue path —
     must still get picked up by the periodic reconcile sweep, not sit in
     DRAFT until a process restart."""
-    t = service.create("audit-spawned thing", "body", source="audit")
+    t = service.create("audit-spawned thing", "body", source=SourceKind.AUDIT)
     assert t.state is State.DRAFT
     w = Worker(ctx)
 

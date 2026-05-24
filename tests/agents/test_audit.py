@@ -10,6 +10,7 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.core.models import SourceKind
 
 
 def _make_settings(tmp_path, **overrides):
@@ -156,7 +157,7 @@ def test_run_audit_pass_creates_draft_tickets(tmp_path, monkeypatch):
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="audit"
     tickets = service.list()
-    audit_tickets = [t for t in tickets if t.source == "audit"]
+    audit_tickets = [t for t in tickets if t.source == SourceKind.AUDIT]
     assert len(audit_tickets) == 2
     assert audit_tickets[0].state == State.DRAFT
     # Each draft should have origin_session == the audit run's session_id.
