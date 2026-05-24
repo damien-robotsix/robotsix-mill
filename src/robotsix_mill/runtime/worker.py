@@ -475,6 +475,7 @@ class Worker:
         self._ci_monitor_task: asyncio.Task | None = None
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
+        self._bc_check_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -961,6 +962,22 @@ class Worker:
                 "Periodic survey enabled: interval %ds",
                 self.ctx.settings.survey_interval_seconds,
             )
+        # Opt-in periodic bc-check
+        if (
+            self.ctx.settings.bc_check_periodic
+            and self._bc_check_task is None
+        ):
+            from ..bc_check_runner import run_bc_check_pass
+            self._bc_check_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "bc_check", run_bc_check_pass,
+                    max(60, self.ctx.settings.bc_check_interval_seconds),
+                )
+            )
+            log.info(
+                "Periodic bc-check enabled: interval %ds",
+                self.ctx.settings.bc_check_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
@@ -968,6 +985,7 @@ class Worker:
             "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
             "_agent_check_task", "_test_gap_task", "_survey_task",
+            "_bc_check_task",
         ):
             t = getattr(self, attr)
             if t is not None:

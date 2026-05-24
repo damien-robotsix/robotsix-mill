@@ -588,6 +588,32 @@ class Settings(BaseSettings):
         default=86400, alias="MILL_SURVEY_INTERVAL_SECONDS"
     )
 
+    # --- bc_check agent (backward-compatibility inspection) ---
+    # Model for the bc-check agent. Defaults to the same capable model
+    # as other read-only periodic agents. Override with
+    # MILL_BC_CHECK_MODEL.
+    bc_check_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_BC_CHECK_MODEL"
+    )
+    # Path to the bc-check agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives
+    # <data_dir>/bc_check_memory.md.
+    bc_check_memory_path: Path | None = Field(
+        default=None, alias="MILL_BC_CHECK_MEMORY_PATH"
+    )
+    # Opt-in periodic bc-check pass. Defaults to False (off); flip to
+    # true to schedule the pass every ``bc_check_interval_seconds`` in
+    # addition to the on-demand CLI.
+    bc_check_periodic: bool = Field(
+        default=False, alias="MILL_BC_CHECK_PERIODIC"
+    )
+    # Seconds between periodic bc-check passes when
+    # MILL_BC_CHECK_PERIODIC=true. Minimum enforced at 60s in the
+    # worker loop.
+    bc_check_interval_seconds: int = Field(
+        default=86400, alias="MILL_BC_CHECK_INTERVAL_SECONDS"
+    )
+
     # --- action-agent memory paths ---
     # Path to the implement agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/implement_memory.md.
@@ -692,6 +718,13 @@ class Settings(BaseSettings):
         if self.survey_memory_path is not None:
             return self.survey_memory_path
         return self.data_dir / "survey_memory.md"
+
+    @property
+    def bc_check_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained bc-check memory ledger."""
+        if self.bc_check_memory_path is not None:
+            return self.bc_check_memory_path
+        return self.data_dir / "bc_check_memory.md"
 
     @property
     def implement_memory_file(self) -> Path:
