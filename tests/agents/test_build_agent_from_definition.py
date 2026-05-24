@@ -288,22 +288,16 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     if not p.exists():
         pytest.skip("agent_definitions/refine.yaml not found")
 
+    had_model_env = "MILL_REFINE_MODEL" in os.environ
     os.environ.setdefault("MILL_REFINE_MODEL", "test/model")
     try:
         definition = load_agent_definition(p)
     finally:
-        if "MILL_REFINE_MODEL" not in os.environ:
+        if not had_model_env:
             os.environ.pop("MILL_REFINE_MODEL", None)
 
     # Provide a fake API key so build_agent can construct the model
     # (model construction is local — no network call).
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.Settings", lambda **kw: Settings(
-            OPENROUTER_API_KEY="sk-fake",
-            **kw,
-        )
-    )
-
     settings = Settings(OPENROUTER_API_KEY="sk-fake")
     agent = build_agent_from_definition(settings, definition, tools=[])
 
