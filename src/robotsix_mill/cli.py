@@ -56,6 +56,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Test-gap pass",
         "format": "memory_drafts",
     },
+    "env-sync": {
+        "module": "env_sync_runner",
+        "function": "run_env_sync_pass",
+        "label": "Env-sync pass",
+        "format": "memory_drafts",
+    },
     "trace-health": {
         "module": "trace_health_runner",
         "function": "run_trace_health_check",
@@ -226,6 +232,16 @@ def main(argv: list[str] | None = None) -> int:
         "test-gap", help="run a test-gap coverage inspection pass"
     )
     p_test_gap.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- env-sync command ---
+    p_env_sync = sub.add_parser(
+        "env-sync", help="run an env-sync config/docs drift detection pass"
+    )
+    p_env_sync.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",

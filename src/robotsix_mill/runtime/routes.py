@@ -912,3 +912,35 @@ def survey_pass(
         target=_run, name="survey-pass", daemon=True
     ).start()
     return {"status": "started"}
+
+
+@router.post("/env-sync", status_code=202)
+def env_sync_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off an env-sync drift detection pass in the BACKGROUND."""
+    from ..env_sync_runner import run_env_sync_pass
+
+    run_id = registry.start("env-sync")
+
+    def _run() -> None:
+        try:
+            r = run_env_sync_pass()
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "env-sync pass done: %d draft(s)", len(r.drafts_created)
+            )
+        except Exception as e:
+            log.exception("env-sync pass failed")
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="env-sync-pass", daemon=True
+    ).start()
+    return {"status": "started"}

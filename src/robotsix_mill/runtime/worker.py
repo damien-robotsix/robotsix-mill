@@ -476,6 +476,7 @@ class Worker:
         self._ci_monitor_task: asyncio.Task | None = None
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
+        self._env_sync_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -1037,6 +1038,19 @@ class Worker:
                 "Periodic survey enabled: interval %ds",
                 self.ctx.settings.survey_interval_seconds,
             )
+        # Opt-in periodic env-sync
+        if self.ctx.settings.env_sync_periodic and self._env_sync_task is None:
+            from ..env_sync_runner import run_env_sync_pass
+            self._env_sync_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "env-sync", run_env_sync_pass,
+                    max(60, self.ctx.settings.env_sync_interval_seconds),
+                )
+            )
+            log.info(
+                "Periodic env-sync enabled: interval %ds",
+                self.ctx.settings.env_sync_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
@@ -1044,6 +1058,7 @@ class Worker:
             "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
             "_agent_check_task", "_bc_check_task", "_test_gap_task", "_survey_task",
+            "_env_sync_task",
         ):
             t = getattr(self, attr)
             if t is not None:
