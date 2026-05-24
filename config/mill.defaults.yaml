@@ -1,0 +1,209 @@
+# =============================================================================
+#  Canonical defaults for every configurable knob in robotsix-mill.
+#
+#  This is the SINGLE SOURCE OF TRUTH for "what is configurable" and what
+#  the safe default value is.  It is committed to the repo; local overrides
+#  go in config/mill.local.yaml (gitignored); production overrides go in
+#  config/mill.production.yaml (host-mounted, gitignored).  Secrets live in
+#  config/secrets.yaml (separate file, separate model).
+#
+#  Field count: 115 unique values across 17 logical groups.
+#  See docs/rfc-config-v2.md for architecture rationale.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+#  core — models, limits, memory, and other engine-tuning knobs
+# ---------------------------------------------------------------------------
+
+core:
+
+  # -- per-agent model selection (19 fields) --------------------------------
+  # Each agent role gets its own model.  All capable roles default to the
+  # same model via the &default_model anchor; cheap/classification roles
+  # override to smaller models.
+  models:
+    coordinator: &default_model deepseek/deepseek-v4-pro  # reads + edits the repo
+    explore: deepseek/deepseek-v4-flash                   # scout sub-agent — pointers only
+    test: *default_model                                  # distills test failures
+    refine: *default_model                                # authors engineering specs from drafts
+    answer: *default_model                                # investigative Q&A via repo + web + traces
+    retrospect: *default_model                            # audits finished tickets; proposes improvements
+    audit: *default_model                                 # meta-audit for quality/security coverage
+    dedup: *default_model                                 # pre-refine duplicate/already-done check
+    web_research: *default_model                          # web lookups — conclusion only
+    review: *default_model                                # blind dual-model diff audit
+    trace_inspector: *default_model                       # inspects full Langfuse observation tree
+    test_gap: *default_model                              # identifies modules with zero dedicated tests
+    agent_check: *default_model                           # audits agent definitions for coherence
+    health: *default_model                                # codebase-health across 6 dimensions
+    survey: *default_model                                # discovers OSS projects; proposes improvements
+    doc: *default_model                                   # documentation agent
+    triage: &cheap_model openai/gpt-4o-mini               # pre-refine triage — fast/cheap classification
+    auto_approve: *cheap_model                            # auto-approve triage — must be fast and cheap
+    rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
+
+  # -- request caps, concurrency, retry, and timeouts (16 fields) -----------
+  limits:
+    coordinator_requests: 200          # per-ticket request cap for implement (coordinator)
+    test_requests: 8                   # per-call cap for test-distillation sub-agent
+    explore_requests: 20               # per-call cap for explore sub-agent
+    dedup_requests: 4                  # per-call cap for dedup check
+    web_research_requests: 8           # per-call cap for web-research sub-agent
+    max_concurrency: 4                 # max parallel tickets in the worker pool
+    max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
+    max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
+    max_spend_usd_per_ticket: 0.0      # dollar cap per ticket (0.0 = disabled)
+    model_request_timeout: 900.0       # hard per-call timeout in seconds
+    transient_retries: 4               # max retries for transient network/model failures
+    transient_backoff_base: 2.0        # base seconds for exponential backoff (jittered)
+    transient_backoff_cap: 30.0        # max seconds between transient retries
+    rate_limit_backoff_base: 30.0      # base seconds for rate-limit backoff (longer window)
+    rate_limit_backoff_cap: 120.0      # max seconds between rate-limit retries
+    rate_limit_fallback_retries: 3     # consecutive rate-limit failures before switching model
+
+  # -- memory ledgers, reference files, and dedup lookback (5 fields) ------
+  memory:
+    max_memory_chars: 8000               # max chars loaded from any memory ledger per pass
+    reference_files_max_count: 5         # max files whose full content refine stores
+    reference_files_max_total_lines: 3000  # max total lines across selected reference files
+    dedup_lookback_days: 30              # days back closed tickets are dup candidates
+    dedup_lookback_commits: 20           # recent commits to inspect for "already done"
+
+# ---------------------------------------------------------------------------
+#  forge — delivery platform configuration
+# ---------------------------------------------------------------------------
+
+forge:
+  kind: none                              # github | gitlab | none
+  remote_url: null                        # remote URL for clone + push
+  target_branch: main                     # target branch for PRs
+  auth_mode: token                        # token (PAT) | app (GitHub App)
+  github_app_private_key_path: null       # host path to App private-key .pem (not a secret)
+  github_api_url: https://api.github.com  # override for GitHub Enterprise
+  gitlab_api_url: https://gitlab.com/api/v4  # override for self-hosted GitLab
+
+# ---------------------------------------------------------------------------
+#  sandbox — disposable container execution environment
+# ---------------------------------------------------------------------------
+
+sandbox:
+  image: python:3.14-slim       # Docker image for sandbox containers
+  memory: 2g                    # memory limit
+  pids_limit: 512               # PID limit
+  readonly: true                # mount rootfs read-only (except tmpfs /tmp)
+  data_volume: mill_data        # named Docker volume for data (fallback)
+  data_mount: null              # host path for bind-mounted data (overrides data_volume)
+  command_timeout: 900          # wall-clock cap (seconds) for shell/test commands
+  test_command: pytest -q       # command run to verify implementation (empty = skip)
+  skills_dir: skills            # directory of skill docs injected into system prompts
+
+# ---------------------------------------------------------------------------
+#  web — web search (sub-agent) and fetch (isolated container)
+# ---------------------------------------------------------------------------
+
+web:
+  search_enabled: true                        # enable web-search capability
+  research_model: *default_model              # web-research sub-agent model
+  research_request_limit: 8                   # per-call request cap for web research
+  fetch_image: curlimages/curl:8.17.0         # Docker image for isolated web_fetch container
+  fetch_max_bytes: 2000000                    # max bytes fetched per URL
+  fetch_timeout: 30                           # timeout (seconds) per web fetch
+
+# ---------------------------------------------------------------------------
+#  gates — human approval, auto-approve, code review, triage, auto-merge
+# ---------------------------------------------------------------------------
+
+gates:
+  require_approval: true                   # pause after refine for human approval
+  auto_approve_enabled: false              # conservative auto-approve triage
+  auto_approve_model: *cheap_model         # model for auto-approve triage (fast + cheap)
+  review_enabled: false                    # enable dual-model code review before deliver
+  review_model: *default_model             # review agent model
+  review_max_rounds: 3                     # max CODE_REVIEW round-trips before escalate
+  auto_merge_enabled: false                # auto-merge green PR via forge API (opt-in)
+  refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
+  spec_review_enabled: false               # post-refinement spec narrative stripping
+
+# ---------------------------------------------------------------------------
+#  pipeline — merge, rebase, ci-fix, retrospect, prune, archive, memory paths
+# ---------------------------------------------------------------------------
+
+pipeline:
+  branch_prefix: mill/                               # prefix for deliver-stage branch names
+  merge_poll_seconds: 120                            # poll interval for PR merge/CI status
+  rebase_max_attempts: 5                             # max rebase LLM invocations before BLOCK
+  ci_fix_max_attempts: 2                             # max CI-fix LLM invocations before BLOCK
+  retrospect_spawn_drafts: true                      # allow retrospect to file improvement drafts
+  retrospect_deep_analysis_frequency: 10             # how many runs between deep trace analyses
+  prune_clone_on_close: true                         # delete workspace repo/ clone on ticket close
+  max_archived_tickets: 100                          # max terminal-state tickets retained (0 = no purge)
+
+  # per-agent memory ledger path overrides (null = derive from data_dir)
+  retrospect_memory_path: null            # defaults to <data_dir>/retrospect_memory.md
+  trace_inspector_memory_path: null       # defaults to <data_dir>/trace_inspector_memory.md
+  implement_memory_path: null             # defaults to <data_dir>/implement_memory.md
+  refine_memory_path: null                # defaults to <data_dir>/refine_memory.md
+  ci_fix_memory_path: null                # defaults to <data_dir>/ci_fix_memory.md
+  rebase_memory_path: null                # defaults to <data_dir>/rebase_memory.md
+
+# ---------------------------------------------------------------------------
+#  periodic — background agents that run on a schedule
+# ---------------------------------------------------------------------------
+
+periodic:
+
+  # -- audit agent — meta-audit for quality/security coverage gaps ---------
+  audit:
+    model: *default_model           # audit agent model
+    enabled: false                  # enable periodic audit passes
+    interval_seconds: 86400         # seconds between passes (86400 = 1 day)
+    memory_path: null               # defaults to <data_dir>/audit_memory.md
+
+  # -- trace-health — monitors Langfuse for unsessioned traces -------------
+  trace_health:
+    enabled: false                  # enable periodic trace-health checks
+    interval_seconds: 86400         # seconds between checks (min 3600 enforced in worker)
+
+  # -- health agent — codebase-health across 6 dimensions ------------------
+  health:
+    model: *default_model           # health agent model
+    enabled: false                  # enable periodic health passes
+    interval_seconds: 86400         # seconds between passes
+    memory_path: null               # defaults to <data_dir>/health_memory.md
+
+  # -- test-gap agent — identifies modules with zero dedicated tests -------
+  test_gap:
+    model: *default_model           # test-gap agent model
+    enabled: false                  # enable periodic test-gap passes
+    interval_seconds: 86400         # seconds between passes
+    memory_path: null               # defaults to <data_dir>/test_gap_memory.md
+
+  # -- agent-check — audits agent definitions for coherence ----------------
+  agent_check:
+    model: *default_model           # agent-check model
+    enabled: false                  # enable periodic agent-check passes
+    interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
+    memory_path: null               # defaults to <data_dir>/agent_check_memory.md
+
+  # -- survey agent — discovers OSS projects; proposes improvements --------
+  survey:
+    model: *default_model           # survey agent model
+    enabled: true                   # enable periodic survey passes (on by default)
+    interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
+    memory_path: null               # defaults to <data_dir>/survey_memory.md
+
+  # -- CI monitor — watches forge target branch for workflow failures ------
+  ci_monitor:
+    enabled: false                  # enable periodic CI failure monitoring
+    interval_seconds: 86400         # seconds between polls
+    log_max_bytes: 65536            # max bytes fetched per CI job log
+
+# ---------------------------------------------------------------------------
+#  service — management-plane API and data directory
+# ---------------------------------------------------------------------------
+
+service:
+  data_dir: .mill-data                      # data directory for DB, workspaces, memory ledgers
+  api_host: "127.0.0.1"                     # FastAPI listen address (container: 0.0.0.0)
+  api_port: 8077                            # FastAPI listen port
+  api_url: http://127.0.0.1:8077            # base URL the CLI client uses
