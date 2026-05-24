@@ -170,12 +170,7 @@ def run_review_agent(
             f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
             f"<git_diff>\n{diff}\n</git_diff>"
         )
-        # Headroom for the read-only fs tools (read_file, list_dir) the
-        # reviewer uses to verify claims. Audit/inventory diffs that
-        # cross-reference many source files (e.g. docs/config-audit.md)
-        # need ~10-15 read_file calls plus reasoning + final verdict —
-        # 10 turned out to be tight. Tracked for a configurable knob.
-        limits = UsageLimits(request_limit=20)
+        limits = UsageLimits(request_limit=settings.review_request_limit)
         result = call_with_retry(
             lambda: agent.run_sync(user_prompt, usage_limits=limits),
             settings=settings, what="review",
