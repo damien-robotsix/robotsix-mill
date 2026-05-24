@@ -82,6 +82,55 @@ class AgentHandle:
         return getattr(self._agent, name)
 
 
+def build_agent_from_definition(
+    settings: Settings,
+    definition: "AgentDefinition",
+    *,
+    tools: list | None = None,
+    **overrides,
+) -> AgentHandle:
+    """Build an agent from an :class:`AgentDefinition`, bridging the YAML
+    loader and the agent runtime.
+
+    Any keyword in ``**overrides`` that matches a :func:`build_agent`
+    parameter name (``system_prompt``, ``model_name``, ``output_type``,
+    ``web``, ``report_issue``, ``retries``, ``name``) replaces the value
+    extracted from *definition*.
+    """
+    import importlib
+
+    from pydantic_ai import PromptedOutput
+
+    # Resolve output_type
+    if definition.output_type and definition.output_type.strip():
+        if not definition.module or not definition.module.strip():
+            raise ValueError(
+                f"Agent definition '{definition.name}' specifies "
+                f"output_type='{definition.output_type}' but module is None"
+            )
+        module = importlib.import_module(
+            f"robotsix_mill.agents.{definition.module}"
+        )
+        output_cls = getattr(module, definition.output_type)
+        resolved_output_type: Any = PromptedOutput(output_cls)
+    else:
+        resolved_output_type = str
+
+    kwargs: dict[str, Any] = dict(
+        name=definition.name,
+        system_prompt=definition.system_prompt,
+        model_name=definition.model,
+        web=definition.web,
+        report_issue=definition.report_issue,
+        retries=definition.retries,
+        output_type=resolved_output_type,
+    )
+    kwargs.update(overrides)
+    kwargs["tools"] = tools
+
+    return build_agent(settings, **kwargs)
+
+
 def _model_name(settings: Settings) -> str:
     # No "openrouter:" prefix — the provider is set explicitly so we can
     # use the cost-instrumented model subclass. The main agent NEVER
