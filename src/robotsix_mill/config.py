@@ -370,6 +370,13 @@ class Settings(BaseSettings):
     doc_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_DOC_MODEL"
     )
+    # How many model requests the document agent may make in one run
+    # (counts each tool call + each reasoning step). Keep tight — the
+    # agent mainly reads + edits existing docs. Raise for repos with
+    # large documentation surfaces.
+    doc_request_limit: int = Field(
+        default=4, alias="MILL_DOC_REQUEST_LIMIT"
+    )
 
     # --- retrospect stage (done -> reviewed) ---
     # When True, retrospect may file an improvement DRAFT. Until the
