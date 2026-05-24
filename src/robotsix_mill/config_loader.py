@@ -81,13 +81,17 @@ def _read_yaml_file(path: Path) -> dict:
     return data
 
 
-def load_yaml_config(config_file: str | None = None) -> dict:
+def load_yaml_config(
+    config_file: str | None = None, skip_local: bool = False
+) -> dict:
     """Load and deep-merge YAML config files in RFC §6 precedence order.
 
     1. ``config/mill.defaults.yaml`` (always, committed)
     2. ``config/mill.local.yaml`` if present (gitignored, optional)
-    3. ``config/mill.production.yaml`` if ``MILL_CONFIG_FILE`` env var
-       (or *config_file* argument) points to it
+       — skipped when *skip_local* is ``True``
+    3. ``config/mill.production.yaml`` if *config_file* (or
+       ``MILL_CONFIG_FILE`` env var) points to it.  An explicit empty
+       string ``""`` means "no production file" (used by the test suite).
 
     Returns a nested dict mirroring the YAML structure
     (e.g. ``{"core": {"models": {"coordinator": "deepseek/..."}, ...}}``).
@@ -108,12 +112,17 @@ def load_yaml_config(config_file: str | None = None) -> dict:
     _deep_merge(merged, defaults)
 
     # Layer 2: per-developer local overrides (optional)
-    local = _read_yaml_file(_LOCAL_FILE)
-    if local:
-        _deep_merge(merged, local)
+    if not skip_local:
+        local = _read_yaml_file(_LOCAL_FILE)
+        if local:
+            _deep_merge(merged, local)
 
     # Layer 3: production overrides (optional)
-    prod_path = config_file or os.environ.get("MILL_CONFIG_FILE", "")
+    prod_path: str = ""
+    if config_file is not None:
+        prod_path = config_file
+    else:
+        prod_path = os.environ.get("MILL_CONFIG_FILE", "")
     if prod_path:
         prod = _read_yaml_file(Path(prod_path))
         if prod:
