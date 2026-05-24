@@ -93,7 +93,6 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
     """Happy path: agent returns normal findings → CLOSED with
     retrospect.md artifact written, langfuse: yes."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
@@ -113,7 +112,7 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
         lambda settings, path, params=None: None,
     )
     monkeypatch.setattr(
-        tracing, "current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -256,7 +255,6 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
     """When MILL_RETROSPECT_SPAWN_DRAFTS=false, a proposed draft is
     noted but NOT created."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
@@ -279,7 +277,7 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
         lambda settings, path, params=None: None,
     )
     monkeypatch.setattr(
-        tracing, "current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -318,7 +316,6 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
     """When spawning is enabled (default) and the agent proposes
     a draft, a new ticket is created with parent_id set."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
@@ -341,7 +338,7 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
         lambda settings, path, params=None: None,
     )
     monkeypatch.setattr(
-        tracing, "current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -383,7 +380,6 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
     """A draft titled 'No notable issues - clean run' is filtered
     and no ticket is created."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
@@ -406,7 +402,7 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
         lambda settings, path, params=None: None,
     )
     monkeypatch.setattr(
-        tracing, "current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -442,7 +438,6 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
     """When agent returns follow_up_title + follow_up_body,
     a concrete follow-up ticket is created with parent_id."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
@@ -464,7 +459,7 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
         lambda settings, path, params=None: None,
     )
     monkeypatch.setattr(
-        tracing, "current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -504,7 +499,6 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
     """A follow-up is created even when a CLOSED ticket with the
     same title exists (CLOSED is in _DONE_WITH)."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
@@ -535,7 +529,7 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
         lambda settings, path, params=None: None,
     )
     monkeypatch.setattr(
-        tracing, "current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -571,7 +565,6 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
     """A follow-up is NOT created when a DRAFT ticket with the same
     case-insensitive title already exists (DRAFT not in _DONE_WITH)."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.runtime import tracing
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
@@ -596,7 +589,7 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
         lambda settings, path, params=None: None,
     )
     monkeypatch.setattr(
-        tracing, "current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -902,6 +895,7 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
     assert len(prune_calls) == 1
+    assert prune_calls[0].dir == ctx.service.workspace(t).dir
 
 
 # ------------------------------------------------------------------
