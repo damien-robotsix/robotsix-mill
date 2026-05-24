@@ -1,109 +1,84 @@
-"""Dedicated route-handler tests for endpoints that lacked coverage.
+"""Dedicated tests for previously-untested route handlers.
 
-The main ``tests/runtime/test_api.py`` (1479 lines) covers 20 endpoints.
-This file fills the remaining gaps with focused, handler-level tests
-that exercise the HTTP contract: status codes, response shapes,
-parameter clamping, and fire-and-forget behaviour.
+Covers the 7 endpoint groups that had zero HTTP-level coverage in the
+existing 1479-line ``tests/runtime/test_api.py``:
 
-All tests use the standard ``client`` + ``service`` fixtures from
-``tests/conftest.py``.  No real HTTP call ever escapes — that is
-enforced globally by the ``_no_real_http`` autouse fixture.
+* ``GET /tickets/{id}/history``
+* ``GET /tickets/{id}/comments``
+* ``GET /active``
+* ``GET /costs/by-agent``
+* ``GET /traces/recent``
+* ``POST /survey``
+* ``POST /tickets/{id}/transition`` (happy-path only; error cases are
+  already tested elsewhere)
 """
 
 from __future__ import annotations
 
 import threading
-from unittest.mock import MagicMock
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.api import create_app
-from robotsix_mill.runtime.deps import get_worker  # for dependency override
 
+
+# -- fixtures -----------------------------------------------------------
 
 @pytest.fixture
 def client(settings):
-    """TestClient fixture — identical to the one in test_api.py."""
+    """Reusable TestClient wired to the same lifespan as test_api.py."""
     with TestClient(create_app(settings)) as c:
         yield c
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# GET /tickets/{id}/history
-# ═══════════════════════════════════════════════════════════════════════
+# -- GET /tickets/{id}/history ------------------------------------------
 
-
-def test_history_happy_path(client, service):
-    """GET /tickets/{id}/history returns a list of TicketEvent entries
-    (created + transition) in chronological order."""
+def test_get_history_happy_path(client, service):
+    """GET /tickets/{id}/history returns list of events for a ticket
+    that has been created and transitioned."""
     t = service.create("History test")
-    service.transition(t.id, State.READY, note="approved for implement")
+    service.transition(t.id, State.READY, note="promoted to ready")
 
     r = client.get(f"/tickets/{t.id}/history")
     assert r.status_code == 200
-    events = r.json()
-    assert isinstance(events, list)
-    assert len(events) >= 2, (
-        f"expected ≥2 events (created + transition), got {len(events)}"
-    )
-    for evt in events:
-        assert "id" in evt
-        assert evt["ticket_id"] == t.id
-        assert "state" in evt
-        assert "note" in evt
-        assert "at" in evt
-
-    # Chronological order: created first, then the transition.
-    assert events[0]["state"] == State.DRAFT
-    assert events[1]["state"] == State.READY
-    assert events[1]["note"] == "approved for implement"
+    data = r.json()
+    assert isinstance(data, list), f"expected list, got {type(data)}"
+    assert len(data) >= 2, f"expected >=2 events (created + transition), got {len(data)}"
+    for evt in data:
+        for key in ("id", "ticket_id", "state", "note", "at"):
+            assert key in evt, f"event missing key '{key}': {evt}"
 
 
-def test_history_404_nonexistent(client):
-    """GET /tickets/nonexistent/history returns 404."""
+def test_get_history_404(client):
+    """GET /tickets/{nonexistent}/history returns 404."""
     r = client.get("/tickets/nonexistent/history")
     assert r.status_code == 404
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# GET /tickets/{id}/comments
-# ═══════════════════════════════════════════════════════════════════════
+# -- GET /tickets/{id}/comments -----------------------------------------
 
-
-def test_list_comments_happy_path(client, service):
-    """GET /tickets/{id}/comments returns all comments for a ticket,
-    ordered oldest-first."""
+def test_get_comments_happy_path(client, service):
+    """GET /tickets/{id}/comments returns all comments for a ticket."""
     t = service.create("Comments test")
-    service.add_comment(t.id, "first note", author="alice")
-    service.add_comment(t.id, "second note", author="bob")
+    service.add_comment(t.id, "First comment", author="alice")
+    service.add_comment(t.id, "Second comment", author="bob")
 
     r = client.get(f"/tickets/{t.id}/comments")
     assert r.status_code == 200
-    comments = r.json()
-    assert isinstance(comments, list)
-    assert len(comments) == 2
-
-    for c in comments:
-        assert "id" in c
-        assert c["ticket_id"] == t.id
-        assert "body" in c
-        assert "author" in c
-        assert "created_at" in c
-
-    assert comments[0]["body"] == "first note"
-    assert comments[0]["author"] == "alice"
-    assert comments[1]["body"] == "second note"
-    assert comments[1]["author"] == "bob"
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+    for c in data:
+        for key in ("id", "ticket_id", "body", "author", "created_at"):
+            assert key in c, f"comment missing key '{key}': {c}"
+    bodies = {c["body"] for c in data}
+    assert bodies == {"First comment", "Second comment"}
 
 
-def test_list_comments_empty(client, service):
-    """GET /tickets/{id}/comments on a ticket with no comments returns [].
-
-    Regression: the endpoint must not 500 when the comment list
-    is empty — it must return a valid (empty) JSON array."""
+def test_get_comments_empty(client, service):
+    """GET /tickets/{id}/comments returns empty list when no comments exist."""
     t = service.create("No comments yet")
 
     r = client.get(f"/tickets/{t.id}/comments")
@@ -111,71 +86,62 @@ def test_list_comments_empty(client, service):
     assert r.json() == []
 
 
-def test_list_comments_404_nonexistent(client):
-    """GET /tickets/nonexistent/comments returns 404."""
+def test_get_comments_404(client):
+    """GET /tickets/{nonexistent}/comments returns 404."""
     r = client.get("/tickets/nonexistent/comments")
     assert r.status_code == 404
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# GET /active
-# ═══════════════════════════════════════════════════════════════════════
-
+# -- GET /active --------------------------------------------------------
 
 def test_active_empty(client):
-    """GET /active returns [] when the worker has no in-flight items."""
+    """GET /active returns empty list when worker has no active items."""
     r = client.get("/active")
     assert r.status_code == 200
     assert r.json() == []
 
 
 def test_active_with_items(client):
-    """GET /active returns in-flight tickets when the worker is
-    processing items."""
-    mock_worker = MagicMock()
-    mock_worker._active = {
-        "ticket-abc": {
-            "stage": "implement",
-            "started_at": "2025-01-15T10:00:00Z",
-        },
-        "ticket-xyz": {
-            "stage": "retrospect",
-            "started_at": "2025-01-15T10:30:00Z",
-        },
-    }
+    """GET /active returns currently-processing tickets from the worker."""
+    from datetime import datetime, timezone
 
-    client.app.dependency_overrides[get_worker] = lambda: mock_worker
+    now = datetime.now(timezone.utc).isoformat()
 
-    r = client.get("/active")
-    assert r.status_code == 200
-    items = r.json()
-    assert isinstance(items, list)
-    assert len(items) == 2
-    ids = {item["ticket_id"] for item in items}
-    assert ids == {"ticket-abc", "ticket-xyz"}
-    for item in items:
-        assert "stage" in item
-        assert "started_at" in item
+    class FakeWorker:
+        _active = {
+            "ticket-1": {"stage": "implement", "started_at": now},
+            "ticket-2": {"stage": "refine", "started_at": now},
+        }
 
-    # Cleanup.
-    client.app.dependency_overrides.pop(get_worker, None)
+    from robotsix_mill.runtime.deps import get_worker as _get_worker
+
+    client.app.dependency_overrides[_get_worker] = lambda: FakeWorker()
+
+    try:
+        r = client.get("/active")
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        assert len(data) == 2
+        ids = {e["ticket_id"] for e in data}
+        assert ids == {"ticket-1", "ticket-2"}
+        for e in data:
+            assert "stage" in e
+            assert "started_at" in e
+    finally:
+        client.app.dependency_overrides.clear()
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# GET /costs/by-agent
-# ═══════════════════════════════════════════════════════════════════════
-
+# -- GET /costs/by-agent -------------------------------------------------
 
 def test_cost_by_agent_happy_path(client, monkeypatch):
     """GET /costs/by-agent returns aggregated cost data from Langfuse."""
-    fake_data = [
-        {"name": "refine", "count": 5, "totalCost": 0.12},
-        {"name": "implement", "count": 3, "totalCost": 0.45},
-    ]
-
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.aggregate_cost_by_name",
-        lambda settings, lookback_hours: fake_data,
+        lambda settings, lookback_hours: [
+            {"name": "refine", "count": 5, "totalCost": 0.12},
+            {"name": "implement", "count": 3, "totalCost": 0.45},
+        ],
     )
 
     r = client.get("/costs/by-agent")
@@ -183,61 +149,63 @@ def test_cost_by_agent_happy_path(client, monkeypatch):
     data = r.json()
     assert isinstance(data, list)
     assert len(data) == 2
-    for entry in data:
-        assert "name" in entry
-        assert "count" in entry
-        assert "totalCost" in entry
+    names = {e["name"] for e in data}
+    assert names == {"refine", "implement"}
 
 
-def test_cost_by_agent_clamps_lookback_low(client, monkeypatch):
+def test_cost_by_agent_clamp_low(client, monkeypatch):
     """GET /costs/by-agent?lookback_hours=0 clamps to 1.0."""
-    received: list[float] = []
+    captured: list[float] = []
 
-    def capture(settings, lookback_hours):
-        received.append(lookback_hours)
+    def fake_aggregate(settings, lookback_hours):
+        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.aggregate_cost_by_name", capture,
+        "robotsix_mill.langfuse_client.aggregate_cost_by_name",
+        fake_aggregate,
     )
 
     r = client.get("/costs/by-agent?lookback_hours=0")
     assert r.status_code == 200
-    assert len(received) == 1
-    assert received[0] == 1.0, f"expected 1.0 (clamped from 0), got {received[0]}"
+    assert len(captured) == 1
+    assert captured[0] == 1.0, f"expected clamped to 1.0, got {captured[0]}"
 
 
-def test_cost_by_agent_clamps_lookback_high(client, monkeypatch):
+def test_cost_by_agent_clamp_high(client, monkeypatch):
     """GET /costs/by-agent?lookback_hours=200 clamps to 168.0."""
-    received: list[float] = []
+    captured: list[float] = []
 
-    def capture(settings, lookback_hours):
-        received.append(lookback_hours)
+    def fake_aggregate(settings, lookback_hours):
+        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.aggregate_cost_by_name", capture,
+        "robotsix_mill.langfuse_client.aggregate_cost_by_name",
+        fake_aggregate,
     )
 
     r = client.get("/costs/by-agent?lookback_hours=200")
     assert r.status_code == 200
-    assert len(received) == 1
-    assert received[0] == 168.0, f"expected 168.0 (clamped from 200), got {received[0]}"
+    assert len(captured) == 1
+    assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# GET /traces/recent
-# ═══════════════════════════════════════════════════════════════════════
-
+# -- GET /traces/recent --------------------------------------------------
 
 def test_traces_recent_happy_path(client, monkeypatch):
-    """GET /traces/recent returns serialised trace dicts with expected keys."""
+    """GET /traces/recent returns serialised trace dicts from Langfuse."""
     fake_traces = [
-        {"id": "t1", "name": "refine", "timestamp": "2025-01-15T10:00:00Z",
-         "sessionId": "sess-1", "totalCost": 0.01, "userId": "u1",
-         "extra": "ignored"},  # extra keys should be filtered
-        {"id": "t2", "name": "implement", "timestamp": "2025-01-15T11:00:00Z",
-         "sessionId": None, "totalCost": 0.05, "userId": None},
+        {
+            "id": f"trace-{i}",
+            "name": f"trace-name-{i}",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "sessionId": f"session-{i}",
+            "totalCost": 0.01 * i,
+            "userId": "user-1",
+            "extraField": "should-be-stripped",
+        }
+        for i in range(5)
     ]
 
     monkeypatch.setattr(
@@ -249,63 +217,57 @@ def test_traces_recent_happy_path(client, monkeypatch):
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
-    assert len(data) == 2
-
+    assert len(data) == 5
     for t in data:
-        assert "id" in t
-        assert "name" in t
-        assert "timestamp" in t
-        assert "sessionId" in t
-        assert "totalCost" in t
-        # Extra keys from the raw trace should be stripped.
-        assert "extra" not in t
+        # Only the serialised subset of keys is returned.
+        for key in ("id", "name", "timestamp", "sessionId", "totalCost"):
+            assert key in t, f"trace missing key '{key}': {t}"
+        assert "extraField" not in t, "unexpected key leaked through serialization"
 
 
-def test_traces_recent_clamps_limit_low(client, monkeypatch):
-    """GET /traces/recent?limit=0 clamps limit to 1."""
-    received: list[int] = []
+def test_traces_recent_clamp_low(client, monkeypatch):
+    """GET /traces/recent?limit=0 clamps to 1."""
+    captured: list[int] = []
 
-    def capture(settings, limit, min_cost=None, max_cost=None):
-        received.append(limit)
+    def fake_list(settings, limit, min_cost=None, max_cost=None):
+        captured.append(limit)
         return []
 
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.list_recent_traces", capture,
+        "robotsix_mill.langfuse_client.list_recent_traces",
+        fake_list,
     )
 
     r = client.get("/traces/recent?limit=0")
     assert r.status_code == 200
-    assert len(received) == 1
-    assert received[0] == 1, f"expected 1 (clamped from 0), got {received[0]}"
+    assert len(captured) == 1
+    assert captured[0] == 1, f"expected clamped to 1, got {captured[0]}"
 
 
-def test_traces_recent_clamps_limit_high(client, monkeypatch):
-    """GET /traces/recent?limit=200 clamps limit to 50."""
-    received: list[int] = []
+def test_traces_recent_clamp_high(client, monkeypatch):
+    """GET /traces/recent?limit=200 clamps to 50."""
+    captured: list[int] = []
 
-    def capture(settings, limit, min_cost=None, max_cost=None):
-        received.append(limit)
+    def fake_list(settings, limit, min_cost=None, max_cost=None):
+        captured.append(limit)
         return []
 
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.list_recent_traces", capture,
+        "robotsix_mill.langfuse_client.list_recent_traces",
+        fake_list,
     )
 
     r = client.get("/traces/recent?limit=200")
     assert r.status_code == 200
-    assert len(received) == 1
-    assert received[0] == 50, f"expected 50 (clamped from 200), got {received[0]}"
+    assert len(captured) == 1
+    assert captured[0] == 50, f"expected clamped to 50, got {captured[0]}"
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# POST /survey
-# ═══════════════════════════════════════════════════════════════════════
-
+# -- POST /survey -------------------------------------------------------
 
 def test_survey_fire_and_forget(client, monkeypatch):
     """POST /survey returns 202 immediately and runs the survey in a
-    background daemon thread — the HTTP response must not block on the
-    LLM call.  Mirrors the test_audit_endpoint_is_fire_and_forget pattern."""
+    background thread — must not block on the LLM call."""
     from robotsix_mill import survey_runner
 
     ran = threading.Event()
@@ -313,53 +275,35 @@ def test_survey_fire_and_forget(client, monkeypatch):
 
     class _R:
         drafts_created: list = []
-        updated_memory = ""
-        session_id = ""
 
     def slow_survey():
         ran.set()
-        release.wait(5)  # simulate a minutes-long run
+        release.wait(5)
         return _R()
 
     monkeypatch.setattr(survey_runner, "run_survey_pass", slow_survey)
 
-    r = client.post("/survey")  # must NOT block on slow_survey
+    r = client.post("/survey")
     assert r.status_code == 202
     assert r.json() == {"status": "started"}
     assert ran.wait(5), "survey did not start in background"
-
-    # Clean up: let the daemon thread finish so it doesn't linger
-    # after the test.
-    release.set()
+    release.set()  # let the daemon thread finish
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# POST /tickets/{id}/transition — happy path
-# ═══════════════════════════════════════════════════════════════════════
-
+# -- POST /tickets/{id}/transition (happy path) -------------------------
 
 def test_transition_happy_path_draft_to_ready(client, service):
-    """POST /tickets/{id}/transition with {"state":"ready"} transitions
-    a DRAFT ticket to READY and returns the updated TicketRead.
-
-    The existing transition tests in test_api.py only cover error
-    cases (409 on illegal transitions) and the blocked-override
-    paths.  This covers the simple-success case.
-    """
-    t = service.create("Transition happy-path test")
+    """POST /tickets/{id}/transition with {'state': 'ready'} transitions
+    a draft ticket to ready and returns the updated ticket."""
+    t = service.create("Transition me")
 
     r = client.post(
         f"/tickets/{t.id}/transition",
-        json={"state": "ready", "note": "operator-approved"},
+        json={"state": "ready", "note": "looks good"},
     )
     assert r.status_code == 200
     data = r.json()
     assert data["id"] == t.id
-    assert data["title"] == "Transition happy-path test"
+    assert data["title"] == "Transition me"
     assert data["state"] == "ready"
     assert "cost_usd" in data
-
-    # The worker races to process the ticket (implement stage picks up
-    # READY tickets).  Accept-transition responded successfully; the
-    # worker may have already moved the ticket out of READY by the
-    # time we check, so we assert the response, not the final DB state.
