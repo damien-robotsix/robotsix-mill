@@ -119,7 +119,7 @@ def _format_recent_proposals(tickets: list[Ticket]) -> str:
     lines = ["<recent_proposals>"]
     for t in tickets:
         short_id = t.id[:7]
-        state_val = t.state.value if hasattr(t.state, 'value') else str(t.state)
+        state_val = t.state.value
         lines.append(f"[{state_val}] {short_id} | {t.title}")
     lines.append("</recent_proposals>")
     return "\n".join(lines)
