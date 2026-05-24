@@ -93,13 +93,12 @@ Which class of agent this is:
 
 ---
 
-### `model` (optional)
+### `model` (required)
 
 | Attribute | Value |
 |-----------|-------|
 | Type | `string` |
-| Required | no |
-| Default | `"deepseek/deepseek-v4-pro"` (the coordinator `model` field) |
+| Required | **yes** |
 
 The OpenRouter model identifier. Supports two forms:
 
@@ -138,8 +137,9 @@ The OpenRouter model identifier. Supports two forms:
    | `${MILL_HEALTH_MODEL}` | `health_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_SURVEY_MODEL}` | `survey_model` | `"deepseek/deepseek-v4-pro"` |
 
-The `model` field is optional. When absent, the loader falls back to
-`${MILL_MODEL}` (the coordinator default).
+The `model` field is required. Every agent YAML must specify a model,
+either as a literal identifier or as a `${VAR}` reference that the
+loader resolves via `Settings`.
 
 ---
 
@@ -312,10 +312,10 @@ demonstrates:
    Existing YAML files remain valid because they simply don't contain
    the new key, and the loader uses the documented default.
 
-2. **Unknown top-level keys** encountered by the loader must be
-   silently ignored, not rejected. This allows YAML files authored
-   against a newer schema to be loaded by an older loader (provided
-   the older loader doesn't depend on the new field's semantics).
+2. **Unknown top-level keys** are rejected by the strict loader
+   (`extra="forbid"`). When adding a new field, update the Pydantic
+   model in `yaml_loader.py` first, then the schema doc, then the
+   YAML files. This catches typos and drift early.
 
 3. **New required fields** must never be added. The set of required
    fields is permanently `name`, `model`, `system_prompt`. Any new
