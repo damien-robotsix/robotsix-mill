@@ -19,8 +19,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Central Pydantic configuration model for robotsix-mill.
 
-    All fields are sourced from environment variables and ``.env`` /
-    ``secrets.env`` files (loaded automatically by pydantic-settings).
+    Values are resolved in this order (later sources override earlier):
+
+    1. ``Field(default=...)`` — Python-level fallback
+    2. YAML layers (``mill.defaults.yaml`` → ``mill.local.yaml`` →
+       ``mill.production.yaml``)
+    3. ``.env`` / ``secrets.env`` files
+    4. ``os.environ``
+    5. Constructor kwargs (e.g. ``Settings(MILL_MAX_CONCURRENCY=99)``)
+
     Conventional keys like ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are
     unprefixed to remain compatible with the reference projects.
     Mill-specific settings use the ``MILL_`` / ``FORGE_`` prefix
@@ -30,6 +37,48 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", "secrets.env"], env_file_encoding="utf-8", extra="ignore"
     )
+
+    def __init__(
+        self,
+        _config_file: str | None = None,
+        _skip_local: bool = False,
+        **data: Any,
+    ) -> None:
+        # Step 1: normal pydantic-settings resolution
+        # (env_file → os.environ → kwargs)
+        super().__init__(**data)
+
+        # Step 2: load YAML layers
+        from .config_loader import flatten_yaml_config, load_yaml_config
+
+        yaml_config = load_yaml_config(
+            config_file=_config_file,
+            skip_local=_skip_local,
+        )
+        yaml_values = flatten_yaml_config(yaml_config)
+
+        # Step 3: build alias→field_name lookup once
+        alias_to_field: dict[str, str] = {}
+        for field_name, field_info in type(self).model_fields.items():
+            if field_info.alias:
+                alias_to_field[field_info.alias] = field_name
+
+        # Step 4: apply YAML value ONLY if field is still at its Field default
+        # (i.e. was NOT set by .env, os.environ, or constructor kwargs)
+        from pydantic import TypeAdapter
+
+        for alias, yaml_value in yaml_values.items():
+            field_name = alias_to_field.get(alias)
+            if field_name is None:
+                continue
+            field_info = type(self).model_fields[field_name]
+            if getattr(self, field_name) == field_info.default:
+                try:
+                    ta = TypeAdapter(field_info.annotation)
+                    value = ta.validate_python(yaml_value)
+                except Exception:
+                    continue
+                object.__setattr__(self, field_name, value)
 
     # --- core ---
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
@@ -1036,20 +1085,10 @@ class Settings(BaseSettings):
 def load_settings() -> Settings:
     """Load and return a :class:`Settings` instance.
 
-    Defaults are sourced from ``config/mill.defaults.yaml`` (plus optional
-    ``config/mill.local.yaml`` and ``config/mill.production.yaml`` overlays).
-    Environment variables override the YAML-derived values.
+    Loads YAML layers (defaults → local → production), then overlays
+    ``.env`` / ``secrets.env`` / environment variables on top.
     """
-    import os
-
-    from robotsix_mill.config_loader import flatten_yaml_config, load_yaml_config
-
-    yaml_defaults = flatten_yaml_config(load_yaml_config())
-    # Remove any YAML key whose env var is already set — pydantic-settings
-    # gives init kwargs higher priority than os.environ, so we must not
-    # pass the YAML value as a kwarg when an env override exists.
-    yaml_kwargs = {k: v for k, v in yaml_defaults.items() if k not in os.environ}
-    return Settings(**yaml_kwargs)
+    return Settings()
 
 
 # ---------------------------------------------------------------------------

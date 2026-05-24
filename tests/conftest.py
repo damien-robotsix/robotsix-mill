@@ -53,6 +53,11 @@ def _no_dotenv(monkeypatch):
     # Block YAML overlays — only defaults.yaml is loaded in tests.
     monkeypatch.setenv("MILL_CONFIG_FILE", "")
     monkeypatch.setenv("MILL_SECRETS_FILE", "")
+    # Patch _LOCAL_FILE to a nonexistent path so no local overlay
+    # leaks into any test, even when Settings.__init__ calls
+    # load_yaml_config directly.
+    import robotsix_mill.config_loader as _cl
+    monkeypatch.setattr(_cl, "_LOCAL_FILE", _cl.Path("/nonexistent/mill.local.yaml"))
     for var in (
         "OPENROUTER_API_KEY",
         "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL",

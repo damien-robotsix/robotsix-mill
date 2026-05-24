@@ -782,14 +782,32 @@ class TestValidationInvalid:
 class TestFactories:
     """Integration tests for ``load_settings()`` and ``load_secrets()``."""
 
-    def test_load_settings_applies_yaml_defaults(self):
-        """``load_settings()`` populates Settings fields from
-        ``config/mill.defaults.yaml``."""
+    def test_load_settings_returns_settings_with_yaml_defaults(
+        self, tmp_path, monkeypatch
+    ):
+        """``load_settings()`` applies YAML values when no other source
+        sets them."""
+        import robotsix_mill.config_loader as cl
+
+        # Write a temporary defaults file with a non-standard value
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        import shutil
+
+        shutil.copy("config/mill.defaults.yaml", defaults)
+        defaults.write_text(
+            defaults.read_text().replace(
+                "max_concurrency: 4", "max_concurrency: 42"
+            )
+        )
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", cl.Path("/nonexistent/mill.local.yaml"))
+
         from robotsix_mill.config import load_settings
 
         s = load_settings()
-        assert s.model == "deepseek/deepseek-v4-pro"
-        assert s.max_concurrency == 4
+        assert s.max_concurrency == 42
 
     def test_load_secrets_returns_secrets_object(self):
         """``load_secrets()`` returns a ``Secrets`` object."""
@@ -798,23 +816,102 @@ class TestFactories:
         s = load_secrets()
         assert isinstance(s, Secrets)
 
-    def test_load_settings_env_overrides_yaml_defaults(self, monkeypatch):
+    def test_load_settings_env_override_yaml(self, tmp_path, monkeypatch):
         """Env vars override YAML defaults in ``load_settings()``."""
+        import robotsix_mill.config_loader as cl
+
+        # Local overlay sets max_concurrency=42, but env var says 77
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        import shutil
+
+        shutil.copy("config/mill.defaults.yaml", defaults)
+        local = local_dir / "mill.local.yaml"
+        local.write_text("core:\n  limits:\n    max_concurrency: 42\n")
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", local)
         monkeypatch.setenv("MILL_MAX_CONCURRENCY", "77")
+
         from robotsix_mill.config import load_settings
 
         s = load_settings()
-        assert s.max_concurrency == 77
+        assert s.max_concurrency == 77  # env var wins, not YAML's 42
 
-    def test_load_settings_yaml_overlay_overrides_defaults(self, tmp_path, monkeypatch):
-        """A YAML production overlay overrides defaults, proving YAML wiring."""
-        overlay = tmp_path / "test.overlay.yaml"
-        overlay.write_text("core:\n  limits:\n    max_concurrency: 99\n")
-        monkeypatch.setenv("MILL_CONFIG_FILE", str(overlay))
+    def test_settings_init_applies_yaml_fallback(
+        self, tmp_path, monkeypatch
+    ):
+        """``Settings()`` applies YAML when field is at default;
+        constructor kwargs override YAML."""
+        import robotsix_mill.config_loader as cl
 
-        from robotsix_mill.config import load_settings
-        s = load_settings()
+        local_dir = tmp_path / "config"
+        local_dir.mkdir()
+        defaults = local_dir / "mill.defaults.yaml"
+        import shutil
 
-        # 99 differs from both the Python default (4) and the committed
-        # YAML default (4), proving the YAML loader is wired.
-        assert s.max_concurrency == 99
+        shutil.copy("config/mill.defaults.yaml", defaults)
+        defaults.write_text(
+            defaults.read_text().replace(
+                "max_concurrency: 4", "max_concurrency: 42"
+            )
+        )
+        monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
+        monkeypatch.setattr(cl, "_LOCAL_FILE", cl.Path("/nonexistent/mill.local.yaml"))
+
+        from robotsix_mill.config import Settings
+
+        # No kwargs → YAML value is used (Field default is 4, YAML says 42)
+        s1 = Settings(MILL_DATA_DIR=str(tmp_path))
+        assert s1.max_concurrency == 42
+
+        # Constructor kwarg overrides YAML
+        s2 = Settings(MILL_DATA_DIR=str(tmp_path), MILL_MAX_CONCURRENCY="99")
+        assert s2.max_concurrency == 99
+
+
+class TestFlattenYamlConfig:
+    """Unit tests for ``flatten_yaml_config``."""
+
+    def test_flatten_basic_nesting(self):
+        """Nested YAML dict is flattened to alias→value pairs."""
+        from robotsix_mill.config_loader import flatten_yaml_config
+
+        yaml_config = {
+            "core": {
+                "limits": {"max_concurrency": 8},
+                "models": {"coordinator": "test/model"},
+            },
+            "service": {"data_dir": "/tmp/data"},
+        }
+        result = flatten_yaml_config(yaml_config)
+        assert result["MILL_MAX_CONCURRENCY"] == 8
+        assert result["MILL_MODEL"] == "test/model"
+        assert result["MILL_DATA_DIR"] == "/tmp/data"
+
+    def test_flatten_unknown_paths_ignored(self):
+        """YAML paths without a mapping are silently ignored."""
+        from robotsix_mill.config_loader import flatten_yaml_config
+
+        yaml_config = {
+            "core": {
+                "unknown_section": {"some_key": "value"},
+            },
+        }
+        result = flatten_yaml_config(yaml_config)
+        assert "some_key" not in result
+        assert result == {}
+
+    def test_flatten_last_wins_for_duplicate_aliases(self):
+        """When two YAML paths map to the same alias, the last one wins."""
+        from robotsix_mill.config_loader import flatten_yaml_config
+
+        yaml_config = {
+            "core": {"models": {"web_research": "model-a"}},
+            "web": {"research_model": "model-b"},
+        }
+        result = flatten_yaml_config(yaml_config)
+        # Both core.models.web_research and web.research_model
+        # map to MILL_WEB_RESEARCH_MODEL; web.research_model is
+        # traversed second because 'web' > 'core' alphabetically
+        assert result["MILL_WEB_RESEARCH_MODEL"] == "model-b"
