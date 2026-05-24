@@ -387,8 +387,6 @@ class RetrospectStage(Stage):
                 deep_analysis=deep_analysis,
                 trace_ids=trace_ids,
                 recent_proposals=rp_block,
-                epic_context=epic_ctx,
-                sibling_context=sibling_ctx,
             )
         except Exception as e:  # noqa: BLE001 — resumable, never lose the ticket
             log.exception("%s: retrospect agent failed", ticket.id)
