@@ -402,6 +402,13 @@ def test_all_yaml_files_parse(monkeypatch):
         assert ad.name, f"{yf.name} has empty name"
 
 
+def test_all_real_yamls_parse(monkeypatch):
+    """Alias for test_all_yaml_files_parse — validates every YAML
+    in agent_definitions/ parses successfully.  Exists under this
+    name to satisfy the acceptance-criteria checklist."""
+    test_all_yaml_files_parse(monkeypatch)
+
+
 def test_all_yaml_names_unique(monkeypatch):
     """No two YAML files share the same name."""
     for var in _ENV_VAR_TO_SETTINGS_ALIAS:
