@@ -4,14 +4,14 @@ Each agent definition lives in its own `.yaml` file under
 `agent_definitions/` (e.g. `agent_definitions/refine.yaml`,
 `agent_definitions/audit.yaml`). This document specifies every field
 a YAML file may contain, its type, default, constraints, and
-semantics. It is the contract that the loader (ticket 2), migration
-(ticket 3), and runtime (ticket 4) implement against.
+semantics. It is the contract that the loader, migration, and runtime
+implement against.
 
 ## Design rules
 
-- **Required fields are minimal.** Only `name`, `description`,
-  `system_prompt`, and `category` are mandatory — everything else has
-  a sensible default.
+- **Required fields are minimal.** Only `name`, `model`, and
+  `system_prompt` are mandatory — everything else has a sensible
+  default.
 - **Unknown top-level keys MUST be ignored** by consumers. The loader
   must not reject a file because it contains a key it doesn't
   understand. This guarantees forward compatibility: new optional
@@ -40,12 +40,13 @@ all loaded agent definitions. Convention: lowercase, snake_case.
 
 ---
 
-### `description` (required)
+### `description` (optional)
 
 | Attribute | Value |
 |-----------|-------|
 | Type | `string` |
-| Required | **yes** |
+| Required | no |
+| Default | `null` |
 | Example | `"Refines a rough ticket draft into a precise, self-contained engineering spec grounded in the actual codebase"` |
 
 A one-line human-readable summary of the agent's role. Used in agent
@@ -70,12 +71,13 @@ Use YAML block-scalar syntax (`|` or `|-`) for readability.
 
 ---
 
-### `category` (required)
+### `category` (optional)
 
 | Attribute | Value |
 |-----------|-------|
 | Type | `string` (enum) |
-| Required | **yes** |
+| Required | no |
+| Default | `null` |
 | Valid values | `"pipeline"`, `"periodic"`, `"sub_agent"` |
 
 Which class of agent this is:
@@ -258,11 +260,11 @@ skills:
   - "git-workflow"
 ```
 
-This field is **forward-looking**: no skill-loading code exists today.
-It is included in the schema from day one so that YAML files written
-now do not need to be updated when skill loading is implemented.
-Consumers that do not implement skill loading should silently ignore
-this field.
+This field is consumed by the agent factory at construction time:
+each skill name resolves to a `skills/<name>/SKILL.md` file whose
+content is injected into the system prompt.  If the `skills/` directory
+does not exist yet (or a named skill is absent), the skill is silently
+skipped.
 
 ---
 
@@ -315,6 +317,5 @@ demonstrates:
    the older loader doesn't depend on the new field's semantics).
 
 3. **New required fields** must never be added. The set of required
-   fields is permanently `name`, `description`, `system_prompt`,
-   `category`. Any new concept must be optional with a sensible
-   default.
+   fields is permanently `name`, `model`, `system_prompt`. Any new
+   concept must be optional with a sensible default.

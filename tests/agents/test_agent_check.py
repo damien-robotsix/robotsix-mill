@@ -35,10 +35,11 @@ def _empty_result():
 
 
 def test_agent_check_prompt_covers_all_coherence_dimensions():
-    """The agent-check prompt must cover all five coherence dimensions A-E."""
+    """The agent-check prompt must cover all five coherence dimensions A-E
+    and now targets YAML files instead of Python source."""
     p = agent_check.SYSTEM_PROMPT.lower()
     # Dimension A: Tool–Prompt Coherence
-    for kw in ("tool–prompt", "tool names", "actual tool set", "mismatch"):
+    for kw in ("tool–prompt", "backtick-quoted", "actual tool set", "mismatch"):
         assert kw in p, f"agent-check prompt missing tool-prompt cue: {kw}"
     # pydantic-ai auto-injection must be documented so the agent knows
     # not to flag absent tool mentions as gaps.
@@ -48,25 +49,30 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
     # "tool in actual set but never mentioned" must NOT be treated as a gap.
     assert "do not flag" in p or "DO NOT flag" in p or "absence from the prompt" in p
     # Must mention docstring staleness / prompt-docstring contradiction checks.
-    assert "docstring" in p and ("thin or stale" in p or "contradict" in p)
+    assert "docstring" in p and ("contradict" in p or "fs_tools.py" in p)
     # Dimension B: Skill Coherence
     for kw in ("skill", "frontmatter", "orphan"):
         assert kw in p, f"agent-check prompt missing skill cue: {kw}"
     # Dimension C: Metadata Correctness
-    for kw in ("metadata", "report_issue", "name", "model_name"):
+    for kw in ("metadata", "report_issue", "name", "model", "duplicate"):
         assert kw in p, f"agent-check prompt missing metadata cue: {kw}"
     # Dimension D: Agent Registration Completeness
-    for kw in ("registration", "_model", "consuming"):
+    for kw in ("registration", "_model", "orphan"):
         assert kw in p, f"agent-check prompt missing registration cue: {kw}"
     # Dimension E: Prompt Self-Consistency
     for kw in ("self-consistency", "copy-paste", "drift"):
         assert kw in p, f"agent-check prompt missing self-consistency cue: {kw}"
+    # Must reference YAML files and agent_definitions/
+    assert "agent_definitions/" in p
+    assert ".yaml" in p
     # Must use explore/read_file/list_dir tools
     assert "explore" in p
     assert "read_file" in p
     assert "list_dir" in p
-    # Must read base.py to understand report_issue/web injection
+    # Must read yaml_loader.py, base.py, config.py
+    assert "yaml_loader.py" in p
     assert "base.py" in p
+    assert "config.py" in p
     # Must read skills and references
     assert "skills/" in p or "SKILL.md" in p
     assert "agent_references/" in p
@@ -74,6 +80,8 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
     assert "90ac" in p or "d847" in p or "false-positive" in p or (
         "deleted" in p and "draft" in p
     )
+    # Must mention `${VAR}` references for model field
+    assert "${var}" in p or "settings field" in p
 
 
 def test_agent_check_result_model():

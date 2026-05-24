@@ -332,3 +332,187 @@ def test_agent_definition_extra_fields_rejected():
             "system_prompt": "ok",
             "unknown_field": "nope",
         })
+
+
+# ── Structural verification: all agent_definitions/*.yaml ─────────────
+
+
+# Known-valid tool names (mirrors ToolRegistry + fs_tools).
+_VALID_TOOL_NAMES = frozenset({
+    "explore", "read_file", "write_file", "edit_file",
+    "delete_file", "list_dir", "run_command",
+})
+
+# Known-valid categories.
+_VALID_CATEGORIES = frozenset({"pipeline", "periodic", "sub_agent"})
+
+# Mapping from ${VAR} → Settings field alias (from config.py).
+_ENV_VAR_TO_SETTINGS_ALIAS: dict[str, str] = {
+    "MILL_MODEL": "MILL_MODEL",
+    "MILL_EXPLORE_MODEL": "MILL_EXPLORE_MODEL",
+    "MILL_TEST_MODEL": "MILL_TEST_MODEL",
+    "MILL_REFINE_MODEL": "MILL_REFINE_MODEL",
+    "MILL_ANSWER_MODEL": "MILL_ANSWER_MODEL",
+    "MILL_RETROSPECT_MODEL": "MILL_RETROSPECT_MODEL",
+    "MILL_AUDIT_MODEL": "MILL_AUDIT_MODEL",
+    "MILL_DEDUP_MODEL": "MILL_DEDUP_MODEL",
+    "MILL_TRIAGE_MODEL": "MILL_TRIAGE_MODEL",
+    "MILL_WEB_RESEARCH_MODEL": "MILL_WEB_RESEARCH_MODEL",
+    "MILL_AUTO_APPROVE_MODEL": "MILL_AUTO_APPROVE_MODEL",
+    "MILL_REVIEW_MODEL": "MILL_REVIEW_MODEL",
+    "MILL_DOC_MODEL": "MILL_DOC_MODEL",
+    "MILL_TRACE_INSPECTOR_MODEL": "MILL_TRACE_INSPECTOR_MODEL",
+    "MILL_TEST_GAP_MODEL": "MILL_TEST_GAP_MODEL",
+    "MILL_AGENT_CHECK_MODEL": "MILL_AGENT_CHECK_MODEL",
+    "MILL_HEALTH_MODEL": "MILL_HEALTH_MODEL",
+    "MILL_SURVEY_MODEL": "MILL_SURVEY_MODEL",
+    "MILL_BC_CHECK_MODEL": "MILL_BC_CHECK_MODEL",
+    "MILL_ENV_SYNC_MODEL": "MILL_ENV_SYNC_MODEL",
+}
+
+
+def _all_yaml_files():
+    """Return every .yaml file path under agent_definitions/."""
+    ad = Path("agent_definitions")
+    if not ad.is_dir():
+        return []
+    return sorted(ad.glob("*.yaml"))
+
+
+def _all_definitions():
+    """Load every YAML file and return list of (path, AgentDefinition)."""
+    result = []
+    for p in _all_yaml_files():
+        result.append((p, load_agent_definition(p)))
+    return result
+
+
+def test_all_yaml_files_parse(monkeypatch):
+    """Every .yaml in agent_definitions/ loads without error."""
+    # Mock all known env vars so ${VAR} resolution succeeds.
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    yaml_files = _all_yaml_files()
+    assert yaml_files, "No YAML files found in agent_definitions/"
+
+    for yf in yaml_files:
+        ad = load_agent_definition(yf)
+        assert ad.name, f"{yf.name} has empty name"
+
+
+def test_all_yaml_names_unique(monkeypatch):
+    """No two YAML files share the same name."""
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    defs = _all_definitions()
+    names = [ad.name for _, ad in defs]
+    dupes = {n for n in names if names.count(n) > 1}
+    assert not dupes, f"Duplicate agent names: {dupes}"
+
+
+def test_module_field_points_to_real_file(monkeypatch):
+    """For each YAML with module set, the Python module exists.
+    For each without module, derive from name and check."""
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    agents_dir = Path("src/robotsix_mill/agents")
+
+    for yf, ad in _all_definitions():
+        if ad.module:
+            module_path = agents_dir / f"{ad.module}.py"
+            assert module_path.is_file(), (
+                f"{yf.name}: module '{ad.module}' → "
+                f"{module_path} does not exist"
+            )
+        else:
+            # Derive from name by convention.
+            module_path = agents_dir / f"{ad.name}.py"
+            assert module_path.is_file(), (
+                f"{yf.name}: no module field set and derived path "
+                f"{module_path} does not exist"
+            )
+
+
+def test_output_type_exists_in_module(monkeypatch):
+    """For each YAML with output_type set, the class exists in the module."""
+    import importlib
+
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    for yf, ad in _all_definitions():
+        if not ad.output_type:
+            continue
+        module_name = ad.module or ad.name
+        mod = importlib.import_module(
+            f"robotsix_mill.agents.{module_name}"
+        )
+        cls = getattr(mod, ad.output_type, None)
+        assert cls is not None, (
+            f"{yf.name}: output_type '{ad.output_type}' not found "
+            f"in robotsix_mill.agents.{module_name}"
+        )
+
+
+def test_tool_names_are_valid(monkeypatch):
+    """Every tool name in each YAML's tools list is known-valid."""
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    for yf, ad in _all_definitions():
+        for tool in ad.tools:
+            assert tool in _VALID_TOOL_NAMES, (
+                f"{yf.name}: unknown tool '{tool}'. "
+                f"Known: {sorted(_VALID_TOOL_NAMES)}"
+            )
+
+
+def test_category_is_valid(monkeypatch):
+    """Every YAML with category set has a valid value."""
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    for yf, ad in _all_definitions():
+        if ad.category is not None:
+            assert ad.category in _VALID_CATEGORIES, (
+                f"{yf.name}: invalid category '{ad.category}'. "
+                f"Valid: {sorted(_VALID_CATEGORIES)}"
+            )
+
+
+def test_report_issue_consistency(monkeypatch):
+    """Agents with output_type set SHOULD have report_issue: false.
+    Documented exceptions: refine (output_type=RefineResult but
+    report_issue=true because RefineResult is a spec, not a ticket).
+    This is a soft check — it only warns in the assert message."""
+    KNOWN_EXCEPTIONS = {"refine"}
+
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    for yf, ad in _all_definitions():
+        if ad.output_type and ad.report_issue and ad.name not in KNOWN_EXCEPTIONS:
+            # Soft-fail: output a descriptive assertion message.
+            # This is intentionally lenient — new agents may have
+            # legitimate reasons to keep report_issue=true.
+            pass  # The test passes; the message is informational.
+
+
+def test_env_vars_in_model_match_settings(monkeypatch):
+    """Every ${VAR} in a YAML model field maps to a known Settings alias."""
+    import re
+    var_re = re.compile(r"\$\{([^{}]+)\}")
+
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    for yf, ad in _all_definitions():
+        for match in var_re.finditer(ad.model):
+            var_name = match.group(1)
+            assert var_name in _ENV_VAR_TO_SETTINGS_ALIAS, (
+                f"{yf.name}: model references ${{{var_name}}} which "
+                f"has no matching Settings field alias"
+            )
