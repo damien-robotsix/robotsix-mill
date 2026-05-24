@@ -22,7 +22,7 @@ from .core.models import Ticket
 from .core.service import TicketService
 from .core.states import State
 from .langfuse_client import list_all_traces_since
-from .runtime.tracing import make_session_id, start_ticket_root_span
+from .runtime.tracing import make_session_id
 
 log = logging.getLogger("robotsix_mill.trace_health")
 
@@ -51,95 +51,95 @@ def run_trace_health_check() -> TraceHealthResult:
     from_ts = window_start.isoformat()
 
     session_id = make_session_id("trace-health")
-    with start_ticket_root_span(session_id, "trace-health"):
-        # 1. Short-circuit when tracing is not configured.
-        if not settings.tracing_enabled:
-            log.debug("tracing disabled — skipping trace-health check")
-            return TraceHealthResult(
-                draft_created=False,
-                unsessioned_count=0,
-                total_traces=0,
-                window_start=window_start.isoformat(),
-                window_end=window_end.isoformat(),
-            )
 
-        # 2. Fetch all traces from the last 24h.
-        traces = list_all_traces_since(settings, from_ts)
-
-        # 3. Partition.
-        unsessioned = [t for t in traces if not t.get("sessionId")]
-        unsessioned_count = len(unsessioned)
-        total = len(traces)
-
-        # 4. Nothing to alert about.
-        if unsessioned_count == 0 or total == 0:
-            return TraceHealthResult(
-                draft_created=False,
-                unsessioned_count=unsessioned_count,
-                total_traces=total,
-                window_start=window_start.isoformat(),
-                window_end=window_end.isoformat(),
-            )
-
-        # 5. Dedup: skip if an open trace-health ticket already exists.
-        with session(settings) as s:
-            stmt = (
-                select(Ticket)
-                .where(Ticket.source == "trace-health")
-                .where(Ticket.state != State.CLOSED)
-            )
-            existing = list(s.exec(stmt).all())
-        if existing:
-            log.info(
-                "open trace-health ticket(s) already exist (%d) — skipping",
-                len(existing),
-            )
-            return TraceHealthResult(
-                draft_created=False,
-                unsessioned_count=unsessioned_count,
-                total_traces=total,
-                window_start=window_start.isoformat(),
-                window_end=window_end.isoformat(),
-            )
-
-        # 6. Build and file the draft ticket.
-        title = (
-            f"Unsessoned Langfuse traces detected — "
-            f"{unsessioned_count}/{total} traces lack session"
-        )
-        examples = []
-        for t in unsessioned[:5]:
-            tid = t.get("id", "?")
-            tname = t.get("name", "?")
-            examples.append(f"- {tid}  \"{tname}\"")
-        examples_block = "\n".join(examples) if examples else "(none)"
-        description = (
-            f"Window: {window_start.isoformat()} UTC → {window_end.isoformat()} UTC\n"
-            f"Unsessoned traces: {unsessioned_count} / {total} total\n"
-            f"\n"
-            f"Examples (up to 5):\n"
-            f"{examples_block}\n"
-            f"\n"
-            f"Likely cause: sub-agents (explore, web_research, deep/test, coordinator)\n"
-            f"not inheriting the ticket root span's session.id. A fix ticket should\n"
-            f"be produced by the pipeline (this ticket itself is just the alert).\n"
-        )
-
-        service = TicketService(settings)
-        ticket = service.create(
-            title, description, source="trace-health",
-            origin_session=session_id,
-        )
-        log.info(
-            "trace-health filed draft %s: %d/%d traces unsessioned",
-            ticket.id,
-            unsessioned_count,
-            total,
-        )
+    # 1. Short-circuit when tracing is not configured.
+    if not settings.tracing_enabled:
+        log.debug("tracing disabled — skipping trace-health check")
         return TraceHealthResult(
-            draft_created=True,
+            draft_created=False,
+            unsessioned_count=0,
+            total_traces=0,
+            window_start=window_start.isoformat(),
+            window_end=window_end.isoformat(),
+        )
+
+    # 2. Fetch all traces from the last 24h.
+    traces = list_all_traces_since(settings, from_ts)
+
+    # 3. Partition.
+    unsessioned = [t for t in traces if not t.get("sessionId")]
+    unsessioned_count = len(unsessioned)
+    total = len(traces)
+
+    # 4. Nothing to alert about.
+    if unsessioned_count == 0 or total == 0:
+        return TraceHealthResult(
+            draft_created=False,
             unsessioned_count=unsessioned_count,
             total_traces=total,
             window_start=window_start.isoformat(),
             window_end=window_end.isoformat(),
         )
+
+    # 5. Dedup: skip if an open trace-health ticket already exists.
+    with session(settings) as s:
+        stmt = (
+            select(Ticket)
+            .where(Ticket.source == "trace-health")
+            .where(Ticket.state != State.CLOSED)
+        )
+        existing = list(s.exec(stmt).all())
+    if existing:
+        log.info(
+            "open trace-health ticket(s) already exist (%d) — skipping",
+            len(existing),
+        )
+        return TraceHealthResult(
+            draft_created=False,
+            unsessioned_count=unsessioned_count,
+            total_traces=total,
+            window_start=window_start.isoformat(),
+            window_end=window_end.isoformat(),
+        )
+
+    # 6. Build and file the draft ticket.
+    title = (
+        f"Unsessoned Langfuse traces detected — "
+        f"{unsessioned_count}/{total} traces lack session"
+    )
+    examples = []
+    for t in unsessioned[:5]:
+        tid = t.get("id", "?")
+        tname = t.get("name", "?")
+        examples.append(f"- {tid}  \"{tname}\"")
+    examples_block = "\n".join(examples) if examples else "(none)"
+    description = (
+        f"Window: {window_start.isoformat()} UTC → {window_end.isoformat()} UTC\n"
+        f"Unsessoned traces: {unsessioned_count} / {total} total\n"
+        f"\n"
+        f"Examples (up to 5):\n"
+        f"{examples_block}\n"
+        f"\n"
+        f"Likely cause: sub-agents (explore, web_research, deep/test, coordinator)\n"
+        f"not inheriting the ticket root span's session.id. A fix ticket should\n"
+        f"be produced by the pipeline (this ticket itself is just the alert).\n"
+    )
+
+    service = TicketService(settings)
+    ticket = service.create(
+        title, description, source="trace-health",
+        origin_session=session_id,
+    )
+    log.info(
+        "trace-health filed draft %s: %d/%d traces unsessioned",
+        ticket.id,
+        unsessioned_count,
+        total,
+    )
+    return TraceHealthResult(
+        draft_created=True,
+        unsessioned_count=unsessioned_count,
+        total_traces=total,
+        window_start=window_start.isoformat(),
+        window_end=window_end.isoformat(),
+    )

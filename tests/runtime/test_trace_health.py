@@ -604,26 +604,30 @@ def test_list_all_traces_since_tracing_disabled_returns_empty():
 # ---------------------------------------------------------------------------
 
 
-def test_run_trace_health_opens_langfuse_session(tmp_path, monkeypatch):
-    """Trace-health check wraps the entire run in a Langfuse session
-    span, so the created ticket's origin_session reflects it."""
-    import contextlib
-
+def test_start_ticket_root_span_not_called(tmp_path, monkeypatch):
+    """Trace-health is a deterministic check — it must NOT call
+    start_ticket_root_span, because it doesn't run an agent and
+    should not create a Langfuse trace of its own.  The created
+    alert ticket still has a valid origin_session."""
     from robotsix_mill import trace_health_runner
 
     settings = _settings(tmp_path)
     _init_db_for_test(settings)
-    seen = {}
+    seen = {"span_called": False}
 
-    @contextlib.contextmanager
-    def fake_root(sid, stage_name=None, extra_attributes=None):
-        seen["session_id"] = sid
-        yield
+    def fake_start_ticket_root_span(sid, stage_name, extra_attributes=None):
+        seen["span_called"] = True
+        # If called, still need to yield so the body doesn't crash
+        import contextlib
+        return contextlib.nullcontext()
 
     # One unsessioned trace triggers ticket creation.
     traces = _mixed_traces(sessioned=0, unsessioned=1)
 
-    monkeypatch.setattr(trace_health_runner, "start_ticket_root_span", fake_root)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.start_ticket_root_span",
+        fake_start_ticket_root_span,
+    )
     monkeypatch.setattr(
         trace_health_runner, "make_session_id",
         lambda kind: f"{kind}-test-session",
@@ -639,7 +643,9 @@ def test_run_trace_health_opens_langfuse_session(tmp_path, monkeypatch):
     result = run_trace_health_check()
 
     assert result.draft_created is True
-    assert seen["session_id"] == "trace-health-test-session"
+    assert seen["span_called"] is False, (
+        "start_ticket_root_span was called — trace-health must not create spans"
+    )
 
     # Verify the created ticket's origin_session.
     svc = TicketService(settings)
