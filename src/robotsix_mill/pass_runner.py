@@ -28,10 +28,21 @@ _GAP_ID_RE = re.compile(
 )
 
 
+def _format_recent_proposals(tickets: list) -> str:
+    """Format a ``<recent_proposals>`` block from a list of Tickets."""
+    if not tickets:
+        return "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+    lines = []
+    for t in tickets:
+        short_id = t.id[:7]
+        lines.append(f"[{t.state.value}] {short_id} | {t.title}")
+    return "<recent_proposals>\n" + "\n".join(lines) + "\n</recent_proposals>"
+
+
 def _verify_prior_proposals(
     service: TicketService,
     settings: Settings,
-    source_label: SourceKind,
+    source_label: str,
 ) -> dict[str, dict]:
     """Query the ticket store for drafts previously spawned by the
     agent identified by *source_label*, check their state, and return a
@@ -197,8 +208,12 @@ def run_agent_pass(
         table = _render_verified_table(verified)
         memory_text = table + "\n\n" + memory_text
 
+    # 2.5. Build recent-proposals block for prompt injection.
+    recent = service.recent_proposals_for(source_label, limit=100)
+    rp_block = _format_recent_proposals(recent)
+
     # 3. Invoke the agent callable.
-    res = agent_fn(settings=settings, memory=memory_text)
+    res = agent_fn(settings=settings, memory=memory_text, recent_proposals=rp_block)
 
     # 4. Persist the agent's updated memory verbatim.
     if res.updated_memory:
