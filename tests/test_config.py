@@ -782,9 +782,9 @@ class TestValidationInvalid:
 class TestFactories:
     """Integration tests for ``load_settings()`` and ``load_secrets()``."""
 
-    def test_load_settings_returns_settings_with_yaml_defaults(self):
-        """``load_settings()`` returns a ``Settings`` with values from
-        ``config/mill.defaults.yaml`` (merged as constructor kwargs)."""
+    def test_load_settings_applies_yaml_defaults(self):
+        """``load_settings()`` populates Settings fields from
+        ``config/mill.defaults.yaml``."""
         from robotsix_mill.config import load_settings
 
         s = load_settings()
@@ -798,10 +798,23 @@ class TestFactories:
         s = load_secrets()
         assert isinstance(s, Secrets)
 
-    def test_load_settings_env_override_yaml(self, monkeypatch):
+    def test_load_settings_env_overrides_yaml_defaults(self, monkeypatch):
         """Env vars override YAML defaults in ``load_settings()``."""
         monkeypatch.setenv("MILL_MAX_CONCURRENCY", "77")
         from robotsix_mill.config import load_settings
 
         s = load_settings()
         assert s.max_concurrency == 77
+
+    def test_load_settings_yaml_overlay_overrides_defaults(self, tmp_path, monkeypatch):
+        """A YAML production overlay overrides defaults, proving YAML wiring."""
+        overlay = tmp_path / "test.overlay.yaml"
+        overlay.write_text("core:\n  limits:\n    max_concurrency: 99\n")
+        monkeypatch.setenv("MILL_CONFIG_FILE", str(overlay))
+
+        from robotsix_mill.config import load_settings
+        s = load_settings()
+
+        # 99 differs from both the Python default (4) and the committed
+        # YAML default (4), proving the YAML loader is wired.
+        assert s.max_concurrency == 99
