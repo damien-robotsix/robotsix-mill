@@ -226,7 +226,7 @@ class Settings(BaseSettings):
         default=4, alias="MILL_DEDUP_REQUEST_LIMIT"
     )
     doc_request_limit: int = Field(
-        default=4, alias="MILL_DOC_REQUEST_LIMIT"
+        default=8, alias="MILL_DOC_REQUEST_LIMIT"
     )
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped (read-side
