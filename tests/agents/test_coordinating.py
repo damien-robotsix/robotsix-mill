@@ -197,7 +197,7 @@ class TestRunCoordinator:
         # ── build_fs_tools (robotsix_mill.agents.fs_tools) ──────────
         from robotsix_mill.agents import fs_tools as _fs
 
-        def _fake_build_fs_tools(root, settings, *, pre_seeded=None):
+        def _fake_build_fs_tools(root, settings, *, pre_seeded=None, extra_roots=None):
             self.captured["fs_pre_seeded"] = pre_seeded
             # Return a single read_file tool so the filtering in
             # run_coordinator doesn't blow up.
@@ -211,7 +211,7 @@ class TestRunCoordinator:
         # ── make_explore_tool (robotsix_mill.agents.explore) ────────
         from robotsix_mill.agents import explore as _expl
 
-        def _fake_make_explore_tool(settings, repo_dir):
+        def _fake_make_explore_tool(settings, repo_dir, extra_roots=None):
             def _explore(question):
                 return "explored"
             return _explore
