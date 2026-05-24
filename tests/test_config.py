@@ -528,19 +528,13 @@ class TestYamlLoading:
 
         # Patch the module-level path to point at our temp dir
         import robotsix_mill.config_loader as cl
-        orig_defaults = cl._DEFAULTS_FILE
-        orig_local = cl._LOCAL_FILE
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", local)
 
-        try:
-            config = load_yaml_config()
-            assert config["core"]["limits"]["max_concurrency"] == 99
-            # Other values unchanged from defaults
-            assert config["core"]["models"]["coordinator"] == "deepseek/deepseek-v4-pro"
-        finally:
-            monkeypatch.setattr(cl, "_DEFAULTS_FILE", orig_defaults)
-            monkeypatch.setattr(cl, "_LOCAL_FILE", orig_local)
+        config = load_yaml_config()
+        assert config["core"]["limits"]["max_concurrency"] == 99
+        # Other values unchanged from defaults
+        assert config["core"]["models"]["coordinator"] == "deepseek/deepseek-v4-pro"
 
     def test_load_yaml_config_missing_defaults_raises(self, monkeypatch):
         """``load_yaml_config()`` raises ``ConfigError`` when
@@ -788,9 +782,9 @@ class TestValidationInvalid:
 class TestFactories:
     """Integration tests for ``load_settings()`` and ``load_secrets()``."""
 
-    def test_load_settings_returns_settings_with_python_defaults(self):
+    def test_load_settings_returns_settings_with_yaml_defaults(self):
         """``load_settings()`` returns a ``Settings`` with values from
-        Python-level Field(default=...)."""
+        ``config/mill.defaults.yaml`` (merged as constructor kwargs)."""
         from robotsix_mill.config import load_settings
 
         s = load_settings()
@@ -805,7 +799,7 @@ class TestFactories:
         assert isinstance(s, Secrets)
 
     def test_load_settings_env_override_yaml(self, monkeypatch):
-        """Env vars override ``.env`` values in ``load_settings()``."""
+        """Env vars override YAML defaults in ``load_settings()``."""
         monkeypatch.setenv("MILL_MAX_CONCURRENCY", "77")
         from robotsix_mill.config import load_settings
 
