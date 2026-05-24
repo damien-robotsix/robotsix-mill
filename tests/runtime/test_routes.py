@@ -472,3 +472,78 @@ def test_transition_happy_path_draft_to_ready(client, service):
     assert data["title"] == "Transition me"
     assert data["state"] == "ready"
     assert "cost_usd" in data
+
+
+# -- GET /costs/trend ----------------------------------------------------
+
+def test_cost_trend_happy_path(client, monkeypatch):
+    """GET /costs/trend returns bucketed trend data."""
+    fake_buckets = [
+        {"ts": "2025-06-24T00:00:00Z", "total_cost": 0.1234, "trace_count": 5},
+        {"ts": "2025-06-24T01:00:00Z", "total_cost": 0.0567, "trace_count": 3},
+    ]
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.aggregate_cost_trend",
+        lambda settings, lookback_hours: fake_buckets,
+    )
+
+    r = client.get("/costs/trend")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, dict)
+    assert "buckets" in data
+    assert len(data["buckets"]) == 2
+    assert data["buckets"][0]["ts"] == "2025-06-24T00:00:00Z"
+    assert data["buckets"][0]["total_cost"] == 0.1234
+    assert data["buckets"][0]["trace_count"] == 5
+
+
+def test_cost_trend_clamp_low(client, monkeypatch):
+    """GET /costs/trend?lookback_hours=0 clamps to 1.0."""
+    captured: list[float] = []
+
+    def fake_trend(settings, lookback_hours):
+        captured.append(lookback_hours)
+        return []
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.aggregate_cost_trend",
+        fake_trend,
+    )
+
+    r = client.get("/costs/trend?lookback_hours=0")
+    assert r.status_code == 200
+    assert len(captured) == 1
+    assert captured[0] == 1.0, f"expected clamped to 1.0, got {captured[0]}"
+
+
+def test_cost_trend_clamp_high(client, monkeypatch):
+    """GET /costs/trend?lookback_hours=200 clamps to 168.0."""
+    captured: list[float] = []
+
+    def fake_trend(settings, lookback_hours):
+        captured.append(lookback_hours)
+        return []
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.aggregate_cost_trend",
+        fake_trend,
+    )
+
+    r = client.get("/costs/trend?lookback_hours=200")
+    assert r.status_code == 200
+    assert len(captured) == 1
+    assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
+
+
+def test_cost_trend_empty_when_disabled(client, monkeypatch):
+    """GET /costs/trend returns empty buckets when data is empty."""
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.aggregate_cost_trend",
+        lambda settings, lookback_hours: [],
+    )
+
+    r = client.get("/costs/trend")
+    assert r.status_code == 200
+    data = r.json()
+    assert data == {"buckets": []}

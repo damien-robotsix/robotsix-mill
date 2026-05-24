@@ -284,3 +284,180 @@ def test_session_total_cost_handles_totalcost_typeerror(settings, monkeypatch):
     )
     cost = session_total_cost(settings, "s")
     assert cost == 0.03  # list contributes 0.0
+
+
+# ---------------------------------------------------------------------------
+# aggregate_cost_trend tests
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_cost_trend_disabled(settings):
+    """Returns [] when tracing_enabled is False."""
+    assert settings.tracing_enabled is False
+    from robotsix_mill.langfuse_client import aggregate_cost_trend
+
+    result = aggregate_cost_trend(settings, lookback_hours=24)
+    assert result == []
+
+
+def test_aggregate_cost_trend_api_error(settings, monkeypatch):
+    """Returns [] when the Langfuse API returns an error."""
+    from robotsix_mill.langfuse_client import aggregate_cost_trend
+
+    # Need tracing enabled
+    s = _langfuse_settings()
+
+    class _ErrorClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, *, params, headers):
+            return _FakeResponse(500, {"error": "internal"})
+
+    monkeypatch.setattr(httpx, "Client", _ErrorClient)
+
+    result = aggregate_cost_trend(s, lookback_hours=24)
+    assert result == []
+
+
+def test_aggregate_cost_trend_sums_correctly(monkeypatch):
+    """Traces in the same bucket should have their costs summed,
+    and trace_count incremented. We verify the function buckets
+    traces correctly without hitting real Langfuse."""
+    from robotsix_mill.langfuse_client import aggregate_cost_trend
+
+    s = _langfuse_settings()
+
+    # We'll mock _langfuse_api_get directly via httpx.Client
+    from datetime import datetime, timedelta
+
+    now = datetime.utcnow()
+    # Create three traces: two in the same hour, one in the next hour
+    t1_ts = (now - timedelta(hours=2)).isoformat() + "Z"
+    t2_ts = (now - timedelta(hours=2, minutes=30)).isoformat() + "Z"
+    t3_ts = (now - timedelta(hours=1)).isoformat() + "Z"
+
+    fake_page_1 = {
+        "data": [
+            {"id": "t1", "name": "impl", "timestamp": t1_ts, "totalCost": 0.10},
+            {"id": "t2", "name": "impl", "timestamp": t2_ts, "totalCost": 0.05},
+            {"id": "t3", "name": "review", "timestamp": t3_ts, "totalCost": 0.20},
+        ],
+        "meta": {"totalPages": 1},
+    }
+
+    class _MockClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, *, params, headers):
+            return _FakeResponse(200, fake_page_1)
+
+    monkeypatch.setattr(httpx, "Client", _MockClient)
+
+    result = aggregate_cost_trend(s, lookback_hours=3)
+
+    # Should have 3 hourly buckets (or 4 depending on rounding)
+    assert len(result) >= 2
+    # Buckets containing t1+t2 should sum to 0.15 with trace_count 2
+    # Bucket containing t3 should have 0.20 with trace_count 1
+    total_cost_sum = sum(b["total_cost"] for b in result)
+    total_trace_sum = sum(b["trace_count"] for b in result)
+    assert total_cost_sum == pytest.approx(0.35)
+    assert total_trace_sum == 3
+
+
+def test_aggregate_cost_trend_produces_contiguous_buckets(monkeypatch):
+    """Every hour in the lookback window gets a bucket, even empty ones."""
+    from robotsix_mill.langfuse_client import aggregate_cost_trend
+
+    s = _langfuse_settings()
+
+    fake_page = {"data": [], "meta": {"totalPages": 1}}
+
+    class _MockClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, *, params, headers):
+            return _FakeResponse(200, fake_page)
+
+    monkeypatch.setattr(httpx, "Client", _MockClient)
+
+    result = aggregate_cost_trend(s, lookback_hours=3)
+
+    # Should have 3 or 4 contiguous hourly buckets, all with zero cost
+    assert len(result) >= 3
+    for b in result:
+        assert b["total_cost"] == 0.0
+        assert b["trace_count"] == 0
+        assert "ts" in b
+        assert b["ts"].endswith("Z")
+
+
+def test_aggregate_cost_trend_buckets_daily(monkeypatch):
+    """lookback_hours > 24 → daily buckets at midnight boundaries."""
+    from robotsix_mill.langfuse_client import aggregate_cost_trend
+    from datetime import datetime, timedelta
+
+    s = _langfuse_settings()
+
+    now = datetime.utcnow()
+    # Two traces: one ~60h ago (bucket 1 of 3), one ~20h ago (bucket 2 of 3)
+    t1_ts = (now - timedelta(hours=60)).isoformat() + "Z"
+    t2_ts = (now - timedelta(hours=20)).isoformat() + "Z"
+
+    fake_page = {
+        "data": [
+            {"id": "d1", "name": "build", "timestamp": t1_ts, "totalCost": 0.30},
+            {"id": "d2", "name": "deploy", "timestamp": t2_ts, "totalCost": 0.12},
+        ],
+        "meta": {"totalPages": 1},
+    }
+
+    class _MockClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, *, params, headers):
+            return _FakeResponse(200, fake_page)
+
+    monkeypatch.setattr(httpx, "Client", _MockClient)
+
+    result = aggregate_cost_trend(s, lookback_hours=72)
+
+    # Daily path: ceil(72/24) = 3 buckets
+    assert len(result) == 3
+    # Each ts must be midnight-aligned
+    for b in result:
+        assert b["ts"].endswith("T00:00:00Z"), f"not midnight: {b['ts']}"
+    # Total cost and trace count should sum correctly
+    assert sum(b["total_cost"] for b in result) == pytest.approx(0.42)
+    assert sum(b["trace_count"] for b in result) == 2
+    # At least two buckets have non-zero cost (each trace in its own day)
+    nonzero = [b for b in result if b["total_cost"] > 0]
+    assert len(nonzero) >= 2, f"expected traces in different daily buckets, got: {nonzero}"
