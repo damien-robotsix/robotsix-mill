@@ -359,6 +359,11 @@ class Settings(BaseSettings):
     review_max_rounds: int = Field(
         default=3, alias="MILL_REVIEW_MAX_ROUNDS"
     )
+    # How many model requests the review agent may make in one run
+    # (counts each tool call + each reasoning step + the final verdict).
+    review_request_limit: int = Field(
+        default=20, alias="MILL_REVIEW_REQUEST_LIMIT"
+    )
 
     # Model for the documentation agent. Defaults to the capable
     # coordinator model.
