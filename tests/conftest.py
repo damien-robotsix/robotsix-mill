@@ -53,6 +53,7 @@ def _no_dotenv(monkeypatch):
     # Block YAML overlays — only defaults.yaml is loaded in tests.
     monkeypatch.setenv("MILL_CONFIG_FILE", "")
     monkeypatch.setenv("MILL_SECRETS_FILE", "")
+    monkeypatch.setenv("MILL_REPOS_FILE", "")
     # Patch _LOCAL_FILE to a nonexistent path so no local overlay
     # leaks into any test, even when Settings.__init__ calls
     # load_yaml_config directly.
@@ -78,9 +79,10 @@ def _no_dotenv(monkeypatch):
 def _reset_secrets_each_test():
     """Clear the cached Secrets singleton before every test so no
     test leaks secret values into another."""
-    from robotsix_mill.config import _reset_secrets
+    from robotsix_mill.config import _reset_repos_config, _reset_secrets
 
     _reset_secrets()
+    _reset_repos_config()
 
 
 @pytest.fixture
