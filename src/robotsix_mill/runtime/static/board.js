@@ -1,4 +1,4 @@
-const ST=["draft","human_issue_approval","ready","documenting","code_review","deliverable","human_mr_approval","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered","epic_open","epic_closed"];
+const ST=["draft","human_issue_approval","ready","documenting","code_review","deliverable","human_mr_approval","waiting_auto_merge","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered","epic_open","epic_closed"];
 let showClosed=false;               // empty cols hidden; CLOSED and EPIC_CLOSED also hidden unless toggled
 let sel=null;
 let runsOpen=false;

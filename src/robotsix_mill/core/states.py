@@ -6,17 +6,22 @@ tickets in that state and transitions them onward. ``ERRORED`` and
 errors or escalates; they require human attention before re-entering the
 pipeline. ``HUMAN_ISSUE_APPROVAL`` is a human-wait state between refine
 and implement — it has no stage owner and pauses the chain until a human
-approves. ``REBASING`` is an active state between ``HUMAN_MR_APPROVAL``
-and ``HUMAN_MR_APPROVAL``: the merge stage detects a conflicting PR and
-transitions to ``REBASING``, then on the next poll runs the rebase agent
-and force-pushes the ticket branch. On success it returns to
-``HUMAN_MR_APPROVAL``; on temporary failure it stays in ``REBASING`` for
-a retry; on exhaustion it escalates to ``BLOCKED``. ``FIXING_CI`` is an
-active state between ``HUMAN_MR_APPROVAL`` and ``HUMAN_MR_APPROVAL``:
-the merge stage detects a mergeable PR with failing CI and transitions
-to ``FIXING_CI``, then on the next poll runs the CI-fix agent. On
-success it returns to ``HUMAN_MR_APPROVAL``; on failure it escalates to
-``BLOCKED``.
+approves. ``WAITING_AUTO_MERGE`` is an active state between
+``HUMAN_MR_APPROVAL`` and ``DONE``: the merge stage detects a mergeable PR
+whose CI is pending and auto-merge is eligible, then on each poll
+re-checks CI; when CI goes green it auto-merges to ``DONE``, on CI
+failure it transitions to ``FIXING_CI``, and on eligibility changes it
+returns to ``HUMAN_MR_APPROVAL``. ``REBASING`` is an active state between
+``HUMAN_MR_APPROVAL`` and ``HUMAN_MR_APPROVAL``: the merge stage detects a
+conflicting PR and transitions to ``REBASING``, then on the next poll
+runs the rebase agent and force-pushes the ticket branch. On success it
+returns to ``HUMAN_MR_APPROVAL``; on temporary failure it stays in
+``REBASING`` for a retry; on exhaustion it escalates to ``BLOCKED``.
+``FIXING_CI`` is an active state between ``HUMAN_MR_APPROVAL`` and
+``HUMAN_MR_APPROVAL``: the merge stage detects a mergeable PR with
+failing CI and transitions to ``FIXING_CI``, then on the next poll runs
+the CI-fix agent. On success it returns to ``HUMAN_MR_APPROVAL``; on
+failure it escalates to ``BLOCKED``.
 
 When a ticket is blocked, the state it was blocked *from* is recorded
 (``Ticket.blocked_from``). A human can **resume** the blocked ticket
@@ -39,6 +44,7 @@ class State(StrEnum):
     CODE_REVIEW = "code_review"  # documented; awaiting automated code review
     DELIVERABLE = "deliverable"  # reviewed; awaiting MR delivery
     HUMAN_MR_APPROVAL = "human_mr_approval"   # PR/MR open; awaiting human merge
+    WAITING_AUTO_MERGE = "waiting_auto_merge"  # PR open + CI pending; auto-merge when green
     REBASING = "rebasing"     # conflicting PR; rebase agent in progress
     FIXING_CI = "fixing_ci"   # PR open + failing CI; auto-fix in progress
     DONE = "done"             # PR/MR merged; awaiting retrospect
@@ -68,6 +74,7 @@ TRANSITIONS: dict[State, set[State]] = {
     # conflicting=rebasing (auto-rebase cycle), failing CI=fixing_ci.
     State.HUMAN_MR_APPROVAL: {
         State.DONE,
+        State.WAITING_AUTO_MERGE,
         State.REBASING,
         State.FIXING_CI,
         State.ERRORED,
@@ -75,6 +82,16 @@ TRANSITIONS: dict[State, set[State]] = {
     },
     # rebasing: merge stage runs rebase agent -> back to human_mr_approval on
     # success, retry on failure, block on exhaustion.
+    # waiting_auto_merge: merge stage polls CI; when green → done (auto-merge),
+    # on CI failure → fixing_ci, on eligibility change → human_mr_approval.
+    State.WAITING_AUTO_MERGE: {
+        State.DONE,
+        State.FIXING_CI,
+        State.REBASING,
+        State.HUMAN_MR_APPROVAL,
+        State.ERRORED,
+        State.BLOCKED,
+    },
     State.REBASING: {State.HUMAN_MR_APPROVAL, State.ERRORED, State.BLOCKED},
     # ci fix: on success -> human_mr_approval; on failure -> blocked; on crash -> errored.
     State.FIXING_CI: {State.HUMAN_MR_APPROVAL, State.BLOCKED, State.ERRORED},
@@ -103,6 +120,7 @@ STAGE_FOR_STATE: dict[State, str] = {
     State.CODE_REVIEW: "review",
     State.DELIVERABLE: "deliver",
     State.HUMAN_MR_APPROVAL: "merge",
+    State.WAITING_AUTO_MERGE: "merge",
     State.REBASING: "merge",
     State.FIXING_CI: "ci_fix",
     State.DONE: "retrospect",
