@@ -335,6 +335,26 @@ class RetrospectStage(Stage):
 
         deep_analysis, trace_ids = self._resolve_deep_analysis(s, ticket.id)
 
+        # Retrieve epic context and sibling sub-issues so the agent can
+        # cross-reference incomplete-work findings against the parent
+        # epic's scope and planned sibling work.
+        epic_ctx = ctx.service.get_epic_context(ticket)
+        sibling_ctx = ""
+        if ticket.parent_id:
+            siblings = ctx.service.list_children(ticket.parent_id)
+            others = [sib for sib in siblings if sib.id != ticket.id]
+            if others:
+                lines = ["<epic_siblings>"]
+                for sib in others:
+                    title = sib.title.strip()
+                    if len(title) > 80:
+                        title = title[:77] + "..."
+                    lines.append(
+                        f"- `{sib.id}` [{sib.state.value}] {title}"
+                    )
+                lines.append("</epic_siblings>")
+                sibling_ctx = "\n".join(lines)
+
         # Read current memory — empty string if missing/unreadable.
         memory_text = ""
         memory_file = s.retrospect_memory_file
@@ -362,6 +382,8 @@ class RetrospectStage(Stage):
                 comments_text=comments_text,
                 deep_analysis=deep_analysis,
                 trace_ids=trace_ids,
+                epic_context=epic_ctx,
+                sibling_context=sibling_ctx,
             )
         except Exception as e:  # noqa: BLE001 — resumable, never lose the ticket
             log.exception("%s: retrospect agent failed", ticket.id)
