@@ -28,11 +28,13 @@ class ReviewVerdict(BaseModel):
     auto_merge_eligible: bool = Field(
         default=False,
         description=(
-            "Set to True ONLY when you are highly confident the change is "
-            "safe to auto-merge without human review. The change must be "
-            "small, self-contained, well-tested by existing tests, and "
-            "carry no architectural risk. When in ANY doubt, leave False — "
-            "the PR will wait for a human merge."
+            "Default to true when verdict is APPROVE and you raised no "
+            "specific concern in comments. Set to false only when you can "
+            "name a concrete reason a human should still look — an "
+            "architectural decision noticed in passing, an "
+            "accepted-but-flagged risk, or a spec-vs-implementation gap "
+            "below the REQUEST_CHANGES threshold. REQUEST_CHANGES and "
+            "NEEDS_DISCUSSION verdicts always leave this false."
         ),
     )
 
@@ -90,15 +92,21 @@ You have access to read-only filesystem tools (``read_file`` and
   from the diff — consider checking manually").
 
 The ``auto_merge_eligible`` field:
-Set this to ``true`` ONLY when the change meets ALL of these criteria:
-- The diff is small and focused (single concern, few files).
-- Existing tests cover the changed code paths (no new untested logic).
-- No new infrastructure, framework, or architectural pattern is introduced.
-- You see zero risk of regression or unintended side-effects.
+Set this to ``true`` when your verdict is ``APPROVE`` and you raised no
+specific concern in ``comments`` — if the implementation is correct and
+you have nothing concrete to flag, a human doesn't need to look.
 
-Default to ``false`` — when uncertain, choose the human path. Even an
-APPROVE verdict may have ``auto_merge_eligible: false`` if the change is
-large but correct.
+Set this to ``false`` only when you can articulate a *specific* reason a
+human should still look, even if it's not blocking — for example, an
+architectural choice you noticed in passing, an accepted-but-flagged risk,
+or a gap between the spec and the implementation that didn't meet the
+REQUEST_CHANGES threshold.
+
+``REQUEST_CHANGES`` and ``NEEDS_DISCUSSION`` verdicts always leave this
+``false``.
+
+When unsure whether a genuine human-judgment concern is present, default
+to ``false`` (the PR will wait for a human).
 """
 
 
