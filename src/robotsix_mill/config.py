@@ -15,6 +15,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Central Pydantic configuration model for robotsix-mill.
+
+    All fields are sourced from environment variables and ``.env`` /
+    ``secrets.env`` files (loaded automatically by pydantic-settings).
+    Conventional keys like ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are
+    unprefixed to remain compatible with the reference projects.
+    Mill-specific settings use the ``MILL_`` / ``FORGE_`` prefix
+    convention and declare explicit ``Field(alias=...)`` values.
+    """
+
     model_config = SettingsConfigDict(
         env_file=[".env", "secrets.env"], env_file_encoding="utf-8", extra="ignore"
     )
@@ -607,18 +617,22 @@ class Settings(BaseSettings):
 
     @property
     def db_path(self) -> Path:
+        """Resolved path to the SQLite database file."""
         return self.data_dir / "mill.db"
 
     @property
     def workspaces_dir(self) -> Path:
+        """Resolved path to the directory holding per-ticket workspaces."""
         return self.data_dir / "workspaces"
 
     @property
     def db_url(self) -> str:
+        """SQLAlchemy-compatible database URL derived from :attr:`db_path`."""
         return f"sqlite:///{self.db_path}"
 
     @property
     def tracing_enabled(self) -> bool:
+        """True when all three Langfuse credentials are configured."""
         return bool(
             self.langfuse_base_url
             and self.langfuse_public_key
@@ -704,4 +718,5 @@ class Settings(BaseSettings):
 
 
 def load_settings() -> Settings:
+    """Load and return a :class:`Settings` instance from env / ``.env`` files."""
     return Settings()

@@ -130,7 +130,19 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Parse CLI args, dispatch to the appropriate runner or HTTP client, and return an exit code."""
+    """Entry point for the robotsix-mill CLI.
+
+    Available subcommands:
+
+    * ``serve`` — run the API and event-driven worker
+    * ``ticket new|list|show|approve|resume-blocked`` — ticket lifecycle
+      operations
+    * ``audit`` — run an audit pass and emit gap drafts
+    * ``trace-health`` — check Langfuse for unsessioned traces
+    * ``health`` — run a health pass and emit gap drafts
+
+    Returns 0 on success, nonzero on failure.
+    """
     parser = argparse.ArgumentParser(prog="robotsix-mill")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
