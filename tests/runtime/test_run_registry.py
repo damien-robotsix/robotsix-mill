@@ -202,6 +202,48 @@ class TestRunRegistry:
         assert all(e["status"] == "ok" for e in entries)
 
 
+# -- most_recent -------------------------------------------------------
+
+
+class TestMostRecent:
+    def test_returns_none_when_empty(self, tmp_path: Path):
+        registry = RunRegistry(tmp_path / "runs.json")
+        assert registry.most_recent("audit") is None
+
+    def test_returns_most_recent_of_kind(self, tmp_path: Path):
+        registry = RunRegistry(tmp_path / "runs.json")
+        a1 = registry.start("audit")
+        registry.finish_ok(a1, "first")
+        registry.start("health")  # different kind
+        a2 = registry.start("audit")
+        registry.finish_ok(a2, "second")
+
+        result = registry.most_recent("audit")
+        assert result is not None
+        assert result["id"] == a2  # newer audit, not the first
+        assert result["kind"] == "audit"
+
+    def test_excludes_running_entries(self, tmp_path: Path):
+        registry = RunRegistry(tmp_path / "runs.json")
+        a1 = registry.start("audit")
+        registry.finish_ok(a1, "done")
+        a2 = registry.start("audit")  # still running — no finish call
+        # also add another kind to make sure we don't match cross-kind
+        registry.start("health")
+
+        result = registry.most_recent("audit")
+        # Must skip the "running" a2 and return a1 instead.
+        assert result is not None
+        assert result["id"] == a1
+        assert result["status"] == "ok"
+
+    def test_returns_none_when_only_running(self, tmp_path: Path):
+        registry = RunRegistry(tmp_path / "runs.json")
+        registry.start("audit")  # running, never finished
+
+        assert registry.most_recent("audit") is None
+
+
 # -- integration tests --------------------------------------------------
 
 
