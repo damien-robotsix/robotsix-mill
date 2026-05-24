@@ -267,3 +267,66 @@ def test_override_multiple_fields(monkeypatch):
     assert kwargs["retries"] == 5
     # Non-overridden fields stay from definition.
     assert kwargs["web"] is False
+
+
+# ── end-to-end: real refine.yaml → working agent ──────────────────────
+
+
+def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
+    """End-to-end: load refine.yaml via load_agent_definition, build
+    the agent via build_agent_from_definition, and verify that
+    web=True and report_issue=True cause the web_research and
+    report_issue tools to be injected into the agent's toolset."""
+    import os
+    from pathlib import Path
+
+    from robotsix_mill.agents.yaml_loader import load_agent_definition
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    p = Path("agent_definitions/refine.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/refine.yaml not found")
+
+    os.environ.setdefault("MILL_REFINE_MODEL", "test/model")
+    try:
+        definition = load_agent_definition(p)
+    finally:
+        if "MILL_REFINE_MODEL" not in os.environ:
+            os.environ.pop("MILL_REFINE_MODEL", None)
+
+    # Provide a fake API key so build_agent can construct the model
+    # (model construction is local — no network call).
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.Settings", lambda **kw: Settings(
+            OPENROUTER_API_KEY="sk-fake",
+            **kw,
+        )
+    )
+
+    settings = Settings(OPENROUTER_API_KEY="sk-fake")
+    agent = build_agent_from_definition(settings, definition, tools=[])
+
+    # Inspect the agent's toolset to verify tool injection.
+    toolset = agent._agent._function_toolset
+    tool_names = set(toolset.tools.keys())
+
+    # web=True → web_research tool injected.
+    assert definition.web is True
+    assert "web_research" in tool_names, (
+        f"web_research tool not injected despite web=True. "
+        f"Captured tools: {tool_names}"
+    )
+
+    # report_issue=True → report_issue tool injected.
+    assert definition.report_issue is True
+    assert "report_issue" in tool_names, (
+        f"report_issue tool not injected despite report_issue=True. "
+        f"Captured tools: {tool_names}"
+    )
+
+    assert definition.name == "refine"
+    assert definition.output_type == "RefineResult"
+
+    # Clean up the agent's HTTP client.
+    agent.close()
