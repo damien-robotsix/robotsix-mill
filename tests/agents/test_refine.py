@@ -835,7 +835,7 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
 
 
 def test_split_creates_children_and_closes_parent(ctx, service, monkeypatch):
-    """Multi-scope draft → N child tickets created, parent CLOSED."""
+    """Multi-scope draft → N child tickets created, parent CLOSED, umbrella epic created."""
     child_a_spec = "## Problem\nAdd checksum verification\n## Scope\n- verify checksums\n"
     child_b_spec = "## Problem\nAdd HEALTHCHECK\n## Scope\n- add HEALTHCHECK\n"
 
@@ -863,13 +863,23 @@ def test_split_creates_children_and_closes_parent(ctx, service, monkeypatch):
     ids_in_note = out.note.replace("split into ", "").split(", ")
     assert len(ids_in_note) == 2
 
-    # Both children exist and have correct parent_id.
+    # Both children exist and have correct parent_id (umbrella epic, not original).
     child_a = service.get(ids_in_note[0])
     child_b = service.get(ids_in_note[1])
     assert child_a is not None
     assert child_b is not None
-    assert child_a.parent_id == parent.id
-    assert child_b.parent_id == parent.id
+
+    # Find the umbrella epic that was created.
+    all_tickets = service.list()
+    epics = [t for t in all_tickets if t.kind == "epic"]
+    assert len(epics) == 1
+    epic = epics[0]
+    assert epic.state is State.EPIC_OPEN
+    # Epic title falls back to original ticket title (result.title is None).
+    assert epic.title == "Dockerfile hardening"
+
+    assert child_a.parent_id == epic.id
+    assert child_b.parent_id == epic.id
 
     # Children have the right state (READY by default, no require_approval).
     assert child_a.state is State.READY
@@ -1072,7 +1082,11 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
 
     child = service.get(child_a_id)
     assert child.state is State.DRAFT
-    assert child.parent_id == parent.id
+    # Child should be parented to the umbrella epic, not the original parent.
+    all_tickets = service.list()
+    epics = [t for t in all_tickets if t.kind == "epic"]
+    assert len(epics) == 1
+    assert child.parent_id == epics[0].id
 
     out2 = RefineStage().run(child, ctx)
 

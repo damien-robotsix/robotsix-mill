@@ -213,9 +213,13 @@ class RefineStage(Stage):
         # spec in its description.md.  Detect this by checking whether
         # the parent is CLOSED with a "split into" note — the canonical
         # signal that this ticket's description is already the refined
-        # output.  We must NOT short-circuit for retrospect-spawned
-        # drafts (whose parent is also CLOSED but for a different
-        # reason and whose description is a raw draft, not a spec).
+        # output.  When children are reparented to an umbrella epic
+        # the direct parent is no longer CLOSED, so also check the
+        # ticket's own history for a "split from" transition note.
+        # We must NOT short-circuit for retrospect-spawned drafts
+        # (whose parent is also CLOSED but for a different reason and
+        # whose description is a raw draft, not a spec).
+        is_split_child = False
         if ticket.parent_id is not None:
             parent = ctx.service.get(ticket.parent_id)
             if parent is not None and parent.state == State.CLOSED:
@@ -229,22 +233,31 @@ class RefineStage(Stage):
                     and ev.note.startswith("split into")
                     for ev in parent_history
                 )
-                if is_split_child:
-                    spec = draft
-                    if not spec.strip():
-                        return Outcome(State.BLOCKED, "split child has empty description")
-                    # Preserve the raw draft if not already preserved.
-                    draft_original = ws.artifacts_dir / "draft-original.md"
-                    if not draft_original.exists():
-                        draft_original.write_text(
-                            "(split child — spec written by parent's refine agent)",
-                            encoding="utf-8",
-                        )
-                    next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id)
-                    note = "split child — spec already refined"
-                    if auto_note:
-                        note += f" | {auto_note}"
-                    return Outcome(next_state, note)
+        if not is_split_child:
+            # Fallback: check the ticket's own history for a
+            # "split from" note (children reparented to an epic).
+            own_history = ctx.service.history(ticket.id)
+            is_split_child = any(
+                ev.note
+                and ev.note.startswith("split from")
+                for ev in own_history
+            )
+        if is_split_child:
+            spec = draft
+            if not spec.strip():
+                return Outcome(State.BLOCKED, "split child has empty description")
+            # Preserve the raw draft if not already preserved.
+            draft_original = ws.artifacts_dir / "draft-original.md"
+            if not draft_original.exists():
+                draft_original.write_text(
+                    "(split child — spec written by parent's refine agent)",
+                    encoding="utf-8",
+                )
+            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id)
+            note = "split child — spec already refined"
+            if auto_note:
+                note += f" | {auto_note}"
+            return Outcome(next_state, note)
 
         # --- gather reviewer comments (sendback guard) ---
         reviewer_comments: str | None = None
@@ -512,7 +525,35 @@ class RefineStage(Stage):
                 source=ticket.source,
             )
             child_ids.append(child_ticket.id)
-            ctx.service.set_parent(child_ticket.id, ticket.id)
+
+        # Reparent children: if the ticket already belongs to an
+        # epic, reparent to that epic; otherwise create a new
+        # umbrella epic so children appear under a visible grouping
+        # entity rather than a closed parent.
+        existing_epic_id: str | None = None
+        if ticket.parent_id is not None:
+            parent_candidate = ctx.service.get(ticket.parent_id)
+            if parent_candidate is not None and parent_candidate.kind == "epic":
+                existing_epic_id = ticket.parent_id
+                for cid in child_ids:
+                    ctx.service.set_parent(cid, existing_epic_id)
+        if existing_epic_id is None:
+            epic_title = (
+                (result.title and result.title.strip())
+                or ticket.title.strip()
+            )
+            epic_desc = (
+                (result.spec_markdown and result.spec_markdown.strip())
+                or draft
+            )
+            epic = ctx.service.create(
+                title=epic_title,
+                description=epic_desc,
+                kind="epic",
+                source=ticket.source,
+            )
+            for cid in child_ids:
+                ctx.service.set_parent(cid, epic.id)
 
         # Resolve depends_on indices → real ticket IDs.
         for i, child in enumerate(valid_children):

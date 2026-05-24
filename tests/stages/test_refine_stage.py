@@ -610,7 +610,8 @@ def test_successful_split_creates_children_and_closes_parent(ctx_factory, monkey
         monkeypatch,
         run_refine_agent=_mock_refine_ok(
             split=True,
-            spec_markdown=None,
+            spec_markdown="## Aggregated spec",
+            title="Umbrella Epic Title",
             children=[
                 ChildSpec(title="Part A", spec_markdown="## A"),
                 ChildSpec(title="Part B", spec_markdown="## B"),
@@ -624,13 +625,23 @@ def test_successful_split_creates_children_and_closes_parent(ctx_factory, monkey
     assert "split into" in out.note
 
     all_tickets = ctx.service.list()
-    children = [tk for tk in all_tickets if tk.parent_id == t.id]
+    # Find the umbrella epic that was created.
+    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    assert len(epics) == 1
+    epic = epics[0]
+    assert epic.title == "Umbrella Epic Title"
+    assert epic.state is State.EPIC_OPEN
+    # Children are parented to the new epic, not the original ticket.
+    children = [tk for tk in all_tickets if tk.parent_id == epic.id]
     assert len(children) == 2
     for child in children:
         assert child.state is State.READY
     # Both child IDs appear in the note
     for child in children:
         assert child.id in out.note
+    # No children parented to the original (closed) ticket.
+    orphaned = [tk for tk in all_tickets if tk.parent_id == t.id]
+    assert len(orphaned) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -657,8 +668,12 @@ def test_split_with_depends_on_resolves_indices(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
     all_tickets = ctx.service.list()
+    # Find the umbrella epic and get its children.
+    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    assert len(epics) == 1
+    epic = epics[0]
     children = sorted(
-        [tk for tk in all_tickets if tk.parent_id == t.id],
+        [tk for tk in all_tickets if tk.parent_id == epic.id],
         key=lambda tk: tk.created_at,
     )
     assert len(children) == 2
@@ -869,3 +884,167 @@ def test_no_forge_remote_url_skips_clone_and_dedup_commits(ctx_factory, monkeypa
     assert out.next_state is State.READY
     assert len(clone_calls) == 0
     assert len(recent_commits_calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# 31. split creates umbrella epic with title from result.title
+# ---------------------------------------------------------------------------
+
+def test_split_creates_umbrella_epic_with_result_title(ctx_factory, monkeypatch):
+    """When no epic parent exists, a new umbrella epic is created and
+    children are reparented to it."""
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    t = _ticket(ctx, title="Big refactor", body="Rewrite auth and add dashboard")
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            split=True,
+            spec_markdown="## Aggregated\nBoth changes together",
+            title="Auth + Dashboard Overhaul",
+            children=[
+                ChildSpec(title="Part A", spec_markdown="## A"),
+                ChildSpec(title="Part B", spec_markdown="## B"),
+            ],
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "split into" in out.note
+
+    all_tickets = ctx.service.list()
+    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    assert len(epics) == 1
+    epic = epics[0]
+    assert epic.title == "Auth + Dashboard Overhaul"
+    assert epic.state is State.EPIC_OPEN
+    assert "Both changes together" in ctx.service.workspace(epic).read_description()
+
+    children = [tk for tk in all_tickets if tk.parent_id == epic.id]
+    assert len(children) == 2
+    for child in children:
+        assert child.state is State.READY
+
+
+# ---------------------------------------------------------------------------
+# 32. split epic title fallback — uses ticket title when result.title is None
+# ---------------------------------------------------------------------------
+
+def test_split_epic_title_fallback_to_ticket_title(ctx_factory, monkeypatch):
+    """When result.title is None or empty, the epic title = original ticket title."""
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    t = _ticket(ctx, title="Refactor core modules", body="Break this up")
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            split=True,
+            spec_markdown="## Plan\nDo A then B",
+            title=None,  # explicitly None
+            children=[
+                ChildSpec(title="Part A", spec_markdown="## A"),
+                ChildSpec(title="Part B", spec_markdown="## B"),
+            ],
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+
+    all_tickets = ctx.service.list()
+    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    assert len(epics) == 1
+    assert epics[0].title == "Refactor core modules"
+
+
+# ---------------------------------------------------------------------------
+# 33. split epic description fallback — uses draft when spec_markdown is empty
+# ---------------------------------------------------------------------------
+
+def test_split_epic_description_fallback_to_draft(ctx_factory, monkeypatch):
+    """When result.spec_markdown is empty/None, epic description = original draft."""
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    draft_body = "Original draft: big feature request"
+    t = _ticket(ctx, title="Big feature", body=draft_body)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            split=True,
+            spec_markdown=None,  # no aggregate spec
+            title="Feature Epic",
+            children=[
+                ChildSpec(title="Part A", spec_markdown="## A"),
+                ChildSpec(title="Part B", spec_markdown="## B"),
+            ],
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+
+    all_tickets = ctx.service.list()
+    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    assert len(epics) == 1
+    epic = epics[0]
+    assert epic.title == "Feature Epic"
+    assert draft_body in ctx.service.workspace(epic).read_description()
+
+
+# ---------------------------------------------------------------------------
+# 34. split with existing epic parent — children reparented to it
+# ---------------------------------------------------------------------------
+
+def test_split_with_existing_epic_reparents_children(ctx_factory, monkeypatch):
+    """When the ticket already belongs to an epic, children are reparented
+    to the existing epic — no new epic is created."""
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    existing_epic = ctx.service.create("Existing Epic", "Epic description", kind="epic")
+    child_of_epic = ctx.service.create(
+        "Split me", "Break into parts", parent_id=existing_epic.id,
+    )
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            split=True,
+            spec_markdown="## Aggregated spec",
+            title="Should Be Ignored",
+            epic_body="Updated epic body",
+            children=[
+                ChildSpec(title="Part A", spec_markdown="## A"),
+                ChildSpec(title="Part B", spec_markdown="## B"),
+            ],
+        ),
+    )
+
+    out = RefineStage().run(child_of_epic, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "split into" in out.note
+
+    all_tickets = ctx.service.list()
+    # No new epic created — only the existing one.
+    epics = [tk for tk in all_tickets if tk.kind == "epic"]
+    assert len(epics) == 1
+    assert epics[0].id == existing_epic.id
+
+    # Children are parented to the existing epic.
+    children = [tk for tk in all_tickets if tk.parent_id == existing_epic.id]
+    # The children + the original child_of_epic (which is now CLOSED).
+    assert len(children) == 3  # original child + 2 new children
+    new_children = [tk for tk in children if tk.id != child_of_epic.id]
+    assert len(new_children) == 2
+    for child in new_children:
+        assert child.state is State.READY
+
+    # Epic body write-back fired: the existing epic's description was updated.
+    assert "Updated epic body" in ctx.service.workspace(existing_epic).read_description()
+
+    # Original (closed) ticket has no children parented to it.
+    orphaned = [tk for tk in all_tickets if tk.parent_id == child_of_epic.id]
+    assert len(orphaned) == 0
