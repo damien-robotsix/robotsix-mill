@@ -614,6 +614,29 @@ class Settings(BaseSettings):
         default=86400, alias="MILL_BC_CHECK_INTERVAL_SECONDS"
     )
 
+    # --- env-sync agent (config ↔ .env ↔ docs drift detection) ---
+    # Model for the env-sync agent. Defaults to a cheap model (read-only
+    # file parsing — no web research or code generation).
+    env_sync_model: str = Field(
+        default="openai/gpt-4o-mini", alias="MILL_ENV_SYNC_MODEL"
+    )
+    # Path to the env-sync agent's Markdown memory ledger. Override to pin
+    # a specific path; unset (default) derives <data_dir>/env_sync_memory.md.
+    env_sync_memory_path: Path | None = Field(
+        default=None, alias="MILL_ENV_SYNC_MEMORY_PATH"
+    )
+    # Opt-in periodic env-sync pass. Default false (agents default off
+    # unless noted). Set true to enable automatic daily drift detection.
+    env_sync_periodic: bool = Field(
+        default=False, alias="MILL_ENV_SYNC_PERIODIC"
+    )
+    # Seconds between automatic env-sync passes when
+    # MILL_ENV_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
+    # enforced at 60s in the worker loop.
+    env_sync_interval_seconds: int = Field(
+        default=86400, alias="MILL_ENV_SYNC_INTERVAL_SECONDS"
+    )
+
     # --- action-agent memory paths ---
     # Path to the implement agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/implement_memory.md.
@@ -722,6 +745,13 @@ class Settings(BaseSettings):
         if self.survey_memory_path is not None:
             return self.survey_memory_path
         return self.data_dir / "survey_memory.md"
+
+    @property
+    def env_sync_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained env-sync memory ledger."""
+        if self.env_sync_memory_path is not None:
+            return self.env_sync_memory_path
+        return self.data_dir / "env_sync_memory.md"
 
     @property
     def bc_check_memory_file(self) -> Path:
