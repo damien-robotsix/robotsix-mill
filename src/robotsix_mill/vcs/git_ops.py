@@ -238,6 +238,6 @@ def diff_base(repo: Path, target_branch: str) -> str:
     vs origin/<target_branch>. Fetches first so the diff is current."""
     _git(repo, "fetch", "origin", target_branch)
     return subprocess.run(
-        ["git", "-C", str(repo), "diff", f"origin/{target_branch}..HEAD"],
+        ["git", "-C", str(repo), "diff", f"origin/{target_branch}...HEAD"],
         check=True, capture_output=True, text=True,
     ).stdout
