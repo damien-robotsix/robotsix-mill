@@ -57,6 +57,7 @@ class RunRegistry:
                     status=e.get("status", "running"),
                     summary=e.get("summary", ""),
                     error=e.get("error"),
+                    repo_id=e.get("repo_id", ""),
                 )
                 for e in data
             ]

@@ -1136,11 +1136,10 @@ def list_runs(
     ``?repo_id=X`` filters to runs associated with that repo.
     When omitted, returns all (current behaviour preserved).
     """
-    entries = registry.list_all()
     if repo_id is not None:
         repos = request.app.state.repos
         if repo_id == "all":
-            pass  # no filtering
+            entries = registry.list_all()
         elif repo_id not in repos.repos:
             raise HTTPException(
                 status_code=400,
@@ -1148,8 +1147,9 @@ def list_runs(
                 f"{sorted(repos.repos.keys())}",
             )
         else:
-            # Filter entries that carry a repo_id matching the request.
-            entries = [e for e in entries if e.get("repo_id") == repo_id]
+            entries = registry.list_by_repo(repo_id)
+    else:
+        entries = registry.list_all()
     return entries
 
 

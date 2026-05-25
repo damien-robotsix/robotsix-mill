@@ -999,7 +999,7 @@ class Worker:
 
                     # 3. List completed workflow runs on the target branch.
                     from ..forge import get_forge
-                    forge = get_forge(settings)
+                    forge = get_forge(settings, repo_config=repo_config)
                     runs = forge.list_workflow_runs(
                         branch=settings.forge_target_branch,
                     )
@@ -1015,7 +1015,13 @@ class Worker:
                         if wf is not None and wf not in latest_by_wf:
                             latest_by_wf[wf] = run
 
-                    existing = self.ctx.service.list()
+                    from ..core.service import TicketService
+                    service = (
+                        TicketService(settings, board_id=repo_config.board_id)
+                        if repo_config is not None
+                        else self.ctx.service
+                    )
+                    existing = service.list()
 
                     for wf, run in latest_by_wf.items():
                         if run.get("conclusion") != "failure":
@@ -1087,7 +1093,7 @@ class Worker:
                         body = "\n".join(body_parts)
 
                         try:
-                            self.ctx.service.create(
+                            service.create(
                                 title=title, description=body, source=SourceKind.CI,
                             )
                         except Exception:

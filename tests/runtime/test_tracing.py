@@ -157,7 +157,7 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
     # _TRACER_PROVIDER_SET_ONCE guard.
     tracer = provider.get_tracer("test-tracer")
 
-    token_outer = tracing._current_session.set("ticket-sub-agent-test")
+    outer_token = tracing._current_session.set("ticket-sub-agent-test")
     try:
         token_inner = tracing._current_session.set("ticket-sub-agent-test")
         try:
@@ -185,7 +185,7 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
                 f"{span_data['attrs']}"
             )
     finally:
-        tracing._current_session.reset(token_outer)
+        tracing._current_session.reset(outer_token)
 
 
 def test_tracing_enabled_no_env():

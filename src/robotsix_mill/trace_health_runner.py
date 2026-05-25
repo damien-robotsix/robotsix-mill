@@ -97,6 +97,8 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
             .where(Ticket.source == SourceKind.TRACE_HEALTH)
             .where(Ticket.state != State.CLOSED)
         )
+        if repo_config is not None:
+            stmt = stmt.where(Ticket.board_id == repo_config.board_id)
         existing = list(s.exec(stmt).all())
     if existing:
         log.info(
