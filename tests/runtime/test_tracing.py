@@ -137,6 +137,10 @@ def test_sub_agent_spans_inherit_session_from_contextvar():
             return True
 
     # ---- set up the pipeline ---------------------------------------
+    # Reset OTel's Once guard so set_tracer_provider is not a no-op.
+    otel_trace._TRACER_PROVIDER_SET_ONCE._done = False
+    otel_trace._TRACER_PROVIDER = None
+
     provider = TracerProvider()
     provider.add_span_processor(_StampAndCapture())
     otel_trace.set_tracer_provider(provider)
@@ -170,6 +174,8 @@ def test_sub_agent_spans_inherit_session_from_contextvar():
             )
     finally:
         # Restore a clean provider so no other test is affected.
+        otel_trace._TRACER_PROVIDER_SET_ONCE._done = False
+        otel_trace._TRACER_PROVIDER = None
         otel_trace.set_tracer_provider(TracerProvider())
 
 

@@ -647,6 +647,7 @@ async function open_(id){
    jget("/tickets/"+id+"/children"),jget("/tickets/"+id+"/merge-info"),
    jget("/tickets/"+id+"/merge-reason"),
    jget("/tickets/"+id+"/merge-status")]);
+ if(sel!==id)return;
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
