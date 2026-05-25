@@ -60,16 +60,16 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
 class Settings(BaseSettings):
     """Central Pydantic configuration model for robotsix-mill.
 
-    All fields are sourced from environment variables and ``.env`` /
-    ``secrets.env`` files (loaded automatically by pydantic-settings).
-    Conventional keys like ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are
-    unprefixed to remain compatible with the reference projects.
-    Mill-specific settings use the ``MILL_`` / ``FORGE_`` prefix
-    convention and declare explicit ``Field(alias=...)`` values.
+    All fields are sourced from ``os.environ`` and layered
+    ``config/*.yaml`` files.  Conventional keys like
+    ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain
+    compatible with the reference projects.  Mill-specific settings use
+    the ``MILL_`` / ``FORGE_`` prefix convention and declare explicit
+    ``Field(alias=...)`` values.
     """
 
     model_config = SettingsConfigDict(
-        env_file=[".env", "secrets.env"], env_file_encoding="utf-8", extra="ignore"
+        env_file_encoding="utf-8", extra="ignore"
     )
 
     @classmethod
@@ -82,19 +82,18 @@ class Settings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Insert YAML source with second-lowest priority (above only
-        Field defaults), so ``.env`` and ``os.environ`` still override it.
+        Field defaults), so ``os.environ`` still overrides it.
 
         Precedence (highest to lowest):
         1. explicit ``Settings(k=v)`` kwargs
         2. ``os.environ``
-        3. ``.env`` / ``secrets.env`` files
-        4. ``config/*.yaml`` layered YAML (new)
+        3. file secrets
+        4. ``config/*.yaml`` layered YAML
         5. Field(default=…) static defaults
         """
         return (
             init_settings,
             env_settings,
-            dotenv_settings,
             file_secret_settings,
             YamlSettingsSource(settings_cls),
         )

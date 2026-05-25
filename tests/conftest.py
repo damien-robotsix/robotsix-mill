@@ -32,25 +32,24 @@ def _no_real_http(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_dotenv(monkeypatch):
-    """Hermeticity: never let the developer's ./.env or ./secrets.env leak into
+    """Hermeticity: never let the developer's ambient env vars leak into
     tests (they can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
-    the suite hit the network). Disable env_file for every Settings()
-    AND clear EVERY ambient credential/endpoint var — pydantic-settings
-    reads os.environ regardless of env_file, so anything exported in the
-    shell *or in the running mill container* (where the implement stage
-    runs the suite as its gate) leaks in. An unstripped LANGFUSE_*/
-    FORGE_*/NTFY_* flips tracing_enabled / forge-config on and makes
-    hermetic tests assert wrong or hit the network — which made the
-    full-suite implement gate fail in-container (76 env-driven
-    failures) and BLOCK essentially every ticket. The suite must be
-    identical green on a clean machine and inside the container.
+    the suite hit the network). Settings no longer reads .env/secrets.env
+    files; it only reads ``os.environ`` and ``config/*.yaml``.  Clear
+    EVERY ambient credential/endpoint var — pydantic-settings reads
+    os.environ, so anything exported in the shell *or in the running mill
+    container* (where the implement stage runs the suite as its gate)
+    leaks in. An unstripped LANGFUSE_*/FORGE_*/NTFY_* flips
+    tracing_enabled / forge-config on and makes hermetic tests assert
+    wrong or hit the network — which made the full-suite implement gate
+    fail in-container (76 env-driven failures) and BLOCK essentially
+    every ticket. The suite must be identical green on a clean machine
+    and inside the container.
 
     Also blocks YAML overlay files (``config/mill.local.yaml``,
     ``config/mill.production.yaml``, ``config/secrets.yaml``) by
     setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty
     so only the committed ``config/mill.defaults.yaml`` is loaded."""
-    monkeypatch.setitem(Settings.model_config, "env_file", None)
-    # Block YAML overlays — only defaults.yaml is loaded in tests.
     monkeypatch.setenv("MILL_CONFIG_FILE", "")
     monkeypatch.setenv("MILL_SECRETS_FILE", "")
     monkeypatch.setenv("MILL_REPOS_FILE", "")

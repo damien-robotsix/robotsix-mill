@@ -483,36 +483,7 @@ def test_extra_ignore(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 6. env_file loading
-# ---------------------------------------------------------------------------
-
-def test_env_file_loading(tmp_path, monkeypatch):
-    """A temp .env file is read and populates Settings fields."""
-    env_file = tmp_path / ".env"
-    env_file.write_text("MILL_MODEL=test-model\nMILL_MAX_CONCURRENCY=3\n")
-
-    # Patch model_config to point at our temp file.  We restore it in
-    # teardown by saving the original; the _no_dotenv fixture already
-    # sets it to None, so we're effectively overriding that here.
-    monkeypatch.setitem(Settings.model_config, "env_file", str(env_file))
-
-    s = Settings()
-    assert s.model == "test-model"
-    assert s.max_concurrency == 3
-
-
-def test_env_file_loading_via_kwarg(tmp_path):
-    """Use the _env_file constructor kwarg (pydantic-settings ≥2.0) to
-    point at a temp file without mutating model_config."""
-    env_file = tmp_path / "test.env"
-    env_file.write_text("MILL_TEST_MODEL=custom-test-model\n")
-
-    s = Settings(_env_file=str(env_file))
-    assert s.test_model == "custom-test-model"
-
-
-# ---------------------------------------------------------------------------
-# 7. load_settings() smoke test
+# 6. load_settings() smoke test
 # ---------------------------------------------------------------------------
 
 def test_load_settings_returns_settings_instance():
@@ -522,7 +493,7 @@ def test_load_settings_returns_settings_instance():
 
 
 # ---------------------------------------------------------------------------
-# 8. YAML config loading
+# 7. YAML config loading
 # ---------------------------------------------------------------------------
 
 class TestYamlLoading:
@@ -614,7 +585,7 @@ class TestYamlLoading:
 
 
 # ---------------------------------------------------------------------------
-# 9. Secrets model
+# 8. Secrets model
 # ---------------------------------------------------------------------------
 
 class TestSecretsModel:
@@ -1158,7 +1129,7 @@ class TestValidationInvalid:
 
 
 # ---------------------------------------------------------------------------
-# 11. Integration: load_settings / load_secrets factories
+# 12. Integration: load_settings / load_secrets factories
 # ---------------------------------------------------------------------------
 
 class TestFactories:
