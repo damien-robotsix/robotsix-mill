@@ -44,7 +44,7 @@ core:
     doc_classifier: *cheap_model                            # doc-diff classifier gate (fast + cheap)
     rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
 
-  # -- request caps, concurrency, retry, and timeouts (16 fields) -----------
+  # -- request caps, concurrency, retry, and timeouts (18 fields) -----------
   limits:
     coordinator_requests: 200          # per-ticket request cap for implement (coordinator)
     test_requests: 8                   # per-call cap for test-distillation sub-agent
@@ -57,6 +57,8 @@ core:
     max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
     max_spend_usd_per_ticket: 0.0      # dollar cap per ticket (0.0 = disabled)
+    stage_timeout_seconds: 1800        # per-stage wall-clock timeout before BLOCK (0 = disabled)
+    stage_timeout_overrides: {}        # per-stage timeout overrides as JSON dict, e.g. {"merge": 300}
     model_request_timeout: 900.0       # hard per-call timeout in seconds
     transient_retries: 4               # max retries for transient network/model failures
     transient_backoff_base: 2.0        # base seconds for exponential backoff (jittered)
