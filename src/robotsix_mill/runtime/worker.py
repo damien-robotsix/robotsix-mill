@@ -162,6 +162,10 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
             return
         ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
         log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
+        # Clear per-stage retry metadata on successful advancement.
+        ctx.service.set_retry_state(
+            ticket_id, retry_attempt=0, last_transient_error=None, next_retry_at=None,
+        )
         # Best-effort push notification for human-attention states.
         if outcome.next_state in _TRIGGER_STATES:
             ticket = ctx.service.get(ticket_id)

@@ -72,7 +72,7 @@ class Ticket(SQLModel, table=True):
     # transient-error retry state (stage-runner level, not LLM-call level)
     retry_attempt: int = Field(default=0)
     last_transient_error: str | None = Field(default=None)
-    next_retry_at: datetime | None = Field(default=None)
+    next_retry_at: datetime | None = Field(default=None, sa_column=Column(TZDateTime(), nullable=True))
     # optional JSON list of ticket IDs that must reach CLOSED/DONE before
     # this ticket can leave READY (implement-stage gate).
     depends_on: str | None = Field(default=None)

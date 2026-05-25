@@ -965,6 +965,14 @@ class Settings(BaseSettings):
             raise ValueError("stage_retry_max_delay must be > 0")
         return v
 
+    @model_validator(mode="after")
+    def _validate_stage_retry_delays(self) -> "Settings":
+        if self.stage_retry_max_delay < self.stage_retry_base_delay:
+            raise ValueError(
+                "stage_retry_max_delay must be ≥ stage_retry_base_delay"
+            )
+        return self
+
     @field_validator("rate_limit_backoff_base")
     @classmethod
     def _validate_rate_limit_backoff_base(cls, v: float) -> float:
