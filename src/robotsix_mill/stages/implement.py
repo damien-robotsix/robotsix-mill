@@ -101,9 +101,10 @@ class ImplementStage(Stage):
 
         # Load the ticket's file scope map (which files are in-scope).
         # Three cases:
-        #   - file_map.json missing entirely → refine broken → BLOCK.
+        #   - file_map.json missing entirely → refine never ran or
+        #     crashed mid-write; warn and proceed scope-free.
         #   - file_map.json contains [] → scope-free mode (split child
-        #     or triage-SKIP path); allow with a warning.
+        #     or triage-SKIP path); warn and proceed scope-free.
         #   - file_map.json contains [{file: …}, …] → enforce scope.
         file_map: set[str] | None = None
         file_map_path = ws.artifacts_dir / "file_map.json"

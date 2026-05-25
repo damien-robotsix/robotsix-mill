@@ -170,6 +170,8 @@ def call_with_retry(
     Re-raises immediately for non-transient, non-rate-limited errors,
     and re-raises the last error once retries are exhausted.
     """
+    from ..runtime import tracing  # lazy import
+
     attempts = max(0, settings.transient_retries)
     consecutive_rate_limits = 0
     using_fallback = False
@@ -185,6 +187,10 @@ def call_with_retry(
             return result
         except Exception as e:  # noqa: BLE001 — re-raised unless retryable
             if attempt >= attempts:
+                try:
+                    tracing.flush_tracing()
+                except Exception:
+                    log.warning("flush_tracing failed", exc_info=True)
                 raise
 
             # --- transient branch (unchanged) ---------------------------------
@@ -198,6 +204,10 @@ def call_with_retry(
                     "%s: transient %s (attempt %d/%d) — retrying in %.1fs",
                     what, type(e).__name__, attempt + 1, attempts, delay,
                 )
+                try:
+                    tracing.flush_tracing()
+                except Exception:
+                    log.warning("flush_tracing failed", exc_info=True)
                 sleep(delay)
                 continue
 
@@ -254,9 +264,17 @@ def call_with_retry(
                     "%s: rate-limited %s (attempt %d/%d) — retrying in %.1fs",
                     what, type(e).__name__, attempt + 1, attempts, delay,
                 )
+                try:
+                    tracing.flush_tracing()
+                except Exception:
+                    log.warning("flush_tracing failed", exc_info=True)
                 sleep(delay)
                 continue
 
             # --- non-retryable -------------------------------------------------
+            try:
+                tracing.flush_tracing()
+            except Exception:
+                log.warning("flush_tracing failed", exc_info=True)
             raise
     raise AssertionError("unreachable")  # pragma: no cover
