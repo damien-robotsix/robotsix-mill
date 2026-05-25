@@ -167,22 +167,22 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
             # processor does not depend on parent context).
             with tracer.start_as_current_span("sub-agent"):
                 pass
-
-        # Both spans must carry the session id.
-        assert len(captured) == 2, (
-            f"Expected 2 spans, got {len(captured)}: {captured}"
-        )
-        for i, span_data in enumerate(captured):
-            assert span_data["attrs"].get("session.id") == "ticket-sub-agent-test", (
-                f"Span {i} ({span_data['name']}) missing session.id: "
-                f"{span_data['attrs']}"
-            )
-            assert span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test", (
-                f"Span {i} ({span_data['name']}) missing langfuse.session.id: "
-                f"{span_data['attrs']}"
-            )
     finally:
         tracing._current_session.reset(token)
+
+    # Both spans must carry the session id.
+    assert len(captured) == 2, (
+        f"Expected 2 spans, got {len(captured)}: {captured}"
+    )
+    for i, span_data in enumerate(captured):
+        assert span_data["attrs"].get("session.id") == "ticket-sub-agent-test", (
+            f"Span {i} ({span_data['name']}) missing session.id: "
+            f"{span_data['attrs']}"
+        )
+        assert span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test", (
+            f"Span {i} ({span_data['name']}) missing langfuse.session.id: "
+            f"{span_data['attrs']}"
+        )
 
 
 def test_tracing_enabled_no_env():

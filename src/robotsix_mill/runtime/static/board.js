@@ -3,8 +3,6 @@ let sel=null;
 let runsOpen=false;
 let costDashboardOpen=false;
 let costLookbackHours=24;
-let costMaxTickets=20;               // default for ticket-count mode
-let costMode='time';                 // 'time' | 'tickets'
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 let activeMap={};
 let gatesCache={};                    // cached /gates response for open_() drawer ordering
@@ -739,60 +737,123 @@ async function generateChildren(id){
 }
 async function open_(id){
  sel=id;
- const [t,h,d,cs,rt,ch,mi,mr,ms]=await Promise.all([jget("/tickets/"+id),
-   jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
-   jget("/tickets/"+id+"/comments"),jget("/tickets/"+id+"/retrospect"),
-   jget("/tickets/"+id+"/children"),jget("/tickets/"+id+"/merge-info"),
-   jget("/tickets/"+id+"/merge-reason"),
-   jget("/tickets/"+id+"/merge-status")]);
- if(sel!==id)return;
- if(!t)return;
- document.getElementById("d").innerHTML=
-  `<h3>${esc(t.title)}</h3>
-   <div class="muted">${t.id}</div>
-   <p>state <b class="s-${t.state}" style="border-left:3px solid var(--c);
-      padding-left:6px">${t.state}</b>${t.kind==="inquiry"?` <span class="inquiry-badge">🔍 inquiry</span>`:""}${t.kind==="epic"?` <span class="epic-badge">📋 epic</span>`:""} · branch ${esc(t.branch)||"—"}<br>
-   source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
+ // 1. Open drawer immediately — the 150ms slide-in starts at once
+ document.getElementById("drawer").classList.add("open");
+ // 2. Show skeleton placeholder while data loads
+ const afterBody=gatesCache.comments_after_body;
+ const skW=(w,h)=>`<div class="sk-block" style="width:${w};height:${h}"></div>`;
+ document.getElementById("d").innerHTML='<div class="drawer-skeleton">'+
+  skW('70%','18px')+skW('30%','12px')+skW('90%','12px')+
+  '<div class="sk-label"></div>'+skW('100%','14px')+skW('80%','14px')+
+  '<div class="sk-label"></div>'+skW('90%','10px')+skW('70%','10px')+
+  '</div>';
+ // 3. Fire all 9 requests in parallel — same endpoints, no extra latency
+ const tP=jget("/tickets/"+id);
+ const hP=jget("/tickets/"+id+"/history");
+ const dP=jget("/tickets/"+id+"/description");
+ const csP=jget("/tickets/"+id+"/comments");
+ const rtP=jget("/tickets/"+id+"/retrospect");
+ const chP=jget("/tickets/"+id+"/children");
+ const miP=jget("/tickets/"+id+"/merge-info");
+ const mrP=jget("/tickets/"+id+"/merge-reason");
+ const msP=jget("/tickets/"+id+"/merge-status");
+ // Accumulators for sections that may arrive before the header DOM exists
+ let tData=null,_ch,_h,_d,_cs,_rt,_mi,_mr,_ms;
+ function updateMergeButton(){
+  if(!tData||tData.state!=="human_mr_approval"||_ms===undefined)return;
+  const ba=document.getElementById("ticket-merge-btn-area");
+  if(!ba)return;
+  ba.innerHTML=
+   (_ms&&_ms.can_merge===false?
+    `<button class="merge-btn" disabled title="${esc(_ms.reason||'')}">Merge</button>`+
+    `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(_ms.reason||'not mergeable')}</p>`:
+    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${id}')">Merge</button>`
+   )+
+   (_mr&&_mr.reason?`<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(_mr.reason)}</p>`:"");
+ }
+ function flushChildren(){
+  if(_ch===undefined)return;const el=document.getElementById("ticket-children");if(!el)return;
+  el.innerHTML=(_ch&&_ch.length?`<h3>Children (${_ch.length})</h3><div class="children-list">`+
+   _ch.map(c=>`<div class="child-ticket" onclick="open_('${c.id}')"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")+
+   `</div>`:"");
+ }
+ function flushHistory(){
+  if(_h===undefined)return;const el=document.getElementById("ticket-history");if(!el)return;
+  el.innerHTML=`<h3>History</h3>`+(_h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}${e.note?"<br>"+renderMD(e.note):""}</div>`).join("");
+ }
+ function flushDescription(){
+  if(_d===undefined)return;const el=document.getElementById("ticket-body-area");if(!el)return;
+  if(afterBody){
+   el.innerHTML=`<h3>description.md <button class="toggle-body-btn" onclick="toggleBody(this)" style="font-size:11px;margin-left:8px">▲ Hide</button></h3><div class="md-body" id="ticket-body">${renderMD((_d&&_d.description)||"")}</div>`;
+  } else {
+   el.innerHTML=`<h3>description.md</h3><div class="md-body">${renderMD((_d&&_d.description)||"")}</div>`;
+  }
+ }
+ function flushRetrospect(){
+  if(_rt===undefined)return;const el=document.getElementById("ticket-retrospect");if(!el)return;
+  el.innerHTML=(_rt&&_rt.retrospect?`<h3>retrospect.md</h3><div class="md-body">${renderMD(_rt.retrospect)}</div>`:"");
+ }
+ function flushComments(){
+  if(_cs===undefined)return;const el=document.getElementById("ticket-comments");if(!el)return;
+  el.innerHTML=`<h3>Comments <button class="add-comment-btn" onclick="addComment('${id}')">+ Add</button></h3>`+
+   ((_cs&&_cs.length)?renderThreads(_cs):`<div class="muted" style="font-size:11px">No comments yet.</div>`);
+ }
+ function flushMerge(){
+  updateMergeButton();
+  const mel=document.getElementById("ticket-merge");
+  if(mel&&_mi!==undefined)mel.innerHTML=(tData&&tData.state==="human_mr_approval"&&_mi?renderMergeInfo(_mi):"");
+ }
+ function flushAllSections(){flushChildren();flushHistory();flushDescription();flushRetrospect();flushComments();flushMerge();}
+ // 4. Render header as soon as ticket data resolves
+ tP.then(t=>{
+  if(sel!==id)return;
+  if(!t){document.getElementById("d").innerHTML='<div class="muted">Ticket not found</div>';return}
+  tData=t;
+  document.getElementById("d").innerHTML=
+   `<div id="ticket-header">`+
+   `<h3>${esc(t.title)}</h3>`+
+   `<div class="muted">${t.id}</div>`+
+   `<p>state <b class="s-${t.state}" style="border-left:3px solid var(--c);padding-left:6px">${t.state}</b>`+
+   (t.kind==="inquiry"?` <span class="inquiry-badge">🔍 inquiry</span>`:"")+
+   (t.kind==="epic"?` <span class="epic-badge">📋 epic</span>`:"")+
+   ` · branch ${esc(t.branch)||"—"}<br>`+
+   `source <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
    (t.origin_session_url?` · origin <a href="${esc(t.origin_session_url)}" target="_blank" rel="noopener" class="origin-link">${esc(t.origin_session)}</a>`:
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
    (t.pr_url?` · <a href="${esc(t.pr_url)}" target="_blank" rel="noopener" class="pr-link">🔗 PR</a>`:"")+
-   (t.state==="human_mr_approval"?
-    (ms&&ms.can_merge===false?
-     `<button class="merge-btn" data-ticket-id="${t.id}" disabled title="${esc(ms.reason||'')}">Merge</button>`+
-     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(ms.reason||'not mergeable')}</p>`:
-     `<button class="merge-btn" data-ticket-id="${t.id}" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`
-    ):"")+
-   (t.state==="human_issue_approval"?
-    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
-    `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
-   (!['draft','human_issue_approval','closed','answered','epic_closed','epic_open'].includes(t.state)?
-    `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
-   `<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_('${t.id}')">✕</button>`+
-   (mr&&mr.reason?
-    `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")+
-   (t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"")+
-   `<br>
-   · cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
+   `<span id="ticket-merge-btn-area">`+
+   (t.state==="human_mr_approval"?`<span class="sk-inline" style="display:inline-block;width:60px;height:22px;border-radius:4px;vertical-align:middle"></span>`:"")+
+   `</span>`+
+   `<br>· cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
    (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+
    (t.retry_attempt>0?`<br><button class="retry-now-btn" onclick="event.stopPropagation();resumeRetry('${t.id}')">Retry now</button>`:"")+
-   `<br>
-   created ${t.created_at} · updated ${t.updated_at}</p>`+
+   `<br>created ${t.created_at} · updated ${t.updated_at}</p>`+
    (t.depends_on?`<p><b>depends on:</b> ${esc(t.depends_on)}</p>`:"")+
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
    (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id)}</span></p>`:"")+
-   (ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">${ch.map(c=>`<div class="child-ticket" onclick="open_('${c.id}')"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")}</div>`:"")+
    (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button> <button class="add-comment-btn" style="background:#2563eb;color:#fff" onclick="newChildTicket('${t.id}')">Add Ticket</button></p>`:"")+
-   `<h3>History</h3>`+
-   (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
-     ${e.note?"<br>"+renderMD(e.note):""}</div>`).join("")+
-   // Body first, then comments (body is collapsible)
-   `<h3>description.md <button class="toggle-body-btn" onclick="toggleBody(this)" style="font-size:11px;margin-left:8px">▲ Hide</button></h3>
-    <div class="md-body" id="ticket-body">${renderMD((d&&d.description)||"")}</div>`+
-   ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"")+
-   `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
-   ((cs&&cs.length)?renderThreads(cs)
-                   :`<div class="muted" style="font-size:11px">No comments yet.</div>`)
- document.getElementById("drawer").classList.add("open");
+   `</div>`+
+   `<div id="ticket-children"><div class="sk-label"></div>${skW('60%','12px')}</div>`+
+   `<div id="ticket-history"><div class="sk-label"></div>${skW('90%','10px')}${skW('70%','10px')}</div>`+
+   (afterBody?
+    `<div id="ticket-body-area">${skW('100%','40px')}${skW('80%','12px')}</div><div id="ticket-retrospect"></div><div id="ticket-comments"><div class="sk-label"></div>${skW('100%','24px')}${skW('80%','24px')}</div>`:
+    `<div id="ticket-comments"><div class="sk-label"></div>${skW('100%','24px')}${skW('80%','24px')}</div><div id="ticket-retrospect"></div><div id="ticket-body-area">${skW('100%','40px')}${skW('80%','12px')}</div>`
+   )+
+   `<div id="ticket-merge"></div>`;
+  // Flush any data that arrived before the header DOM was ready
+  flushAllSections();
+ });
+ // 5. Fire all section handlers — each stores data and tries to flush
+ chP.then(ch=>{if(sel!==id)return;_ch=ch;flushChildren();});
+ hP.then(h=>{if(sel!==id)return;_h=h;flushHistory();});
+ dP.then(d=>{if(sel!==id)return;_d=d;flushDescription();});
+ rtP.then(rt=>{if(sel!==id)return;_rt=rt;flushRetrospect();});
+ csP.then(cs=>{if(sel!==id)return;_cs=cs;flushComments();});
+ Promise.all([miP,mrP,msP]).then(([mi,mr,ms])=>{
+  if(sel!==id)return;
+  _mi=mi;_mr=mr;_ms=ms;
+  flushMerge();
+ });
 }
 function toggleBody(btn) {
   const body = document.getElementById("ticket-body");
@@ -863,24 +924,13 @@ async function renderCostDashboard(){
  const repoLabel=repoId==="all"?"Costs across all repos (last "+hoursLabel+")":"Costs for "+esc(repoId)+" (last "+hoursLabel+")";
  document.getElementById("d").innerHTML='<h3>💰 Cost Dashboard <span class="muted" style="font-size:11px;font-weight:normal">— '+repoLabel+'</span></h3>'+
   '<div class="cost-lookback">'+
-   '<div class="cost-mode-toggle">'+
-    '<button class="cost-mode-btn'+(timeModeActive?' active':'')+'" onclick="costMode=\'time\';renderCostDashboard()">⏱️ Time window</button>'+
-    '<button class="cost-mode-btn'+(!timeModeActive?' active':'')+'" onclick="costMode=\'tickets\';renderCostDashboard()">🎫 Last N tickets</button>'+
-   '</div>'+
-   (timeModeActive?
-    '<label>Last <select id="cost-lookback" onchange="costLookbackHours=parseInt(this.value);renderCostDashboard()">'+
-     '<option value="1"'+selTimeOpt(1)+'>1 hour</option>'+
-     '<option value="6"'+selTimeOpt(6)+'>6 hours</option>'+
-     '<option value="24"'+selTimeOpt(24)+'>24 hours</option>'+
-     '<option value="72"'+selTimeOpt(72)+'>3 days</option>'+
-     '<option value="168"'+selTimeOpt(168)+'>7 days</option>'+
-    '</select></label>'
-    :
-    '<label>Last <select id="cost-max-tickets" onchange="costMaxTickets=parseInt(this.value);renderCostDashboard()">'+
-     '<option value="20"'+selTickOpt(20)+'>20 tickets</option>'+
-     '<option value="100"'+selTickOpt(100)+'>100 tickets</option>'+
-     '<option value="1000"'+selTickOpt(1000)+'>1000 tickets</option>'+
-    '</select></label>')+
+   '<label>Last <select id="cost-lookback" onchange="costLookbackHours=parseInt(this.value);renderCostDashboard()">'+
+    '<option value="1"'+selOpt(1)+'>1 hour</option>'+
+    '<option value="6"'+selOpt(6)+'>6 hours</option>'+
+    '<option value="24"'+selOpt(24)+'>24 hours</option>'+
+    '<option value="72"'+selOpt(72)+'>3 days</option>'+
+    '<option value="168"'+selOpt(168)+'>7 days</option>'+
+   '</select></label>'+
   '</div>'+
   '<canvas id="cost-sparkline" style="display:none"></canvas>'+
   '<div id="cost-chart">loading…</div>'+
@@ -974,14 +1024,12 @@ async function renderCostDashboard(){
   ctx.fillStyle="#7d828c";
   ctx.font="11px ui-monospace,monospace";
   ctx.textAlign="center";
-  const emptyMsg=timeModeActive?'No trend data available for this period.':'No trend data available for the last '+costMaxTickets+' tickets.';
-  ctx.fillText(emptyMsg,rect.width/2,rect.height/2);
+  ctx.fillText("No trend data available for this period.",rect.width/2,rect.height/2);
  }
 
  // -- per-agent bar chart -----------------------------------------------
  if(!data||!data.length){
-  const emptyMsg=timeModeActive?'No cost data available for this period.':'No cost data available for the last '+costMaxTickets+' tickets.';
-  document.getElementById("cost-chart").innerHTML='<div class="muted">'+emptyMsg+'</div>';
+  document.getElementById("cost-chart").innerHTML='<div class="muted">No cost data available for this period.</div>';
  } else {
   const colors=["#3b82f6","#8b5cf6","#22c55e","#eab308","#ef4444","#f97316","#06b6d4","#ec4899","#14b8a6","#a855f7"];
   const maxCost=Math.max(...data.map(d=>d.total_cost),0.0001);
