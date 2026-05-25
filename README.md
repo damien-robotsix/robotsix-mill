@@ -88,6 +88,7 @@ Running the pipeline needs Docker (agents run in disposable containers);
 - [docs/security.md](docs/security.md) — Security model
 - [docs/agents.md](docs/agents.md) — Full agent catalog
 - [docs/agent-yaml-schema.md](docs/agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
+- [docs/expert-yaml-schema.md](docs/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
 - [docs/dedup-guard.md](docs/dedup-guard.md) — Pre-refine duplicate / already-done check
 - [docs/merge-stage.md](docs/merge-stage.md) — Auto-rebase of stale PRs + auto-fix of failing CI
