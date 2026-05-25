@@ -41,7 +41,7 @@ other code depends on.
 | `FORGE_TOKEN` | `forge_token` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `forge/auth.py`, `forge/base.py` | PAT alternative to GitHub App; set in `config/secrets.yaml` |
 | `GITHUB_APP_ID` | `github_app_id` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `forge/auth.py` | Set in `config/secrets.yaml` |
 | `GITHUB_APP_PRIVATE_KEY` | `github_app_private_key` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `forge/auth.py` | Inline PEM; alternative to `*_PATH` |
-| `GITHUB_APP_PRIVATE_KEY_PATH` | `github_app_private_key_path` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `forge/auth.py`, `docker-compose.yml` | Host path; bind-mounted into container |
+| `GITHUB_APP_PRIVATE_KEY_PATH` | `github_app_private_key_path` | `None` | `str\|None` | Settings | **secret** | default | Non-prefixed | `forge/auth.py`, `docker-compose.yml` | Host path; bind-mounted into container |
 | `LANGFUSE_PUBLIC_KEY` | `langfuse_public_key` | `None` | `str\|None` | Settings + **os.environ** | **secret** | secret | Non-prefixed | `config.py` (via `tracing_enabled`), `tracing.py` (raw `os.environ`) | **Dual-source**: read both via `Settings` AND raw `os.environ.get` in `tracing.py:_tracing_enabled()` |
 | `LANGFUSE_SECRET_KEY` | `langfuse_secret_key` | `None` | `str\|None` | Settings + **os.environ** | **secret** | secret | Non-prefixed | `config.py` (via `tracing_enabled`), `tracing.py` (raw `os.environ`) | **Dual-source** (same as above) |
 | `LANGFUSE_BASE_URL` | `langfuse_base_url` | `None` | `str\|None` | Settings + **os.environ** | identifying | absent | Non-prefixed | `config.py` (via `tracing_enabled`), `tracing.py` (raw `os.environ`) | **Dual-source**; `tracing.py` defaults to `https://cloud.langfuse.com` when unset |
@@ -448,16 +448,10 @@ and prevent accidental exposure.
 
 - **12 fields** defined in `config.py` are **completely absent** from
   `docs/configuration.md` (see §2.1).
-- **13 fields** are in `config.py` but have no corresponding entry in
-  `config/mill.defaults.yaml` (neither default nor commented-out):
-  `OPENROUTER_API_KEY`, `MILL_ANSWER_MODEL`,
-  `MILL_TRIAGE_MODEL`, `MILL_REFINE_TRIAGE_ENABLED`, `MILL_SPEC_REVIEW_ENABLED`,
-  `MILL_REVIEW_MAX_ROUNDS`, `MILL_MAX_ARCHIVED_TICKETS`, `MILL_GITLAB_API_URL`,
-  `MILL_REFERENCE_FILES_MAX_COUNT`, `MILL_REFERENCE_FILES_MAX_TOTAL_LINES`,
-  `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_PROJECT_ID`.
-  (Secrets are intentionally absent from committed YAML; the 4 non-secret absentees
-  are `MILL_ANSWER_MODEL`, `MILL_TRIAGE_MODEL`, and the review/refine/ticket
-  fields that should arguably have entries.)
+- **4 fields** are in `config.py` but intentionally absent from
+  `config/mill.defaults.yaml` (all are secrets):
+  `OPENROUTER_API_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
+  `LANGFUSE_PROJECT_ID`.
 - **Documentation is manually maintained** — no mechanical cross-check
   between `config.py` and `docs/configuration.md` exists. A script or test that
   diffs the two would prevent drift.
