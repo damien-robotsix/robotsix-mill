@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import importlib
+import os
 import sys
 
 import httpx
@@ -164,7 +165,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="robotsix-mill")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("serve", help="run the API + event-driven worker")
+    p_serve = sub.add_parser("serve", help="run the API + event-driven worker")
+    p_serve.add_argument(
+        "--repo-id",
+        default=os.environ.get("MILL_REPO_ID"),
+        help="repository identifier (default from MILL_REPO_ID env var)",
+    )
 
     p_ticket = sub.add_parser("ticket", help="ticket operations")
     tsub = p_ticket.add_subparsers(dest="tcmd", required=True)
@@ -289,9 +295,25 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
 
         from .runtime.api import create_app
+        from .config import get_repo_config
+        from .config_loader import ConfigError
+
+        if not args.repo_id:
+            from .config import get_repos_config
+            known = sorted(get_repos_config().repos.keys())
+            print(f"Error: --repo-id is required. Known repos: {known}", file=sys.stderr)
+            return 2
+
+        try:
+            repo_config = get_repo_config(args.repo_id)
+        except ConfigError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
 
         uvicorn.run(
-            create_app(settings), host=settings.api_host, port=settings.api_port
+            create_app(settings, repo_config),
+            host=settings.api_host,
+            port=settings.api_port,
         )
         return 0
 

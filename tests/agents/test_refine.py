@@ -46,8 +46,8 @@ def _dedup_clean(monkeypatch):
 
 
 @pytest.fixture
-def ctx(settings, service):
-    return StageContext(settings=settings, service=service)
+def ctx(settings, service, repo_config):
+    return StageContext(settings=settings, service=service, repo_config=repo_config)
 
 
 def test_empty_title_and_draft_blocks(ctx, service):
@@ -175,13 +175,13 @@ def test_empty_spec_proceeds_to_ready(ctx, service, monkeypatch):
     assert (service.workspace(t).artifacts_dir / "draft-original.md").read_text() == "draft"
 
 
-def test_empty_spec_proceeds_to_human_issue_approval_when_gated(ctx, service, monkeypatch, tmp_path):
+def test_empty_spec_proceeds_to_human_issue_approval_when_gated(ctx, service, monkeypatch, tmp_path, repo_config):
     """Whitespace-only spec + gated → HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service)
+    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
     t = service.create("x", "draft")
     out = RefineStage().run(t, gated_ctx)
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
@@ -209,14 +209,14 @@ async def test_chains_draft_to_implement(ctx, service, monkeypatch):
 # --- approval gate tests ---
 
 
-def test_refine_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatch, tmp_path):
+def test_refine_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatch, tmp_path, repo_config):
     """When require_approval=true, refine transitions to human_issue_approval."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service)
+    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
     t = service.create("Add X", "make x happen")
 
     out = RefineStage().run(t, gated_ctx)
@@ -225,7 +225,7 @@ def test_refine_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatc
     assert service.get(t.id).state is State.DRAFT  # worker hasn't applied transition
 
 
-def test_refine_goes_to_ready_when_autonomous(ctx, service, monkeypatch):
+def test_refine_goes_to_ready_when_autonomous(ctx, service, monkeypatch, repo_config):
     """When require_approval=false, refine transitions to ready (autonomous)."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
@@ -236,7 +236,7 @@ def test_refine_goes_to_ready_when_autonomous(ctx, service, monkeypatch):
     assert out.next_state is State.READY
 
 
-async def test_human_issue_approval_pauses_chain(ctx, service, monkeypatch):
+async def test_human_issue_approval_pauses_chain(ctx, service, monkeypatch, repo_config):
     """When require_approval=true, the worker pauses at human_issue_approval
     (no stage owns it), so the ticket is not picked up by implement."""
     monkeypatch.setattr(
@@ -246,7 +246,7 @@ async def test_human_issue_approval_pauses_chain(ctx, service, monkeypatch):
     # apply refine outcome with gated settings
     from robotsix_mill.config import Settings as S
     gated = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REQUIRE_APPROVAL="true")
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
     outcome = RefineStage().run(t, gated_ctx)
     service.transition(t.id, outcome.next_state, outcome.note)
 
@@ -964,7 +964,7 @@ def test_split_empty_children_proceeds(ctx, service, monkeypatch):
 
 
 def test_split_empty_children_proceeds_to_human_issue_approval_when_gated(
-    ctx, service, monkeypatch, tmp_path
+    ctx, service, monkeypatch, tmp_path, repo_config
 ):
     """No children in split + gated → HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(
@@ -975,7 +975,7 @@ def test_split_empty_children_proceeds_to_human_issue_approval_when_gated(
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service)
+    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     t = service.create("Empty split gated", "draft")
     out = RefineStage().run(t, gated_ctx)
@@ -1008,7 +1008,7 @@ def test_split_malformed_children_skipped(ctx, service, monkeypatch):
     assert service.workspace(t).read_description().rstrip("\n") == good_spec.rstrip("\n")
 
 
-def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tmp_path):
+def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tmp_path, repo_config):
     """When require_approval=true, children go to HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(
         refining, "run_refine_agent",
@@ -1021,7 +1021,7 @@ def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tm
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service)
+    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     parent = service.create("Gated split", "draft")
     out = RefineStage().run(parent, gated_ctx)
@@ -1692,7 +1692,7 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     assert "doc-only change" in out.note
 
 
-def test_triage_skip_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatch):
+def test_triage_skip_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatch, repo_config):
     """When triage returns SKIP and require_approval=True, the ticket
     transitions to HUMAN_ISSUE_APPROVAL."""
     from robotsix_mill.agents.refining import TriageResult
@@ -1707,7 +1707,7 @@ def test_triage_skip_goes_to_human_issue_approval_when_gated(ctx, service, monke
 
     from robotsix_mill.config import Settings as S
     gated = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REQUIRE_APPROVAL="true")
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
@@ -1739,7 +1739,7 @@ def test_triage_refine_calls_full_refine(ctx, service, monkeypatch):
     assert out.note == "refined"
 
 
-def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch):
+def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch, repo_config):
     """When refine_triage_enabled=False, triage_refine is never called
     and full refine runs."""
     refine_called = False
@@ -1763,7 +1763,7 @@ def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch):
 
     from robotsix_mill.config import Settings as S
     disabled = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REFINE_TRIAGE_ENABLED="false", MILL_REQUIRE_APPROVAL="false")
-    disabled_ctx = StageContext(settings=disabled, service=service)
+    disabled_ctx = StageContext(settings=disabled, service=service, repo_config=repo_config)
     out = RefineStage().run(t, disabled_ctx)
 
     assert not triage_called
@@ -1835,7 +1835,7 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_path):
+def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_path, repo_config):
     """When triage_auto_approve returns APPROVE, the ticket goes straight
     to READY even when require_approval=true.  Uses a precise multi-file
     feature spec to demonstrate the relaxed criteria."""
@@ -1863,7 +1863,7 @@ def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_pa
         MILL_REQUIRE_APPROVAL="true",
         MILL_AUTO_APPROVE_ENABLED="true",
     )
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
     t = service.create("CSV export", "add CSV export feature")
     out = RefineStage().run(t, gated_ctx)
@@ -1872,7 +1872,7 @@ def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_pa
     assert "auto-approve: APPROVE — precise multi-file feature, no design decisions" in out.note
 
 
-def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tmp_path):
+def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tmp_path, repo_config):
     """When triage_auto_approve returns NEEDS_APPROVAL, the ticket goes to
     HUMAN_ISSUE_APPROVAL when gated.  The spec here is ambiguous about scope
     — the implementer would have to guess where to make changes."""
@@ -1895,7 +1895,7 @@ def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tm
         MILL_REQUIRE_APPROVAL="true",
         MILL_AUTO_APPROVE_ENABLED="true",
     )
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
     t = service.create("Improve errors", "improve error handling")
     out = RefineStage().run(t, gated_ctx)
@@ -1904,7 +1904,7 @@ def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tm
     assert "auto-approve: NEEDS_APPROVAL — ambiguous scope, unclear acceptance criteria" in out.note
 
 
-def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp_path):
+def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp_path, repo_config):
     """When triage_auto_approve raises, the ticket falls back to
     HUMAN_ISSUE_APPROVAL when gated."""
     spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
@@ -1920,7 +1920,7 @@ def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp
         MILL_REQUIRE_APPROVAL="true",
         MILL_AUTO_APPROVE_ENABLED="true",
     )
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
     t = service.create("Fix typo", "fix a typo in README.md")
     out = RefineStage().run(t, gated_ctx)
@@ -1929,7 +1929,7 @@ def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp
     assert "auto-approve: triage failed — falling back to human approval" in out.note
 
 
-def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path):
+def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path, repo_config):
     """When auto_approve_enabled=false, triage_auto_approve is never called
     and the ticket follows normal gated behaviour."""
     spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
@@ -1949,7 +1949,7 @@ def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path)
         MILL_REQUIRE_APPROVAL="true",
         MILL_AUTO_APPROVE_ENABLED="false",
     )
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
     t = service.create("Fix typo", "fix a typo in README.md")
     out = RefineStage().run(t, gated_ctx)
@@ -1958,7 +1958,7 @@ def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path)
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
 
 
-def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypatch, tmp_path):
+def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypatch, tmp_path, repo_config):
     """A precise, well-specified multi-file feature spec with clear
     acceptance criteria → APPROVE, ticket goes to READY."""
     spec = (
@@ -1986,7 +1986,7 @@ def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypat
         MILL_REQUIRE_APPROVAL="true",
         MILL_AUTO_APPROVE_ENABLED="true",
     )
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
     t = service.create("Add pagination", "add pagination to list endpoints")
     out = RefineStage().run(t, gated_ctx)
@@ -1994,7 +1994,7 @@ def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypat
     assert out.next_state is State.READY
 
 
-def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, tmp_path):
+def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, tmp_path, repo_config):
     """A spec with ambiguous scope where the implementer would have to
     guess → NEEDS_APPROVAL, ticket goes to HUMAN_ISSUE_APPROVAL."""
     spec = (
@@ -2016,7 +2016,7 @@ def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, t
         MILL_REQUIRE_APPROVAL="true",
         MILL_AUTO_APPROVE_ENABLED="true",
     )
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
     t = service.create("Make faster", "make the app faster")
     out = RefineStage().run(t, gated_ctx)
@@ -2024,7 +2024,7 @@ def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, t
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
 
 
-def test_auto_approve_architecture_decision_needs_approval(ctx, service, monkeypatch, tmp_path):
+def test_auto_approve_architecture_decision_needs_approval(ctx, service, monkeypatch, tmp_path, repo_config):
     """A spec introducing a new abstraction/module boundary →
     NEEDS_APPROVAL, ticket goes to HUMAN_ISSUE_APPROVAL."""
     spec = (
@@ -2053,7 +2053,7 @@ def test_auto_approve_architecture_decision_needs_approval(ctx, service, monkeyp
         MILL_REQUIRE_APPROVAL="true",
         MILL_AUTO_APPROVE_ENABLED="true",
     )
-    gated_ctx = StageContext(settings=gated, service=service)
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
     t = service.create("Plugin system", "add plugin system")
     out = RefineStage().run(t, gated_ctx)
@@ -2088,7 +2088,7 @@ def test_epic_body_applied_immediately_in_autonomous_mode(ctx, service, monkeypa
     assert "login first, then roles" in epic_desc
 
 
-def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, tmp_path):
+def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, tmp_path, repo_config):
     """When require_approval=true, epic_body is stored as an artifact
     in the child's workspace, NOT written to the epic yet."""
     epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
@@ -2106,7 +2106,7 @@ def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, t
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service)
+    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     out = RefineStage().run(child, gated_ctx)
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
@@ -2122,7 +2122,7 @@ def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, t
     assert artifact.read_text(encoding="utf-8") == "Revised epic strategy: login first."
 
 
-def test_epic_body_applied_on_approval_in_gated_mode(ctx, service, monkeypatch, tmp_path):
+def test_epic_body_applied_on_approval_in_gated_mode(ctx, service, monkeypatch, tmp_path, repo_config):
     """When require_approval=true, the epic body is applied to the
     epic only when the child ticket is approved."""
     epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
@@ -2140,7 +2140,7 @@ def test_epic_body_applied_on_approval_in_gated_mode(ctx, service, monkeypatch, 
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service)
+    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     out = RefineStage().run(child, gated_ctx)
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
@@ -2193,7 +2193,7 @@ def test_epic_body_not_applied_when_no_epic_parent(ctx, service, monkeypatch):
     assert not artifact.exists()
 
 
-def test_epic_body_applied_immediately_in_split_path(ctx, service, monkeypatch, tmp_path):
+def test_epic_body_applied_immediately_in_split_path(ctx, service, monkeypatch, tmp_path, repo_config):
     """In the split path, epic_body is applied immediately even when
     require_approval=true, because the original ticket is closed."""
     epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
@@ -2214,7 +2214,7 @@ def test_epic_body_applied_immediately_in_split_path(ctx, service, monkeypatch, 
     gated_settings = Settings(
         MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service)
+    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     out = RefineStage().run(child, gated_ctx)
     assert out.next_state is State.CLOSED

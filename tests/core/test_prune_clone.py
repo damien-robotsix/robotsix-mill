@@ -33,7 +33,7 @@ def _ctx(tmp_path: Path, **env_overrides):
     s = Settings(**env)
     db.init_db(s)
     from robotsix_mill.core.service import TicketService
-    return StageContext(settings=s, service=TicketService(s))
+    from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=TicketService(s), repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
 
 
 def _done(ctx):

@@ -49,7 +49,7 @@ def ctx_factory(tmp_path, fake_sandbox):
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
-        return StageContext(settings=s, service=svc)
+        from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=svc, repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
 
     yield make
     db.reset_engine()

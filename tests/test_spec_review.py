@@ -69,8 +69,8 @@ PEP 257 conventions.
 
 
 @pytest.fixture
-def ctx(settings, service):
-    return StageContext(settings=settings, service=service)
+def ctx(settings, service, repo_config):
+    return StageContext(settings=settings, service=service, repo_config=repo_config)
 
 
 @pytest.fixture
@@ -99,8 +99,8 @@ def review_service(review_settings):
 
 
 @pytest.fixture
-def review_ctx(review_settings, review_service):
-    return StageContext(settings=review_settings, service=review_service)
+def review_ctx(review_settings, review_service, repo_config):
+    return StageContext(settings=review_settings, service=review_service, repo_config=repo_config)
 
 
 # -----------------------------------------------------------------------

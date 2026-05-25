@@ -1,7 +1,7 @@
 import pytest
 
 from robotsix_mill.core import db
-from robotsix_mill.config import Settings
+from robotsix_mill.config import RepoConfig, Settings
 from robotsix_mill.core.service import TicketService
 
 
@@ -118,6 +118,17 @@ def settings(tmp_path) -> Settings:
 @pytest.fixture
 def service(settings) -> TicketService:
     return TicketService(settings)
+
+
+@pytest.fixture
+def repo_config() -> RepoConfig:
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
 
 
 @pytest.fixture

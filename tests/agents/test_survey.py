@@ -19,7 +19,7 @@ def _make_settings(tmp_path, **overrides):
 
 
 @pytest.mark.asyncio
-async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch):
+async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
     """Worker._survey_task is created when MILL_SURVEY_PERIODIC=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -34,7 +34,7 @@ async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch):
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)
-    ctx = StageContext(settings=settings, service=service)
+    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     # Patch _run_periodic_pass to be a no-op to avoid running immediately
     async def noop_periodic(self, label, runner_fn, interval):
@@ -53,7 +53,7 @@ async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_survey_task_not_created_when_periodic_false(tmp_path, monkeypatch):
+async def test_worker_survey_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
     """Worker._survey_task is NOT created when MILL_SURVEY_PERIODIC=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -64,7 +64,7 @@ async def test_worker_survey_task_not_created_when_periodic_false(tmp_path, monk
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)
-    ctx = StageContext(settings=settings, service=service)
+    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     worker = Worker(ctx)
     worker.start()

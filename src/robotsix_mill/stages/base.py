@@ -14,7 +14,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from ..config import Settings
+from ..config import RepoConfig, Settings
 from ..core.models import Ticket
 from ..core.service import TicketService
 from ..core.states import State
@@ -28,9 +28,13 @@ class StageContext:
         settings: Mill runtime configuration (models, paths, limits).
         service: :class:`TicketService` for reading ticket state and
             workspace.
+        repo_config: Per-repository configuration resolved from the
+            ``--repo-id`` CLI argument (board identity, Langfuse
+            credentials for the repository).
     """
     settings: Settings
     service: TicketService
+    repo_config: RepoConfig
 
 
 @dataclass
