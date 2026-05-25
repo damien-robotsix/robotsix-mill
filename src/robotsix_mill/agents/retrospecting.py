@@ -15,32 +15,24 @@ from ..config import Settings
 
 _DEEP_ANALYSIS_ADDENDUM = """\
 
-## DEEP ANALYSIS MODE — TWO PHASES
-
-### Phase 1 — Per-trace inspection
+## DEEP ANALYSIS MODE
 
 You MUST call `trace_inspect` for EVERY trace in this
 session to inspect its full observation tree. The tool returns a text
 summary of tool errors, agent limitations, and optimisation
 opportunities found in that trace.
 
-### Phase 2 — Cross-trace analysis
+After inspecting all traces, synthesise the findings across traces:
+- Patterns that appear in *multiple* traces are stronger evidence and
+  should be recorded in the memory ledger with higher weight.
+- A single-trace anomaly may still be worth recording, but note that it
+  has only one data point so far.
+- Incorporate the deep findings into your `findings`, `conclusion`,
+  `updated_memory`, and draft decision just as you would with the
+  summary-based analysis.
 
-After all per-trace `trace_inspect` calls complete, call
-`cross_trace_analyze` ONCE with ALL the per-trace summaries formatted
-together. Precede each summary with a line identifying the stage:
-`--- trace <id> (<stage_name>) ---` so the analyzer can attribute
-findings to the correct stage. The tool returns cross-cutting
-patterns — redundant exploration across stages, information loss,
-retry cascades, context waste, and stage inefficiencies — that are
-invisible when inspecting a single trace.
-
-Cross-trace findings carry the same weight as per-trace findings.
-Incorporate both into your synthesis, memory ledger, draft proposals,
-and follow-ups.
-
-The trace IDs and stage names to inspect are listed in the prompt
-below.  Call `trace_inspect` for each one, then `cross_trace_analyze`.
+The trace IDs to inspect are listed in the prompt below.  Call
+`trace_inspect` for each one.
 """
 
 
@@ -104,7 +96,7 @@ def run_retrospect_agent(
     memory: str = "",
     comments_text: str = "",
     deep_analysis: bool = False,
-    trace_ids: list[tuple[str, str]] | None = None,
+    trace_ids: list[str] | None = None,
     recent_proposals: str = "",
     epic_context: str = "",
     sibling_context: str = "",
@@ -152,11 +144,10 @@ def run_retrospect_agent(
     if sibling_context:
         prompt += f"\n\n{sibling_context}"
     if deep_analysis and trace_ids:
-        ids_text = "\n".join(f"- {tid} ({tname})" for tid, tname in trace_ids)
+        ids_text = "\n".join(f"- {tid}" for tid in trace_ids)
         prompt += (
             f"\n\n<trace_ids>\n{ids_text}\n</trace_ids>\n\n"
-            "Inspect each trace above with trace_inspect().\n"
-            "Then call cross_trace_analyze with all summaries together."
+            "Inspect each trace above with trace_inspect()."
         )
     from .retry import call_with_retry
 
