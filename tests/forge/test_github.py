@@ -1054,3 +1054,110 @@ def test_list_review_comments_http_error(tmp_path, monkeypatch):
     forge = _forge(tmp_path)
     with pytest.raises(real_httpx.HTTPStatusError):
         forge.list_review_comments(source_branch="feature/x")
+
+
+# ---------------------------------------------------------------------------
+# _pr_files
+# ---------------------------------------------------------------------------
+
+
+def test_pr_files_happy_path(tmp_path, monkeypatch):
+    """PR exists → _pr_files returns normalized file dicts."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    files_resp = [
+        {
+            "filename": "src/main.py",
+            "status": "modified",
+            "additions": 12,
+            "deletions": 3,
+        },
+        {
+            "filename": "tests/test_main.py",
+            "status": "added",
+            "additions": 45,
+            "deletions": 0,
+        },
+        {
+            "filename": "old/deprecated.py",
+            "status": "removed",
+            "additions": 0,
+            "deletions": 20,
+        },
+    ]
+    get_map = {
+        "repos/o/r/pulls/7/files": _make_response(200, files_resp),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    files = forge._pr_files(owner="o", repo="r", pull_number=7)
+    assert len(files) == 3
+    assert files[0] == {
+        "path": "src/main.py", "status": "modified",
+        "additions": 12, "deletions": 3,
+    }
+    assert files[1] == {
+        "path": "tests/test_main.py", "status": "added",
+        "additions": 45, "deletions": 0,
+    }
+    assert files[2] == {
+        "path": "old/deprecated.py", "status": "removed",
+        "additions": 0, "deletions": 20,
+    }
+
+
+def test_pr_files_no_pr(tmp_path, monkeypatch):
+    """No PR for branch → returns [] without calling files endpoint."""
+    get_map = {"repos/o/r/pulls": _make_response(200, [])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.pr_files(source_branch="no-such-branch")
+    assert result == []
+
+
+def test_pr_files_http_error(tmp_path, monkeypatch):
+    """HTTP error on files endpoint → returns [] gracefully."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7/files": _make_response(500, {}, "boom"),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    files = forge._pr_files(owner="o", repo="r", pull_number=7)
+    assert files == []
+
+
+def test_pr_files_empty_files(tmp_path, monkeypatch):
+    """PR with no files changed → returns []."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7, "merged": False, "state": "open",
+        "html_url": "http://pr/7", "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    get_map = {
+        "repos/o/r/pulls/7/files": _make_response(200, []),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    files = forge._pr_files(owner="o", repo="r", pull_number=7)
+    assert files == []

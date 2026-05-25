@@ -154,6 +154,45 @@ async function addComment(id){
  const r=await jpost("/tickets/"+id+"/comments",{body:body.trim()});
  if(!r.ok){const e=await r.text();alert("add comment failed: "+e)}else if(sel===id)open_(id)
 }
+function renderMergeInfo(mi){
+ // CI status
+ let ciHtml="";
+ if(mi.ci_conclusion==="success") ciHtml=`<span class="mi-ok">✓</span> CI passing`;
+ else if(mi.ci_conclusion==="failure") {
+  const names=mi.ci_failing.map(f=>esc(f.name)).join(", ");
+  ciHtml=`<span class="mi-bad">✗</span> CI failing`;
+  if(names) ciHtml+=` — ${names}`;
+ }
+ else if(mi.ci_conclusion==="pending") ciHtml=`<span class="mi-pending">◷</span> CI pending…`;
+ else ciHtml=`<span class="mi-unknown">—</span> CI unknown`;
+
+ // Mergeable status
+ let mgHtml="";
+ if(mi.mergeable===true) mgHtml=`<span class="mi-ok">✓</span> No conflicts`;
+ else if(mi.mergeable===false) mgHtml=`<span class="mi-bad">✗</span> Conflicts detected`;
+ else mgHtml=`<span class="mi-unknown">—</span> Checking conflicts…`;
+
+ // Files
+ let filesHtml="";
+ if(mi.files&&mi.files.length){
+  filesHtml=`<div class="mi-files-header">${mi.files.length} file${mi.files.length!==1?"s":""} changed</div>`;
+  filesHtml+=mi.files.map(f=>{
+   let a="", d="";
+   if(f.additions) a=`<span class="mi-add">+${f.additions}</span> `;
+   if(f.deletions) d=`<span class="mi-del">−${f.deletions}</span> `;
+   return `<div class="mi-file">${a}${d}<span class="mi-path">${esc(f.path)}</span> <span class="mi-status">${esc(f.status)}</span></div>`;
+  }).join("");
+ } else {
+  filesHtml=`<div class="mi-files-header muted">(no file info available)</div>`;
+ }
+
+ return `<div class="mi-section">
+  <h3>Merge Info</h3>
+  <div class="mi-row">${ciHtml}</div>
+  <div class="mi-row">${mgHtml}</div>
+  ${filesHtml}
+ </div>`;
+}
 function renderThreads(cs){
  const threads=cs.filter(c=>c.parent_id===null);
  const replies=cs.filter(c=>c.parent_id!==null);
@@ -602,10 +641,11 @@ async function generateChildren(id){
 }
 async function open_(id){
  sel=id;
- const [t,h,d,cs,rt,ch,mr]=await Promise.all([jget("/tickets/"+id),
+ const [t,h,d,cs,rt,ch,mi,mr]=await Promise.all([jget("/tickets/"+id),
    jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
    jget("/tickets/"+id+"/comments"),jget("/tickets/"+id+"/retrospect"),
-   jget("/tickets/"+id+"/children"),jget("/tickets/"+id+"/merge-reason")]);
+   jget("/tickets/"+id+"/children"),jget("/tickets/"+id+"/merge-info"),
+   jget("/tickets/"+id+"/merge-reason")]);
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
@@ -620,6 +660,7 @@ async function open_(id){
     `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
    (mr&&mr.reason?
     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")+
+   (t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"")+
    `<br>
    · cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
    (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+
