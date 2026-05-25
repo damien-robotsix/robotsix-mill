@@ -43,7 +43,7 @@ echo ""
 # Embedded Python 3 script — does all the heavy lifting.
 # ---------------------------------------------------------------------------
 exec python3 - "$DATA_DIR" <<'PYEOF'
-import os, re, sys, time
+import re, sys, time
 from pathlib import Path
 
 data_dir = Path(sys.argv[1])
@@ -70,7 +70,7 @@ _COUNT_CLAIM_RE = re.compile(
 
 # --- "Observed in `<id>`: " prefix ----------------------------------------
 _OBSERVED_IN_RE = re.compile(
-    r"^\s*Observed\s+in\s+`[^`]+`\s*:\s*",
+    r"Observed\s+in\s+`[^`]+`\s*:\s*",
     re.IGNORECASE,
 )
 
@@ -189,7 +189,7 @@ def process_file(memory_path: Path) -> str:
 
     total_removed = line_removed + sec_removed
 
-    if after_sections == original.rstrip() + '\n':
+    if total_removed == 0:
         return f"{name}: SKIPPED (no per-ticket content found)"
 
     # Create timestamped backup.
