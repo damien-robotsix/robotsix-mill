@@ -111,7 +111,7 @@ other code depends on.
 | `MILL_API_HOST` | `api_host` | `127.0.0.1` | `str` | Settings + Dockerfile | non-sensitive | default | §5 | `runtime/api.py` | Dockerfile overrides to `0.0.0.0` |
 | `MILL_API_PORT` | `api_port` | `8077` | `int` | Settings | non-sensitive | default | §5 | `runtime/api.py` | |
 | `MILL_API_URL` | `api_url` | `http://127.0.0.1:8077` | `str` | Settings + Dockerfile | identifying | default | §5 | `cli.py` | Dockerfile sets same value |
-| `MILL_BOARD_ID` | `board_id` | `""` | `str` | Settings | non-sensitive | default | §5 | `core/service.py`, `runtime/lifespan.py` | Set at startup from `repos.yaml` |
+| `MILL_BOARD_ID` | `board_id` | `""` | `str` | Settings | non-sensitive | absent | §5 | `core/service.py`, `runtime/lifespan.py` | Set at startup from `repos.yaml` |
 
 ### 1.6  Forge delivery
 
@@ -304,18 +304,18 @@ in `docs/configuration.md`:
 
 | # | Env var | Python field | Default | In YAML? |
 |---|---------|-------------|---------|----------|
-| 1 | `MILL_TRIAGE_MODEL` | `triage_model` | `openai/gpt-4o-mini` | absent |
+| 1 | `MILL_TRIAGE_MODEL` | `triage_model` | `openai/gpt-4o-mini` | default |
 | 2 | `MILL_DOC_MODEL` | `doc_model` | `deepseek/deepseek-v4-pro` | default |
 | 3 | `MILL_PRUNE_CLONE_ON_CLOSE` | `prune_clone_on_close` | `true` | default |
-| 4 | `MILL_MAX_ARCHIVED_TICKETS` | `max_archived_tickets` | `100` | absent |
+| 4 | `MILL_MAX_ARCHIVED_TICKETS` | `max_archived_tickets` | `100` | default |
 | 5 | `MILL_AUTO_MERGE_ENABLED` | `auto_merge_enabled` | `false` | default |
-| 6 | `MILL_REFINE_TRIAGE_ENABLED` | `refine_triage_enabled` | `true` | absent |
-| 7 | `MILL_SPEC_REVIEW_ENABLED` | `spec_review_enabled` | `false` | absent |
-| 8 | `MILL_REVIEW_MAX_ROUNDS` | `review_max_rounds` | `3` | absent |
+| 6 | `MILL_REFINE_TRIAGE_ENABLED` | `refine_triage_enabled` | `true` | default |
+| 7 | `MILL_SPEC_REVIEW_ENABLED` | `spec_review_enabled` | `false` | default |
+| 8 | `MILL_REVIEW_MAX_ROUNDS` | `review_max_rounds` | `3` | default |
 | 9 | `MILL_SURVEY_PERIODIC` | `survey_periodic` | `true` | default |
-| 10 | `MILL_GITLAB_API_URL` | `gitlab_api_url` | `https://gitlab.com/api/v4` | absent |
-| 11 | `MILL_REFERENCE_FILES_MAX_COUNT` | `reference_files_max_count` | `5` | absent |
-| 12 | `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `reference_files_max_total_lines` | `3000` | absent |
+| 10 | `MILL_GITLAB_API_URL` | `gitlab_api_url` | `https://gitlab.com/api/v4` | default |
+| 11 | `MILL_REFERENCE_FILES_MAX_COUNT` | `reference_files_max_count` | `5` | default |
+| 12 | `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `reference_files_max_total_lines` | `3000` | default |
 
 > The spec's known list omitted `MILL_REFERENCE_FILES_MAX_COUNT` and
 > `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` (both missing from docs) and
@@ -325,7 +325,7 @@ in `docs/configuration.md`:
 
 | Env var | Value | Where consumed | Notes |
 |---|---|---|---|
-| `DOCKER_GID` | `999` | `docker-compose.yml` (`group_add: ["${DOCKER_GID:-999}"]`), `dev/mill-autoupdate.sh` (`export DOCKER_GID`) | **Not an app config var.** Docker socket group ownership for the non-root container user. pydantic-settings ignores it (`extra="ignore"`). Set via shell environment or `.env` (docker-compose variable substitution only). |
+| `DOCKER_GID` | `999` | `docker-compose.yml` (`group_add: ["${DOCKER_GID:-999}"]`), `dev/mill-autoupdate.sh` (`export DOCKER_GID`) | **Not an app config var.** Docker socket group ownership for the non-root container user. pydantic-settings ignores it (`extra="ignore"`). Set via shell environment (docker-compose variable substitution only). |
 
 ### 2.3  Vars read via raw `os.environ` bypassing `Settings`
 
