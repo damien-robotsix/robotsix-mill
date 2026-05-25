@@ -641,11 +641,12 @@ async function generateChildren(id){
 }
 async function open_(id){
  sel=id;
- const [t,h,d,cs,rt,ch,mi,mr]=await Promise.all([jget("/tickets/"+id),
+ const [t,h,d,cs,rt,ch,mi,mr,ms]=await Promise.all([jget("/tickets/"+id),
    jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
    jget("/tickets/"+id+"/comments"),jget("/tickets/"+id+"/retrospect"),
    jget("/tickets/"+id+"/children"),jget("/tickets/"+id+"/merge-info"),
-   jget("/tickets/"+id+"/merge-reason")]);
+   jget("/tickets/"+id+"/merge-reason"),
+   jget("/tickets/"+id+"/merge-status")]);
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
@@ -657,7 +658,11 @@ async function open_(id){
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
    (t.pr_url?` · <a href="${esc(t.pr_url)}" target="_blank" rel="noopener" class="pr-link">🔗 PR</a>`:"")+
    (t.state==="human_mr_approval"?
-    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
+    (ms&&ms.can_merge===false?
+     `<button class="merge-btn" disabled title="${esc(ms.reason||'')}">Merge</button>`+
+     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(ms.reason||'not mergeable')}</p>`:
+     `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`
+    ):"")+
    (mr&&mr.reason?
     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")+
    (t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"")+
