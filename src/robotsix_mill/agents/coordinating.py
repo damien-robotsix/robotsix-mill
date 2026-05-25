@@ -210,7 +210,7 @@ def run_coordinator(
     # system prompt is already added by build_agent below; the synthetic
     # history starts directly with the preloaded read_file ToolCall /
     # ToolReturn pairs, which pydantic-ai accepts.
-    if reference_files and message_history is None and feedback is None:
+    if reference_files and message_history is None and not feedback:
         from pydantic_ai.messages import (
             ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
         )

@@ -39,6 +39,58 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.implement")
 
 
+def _persist_post_edit_reference_files(
+    repo_dir: Path,
+    artifacts_dir: Path,
+    file_map: set[str],
+    summary: str,
+    settings,
+) -> None:
+    """Persist current content of in-scope files as reference_files.json
+    and the agent summary as implement_summary.txt.
+
+    Best-effort: never raises; logs warnings on individual file errors.
+    """
+    if not file_map:
+        return
+
+    entries: list[dict[str, str]] = []
+    total_lines = 0
+    max_count = getattr(settings, "reference_files_max_count", 5)
+    max_total_lines = getattr(settings, "reference_files_max_total_lines", 3000)
+
+    for fname in sorted(file_map)[:max_count]:
+        candidate = repo_dir / fname
+        try:
+            content = candidate.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            log.warning(
+                "_persist_post_edit_reference_files: cannot read %s, skipping",
+                fname,
+            )
+            continue
+
+        line_count = (
+            content.count("\n")
+            + (1 if content and not content.endswith("\n") else 0)
+        )
+        if total_lines + line_count > max_total_lines:
+            break
+
+        entries.append({"path": fname, "content": content})
+        total_lines += line_count
+
+    if entries:
+        (artifacts_dir / "reference_files.json").write_text(
+            json.dumps(entries, indent=2),
+            encoding="utf-8",
+        )
+
+    (artifacts_dir / "implement_summary.txt").write_text(
+        summary, encoding="utf-8",
+    )
+
+
 class ImplementStage(Stage):
     name = "implement"
     input_state = State.READY
@@ -168,6 +220,17 @@ class ImplementStage(Stage):
             # so a later-iteration failure can't lose the learning.
             if updated_memory:
                 persist_memory(settings.implement_memory_file, updated_memory)
+
+            # Persist post-edit reference_files + summary so the next
+            # iteration's agent starts warm with current file content.
+            if file_map:
+                _persist_post_edit_reference_files(
+                    repo_dir=repo_dir,
+                    artifacts_dir=ws.artifacts_dir,
+                    file_map=file_map,
+                    summary=summary,
+                    settings=settings,
+                )
 
             # Scope guardrail: verify every changed file is listed in the
             # ticket's file_map.  file_map may be None; scope check is
@@ -315,7 +378,14 @@ class ImplementStage(Stage):
                 )
 
             # retry → feed the diagnosis into the next edit pass.
-            feedback = diag
+            # Reload reference_files so the next iteration gets post-edit content.
+            prev_summary = summary
+            ref_files_path = ws.artifacts_dir / "reference_files.json"
+            if ref_files_path.exists():
+                reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
+            else:
+                reference_files = None
+            feedback = f"[Previous attempt]: {prev_summary}\n\n{diag}"
 
         # The escalate branch fires on the final attempt, so the loop
         # always returns above. This is a defensive fallback.

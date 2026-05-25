@@ -1,3 +1,4 @@
+import json
 import subprocess
 from pathlib import Path
 
@@ -1194,3 +1195,164 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
     assert "agent error" in out.note
     comments = ctx.service.list_comments(t.id)
     assert any("agent error" in c.body for c in comments)
+
+
+# --- post-edit reference_files persistence ------------------------------
+
+
+def test_post_edit_reference_files_persisted(ctx_factory, tmp_path, monkeypatch):
+    """After a successful agent pass, reference_files.json and
+    implement_summary.txt are written to artifacts_dir with current
+    content for files listed in file_map.json."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false",
+    )
+
+    agent_called = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+        agent_called.append(1)
+        (Path(repo_dir) / "wip.txt").write_text("post-edit content here")
+        return ("agent summary text", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "wip.txt")
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+    assert len(agent_called) == 1
+
+    artifacts = ctx.service.workspace(t).artifacts_dir
+
+    # reference_files.json exists with current content.
+    ref_path = artifacts / "reference_files.json"
+    assert ref_path.exists(), "reference_files.json should exist"
+    ref_data = json.loads(ref_path.read_text(encoding="utf-8"))
+    assert len(ref_data) == 1
+    assert ref_data[0]["path"] == "wip.txt"
+    assert ref_data[0]["content"] == "post-edit content here"
+
+    # implement_summary.txt exists with the agent's summary.
+    summary_path = artifacts / "implement_summary.txt"
+    assert summary_path.exists(), "implement_summary.txt should exist"
+    assert summary_path.read_text(encoding="utf-8") == "agent summary text"
+
+
+def test_reference_files_reloaded_on_retry(ctx_factory, tmp_path, monkeypatch):
+    """On a retry iteration, the reference_files passed to
+    run_implement_agent contain post-edit content, not stale
+    refine-stage content."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="false",
+        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="2",
+    )
+
+    captured_refs: list[list[dict] | None] = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, message_history, memory, epic_workspace_path
+        captured_refs.append(reference_files)
+        (Path(repo_dir) / "wip.txt").write_text("post-edit pass content")
+        return ("agent summary", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "wip.txt")
+
+    out = ImplementStage().run(t, ctx)
+    # Test gate always fails → should escalate after 2 iterations.
+    assert out.next_state is State.BLOCKED
+    assert len(captured_refs) == 2, "agent should be called twice"
+
+    # Second call's reference_files should contain post-edit content.
+    refs2 = captured_refs[1]
+    assert refs2 is not None, "second call should receive reference_files"
+    assert len(refs2) == 1
+    assert refs2[0]["path"] == "wip.txt"
+    assert refs2[0]["content"] == "post-edit pass content"
+
+
+def test_summary_included_in_retry_feedback(ctx_factory, tmp_path, monkeypatch):
+    """On a retry iteration, the feedback string includes the previous
+    pass's summary prepended before the test failure diagnosis."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="false",
+        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="2",
+    )
+
+    captured_feedback: list[str | None] = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, reference_files, message_history, memory, epic_workspace_path
+        captured_feedback.append(feedback)
+        (Path(repo_dir) / "wip.txt").write_text("edited")
+        return ("pass-1-summary-abc", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "wip.txt")
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert len(captured_feedback) == 2
+
+    # First call: feedback should be None (or could be review feedback, but
+    # not our concern here — no comments exist).
+    assert captured_feedback[0] is None
+
+    # Second call: feedback should start with [Previous attempt] + summary.
+    fb = captured_feedback[1]
+    assert fb is not None
+    assert fb.startswith("[Previous attempt]: pass-1-summary-abc")
+    assert "test" in fb.lower() or "fail" in fb.lower() or len(fb.split("\n\n")) >= 2
+    # The diag part follows after the blank line.
+    parts = fb.split("\n\n", 1)
+    assert len(parts) == 2
+    assert parts[0] == "[Previous attempt]: pass-1-summary-abc"
+
+
+def test_no_persistence_when_file_map_is_none(ctx_factory, tmp_path, monkeypatch):
+    """When file_map.json is absent, _persist_post_edit_reference_files
+    is not called — no reference_files.json written, no crash."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false",
+    )
+
+    agent_called = []
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+        agent_called.append(1)
+        (Path(repo_dir) / "out.txt").write_text("done")
+        return ("summary", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    t = _ticket(ctx)
+    # Deliberately do NOT write file_map.json.
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+    assert len(agent_called) == 1
+
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    ref_path = artifacts / "reference_files.json"
+    # Should NOT be created since file_map is None.
+    assert not ref_path.exists(), (
+        "reference_files.json should not be written when file_map is None"
+    )
