@@ -58,7 +58,7 @@ async function fetchRepos(){
   if(reposCache.length<=1){
     // Single repo: no "All" option.
     sel.innerHTML=reposCache.map(r=>`<option value="${esc(r.repo_id)}">${esc(r.repo_id)}</option>`).join("");
-    if(reposCache.length===1)currentRepoId=reposCache[0].repo_id;
+    if(reposCache.length===1)onRepoChange(reposCache[0].repo_id);
     sel.value=currentRepoId;
   } else {
     sel.innerHTML='<option value="all">All repos</option>'+
@@ -850,8 +850,8 @@ async function openCostDashboard(){
  await renderCostDashboard();
 }
 async function renderCostDashboard(){
- const selTimeOpt=lookback=>lookback==costLookbackHours?' selected':'';
- const selTickOpt=n=>n==costMaxTickets?' selected':'';
+ const selTimeOpt=lookback=>lookback===costLookbackHours?' selected':'';
+ const selTickOpt=n=>n===costMaxTickets?' selected':'';
  const timeModeActive=costMode==='time';
  const repoId=getRepoId();
  const hoursLabel=costLookbackHours===1?"1 hour":costLookbackHours+" hours";
