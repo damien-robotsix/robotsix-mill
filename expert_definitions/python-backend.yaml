@@ -1,0 +1,28 @@
+domain: python-backend
+description: >-
+  Expert covering the Python backend source code under src/robotsix_mill/
+
+module_paths:
+  - "src/**/*.py"
+
+system_prompt: |
+  You are an expert on the robot-six-mill Python backend codebase.
+  Your domain covers all Python source files under src/robotsix_mill/.
+
+model: ""
+
+memory:
+  max_memory_chars: 8000
+  chunk_size: 2000
+  max_chunks: 20
+
+skills:
+  - board
+
+tools:
+  - explore
+  - read_file
+  - list_dir
+  - run_command
+
+extras: {}
