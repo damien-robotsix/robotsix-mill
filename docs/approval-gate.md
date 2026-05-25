@@ -1,4 +1,10 @@
-# Approval gate
+# Approval gates
+
+Robotsix-mill has two human approval gates: one for the refined spec
+(before implementation) and one for the merge decision (before the
+merge stage takes over).
+
+## Spec approval (after refine)
 
 By default (`MILL_REQUIRE_APPROVAL=true`), the refine stage transitions
 tickets to `awaiting_approval` instead of `ready`. The pipeline pauses
@@ -36,6 +42,21 @@ inspected — no git diff, no repo exploration.
 Auto-approved tickets record `"auto-approved: <reason>"` in their
 event trail so operators can audit which tickets were auto-approved
 and why.
+
+## MR approval (before merge)
+
+After the implement stage completes and a PR exists, the merge stage
+may return the ticket to `human_mr_approval` (e.g. after a successful
+rebase). The ticket waits for an explicit human go-ahead before the
+merge stage polls CI and auto-merges. Approve via:
+
+- **Web board:** click the "Approve" button on any card in the
+  `human_mr_approval` column.
+- **API:** `POST /tickets/{id}/approve-mr`
+
+This bypasses auto-merge eligibility checks — the human is making the
+call. The ticket moves directly to `waiting_auto_merge`, where the merge
+stage picks it up on the next poll.
 
 ## See also
 

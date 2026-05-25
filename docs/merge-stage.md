@@ -23,6 +23,9 @@ In both paths, once the rebase agent runs:
 - On success the ticket branch is force-pushed.
   - If a PR already exists for the branch, the ticket returns to
     `HUMAN_MR_APPROVAL` for the next poll to observe the now-mergeable PR.
+    Click the **Approve** button on the board card (or call
+    `POST /tickets/{id}/approve-mr`) to give the go-ahead; the ticket
+    enters `waiting_auto_merge` and the merge stage takes over.
   - If no PR exists yet (implement-stage path), the ticket routes to
     `READY` and re-enters the implement stage on the next worker tick.
 - On failure (after exhausting retries) the ticket escalates to
