@@ -331,7 +331,7 @@ Each periodic agent shares this pattern:
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² |
 
 Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
-`agent_check`, `survey`, `ci_monitor`, `env_sync`, `completeness_check`.
+`agent_check`, `survey`, `ci_monitor`, `env_sync`, `bc_check`, `completeness_check`.
 
 > ¹ `survey` is the exception — its default is `enabled: true`.
 >

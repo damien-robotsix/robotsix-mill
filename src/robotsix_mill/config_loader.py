@@ -365,6 +365,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.bc_check.enabled": "MILL_BC_CHECK_PERIODIC",
     "periodic.bc_check.interval_seconds": "MILL_BC_CHECK_INTERVAL_SECONDS",
     "periodic.bc_check.memory_path": "MILL_BC_CHECK_MEMORY_PATH",
+    # -- periodic.completeness_check --
+    "periodic.completeness_check.model": "MILL_COMPLETENESS_CHECK_MODEL",
+    "periodic.completeness_check.enabled": "MILL_COMPLETENESS_CHECK_PERIODIC",
+    "periodic.completeness_check.interval_seconds": "MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS",
+    "periodic.completeness_check.memory_path": "MILL_COMPLETENESS_CHECK_MEMORY_PATH",
     # -- periodic.survey --
     "periodic.survey.model": "MILL_SURVEY_MODEL",
     "periodic.survey.enabled": "MILL_SURVEY_PERIODIC",
