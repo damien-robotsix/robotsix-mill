@@ -289,6 +289,50 @@ def test_cost_by_agent_clamp_high(client, monkeypatch):
     assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
 
 
+def test_cost_by_agent_max_tickets(client, monkeypatch):
+    """GET /costs/by-agent?max_tickets=100 uses ticket-count mode."""
+    captured: list[int | None] = []
+
+    def fake_aggregate(settings, lookback_hours=24, max_tickets=None, repo_config=None):
+        captured.append(max_tickets)
+        return [{"name": "refine", "total_cost": 0.5, "trace_count": 2}]
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.aggregate_cost_by_name",
+        fake_aggregate,
+    )
+
+    r = client.get("/costs/by-agent?max_tickets=100")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert len(captured) == 1
+    assert captured[0] == 100
+
+
+def test_cost_by_agent_max_tickets_clamp(client, monkeypatch):
+    """GET /costs/by-agent?max_tickets=2000 clamps to 1000, ?max_tickets=0 clamps to 1."""
+    captured: list[int | None] = []
+
+    def fake_aggregate(settings, lookback_hours=24, max_tickets=None, repo_config=None):
+        captured.append(max_tickets)
+        return []
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.aggregate_cost_by_name",
+        fake_aggregate,
+    )
+
+    r = client.get("/costs/by-agent?max_tickets=2000")
+    assert r.status_code == 200
+    assert captured[-1] == 1000, f"expected clamped to 1000, got {captured[-1]}"
+
+    r = client.get("/costs/by-agent?max_tickets=0")
+    assert r.status_code == 200
+    assert captured[-1] == 1, f"expected clamped to 1, got {captured[-1]}"
+
+
 # -- GET /costs/most-expensive-ticket -----------------------------------
 
 def test_most_expensive_ticket_happy_path(client, service, monkeypatch):
@@ -373,6 +417,51 @@ def test_most_expensive_ticket_clamp_high(client, monkeypatch):
     assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
 
 
+def test_most_expensive_ticket_max_tickets(client, service, monkeypatch):
+    """GET /costs/most-expensive-ticket?max_tickets=200 uses ticket-count mode."""
+    t = service.create("Max tickets test")
+    captured: list[int | None] = []
+
+    def fake(settings, lookback_hours=24, max_tickets=None, repo_config=None):
+        captured.append(max_tickets)
+        return {"session_id": t.id, "total_cost": 0.999, "trace_count": 1}
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_ticket",
+        fake,
+    )
+
+    r = client.get("/costs/most-expensive-ticket?max_tickets=200")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ticket_id"] == t.id
+    assert data["cost_usd"] == 0.999
+    assert len(captured) == 1
+    assert captured[0] == 200
+
+
+def test_most_expensive_ticket_max_tickets_clamp(client, monkeypatch):
+    """GET /costs/most-expensive-ticket?max_tickets=2000 clamps to 1000, ?max_tickets=0 clamps to 1."""
+    captured: list[int | None] = []
+
+    def fake(settings, lookback_hours=24, max_tickets=None, repo_config=None):
+        captured.append(max_tickets)
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_ticket",
+        fake,
+    )
+
+    r = client.get("/costs/most-expensive-ticket?max_tickets=2000")
+    assert r.status_code == 200
+    assert captured[-1] == 1000, f"expected clamped to 1000, got {captured[-1]}"
+
+    r = client.get("/costs/most-expensive-ticket?max_tickets=0")
+    assert r.status_code == 200
+    assert captured[-1] == 1, f"expected clamped to 1, got {captured[-1]}"
+
+
 # -- GET /costs/most-expensive-trace ------------------------------------
 
 def test_most_expensive_trace_happy_path(client, monkeypatch):
@@ -443,6 +532,50 @@ def test_most_expensive_trace_clamp_high(client, monkeypatch):
     assert r.status_code == 200
     assert len(captured) == 1
     assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
+
+
+def test_most_expensive_trace_max_tickets(client, monkeypatch):
+    """GET /costs/most-expensive-trace?max_tickets=50 uses ticket-count mode."""
+    captured: list[int | None] = []
+
+    def fake(settings, lookback_hours=24, max_tickets=None, repo_config=None):
+        captured.append(max_tickets)
+        return {"id": "abc", "name": "costly", "total_cost": 2.5, "timestamp": "x", "session_id": "s1"}
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_trace",
+        fake,
+    )
+
+    r = client.get("/costs/most-expensive-trace?max_tickets=50")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == "abc"
+    assert data["total_cost"] == 2.5
+    assert len(captured) == 1
+    assert captured[0] == 50
+
+
+def test_most_expensive_trace_max_tickets_clamp(client, monkeypatch):
+    """GET /costs/most-expensive-trace?max_tickets=2000 clamps to 1000, ?max_tickets=0 clamps to 1."""
+    captured: list[int | None] = []
+
+    def fake(settings, lookback_hours=24, max_tickets=None, repo_config=None):
+        captured.append(max_tickets)
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.most_expensive_trace",
+        fake,
+    )
+
+    r = client.get("/costs/most-expensive-trace?max_tickets=2000")
+    assert r.status_code == 200
+    assert captured[-1] == 1000, f"expected clamped to 1000, got {captured[-1]}"
+
+    r = client.get("/costs/most-expensive-trace?max_tickets=0")
+    assert r.status_code == 200
+    assert captured[-1] == 1, f"expected clamped to 1, got {captured[-1]}"
 
 
 # -- GET /traces/recent --------------------------------------------------
@@ -621,6 +754,49 @@ def test_cost_trend_clamp_high(client, monkeypatch):
     assert r.status_code == 200
     assert len(captured) == 1
     assert captured[0] == 168.0, f"expected clamped to 168.0, got {captured[0]}"
+
+
+def test_cost_trend_max_tickets(client, monkeypatch):
+    """GET /costs/trend?max_tickets=20 uses ticket-count mode."""
+    captured: list[int | None] = []
+
+    def fake_trend(settings, lookback_hours=24, max_tickets=None, repo_config=None):
+        captured.append(max_tickets)
+        return [{"ts": "2025-01-01T00:00:00Z", "total_cost": 1.0, "trace_count": 1}]
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.aggregate_cost_trend",
+        fake_trend,
+    )
+
+    r = client.get("/costs/trend?max_tickets=20")
+    assert r.status_code == 200
+    data = r.json()
+    assert "buckets" in data
+    assert len(captured) == 1
+    assert captured[0] == 20
+
+
+def test_cost_trend_max_tickets_clamp(client, monkeypatch):
+    """GET /costs/trend?max_tickets=2000 clamps to 1000, ?max_tickets=0 clamps to 1."""
+    captured: list[int | None] = []
+
+    def fake_trend(settings, lookback_hours=24, max_tickets=None, repo_config=None):
+        captured.append(max_tickets)
+        return []
+
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.aggregate_cost_trend",
+        fake_trend,
+    )
+
+    r = client.get("/costs/trend?max_tickets=2000")
+    assert r.status_code == 200
+    assert captured[-1] == 1000, f"expected clamped to 1000, got {captured[-1]}"
+
+    r = client.get("/costs/trend?max_tickets=0")
+    assert r.status_code == 200
+    assert captured[-1] == 1, f"expected clamped to 1, got {captured[-1]}"
 
 
 def test_cost_trend_empty_when_disabled(client, monkeypatch):
