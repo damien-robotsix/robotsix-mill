@@ -270,7 +270,7 @@ def test_audit_cli_command(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     # Mock the run_audit_pass function
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return AuditPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Fix gap"}],
@@ -288,7 +288,7 @@ def test_audit_cli_json_output(capsys, tmp_path, monkeypatch):
     """Test JSON output flag."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return AuditPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Fix gap"}],

@@ -335,7 +335,7 @@ def test_bc_check_cli_command(capsys, tmp_path, monkeypatch):
     """Test that CLI bc-check command works."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return BcCheckPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Remove no-op init()"}],
@@ -356,7 +356,7 @@ def test_bc_check_cli_json_output(capsys, tmp_path, monkeypatch):
     """Test JSON output flag for bc-check CLI."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return BcCheckPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Remove no-op init()"}],
@@ -379,7 +379,7 @@ def test_bc_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
     """CLI bc-check command when no drafts created."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return BcCheckPassResult(
             updated_memory="mem",
             drafts_created=[],
@@ -399,7 +399,7 @@ def test_bc_check_cli_failure(capsys, monkeypatch):
     """CLI bc-check exits 1 on failure."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
     monkeypatch.setattr(
