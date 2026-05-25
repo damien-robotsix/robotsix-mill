@@ -669,7 +669,12 @@ class Worker:
                 log.info("Starting periodic %s pass", label)
                 if self.run_registry:
                     run_id = self.run_registry.start(label)
-                result = runner_fn()
+                # runner_fn invokes pydantic-ai's ``agent.run_sync``,
+                # which calls ``asyncio.run()`` internally and explodes
+                # ("this event loop is already running") when invoked
+                # from inside an async task. Offload to a worker thread
+                # — same pattern stage handlers use.
+                result = await asyncio.to_thread(runner_fn)
                 log.info(
                     "%s pass completed, created %d draft(s)",
                     label.capitalize(), len(result.drafts_created),
@@ -704,7 +709,7 @@ class Worker:
                 run_id = None
                 if self.run_registry:
                     run_id = self.run_registry.start("trace-health")
-                result = run_trace_health_check()
+                result = await asyncio.to_thread(run_trace_health_check)
                 if result.draft_created:
                     log.info(
                         "Trace-health check: draft created — "
@@ -747,7 +752,7 @@ class Worker:
                 if self.run_registry:
                     run_id = self.run_registry.start("health")
                 from ..health_runner import run_health_pass
-                result = run_health_pass()
+                result = await asyncio.to_thread(run_health_pass)
                 log.info(
                     "Health pass completed, created %d draft(s)",
                     len(result.drafts_created),
@@ -782,7 +787,7 @@ class Worker:
                 if self.run_registry:
                     run_id = self.run_registry.start("test-gap")
                 from ..test_gap_runner import run_test_gap_pass
-                result = run_test_gap_pass()
+                result = await asyncio.to_thread(run_test_gap_pass)
                 log.info(
                     "Test-gap pass completed, created %d draft(s)",
                     len(result.drafts_created),
