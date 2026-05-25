@@ -347,6 +347,22 @@ class Settings(BaseSettings):
     max_spend_usd_per_ticket: float = Field(
         default=0.0, alias="MILL_MAX_SPEND_USD_PER_TICKET"
     )
+    # Per-stage wall-clock timeout (seconds).  A stage that exceeds this
+    # limit is escalated to BLOCKED, freeing the worker slot.  ≤ 0
+    # disables the timeout entirely.  1800 s (30 min) comfortably
+    # exceeds worst-case LLM latency (~190 s per call) and multiple
+    # shell-command runs while still catching a true hang.
+    stage_timeout_seconds: int = Field(
+        default=1800, alias="MILL_STAGE_TIMEOUT_SECONDS"
+    )
+    # Per-stage timeout overrides (JSON dict via env var, e.g.
+    # MILL_STAGE_TIMEOUT_OVERRIDES='{"merge":0,"deliver":0}').
+    # Keys are stage names; values are seconds.  Falls back to
+    # stage_timeout_seconds when a stage isn't listed.  A value of 0
+    # disables the timeout for that stage.
+    stage_timeout_overrides: dict[str, int] = Field(
+        default_factory=dict, alias="MILL_STAGE_TIMEOUT_OVERRIDES"
+    )
 
     # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain

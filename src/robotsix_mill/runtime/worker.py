@@ -92,13 +92,32 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
                         "stage": stage_name,
                         "started_at": datetime.now(timezone.utc).isoformat(),
                     }
+                timeout = ctx.settings.stage_timeout_overrides.get(
+                    stage_name, ctx.settings.stage_timeout_seconds
+                )
+                coro = asyncio.to_thread(stage.run, ticket, ctx)
                 try:
-                    outcome = await asyncio.to_thread(
-                        stage.run, ticket, ctx
-                    )
+                    if timeout > 0:
+                        outcome = await asyncio.wait_for(coro, timeout=timeout)
+                    else:
+                        outcome = await coro
                 finally:
                     if active_map is not None:
                         active_map.pop(ticket_id, None)
+        except asyncio.TimeoutError:
+            timeout = ctx.settings.stage_timeout_overrides.get(
+                stage_name, ctx.settings.stage_timeout_seconds
+            )
+            log.error(
+                "%s: %s timed out after %ds — escalating to BLOCKED",
+                stage_name, ticket_id, timeout,
+            )
+            note = f"stage {stage_name} timed out after {timeout}s"[:200]
+            ctx.service.transition(ticket_id, State.BLOCKED, note=note)
+            ticket = ctx.service.get(ticket_id)
+            if ticket is not None:
+                send_notification(ticket, State.BLOCKED, note, ctx.settings)
+            return
         except NotImplementedError as e:
             log.warning(
                 "%s: stub (%s) — chain paused at %s for %s",
