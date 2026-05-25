@@ -138,11 +138,11 @@ class ReviewStage(Stage):
             ctx.service.add_comment(ticket.id, verdict.comments, author="review")
             return Outcome(
                 State.READY,
-                verdict.comments[:200],
+                verdict.comments,
             )
         else:  # NEEDS_DISCUSSION
             ctx.service.add_comment(ticket.id, verdict.comments, author="review")
             return Outcome(
                 State.BLOCKED,
-                verdict.comments[:200],
+                verdict.comments,
             )
