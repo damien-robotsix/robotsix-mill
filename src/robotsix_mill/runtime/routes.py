@@ -318,6 +318,75 @@ def merge_now(
     return enrich_ticket_read(ticket, settings, svc)
 
 
+@router.get("/tickets/{ticket_id}/merge-info")
+def get_merge_info(
+    ticket_id: str,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> dict:
+    """Return CI status, mergeable flag, and changed files for the PR/MR
+    backing *ticket_id*.  Each forge call is individually resilient —
+    a failure in one field does not crash the whole response."""
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+
+    branch = ticket.branch or f"{settings.branch_prefix}{ticket_id}"
+
+    # Resolve forge once; remains None when forge is not configured.
+    forge = None
+    try:
+        forge = get_forge(settings)
+    except RuntimeError:
+        pass  # forge not configured
+
+    # --- mergeable -------------------------------------------------------
+    mergeable: bool | None = None
+    if forge is not None:
+        try:
+            pr = forge.pr_status(source_branch=branch)
+            if pr is not None:
+                mergeable = pr.get("mergeable")
+        except Exception:
+            pass
+
+    # --- CI conclusion / failing checks ----------------------------------
+    ci_conclusion: str | None = None
+    ci_failing: list[dict] = []
+    if forge is not None:
+        try:
+            cs = forge.check_status(source_branch=branch)
+            if cs is not None:
+                ci_conclusion = cs.get("conclusion")
+                if ci_conclusion == "failure":
+                    ci_failing = [
+                        {"name": f.get("name", ""),
+                         "summary": (f.get("summary") or "")[:200]}
+                        for f in (cs.get("failing") or [])
+                    ]
+        except Exception:
+            pass
+
+    # --- files -----------------------------------------------------------
+    files: list[dict] = []
+    if forge is not None:
+        try:
+            raw = forge.pr_files(source_branch=branch)
+            # Sort by total changes desc, cap at 50.
+            raw.sort(key=lambda f: f.get("additions", 0) + f.get("deletions", 0),
+                     reverse=True)
+            files = raw[:50]
+        except Exception:
+            pass
+
+    return {
+        "mergeable": mergeable,
+        "ci_conclusion": ci_conclusion,
+        "ci_failing": ci_failing,
+        "files": files,
+    }
+
+
 @router.get("/tickets/{ticket_id}/merge-reason")
 def get_merge_reason(
     ticket_id: str,

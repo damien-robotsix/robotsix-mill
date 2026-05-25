@@ -104,6 +104,16 @@ class GitHubForge(Forge):
         owner, repo = _parse_owner_repo(s.forge_remote_url or "")
         return self._check_status(owner=owner, repo=repo, head=source_branch)
 
+    def pr_files(self, *, source_branch: str) -> list[dict]:
+        s = self.settings
+        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return []
+        return self._pr_files(
+            owner=owner, repo=repo, pull_number=pr["number"],
+        )
+
     def merge_pr(self, *, source_branch: str) -> dict:
         s = self.settings
         owner, repo = _parse_owner_repo(s.forge_remote_url or "")
@@ -204,6 +214,40 @@ class GitHubForge(Forge):
             "sha": (pr.get("head") or {}).get("sha", ""),
             "number": pr["number"],
         }
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _pr_files(
+        self, *, owner: str, repo: str, pull_number: int,
+    ) -> list[dict]:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s))
+        url = (
+            f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/files"
+        )
+        try:
+            with httpx.Client(timeout=30) as c:
+                r = c.get(
+                    url, headers=headers,
+                    params={"per_page": 100},
+                )
+                r.raise_for_status()
+                items = r.json()
+        except Exception:
+            return []
+        return [
+            {
+                "path": item["filename"],
+                "status": item.get("status", "modified"),
+                "additions": item.get("additions", 0),
+                "deletions": item.get("deletions", 0),
+            }
+            for item in items
+        ]
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _merge_pr(

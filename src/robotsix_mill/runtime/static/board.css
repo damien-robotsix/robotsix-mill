@@ -235,3 +235,16 @@ margin-top:3px;background:#1e1a2a;color:#a78bfa;letter-spacing:.03em}
   border-radius:4px;margin-left:4px;cursor:default}
 .gate-on{background:#1a3b2f;color:#34d399}
 .gate-off{background:#3b1f1f;color:#f87171}
+/* merge-info in drawer */
+.mi-section{border-left:2px solid var(--c);font-size:12px;padding:8px 12px;
+ margin:10px 0;background:#161922;border-radius:4px}
+.mi-section h3{margin:0 0 6px 0;font-size:13px}
+.mi-row{margin:3px 0}
+.mi-ok{color:#22c55e}.mi-bad{color:#ef4444}
+.mi-pending{color:#f59e0b}.mi-unknown{color:#7d828c}
+.mi-files-header{margin-top:8px;font-weight:bold;color:#aab0bd}
+.mi-file{font-family:ui-monospace,monospace;font-size:11px;
+ padding:1px 0;display:flex;gap:4px;align-items:baseline}
+.mi-add{color:#22c55e;white-space:pre}.mi-del{color:#ef4444;white-space:pre}
+.mi-path{color:#cfd3db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mi-status{color:#7d828c;font-size:10px;flex-shrink:0}

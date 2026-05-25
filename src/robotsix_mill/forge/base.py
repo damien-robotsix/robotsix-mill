@@ -67,6 +67,18 @@ class Forge(ABC):
         """
 
     @abstractmethod
+    def pr_files(self, *, source_branch: str) -> list[dict]:
+        """Return the file-list diff of the PR/MR for *source_branch*.
+
+        Returns ``[]`` when no PR exists or files are unavailable.
+        Each dict has:
+        ``path`` — file path (str)
+        ``status`` — "added" | "modified" | "removed" | "renamed"
+        ``additions`` — lines added (int)
+        ``deletions`` — lines deleted (int)
+        """
+
+    @abstractmethod
     def merge_pr(self, *, source_branch: str) -> dict:
         """Merge the PR for *source_branch* (squash merge).
 

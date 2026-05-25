@@ -697,3 +697,140 @@ def test_merge_pr_payload_includes_squash_and_mwps(tmp_path, monkeypatch):
         "squash": True,
         "should_remove_source_branch": False,
     }
+
+
+# ---------------------------------------------------------------------------
+# _mr_changes
+# ---------------------------------------------------------------------------
+
+
+def test_mr_changes_happy_path(tmp_path, monkeypatch):
+    """MR exists → _mr_changes returns normalized file dicts."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://gl/ns/project/-/mr/7"}
+    changes_resp = {
+        "changes": [
+            {
+                "old_path": "src/main.py",
+                "new_path": "src/main.py",
+                "new_file": False,
+                "deleted_file": False,
+                "renamed_file": False,
+                "diff": "--- a/src/main.py\n+++ b/src/main.py\n@@ -1,3 +1,5 @@\n-old\n+new1\n+new2\n old2",
+            },
+            {
+                "old_path": "/dev/null",
+                "new_path": "tests/test_main.py",
+                "new_file": True,
+                "deleted_file": False,
+                "renamed_file": False,
+                "diff": "--- /dev/null\n+++ b/tests/test_main.py\n@@ -0,0 +1,3 @@\n+line1\n+line2\n+line3",
+            },
+            {
+                "old_path": "old/deprecated.py",
+                "new_path": "/dev/null",
+                "new_file": False,
+                "deleted_file": True,
+                "renamed_file": False,
+                "diff": "--- a/old/deprecated.py\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-line1\n-line2",
+            },
+            {
+                "old_path": "old_name.py",
+                "new_path": "new_name.py",
+                "new_file": False,
+                "deleted_file": False,
+                "renamed_file": True,
+                "diff": "",
+            },
+        ]
+    }
+    get_map = {
+        "merge_requests/7/changes": _make_response(200, changes_resp),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+        "projects/42/merge_requests": _make_response(200, [mr]),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    files = forge._mr_changes(project_path="ns/project", mr_iid=7)
+    assert len(files) == 4
+    assert files[0] == {
+        "path": "src/main.py", "status": "modified",
+        "additions": 2, "deletions": 1,
+    }
+    assert files[1] == {
+        "path": "tests/test_main.py", "status": "added",
+        "additions": 3, "deletions": 0,
+    }
+    assert files[2] == {
+        "path": "/dev/null", "status": "removed",
+        "additions": 0, "deletions": 2,
+    }
+    assert files[3] == {
+        "path": "new_name.py", "status": "renamed",
+        "additions": 0, "deletions": 0,
+    }
+
+
+def test_mr_changes_no_mr(tmp_path, monkeypatch):
+    """No MR for branch → pr_files returns []."""
+    project_json = {"id": 42}
+    get_map = {
+        "merge_requests": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+        "projects/42/merge_requests": _make_response(200, []),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.pr_files(source_branch="no-such-branch")
+    assert result == []
+
+
+def test_mr_changes_http_error(tmp_path, monkeypatch):
+    """HTTP error on changes endpoint → returns [] gracefully."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://gl/ns/project/-/mr/7"}
+    get_map = {
+        "merge_requests/7/changes": _make_response(500, {}, "boom"),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+        "projects/42/merge_requests": _make_response(200, [mr]),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    files = forge._mr_changes(project_path="ns/project", mr_iid=7)
+    assert files == []
+
+
+def test_mr_changes_no_diff(tmp_path, monkeypatch):
+    """A change with no diff field → additions/deletions both 0."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://gl/ns/project/-/mr/7"}
+    changes_resp = {
+        "changes": [
+            {
+                "old_path": "a.py",
+                "new_path": "b.py",
+                "new_file": False,
+                "deleted_file": False,
+                "renamed_file": False,
+            },
+        ]
+    }
+    get_map = {
+        "merge_requests/7/changes": _make_response(200, changes_resp),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+        "projects/42/merge_requests": _make_response(200, [mr]),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    files = forge._mr_changes(project_path="ns/project", mr_iid=7)
+    assert len(files) == 1
+    assert files[0]["path"] == "b.py"
+    assert files[0]["additions"] == 0
+    assert files[0]["deletions"] == 0

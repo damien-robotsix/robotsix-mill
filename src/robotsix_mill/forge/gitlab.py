@@ -97,6 +97,19 @@ class GitLabForge(Forge):
         except Exception:
             return None
 
+    def pr_files(self, *, source_branch: str) -> list[dict]:
+        try:
+            s = self.settings
+            project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+            if mr is None:
+                return []
+            return self._mr_changes(
+                project_path=project_path, mr_iid=mr["iid"],
+            )
+        except Exception:
+            return []
+
     def merge_pr(self, *, source_branch: str) -> dict:
         try:
             s = self.settings
@@ -273,6 +286,57 @@ class GitLabForge(Forge):
                 f"GitLab MR create failed: {r.status_code} "
                 f"{r.text[:300]}"
             )
+
+    def _mr_changes(
+        self, project_path: str, mr_iid: int,
+    ) -> list[dict]:
+        """GET /projects/:id/merge_requests/:iid/changes → normalized file list."""
+        import httpx
+
+        s = self.settings
+        api = s.gitlab_api_url.rstrip("/")
+        headers = _build_headers(get_secrets().forge_token or "")
+        pid = self._resolve_project_id(project_path)
+        try:
+            with httpx.Client(timeout=30) as c:
+                r = c.get(
+                    f"{api}/projects/{pid}/merge_requests/{mr_iid}/changes",
+                    headers=headers,
+                )
+                r.raise_for_status()
+                changes = r.json().get("changes", [])
+        except Exception:
+            return []
+
+        result: list[dict] = []
+        for ch in changes:
+            path = ch.get("new_path", ch.get("old_path", ""))
+            if ch.get("new_file"):
+                status = "added"
+            elif ch.get("deleted_file"):
+                status = "removed"
+            elif ch.get("renamed_file"):
+                status = "renamed"
+            else:
+                status = "modified"
+
+            diff = ch.get("diff", "")
+            additions = 0
+            deletions = 0
+            if diff:
+                for line in diff.split("\n"):
+                    if line.startswith("+") and not line.startswith("+++"):
+                        additions += 1
+                    elif line.startswith("-") and not line.startswith("---"):
+                        deletions += 1
+
+            result.append({
+                "path": path,
+                "status": status,
+                "additions": additions,
+                "deletions": deletions,
+            })
+        return result
 
     def _merge_mr(self, project_path: str, mr_iid: int) -> dict:
         """PUT /projects/:id/merge_requests/:iid/merge with MWPS + squash."""

@@ -24,8 +24,10 @@ In both paths, once the rebase agent runs:
   - If a PR already exists for the branch, the ticket returns to
     `HUMAN_MR_APPROVAL` for the next poll to observe the now-mergeable PR.
     Click the **Merge** button on the board card (or call
-    `POST /tickets/{id}/merge-now`) to merge via the forge. See
-    [approval-gate.md](approval-gate.md) for details.
+    `POST /tickets/{id}/merge-now`) to merge via the forge. The detail
+    drawer shows a **Merge Info** panel with CI status, mergeable flag,
+    and changed files — see [approval-gate.md](approval-gate.md) for
+    details.
   - If no PR exists yet (implement-stage path), the ticket routes to
     `READY` and re-enters the implement stage on the next worker tick.
 - On failure (after exhausting retries) the ticket escalates to
