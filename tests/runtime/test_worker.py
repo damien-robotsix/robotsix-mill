@@ -412,10 +412,10 @@ async def test_periodic_pass_fires_immediately_when_overdue(
 
     fired = {"count": 0}
 
-    def fake_pass():
+    def fake_pass(session_id=None):
         fired["count"] += 1
-        from robotsix_mill.audit_runner import AuditResult
-        return AuditResult(drafts_created=[])
+        from robotsix_mill.audit_runner import AuditPassResult
+        return AuditPassResult(drafts_created=[], session_id=session_id or "")
 
     monkeypatch.setattr(
         "robotsix_mill.audit_runner.run_audit_pass", fake_pass,
@@ -470,10 +470,10 @@ async def test_periodic_pass_waits_when_not_overdue(
 
     fired = {"count": 0}
 
-    def fake_pass():
+    def fake_pass(session_id=None):
         fired["count"] += 1
-        from robotsix_mill.audit_runner import AuditResult
-        return AuditResult(drafts_created=[])
+        from robotsix_mill.audit_runner import AuditPassResult
+        return AuditPassResult(drafts_created=[], session_id=session_id or "")
 
     monkeypatch.setattr(
         "robotsix_mill.audit_runner.run_audit_pass", fake_pass,
@@ -605,3 +605,102 @@ async def test_transient_exhausted_blocks(ctx, service, monkeypatch):
     note = service.history(t.id)[-1].note
     assert "2 attempts" in note
     assert "ReadTimeout" in note
+
+
+# --- periodic pass root span tests -------------------------------------
+
+
+async def test_periodic_pass_opens_root_span_before_runner(ctx, monkeypatch):
+    """Root span is opened with the correct label before runner_fn is
+    invoked, and session_id is passed to runner_fn."""
+    import contextlib
+
+    from robotsix_mill.runtime import tracing as tracing_mod
+
+    seen = {}
+    captured = {}
+
+    @contextlib.contextmanager
+    def fake_root(sid, name=None):
+        seen["root_opened"] = True
+        seen["session_id"] = sid
+        seen["stage"] = name
+        yield
+
+    monkeypatch.setattr(tracing_mod, "start_ticket_root_span", fake_root)
+
+    def fake_runner(session_id=None):
+        captured["session_id"] = session_id
+        captured["root_was_opened"] = seen.get("root_opened", False)
+        from robotsix_mill.audit_runner import AuditPassResult
+        return AuditPassResult(
+            updated_memory="", drafts_created=[],
+            session_id=session_id or "",
+        )
+
+    sleep_calls = 0
+    _real_sleep = asyncio.sleep
+
+    async def counting_sleep(delay):
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls >= 2:  # after initial delay + one loop iteration
+            raise asyncio.CancelledError
+        await _real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", counting_sleep)
+
+    w = Worker(ctx)
+    with pytest.raises(asyncio.CancelledError):
+        await w._run_periodic_pass("test-label", fake_runner, 60)
+
+    assert seen["root_opened"] is True
+    assert seen["stage"] == "test-label"
+    assert seen["session_id"].startswith("test-label-")
+    assert captured["root_was_opened"] is True, (
+        "root span must be opened BEFORE runner_fn is invoked"
+    )
+    assert captured["session_id"] == seen["session_id"]
+
+
+async def test_periodic_pass_root_span_survives_runner_crash(ctx, monkeypatch):
+    """A runner_fn that raises still has its root span opened by the poll
+    loop — the Langfuse trace exists even if the runner crashes before
+    doing any agent work."""
+    import contextlib
+
+    from robotsix_mill.runtime import tracing as tracing_mod
+
+    seen = {}
+
+    @contextlib.contextmanager
+    def fake_root(sid, name=None):
+        seen["root_opened"] = True
+        seen["session_id"] = sid
+        yield
+
+    monkeypatch.setattr(tracing_mod, "start_ticket_root_span", fake_root)
+
+    def crashing_runner(session_id=None):
+        raise RuntimeError("pre-agent setup failure")
+
+    sleep_calls = 0
+    _real_sleep = asyncio.sleep
+
+    async def counting_sleep(delay):
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls >= 2:
+            raise asyncio.CancelledError
+        await _real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", counting_sleep)
+
+    w = Worker(ctx)
+    with pytest.raises(asyncio.CancelledError):
+        await w._run_periodic_pass("crash-test", crashing_runner, 60)
+
+    assert seen["root_opened"] is True, (
+        "root span must exist even when runner_fn crashes before the old "
+        "start_ticket_root_span would have been reached"
+    )

@@ -27,7 +27,7 @@ class EnvSyncPassResult:
     session_id: str = ""        # Langfuse session.id for this env-sync run
 
 
-def run_env_sync_pass(root: str | None = None) -> EnvSyncPassResult:
+def run_env_sync_pass(session_id: str) -> EnvSyncPassResult:
     """Execute one full env-sync pass.
 
     Reads the memory ledger, invokes the env-sync agent, writes the
@@ -35,9 +35,7 @@ def run_env_sync_pass(root: str | None = None) -> EnvSyncPassResult:
     drift gaps.
 
     Args:
-        root: repository root (unused directly — the agent uses
-              forge_remote_url for repo context; kept for API
-              compatibility).
+        session_id: Langfuse session id from the poll loop.
 
     Returns:
         EnvSyncPassResult with updated memory and created draft info.
@@ -48,7 +46,6 @@ def run_env_sync_pass(root: str | None = None) -> EnvSyncPassResult:
 
     # Import here to allow monkeypatching in tests.
     from .agents import env_syncing
-    from .runtime import tracing
     from .vcs import git_ops
 
     # Clone the repo locally so the env-sync agent inspects it via
@@ -76,29 +73,19 @@ def run_env_sync_pass(root: str | None = None) -> EnvSyncPassResult:
                     (e.stderr or "")[:200],
                 )
 
-    # One Langfuse session per env-sync run, so its model calls are
-    # attributed (no untagged traces). No-op if tracing isn't ready.
-    from .runtime.tracing import make_session_id
-
-    session_id = make_session_id("env-sync")
     log.info("env-sync pass starting (session %s)", session_id)
-    try:
-        with tracing.start_ticket_root_span(session_id, "env-sync"):
-            from functools import partial
-            from .pass_runner import run_agent_pass
+    from functools import partial
+    from .pass_runner import run_agent_pass
 
-            agent_fn = partial(env_syncing.run_env_sync_agent, repo_dir=repo_dir)
-            result = run_agent_pass(
-                agent_fn=agent_fn,
-                memory_file=memory_file,
-                source_label=SourceKind.ENV_SYNC,
-                service=service,
-                settings=settings,
-                origin_session=session_id,
-            )
-    except Exception as e:  # noqa: BLE001
-        log.exception("env-sync agent failed")
-        raise RuntimeError(f"env-sync agent failed: {e}") from e
+    agent_fn = partial(env_syncing.run_env_sync_agent, repo_dir=repo_dir)
+    result = run_agent_pass(
+        agent_fn=agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.ENV_SYNC,
+        service=service,
+        settings=settings,
+        origin_session=session_id,
+    )
 
     return EnvSyncPassResult(
         updated_memory=result.updated_memory,

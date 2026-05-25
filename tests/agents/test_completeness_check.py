@@ -110,7 +110,7 @@ def test_run_completeness_check_pass_empty_memory(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass()
+    run_completeness_check_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -137,7 +137,7 @@ def test_run_completeness_check_pass_reads_existing_memory(tmp_path, monkeypatch
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass()
+    run_completeness_check_pass(session_id="test-sid")
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
 
 
@@ -159,7 +159,7 @@ def test_run_completeness_check_pass_writes_memory_verbatim(tmp_path, monkeypatc
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass()
+    run_completeness_check_pass(session_id="test-sid")
     memory_file = settings.completeness_check_memory_file
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == updated
@@ -186,7 +186,7 @@ def test_run_completeness_check_pass_creates_draft_tickets(tmp_path, monkeypatch
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass()
+    result = run_completeness_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="completeness_check"
     tickets = service.list()
@@ -214,7 +214,7 @@ def test_run_completeness_check_pass_no_drafts_when_empty(tmp_path, monkeypatch)
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass()
+    result = run_completeness_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 0
 
 
@@ -241,7 +241,7 @@ def test_run_completeness_check_pass_missing_memory_file(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass()
+    result = run_completeness_check_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -262,7 +262,7 @@ def test_completeness_check_pass_result_structure(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass()
+    result = run_completeness_check_pass(session_id="test-sid")
     assert isinstance(result, CompletenessCheckPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
@@ -288,7 +288,7 @@ def test_run_completeness_check_pass_skips_empty_title_or_body(tmp_path, monkeyp
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass()
+    result = run_completeness_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 1  # only first has both title + body
 
 
@@ -339,7 +339,7 @@ def test_completeness_check_cli_command(capsys, tmp_path, monkeypatch):
     """Test that CLI completeness-check command works."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return CompletenessCheckPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Add YAML mapping for foo"}],
@@ -360,7 +360,7 @@ def test_completeness_check_cli_json_output(capsys, tmp_path, monkeypatch):
     """Test JSON output flag for completeness-check CLI."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return CompletenessCheckPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Add YAML mapping for foo"}],
@@ -383,7 +383,7 @@ def test_completeness_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
     """CLI completeness-check command when no drafts created."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return CompletenessCheckPassResult(
             updated_memory="mem",
             drafts_created=[],
@@ -403,7 +403,7 @@ def test_completeness_check_cli_failure(capsys, monkeypatch):
     """CLI completeness-check exits 1 on failure."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
     monkeypatch.setattr(
@@ -420,39 +420,27 @@ def test_completeness_check_cli_failure(capsys, monkeypatch):
 
 
 def test_run_completeness_check_pass_opens_langfuse_session(tmp_path, monkeypatch):
-    """Each completeness-check run wraps the agent in a Langfuse session span with a
-    unique per-run id, and returns it."""
-    import contextlib
-
-    from robotsix_mill.runtime import tracing
+    """session_id is passed through to the result — tracing is now the
+    poll loop's responsibility."""
 
     settings = _make_settings(tmp_path)
     seen = {}
 
-    @contextlib.contextmanager
-    def fake_root(sid, name=None):
-        seen["session_id"] = sid
-        seen["stage"] = name
-        yield
-
     def mock_agent(**kwargs):
-        seen["agent_ran_under"] = seen.get("session_id")
+        seen["agent_ran"] = True
         return cc_agent.CompletenessCheckResult(
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         )
 
-    monkeypatch.setattr(tracing, "start_ticket_root_span", fake_root)
     monkeypatch.setattr(cc_agent, "run_completeness_check_agent", mock_agent)
     monkeypatch.setattr(
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    res = run_completeness_check_pass()
+    res = run_completeness_check_pass(session_id="test-sid")
 
-    assert res.session_id.startswith("completeness-check-")
-    assert seen["session_id"] == res.session_id
-    assert seen["stage"] == "completeness-check"
-    assert seen["agent_ran_under"] == res.session_id
+    assert res.session_id == "test-sid"
+    assert seen["agent_ran"] is True
 
 
 def test_completeness_check_session_ids_are_unique_per_run(tmp_path, monkeypatch):
@@ -466,9 +454,8 @@ def test_completeness_check_session_ids_are_unique_per_run(tmp_path, monkeypatch
     monkeypatch.setattr(
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
-    a = run_completeness_check_pass().session_id
-    b = run_completeness_check_pass().session_id
-    assert a != b and a.startswith("completeness-check-") and b.startswith("completeness-check-")
+    a = run_completeness_check_pass(session_id="test-sid").session_id
+    assert a == "test-sid"
 
 
 # --- Clone tests ---
@@ -501,12 +488,12 @@ def test_run_completeness_check_pass_clones_and_passes_repo_dir(tmp_path, monkey
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass()
+    run_completeness_check_pass(session_id="test-sid")
     repo = settings.data_dir / "completeness_check_workspace" / "repo"
     assert seen["clone"] == 1 and seen["repo_dir"] == repo
 
     seen["clone"] = 0
-    run_completeness_check_pass()
+    run_completeness_check_pass(session_id="test-sid")
     assert seen["clone"] == 0 and seen["repo_dir"] == repo
 
 
@@ -522,7 +509,7 @@ def test_run_completeness_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeyp
     monkeypatch.setattr(
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
-    run_completeness_check_pass()
+    run_completeness_check_pass(session_id="test-sid")
     assert got["repo_dir"] is None
 
 
@@ -553,7 +540,7 @@ def test_run_completeness_check_pass_clips_to_max_gaps(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass()
+    result = run_completeness_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == MAX_GAPS
 
 

@@ -27,7 +27,7 @@ class TestGapPassResult:
     session_id: str = ""        # Langfuse session.id for this test-gap run
 
 
-def run_test_gap_pass(root: str | None = None) -> TestGapPassResult:
+def run_test_gap_pass(session_id: str) -> TestGapPassResult:
     """Execute one full test-gap pass.
 
     Reads the memory ledger, invokes the test-gap agent, writes the
@@ -35,9 +35,7 @@ def run_test_gap_pass(root: str | None = None) -> TestGapPassResult:
     gaps.
 
     Args:
-        root: repository root (unused directly — the agent uses
-              forge_remote_url for repo context; kept for API
-              compatibility).
+        session_id: Langfuse session id from the poll loop.
 
     Returns:
         TestGapPassResult with updated memory and created draft info.
@@ -48,7 +46,6 @@ def run_test_gap_pass(root: str | None = None) -> TestGapPassResult:
 
     # Import here to allow monkeypatching in tests.
     from .agents import test_gap
-    from .runtime import tracing
     from .vcs import git_ops
 
     # Clone the repo locally so the test-gap agent inspects it via
@@ -76,29 +73,19 @@ def run_test_gap_pass(root: str | None = None) -> TestGapPassResult:
                     (e.stderr or "")[:200],
                 )
 
-    # One Langfuse session per test-gap run, so its model calls are
-    # attributed (no untagged traces). No-op if tracing isn't ready.
-    from .runtime.tracing import make_session_id
-
-    session_id = make_session_id("test-gap")
     log.info("test-gap pass starting (session %s)", session_id)
-    try:
-        with tracing.start_ticket_root_span(session_id, "test-gap"):
-            from functools import partial
-            from .pass_runner import run_agent_pass
+    from functools import partial
+    from .pass_runner import run_agent_pass
 
-            agent_fn = partial(test_gap.run_test_gap_agent, repo_dir=repo_dir)
-            result = run_agent_pass(
-                agent_fn=agent_fn,
-                memory_file=memory_file,
-                source_label=SourceKind.TEST_GAP,
-                service=service,
-                settings=settings,
-                origin_session=session_id,
-            )
-    except Exception as e:  # noqa: BLE001
-        log.exception("test-gap agent failed")
-        raise RuntimeError(f"test-gap agent failed: {e}") from e
+    agent_fn = partial(test_gap.run_test_gap_agent, repo_dir=repo_dir)
+    result = run_agent_pass(
+        agent_fn=agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        origin_session=session_id,
+    )
 
     return TestGapPassResult(
         updated_memory=result.updated_memory,

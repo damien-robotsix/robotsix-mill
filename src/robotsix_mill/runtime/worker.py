@@ -718,14 +718,15 @@ class Worker:
 
         Args:
             label: Pass identifier (``"audit"``, ``"agent_check"``).
-            runner_fn: Zero-arg callable that returns a result with a
-                       ``drafts_created`` field.
+            runner_fn: Callable accepting ``session_id=`` keyword that
+                       returns a result with a ``drafts_created`` field.
             interval: Seconds between passes.
         """
         initial = self._initial_delay(label, interval)
         await asyncio.sleep(initial)
         while True:
             run_id = None
+            session_id = tracing.make_session_id(label)
             try:
                 log.info("Starting periodic %s pass", label)
                 if self.run_registry:
@@ -735,7 +736,10 @@ class Worker:
                 # ("this event loop is already running") when invoked
                 # from inside an async task. Offload to a worker thread
                 # — same pattern stage handlers use.
-                result = await asyncio.to_thread(runner_fn)
+                with tracing.start_ticket_root_span(session_id, label):
+                    result = await asyncio.to_thread(
+                        runner_fn, session_id=session_id,
+                    )
                 log.info(
                     "%s pass completed, created %d draft(s)",
                     label.capitalize(), len(result.drafts_created),
@@ -808,12 +812,16 @@ class Worker:
         await asyncio.sleep(initial)
         while True:
             run_id = None
+            session_id = tracing.make_session_id("health")
             try:
                 log.info("Starting periodic health pass")
                 if self.run_registry:
                     run_id = self.run_registry.start("health")
                 from ..health_runner import run_health_pass
-                result = await asyncio.to_thread(run_health_pass)
+                with tracing.start_ticket_root_span(session_id, "health"):
+                    result = await asyncio.to_thread(
+                        run_health_pass, session_id=session_id,
+                    )
                 log.info(
                     "Health pass completed, created %d draft(s)",
                     len(result.drafts_created),
@@ -843,12 +851,16 @@ class Worker:
         await asyncio.sleep(initial)
         while True:
             run_id = None
+            session_id = tracing.make_session_id("test-gap")
             try:
                 log.info("Starting periodic test-gap pass")
                 if self.run_registry:
                     run_id = self.run_registry.start("test-gap")
                 from ..test_gap_runner import run_test_gap_pass
-                result = await asyncio.to_thread(run_test_gap_pass)
+                with tracing.start_ticket_root_span(session_id, "test-gap"):
+                    result = await asyncio.to_thread(
+                        run_test_gap_pass, session_id=session_id,
+                    )
                 log.info(
                     "Test-gap pass completed, created %d draft(s)",
                     len(result.drafts_created),

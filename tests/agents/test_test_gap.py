@@ -101,7 +101,7 @@ def test_run_test_gap_pass_empty_memory(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    run_test_gap_pass()
+    run_test_gap_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -128,7 +128,7 @@ def test_run_test_gap_pass_reads_existing_memory(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    run_test_gap_pass()
+    run_test_gap_pass(session_id="test-sid")
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
 
 
@@ -150,7 +150,7 @@ def test_run_test_gap_pass_writes_memory_verbatim(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    run_test_gap_pass()
+    run_test_gap_pass(session_id="test-sid")
     memory_file = settings.test_gap_memory_file
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == updated
@@ -178,7 +178,7 @@ def test_run_test_gap_pass_creates_draft_tickets(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    result = run_test_gap_pass()
+    result = run_test_gap_pass(session_id="test-sid")
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="test_gap"
     tickets = service.list()
@@ -206,7 +206,7 @@ def test_run_test_gap_pass_no_drafts_when_empty(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    result = run_test_gap_pass()
+    result = run_test_gap_pass(session_id="test-sid")
     assert len(result.drafts_created) == 0
 
 
@@ -233,7 +233,7 @@ def test_run_test_gap_pass_missing_memory_file(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    result = run_test_gap_pass()
+    result = run_test_gap_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -256,7 +256,7 @@ def test_run_test_gap_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    result = run_test_gap_pass()
+    result = run_test_gap_pass(session_id="test-sid")
     assert len(result.drafts_created) == 1  # only first has both title + body
 
 
@@ -277,7 +277,7 @@ def test_test_gap_pass_result_structure(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    result = run_test_gap_pass()
+    result = run_test_gap_pass(session_id="test-sid")
     assert isinstance(result, TestGapPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
@@ -331,7 +331,7 @@ def test_test_gap_cli_command(capsys, tmp_path, monkeypatch):
     """Test that CLI test-gap command works."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return TestGapPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "test gap: add unit tests for X"}],
@@ -352,7 +352,7 @@ def test_test_gap_cli_json_output(capsys, tmp_path, monkeypatch):
     """Test JSON output flag for test-gap CLI."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return TestGapPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "test gap: add unit tests for X"}],
@@ -375,7 +375,7 @@ def test_test_gap_cli_no_drafts(capsys, tmp_path, monkeypatch):
     """CLI test-gap command when no drafts created."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         return TestGapPassResult(
             updated_memory="mem",
             drafts_created=[],
@@ -395,7 +395,7 @@ def test_test_gap_cli_failure(capsys, monkeypatch):
     """CLI test-gap exits 1 on failure."""
     from robotsix_mill.cli import main
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
     monkeypatch.setattr(
@@ -412,39 +412,27 @@ def test_test_gap_cli_failure(capsys, monkeypatch):
 
 
 def test_run_test_gap_pass_opens_langfuse_session(tmp_path, monkeypatch):
-    """Each test-gap run wraps the agent in a Langfuse session span with a
-    unique per-run id."""
-    import contextlib
-
-    from robotsix_mill.runtime import tracing
+    """session_id is passed through to the result — tracing is now the
+    poll loop's responsibility."""
 
     settings = _make_settings(tmp_path)
     seen = {}
 
-    @contextlib.contextmanager
-    def fake_root(sid, name=None):
-        seen["session_id"] = sid
-        seen["stage"] = name
-        yield
-
     def mock_agent(**kwargs):
-        seen["agent_ran_under"] = seen.get("session_id")
+        seen["agent_ran"] = True
         return test_gap_agent.TestGapResult(
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         )
 
-    monkeypatch.setattr(tracing, "start_ticket_root_span", fake_root)
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
     monkeypatch.setattr(
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    res = run_test_gap_pass()
+    res = run_test_gap_pass(session_id="test-sid")
 
-    assert res.session_id.startswith("test-gap-")
-    assert seen["session_id"] == res.session_id
-    assert seen["stage"] == "test-gap"
-    assert seen["agent_ran_under"] == res.session_id
+    assert res.session_id == "test-sid"
+    assert seen["agent_ran"] is True
 
 
 def test_test_gap_session_ids_are_unique_per_run(tmp_path, monkeypatch):
@@ -458,9 +446,8 @@ def test_test_gap_session_ids_are_unique_per_run(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
-    a = run_test_gap_pass().session_id
-    b = run_test_gap_pass().session_id
-    assert a != b and a.startswith("test-gap-") and b.startswith("test-gap-")
+    a = run_test_gap_pass(session_id="test-sid").session_id
+    assert a == "test-sid"
 
 
 # --- Clone tests ---
@@ -493,12 +480,12 @@ def test_run_test_gap_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
 
-    run_test_gap_pass()
+    run_test_gap_pass(session_id="test-sid")
     repo = settings.data_dir / "test_gap_workspace" / "repo"
     assert seen["clone"] == 1 and seen["repo_dir"] == repo
 
     seen["clone"] = 0
-    run_test_gap_pass()
+    run_test_gap_pass(session_id="test-sid")
     assert seen["clone"] == 0 and seen["repo_dir"] == repo
 
 
@@ -514,7 +501,7 @@ def test_run_test_gap_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.test_gap_runner.Settings", lambda: settings
     )
-    run_test_gap_pass()
+    run_test_gap_pass(session_id="test-sid")
     assert got["repo_dir"] is None
 
 
@@ -590,7 +577,7 @@ def test_post_test_gap_returns_202(tmp_path, monkeypatch, repos_registry):
     started = threading.Event()
     finished = threading.Event()
 
-    def slow_run(root=None):
+    def slow_run(session_id=None):
         started.set()
         finished.wait(timeout=5)
         return TestGapPassResult(
@@ -627,7 +614,7 @@ def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry)
 
     run_event = threading.Event()
 
-    def mock_run(root=None):
+    def mock_run(session_id=None):
         # Create a ticket directly in DB to simulate the runner
         svc = TicketService(settings)
         svc.create("Test-gap draft", "Test-gap body", source="test_gap")

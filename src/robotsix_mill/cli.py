@@ -93,7 +93,13 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
     func = getattr(mod, entry["function"])
 
     try:
-        result = func()
+        if cmd == "trace-health":
+            result = func()
+        else:
+            from .runtime.tracing import make_session_id
+
+            session_id = make_session_id(cmd)
+            result = func(session_id=session_id)
     except Exception as e:
         print(f"{cmd} failed: {e}", file=sys.stderr)
         return 1

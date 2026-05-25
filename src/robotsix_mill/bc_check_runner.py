@@ -31,7 +31,7 @@ class BcCheckPassResult:
     session_id: str = ""        # Langfuse session.id for this run
 
 
-def run_bc_check_pass(root: str | None = None) -> BcCheckPassResult:
+def run_bc_check_pass(session_id: str) -> BcCheckPassResult:
     """Execute one full backward-compatibility inspection pass.
 
     Reads the memory ledger, invokes the bc-check agent, writes the
@@ -39,9 +39,7 @@ def run_bc_check_pass(root: str | None = None) -> BcCheckPassResult:
     backward-compat code that is ripe for removal.
 
     Args:
-        root: repository root (unused directly — the agent uses
-              forge_remote_url for repo context; kept for API
-              compatibility).
+        session_id: Langfuse session id from the poll loop.
 
     Returns:
         BcCheckPassResult with updated memory and created draft info.
@@ -52,7 +50,6 @@ def run_bc_check_pass(root: str | None = None) -> BcCheckPassResult:
 
     # Import here to allow monkeypatching in tests.
     from .agents import bc_check
-    from .runtime import tracing
     from .vcs import git_ops
 
     # Clone the repo locally so the agent inspects it via
@@ -78,27 +75,18 @@ def run_bc_check_pass(root: str | None = None) -> BcCheckPassResult:
                     (e.stderr or "")[:200],
                 )
 
-    # One Langfuse session per bc-check run.
-    from .runtime.tracing import make_session_id
-
-    session_id = make_session_id("bc-check")
     log.info("bc-check pass starting (session %s)", session_id)
-    try:
-        with tracing.start_ticket_root_span(session_id, "bc-check"):
-            agent_fn = partial(
-                bc_check.run_bc_check_agent, repo_dir=repo_dir
-            )
-            result = run_agent_pass(
-                agent_fn=agent_fn,
-                memory_file=memory_file,
-                source_label=SourceKind.BC_CHECK,
-                service=service,
-                settings=settings,
-                origin_session=session_id,
-            )
-    except Exception as e:  # noqa: BLE001
-        log.exception("bc-check agent failed")
-        raise RuntimeError(f"bc-check agent failed: {e}") from e
+    agent_fn = partial(
+        bc_check.run_bc_check_agent, repo_dir=repo_dir
+    )
+    result = run_agent_pass(
+        agent_fn=agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.BC_CHECK,
+        service=service,
+        settings=settings,
+        origin_session=session_id,
+    )
 
     return BcCheckPassResult(
         updated_memory=result.updated_memory,
