@@ -135,7 +135,7 @@ async function refresh(){
  // Race guard: each refresh() captures a seq token and the showClosed
  // it was started with; a later call bumps refreshSeq, so when this
  // call's await resolves it can tell it's stale and skip rendering.
- // (The auto-5s tick + the toggle's onchange refresh otherwise race,
+ // (The auto-1s tick + the toggle's onchange refresh otherwise race,
  // and the last response to land wins — making "show closed" flicker.)
  const wantClosed=showClosed;
  const tok=++refreshSeq;

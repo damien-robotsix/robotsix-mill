@@ -108,7 +108,7 @@ def with_cost(
     When ``blocking=False`` the lookup is cache-only — returns the
     cached value if present, else 0.0, and never hits the network. Use
     this for list endpoints like /tickets which the board polls every
-    5s; otherwise N cold-cache tickets would issue N serial Langfuse
+    1s; otherwise N cold-cache tickets would issue N serial Langfuse
     HTTP calls and the response would take seconds.
 
     When *repo_config* is provided, its Langfuse credentials are used

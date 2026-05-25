@@ -196,7 +196,7 @@ def list_tickets(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
-    # The board polls this every 5s. Both expensive enrichments are
+    # The board polls this every 1s. Both expensive enrichments are
     # downgraded for the list:
     #   blocking_cost=False — cache-only Langfuse cost lookup (no HTTP).
     #   fetch_pr_url=False  — skip the per-ticket forge pr_status call.
