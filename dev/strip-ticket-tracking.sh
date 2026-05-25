@@ -75,52 +75,62 @@ _OBSERVED_IN_RE = re.compile(
 )
 
 
-def strip_lines(text: str) -> tuple[str, int]:
-    """Apply line-level stripping.  Returns (cleaned_text, removed_count)."""
+def strip_lines(text: str) -> tuple[str, int, int, bool]:
+    """Apply line-level stripping.
+    Returns (cleaned_text, lines_removed, prefixes_stripped, changed)."""
     lines = text.split('\n')
     kept: list[str] = []
     removed = 0
+    prefixes = 0
+    changed = False
 
     for line in lines:
         # (e) Strip "Observed in `<id>`:" prefix first — must run before
         #     (b) so the rest of the line (no longer containing a ticket
         #     ID) survives the ID-strip pass.
-        line = _OBSERVED_IN_RE.sub('', line)
+        stripped_line = _OBSERVED_IN_RE.sub('', line)
+        if stripped_line != line:
+            prefixes += 1
+            changed = True
+        line = stripped_line
 
         # (b) Strip lines containing a full ticket ID.
         if _TICKET_ID_RE.search(line):
             removed += 1
+            changed = True
             continue
 
         # (c) Strip evidence bullets that are purely backtick-wrapped IDs:
         #     `- `TKT-001`` with optional trailing whitespace.
-        stripped = line.rstrip()
-        if re.match(r'^\s*[-*]\s+`[^`]+`\s*$', stripped):
+        s = line.rstrip()
+        if re.match(r'^\s*[-*]\s+`[^`]+`\s*$', s):
             removed += 1
+            changed = True
             continue
 
         # (d) Strip numeric count claims.
         if _COUNT_CLAIM_RE.search(line):
             removed += 1
+            changed = True
             continue
 
         kept.append(line)
 
-    return '\n'.join(kept), removed
+    return '\n'.join(kept), removed, prefixes, changed
 
 
-def strip_sections(text: str) -> tuple[str, int]:
+def strip_sections(text: str) -> tuple[str, int, bool]:
     """Remove whole ## sections whose heading matches the drop set (a),
     then remove any section whose body is now empty (f).
 
-    Returns (cleaned_text, sections_removed)."""
+    Returns (cleaned_text, sections_removed, changed)."""
     # Split on "\n## " at line start (heading boundaries).
     # If the text starts with "## " the first chunk after a plain
     # split would land in the preamble and escape the section loop.
     # Prepend a sentinel newline so the first heading is always in
     # sections[0] and preamble is guaranteed empty-or-prose.
     if not text.strip():
-        return text, 0
+        return text, 0, False
 
     if text.startswith('## '):
         parts = re.split(r'\n(?=## )', '\n' + text)
@@ -165,7 +175,7 @@ def strip_sections(text: str) -> tuple[str, int]:
 
     # Normalise: no trailing whitespace, exactly one trailing newline.
     result = result.rstrip() + '\n'
-    return result, removed
+    return result, removed, (removed > 0)
 
 
 def process_file(memory_path: Path) -> str:
@@ -182,14 +192,14 @@ def process_file(memory_path: Path) -> str:
         return f"{name}: SKIPPED (empty file)"
 
     # Phase 1: line-level stripping.
-    after_lines, line_removed = strip_lines(original)
+    after_lines, line_removed, prefix_stripped, line_changed = strip_lines(original)
 
     # Phase 2: section-level stripping.
-    after_sections, sec_removed = strip_sections(after_lines)
+    after_sections, sec_removed, sec_changed = strip_sections(after_lines)
 
-    total_removed = line_removed + sec_removed
+    any_change = line_removed > 0 or sec_removed > 0 or prefix_stripped > 0 or line_changed or sec_changed
 
-    if total_removed == 0:
+    if not any_change:
         return f"{name}: SKIPPED (no per-ticket content found)"
 
     # Create timestamped backup.
@@ -201,8 +211,8 @@ def process_file(memory_path: Path) -> str:
     memory_path.write_text(after_sections, encoding='utf-8')
 
     return (
-        f"{name}: stripped {total_removed} item(s) "
-        f"({line_removed} line-level, {sec_removed} section-level) "
+        f"{name}: stripped {line_removed + prefix_stripped + sec_removed} item(s) "
+        f"({line_removed} line-removed, {prefix_stripped} prefix-stripped, {sec_removed} section-level) "
         f"— backup: {backup_path.name}"
     )
 
