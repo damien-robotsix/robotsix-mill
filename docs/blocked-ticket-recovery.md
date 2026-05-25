@@ -43,18 +43,43 @@ and `states.py:TRANSITIONS`.
 Transient infrastructure errors (git outages, provider 503s, connection
 refused) are retried automatically with exponential backoff — the ticket
 stays in its current workflow state and the worker polls it after the
-backoff delay. You can identify a retrying ticket on the board by its
-`retry_attempt` counter and `last_transient_error` fields.
+backoff delay.
 
-To cancel the backoff and retry immediately:
+### Identifying retrying tickets on the board
 
-```sh
-robotsix-mill ticket resume-blocked <id>
+A retrying ticket displays an amber **retry chip** on its board card:
+
+```
+┌──────────────────────────────────────────┐
+│  ✕                                       │
+│  Fix login redirect                      │
+│  abc123de                                │
+│  user                      $0.0123      │
+│  retry 3 · next in 2m                    │  ← amber chip
+│  ⏺ implementing…                         │
+└──────────────────────────────────────────┘
 ```
 
-This clears the retry state and re-enqueues the ticket. The same
-`POST /tickets/{id}/resume-blocked` endpoint handles both BLOCKED and
-retrying tickets.
+The chip shows the retry attempt count and the time until the next
+automatic retry (computed from `next_retry_at`). Hovering over the chip
+reveals the `last_transient_error` detail in a tooltip.
+
+### Retrying immediately
+
+To cancel the backoff and retry immediately, either:
+
+- **Board drawer:** open the ticket and click the **Retry now** button.
+- **CLI:**
+  ```sh
+  robotsix-mill ticket resume-blocked <id>
+  ```
+
+Both call the same `POST /tickets/{id}/resume-blocked` endpoint, which
+clears the retry state and re-enqueues the ticket. This endpoint handles
+both BLOCKED and retrying tickets.
+
+When `retry_attempt` is 0 the retry chip and "Retry now" button are
+absent — the board looks exactly as it does for a non-retrying ticket.
 
 ## See also
 

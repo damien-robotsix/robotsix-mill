@@ -18,6 +18,15 @@ const ACTIVE_LABEL={
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const renderMD = s => { if (!s) return ""; return marked.parse(s); };
 const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="test_gap"?"test-gap":s==="agent"?"agent":s==="deep-review"?"deep-review":"user");
+function fmtRelative(iso){
+ const d=(new Date(iso)).getTime()-Date.now();
+ if(d<=0)return"now";
+ const s=Math.round(d/1000);
+ if(s<60)return"in "+s+"s";
+ const m=Math.round(s/60);
+ if(m<60)return"in "+m+"m";
+ return new Date(iso).toLocaleTimeString();
+}
 // HTTP helpers built on XMLHttpRequest, not fetch().
 // `fetch` is wrapped by SES / hardened-JS extensions (MetaMask, some
 // privacy/wallet add-ons) and can fail with "NetworkError when
@@ -88,6 +97,7 @@ async function refresh(){
    ${t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:""}
    ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:""}
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}`+
+   ${t.retry_attempt>0?`<span class="retry-chip" title="${esc(t.last_transient_error||'')}">retry ${t.retry_attempt}${t.next_retry_at?` · next ${fmtRelative(t.next_retry_at)}`:''}</span>`:''}
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
    (s==="human_mr_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approveMR('${t.id}')">Approve</button>`:"")+
@@ -434,6 +444,11 @@ async function redraft(id){
  const r=await jpost("/tickets/"+id+"/redraft",{body:body.trim()});
  if(!r.ok){const e=await r.text();alert("redraft failed: "+e)}else{refresh();if(sel===id)open_(id)}
 }
+async function resumeRetry(id){
+ const r=await jpost("/tickets/"+id+"/resume-blocked");
+ if(!r.ok){const e=await r.text();alert("resume failed: "+e);return}
+ refresh();if(sel===id)open_(id);
+}
 async function del_(id){
  if(!confirm("Delete ticket "+id+"? This is irreversible (row, history, workspace)."))return;
  const r=await jdel("/tickets/"+id);
@@ -570,6 +585,7 @@ async function open_(id){
    `<br>
    · cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
    (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+
+   (t.retry_attempt>0?`<br><button class="retry-now-btn" onclick="event.stopPropagation();resumeRetry('${t.id}')">Retry now</button>`:"")+
    `<br>
    created ${t.created_at} · updated ${t.updated_at}</p>`+
    (t.depends_on?`<p><b>depends on:</b> ${esc(t.depends_on)}</p>`:"")+
