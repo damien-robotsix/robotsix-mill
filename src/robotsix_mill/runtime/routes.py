@@ -228,6 +228,32 @@ def approve_ticket(
     return enrich_ticket_read(ticket, settings, svc)
 
 
+@router.post("/tickets/{ticket_id}/approve-mr", response_model=TicketRead)
+def approve_mr(
+    ticket_id: str,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Approve a ticket in human_mr_approval, moving it to waiting_auto_merge.
+
+    The merge stage picks it up, polls CI, and auto-merges when green.
+    This is the human's explicit go-ahead for merge — it bypasses
+    auto-merge eligibility checks (the human is making the call).
+    """
+    try:
+        ticket = svc.transition(
+            ticket_id, State.WAITING_AUTO_MERGE, note="approved by human"
+        )
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    except TransitionError as e:
+        raise HTTPException(409, str(e)) from None
+
+    maybe_enqueue(ticket, worker)  # merge stage polls immediately
+    return enrich_ticket_read(ticket, settings, svc)
+
+
 @router.post(
     "/tickets/{ticket_id}/comments",
     response_model=Comment,
