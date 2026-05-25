@@ -726,6 +726,32 @@ class Settings(BaseSettings):
         default=86400, alias="MILL_BC_CHECK_INTERVAL_SECONDS"
     )
 
+    # --- cost-reconciliation agent (OpenRouter ↔ Langfuse cost drift) ---
+    # Model for the cost-reconciliation agent. Defaults to the same
+    # capable model as other periodic agents. Override with
+    # MILL_COST_RECONCILIATION_MODEL.
+    cost_reconciliation_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_COST_RECONCILIATION_MODEL"
+    )
+    # Path to the cost-reconciliation agent's Markdown memory ledger.
+    # Override to pin a specific path; unset (default) derives
+    # <data_dir>/cost_reconciliation_memory.md.
+    cost_reconciliation_memory_path: Path | None = Field(
+        default=None, alias="MILL_COST_RECONCILIATION_MEMORY_PATH"
+    )
+    # Opt-in periodic cost-reconciliation pass. Defaults to False (off);
+    # flip to true to schedule the pass every
+    # ``cost_reconciliation_interval_seconds``.
+    cost_reconciliation_periodic: bool = Field(
+        default=False, alias="MILL_COST_RECONCILIATION_PERIODIC"
+    )
+    # Seconds between periodic cost-reconciliation passes when
+    # MILL_COST_RECONCILIATION_PERIODIC=true. Minimum enforced at 60s
+    # in the worker loop.
+    cost_reconciliation_interval_seconds: int = Field(
+        default=86400, alias="MILL_COST_RECONCILIATION_INTERVAL_SECONDS"
+    )
+
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same
     # capable model as other read-only periodic agents. Override with
@@ -888,6 +914,13 @@ class Settings(BaseSettings):
         if self.bc_check_memory_path is not None:
             return self.bc_check_memory_path
         return self.data_dir / "bc_check_memory.md"
+
+    @property
+    def cost_reconciliation_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained cost-reconciliation memory ledger."""
+        if self.cost_reconciliation_memory_path is not None:
+            return self.cost_reconciliation_memory_path
+        return self.data_dir / "cost_reconciliation_memory.md"
 
 
     @property
@@ -1223,6 +1256,7 @@ class Secrets(BaseModel):
     langfuse_secret_key: str | None = None
     langfuse_base_url: str | None = None
     langfuse_project_id: str | None = None
+    openrouter_management_key: str | None = None
     ntfy_url: str | None = None
     ntfy_token: str | None = None
 

@@ -37,6 +37,7 @@ Opt-in agents that run independently of the ticket pipeline.
 | Survey | `agent_definitions/survey.yaml` | `agents/surveying.py` | `MILL_SURVEY_MODEL` | CLI, API (`POST /survey`) | Discovers similar OSS projects via web research; proposes concrete improvements |
 | BC-check | `agent_definitions/bc_check.yaml` | `agents/bc_check.py` | `MILL_BC_CHECK_MODEL` | CLI, API (`POST /bc-check`), or periodic (`MILL_BC_CHECK_PERIODIC`) | Backward-compatibility scanner: examines git history for changed signatures and flags breakage |
 | Completeness-check | `agent_definitions/completeness_check.yaml` | `agents/completeness_check.py` | `MILL_COMPLETENESS_CHECK_MODEL` | CLI or periodic (`MILL_COMPLETENESS_CHECK_PERIODIC`) | Scans the repo for incomplete feature wiring (missing YAML mappings/defaults, routes without buttons, runners without CLI, agent files without callers) |
+| Cost-reconciliation | `agent_definitions/cost_reconciliation.yaml` | `agents/cost_reconciling.py` | `MILL_COST_RECONCILIATION_MODEL` | CLI or periodic (`MILL_COST_RECONCILIATION_PERIODIC`) | Detects OpenRouter ↔ Langfuse cost drift; invokes analysis agent and files draft when delta > $1 |
 | Answer | `agent_definitions/answer.yaml` | `agents/answering.py` | `MILL_ANSWER_MODEL` | `answer` stage (ASKED state — ticket type `inquiry`) | Investigative analyst: answers questions using repo exploration + web research + Langfuse data |
 
 ## Sub-agents

@@ -196,6 +196,13 @@ periodic:
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/bc_check_memory.md
 
+  # -- cost-reconciliation — detects OpenRouter ↔ Langfuse cost drift -----
+  cost_reconciliation:
+    model: *default_model           # cost-reconciliation agent model
+    enabled: false                  # enable periodic cost-reconciliation passes
+    interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
+    memory_path: null               # defaults to <data_dir>/cost_reconciliation_memory.md
+
   # -- completeness-check — detects half-wired features --------------
   completeness_check:
     model: *default_model           # completeness-check agent model

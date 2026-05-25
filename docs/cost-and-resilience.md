@@ -93,6 +93,75 @@ Both functions cap examination at 500 traces (`EXAMINE_CAP`) to bound
 API calls, and catch all exceptions — returning `None` on failure
 rather than crashing the dashboard.
 
+## Cost reconciliation
+
+The cost-reconciliation pass detects drift between OpenRouter usage
+accounting and Langfuse span-derived cost totals — a silent cost leak
+that can otherwise go unnoticed for days.
+
+### How it works
+
+Once per day (opt-in via `MILL_COST_RECONCILIATION_PERIODIC=true`), the
+worker calls `run_cost_reconciliation_pass()`:
+
+1. **Fetch OpenRouter total** — `GET /api/v1/activity?date=<yesterday>`
+   using `openrouter_management_key` from secrets. Sums `usage` +
+   `byok_usage_inference` across all model entries.
+2. **Fetch Langfuse total** — paginates `/api/public/traces` for the
+   same UTC day window, sums `totalCost` across all traces (capped at
+   2000 for safety).
+3. **Compare** — if `|delta| ≤ $1.00`, logs clean and returns (no
+   agent call, no ticket).
+4. **Investigate** — if delta > $1.00, invokes the cost-reconciliation
+   agent (a single LLM call with zero tools) and creates a DRAFT ticket
+   with the analysis.
+
+### Sources of divergence
+
+The agent considers these possible causes:
+
+- **Non-OpenRouter models** routed through OpenRouter that don't support
+  usage accounting (cost missing from spans → Langfuse under-reports).
+- **Streaming-only providers** where OpenRouter can't compute cost until
+  the stream completes (timing skew).
+- **OTel export gaps** — if the OTLP exporter is down or a span is
+  dropped, Langfuse never sees the cost.
+- **BYOK models** where OpenRouter charges a routing fee but the
+  inference cost hits the user's own provider key.
+- **Ingestion lag** — Langfuse is near-real-time but OpenRouter's
+  activity endpoint reflects completed UTC days.
+
+### Configuration
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `periodic.cost_reconciliation.enabled` | `MILL_COST_RECONCILIATION_PERIODIC` | `false` | Enable daily cost-reconciliation passes |
+| `periodic.cost_reconciliation.interval_seconds` | `MILL_COST_RECONCILIATION_INTERVAL_SECONDS` | `86400` | Seconds between passes (min 60) |
+| `periodic.cost_reconciliation.model` | `MILL_COST_RECONCILIATION_MODEL` | `deepseek/deepseek-v4-pro` | Model for the analysis agent |
+| `periodic.cost_reconciliation.memory_path` | `MILL_COST_RECONCILIATION_MEMORY_PATH` | `None` | Override path for memory ledger (defaults to `<data_dir>/cost_reconciliation_memory.md`) |
+
+The `openrouter_management_key` secret is **optional** — if absent, the
+pass skips OpenRouter-side fetching and logs a warning.
+
+### Draft tickets
+
+When a discrepancy is found, the ticket is created with
+`source=cost_reconciliation` (amber badge on the board). The body
+includes the agent's analysis and conclusion, plus the raw OpenRouter
+and Langfuse breakdowns. Each ticket includes a date-based gap-id
+marker (`<!-- cost_reconciliation-gap-id: YYYY-MM-DD -->`) for
+deduplication — the same day is never reported twice.
+
+### Limitations
+
+- **Daily only** — each pass looks at exactly one UTC day (yesterday).
+  No multi-day trending or real-time alerting.
+- **No auto-fix** — the agent only explains the discrepancy; it never
+  modifies config, API keys, or tracing.
+- **No per-model reconciliation** — comparison is at daily-total level.
+  Per-model drill-down lives in the agent's analysis, not in the
+  comparison logic.
+
 ## Cost controls
 
 - **Implement agent + two lean sub-agents (each its own model).** A
