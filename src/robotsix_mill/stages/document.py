@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ..agents.documenting import DocResult
+from ..agents.documenting import DocClassifierResult, DocResult
 from ..core.models import Ticket
 from ..core.states import State
 from ..vcs import git_ops
@@ -66,7 +66,9 @@ class DocumentStage(Stage):
         # --- Phase 1: cheap classifier gate ---
         try:
             classifier_result = self._run_doc_classifier(
-                settings=s, diff=diff, spec=spec,
+                settings=s,
+                diff=diff,
+                spec=spec,
             )
             ctx.service.add_comment(
                 ticket.id,
@@ -75,7 +77,7 @@ class DocumentStage(Stage):
             )
             if not classifier_result.user_facing:
                 log.info(
-                    "%s: classifier → internal-only — skipping full doc agent",
+                    "%s: classifier says internal-only — skipping full doc agent",
                     ticket.id,
                 )
                 return Outcome(
@@ -164,14 +166,14 @@ class DocumentStage(Stage):
         settings,
         diff: str,
         spec: str,
-    ):
-        """Run the cheap, tool-free doc classifier gate.
+    ) -> DocClassifierResult:
+        """Run the cheap doc classifier to decide whether a change is
+        user-facing or internal-only.
 
-        Returns a ``DocClassifierResult`` with ``user_facing`` and
-        ``classification`` fields.  No tools, no file-system access —
-        pure diff-and-spec inspection.
+        Returns a ``DocClassifierResult`` with ``user_facing`` (bool)
+        and ``classification`` (str).
         """
-        from ..agents.documenting import run_doc_classifier, DocClassifierResult
+        from ..agents.documenting import run_doc_classifier
 
         return run_doc_classifier(
             settings=settings,
