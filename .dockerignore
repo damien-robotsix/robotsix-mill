@@ -1,9 +1,8 @@
 # Keep local-only artifacts out of the build context so they can't be
-# baked into the image (notably secrets.env — secrets — and .mill-data).
+# baked into the image (notably .mill-data).
 .git
 .venv
 venv
-secrets.env
 .mill-data
 .pytest_cache
 __pycache__
@@ -33,7 +32,6 @@ Makefile
 
 # Example / dev configs (not needed at runtime).
 docker-compose.override.example.yml
-secrets.env.example
 dev/
 
 # Test coverage artifact (NOT tests/ — the dev stage doubles as the

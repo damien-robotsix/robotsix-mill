@@ -4,7 +4,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
-secrets.env
+.env  # user-created compose variable-substitution file
 config/secrets.yaml
 config/repos.yaml
 config/mill.local.yaml
