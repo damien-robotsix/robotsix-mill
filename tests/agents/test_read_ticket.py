@@ -283,6 +283,25 @@ def test_overall_output_truncation(settings, service, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# AC 7 — Tool is registered in ToolRegistry
+# ---------------------------------------------------------------------------
+
+
+def test_registered_in_tool_registry(settings):
+    """After make_read_ticket_tool is called, ToolRegistry includes read_ticket."""
+    from robotsix_mill.agents.tool_registry import ToolRegistry
+
+    make_read_ticket_tool(settings)
+    tools = ToolRegistry.list_tools()
+    read_ticket_info = next(
+        (t for t in tools if t.name == "read_ticket"), None
+    )
+    assert read_ticket_info is not None, "read_ticket not found in ToolRegistry"
+    assert read_ticket_info.category == "reporting"
+    assert read_ticket_info.parameters == {"ticket_id": "str"}
+
+
+# ---------------------------------------------------------------------------
 # AC 9 — Never raises
 # ---------------------------------------------------------------------------
 

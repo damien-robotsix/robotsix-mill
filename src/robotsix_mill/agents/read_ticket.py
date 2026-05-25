@@ -72,7 +72,14 @@ def make_read_ticket_tool(settings: Settings):
                 lines.append("(no description)")
             else:
                 if len(desc) > 3000:
-                    desc = desc[:3000] + "\n\n... [truncated]"
+                    # Prefer a paragraph boundary, then a line boundary
+                    cutoff = 3000
+                    for marker in ("\n\n", "\n"):
+                        pos = desc.rfind(marker, 0, 3000)
+                        if pos != -1 and pos > 2700:
+                            cutoff = pos
+                            break
+                    desc = desc[:cutoff] + "\n\n... [truncated]"
                 lines.append(desc)
             lines.append("")
 
