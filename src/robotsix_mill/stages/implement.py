@@ -107,6 +107,24 @@ class ImplementStage(Stage):
             if raw:  # non-empty list → extract paths
                 file_map = {entry["file"] for entry in raw}
 
+        # Hard gate: refuse to proceed without a file_map.  The refine
+        # stage must produce one; a missing or empty map means we cannot
+        # enforce scope — proceed and risk the incidents seen in
+        # 20260525T113211Z / 20260525T115012Z.
+        if file_map is None:
+            log.warning(
+                "%s: file_map.json missing or empty — cannot verify scope",
+                ticket.id,
+            )
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, "", ok=False,
+            )
+            return Outcome(
+                State.BLOCKED,
+                "file_map.json missing or empty — refine stage must "
+                "produce a file_map for scope enforcement",
+            )
+
         feedback: str | None = None
         summary = ""
 
@@ -153,8 +171,8 @@ class ImplementStage(Stage):
                 persist_memory(settings.implement_memory_file, updated_memory)
 
             # Scope guardrail: verify every changed file is listed in the
-            # ticket's file_map.  Skip the check entirely when file_map is
-            # absent or empty (graceful degradation).
+            # ticket's file_map.  file_map is guaranteed non-None here
+            # (missing/empty → hard-fail before the loop above).
             if file_map:
                 changed = git_ops.changed_files(
                     repo_dir, settings.forge_target_branch
@@ -164,16 +182,25 @@ class ImplementStage(Stage):
                     if f not in file_map
                 ]
                 if out_of_scope:
-                    file_list = "\n".join(f"  - {f}" for f in out_of_scope)
-                    feedback = (
-                        "[SCOPE] Extraneous changes detected. The following "
-                        "files were modified but are NOT listed in the "
-                        "ticket's scope:\n"
-                        f"{file_list}\n"
-                        "Revert ALL changes to these files and keep ONLY "
-                        "the changes required by the ticket spec."
+                    log.warning(
+                        "%s: scope violation — %d out-of-scope file(s): %s",
+                        ticket.id, len(out_of_scope),
+                        ", ".join(out_of_scope),
                     )
-                    continue
+                    ImplementStage._finalize(
+                        ctx, ticket, repo_dir, branch, summary, ok=False,
+                    )
+                    return Outcome(
+                        State.BLOCKED,
+                        f"scope violation: {len(out_of_scope)} file(s) "
+                        f"outside ticket scope — "
+                        f"{', '.join(out_of_scope)}",
+                    )
+                log.info(
+                    "%s: scope check passed — %d file(s) changed, "
+                    "all in file_map (%d allowed)",
+                    ticket.id, len(changed), len(file_map),
+                )
 
             # Stage-owned test gate: one sandbox run; on failure a cheap
             # model distills an actionable diagnosis. `passed` is the
