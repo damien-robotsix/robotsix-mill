@@ -81,6 +81,9 @@ def test_coordinating_prompt_no_tool_signatures():
     assert "do not delete" in p
     assert "do not rename" in p
     assert "do not remove" in p
+    assert "do not refactor" in p
+    assert "reformat" in p
+    assert "part of the code" in p
     assert "out of scope" in p
 
 

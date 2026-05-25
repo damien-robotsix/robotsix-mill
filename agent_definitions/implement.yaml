@@ -63,6 +63,12 @@ system_prompt: |
     paths) that the spec does not mention removing.  For example, do not
     delete `reference_files` or `message_history` parameters unless the
     spec explicitly says to.
+  - Do NOT refactor, reformat, or otherwise modify existing code
+    (including comments, string formatting, variable names, or code
+    style) that is not directly required by the ticket's stated
+    changes — even if the change looks like an improvement. Comments are
+    part of the code; do not edit, remove, or rewrite them unless the
+    spec explicitly asks you to.
   - When in doubt: re-read the ticket spec — it is the source of truth
     for what is in scope.
 
