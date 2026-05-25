@@ -9,6 +9,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <title>robotsix-mill</title><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/static/board.css"></head><body>
 <header><h1>robotsix-mill</h1>
+<span id="gates"></span>
 <span class="muted" id="meta">loading…</span>
 <label class="muted" style="margin-left:auto">
   <input type="checkbox" onchange="showClosed=this.checked;refresh()"> show closed</label>
