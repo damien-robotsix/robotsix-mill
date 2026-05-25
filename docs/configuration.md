@@ -45,6 +45,21 @@ config/
   repos.example.yaml       # committed: template for repos.yaml
 ```
 
+### Migration from `.env`
+
+If you are upgrading from an older version that used `.env` and
+`secrets.env` files, run the one-shot migration script:
+
+```sh
+python dev/migrate-env-to-yaml.py
+```
+
+This reads your existing `.env` (and optional `secrets.env`), diffs
+against the committed defaults in `config/mill.defaults.yaml`, and
+writes `config/mill.local.yaml` and `config/secrets.yaml` with only
+the values that differ.  The original `.env` files are left untouched
+— you can remove them after verifying the migration.
+
 ---
 
 ## Common tasks
