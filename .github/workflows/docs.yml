@@ -30,4 +30,17 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
 
       - name: Deploy to GitHub Pages
-        run: mkdocs gh-deploy --force
+        run: |
+          for i in 1 2 3 4; do
+            echo "Attempt $i/4..."
+            if mkdocs gh-deploy --force; then
+              echo "Deploy succeeded on attempt $i/4"
+              exit 0
+            fi
+            if [ "$i" -lt 4 ]; then
+              echo "Attempt $i/4 failed — retrying in 10s..."
+              sleep 10
+            fi
+          done
+          echo "All 4 attempts failed."
+          exit 1
