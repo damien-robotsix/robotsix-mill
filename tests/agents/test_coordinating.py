@@ -170,6 +170,7 @@ class TestRunCoordinator:
             tools=None, web=False, report_issue=True,
             read_ticket=False,
             model_name=None, name=None, retries=2,
+            skills=None,
         ):
             self.captured["system_prompt"] = system_prompt
             self.captured["output_type"] = output_type

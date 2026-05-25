@@ -125,6 +125,7 @@ def build_agent_from_definition(
         read_ticket=definition.read_ticket,
         retries=definition.retries,
         output_type=resolved_output_type,
+        skills=definition.skills,
     )
     kwargs.update(overrides)
     kwargs["tools"] = tools
@@ -144,12 +145,42 @@ def compose_prompt(
     settings: Settings,
     system_prompt: str,
     tool_names: set[str] | None = None,
+    skills: list[str] | None = None,
 ) -> str:
     from .tool_registry import ToolRegistry
 
-    return system_prompt + "\n\n" + ToolRegistry.describe_for_prompt(
+    prompt = system_prompt
+
+    if skills:
+        import logging
+        import re
+
+        logger = logging.getLogger(__name__)
+        skill_sections: list[str] = []
+
+        for name in skills:
+            skill_path = settings.skills_dir / name / "SKILL.md"
+            try:
+                raw = skill_path.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                logger.warning("Skill file not found: %s", skill_path)
+                continue
+
+            # Strip YAML frontmatter (--- ... ---)
+            body = re.sub(
+                r"^---\n.*?\n---\n", "", raw, count=1, flags=re.DOTALL
+            ).strip()
+
+            if body:
+                skill_sections.append(body)
+
+        if skill_sections:
+            prompt += "\n\n## Skills\n\n" + "\n\n".join(skill_sections)
+
+    prompt += "\n\n" + ToolRegistry.describe_for_prompt(
         tool_names=tool_names
     )
+    return prompt
 
 
 def build_agent(
@@ -164,6 +195,7 @@ def build_agent(
     model_name: str | None = None,
     name: str | None = None,
     retries: int = 2,
+    skills: list[str] | None = None,
 ):
     """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
     role passes its own ``model_name`` (see Settings per-agent models);
@@ -216,7 +248,7 @@ def build_agent(
     agent_kwargs: dict[str, Any] = dict(
         model=model,
         system_prompt=compose_prompt(
-            settings, system_prompt, tool_names=tool_names
+            settings, system_prompt, tool_names=tool_names, skills=skills
         ),
         output_type=output_type,
         tools=all_tools,

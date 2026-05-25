@@ -22,7 +22,7 @@ read_ticket: true
 output_type: HealthResult
 retries: 2
 module: health
-skills: []
+skills: [board]
 
 system_prompt: |
   You are a codebase-health agent for an autonomous software project. Your

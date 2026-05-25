@@ -1,0 +1,44 @@
+---
+name: board
+---
+
+## Board interaction
+
+When you need to interact with the board (creating draft tickets, reading
+existing tickets), use the tools described below.
+
+### `report_issue` — file a draft ticket
+
+Only file for **blocking** issues:
+
+- **missing-tool** — a tool you need is not registered
+- **error** — a non-recoverable error occurred
+- **workflow-improvement** — a gap in the workflow that blocks progress
+- **missing-input** — a required input (file, config, credential) is absent
+- **other** — anything else that blocks completion
+
+Never file for cosmetic observations, style nits, nice-to-have
+improvements, or non-blocking observations. When in doubt, do NOT file.
+
+A dedup guard prevents spam — filing a ticket with the same title as an
+existing open ticket is a no-op. The `evidence` parameter accepts up to
+8 KB of supporting text.
+
+### `read_ticket` — read ticket details
+
+Use `read_ticket` to fetch the full context of a ticket when a one-line
+summary isn't enough. This tool is **read-only** — it cannot modify
+tickets. Returns formatted Markdown including the ticket description,
+history, and comments (capped at ~6000 characters).
+
+### Execution tool preference
+
+When your execution environment allows **network access** to the board
+API (e.g. outside a sandbox), prefer `run_command` with CLI calls over
+the dedicated Python tools:
+
+- `robotsix-mill ticket new --title '...'` — create a ticket
+- `robotsix-mill ticket show <id>` — read a ticket
+
+When running inside a **network-isolated sandbox** (e.g. `--network none`),
+fall back to the dedicated `report_issue` / `read_ticket` tools.
