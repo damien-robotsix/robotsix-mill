@@ -775,7 +775,7 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
         lambda *a, **k: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.github_token", lambda s: "MINTED-APP-TOK"
+        "robotsix_mill.stages.merge.github_token", lambda s, repo_config=None: "MINTED-APP-TOK"
     )
     seen = {}
     monkeypatch.setattr(

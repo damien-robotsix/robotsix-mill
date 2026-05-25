@@ -128,6 +128,7 @@ class TicketCreate(SQLModel):
     source: str = SourceKind.USER
     kind: str = "task"  # "task", "inquiry", or "epic"
     parent_id: str | None = None
+    repo_id: str | None = None
 
 
 class TicketTransition(SQLModel):

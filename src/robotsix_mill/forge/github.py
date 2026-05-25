@@ -47,11 +47,28 @@ def _parse_owner_repo(remote_url: str) -> tuple[str, str]:
 
 
 class GitHubForge(Forge):
+    def __init__(self, settings, repo_config=None):
+        super().__init__(settings)
+        self._repo_config = repo_config
+
+    @property
+    def _remote_url(self) -> str:
+        """Effective remote URL: per-repo override, else global setting."""
+        if self._repo_config is not None:
+            remote = getattr(self._repo_config, "forge_remote_url", None)
+            if remote:
+                return remote
+        return self.settings.forge_remote_url or ""
+
+    @property
+    def _owner_repo(self) -> tuple[str, str]:
+        return _parse_owner_repo(self._remote_url)
+
     def open_merge_request(
         self, *, source_branch: str, title: str, body: str
     ) -> str:
         s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         return self._create_pr(
             owner=owner,
             repo=repo,
@@ -73,7 +90,7 @@ class GitHubForge(Forge):
         s = self.settings
         api = s.github_api_url.rstrip("/")
         url = f"{api}/repos/{owner}/{repo}/pulls"
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         payload = {"title": title, "head": head, "base": base, "body": body}
         with httpx.Client(timeout=30) as c:
             r = c.post(url, headers=headers, json=payload)
@@ -95,18 +112,15 @@ class GitHubForge(Forge):
             )
 
     def pr_status(self, *, source_branch: str) -> dict | None:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         return self._get_pr(owner=owner, repo=repo, head=source_branch)
 
     def check_status(self, *, source_branch: str) -> dict | None:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         return self._check_status(owner=owner, repo=repo, head=source_branch)
 
     def pr_files(self, *, source_branch: str) -> list[dict]:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
             return []
@@ -115,8 +129,7 @@ class GitHubForge(Forge):
         )
 
     def merge_pr(self, *, source_branch: str) -> dict:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
             return {"merged": False, "reason": "PR not found"}
@@ -125,8 +138,7 @@ class GitHubForge(Forge):
         )
 
     def list_pr_comments(self, *, source_branch: str) -> list[dict]:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
             return []
@@ -135,8 +147,7 @@ class GitHubForge(Forge):
         )
 
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
             return []
@@ -145,8 +156,7 @@ class GitHubForge(Forge):
         )
 
     def list_review_comments(self, *, source_branch: str) -> list[dict]:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
         if pr is None:
             return []
@@ -157,15 +167,13 @@ class GitHubForge(Forge):
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict]:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         return self._list_workflow_runs(
             owner=owner, repo=repo, branch=branch, head_sha=head_sha,
         )
 
     def fetch_workflow_job_logs(self, *, run_id: int) -> str:
-        s = self.settings
-        owner, repo = _parse_owner_repo(s.forge_remote_url or "")
+        owner, repo = self._owner_repo
         return self._fetch_workflow_job_logs(
             owner=owner, repo=repo, run_id=run_id,
         )
@@ -178,7 +186,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         with httpx.Client(timeout=30) as c:
             lst = c.get(
                 f"{api}/repos/{owner}/{repo}/pulls",
@@ -225,7 +233,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         url = (
             f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/files"
         )
@@ -259,7 +267,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/merge"
         try:
             with httpx.Client(timeout=30) as c:
@@ -290,7 +298,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         url = f"{api}/repos/{owner}/{repo}/issues/{pull_number}/comments"
         with httpx.Client(timeout=30) as c:
             r = c.get(url, headers=headers, params={"per_page": 100})
@@ -316,7 +324,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
         with httpx.Client(timeout=30) as c:
             r = c.get(url, headers=headers, params={"per_page": 100})
@@ -342,7 +350,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments"
         with httpx.Client(timeout=30) as c:
             r = c.get(url, headers=headers, params={"per_page": 100})
@@ -371,7 +379,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
 
         pr = self._get_pr(owner=owner, repo=repo, head=head)
         if pr is None:
@@ -416,7 +424,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
         params: dict = {"status": "completed", "per_page": 30}
         if branch is not None:
             params["branch"] = branch
@@ -453,7 +461,7 @@ class GitHubForge(Forge):
 
         s = self.settings
         api = s.github_api_url.rstrip("/")
-        headers = _build_headers(github_token(s))
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
 
         with httpx.Client(timeout=30) as c:
             # 1. List jobs for the run.

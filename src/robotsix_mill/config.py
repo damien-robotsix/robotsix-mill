@@ -1332,6 +1332,7 @@ class RepoConfig(BaseModel):
     langfuse_public_key: str
     langfuse_secret_key: str
     langfuse_base_url: str = "https://cloud.langfuse.com"
+    forge_remote_url: str | None = None
 
     @field_validator("repo_id", "board_id")
     @classmethod
@@ -1377,6 +1378,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             langfuse_public_key=langfuse.get("public_key", ""),
             langfuse_secret_key=langfuse.get("secret_key", ""),
             langfuse_base_url=langfuse.get("base_url", "https://cloud.langfuse.com"),
+            forge_remote_url=repo_data.get("forge_remote_url") if isinstance(repo_data, dict) else None,
         )
     return ReposRegistry(repos=repos)
 

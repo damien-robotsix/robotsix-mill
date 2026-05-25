@@ -435,6 +435,7 @@ cp config/repos.example.yaml config/repos.yaml
 repos:
   my-repo:
     board_id: "my-board"
+    # forge_remote_url: "https://github.com/your-org/your-repo.git"  # optional — defaults to FORGE_REMOTE_URL
     langfuse:
       project_name: "my-repo"
       public_key: "pk-lf-..."
@@ -491,6 +492,7 @@ Set `MILL_REPOS_FILE=""` to disable repos config entirely. Template:
 | YAML key | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
+| `repos.<id>.forge_remote_url` | no | `FORGE_REMOTE_URL` | Per-repo forge remote URL for push/PR/merge operations |
 | `repos.<id>.langfuse.project_name` | yes | — | Langfuse project name for this repo's traces |
 | `repos.<id>.langfuse.public_key` | yes | — | Langfuse public key for this repo's project |
 | `repos.<id>.langfuse.secret_key` | yes | — | Langfuse secret key for this repo's project |

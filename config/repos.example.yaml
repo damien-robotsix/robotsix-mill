@@ -11,6 +11,7 @@
 repos:
   example-repo:
     board_id: "example-board"
+    # forge_remote_url: "https://github.com/your-org/your-repo.git"  # optional — defaults to FORGE_REMOTE_URL
     langfuse:
       project_name: "example-repo"
       public_key: "pk-lf-..."

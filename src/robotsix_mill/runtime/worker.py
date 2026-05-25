@@ -19,8 +19,9 @@ import re
 import time
 from datetime import datetime, timezone
 
+from ..config import RepoConfig
 from ..langfuse_client import session_cost
-from ..stages import StageContext, get_stage
+from ..stages import StageContext, get_stage, stage_context_for
 from ..core.states import STAGE_FOR_STATE, State
 from ..core.models import SourceKind
 from ..notify import send_notification, _TRIGGER_STATES
@@ -552,17 +553,47 @@ class Worker:
         self._pending.add(ticket_id)
         self.queue.put_nowait(ticket_id)
 
+    def _repo_config_for_ticket(self, ticket_id: str) -> RepoConfig | None:
+        """Resolve the ``RepoConfig`` for *ticket_id* from its ``board_id``.
+
+        Returns ``None`` when the ticket has no ``board_id`` or no
+        matching repo is found.
+        """
+        try:
+            from ..config import get_repos_config
+
+            ticket = self.ctx.service.get(ticket_id)
+            if ticket is None or not ticket.board_id:
+                return None
+            repos = get_repos_config()
+            for rc in repos.repos.values():
+                if rc.board_id == ticket.board_id:
+                    return rc
+            return None
+        except Exception:
+            return None
+
     async def _run(self) -> None:
         while True:
             ticket_id = await self.queue.get()
             try:
                 before = self.ctx.service.get(ticket_id)
                 before_state = before.state if before else None
-                await process_ticket(ticket_id, self.ctx, active_map=self._active)
+
+                # Resolve per-ticket repo_config from the ticket's board_id.
+                ticket_repo_config = self._repo_config_for_ticket(ticket_id)
+                per_ticket_ctx = StageContext(
+                    settings=self.ctx.settings,
+                    service=self.ctx.service,
+                    repo_config=ticket_repo_config,
+                )
+
+                await process_ticket(ticket_id, per_ticket_ctx, active_map=self._active)
                 after = self.ctx.service.get(ticket_id)
                 self._check_progress(
                     ticket_id, before_state,
                     after.state if after else None,
+                    repo_config=ticket_repo_config,
                 )
             except Exception:  # noqa: BLE001 — never let the consumer die
                 log.exception("processing %s crashed", ticket_id)
@@ -573,7 +604,7 @@ class Worker:
                 self._active.pop(ticket_id, None)
                 self.queue.task_done()
 
-    def _check_progress(self, ticket_id: str, before, after) -> None:
+    def _check_progress(self, ticket_id: str, before, after, repo_config: RepoConfig | None = None) -> None:
         """No-progress safety net. A ticket that keeps re-entering the
         same *model-driven* (traced) stage without ever advancing —
         runs interrupted before any checkpoint, or a churning stage —
@@ -595,7 +626,7 @@ class Worker:
         # early-return so the cap fires even when the ticket is making
         # forward progress (cost accumulates across all stages). ---
         if self.ctx.settings.max_spend_usd_per_ticket > 0.0:
-            cost = session_cost(self.ctx.settings, ticket_id, repo_config=self.ctx.repo_config)
+            cost = session_cost(self.ctx.settings, ticket_id, repo_config=repo_config)
             if cost > self.ctx.settings.max_spend_usd_per_ticket:
                 note = (
                     f"Cost cap exceeded: ${cost:.2f} spent "

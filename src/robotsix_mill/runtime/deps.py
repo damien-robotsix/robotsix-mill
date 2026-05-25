@@ -6,9 +6,9 @@ that were previously defined inside ``create_app()``.
 
 from __future__ import annotations
 
-from fastapi import Request
+from fastapi import HTTPException, Query, Request
 
-from ..config import ReposRegistry, Settings, get_secrets
+from ..config import RepoConfig, ReposRegistry, Settings, get_repo_config, get_secrets
 from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE, State
@@ -42,27 +42,64 @@ def get_repos_registry(request: Request) -> ReposRegistry:
     return request.app.state.repos
 
 
+def get_repo_config_for(
+    repo_id: str | None = Query(None),
+    repos: ReposRegistry = None,
+    request: Request = None,
+) -> RepoConfig | None:
+    """Resolve a ``RepoConfig`` from a ``repo_id`` query param.
+
+    When *repo_id* is provided but unknown, raises 400 immediately.
+    When omitted, returns ``None`` — the caller decides the fallback
+    (e.g. "all repos" for list endpoints, or per-ticket lookup).
+    """
+    if repo_id is None:
+        return None
+    repos_registry = repos or request.app.state.repos
+    if repo_id not in repos_registry.repos:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown repo: '{repo_id}'. Known repos: "
+            f"{sorted(repos_registry.repos.keys())}",
+        )
+    return repos_registry.repos[repo_id]
+
+
 def maybe_enqueue(ticket: Ticket, worker: Worker) -> None:
     """Enqueue *ticket* on the worker if its state has a pipeline stage."""
     if ticket.state in STAGE_FOR_STATE:
         worker.enqueue(ticket.id)
 
 
-def _origin_session_url(ticket: Ticket, settings: Settings) -> str | None:
+def _origin_session_url(
+    ticket: Ticket, settings: Settings, repo_config: RepoConfig | None = None
+) -> str | None:
     """Return a Langfuse web-UI session URL for *ticket*'s origin session.
 
     Returns ``None`` when any ingredient is missing — no broken links.
+    When *repo_config* is provided, its Langfuse fields are used;
+    otherwise the global :class:`Secrets` singleton is consulted.
     """
     origin = ticket.origin_session
-    secrets = get_secrets()
-    base = secrets.langfuse_base_url
-    project_id = secrets.langfuse_project_id
+    if repo_config is not None:
+        base = repo_config.langfuse_base_url
+        project_id = repo_config.langfuse_project_name
+    else:
+        secrets = get_secrets()
+        base = secrets.langfuse_base_url
+        project_id = secrets.langfuse_project_id
     if origin and base and project_id:
         return f"{base.rstrip('/')}/project/{project_id}/sessions/{origin}"
     return None
 
 
-def with_cost(ticket: Ticket, settings: Settings, *, blocking: bool = True) -> Ticket:
+def with_cost(
+    ticket: Ticket,
+    settings: Settings,
+    *,
+    blocking: bool = True,
+    repo_config: RepoConfig | None = None,
+) -> Ticket:
     """Populate ``cost_usd`` on *ticket* (in-place) from the Langfuse session.
 
     Cost is NOT persisted — it lives in Langfuse; this is read-time
@@ -73,11 +110,14 @@ def with_cost(ticket: Ticket, settings: Settings, *, blocking: bool = True) -> T
     this for list endpoints like /tickets which the board polls every
     5s; otherwise N cold-cache tickets would issue N serial Langfuse
     HTTP calls and the response would take seconds.
+
+    When *repo_config* is provided, its Langfuse credentials are used
+    for the cost lookup (per-repo isolation).
     """
     from ..langfuse_client import session_cost, session_cost_cached
 
     if blocking:
-        ticket.cost_usd = session_cost(settings, ticket.id)
+        ticket.cost_usd = session_cost(settings, ticket.id, repo_config=repo_config)
     else:
         ticket.cost_usd = session_cost_cached(ticket.id)
     return ticket
@@ -123,6 +163,7 @@ def enrich_ticket_read(
     *,
     blocking_cost: bool = True,
     fetch_pr_url: bool = True,
+    repo_config: RepoConfig | None = None,
 ) -> TicketRead:
     """Convert a :class:`Ticket` into a :class:`TicketRead`, populating
     ``cost_usd`` from Langfuse, computing ``origin_session_url``, and
@@ -137,15 +178,20 @@ def enrich_ticket_read(
     the list, N serial GitHub API calls would stall the response. The
     drawer (per-ticket GET) keeps the full lookup so the PR link is
     authoritative when the user actually opens a ticket.
+
+    *repo_config* is passed through to Langfuse lookups and the
+    origin-session URL builder so per-repo project data is used.
+    When ``None`` the global ``Secrets`` singleton is consulted.
     """
-    with_cost(ticket, settings, blocking=blocking_cost)
+    with_cost(ticket, settings, blocking=blocking_cost, repo_config=repo_config)
 
     # Compute cumulative cost for any ticket with descendants.
     cumulative: float | None = None
     children = service.list_children(ticket.id)
     if children:
         cum = service.cumulative_cost(
-            ticket.id, settings, blocking=blocking_cost
+            ticket.id, settings, blocking=blocking_cost,
+            repo_config=repo_config,
         )
         # Only expose cumulative when it's meaningfully larger than direct.
         if cum > ticket.cost_usd:
@@ -166,7 +212,7 @@ def enrich_ticket_read(
         parent_title=parent_title,
         source=ticket.source,
         origin_session=ticket.origin_session,
-        origin_session_url=_origin_session_url(ticket, settings),
+        origin_session_url=_origin_session_url(ticket, settings, repo_config=repo_config),
         cost_usd=ticket.cost_usd,
         cumulative_cost=cumulative,
         depends_on=ticket.depends_on,
