@@ -117,8 +117,18 @@ class ImplementStage(Stage):
         # and skip the scope check; the agent can still produce valid
         # changes and the test gate still runs.
         if file_map is None:
+            if file_map_path.exists():
+                # File exists but is empty — no scoped files to implement.
+                ImplementStage._finalize(
+                    ctx, ticket, repo_dir, branch, "", ok=False,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    "file_map.json is empty — refine stage must produce a "
+                    "file_map for scope enforcement",
+                )
             log.warning(
-                "%s: file_map.json missing or empty — "
+                "%s: file_map.json missing — "
                 "skipping scope enforcement",
                 ticket.id,
             )
