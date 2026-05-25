@@ -712,7 +712,6 @@ class Settings(BaseSettings):
     completeness_check_interval_seconds: int = Field(
         default=86400, alias="MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS"
     )
-
     # --- env-sync agent (config ↔ .env ↔ docs drift detection) ---
     # Model for the env-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).
@@ -859,6 +858,7 @@ class Settings(BaseSettings):
         if self.bc_check_memory_path is not None:
             return self.bc_check_memory_path
         return self.data_dir / "bc_check_memory.md"
+
 
     @property
     def completeness_check_memory_file(self) -> Path:
