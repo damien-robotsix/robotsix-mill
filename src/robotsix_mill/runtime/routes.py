@@ -342,7 +342,9 @@ def mark_done(
     a terminal state or an epic.
     """
     try:
-        comment, ticket = svc.mark_done(ticket_id, note=body.get("note", ""))
+        raw_note = body.get("note", "")
+        note = str(raw_note) if raw_note else ""
+        comment, ticket = svc.mark_done(ticket_id, note=note)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
