@@ -395,12 +395,6 @@ class MergeStage(Stage):
             # traces are attributed to the ticket, not an orphan root
             # trace. (This is what made the overnight rebase cost
             # invisible in the per-ticket session total.)
-            # Build the context-manager stack based on attempt number.
-            # On the first attempt: open a ticket-root span so
-            # Langfuse attributes the rebase agent's LLM cost/traces
-            # to the ticket's session.  Retries (attempt > 1) skip
-            # the root span to avoid creating duplicate Langfuse
-            # traces for the same logical rebase operation.
             stack = contextlib.ExitStack()
             if attempt == 1:
                 stack.enter_context(tracing.start_ticket_root_span(ticket.id, "rebase"))
