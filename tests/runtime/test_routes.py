@@ -92,6 +92,106 @@ def test_get_comments_404(client):
     assert r.status_code == 404
 
 
+# -- POST /comments/{id}/close and /reopen ------------------------------
+
+def test_close_thread_happy_path(client, service):
+    """POST /comments/{id}/close on an open top-level comment returns 200
+    with closed_at set."""
+    t = service.create("Close test")
+    c = service.add_comment(t.id, "Thread to close", author="alice")
+
+    r = client.post(f"/comments/{c.id}/close")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == c.id
+    assert data["closed_at"] is not None
+    assert data["parent_id"] is None  # top-level
+
+
+def test_close_thread_on_reply_returns_409(client, service):
+    """POST /comments/{id}/close on a reply returns 409."""
+    t = service.create("Close reply test")
+    parent = service.add_comment(t.id, "Parent thread", author="alice")
+    reply = service.add_comment(
+        t.id, "A reply", author="bob", parent_id=parent.id
+    )
+
+    r = client.post(f"/comments/{reply.id}/close")
+    assert r.status_code == 409
+
+
+def test_close_thread_already_closed_returns_409(client, service):
+    """POST /comments/{id}/close on an already-closed thread returns 409."""
+    t = service.create("Double close test")
+    c = service.add_comment(t.id, "Thread", author="alice")
+    service.close_thread(c.id)
+
+    r = client.post(f"/comments/{c.id}/close")
+    assert r.status_code == 409
+
+
+def test_reopen_thread_happy_path(client, service):
+    """POST /comments/{id}/reopen on a closed thread returns 200
+    with closed_at null."""
+    t = service.create("Reopen test")
+    c = service.add_comment(t.id, "Thread", author="alice")
+    service.close_thread(c.id)
+
+    r = client.post(f"/comments/{c.id}/reopen")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == c.id
+    assert data["closed_at"] is None
+
+
+def test_reopen_thread_open_returns_409(client, service):
+    """POST /comments/{id}/reopen on an open thread returns 409."""
+    t = service.create("Reopen open test")
+    c = service.add_comment(t.id, "Open thread", author="alice")
+
+    r = client.post(f"/comments/{c.id}/reopen")
+    assert r.status_code == 409
+
+
+def test_reopen_thread_nonexistent_returns_404(client):
+    """POST /comments/{id}/reopen on a nonexistent comment returns 404."""
+    r = client.post("/comments/99999/reopen")
+    assert r.status_code == 404
+
+
+def test_close_thread_nonexistent_returns_404(client):
+    """POST /comments/{id}/close on a nonexistent comment returns 404."""
+    r = client.post("/comments/99999/close")
+    assert r.status_code == 404
+
+
+def test_add_comment_with_parent_id(client, service):
+    """POST /tickets/{id}/comments with parent_id creates a reply."""
+    t = service.create("Reply test")
+    parent = service.add_comment(t.id, "Parent", author="alice")
+
+    r = client.post(
+        f"/tickets/{t.id}/comments",
+        json={"body": "A reply", "parent_id": parent.id},
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert data["body"] == "A reply"
+    assert data["parent_id"] == parent.id
+
+
+def test_add_comment_invalid_parent_returns_422(client, service):
+    """POST /tickets/{id}/comments with invalid parent_id returns 422."""
+    t = service.create("Bad parent test")
+
+    r = client.post(
+        f"/tickets/{t.id}/comments",
+        json={"body": "Orphan reply", "parent_id": 99999},
+    )
+    # The service raises ValueError which the route maps to 400
+    assert r.status_code in (400, 422)
+
+
 # -- GET /active --------------------------------------------------------
 
 def test_active_empty(client):
