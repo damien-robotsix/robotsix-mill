@@ -73,7 +73,7 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
         )
 
     # 2. Fetch all traces from the last 24h.
-    traces = list_all_traces_since(settings, from_ts)
+    traces = list_all_traces_since(settings, from_ts, repo_config=repo_config)
 
     # 3. Partition.
     unsessioned = [t for t in traces if not t.get("sessionId")]
