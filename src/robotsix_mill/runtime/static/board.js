@@ -552,6 +552,20 @@ async function runBcCheck(){
    btn.disabled=false; btn.textContent='BC Check';
  }
 }
+async function runCompletenessCheck(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/completeness-check");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Completeness-check started — it scans for half-wired features and files draft tickets for discovered gaps. New drafts appear on the board when it finishes.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Completeness-check failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Completeness';
+ }
+}
 async function generateChildren(id){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Generating…';
