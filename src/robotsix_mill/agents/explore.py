@@ -61,6 +61,8 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
     raising so the driver can react."""
     if not get_secrets().openrouter_api_key:
         return "explore unavailable: OPENROUTER_API_KEY is not set"
+    if not repo_dir.exists():
+        return "explore unavailable: workspace repo directory does not exist — the repository has not been cloned yet"
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent

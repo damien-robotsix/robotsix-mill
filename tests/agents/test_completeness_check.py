@@ -530,7 +530,7 @@ def test_run_completeness_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_worker_completeness_check_task_created_when_periodic(tmp_path, monkeypatch):
+async def test_worker_completeness_check_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
     """Worker._completeness_check_task is created when MILL_COMPLETENESS_CHECK_PERIODIC=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -543,13 +543,6 @@ async def test_worker_completeness_check_task_created_when_periodic(tmp_path, mo
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)
-    repo_config = RepoConfig(
-        repo_id="test-repo",
-        board_id="test-board",
-        langfuse_project_name="test-langfuse",
-        langfuse_public_key="pk-test",
-        langfuse_secret_key="sk-test",
-    )
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     # Patch _run_periodic_pass to be a no-op (avoid running immediately)
@@ -569,7 +562,7 @@ async def test_worker_completeness_check_task_created_when_periodic(tmp_path, mo
 
 
 @pytest.mark.asyncio
-async def test_worker_completeness_check_task_not_created_when_periodic_false(tmp_path, monkeypatch):
+async def test_worker_completeness_check_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
     """Worker._completeness_check_task is NOT created when MILL_COMPLETENESS_CHECK_PERIODIC=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -578,13 +571,6 @@ async def test_worker_completeness_check_task_not_created_when_periodic_false(tm
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)
-    repo_config = RepoConfig(
-        repo_id="test-repo",
-        board_id="test-board",
-        langfuse_project_name="test-langfuse",
-        langfuse_public_key="pk-test",
-        langfuse_secret_key="sk-test",
-    )
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     worker = Worker(ctx)

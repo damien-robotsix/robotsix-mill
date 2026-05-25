@@ -25,20 +25,20 @@ _PRUNED_PLACEHOLDER = "[content pruned — more recent content above]"
 
 
 def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Path:
-    p = (root / rel).resolve()
-    root = root.resolve()
-    if p != root and not p.is_relative_to(root):
-        # Allow paths that resolve into an extra root
-        if extra_roots:
-            for extra in extra_roots:
-                if p.is_relative_to(extra.resolve()):
-                    return p
-        raise ValueError(f"path {rel!r} escapes the repository")
     if not root.exists():
         raise ValueError(
             "workspace repo directory does not exist — "
             "the repository has not been cloned yet"
         )
+    p = (root / rel).resolve()
+    root = root.resolve()
+    if p != root and not p.is_relative_to(root):
+        # Allow paths that resolve into an extra root (e.g. _epic/)
+        if extra_roots:
+            for extra in extra_roots:
+                if p.is_relative_to(extra.resolve()):
+                    return p
+        raise ValueError(f"path {rel!r} escapes the repository")
     return p
 
 
