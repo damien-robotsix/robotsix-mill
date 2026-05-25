@@ -257,7 +257,8 @@ def test_cost_by_agent_clamp_low(client, monkeypatch):
     """GET /costs/by-agent?lookback_hours=0 clamps to 1.0."""
     captured: list[float] = []
 
-    def fake_aggregate(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
+    def fake_aggregate(settings, lookback_hours, repo_config=None, max_tickets=None):
+        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
@@ -275,7 +276,8 @@ def test_cost_by_agent_clamp_high(client, monkeypatch):
     """GET /costs/by-agent?lookback_hours=200 clamps to 168.0."""
     captured: list[float] = []
 
-    def fake_aggregate(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
+    def fake_aggregate(settings, lookback_hours, repo_config=None, max_tickets=None):
+        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
@@ -385,7 +387,8 @@ def test_most_expensive_ticket_clamp_low(client, monkeypatch):
     """GET /costs/most-expensive-ticket?lookback_hours=0 clamps to 1.0."""
     captured: list[float] = []
 
-    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
+    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):
+        captured.append(lookback_hours)
         return None
 
     monkeypatch.setattr(
@@ -403,7 +406,8 @@ def test_most_expensive_ticket_clamp_high(client, monkeypatch):
     """GET /costs/most-expensive-ticket?lookback_hours=200 clamps to 168.0."""
     captured: list[float] = []
 
-    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
+    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):
+        captured.append(lookback_hours)
         return None
 
     monkeypatch.setattr(
@@ -502,7 +506,8 @@ def test_most_expensive_trace_clamp_low(client, monkeypatch):
     """GET /costs/most-expensive-trace?lookback_hours=0 clamps to 1.0."""
     captured: list[float] = []
 
-    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
+    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):
+        captured.append(lookback_hours)
         return None
 
     monkeypatch.setattr(
@@ -520,7 +525,8 @@ def test_most_expensive_trace_clamp_high(client, monkeypatch):
     """GET /costs/most-expensive-trace?lookback_hours=200 clamps to 168.0."""
     captured: list[float] = []
 
-    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
+    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):
+        captured.append(lookback_hours)
         return None
 
     monkeypatch.setattr(
@@ -724,7 +730,8 @@ def test_cost_trend_clamp_low(client, monkeypatch):
     """GET /costs/trend?lookback_hours=0 clamps to 1.0."""
     captured: list[float] = []
 
-    def fake_trend(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
+    def fake_trend(settings, lookback_hours, repo_config=None, max_tickets=None):
+        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
@@ -742,7 +749,8 @@ def test_cost_trend_clamp_high(client, monkeypatch):
     """GET /costs/trend?lookback_hours=200 clamps to 168.0."""
     captured: list[float] = []
 
-    def fake_trend(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
+    def fake_trend(settings, lookback_hours, repo_config=None, max_tickets=None):
+        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
