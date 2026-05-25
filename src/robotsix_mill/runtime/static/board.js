@@ -162,12 +162,14 @@ async function replyToThread(threadId,ticketId){
  if(!r.ok){const e=await r.text();alert("reply failed: "+e)}else if(sel===ticketId)open_(ticketId)
 }
 async function closeThread(commentId){
+ const tid=sel;
  const r=await jpost("/comments/"+commentId+"/close");
- if(!r.ok){const e=await r.text();alert("close thread failed: "+e)}else if(sel)open_(sel)
+ if(!r.ok){const e=await r.text();alert("close thread failed: "+e)}else if(tid)open_(tid)
 }
 async function reopenThread(commentId){
+ const tid=sel;
  const r=await jpost("/comments/"+commentId+"/reopen");
- if(!r.ok){const e=await r.text();alert("reopen thread failed: "+e)}else if(sel)open_(sel)
+ if(!r.ok){const e=await r.text();alert("reopen thread failed: "+e)}else if(tid)open_(tid)
 }
 async function newTicket(){
  // Build modal DOM

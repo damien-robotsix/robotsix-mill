@@ -200,7 +200,7 @@ margin-top:3px;background:#1e1a2a;color:#a78bfa;letter-spacing:.03em}
 /* cumulative cost badge */
 .cost-cumulative{font-size:10px;color:#aab0bd}
 /* threaded comments */
-.reply-ev{margin-left:20px;border-left-color:#4a5568;font-size:12px}
+.reply-ev{margin-left:20px;border-left:1px solid #4a5568;font-size:12px}
 .thread{margin-bottom:12px;border:1px solid #262b36;border-radius:6px;padding:8px 10px;background:#161922}
 .thread-closed{opacity:.65;background:#14181f}
 .closed-badge{font-size:10px;color:#f87171;margin-left:6px}
