@@ -4,7 +4,7 @@ from robotsix_mill.cli import main
 from robotsix_mill.core.states import State
 
 
-def test_approve_success(settings, service):
+def test_approve_success(settings, service, repo_config):
     """CLI `ticket approve <id>` exits 0 on success with human-readable output."""
     t = service.create("Approve me via CLI")
     service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
@@ -17,7 +17,7 @@ def test_approve_success(settings, service):
     from fastapi.testclient import TestClient
     from robotsix_mill.runtime.api import create_app
 
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(repo_config, settings)) as client:
         # The CLI uses settings.api_url to reach the server.
         # We can't override that easily without monkeypatching.
         pass

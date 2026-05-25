@@ -25,19 +25,33 @@ from robotsix_mill.langfuse_client import (
 def _langfuse_settings(**overrides):
     """Return a Settings with tracing enabled via Secrets.
 
-    Constructs a Settings from overrides AND sets the Secrets
-    singleton so that tracing_enabled and the Langfuse API helpers
-    find the credentials."""
-    overrides.setdefault("LANGFUSE_BASE_URL", "https://lf.example.com")
-    overrides.setdefault("LANGFUSE_PUBLIC_KEY", "pk-test")
-    overrides.setdefault("LANGFUSE_SECRET_KEY", "sk-test")
-    # Populate Secrets so get_secrets() returns matching values
+    Constructs a Settings and sets the Secrets singleton so that
+    tracing_enabled and the Langfuse API helpers find the credentials.
+
+    *overrides* keys may include ``langfuse_base_url``,
+    ``langfuse_public_key``, and ``langfuse_secret_key`` to customize
+    the Langfuse credentials (the old ``LANGFUSE_*`` env-var-style
+    keys are mapped automatically).
+    """
+    from robotsix_mill.config import Settings
+
+    # Map old LANGFUSE_* keys to Secrets field names.
+    secrets_kwargs: dict = {}
+    for env_key, field_name in [
+        ("LANGFUSE_BASE_URL", "langfuse_base_url"),
+        ("LANGFUSE_PUBLIC_KEY", "langfuse_public_key"),
+        ("LANGFUSE_SECRET_KEY", "langfuse_secret_key"),
+    ]:
+        if env_key in overrides:
+            secrets_kwargs[field_name] = overrides.pop(env_key)
+
+    # Populate Secrets so get_secrets() returns matching values.
     import robotsix_mill.config as _cfg
     _reset_secrets()
     _cfg._secrets = Secrets(
-        langfuse_base_url=overrides.get("LANGFUSE_BASE_URL"),
-        langfuse_public_key=overrides.get("LANGFUSE_PUBLIC_KEY"),
-        langfuse_secret_key=overrides.get("LANGFUSE_SECRET_KEY"),
+        langfuse_base_url=secrets_kwargs.get("langfuse_base_url", "https://lf.example.com"),
+        langfuse_public_key=secrets_kwargs.get("langfuse_public_key", "pk-test"),
+        langfuse_secret_key=secrets_kwargs.get("langfuse_secret_key", "sk-test"),
     )
     return Settings(**overrides)
 

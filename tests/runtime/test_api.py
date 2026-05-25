@@ -8,9 +8,9 @@ from robotsix_mill.runtime.api import create_app
 
 
 @pytest.fixture
-def client(settings):
+def client(settings, repo_config):
     # TestClient runs the lifespan: init_db, worker start/stop.
-    with TestClient(create_app(settings)) as c:
+    with TestClient(create_app(repo_config, settings)) as c:
         yield c
 
 

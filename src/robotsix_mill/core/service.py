@@ -60,10 +60,9 @@ class TicketService:
 
         The settings provide the database path and workspace root directory.
         *board_id* identifies the repository this service stamps on tickets.
-        When empty, falls back to ``settings.board_id``.
         """
         self.settings = settings
-        self.board_id = board_id or settings.board_id
+        self.board_id = board_id
 
     def workspace(self, ticket: Ticket) -> Workspace:
         """Return the :class:`Workspace` for *ticket*.

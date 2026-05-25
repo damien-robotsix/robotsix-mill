@@ -1,8 +1,9 @@
 """Runtime configuration, sourced from environment, .env, and secrets.env.
 
-Conventional keys (``OPENROUTER_API_KEY``, ``LANGFUSE_*``) are
-unprefixed to match the reference projects; mill-specific knobs use the
-``MILL_`` / ``FORGE_`` prefixes.
+Conventional keys (``OPENROUTER_API_KEY``) are unprefixed to match the
+reference projects; mill-specific knobs use the ``MILL_`` / ``FORGE_``
+prefixes.  Per-repository Langfuse credentials are loaded from
+``config/repos.yaml`` and stamped onto ``Secrets`` at startup.
 """
 
 from __future__ import annotations
@@ -62,9 +63,9 @@ class Settings(BaseSettings):
 
     All fields are sourced from ``os.environ`` and layered
     ``config/*.yaml`` files.  Conventional keys like
-    ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain
-    compatible with the reference projects.  Mill-specific settings use
-    the ``MILL_`` / ``FORGE_`` prefix convention and declare explicit
+    ``OPENROUTER_API_KEY`` are unprefixed to remain compatible with the
+    reference projects.  Mill-specific settings use the ``MILL_`` /
+    ``FORGE_`` prefix convention and declare explicit
     ``Field(alias=...)`` values.
     """
 
@@ -766,18 +767,9 @@ class Settings(BaseSettings):
         default=None, alias="MILL_REBASE_MEMORY_PATH"
     )
 
-    # --- tracing (optional) ---
-    langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
-    langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
-    langfuse_secret_key: str | None = Field(default=None, alias="LANGFUSE_SECRET_KEY")
-    langfuse_project_id: str | None = Field(default=None, alias="LANGFUSE_PROJECT_ID")
-
     # --- notifications (optional) ---
     ntfy_url: str | None = Field(default=None, alias="NTFY_URL")
     ntfy_token: str | None = Field(default=None, alias="NTFY_TOKEN")
-
-    # --- board ---
-    board_id: str = Field(default="", alias="MILL_BOARD_ID")
 
     @property
     def db_path(self) -> Path:

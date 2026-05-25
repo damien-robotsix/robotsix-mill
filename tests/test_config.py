@@ -79,7 +79,6 @@ def test_default_empty_and_none():
     assert s.openrouter_api_key is None
     assert s.rate_limit_fallback_model == ""
     assert s.forge_remote_url is None
-    assert s.langfuse_base_url is None
 
 
 def test_default_max_spend_sentinel():
@@ -234,11 +233,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("refine_memory_path", "MILL_REFINE_MEMORY_PATH", "/mem/ref.md", Path("/mem/ref.md")),
     ("ci_fix_memory_path", "MILL_CI_FIX_MEMORY_PATH", "/mem/cifix.md", Path("/mem/cifix.md")),
     ("rebase_memory_path", "MILL_REBASE_MEMORY_PATH", "/mem/rebase.md", Path("/mem/rebase.md")),
-    # --- tracing ---
-    ("langfuse_base_url", "LANGFUSE_BASE_URL", "https://lf.example.com", "https://lf.example.com"),
-    ("langfuse_public_key", "LANGFUSE_PUBLIC_KEY", "pk-lf-test", "pk-lf-test"),
-    ("langfuse_secret_key", "LANGFUSE_SECRET_KEY", "sk-lf-test", "sk-lf-test"),
-    ("langfuse_project_id", "LANGFUSE_PROJECT_ID", "proj-123", "proj-123"),
     # --- notifications ---
     ("ntfy_url", "NTFY_URL", "https://ntfy.example.com", "https://ntfy.example.com"),
     ("ntfy_token", "NTFY_TOKEN", "tk-test", "tk-test"),
@@ -345,15 +339,8 @@ class TestComputedProperties:
 
     # -- tracing_enabled --
 
-    def test_tracing_enabled_true(self, monkeypatch):
-        monkeypatch.setenv("LANGFUSE_BASE_URL", "https://lf.example.com")
-        monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
-        monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
-        # Populate Secrets so get_secrets() returns matching values
-        from robotsix_mill.config import Secrets, _reset_secrets
-        import robotsix_mill.config as _cfg
-        _reset_secrets()
-        _cfg._secrets = Secrets(
+    def test_tracing_enabled_true(self, secrets_set):
+        secrets_set(
             langfuse_base_url="https://lf.example.com",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -361,41 +348,24 @@ class TestComputedProperties:
         s = Settings()
         assert s.tracing_enabled is True
 
-    def test_tracing_enabled_false_missing_url(self, monkeypatch):
-        monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
-        monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
-        # no LANGFUSE_BASE_URL
-        from robotsix_mill.config import Secrets, _reset_secrets
-        import robotsix_mill.config as _cfg
-        _reset_secrets()
-        _cfg._secrets = Secrets(
+    def test_tracing_enabled_false_missing_url(self, secrets_set):
+        secrets_set(
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
         )
         s = Settings()
         assert s.tracing_enabled is False
 
-    def test_tracing_enabled_false_missing_public_key(self, monkeypatch):
-        monkeypatch.setenv("LANGFUSE_BASE_URL", "https://lf.example.com")
-        monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
-        from robotsix_mill.config import Secrets, _reset_secrets
-        import robotsix_mill.config as _cfg
-        _reset_secrets()
-        _cfg._secrets = Secrets(
+    def test_tracing_enabled_false_missing_public_key(self, secrets_set):
+        secrets_set(
             langfuse_base_url="https://lf.example.com",
             langfuse_secret_key="sk-test",
         )
         s = Settings()
         assert s.tracing_enabled is False
 
-    def test_tracing_enabled_false_empty_string(self, monkeypatch):
-        monkeypatch.setenv("LANGFUSE_BASE_URL", "")
-        monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
-        monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
-        from robotsix_mill.config import Secrets, _reset_secrets
-        import robotsix_mill.config as _cfg
-        _reset_secrets()
-        _cfg._secrets = Secrets(
+    def test_tracing_enabled_false_empty_string(self, secrets_set):
+        secrets_set(
             langfuse_base_url="",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",

@@ -310,8 +310,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
 
+        # Stamp per-repo Langfuse credentials onto the Secrets singleton
+        # so tracing_enabled and the Langfuse API helpers pick them up.
+        from .config import Secrets, _reset_secrets, get_secrets
+        _reset_secrets()
+        existing = get_secrets()
+        import robotsix_mill.config as _cfg
+        _cfg._secrets = Secrets(
+            openrouter_api_key=existing.openrouter_api_key,
+            forge_token=existing.forge_token,
+            github_app_id=existing.github_app_id,
+            github_app_private_key=existing.github_app_private_key,
+            github_app_private_key_path=existing.github_app_private_key_path,
+            langfuse_public_key=repo_config.langfuse_public_key,
+            langfuse_secret_key=repo_config.langfuse_secret_key,
+            langfuse_base_url=repo_config.langfuse_base_url,
+            langfuse_project_id=repo_config.langfuse_project_name,
+            ntfy_url=existing.ntfy_url,
+            ntfy_token=existing.ntfy_token,
+        )
+
         uvicorn.run(
-            create_app(settings, repo_config),
+            create_app(repo_config, settings),
             host=settings.api_host,
             port=settings.api_port,
         )

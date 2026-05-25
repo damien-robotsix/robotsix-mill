@@ -3,13 +3,14 @@
 Zero imports from ``opentelemetry.*``, ``langfuse``, or ``pydantic_ai.agent``
 at module level — everything is lazy behind ``_ensure_tracing()``.
 
-When ``LANGFUSE_PUBLIC_KEY`` and ``LANGFUSE_SECRET_KEY`` are both set, we
-configure a global ``TracerProvider`` with an ``OTLPSpanExporter`` pointing
-to Langfuse's OTLP endpoint, call ``Agent.instrument_all()`` so every
-pydantic-ai agent run is automatically recorded, and expose context
-managers for root ticket spans and pipeline stage spans.
+When per-repo Langfuse credentials are available via ``RepoConfig``
+(stamped onto ``Secrets`` at startup), we configure a global
+``TracerProvider`` with an ``OTLPSpanExporter`` pointing to Langfuse's
+OTLP endpoint, call ``Agent.instrument_all()`` so every pydantic-ai
+agent run is automatically recorded, and expose context managers for
+root ticket spans and pipeline stage spans.
 
-When the env vars are absent, every function is a cheap no-op.
+When the credentials are absent, every function is a cheap no-op.
 """
 
 from __future__ import annotations
