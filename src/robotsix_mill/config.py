@@ -243,6 +243,12 @@ class Settings(BaseSettings):
     doc_request_limit: int = Field(
         default=8, alias="MILL_DOC_REQUEST_LIMIT"
     )
+    doc_classifier_model: str = Field(
+        default="openai/gpt-4o-mini", alias="MILL_DOC_CLASSIFIER_MODEL"
+    )
+    doc_classifier_request_limit: int = Field(
+        default=3, alias="MILL_DOC_CLASSIFIER_REQUEST_LIMIT"
+    )
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped (read-side
     # only — persist_memory is unchanged).  Applies to all memory ledgers

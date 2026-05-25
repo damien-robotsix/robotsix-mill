@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from robotsix_mill.agents.documenting import DocResult
+from robotsix_mill.agents.documenting import DocClassifierResult, DocResult
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
@@ -277,3 +277,131 @@ def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
     out = DocumentStage().run(t, ctx)
     assert out.next_state is State.DELIVERABLE
     assert out.note == "updated docs"
+
+
+# --- classifier internal-only → skips full agent ----------------------
+
+def test_classifier_internal_skips_full_agent(ctx_factory, monkeypatch):
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    commits_before = _git_log(repo_dir).count("\n") + 1
+
+    full_agent_called = []
+
+    def _fake_classifier(self, *, settings, diff, spec):
+        del self, settings, diff, spec
+        return DocClassifierResult(
+            user_facing=False,
+            classification="internal-only — test changes only",
+        )
+
+    def _fake_full_agent(self, *args, **kwargs):
+        full_agent_called.append(1)
+        return DocResult(user_facing=False, summary="")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_classifier", _fake_classifier)
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_full_agent)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert "no user-facing changes" in out.note
+    assert len(full_agent_called) == 0  # full agent never invoked
+
+    # No new commits.
+    commits_after = _git_log(repo_dir).count("\n") + 1
+    assert commits_after == commits_before
+
+
+# --- classifier user-facing → runs full agent -------------------------
+
+def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    def _fake_classifier(self, *, settings, diff, spec):
+        del self, settings, diff, spec
+        return DocClassifierResult(
+            user_facing=True,
+            classification="user-facing — new config key",
+        )
+
+    def _fake_full_agent(self, *, settings, repo_dir, diff, spec, extra_roots=None):
+        del self, settings, diff, spec
+        (Path(repo_dir) / "README.md").write_text("# Updated by doc agent\n")
+        return DocResult(user_facing=True, summary="updated README")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_classifier", _fake_classifier)
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_full_agent)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert out.note == "updated README"
+
+    # Full agent wrote docs and they were committed.
+    assert (repo_dir / "README.md").read_text() == "# Updated by doc agent\n"
+    log = _git_log(repo_dir)
+    assert "mill(docs):" in log
+
+
+# --- classifier exception → fall through to full agent ----------------
+
+def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypatch):
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+
+    full_agent_called = []
+
+    def _failing_classifier(self, *, settings, diff, spec):
+        del self, settings, diff, spec
+        raise RuntimeError("model unavailable")
+
+    def _fake_full_agent(self, *, settings, repo_dir, diff, spec, extra_roots=None):
+        full_agent_called.append(1)
+        del self, settings, diff, spec
+        (Path(repo_dir) / "README.md").write_text("# Full agent ran\n")
+        return DocResult(user_facing=True, summary="updated docs")
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_classifier", _failing_classifier)
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_full_agent)
+
+    out = DocumentStage().run(t, ctx)
+    assert out.next_state is State.DELIVERABLE
+    assert out.note == "updated docs"
+    assert len(full_agent_called) == 1  # full agent still ran
+    assert (repo_dir / "README.md").read_text() == "# Full agent ran\n"
+
+
+# --- classifier verdict recorded in history ---------------------------
+
+def test_classifier_verdict_recorded_in_history(ctx_factory, monkeypatch):
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+
+    add_comment_calls = []
+
+    orig_add = ctx.service.add_comment
+
+    def _spy_add_comment(ticket_id, body, *, author="user", parent_id=None):
+        add_comment_calls.append({"body": body, "author": author})
+        return orig_add(ticket_id, body, author=author, parent_id=parent_id)
+
+    monkeypatch.setattr(ctx.service, "add_comment", _spy_add_comment)
+
+    def _fake_classifier(self, *, settings, diff, spec):
+        del self, settings, diff, spec
+        return DocClassifierResult(
+            user_facing=False,
+            classification="internal-only — model field rename",
+        )
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_classifier", _fake_classifier)
+
+    DocumentStage().run(t, ctx)
+
+    classifier_comments = [c for c in add_comment_calls if c["author"] == "doc_classifier"]
+    assert len(classifier_comments) == 1
+    assert classifier_comments[0]["body"] == "classifier: internal-only — model field rename"
