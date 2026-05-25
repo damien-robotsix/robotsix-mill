@@ -63,6 +63,23 @@ On success the ticket transitions directly to `done` and retrospect runs.
 If the forge rejects the merge (branch protection, conflicts, etc.), the
 endpoint returns 409 and the ticket remains in `human_mr_approval`.
 
+The drawer performs a **live merge-status check** before rendering the
+Merge button. When the ticket drawer opens it calls
+`GET /tickets/{id}/merge-status`, which queries the forge for the PR's
+mergeability and CI conclusion:
+
+- **Conflicts** → button is disabled with "PR has conflicts — rebase
+  needed"
+- **Failing CI** → button is disabled with "CI checks are failing"
+- **Pending CI** → button is disabled with "CI checks are still running"
+- **Mergeable + green CI** → button is active and clickable
+- **Transient forge error** → button stays active (optimistic; the
+  `merge-now` endpoint handles the actual rejection)
+
+The card-level Merge button does **not** perform this live check — it
+renders optimistically and the merge stage's poll loop transitions
+tickets to `REBASING` / `FIXING_CI` when it detects problems.
+
 The drawer also calls `GET /tickets/{id}/merge-reason` to display an
 amber annotation explaining *why* auto-merge is ineligible when it is.
 
