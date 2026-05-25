@@ -14,6 +14,7 @@ def _clear_env():
     _reset_secrets()
     # Reset the module-level state so tests are independent.
     tracing._tracing_ready = None
+    tracing._shutdown_requested = False
 
 
 def test_ensure_tracing_disabled():
@@ -273,3 +274,86 @@ def test_make_session_id_all_unique():
     assert len(set(ids)) == 1000
     for sid in ids:
         assert sid.startswith("smoke-")
+
+
+# --- install_signal_handlers & flush_tracing timeout ---
+
+
+def test_install_signal_handlers_registers_without_otel():
+    """install_signal_handlers() must not import OTel at module level.
+
+    Verified implicitly by test_no_otel_imports_at_module_level (the
+    subprocess check imports the module, which defines the function).
+    Here we only verify the function is callable without error.
+    """
+    tracing.install_signal_handlers()
+
+
+def test_sigterm_calls_flush_tracing(monkeypatch):
+    """Sending SIGTERM after install_signal_handlers must call
+    flush_tracing() before raising SystemExit."""
+    import os
+    import signal
+
+    calls: list = []
+    def fake_flush(timeout: int = 10_000) -> None:
+        calls.append(timeout)
+    monkeypatch.setattr(tracing, "flush_tracing", fake_flush)
+
+    tracing.install_signal_handlers()
+    try:
+        os.kill(os.getpid(), signal.SIGTERM)
+    except SystemExit:
+        pass
+    assert len(calls) == 1
+
+
+def test_double_sigterm_no_deadlock(monkeypatch):
+    """A second SIGTERM must not call flush_tracing again — the
+    _shutdown_requested flag prevents re-entrant flushes."""
+    import os
+    import signal
+
+    calls: list = []
+    def fake_flush(timeout: int = 10_000) -> None:
+        calls.append(timeout)
+    monkeypatch.setattr(tracing, "flush_tracing", fake_flush)
+
+    tracing.install_signal_handlers()
+    # First signal — handler runs, raises SystemExit.
+    try:
+        os.kill(os.getpid(), signal.SIGTERM)
+    except SystemExit:
+        pass
+    assert len(calls) == 1
+
+    # Second signal — handler sees _shutdown_requested is True, returns.
+    os.kill(os.getpid(), signal.SIGTERM)
+    assert len(calls) == 1  # still only one flush
+
+
+def test_flush_tracing_timeout_passed_to_force_flush(monkeypatch):
+    """flush_tracing(timeout=5000) passes timeout_millis=5000 to
+    provider.force_flush."""
+    tracing._tracing_ready = True
+
+    import opentelemetry.trace  # ensure module is importable for patching
+
+    timeout_value: list = []
+    class FakeProvider:
+        def force_flush(self, timeout_millis: int | None = None) -> None:
+            timeout_value.append(timeout_millis)
+
+    monkeypatch.setattr(
+        opentelemetry.trace, "get_tracer_provider", lambda: FakeProvider()
+    )
+    tracing.flush_tracing(timeout=5000)
+    assert timeout_value == [5000]
+
+
+def test_flush_tracing_default_timeout():
+    """flush_tracing() default timeout is 10_000 ms."""
+    import inspect
+
+    sig = inspect.signature(tracing.flush_tracing)
+    assert sig.parameters["timeout"].default == 10_000
