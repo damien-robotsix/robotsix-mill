@@ -77,13 +77,20 @@ def try_rebase_onto(repo: Path, target: str) -> bool:
     returns ``False`` so the caller can fall back to a fresh clone.
     Used by the implement resume path so a WIP branch pinned to an old
     base picks up current ``main`` (e.g. a fixed test-gate conftest)
-    instead of failing the gate forever."""
+    instead of failing the gate forever.
+
+    ``--autostash`` preserves uncommitted edits across the rebase. The
+    implement loop frequently re-enters with a dirty working tree
+    (half-finished agent edits not yet committed); without autostash,
+    ``git rebase`` aborts with "you have unstaged changes" and the
+    caller cycled REBASING→READY→REBASING forever.
+    """
     try:
         _git(repo, "fetch", "origin", target)
     except subprocess.CalledProcessError:
         return False
     try:
-        _git(repo, "rebase", f"origin/{target}")
+        _git(repo, "rebase", "--autostash", f"origin/{target}")
         return True
     except subprocess.CalledProcessError:
         try:
