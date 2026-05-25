@@ -197,6 +197,15 @@ class Settings(BaseSettings):
     transient_backoff_cap: float = Field(
         default=30.0, alias="MILL_TRANSIENT_BACKOFF_CAP"
     )
+    stage_retry_max_attempts: int = Field(
+        default=5, alias="MILL_STAGE_RETRY_MAX_ATTEMPTS"
+    )
+    stage_retry_base_delay: float = Field(
+        default=30.0, alias="MILL_STAGE_RETRY_BASE_DELAY"
+    )
+    stage_retry_max_delay: float = Field(
+        default=300.0, alias="MILL_STAGE_RETRY_MAX_DELAY"
+    )
     # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
     # are longer than transient backoff because OpenRouter/provider
     # rate-limit windows are typically ~60s.  When
@@ -934,6 +943,35 @@ class Settings(BaseSettings):
         if v <= 0:
             raise ValueError("transient_backoff_cap must be > 0")
         return v
+
+    @field_validator("stage_retry_max_attempts")
+    @classmethod
+    def _validate_stage_retry_max_attempts(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("stage_retry_max_attempts must be ≥ 0")
+        return v
+
+    @field_validator("stage_retry_base_delay")
+    @classmethod
+    def _validate_stage_retry_base_delay(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("stage_retry_base_delay must be > 0")
+        return v
+
+    @field_validator("stage_retry_max_delay")
+    @classmethod
+    def _validate_stage_retry_max_delay(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("stage_retry_max_delay must be > 0")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_stage_retry_delays(self) -> "Settings":
+        if self.stage_retry_max_delay < self.stage_retry_base_delay:
+            raise ValueError(
+                "stage_retry_max_delay must be ≥ stage_retry_base_delay"
+            )
+        return self
 
     @field_validator("rate_limit_backoff_base")
     @classmethod

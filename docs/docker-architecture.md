@@ -26,12 +26,15 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
         ─deliver▶ in_review ─(PR merged; merge-poll)▶ done ─retrospect▶ closed
   in_review = PR open (the PR is the review); merge poll flips it.
   retrospect audits the run + Langfuse and may spawn an improvement draft.
-  closed = terminal. errored = a stage threw; blocked = needs a human
-  (both resumable: a human transition re-enqueues).
+  closed = terminal. errored = worker-level crash (rare); blocked = needs a human.
+  Transient stage failures (git outage, provider 5xx) are retried automatically
+  with exponential backoff (see MILL_STAGE_RETRY_*). Fatal stage errors and
+  exhausted retries go straight to BLOCKED.
 
-  BLOCKED recovery (no raw-DB editing ever needed):
+  BLOCKED / retrying recovery (no raw-DB editing ever needed):
     BLOCKED ─resume-blocked▶ <blocked_from>   (re-run only the failed stage)
     BLOCKED → READY | DRAFT                    (manual override: full re-run)
+    retrying ticket → resume-blocked           (clears retry state, re-enqueues)
   awaiting_approval is a human gate (configurable via MILL_REQUIRE_APPROVAL).
 ```
 

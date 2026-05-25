@@ -354,6 +354,9 @@ class TicketService:
                     f"{ticket_id}: {ticket.state} -> {dst} not allowed"
                 )
             ticket.blocked_from = None
+            ticket.retry_attempt = 0
+            ticket.last_transient_error = None
+            ticket.next_retry_at = None
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -367,6 +370,29 @@ class TicketService:
             s.commit()
             s.refresh(ticket)
             return ticket
+
+    def set_retry_state(
+        self,
+        ticket_id: str,
+        *,
+        retry_attempt: int,
+        last_transient_error: str | None,
+        next_retry_at: datetime | None,
+    ) -> None:
+        """Set transient-error retry metadata on a ticket.
+
+        Does NOT create a ``TicketEvent`` — the workflow state hasn't changed.
+        """
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.retry_attempt = retry_attempt
+            ticket.last_transient_error = last_transient_error
+            ticket.next_retry_at = next_retry_at
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
 
     def set_branch(self, ticket_id: str, branch: str) -> None:
         """Record the git branch name for a ticket.

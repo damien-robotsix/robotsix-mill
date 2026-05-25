@@ -523,13 +523,36 @@ def resume_blocked(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
-    """Resume a blocked ticket back to the state it was blocked from."""
-    try:
-        ticket = svc.resume_blocked(ticket_id)
-    except KeyError:
-        raise HTTPException(404, "ticket not found") from None
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
+    """Resume a blocked or retrying ticket.
+
+    For BLOCKED tickets, transitions back to the originating state.
+    For retrying tickets (retry_attempt > 0 in any non-BLOCKED state),
+    clears the retry metadata and re-enqueues immediately.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+
+    if ticket.state is State.BLOCKED:
+        try:
+            ticket = svc.resume_blocked(ticket_id)
+        except KeyError:
+            raise HTTPException(404, "ticket not found") from None
+        except TransitionError as e:
+            raise HTTPException(409, str(e)) from None
+    elif ticket.retry_attempt > 0:
+        svc.set_retry_state(
+            ticket_id,
+            retry_attempt=0,
+            last_transient_error=None,
+            next_retry_at=None,
+        )
+        ticket = svc.get(ticket_id)
+    else:
+        raise HTTPException(
+            409, f"ticket is not blocked or retrying (currently {ticket.state})"
+        )
+
     maybe_enqueue(ticket, worker)
     return enrich_ticket_read(ticket, settings, svc)
 

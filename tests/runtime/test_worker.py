@@ -90,8 +90,10 @@ async def test_failing_stage_marks_failed(ctx, service, monkeypatch):
     t = service.create("x")
     await process_ticket(t.id, ctx)
     reloaded = service.get(t.id)
-    assert reloaded.state is State.ERRORED
-    assert "boom" in service.history(t.id)[-1].note
+    assert reloaded.state is State.BLOCKED
+    note = service.history(t.id)[-1].note
+    assert "Fatal:" in note
+    assert "boom" in note
 
 
 async def test_untraced_noop_stage_emits_no_trace(ctx, service, monkeypatch):
@@ -488,3 +490,118 @@ async def test_periodic_pass_waits_when_not_overdue(
         )
     finally:
         await w.stop()
+
+
+# --- transient-error retry at stage-runner level -----------------------
+
+
+async def test_transient_retry_succeeds(ctx, service, monkeypatch):
+    """A stage that raises httpx.ConnectError twice then succeeds must
+    retry automatically and reach its intended next state without ever
+    hitting BLOCKED or ERRORED."""
+    import httpx
+
+    calls = [0]
+
+    class FlakyRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            calls[0] += 1
+            if calls[0] <= 2:
+                raise httpx.ConnectError("connection refused")
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined on retry")
+
+    monkeypatch.setitem(registry.STAGES, "refine", FlakyRefine())
+    ctx.settings.stage_retry_max_attempts = 3
+    ctx.settings.stage_retry_base_delay = 0.001
+    ctx.settings.stage_retry_max_delay = 0.001
+
+    t = service.create("flaky")
+
+    # Call 1: raises ConnectError — attempt 1, backoff set
+    await process_ticket(t.id, ctx)
+    assert service.get(t.id).state is State.DRAFT  # stays in current state
+    t1 = service.get(t.id)
+    assert t1.retry_attempt == 1
+    assert "connection refused" in (t1.last_transient_error or "")
+
+    # Let the tiny backoff elapse.
+    await asyncio.sleep(0.01)
+
+    # Call 2: backoff elapsed — raises ConnectError — attempt 2
+    await process_ticket(t.id, ctx)
+    t2 = service.get(t.id)
+    assert t2.retry_attempt == 2
+    assert service.get(t.id).state is State.DRAFT
+
+    # Let the tiny backoff elapse.
+    await asyncio.sleep(0.01)
+
+    # Call 3: succeeds — advances
+    await process_ticket(t.id, ctx)
+    assert service.get(t.id).state is State.HUMAN_ISSUE_APPROVAL
+
+
+async def test_non_transient_blocks_immediately(ctx, service, monkeypatch):
+    """A non-transient ValueError must go straight to BLOCKED with no
+    retry — retry_attempt stays 0 and note is prefixed 'Fatal:'."""
+    class Boom(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            raise ValueError("boom")
+
+    monkeypatch.setitem(registry.STAGES, "refine", Boom())
+    t = service.create("x")
+    await process_ticket(t.id, ctx)
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.BLOCKED
+    assert reloaded.retry_attempt == 0
+    note = service.history(t.id)[-1].note
+    assert "Fatal:" in note
+    assert "ValueError" in note
+    assert "boom" in note
+
+
+async def test_transient_exhausted_blocks(ctx, service, monkeypatch):
+    """When retries are exhausted, a transient error transitions to
+    BLOCKED with a note mentioning the attempt count."""
+    import httpx
+
+    class AlwaysTimeout(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            raise httpx.ReadTimeout("read timed out")
+
+    monkeypatch.setitem(registry.STAGES, "refine", AlwaysTimeout())
+    ctx.settings.stage_retry_max_attempts = 2
+    ctx.settings.stage_retry_base_delay = 0.001
+    ctx.settings.stage_retry_max_delay = 0.001
+
+    t = service.create("doomed")
+
+    # Attempt 1 — retry
+    await process_ticket(t.id, ctx)
+    assert service.get(t.id).state is State.DRAFT
+    assert service.get(t.id).retry_attempt == 1
+
+    await asyncio.sleep(0.01)
+
+    # Attempt 2 — retry
+    await process_ticket(t.id, ctx)
+    assert service.get(t.id).retry_attempt == 2
+    assert service.get(t.id).state is State.DRAFT
+
+    await asyncio.sleep(0.01)
+
+    # Attempt 3 — exhausted (max_attempts=2, so this is the 3rd call)
+    await process_ticket(t.id, ctx)
+    assert service.get(t.id).state is State.BLOCKED
+    note = service.history(t.id)[-1].note
+    assert "2 attempts" in note
+    assert "ReadTimeout" in note
