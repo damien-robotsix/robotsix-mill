@@ -669,7 +669,7 @@ multiple PRs without a flag-day cutover.
 4. Add the `Secrets` model and load it from `config/secrets.yaml` (if
    present) **alongside** the existing `secrets.env` path.  If both exist,
    YAML wins.
-5. Ship a `scripts/migrate-config` script (see Phase 2).  CI gains a
+5. Ship `dev/migrate-env-to-yaml.py` (see Phase 2).  CI gains a
    `scripts/validate-config-docs` check (see §10).
 
 **At this point:** existing `.env` files work unchanged.  Developers can opt
@@ -678,9 +678,9 @@ in to YAML by creating `config/mill.local.yaml`.  Production can test the
 
 ### Phase 2: Run migration, commit defaults
 
-1. Run `scripts/migrate-config` — it reads `.env` + `secrets.env` and emits
-   `config/mill.production.yaml` + `config/secrets.yaml` with all active
-   values.
+1. Run `dev/migrate-env-to-yaml.py` — it reads `.env` + `secrets.env` and emits
+   `config/mill.local.yaml` + `config/secrets.yaml` with only the values
+   that differ from the committed defaults.
 2. Review the generated production config for correctness.
 3. Rename `.env` → `.env.deprecated` (kept for reference, not loaded).
 4. Commit `config/mill.defaults.yaml` (already done in Phase 1).
@@ -704,21 +704,25 @@ in to YAML by creating `config/mill.local.yaml`.  Production can test the
 
 ### Migration script
 
-`scripts/migrate-config` performs a lossless translation:
+`dev/migrate-env-to-yaml.py` performs a lossless translation:
 
 ```
-Input:  .env + secrets.env
-Output: config/mill.production.yaml + config/secrets.yaml
+Input:  .env + secrets.env (optional)
+Output: config/mill.local.yaml + config/secrets.yaml
 ```
 
 It reads every active (uncommented, non-empty) line from `.env` and
 `secrets.env`, maps each `MILL_*` / `FORGE_*` / non-prefixed var to its
-YAML dotted path using the mapping table in §4.2, and writes the
-corresponding nested YAML.  Vars that match the committed default are
-omitted from the production overlay (the defaults file already covers them).
-Secrets always go to `config/secrets.yaml`.
+YAML dotted path using `_YAML_PATH_TO_ALIAS`, and writes the
+corresponding nested YAML.  Vars that match the committed default in
+`config/mill.defaults.yaml` are omitted from the local overlay (the
+defaults file already covers them).  Secrets always go to
+`config/secrets.yaml` with keys lowercased to match the `Secrets` model
+field names.
 
 The script is idempotent — running it twice produces the same output.
+It is non-destructive (original `.env` and `secrets.env` are left
+untouched).
 
 ---
 
