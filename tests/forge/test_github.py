@@ -226,6 +226,7 @@ def test_get_pr_found_returns_expected_dict(tmp_path, monkeypatch):
         "state": "open",
         "html_url": "http://pr/7",
         "mergeable": True,
+        "mergeable_state": "clean",
         "head": {"sha": "abc123"},
     }
     # Detail key must come BEFORE list key so it matches first
@@ -243,6 +244,7 @@ def test_get_pr_found_returns_expected_dict(tmp_path, monkeypatch):
         "state": "open",
         "url": "http://pr/7",
         "mergeable": True,
+        "mergeable_state": "clean",
         "sha": "abc123",
         "number": 7,
     }
