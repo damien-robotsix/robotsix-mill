@@ -849,6 +849,7 @@ def test_scope_violation_blocks_ticket(ctx_factory, tmp_path, monkeypatch):
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
         MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+        MILL_SCOPE_TRIAGE_ENABLED="false",
     )
     t = _ticket(ctx)
 
@@ -984,3 +985,212 @@ def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypa
     assert any(
         "skipping scope enforcement" in m for m in caplog.messages
     ), f"expected scope-skip warning, got: {caplog.messages}"
+
+
+# --- scope-triage integration tests -------------------------------------
+
+
+def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
+    """EXPAND verdict: file_map is updated in-memory, the loop continues,
+    and a comment is posted."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+    )
+
+    call_count = {"n": 0}
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+        call_count["n"] += 1
+        (Path(repo_dir) / "wip.txt").write_text("in scope")
+        (Path(repo_dir) / "README.md").write_text("out of scope edit")
+        return ("edit done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+        return ScopeTriageVerdict(
+            action="EXPAND",
+            justification="Minor dependency edit is a legitimate consequence",
+            expand_files=["README.md"],
+        )
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    out = ImplementStage().run(t, ctx)
+
+    # With EXPAND the loop should continue (agent called at least twice)
+    assert call_count["n"] >= 2, "EXPAND should continue the loop"
+    assert out.next_state is not State.BLOCKED
+    # A scope-triage comment should be posted
+    comments = ctx.service.list_comments(t.id)
+    assert any("[scope-triage] EXPAND" in c.body for c in comments)
+
+
+def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):
+    """REJECT verdict: ticket goes back to READY with a comment naming
+    the rogue files."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+    )
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+        (Path(repo_dir) / "wip.txt").write_text("in scope")
+        (Path(repo_dir) / "README.md").write_text("out of scope edit")
+        return ("edit done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+        return ScopeTriageVerdict(
+            action="REJECT",
+            justification="Unrelated module — scope creep",
+            expand_files=[],
+        )
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert "REJECT" in out.note
+    comments = ctx.service.list_comments(t.id)
+    assert any("REJECT" in c.body and "scope-triage" in c.body for c in comments)
+
+
+def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
+    """ESCALATE verdict: ticket goes to BLOCKED with triage reasoning."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+    )
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+        (Path(repo_dir) / "wip.txt").write_text("in scope")
+        (Path(repo_dir) / "README.md").write_text("out of scope edit")
+        return ("edit done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+        return ScopeTriageVerdict(
+            action="ESCALATE",
+            justification="Ambiguous spec — cannot classify",
+            expand_files=[],
+        )
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "ESCALATE" in out.note
+    comments = ctx.service.list_comments(t.id)
+    assert any("ESCALATE" in c.body and "scope-triage" in c.body for c in comments)
+
+
+def test_scope_triage_disabled_falls_through(ctx_factory, tmp_path, monkeypatch):
+    """When scope_triage_enabled=False, existing BLOCKED behaviour is
+    preserved exactly — no triage agent is called."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+        MILL_SCOPE_TRIAGE_ENABLED="false",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+    )
+
+    call_count = {"n": 0}
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+        call_count["n"] += 1
+        (Path(repo_dir) / "wip.txt").write_text("in scope")
+        (Path(repo_dir) / "README.md").write_text("out of scope edit")
+        return ("edit done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "scope violation" in out.note
+    assert call_count["n"] == 1, "agent must not be retried"
+
+
+def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
+    """When the triage agent raises an exception, the ticket escalates
+    to BLOCKED with an agent-error note."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+    )
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+        (Path(repo_dir) / "wip.txt").write_text("in scope")
+        (Path(repo_dir) / "README.md").write_text("out of scope edit")
+        return ("edit done", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    def _failing_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+        raise RuntimeError("model unavailable")
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _failing_triage)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "agent error" in out.note
+    comments = ctx.service.list_comments(t.id)
+    assert any("agent error" in c.body for c in comments)

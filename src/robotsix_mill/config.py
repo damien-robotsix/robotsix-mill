@@ -152,6 +152,12 @@ class Settings(BaseSettings):
     triage_model: str = Field(
         default="openai/gpt-4o-mini", alias="MILL_TRIAGE_MODEL"
     )
+    # Model for the scope-violation triage agent — a cheap call that
+    # decides whether changed-out-of-scope files are legitimate
+    # expansions or scope creep. Must be fast and inexpensive.
+    scope_triage_model: str = Field(
+        default="openai/gpt-4o-mini", alias="MILL_SCOPE_TRIAGE_MODEL"
+    )
     # Per-call request caps (bound each role's loop). Sized for slow
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
     # ~49 implement calls, so 200 leaves generous headroom; raising it
@@ -434,6 +440,13 @@ class Settings(BaseSettings):
     spec_review_enabled: bool = Field(
         default=False, alias="MILL_SPEC_REVIEW_ENABLED"
     )
+    # When True (default), a cheap scope-triage LLM call inspects
+    # out-of-scope file changes before blocking the ticket. The agent
+    # decides EXPAND (legitimate), REJECT (scope creep), or ESCALATE
+    # (uncertain). Set False to restore immediate BLOCKED behaviour.
+    scope_triage_enabled: bool = Field(
+        default=True, alias="MILL_SCOPE_TRIAGE_ENABLED"
+    )
     # Model for the review agent. Defaults to the capable coordinator model.
     # Override to use a *different* model for a genuinely independent review
     # perspective (the dual-model benefit).
@@ -451,6 +464,11 @@ class Settings(BaseSettings):
     # (counts each tool call + each reasoning step + the final verdict).
     review_request_limit: int = Field(
         default=20, alias="MILL_REVIEW_REQUEST_LIMIT"
+    )
+    # How many model requests the scope-triage agent may make per
+    # invocation (main call + any tool calls). Default 4.
+    scope_triage_request_limit: int = Field(
+        default=4, alias="MILL_SCOPE_TRIAGE_REQUEST_LIMIT"
     )
 
     # Model for the documentation agent. Defaults to the capable

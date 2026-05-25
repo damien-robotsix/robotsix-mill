@@ -185,6 +185,75 @@ class ImplementStage(Stage):
                         ticket.id, len(out_of_scope),
                         ", ".join(out_of_scope),
                     )
+
+                    if settings.scope_triage_enabled:
+                        # Build diff summaries for out-of-scope files only.
+                        diff_summaries: dict[str, str] = {}
+                        for path in out_of_scope:
+                            raw = subprocess.run(
+                                ["git", "-C", str(repo_dir), "diff",
+                                 f"origin/{settings.forge_target_branch}", "--", path],
+                                capture_output=True, text=True,
+                            ).stdout
+                            lines = raw.split("\n")
+                            diff_summaries[path] = "\n".join(lines[:40])
+
+                        from robotsix_mill.agents import scope_triage as st
+                        try:
+                            verdict = st.run_scope_triage_agent(
+                                settings=settings,
+                                ticket_spec=spec,
+                                file_map=sorted(file_map),
+                                out_of_scope_files=out_of_scope,
+                                diff_summaries=diff_summaries,
+                            )
+                        except Exception as exc:
+                            log.error("%s: scope-triage agent failed: %s", ticket.id, exc)
+                            verdict = None  # fall through to ESCALATE
+
+                        if verdict is not None and verdict.action == "EXPAND":
+                            for f in verdict.expand_files:
+                                file_map.add(f)
+                            log.info("%s: scope-triage EXPAND — %s", ticket.id, verdict.justification)
+                            ctx.service.add_comment(
+                                ticket.id,
+                                f"[scope-triage] EXPAND: {verdict.justification}\n\n"
+                                f"Added to scope: {', '.join(verdict.expand_files)}",
+                                author="scope-triage",
+                            )
+                            feedback = None
+                            continue
+
+                        if verdict is not None and verdict.action == "REJECT":
+                            log.info("%s: scope-triage REJECT — %s", ticket.id, verdict.justification)
+                            ctx.service.add_comment(
+                                ticket.id,
+                                f"[scope-triage] REJECT: {verdict.justification}\n\n"
+                                f"Out-of-scope files:\n" +
+                                "\n".join(f"- `{f}`" for f in out_of_scope),
+                                author="scope-triage",
+                            )
+                            ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
+                            return Outcome(State.READY,
+                                f"scope-triage REJECT: {verdict.justification[:120]}")
+
+                        # ESCALATE (or agent error fall-through).
+                        reason = (
+                            f"scope-triage ESCALATE: {verdict.justification}"
+                            if verdict is not None
+                            else "scope-triage agent error — escalated for human review"
+                        )
+                        log.warning("%s: %s", ticket.id, reason)
+                        ctx.service.add_comment(
+                            ticket.id,
+                            f"[scope-triage] {reason}\n\nOut-of-scope files:\n" +
+                            "\n".join(f"- `{f}`" for f in out_of_scope),
+                            author="scope-triage",
+                        )
+                        ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
+                        return Outcome(State.BLOCKED, reason)
+
+                    # scope_triage_enabled is False — existing behaviour.
                     ImplementStage._finalize(
                         ctx, ticket, repo_dir, branch, summary, ok=False,
                     )
