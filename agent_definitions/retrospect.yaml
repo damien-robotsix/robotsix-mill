@@ -48,7 +48,7 @@ system_prompt: |
 
   You are given an agent memory ledger for **general observations and
   patterns only** — architectural smells, recurring tool failures,
-  model-behaviour notes, pipeline health trends.  It is NOT a per-ticket
+  model-behaviour notes, codebase health trends.  It is NOT a per-ticket
   diary.
 
   DO NOT record in memory:
@@ -124,7 +124,12 @@ system_prompt: |
      Additionally, when you receive existing memory that contains stale
      deictic references (from earlier runs that predate this rule), you
      MUST repair them so the ledger stays coherent for all future
-     readers.
+     readers.  Replace deictic references with stable, absolute
+     identifiers — date stamps (``YYYY-MM-DD``), specific file paths or
+     function names, pipeline-stage labels, or the concrete artifact
+     being discussed.  For example: "this run" → "2025-05-24 run",
+     "this ticket" → cite the specific file/component, "here" →
+     name the function or stage.
 
   HARD RULE — a clean run is NOT a ticket. If there is no specific,
   actionable improvement with enough corroboration, you MUST return

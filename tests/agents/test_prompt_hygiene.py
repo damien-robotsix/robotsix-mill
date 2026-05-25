@@ -5,6 +5,8 @@ pydantic-ai auto-injects, and MUST contain orchestration guidance.
 import re
 from pathlib import Path
 
+import pytest
+
 from robotsix_mill.agents import (
     refining,
     health,
@@ -134,3 +136,80 @@ def test_agent_check_prompt_no_tool_signatures():
     assert "`explore`" in p
     assert "`read_file`" in p
     assert "`list_dir`" in p
+
+
+# --- Per-ticket memory write patterns that must NOT appear ---
+
+# Patterns that positively encourage or permit recording ticket-specific
+# information in the agent memory ledger.  These are prohibited because
+# ticket history now lives in the DB and is surfaced via
+# `<recent_proposals>`; memory is for general observations and patterns
+# only.
+#
+# Each pattern is a (regex, description) pair.  A match fails the test
+# UNLESS the matching line is inside a "DO NOT" / "do not" / "NEVER" /
+# "FORBIDDEN" / "PROHIBITED" negation context (the MEMORY USAGE section
+# legitimately lists prohibited behaviours).
+
+_PER_TICKET_MEMORY_PATTERNS = [
+    (r"record[ \t]+(the[ \t]+)?ticket[ \t]+IDs?\b", "record the ticket ID(s)"),
+    (r"note[ \t]+(down[ \t]+)?(the[ \t]+)?ticket[ \t]+IDs?\b", "note down the ticket ID(s)"),
+    (r"keep[ \t]+(a[ \t]+)?(log|diary|record)[ \t]+of[ \t]+tickets?\b", "keep a log/diary of tickets"),
+    (r"per-ticket[ \t]+(notes?|diary|log|record)\b", "per-ticket notes/diary"),
+    (r"per-proposal[ \t]+(notes?|diary|log|record)\b", "per-proposal notes/diary"),
+    (r"per-finding[ \t]+(notes?|diary|log|record)\b", "per-finding notes/diary"),
+    (r"track[ \t]+what[ \t]+you[ \t]+(proposed|filed|submitted)", "track what you proposed"),
+    (r"record[ \t]+each[ \t]+(finding|proposal|ticket|gap)", "record each finding/proposal"),
+    (r"diary[ \t]+of[ \t]+(tickets?|proposals?|findings?)", "diary of tickets/proposals"),
+    (r"log[ \t]+(each|every)[ \t]+(ticket|proposal|finding)", "log each ticket/proposal"),
+    (r"maintain[ \t]+a[ \t]+(list|log)[ \t]+of[ \t]+(tickets?|proposals?)", "maintain a list of tickets"),
+    (r"write[ \t]+(down[ \t]+)?(the[ \t]+)?ticket[ \t]+(ID|number|reference)", "write down the ticket ID"),
+    (r"store[ \t]+(the[ \t]+)?ticket[ \t]+(ID|number)", "store the ticket ID"),
+    (r"capture[ \t]+(the[ \t]+)?ticket[ \t]+(ID|number|state)", "capture the ticket ID"),
+]
+
+
+def _has_negation_context(text: str, match_start: int) -> bool:
+    """Check whether the match at ``match_start`` appears inside a
+    negation / prohibition context (e.g. 'DO NOT …')."""
+    # Look backwards up to 200 chars for negation markers across lines.
+    before = text[max(0, match_start - 200) : match_start]
+    return bool(
+        re.search(
+            r"(?i)(?:DO\s+NOT|NEVER|FORBIDDEN|PROHIBITED|MUST\s+NOT|SHOULD\s+NOT|"
+            r"\bNOT\s+a\b|is\s+NOT\b|is\s+not\b|are\s+NOT\b|are\s+not\b)",
+            before,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "agent_name,yaml_path",
+    [
+        ("audit", "audit.yaml"),
+        ("health", "health.yaml"),
+        ("test_gap", "test_gap.yaml"),
+        ("agent_check", "agent_check.yaml"),
+        ("survey", "survey.yaml"),
+        ("retrospect", "retrospect.yaml"),
+    ],
+)
+def test_periodic_prompts_prohibit_per_ticket_memory_writes(
+    agent_name: str, yaml_path: str
+):
+    """No periodic agent prompt may encourage or permit per-ticket
+    memory writes."""
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent / "agent_definitions" / yaml_path
+    )
+    prompt = definition.system_prompt
+
+    for pattern, desc in _PER_TICKET_MEMORY_PATTERNS:
+        for m in re.finditer(pattern, prompt, re.IGNORECASE):
+            if not _has_negation_context(prompt, m.start()):
+                pytest.fail(
+                    f"{agent_name} prompt contains prohibited "
+                    f"per-ticket-memory language: {desc!r}\n"
+                    f"Match: {m.group()!r}\n"
+                    f"Context: …{prompt[max(0,m.start()-40):m.end()+40]}…"
+                )
