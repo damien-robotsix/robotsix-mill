@@ -56,16 +56,34 @@ jobs:
         id: scan-ref
         run: echo "image=$(echo "${{ steps.meta.outputs.tags }}" | head -1)" >> $GITHUB_OUTPUT
 
-      - name: Trivy vulnerability scan
+      # Gate: only CRITICAL, fixable CVEs block the pipeline. Runs in
+      # table format so the failing CVE row is visible in the CI log
+      # (SARIF mode would silently swallow it — see below).
+      - name: Trivy vulnerability scan (gate)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.scan-ref.outputs.image }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+      # Code-scanning surface: separate Trivy run that emits SARIF for
+      # all severities (no exit-code). The two steps MUST stay separate:
+      # the trivy-action's entrypoint unsets TRIVY_SEVERITY when
+      # format=sarif (unless limit-severities-for-sarif=true), so
+      # combining gate + SARIF into one step would silently scan for
+      # ALL severities and fail on HIGH/MEDIUM findings the gate is
+      # supposed to ignore. `if: always()` so we still surface findings
+      # in the Security tab even when the gate above trips.
+      - name: Trivy vulnerability scan (SARIF for code-scanning)
+        if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan-ref.outputs.image }}
           format: sarif
           output: trivy-results.sarif
-          exit-code: "1"
-          # Initial gate: only CRITICAL, fixable CVEs block the pipeline.
-          # Once the CRITICAL backlog is addressed, tighten to CRITICAL,HIGH.
-          severity: CRITICAL
+          # No exit-code: this step is observability-only.
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
