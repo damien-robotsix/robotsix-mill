@@ -287,6 +287,34 @@ def list_comments(
         raise HTTPException(404, "ticket not found") from None
 
 
+@router.post("/comments/{comment_id}/close", response_model=Comment)
+def close_thread(
+    comment_id: int,
+    svc=Depends(get_service),
+) -> Comment:
+    """Close a top-level comment thread to mark it as resolved."""
+    try:
+        return svc.close_thread(comment_id)
+    except KeyError:
+        raise HTTPException(404, "comment not found") from None
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+
+
+@router.post("/comments/{comment_id}/reopen", response_model=Comment)
+def reopen_thread(
+    comment_id: int,
+    svc=Depends(get_service),
+) -> Comment:
+    """Reopen a previously-closed comment thread."""
+    try:
+        return svc.reopen_thread(comment_id)
+    except KeyError:
+        raise HTTPException(404, "comment not found") from None
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+
+
 @router.post("/tickets/{ticket_id}/request-changes")
 def request_changes(
     ticket_id: str,
