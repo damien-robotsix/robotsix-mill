@@ -48,6 +48,10 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
             return
         if ticket.state in _TERMINAL:
             return
+        # Retrying ticket still in backoff — don't open a trace or
+        # run any stage; the poll loop re-enqueues later.
+        if ticket.next_retry_at is not None and ticket.next_retry_at.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
+            return
         stage_name = STAGE_FOR_STATE.get(ticket.state)
         if stage_name is None:
             log.debug("no stage for %s; pausing %s", ticket.state, ticket_id)
@@ -102,11 +106,51 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
             return
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
             log.exception("%s: %s failed", stage_name, ticket_id)
-            ctx.service.transition(ticket_id, State.ERRORED, note=repr(e)[:200])
-            # Best-effort notification for the errored transition.
-            ticket = ctx.service.get(ticket_id)
-            if ticket is not None:
-                send_notification(ticket, State.ERRORED, repr(e)[:200], ctx.settings)
+            from .transient_errors import classify_stage_error
+            from .stage_retry import compute_retry_delay
+
+            classification = classify_stage_error(e)
+            if classification == "transient":
+                ticket = ctx.service.get(ticket_id)
+                if ticket is None:
+                    return
+                attempt = ticket.retry_attempt + 1
+                max_attempts = ctx.settings.stage_retry_max_attempts
+                if attempt <= max_attempts:
+                    delay = compute_retry_delay(
+                        attempt,
+                        base=ctx.settings.stage_retry_base_delay,
+                        cap=ctx.settings.stage_retry_max_delay,
+                    )
+                    next_at = datetime.now(timezone.utc).timestamp() + delay
+                    next_at_dt = datetime.fromtimestamp(next_at, tz=timezone.utc)
+                    ctx.service.set_retry_state(
+                        ticket_id,
+                        retry_attempt=attempt,
+                        last_transient_error=repr(e)[:200],
+                        next_retry_at=next_at_dt,
+                    )
+                    log.warning(
+                        "%s: %s transient error (attempt %d/%d) — retry in %.0fs",
+                        stage_name, ticket_id, attempt, max_attempts, delay,
+                    )
+                    return
+                # Retries exhausted — block.
+                note = (
+                    f"Transient: {type(e).__name__} persisted after "
+                    f"{max_attempts} attempts — last: {e}"
+                )[:200]
+                ctx.service.transition(ticket_id, State.BLOCKED, note=note)
+                ticket = ctx.service.get(ticket_id)
+                if ticket is not None:
+                    send_notification(ticket, State.BLOCKED, note, ctx.settings)
+            else:
+                # FATAL — block immediately.
+                note = f"Fatal: {type(e).__name__}: {e}"[:200]
+                ctx.service.transition(ticket_id, State.BLOCKED, note=note)
+                ticket = ctx.service.get(ticket_id)
+                if ticket is not None:
+                    send_notification(ticket, State.BLOCKED, note, ctx.settings)
             return
         if outcome.next_state == ticket.state:
             # no-op (e.g. merge: PR still open) — leave it; the poll
@@ -532,6 +576,14 @@ class Worker:
         BLOCKED (resumable) and notify. Poll stages (merge/deliver,
         traced=False) are exempt: human_mr_approval/rebasing legitimately waits
         on a PR or rebase cycle."""
+
+        # --- retrying-ticket exemption: tickets in explicit backoff
+        # must not be counted as stuck (they're waiting on an external
+        # outage, not churning). ---
+        ticket = self.ctx.service.get(ticket_id)
+        if ticket is not None and (ticket.retry_attempt or 0) > 0:
+            self._stuck.pop(ticket_id, None)
+            return
 
         # --- dollar-cap safety net: check before the state-change
         # early-return so the cap fires even when the ticket is making

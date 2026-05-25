@@ -238,8 +238,8 @@ async def test_notifies_on_human_mr_approval(ctx, service, monkeypatch, _notify_
 
 
 async def test_notifies_on_errored_from_stage(ctx, service, monkeypatch, _notify_settings, _recording):
-    """Worker-driven transition into errored fires a notification (stage
-    raises exception -> worker transitions to errored)."""
+    """Worker-driven fatal stage exception transitions to BLOCKED and
+    fires a notification."""
     class BoomStage(Stage):
         name = "refine"
         input_state = State.DRAFT
@@ -251,7 +251,7 @@ async def test_notifies_on_errored_from_stage(ctx, service, monkeypatch, _notify
     t = service.create("errored test")
     await process_ticket(t.id, ctx)
 
-    assert service.get(t.id).state == State.ERRORED
+    assert service.get(t.id).state == State.BLOCKED
     assert len(_recording.calls) == 1
 
 

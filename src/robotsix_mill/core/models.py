@@ -69,6 +69,10 @@ class Ticket(SQLModel, table=True):
     # review session.  Reset on APPROVE or when the cap is hit; persists
     # across the CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW loop.
     review_rounds: int = Field(default=0)
+    # transient-error retry state (stage-runner level, not LLM-call level)
+    retry_attempt: int = Field(default=0)
+    last_transient_error: str | None = Field(default=None)
+    next_retry_at: datetime | None = Field(default=None)
     # optional JSON list of ticket IDs that must reach CLOSED/DONE before
     # this ticket can leave READY (implement-stage gate).
     depends_on: str | None = Field(default=None)
@@ -147,6 +151,9 @@ class TicketRead(SQLModel):
     depends_on: str | None
     unmet_deps: list[str]
     pr_url: str | None = None
+    retry_attempt: int
+    last_transient_error: str | None
+    next_retry_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

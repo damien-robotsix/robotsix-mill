@@ -167,6 +167,9 @@ def enrich_ticket_read(
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
         pr_url=_pr_url(ticket, settings) if fetch_pr_url else None,
+        retry_attempt=ticket.retry_attempt,
+        last_transient_error=ticket.last_transient_error,
+        next_retry_at=ticket.next_retry_at,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )
