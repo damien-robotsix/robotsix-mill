@@ -10,6 +10,7 @@ let activeMap={};
 let gatesCache={};                    // cached /gates response for open_() drawer ordering
 let reposCache=null;                  // cached from GET /repos: [{repo_id, board_id}, …]
 let currentRepoId=null;               // current selection, resolved lazily from URL → localStorage → "all"
+let mergingSet=new Set();              // ticket ids currently being merged (loading state)
 const ACTIVE_LABEL={
   refine: "refining…",
   implement: "implementing…",
@@ -176,7 +177,7 @@ async function refresh(){
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${t.retry_attempt>0?`<span class="retry-chip" title="${esc(t.last_transient_error||'')}">retry ${t.retry_attempt}${t.next_retry_at?` · next ${fmtRelative(t.next_retry_at)}`:''}</span>`:''}`+
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
    (s==="human_mr_approval"?
-    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
+    `<button class="merge-btn" data-ticket-id="${t.id}" onclick="event.stopPropagation();mergePR('${t.id}')"${mergingSet.has(t.id)?' disabled':''}>${mergingSet.has(t.id)?'<span class="live-spinner"></span> Merging…':'Merge'}</button>`:"")+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
@@ -189,9 +190,26 @@ async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
 }
+function updateMergeButtons(ticketId,merging){
+ document.querySelectorAll('button.merge-btn[data-ticket-id="'+ticketId+'"]').forEach(function(btn){
+  if(merging){
+   btn.disabled=true;
+   btn.innerHTML='<span class="live-spinner"></span> Merging…';
+   btn.classList.add('merging');
+  } else {
+   btn.disabled=false;
+   btn.textContent='Merge';
+   btn.classList.remove('merging');
+  }
+ });
+}
 async function mergePR(id){
+ if(mergingSet.has(id))return;         // ignore double-clicks
+ mergingSet.add(id);
+ updateMergeButtons(id,true);
  const r=await jpost("/tickets/"+id+"/merge-now");
- if(!r.ok){const e=await r.text();alert("merge failed: "+e)}else refresh()
+ if(!r.ok){const e=await r.text();mergingSet.delete(id);updateMergeButtons(id,false);alert("merge failed: "+e)}
+ else{mergingSet.delete(id);refresh()}
 }
 async function requestChanges(id){
  const body=prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
@@ -752,7 +770,7 @@ async function open_(id){
     (ms&&ms.can_merge===false?
      `<button class="merge-btn" disabled title="${esc(ms.reason||'')}">Merge</button>`+
      `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(ms.reason||'not mergeable')}</p>`:
-     `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`
+     `<button class="merge-btn" data-ticket-id="${t.id}" onclick="event.stopPropagation();mergePR('${t.id}')"${mergingSet.has(t.id)?' disabled':''}>${mergingSet.has(t.id)?'<span class="live-spinner"></span> Merging…':'Merge'}</button>`
     ):"")+
    (mr&&mr.reason?
     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")+
