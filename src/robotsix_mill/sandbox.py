@@ -166,6 +166,17 @@ def run(command: str, *, repo_dir: Path, settings: Settings,
         raise SandboxError(
             f"docker run failed: {(r.stderr or '').strip()[:300]}"
         )
+
+    # Docker exits 1 (not 125) when it can't reach the daemon socket.
+    # Classify this as infrastructure failure so callers don't mistake
+    # it for a legitimate command failure.
+    if r.returncode == 1:
+        stderr = r.stderr or ""
+        if "permission denied while trying to connect to the docker api" in stderr.lower() or "cannot connect to the docker daemon" in stderr.lower():
+            raise SandboxError(
+                f"docker daemon unreachable: {stderr.strip()[:300]}"
+            )
+
     return r.returncode, _truncate((r.stdout or "") + (r.stderr or ""))
 
 

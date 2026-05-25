@@ -154,6 +154,32 @@ def test_docker_daemon_error_raises(tmp_path, monkeypatch):
         sandbox.run("true", repo_dir=tmp_path, settings=s)
 
 
+def test_docker_socket_permission_denied_raises(tmp_path, monkeypatch):
+    """Docker CLI exits 1 (NOT 125) when it can't reach the daemon
+    socket — e.g. permission denied on /var/run/docker.sock or daemon
+    not running.  sandbox.run() must raise SandboxError for this case
+    so infrastructure failures aren't mistaken for command failures."""
+    s = _settings(tmp_path)
+
+    # Bypass _repo_mount so we only exercise the exit-code-1 codepath.
+    monkeypatch.setattr(
+        sandbox, "_repo_mount",
+        lambda repo_dir, settings: [
+            "-v", "/host/.data/work/repo:/data/work/repo",
+        ],
+    )
+
+    def fake_run(argv, **kw):
+        return subprocess.CompletedProcess(
+            argv, 1, stdout="",
+            stderr="permission denied while trying to connect to the docker API at unix:///var/run/docker.sock: ...",
+        )
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    with pytest.raises(sandbox.SandboxError, match="docker daemon unreachable"):
+        sandbox.run("true", repo_dir=tmp_path, settings=s)
+
+
 def test_repo_mount_rejects_non_existent_source(tmp_path):
     """When the repo directory doesn't exist (not yet cloned), _repo_mount
     raises SandboxError before Docker ever sees the mount spec."""
