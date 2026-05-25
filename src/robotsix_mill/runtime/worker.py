@@ -477,6 +477,7 @@ class Worker:
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
         self._bc_check_task: asyncio.Task | None = None
+        self._completeness_check_task: asyncio.Task | None = None
         self._ci_monitor_task: asyncio.Task | None = None
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
@@ -1013,6 +1014,19 @@ class Worker:
                 "Periodic bc-check enabled: interval %ds",
                 self.ctx.settings.bc_check_interval_seconds,
             )
+        # Opt-in periodic completeness-check
+        if self.ctx.settings.completeness_check_periodic and self._completeness_check_task is None:
+            from ..completeness_check_runner import run_completeness_check_pass
+            self._completeness_check_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "completeness_check", run_completeness_check_pass,
+                    max(60, self.ctx.settings.completeness_check_interval_seconds),
+                )
+            )
+            log.info(
+                "Periodic completeness-check enabled: interval %ds",
+                self.ctx.settings.completeness_check_interval_seconds,
+            )
         # Opt-in CI monitor
         if self.ctx.settings.ci_monitor_periodic and self._ci_monitor_task is None:
             self._ci_monitor_task = asyncio.create_task(
@@ -1061,7 +1075,7 @@ class Worker:
         for attr in (
             "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
-            "_agent_check_task", "_bc_check_task", "_test_gap_task", "_survey_task",
+            "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_test_gap_task", "_survey_task",
             "_env_sync_task",
         ):
             t = getattr(self, attr)

@@ -74,6 +74,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "BC-check pass",
         "format": "memory_drafts",
     },
+    "completeness-check": {
+        "module": "completeness_check_runner",
+        "function": "run_completeness_check_pass",
+        "label": "Completeness-check pass",
+        "format": "memory_drafts",
+    },
 }
 
 
@@ -252,6 +258,16 @@ def main(argv: list[str] | None = None) -> int:
         "bc-check", help="run a backward-compatibility inspection pass"
     )
     p_bc_check.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- completeness-check command ---
+    p_completeness_check = sub.add_parser(
+        "completeness-check", help="run a feature-completeness inspection pass"
+    )
+    p_completeness_check.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
