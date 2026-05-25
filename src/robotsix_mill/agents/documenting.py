@@ -16,6 +16,28 @@ from pydantic import BaseModel, Field
 from ..config import Settings
 
 
+class DocClassifierResult(BaseModel):
+    """Structured output from the cheap doc-classifier gate.
+
+    This is a separate type from ``DocResult`` — the classifier only
+    classifies; it never edits docs.
+    """
+
+    user_facing: bool = Field(
+        description="True when the diff introduces a user-facing change "
+                    "(new feature, API change, config key, CLI flag, "
+                    "behavioral change a user would notice). False for "
+                    "internal-only changes (refactor, bug-fix with no doc "
+                    "impact, test/CI-only, lint/format)."
+    )
+    classification: str = Field(
+        min_length=1,
+        description="One-line human-readable classification, e.g. "
+                    "'internal-only — model field rename' or "
+                    "'user-facing — new CLI flag'.",
+    )
+
+
 class DocResult(BaseModel):
     """Structured output from the documentation agent."""
 
@@ -31,6 +53,56 @@ class DocResult(BaseModel):
         description="Summary of documentation changes made, or a note "
                     "that no changes were needed.",
     )
+
+
+def run_doc_classifier(
+    *,
+    settings: Settings,
+    diff: str,
+    spec: str,
+) -> DocClassifierResult:
+    """Run the cheap doc-classifier gate.
+
+    Loads ``agent_definitions/doc_classifier.yaml``, builds a zero-tool
+    agent, and returns a ``DocClassifierResult`` classifying the change
+    as user-facing or internal-only.  The classifier is purely
+    diff-and-spec-driven — it receives no tools.
+
+    Conservative bias: when uncertain, classifies as user-facing (the
+    only real risk is a wrong "internal-only" that skips needed docs).
+    """
+    from pydantic_ai.usage import UsageLimits
+
+    from .base import _safe_close, build_agent_from_definition
+    from .retry import call_with_retry
+    from .yaml_loader import load_agent_definition
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "doc_classifier.yaml"
+    )
+
+    agent = build_agent_from_definition(
+        settings,
+        definition,
+        tools=[],
+        model_name=definition.model or settings.doc_classifier_model,
+    )
+    try:
+        user_prompt = (
+            f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
+            f"<git_diff>\n{diff}\n</git_diff>"
+        )
+        limits = UsageLimits(request_limit=settings.doc_classifier_request_limit)
+        result = call_with_retry(
+            lambda: agent.run_sync(user_prompt, usage_limits=limits),
+            settings=settings,
+            what="doc classifier",
+        )
+        return result.output
+    finally:
+        _safe_close(agent)
 
 
 def run_doc_agent(

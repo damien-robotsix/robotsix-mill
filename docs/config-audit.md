@@ -66,6 +66,7 @@ other code depends on.
 | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `rate_limit_fallback_model` | `""` (empty = disabled) | `str` | Settings | non-sensitive | default | §1, §4 | `runtime/model.py` (retry logic) | Mentioned in both §1 and §4 |
 | `MILL_TRIAGE_MODEL` | `triage_model` | `openai/gpt-4o-mini` | `str` | Settings | non-sensitive | default | **missing** | `stages/refine.py` (pre-refine triage) | ⚠️ Undocumented |
 | `MILL_DOC_MODEL` | `doc_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | **missing** | `stages/documenting.py` | ⚠️ Undocumented |
+| `MILL_DOC_CLASSIFIER_MODEL` | `doc_classifier_model` | `openai/gpt-4o-mini` | `str` | Settings | non-sensitive | default | §1 | `stages/document.py`, doc-classifier gate | Cheap classifier gate — inspects diff + spec to decide whether the change is user-facing |
 | `MILL_AUTO_APPROVE_MODEL` | `auto_approve_model` | `openai/gpt-4o-mini` | `str` | Settings | non-sensitive | default | §6 | `stages/refine.py` | |
 | `MILL_SCOPE_TRIAGE_MODEL` | `scope_triage_model` | `openai/gpt-4o-mini` | `str` | Settings | non-sensitive | default | §1 | `stages/implement.py`, `agents/scope_triage.py` | Cheap classifier for out-of-scope file changes |
 
@@ -86,6 +87,7 @@ other code depends on.
 | `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `rate_limit_fallback_retries` | `3` | `int` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
 | `MILL_EXPLORE_REQUEST_LIMIT` | `explore_request_limit` | `20` | `int` | Settings | non-sensitive | default | §2 | Explore sub-agent | |
 | `MILL_DEDUP_REQUEST_LIMIT` | `dedup_request_limit` | `4` | `int` | Settings | non-sensitive | default | §2, §17 | Pre-refine dedup check | Mentioned in both §2 and §17 |
+| `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `doc_classifier_request_limit` | `3` | `int` | Settings | non-sensitive | default | §2 | `stages/document.py`, doc-classifier gate | Per-call cap for the cheap doc-classifier agent |
 | `MILL_MAX_STUCK_CYCLES` | `max_stuck_cycles` | `3` | `int` | Settings | non-sensitive | default | §3 | `runtime/worker.py` | |
 | `MILL_MAX_SPEND_USD_PER_TICKET` | `max_spend_usd_per_ticket` | `0.0` | `float` | Settings | non-sensitive | default | §3 | `runtime/worker.py` | `0.0` = disabled |
 | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `web_research_request_limit` | `8` | `int` | Settings | non-sensitive | default | §2, §8 | Web-research sub-agent | Mentioned in both §2 and §8 |
@@ -494,3 +496,4 @@ This audit was produced by:
 7. Classifying every value by sensitivity (`secret`, `identifying`,
    `non-sensitive`) based on whether it is a token/key/password, a
    URL/username/hostname, or a tuning knob/feature flag.
+name/hostname, or a tuning knob/feature flag.

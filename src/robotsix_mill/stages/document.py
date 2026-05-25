@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ..agents.documenting import DocResult
+from ..agents.documenting import DocClassifierResult, DocResult
 from ..core.models import Ticket
 from ..core.states import State
 from ..vcs import git_ops
@@ -63,7 +63,36 @@ class DocumentStage(Stage):
 
         spec = ws.read_description()
 
-        # --- Documentation agent ---
+        # --- Phase 1: cheap classifier gate ---
+        # A single cheap LLM call decides whether the diff is user-facing.
+        # Internal-only diffs skip the full (expensive) doc agent entirely.
+        # Failure is non-blocking — we fall through to the full agent.
+        try:
+            classifier_result = self._run_doc_classifier(
+                settings=s, diff=diff, spec=spec,
+            )
+            ctx.service.add_comment(
+                ticket.id,
+                f"classifier: {classifier_result.classification}",
+                author="doc_classifier",
+            )
+            if not classifier_result.user_facing:
+                log.info(
+                    "%s: classifier says internal-only — skipping doc agent",
+                    ticket.id,
+                )
+                return Outcome(
+                    State.DELIVERABLE,
+                    f"no user-facing changes ({classifier_result.classification})",
+                )
+        except Exception:
+            log.warning(
+                "%s: doc classifier failed — falling through to full doc agent",
+                ticket.id,
+                exc_info=True,
+            )
+
+        # --- Phase 2: full documentation agent ---
         try:
             doc_result = self._run_doc_agent(
                 settings=s,
@@ -130,4 +159,25 @@ class DocumentStage(Stage):
             spec=spec,
             model_name=model_name,
             extra_roots=extra_roots,
+        )
+
+    def _run_doc_classifier(
+        self,
+        *,
+        settings,
+        diff: str,
+        spec: str,
+    ) -> DocClassifierResult:
+        """Run the cheap classifier gate to decide whether the diff is
+        user-facing.
+
+        Returns a ``DocClassifierResult`` with ``user_facing`` (bool) and
+        ``classification`` (human-readable one-liner).
+        """
+        from ..agents.documenting import run_doc_classifier
+
+        return run_doc_classifier(
+            settings=settings,
+            diff=diff,
+            spec=spec,
         )
