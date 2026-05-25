@@ -66,6 +66,25 @@ endpoint returns 409 and the ticket remains in `human_mr_approval`.
 The drawer also calls `GET /tickets/{id}/merge-reason` to display an
 amber annotation explaining *why* auto-merge is ineligible when it is.
 
+### Merge Info panel
+
+When a ticket is in `human_mr_approval`, the detail drawer displays a
+**Merge Info** block between the Merge button and the cost line.
+It is fetched from `GET /tickets/{id}/merge-info` and surfaces three
+things the human needs before clicking Merge:
+
+- **CI status** — green checkmark (passing), red X with failing check
+  names (failure), yellow spinner (pending), or grey dash (unknown).
+- **Mergeable** — green checkmark (no conflicts), red X (conflicts
+  detected), or grey dash (still computing).
+- **Files changed** — a compact file list sorted by total line changes,
+  capped at 50 files. Each file shows added/deleted line counts and
+  status (`added`, `modified`, `removed`, `renamed`).
+
+The merge-info is fetched once when the drawer opens (no auto-refresh).
+Each sub-field is individually resilient — a forge error in one does not
+break the others.
+
 ## See also
 
 - [index.md](index.md) — documentation home
