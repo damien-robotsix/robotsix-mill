@@ -15,7 +15,6 @@ def _clear_env():
     # Reset the module-level state so tests are independent.
     tracing._tracing_ready = None
     tracing._shutdown_requested = False
-    tracing._current_session.set(None)
 
 
 def test_ensure_tracing_disabled():
