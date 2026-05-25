@@ -83,7 +83,7 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
                     # session.id attribute still groups all of a ticket's
                     # stage traces together via Langfuse's session view.
                     es.enter_context(
-                        tracing.start_ticket_root_span(ticket_id, stage_name)
+                        tracing.start_ticket_root_span(ticket_id, stage_name, repo_config=ctx.repo_config)
                     )
                 # stage.run is sync (LLM/tool) — keep the loop responsive
                 if active_map is not None:
@@ -593,7 +593,7 @@ class Worker:
         # early-return so the cap fires even when the ticket is making
         # forward progress (cost accumulates across all stages). ---
         if self.ctx.settings.max_spend_usd_per_ticket > 0.0:
-            cost = session_cost(self.ctx.settings, ticket_id)
+            cost = session_cost(self.ctx.settings, ticket_id, repo_config=self.ctx.repo_config)
             if cost > self.ctx.settings.max_spend_usd_per_ticket:
                 note = (
                     f"Cost cap exceeded: ${cost:.2f} spent "

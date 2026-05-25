@@ -412,6 +412,14 @@ Langfuse observability project. It is loaded **separately** from
 participates in the Settings merge. Access it via `get_repos_config()`
 or `get_repo_config("repo-id")`.
 
+When a repo is selected at startup (via `--repo-id`), its
+`langfuse.public_key`, `langfuse.secret_key`, and `langfuse.base_url`
+are used for **all** Langfuse operations — OTel trace export and
+read-side API calls (cost tracking, trace inspection, session
+summaries, etc.). The global `langfuse_*` secrets in
+`config/secrets.yaml` serve as a **fallback** for callers that do not
+yet have a repo context (e.g. global dashboard endpoints).
+
 ### Set up
 
 ```sh

@@ -111,7 +111,7 @@ async def test_untraced_noop_stage_emits_no_trace(ctx, service, monkeypatch):
     calls = {"root": 0, "stage_names": []}
 
     @contextlib.contextmanager
-    def fake_root(_tid, stage_name=None):
+    def fake_root(_tid, stage_name=None, repo_config=None):
         calls["root"] += 1
         calls["stage_names"].append(stage_name)
         yield

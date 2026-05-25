@@ -109,7 +109,7 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
@@ -167,7 +167,7 @@ def test_langfuse_none_workflow_only_still_succeeds(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -217,7 +217,7 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -274,7 +274,7 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
@@ -335,7 +335,7 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
@@ -399,7 +399,7 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
@@ -456,7 +456,7 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
@@ -526,7 +526,7 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
@@ -586,7 +586,7 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
@@ -645,7 +645,7 @@ def test_deep_analysis_below_frequency_no_api_call(ctx_factory, monkeypatch):
     )
     langfuse_api_called = []
 
-    def _fake_api_get(settings, path, params=None):
+    def _fake_api_get(settings, path, params=None, repo_config=None):
         langfuse_api_called.append(True)
         return None
 
@@ -701,7 +701,7 @@ def test_deep_analysis_at_frequency_triggers_api_call(ctx_factory, monkeypatch):
     write_calls = []
     langfuse_api_called = []
 
-    def _fake_api_get(settings, path, params=None):
+    def _fake_api_get(settings, path, params=None, repo_config=None):
         langfuse_api_called.append((path, params))
         return {
             "data": [
@@ -769,7 +769,7 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -826,7 +826,7 @@ def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -875,7 +875,7 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,
@@ -928,7 +928,7 @@ def test_prune_clone_on_close_false_no_prune(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
-        lambda settings, path, params=None: None,
+        lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
         retrospect_module.RetrospectStage,

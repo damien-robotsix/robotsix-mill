@@ -219,7 +219,7 @@ def test_session_total_cost_returns_float_from_mocked_api(settings, monkeypatch)
         ]
     }
 
-    def fake_get(_s, _path, params=None):
+    def fake_get(_s, _path, params=None, repo_config=None):
         return fake_data
 
     monkeypatch.setattr(
@@ -235,7 +235,7 @@ def test_session_total_cost_returns_none_when_api_fails(settings, monkeypatch):
     session_total_cost returns None gracefully."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client._langfuse_api_get",
-        lambda s, path, params=None: None,
+        lambda s, path, params=None, repo_config=None: None,
     )
     assert session_total_cost(settings, "test-session") is None
 
@@ -244,7 +244,7 @@ def test_session_total_cost_handles_empty_traces(settings, monkeypatch):
     """Zero traces → cost is 0.0 (not None)."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client._langfuse_api_get",
-        lambda s, path, params=None: {"data": []},
+        lambda s, path, params=None, repo_config=None: {"data": []},
     )
     assert session_total_cost(settings, "test-session") == 0.0
 
@@ -265,7 +265,7 @@ def test_session_cost_caches_within_ttl(settings, monkeypatch):
     calls = []
     monkeypatch.setattr(
         lc, "session_total_cost",
-        lambda s, sid: (calls.append(sid), 0.25)[1],
+        lambda s, sid, repo_config=None: (calls.append(sid), 0.25)[1],
     )
     assert lc.session_cost(settings, "sid-b") == 0.25
     assert lc.session_cost(settings, "sid-b") == 0.25  # cached
@@ -277,7 +277,7 @@ def test_session_cost_refreshes_after_ttl(settings, monkeypatch):
     from robotsix_mill import langfuse_client as lc
     lc._cost_cache.clear()
     seq = iter([0.10, 0.99])
-    monkeypatch.setattr(lc, "session_total_cost", lambda s, sid: next(seq))
+    monkeypatch.setattr(lc, "session_total_cost", lambda s, sid, repo_config=None: next(seq))
     t = [1000.0]
     monkeypatch.setattr(lc.time, "monotonic", lambda: t[0])
     assert lc.session_cost(settings, "sid-c") == 0.10
@@ -291,7 +291,7 @@ def test_session_cost_serves_stale_on_transient_failure(settings, monkeypatch):
     from robotsix_mill import langfuse_client as lc
     lc._cost_cache.clear()
     state = {"v": 0.42}
-    monkeypatch.setattr(lc, "session_total_cost", lambda s, sid: state["v"])
+    monkeypatch.setattr(lc, "session_total_cost", lambda s, sid, repo_config=None: state["v"])
     t = [500.0]
     monkeypatch.setattr(lc.time, "monotonic", lambda: t[0])
     assert lc.session_cost(settings, "sid-d") == 0.42
@@ -313,7 +313,7 @@ def test_fetch_session_summary_empty_traces(settings, monkeypatch):
     from robotsix_mill.langfuse_client import fetch_session_summary
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client._langfuse_api_get",
-        lambda s, path, params=None: {"data": []},
+        lambda s, path, params=None, repo_config=None: {"data": []},
     )
     result = fetch_session_summary(settings, "sid")
     assert result == "(no Langfuse traces found for this session)"
@@ -332,7 +332,7 @@ def test_fetch_session_summary_groups_by_stage(settings, monkeypatch):
     }
 
     # Per-trace detail calls return empty observations (no errors)
-    def fake_get(_s, path, params=None):
+    def fake_get(_s, path, params=None, repo_config=None):
         if "/api/public/traces/" in path and path != "/api/public/traces":
             return {"observations": []}
         return trace_list
@@ -372,7 +372,7 @@ def test_fetch_session_summary_warnings_errors(settings, monkeypatch):
         },
     }
 
-    def fake_get(_s, path, params=None):
+    def fake_get(_s, path, params=None, repo_config=None):
         # Per-trace detail
         for tid in detail_map:
             if path == f"/api/public/traces/{tid}":
@@ -403,7 +403,7 @@ def test_fetch_session_summary_per_trace_fetch_fails_gracefully(settings, monkey
         ]
     }
 
-    def fake_get(_s, path, params=None):
+    def fake_get(_s, path, params=None, repo_config=None):
         # t1 detail succeeds, t2 detail fails
         if path == "/api/public/traces/t1":
             return {"observations": [{"level": "ERROR", "statusMessage": "boom"}]}
@@ -442,7 +442,7 @@ def test_fetch_session_summary_warnings_capped_at_20(settings, monkeypatch):
         ]
     }
 
-    def fake_get(_s, path, params=None):
+    def fake_get(_s, path, params=None, repo_config=None):
         if path == "/api/public/traces/t1":
             return {"observations": many_obs}
         return trace_list
