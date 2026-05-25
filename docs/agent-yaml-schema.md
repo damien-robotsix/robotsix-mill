@@ -136,6 +136,7 @@ The OpenRouter model identifier. Supports two forms:
    | `${MILL_AGENT_CHECK_MODEL}` | `agent_check_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_HEALTH_MODEL}` | `health_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_SURVEY_MODEL}` | `survey_model` | `"deepseek/deepseek-v4-pro"` |
+   | `${MILL_COMPLETENESS_CHECK_MODEL}` | `completeness_check_model` | `"deepseek/deepseek-v4-pro"` |
 
 The `model` field is required. Every agent YAML must specify a model,
 either as a literal identifier or as a `${VAR}` reference that the
@@ -202,7 +203,7 @@ Whether the `report_issue` self-reporting tool is injected. When
 omitted. Agents that already emit structured draft tickets through
 their `output_type` (`audit`, `retrospect`, `health`, `survey`,
 `test_gap`, `agent_check`, `document`, `epic_breakdown`,
-`epic_status`) set this to `false` to avoid double-reporting.
+`epic_status`, `completeness_check`) set this to `false` to avoid double-reporting.
 
 ---
 
@@ -220,7 +221,7 @@ of any ticket by ID. This is the safe, read-only counterpart to
 `report_issue` — same wiring, opposite direction.
 
 Periodic agents (`audit`, `health`, `survey`, `test_gap`, `bc_check`,
-`agent_check`, `retrospect`, `env_sync`) set this to `true` so they
+`agent_check`, `retrospect`, `env_sync`, `completeness_check`) set this to `true` so they
 can look up the full context of past proposals when the one-line
 summary in `<recent_proposals>` isn't enough. Pipeline agents and
 other on-demand agents typically leave this `false`.

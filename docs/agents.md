@@ -35,6 +35,8 @@ Opt-in agents that run independently of the ticket pipeline.
 | Test-gap | `agent_definitions/test_gap.yaml` | `agents/test_gap.py` | `MILL_TEST_GAP_MODEL` | CLI, API (`POST /test-gap`), or periodic (`MILL_TEST_GAP_PERIODIC`) | Identifies modules with zero dedicated unit-test coverage |
 | Agent-check | `agent_definitions/agent_check.yaml` | `agents/agent_check.py` | `MILL_AGENT_CHECK_MODEL` | CLI, API (`POST /agent-check`), or periodic (`MILL_AGENT_CHECK_PERIODIC`) | Meta-agent: inspects all agent definitions for tool–prompt mismatch, skill drift, metadata correctness, registration completeness, prompt self-consistency, and memory ledger coherence |
 | Survey | `agent_definitions/survey.yaml` | `agents/surveying.py` | `MILL_SURVEY_MODEL` | CLI, API (`POST /survey`) | Discovers similar OSS projects via web research; proposes concrete improvements |
+| BC-check | `agent_definitions/bc_check.yaml` | `agents/bc_check.py` | `MILL_BC_CHECK_MODEL` | CLI, API (`POST /bc-check`), or periodic (`MILL_BC_CHECK_PERIODIC`) | Backward-compatibility scanner: examines git history for changed signatures and flags breakage |
+| Completeness-check | `agent_definitions/completeness_check.yaml` | `agents/completeness_check.py` | `MILL_COMPLETENESS_CHECK_MODEL` | CLI, API (`POST /completeness-check`), or periodic (`MILL_COMPLETENESS_CHECK_PERIODIC`) | Scans the repo for incomplete feature wiring (missing YAML mappings/defaults, routes without buttons, runners without CLI, agent files without callers) |
 | Answer | `agent_definitions/answer.yaml` | `agents/answering.py` | `MILL_ANSWER_MODEL` | `answer` stage (ASKED state — ticket type `inquiry`) | Investigative analyst: answers questions using repo exploration + web research + Langfuse data |
 
 ## Sub-agents

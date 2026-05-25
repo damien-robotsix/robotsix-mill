@@ -181,6 +181,8 @@ Every setting below shows:
 | `core.models.agent_check` | `MILL_AGENT_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Agent-check agent — audits agent definitions for coherence |
 | `core.models.health` | `MILL_HEALTH_MODEL` | `deepseek/deepseek-v4-pro` | Health agent — codebase-health across 6 dimensions |
 | `core.models.survey` | `MILL_SURVEY_MODEL` | `deepseek/deepseek-v4-pro` | Survey agent — discovers OSS projects; proposes improvements |
+| `core.models.bc_check` | `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | BC-check agent — backward-compatibility scanner |
+| `core.models.completeness_check` | `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Completeness-check agent — feature-wiring completeness scanner |
 | `core.models.rate_limit_fallback` | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `""` (disabled) | Fallback model when rate-limit retries exhausted |
 | `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-pro` | Documentation agent |
 | `core.models.triage` | `MILL_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Pre-refine triage — fast/cheap classification |
@@ -314,14 +316,14 @@ Each periodic agent shares this pattern:
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² |
 
 Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
-`agent_check`, `survey`, `ci_monitor`, `env_sync`.
+`agent_check`, `survey`, `ci_monitor`, `env_sync`, `completeness_check`.
 
 > ¹ `survey` is the exception — its default is `enabled: true`.
 >
 > ² `trace_health` and `ci_monitor` do **not** have a `memory_path`
 > field — they write no per-agent memory ledger.
 >
-> `env_sync` and `bc_check` are **env-var-only** (no YAML mapping yet).
+> `env_sync`, `bc_check`, and `completeness_check` are **env-var-only** (no YAML mapping yet).
 > Set `MILL_ENV_SYNC_PERIODIC=true`, `MILL_BC_CHECK_PERIODIC=true`, etc.
 
 Additional fields:
@@ -336,7 +338,7 @@ Additional fields:
 
 #### Env-var-only periodic agents
 
-`env_sync` and `bc_check` have no YAML mapping yet — set them via
+`env_sync`, `bc_check`, and `completeness_check` have no YAML mapping yet — set them via
 environment variables only:
 
 | Env var | Default | Description |
@@ -347,6 +349,9 @@ environment variables only:
 | `MILL_BC_CHECK_PERIODIC` | `false` | Enable periodic backward-compatibility inspection |
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
 | `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | BC-check agent model |
+| `MILL_COMPLETENESS_CHECK_PERIODIC` | `false` | Enable periodic feature-wiring completeness inspection |
+| `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between completeness-check passes |
+| `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Completeness-check agent model |
 
 ### 13. Skills
 
