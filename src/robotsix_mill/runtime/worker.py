@@ -210,6 +210,7 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
     """
     from ..core.service import TicketService
     from ..agents.epic_status import run_epic_status_agent
+    from ..runtime import tracing
 
     svc = TicketService(settings)
     try:
@@ -237,12 +238,13 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
                 "depends_on": TicketService._parse_depends_on(child),
             })
 
-        result = run_epic_status_agent(
-            settings=settings,
-            epic_title=epic.title,
-            epic_description=epic_desc,
-            children=child_summaries,
-        )
+        with tracing.start_ticket_root_span(epic_id, "epic-status"):
+            result = run_epic_status_agent(
+                settings=settings,
+                epic_title=epic.title,
+                epic_description=epic_desc,
+                children=child_summaries,
+            )
 
         if result.decision == "close":
             svc.transition(epic_id, State.EPIC_CLOSED, note="[auto-closed] " + (result.note or ""))
