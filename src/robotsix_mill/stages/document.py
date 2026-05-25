@@ -64,11 +64,12 @@ class DocumentStage(Stage):
         spec = ws.read_description()
 
         # --- Phase 1: cheap classifier gate ---
+        # A single cheap LLM call decides whether the diff is user-facing.
+        # Internal-only diffs skip the full (expensive) doc agent entirely.
+        # Failure is non-blocking — we fall through to the full agent.
         try:
             classifier_result = self._run_doc_classifier(
-                settings=s,
-                diff=diff,
-                spec=spec,
+                settings=s, diff=diff, spec=spec,
             )
             ctx.service.add_comment(
                 ticket.id,
@@ -77,7 +78,7 @@ class DocumentStage(Stage):
             )
             if not classifier_result.user_facing:
                 log.info(
-                    "%s: classifier says internal-only — skipping full doc agent",
+                    "%s: classifier says internal-only — skipping doc agent",
                     ticket.id,
                 )
                 return Outcome(
@@ -167,11 +168,11 @@ class DocumentStage(Stage):
         diff: str,
         spec: str,
     ) -> DocClassifierResult:
-        """Run the cheap doc classifier to decide whether a change is
-        user-facing or internal-only.
+        """Run the cheap classifier gate to decide whether the diff is
+        user-facing.
 
-        Returns a ``DocClassifierResult`` with ``user_facing`` (bool)
-        and ``classification`` (str).
+        Returns a ``DocClassifierResult`` with ``user_facing`` (bool) and
+        ``classification`` (human-readable one-liner).
         """
         from ..agents.documenting import run_doc_classifier
 

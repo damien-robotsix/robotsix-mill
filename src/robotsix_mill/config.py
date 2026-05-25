@@ -1,9 +1,8 @@
 """Runtime configuration, sourced from environment, .env, and secrets.env.
 
-Conventional keys (``OPENROUTER_API_KEY``) are unprefixed to match the
-reference projects; mill-specific knobs use the ``MILL_`` / ``FORGE_``
-prefixes.  Per-repository Langfuse credentials are loaded from
-``config/repos.yaml`` and stamped onto ``Secrets`` at startup.
+Conventional keys (``OPENROUTER_API_KEY``, ``LANGFUSE_*``) are
+unprefixed to match the reference projects; mill-specific knobs use the
+``MILL_`` / ``FORGE_`` prefixes.
 """
 
 from __future__ import annotations
@@ -63,9 +62,9 @@ class Settings(BaseSettings):
 
     All fields are sourced from ``os.environ`` and layered
     ``config/*.yaml`` files.  Conventional keys like
-    ``OPENROUTER_API_KEY`` are unprefixed to remain compatible with the
-    reference projects.  Mill-specific settings use the ``MILL_`` /
-    ``FORGE_`` prefix convention and declare explicit
+    ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain
+    compatible with the reference projects.  Mill-specific settings use
+    the ``MILL_`` / ``FORGE_`` prefix convention and declare explicit
     ``Field(alias=...)`` values.
     """
 
@@ -204,15 +203,6 @@ class Settings(BaseSettings):
     transient_backoff_cap: float = Field(
         default=30.0, alias="MILL_TRANSIENT_BACKOFF_CAP"
     )
-    stage_retry_max_attempts: int = Field(
-        default=5, alias="MILL_STAGE_RETRY_MAX_ATTEMPTS"
-    )
-    stage_retry_base_delay: float = Field(
-        default=30.0, alias="MILL_STAGE_RETRY_BASE_DELAY"
-    )
-    stage_retry_max_delay: float = Field(
-        default=300.0, alias="MILL_STAGE_RETRY_MAX_DELAY"
-    )
     # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
     # are longer than transient backoff because OpenRouter/provider
     # rate-limit windows are typically ~60s.  When
@@ -243,6 +233,7 @@ class Settings(BaseSettings):
     doc_request_limit: int = Field(
         default=8, alias="MILL_DOC_REQUEST_LIMIT"
     )
+    # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(
         default="openai/gpt-4o-mini", alias="MILL_DOC_CLASSIFIER_MODEL"
     )
@@ -803,9 +794,18 @@ class Settings(BaseSettings):
         default=None, alias="MILL_REBASE_MEMORY_PATH"
     )
 
+    # --- tracing (optional) ---
+    langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
+    langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str | None = Field(default=None, alias="LANGFUSE_SECRET_KEY")
+    langfuse_project_id: str | None = Field(default=None, alias="LANGFUSE_PROJECT_ID")
+
     # --- notifications (optional) ---
     ntfy_url: str | None = Field(default=None, alias="NTFY_URL")
     ntfy_token: str | None = Field(default=None, alias="NTFY_TOKEN")
+
+    # --- board ---
+    board_id: str = Field(default="", alias="MILL_BOARD_ID")
 
     @property
     def db_path(self) -> Path:
@@ -971,35 +971,6 @@ class Settings(BaseSettings):
         if v <= 0:
             raise ValueError("transient_backoff_cap must be > 0")
         return v
-
-    @field_validator("stage_retry_max_attempts")
-    @classmethod
-    def _validate_stage_retry_max_attempts(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("stage_retry_max_attempts must be ≥ 0")
-        return v
-
-    @field_validator("stage_retry_base_delay")
-    @classmethod
-    def _validate_stage_retry_base_delay(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError("stage_retry_base_delay must be > 0")
-        return v
-
-    @field_validator("stage_retry_max_delay")
-    @classmethod
-    def _validate_stage_retry_max_delay(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError("stage_retry_max_delay must be > 0")
-        return v
-
-    @model_validator(mode="after")
-    def _validate_stage_retry_delays(self) -> "Settings":
-        if self.stage_retry_max_delay < self.stage_retry_base_delay:
-            raise ValueError(
-                "stage_retry_max_delay must be ≥ stage_retry_base_delay"
-            )
-        return self
 
     @field_validator("rate_limit_backoff_base")
     @classmethod
