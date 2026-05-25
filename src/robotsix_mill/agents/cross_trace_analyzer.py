@@ -209,7 +209,7 @@ def make_cross_trace_analyze_tool(settings: Settings):
             "stage_inefficiency": [],
         }
         for f in result.findings:
-            by_cat.setdefault(f.category, []).append(f)
+            by_cat[f.category].append(f)
 
         section_titles = {
             "redundant_exploration": "Redundant Exploration",
