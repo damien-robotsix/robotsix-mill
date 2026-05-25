@@ -526,6 +526,37 @@ def test_run_completeness_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeyp
     assert got["repo_dir"] is None
 
 
+# --- MAX_GAPS clipping test ---
+
+
+def test_run_completeness_check_pass_clips_to_max_gaps(tmp_path, monkeypatch):
+    """Runner clips draft tickets to MAX_GAPS when agent returns more
+    than the limit — enforcement lives in the runner/pass_runner, not
+    just inside the (monkeypatched) agent function."""
+    from robotsix_mill.agents.completeness_check import MAX_GAPS
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings)
+
+    n = MAX_GAPS + 3  # 15 entries, exceeds the 12-entry cap
+    def mock_agent(**kwargs):
+        return cc_agent.CompletenessCheckResult(
+            updated_memory="# Memory\n",
+            draft_titles=[f"Gap {i}" for i in range(n)],
+            draft_bodies=[f"Body {i}" for i in range(n)],
+            gap_ids=[f"gap_{i}" for i in range(n)],
+        )
+
+    monkeypatch.setattr(cc_agent, "run_completeness_check_agent", mock_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.completeness_check_runner.Settings", lambda: settings
+    )
+
+    result = run_completeness_check_pass()
+    assert len(result.drafts_created) == MAX_GAPS
+
+
 # --- Worker periodic tests ---
 
 

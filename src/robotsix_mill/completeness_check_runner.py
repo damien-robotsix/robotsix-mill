@@ -97,6 +97,7 @@ def run_completeness_check_pass(root: str | None = None) -> CompletenessCheckPas
                 service=service,
                 settings=settings,
                 origin_session=session_id,
+                max_drafts=completeness_check.MAX_GAPS,
             )
     except Exception as e:  # noqa: BLE001
         log.exception("completeness-check agent failed")

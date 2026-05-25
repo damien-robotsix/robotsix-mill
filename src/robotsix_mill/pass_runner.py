@@ -187,6 +187,7 @@ def run_agent_pass(
     service: TicketService,
     settings: Settings,
     origin_session: str | None = None,
+    max_drafts: int | None = None,
 ) -> AgentPassResult:
     """Execute one agent pass with shared boilerplate.
 
@@ -200,6 +201,10 @@ def run_agent_pass(
         service: ``TicketService`` for creating draft tickets.
         settings: Mill settings (passed through to the agent callable).
         origin_session: Value for ``origin_session`` on created tickets.
+        max_drafts: If set, limit the number of draft tickets created
+                    (clips ``draft_titles``, ``draft_bodies``, and
+                    ``gap_ids`` before the creation loop).  Defaults to
+                    ``None`` (no limit).
 
     Returns:
         ``AgentPassResult`` with updated memory and created draft info.
@@ -227,7 +232,10 @@ def run_agent_pass(
     # 6. Create draft tickets for each proposal.
     gap_ids = getattr(res, 'gap_ids', [])
     created: list[dict] = []
-    for i in range(min(len(res.draft_titles), len(res.draft_bodies))):
+    limit = min(len(res.draft_titles), len(res.draft_bodies))
+    if max_drafts is not None:
+        limit = min(limit, max_drafts)
+    for i in range(limit):
         title = res.draft_titles[i]
         body = res.draft_bodies[i]
         if not title or not body:
