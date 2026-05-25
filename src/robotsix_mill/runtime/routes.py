@@ -72,7 +72,7 @@ def list_repos(
 
 @router.get("/gates")
 def gates(settings=Depends(get_settings)) -> dict:
-    """Return the pipeline gate flags from the live configuration.
+    """Return the four pipeline gate flags from the live configuration.
 
     Same open access model as ``/health`` — no auth.  The board polls
     these every refresh cycle and renders them as header pills so the

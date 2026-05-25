@@ -5,7 +5,7 @@ let costDashboardOpen=false;
 let costLookbackHours=24;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 let activeMap={};
-let gatesCache={};                   // cached from /gates so open_() can read gate values
+let gatesCache={};                    // cached /gates response for open_() drawer ordering
 const ACTIVE_LABEL={
   refine: "refining…",
   implement: "implementing…",
@@ -704,10 +704,6 @@ async function open_(id){
    );
  document.getElementById("drawer").classList.add("open");
 }
-function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
- if(deepReviewPollTimer){clearInterval(deepReviewPollTimer);deepReviewPollTimer=null}
- deepReviewOpen=false;deepReviewTraceId=null;deepReviewFindings=[];
- document.getElementById("drawer").classList.remove("open")}
 function toggleBody(btn) {
   const body = document.getElementById("ticket-body");
   if (!body) return;
@@ -719,6 +715,10 @@ function toggleBody(btn) {
     btn.textContent = "▼ Show";
   }
 }
+function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
+ if(deepReviewPollTimer){clearInterval(deepReviewPollTimer);deepReviewPollTimer=null}
+ deepReviewOpen=false;deepReviewTraceId=null;deepReviewFindings=[];
+ document.getElementById("drawer").classList.remove("open")}
 async function renderRuns(){
  const rs=await jget("/runs");
  document.getElementById("d").innerHTML=rs&&rs.length?
