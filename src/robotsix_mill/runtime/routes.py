@@ -251,6 +251,8 @@ def add_comment(
         comment = svc.add_comment(ticket_id, body.body, author=body.author, parent_id=body.parent_id)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
 
     # Fire-and-forget: re-process the epic in a daemon thread.
     ticket = svc.get(ticket_id)

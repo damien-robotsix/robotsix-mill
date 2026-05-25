@@ -633,7 +633,7 @@ class TicketService:
             if comment is None:
                 raise KeyError(comment_id)
             if comment.parent_id is not None:
-                raise ValueError("only top-level threads can be closed")
+                raise ValueError("only top-level threads can be reopened")
             if comment.closed_at is None:
                 raise ValueError("thread is not closed")
             comment.closed_at = None
