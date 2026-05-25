@@ -45,7 +45,7 @@ When Langfuse is unconfigured (Langfuse secrets absent from
 
 Accurate per-ticket cost **requires Langfuse configured** with
 `langfuse_public_key`, `langfuse_secret_key`, and `langfuse_base_url`
-set in `config/secrets.yaml`. Session-summed cost is only complete if
+set in `config/repos.yaml` for the selected repo. Session-summed cost is only complete if
 every trace carries the session id — the trace-health system enforces
 this across all agent runs.
 

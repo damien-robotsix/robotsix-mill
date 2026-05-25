@@ -9,7 +9,7 @@ them automatically.
 
 ## How it works
 
-1. **Short-circuits** when tracing is disabled (Langfuse secrets not configured in `config/secrets.yaml`).
+1. **Short-circuits** when tracing is disabled (no per-repo Langfuse credentials in `config/repos.yaml`).
 
 2. **Fetches all traces** from the last 24 hours via the Langfuse
    public API (paginated, with graceful error handling).
@@ -73,8 +73,7 @@ periodic:
 - The 24-hour lookback window is **hard-coded**, not configurable.
 - The minimum periodic interval is **3600s (1 hour)**, enforced in
   the worker to avoid hammering Langfuse.
-- When Langfuse secrets are not configured in `config/secrets.yaml`,
-  the check is a zero-cost no-op.
+- When per-repo Langfuse credentials are not available (not configured in `config/repos.yaml`), the check is a zero-cost no-op.
 
 ## See also
 

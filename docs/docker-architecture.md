@@ -47,7 +47,7 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   check).
 - **Delivery:** pluggable forge adapter (GitHub / GitLab), invoked only
   by the `deliver` stage.
-- **Tracing:** optional Langfuse; a no-op unless Langfuse secrets are configured in `config/secrets.yaml`.
+- **Tracing:** optional Langfuse; a no-op unless per-repo Langfuse credentials are configured in `config/repos.yaml`.
 
 ## Container topology
 

@@ -139,9 +139,6 @@ cp config/secrets.example.yaml config/secrets.yaml
 # config/secrets.yaml
 openrouter_api_key: "sk-or-..."
 forge_token: "ghp_..."
-# langfuse tracing (optional, leave blank to disable)
-langfuse_public_key: "pk-..."
-langfuse_secret_key: "sk-..."
 ```
 
 File permissions should be `0600` (the YAML loader enforces a warning
@@ -261,8 +258,6 @@ Every setting below shows:
 | `service.api_host` | `MILL_API_HOST` | `127.0.0.1` | FastAPI listen address |
 | `service.api_port` | `MILL_API_PORT` | `8077` | FastAPI listen port |
 | `service.api_url` | `MILL_API_URL` | `http://127.0.0.1:8077` | Base URL the CLI client uses to reach the API |
-| `service.board_id` | `MILL_BOARD_ID` | `""` | Board identifier for per-repo ticket isolation; set automatically from `repos.yaml` at startup |
-
 ### 7. Approval & review
 
 | YAML path | Env var | Default | Description |
@@ -392,15 +387,20 @@ via `get_secrets()`.
 | `forge_token` | `FORGE_TOKEN` | PAT for forge authentication |
 | `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `FORGE_AUTH=app`) |
 | `github_app_private_key` | `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (inline PEM, newlines as `\n`) |
-| `langfuse_public_key` | `LANGFUSE_PUBLIC_KEY` | Langfuse public key (tracing) |
-| `langfuse_secret_key` | `LANGFUSE_SECRET_KEY` | Langfuse secret key |
-| `langfuse_base_url` | `LANGFUSE_BASE_URL` | Langfuse base URL |
-| `langfuse_project_id` | `LANGFUSE_PROJECT_ID` | Langfuse project ID (optional) |
+| `langfuse_public_key`¹ | — | Langfuse public key (populated from `RepoConfig` at startup) |
+| `langfuse_secret_key`¹ | — | Langfuse secret key (populated from `RepoConfig` at startup) |
+| `langfuse_base_url`¹ | — | Langfuse base URL (populated from `RepoConfig` at startup) |
+| `langfuse_project_id`¹ | — | Langfuse project ID (populated from `RepoConfig` at startup) |
 | `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications |
 | `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional) |
 
 Secrets file path: `config/secrets.yaml` (overridable via
 `MILL_SECRETS_FILE` env var). Template: `config/secrets.example.yaml`.
+
+> ¹ The `langfuse_*` fields on `Secrets` are **not** user-configurable
+> via `secrets.yaml` or environment variables.  They are populated
+> automatically at startup from the per-repo `RepoConfig` (loaded from
+> `config/repos.yaml`).  See [Repos registry](#repos-registry) below.
 
 ---
 
@@ -414,11 +414,10 @@ or `get_repo_config("repo-id")`.
 
 When a repo is selected at startup (via `--repo-id`), its
 `langfuse.public_key`, `langfuse.secret_key`, and `langfuse.base_url`
-are used for **all** Langfuse operations — OTel trace export and
-read-side API calls (cost tracking, trace inspection, session
-summaries, etc.). The global `langfuse_*` secrets in
-`config/secrets.yaml` serve as a **fallback** for callers that do not
-yet have a repo context (e.g. global dashboard endpoints).
+are stamped onto the `Secrets` singleton and used for **all** Langfuse
+operations — OTel trace export and read-side API calls (cost tracking,
+trace inspection, session summaries, etc.). There is no global
+fallback; every Langfuse operation requires a valid per-repo config.
 
 ### Set up
 
