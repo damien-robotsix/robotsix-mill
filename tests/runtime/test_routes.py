@@ -238,7 +238,7 @@ def test_cost_by_agent_happy_path(client, monkeypatch):
     """GET /costs/by-agent returns aggregated cost data from Langfuse."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.aggregate_cost_by_name",
-        lambda settings, lookback_hours, repo_config=None: [
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: [
             {"name": "refine", "count": 5, "totalCost": 0.12},
             {"name": "implement", "count": 3, "totalCost": 0.45},
         ],
@@ -257,8 +257,7 @@ def test_cost_by_agent_clamp_low(client, monkeypatch):
     """GET /costs/by-agent?lookback_hours=0 clamps to 1.0."""
     captured: list[float] = []
 
-    def fake_aggregate(settings, lookback_hours, repo_config=None):
-        captured.append(lookback_hours)
+    def fake_aggregate(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
@@ -276,8 +275,7 @@ def test_cost_by_agent_clamp_high(client, monkeypatch):
     """GET /costs/by-agent?lookback_hours=200 clamps to 168.0."""
     captured: list[float] = []
 
-    def fake_aggregate(settings, lookback_hours, repo_config=None):
-        captured.append(lookback_hours)
+    def fake_aggregate(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
@@ -298,8 +296,7 @@ def test_most_expensive_ticket_happy_path(client, service, monkeypatch):
     t = service.create("Most expensive ticket test")
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_ticket",
-        lambda settings, lookback_hours, repo_config=None: {
-            "session_id": t.id,
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {            "session_id": t.id,
             "total_cost": 1.2345,
             "trace_count": 3,
         },
@@ -318,8 +315,7 @@ def test_most_expensive_ticket_null_when_disabled(client, monkeypatch):
     """GET /costs/most-expensive-ticket returns null when tracing disabled."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_ticket",
-        lambda settings, lookback_hours, repo_config=None: None,
-    )
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: None,    )
 
     r = client.get("/costs/most-expensive-ticket")
     assert r.status_code == 200
@@ -330,8 +326,7 @@ def test_most_expensive_ticket_null_when_no_matching_ticket(client, monkeypatch)
     """GET /costs/most-expensive-ticket returns null when session has no DB ticket."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_ticket",
-        lambda settings, lookback_hours, repo_config=None: {
-            "session_id": "T-nonexistent",
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {            "session_id": "T-nonexistent",
             "total_cost": 0.5,
             "trace_count": 1,
         },
@@ -346,8 +341,7 @@ def test_most_expensive_ticket_clamp_low(client, monkeypatch):
     """GET /costs/most-expensive-ticket?lookback_hours=0 clamps to 1.0."""
     captured: list[float] = []
 
-    def fake(settings, lookback_hours, repo_config=None):
-        captured.append(lookback_hours)
+    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
         return None
 
     monkeypatch.setattr(
@@ -365,8 +359,7 @@ def test_most_expensive_ticket_clamp_high(client, monkeypatch):
     """GET /costs/most-expensive-ticket?lookback_hours=200 clamps to 168.0."""
     captured: list[float] = []
 
-    def fake(settings, lookback_hours, repo_config=None):
-        captured.append(lookback_hours)
+    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
         return None
 
     monkeypatch.setattr(
@@ -386,8 +379,7 @@ def test_most_expensive_trace_happy_path(client, monkeypatch):
     """GET /costs/most-expensive-trace returns the trace dict directly."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_trace",
-        lambda settings, lookback_hours, repo_config=None: {
-            "id": "trace-abc",
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {            "id": "trace-abc",
             "name": "implement",
             "total_cost": 0.9876,
             "timestamp": "2025-01-01T00:00:00Z",
@@ -410,8 +402,7 @@ def test_most_expensive_trace_null_when_disabled(client, monkeypatch):
     """GET /costs/most-expensive-trace returns null when tracing disabled."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_trace",
-        lambda settings, lookback_hours, repo_config=None: None,
-    )
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: None,    )
 
     r = client.get("/costs/most-expensive-trace")
     assert r.status_code == 200
@@ -422,8 +413,7 @@ def test_most_expensive_trace_clamp_low(client, monkeypatch):
     """GET /costs/most-expensive-trace?lookback_hours=0 clamps to 1.0."""
     captured: list[float] = []
 
-    def fake(settings, lookback_hours, repo_config=None):
-        captured.append(lookback_hours)
+    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
         return None
 
     monkeypatch.setattr(
@@ -441,8 +431,7 @@ def test_most_expensive_trace_clamp_high(client, monkeypatch):
     """GET /costs/most-expensive-trace?lookback_hours=200 clamps to 168.0."""
     captured: list[float] = []
 
-    def fake(settings, lookback_hours, repo_config=None):
-        captured.append(lookback_hours)
+    def fake(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
         return None
 
     monkeypatch.setattr(
@@ -584,7 +573,7 @@ def test_cost_trend_happy_path(client, monkeypatch):
     ]
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.aggregate_cost_trend",
-        lambda settings, lookback_hours, repo_config=None: fake_buckets,
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: fake_buckets,
     )
 
     r = client.get("/costs/trend")
@@ -602,8 +591,7 @@ def test_cost_trend_clamp_low(client, monkeypatch):
     """GET /costs/trend?lookback_hours=0 clamps to 1.0."""
     captured: list[float] = []
 
-    def fake_trend(settings, lookback_hours, repo_config=None):
-        captured.append(lookback_hours)
+    def fake_trend(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
@@ -621,8 +609,7 @@ def test_cost_trend_clamp_high(client, monkeypatch):
     """GET /costs/trend?lookback_hours=200 clamps to 168.0."""
     captured: list[float] = []
 
-    def fake_trend(settings, lookback_hours, repo_config=None):
-        captured.append(lookback_hours)
+    def fake_trend(settings, lookback_hours, repo_config=None, max_tickets=None):        captured.append(lookback_hours)
         return []
 
     monkeypatch.setattr(
@@ -640,7 +627,7 @@ def test_cost_trend_empty_when_disabled(client, monkeypatch):
     """GET /costs/trend returns empty buckets when data is empty."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.aggregate_cost_trend",
-        lambda settings, lookback_hours, repo_config=None: [],
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: [],
     )
 
     r = client.get("/costs/trend")

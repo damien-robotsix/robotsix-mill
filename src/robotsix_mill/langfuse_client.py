@@ -377,18 +377,92 @@ def list_all_traces_since(
         return []
 
 
+def _fetch_traces_for_tickets(
+    settings: Settings,
+    max_tickets: int,
+    repo_config: RepoConfig | None = None,
+) -> list[dict]:
+    """Fetch all traces belonging to the first *max_tickets* distinct
+    sessions (by sessionId), paginating by timestamp.desc.
+
+    Continues paginating after the cap is reached to collect remaining
+    traces from the already-identified sessions.  Stops after two
+    consecutive pages with no matching traces, or at the safety cap
+    (100 pages / 10 000 traces).
+
+    Returns the full list of traces (all traces from the capped
+    sessions, not deduplicated to one per session).
+    """
+    PAGE_SIZE = 100
+    MAX_PAGES = 100
+
+    all_traces: list[dict] = []
+    session_ids: set[str] = set()
+    capped = False
+    page = 1
+    pages_since_match = 0
+
+    while page <= MAX_PAGES and pages_since_match < 2:
+        body = _langfuse_api_get(
+            settings,
+            "/api/public/traces",
+            params={
+                "orderBy": "timestamp.desc",
+                "limit": PAGE_SIZE,
+                "page": page,
+            },
+            repo_config=repo_config,
+        )
+        if body is None:
+            break
+        traces = body.get("data", [])
+        if not traces:
+            break
+
+        matched_this_page = False
+        for t in traces:
+            sid = (t.get("sessionId") or "").strip()
+            if not capped:
+                if sid:
+                    session_ids.add(sid)
+                all_traces.append(t)
+                matched_this_page = True
+                if len(session_ids) >= max_tickets:
+                    capped = True
+            else:
+                if sid in session_ids:
+                    all_traces.append(t)
+                    matched_this_page = True
+
+        if capped:
+            pages_since_match = 0 if matched_this_page else pages_since_match + 1
+
+        meta = body.get("meta", {})
+        total_pages = meta.get("totalPages", 1)
+        if page >= total_pages:
+            break
+        page += 1
+
+    return all_traces
+
+
 def aggregate_cost_trend(
     settings: Settings,
     lookback_hours: float = 24,
+    max_tickets: int | None = None,
     repo_config: RepoConfig | None = None,
 ) -> list[dict]:
-    """Return cost bucketed by time for the last *lookback_hours*.
+    """Return cost bucketed by time for the last *lookback_hours* (default)
+    or for the first *max_tickets* distinct sessions.
 
-    - Bucket width: 1 hour when lookback ≤ 24, 1 day when > 24.
+    - Bucket width: 1 hour when span ≤ 24, 1 day when > 24.
     - Each bucket has ``ts`` (ISO-8601 start), ``total_cost``, and
       ``trace_count``.
     - Paginates through all traces in the window (up to 100 pages /
       10,000 traces as a safety bound).
+
+    When *max_tickets* is set, the time window is derived from the
+    collected traces' timestamp range instead of *lookback_hours*.
 
     Graceful: returns ``[]`` when tracing is disabled or the API errors.
     """
@@ -399,6 +473,82 @@ def aggregate_cost_trend(
     ):
         return []
 
+    # ── ticket-count mode ───────────────────────────────────────────
+    if max_tickets is not None:
+        all_traces = _fetch_traces_for_tickets(settings, max_tickets, repo_config=repo_config)
+        if not all_traces:
+            return []
+
+        # Derive the time span from earliest / latest trace timestamps.
+        timestamps: list[datetime] = []
+        for t in all_traces:
+            ts_str = t.get("timestamp")
+            if not ts_str:
+                continue
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                timestamps.append(ts.replace(tzinfo=None))
+            except (ValueError, TypeError):
+                continue
+
+        if not timestamps:
+            return []
+
+        earliest = min(timestamps)
+        latest = max(timestamps)
+        span_hours = (latest - earliest).total_seconds() / 3600.0
+
+        # Pad the span slightly so edge traces land inside buckets.
+        if span_hours <= 24:
+            bucket_delta = timedelta(hours=1)
+            start = earliest.replace(minute=0, second=0, microsecond=0)
+            end = latest.replace(minute=59, second=59, microsecond=999999)
+            num_buckets = max(int((end - start).total_seconds() / 3600) + 1, 1)
+            bucket_starts = [start + bucket_delta * i for i in range(num_buckets)]
+            ts_fmt = lambda dt: dt.replace(minute=0, second=0, microsecond=0).isoformat() + "Z"
+        else:
+            bucket_delta = timedelta(days=1)
+            start = earliest.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = latest.replace(hour=23, minute=59, second=59, microsecond=999999)
+            num_days = max((end - start).days + 1, 1)
+            bucket_starts = [
+                (start + bucket_delta * i).replace(hour=0, minute=0, second=0, microsecond=0)
+                for i in range(num_days)
+            ]
+            ts_fmt = lambda dt: dt.isoformat() + "Z"
+
+        buckets: dict[str, dict] = {}
+        for bs in bucket_starts:
+            key = ts_fmt(bs)
+            buckets[key] = {"ts": key, "total_cost": 0.0, "trace_count": 0}
+        bucket_keys = sorted(buckets.keys())
+
+        for t in all_traces:
+            ts_str = t.get("timestamp")
+            if not ts_str:
+                continue
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                ts_naive = ts.replace(tzinfo=None)
+            except (ValueError, TypeError):
+                continue
+            cost = float(t.get("totalCost") or 0)
+            assigned = None
+            for key in bucket_keys:
+                bucket_dt = datetime.fromisoformat(
+                    key.replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+                if bucket_dt <= ts_naive:
+                    assigned = key
+                else:
+                    break
+            if assigned is not None:
+                buckets[assigned]["total_cost"] += cost
+                buckets[assigned]["trace_count"] += 1
+
+        return [buckets[k] for k in bucket_keys]
+
+    # ── time-window mode (original) ─────────────────────────────────
     from_timestamp = (
         datetime.utcnow() - timedelta(hours=lookback_hours)
     ).isoformat() + "Z"
@@ -520,10 +670,12 @@ def aggregate_cost_trend(
 def aggregate_cost_by_name(
     settings: Settings,
     lookback_hours: float = 24,
+    max_tickets: int | None = None,
     repo_config: RepoConfig | None = None,
 ) -> list[dict]:
     """Return cost aggregated by trace name for Langfuse traces within
-    the last *lookback_hours*.
+    the last *lookback_hours* (default) or for the first *max_tickets*
+    distinct sessions.
 
     Graceful: returns ``[]`` when tracing is disabled or the API errors.
     Paginates through all traces in the window (up to 100 pages /
@@ -536,45 +688,48 @@ def aggregate_cost_by_name(
     ):
         return []
 
-    from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+    if max_tickets is not None:
+        all_traces = _fetch_traces_for_tickets(settings, max_tickets, repo_config=repo_config)
+    else:
+        from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
-    PAGE_SIZE = 100
-    MAX_PAGES = 100
-    all_traces: list[dict] = []
+        PAGE_SIZE = 100
+        MAX_PAGES = 100
+        all_traces = []
 
-    try:
-        page = 1
-        while page <= MAX_PAGES:
-            body = _langfuse_api_get(
-                settings,
-                "/api/public/traces",
-                params={
-                    "fromTimestamp": from_timestamp,
-                    "limit": PAGE_SIZE,
-                    "page": page,
-                    "orderBy": "timestamp.desc",
-                },
-                repo_config=repo_config,
-            )
-            if body is None:
-                log.warning(
-                    "aggregate_cost_by_name: Langfuse request failed on page %d",
-                    page,
+        try:
+            page = 1
+            while page <= MAX_PAGES:
+                body = _langfuse_api_get(
+                    settings,
+                    "/api/public/traces",
+                    params={
+                        "fromTimestamp": from_timestamp,
+                        "limit": PAGE_SIZE,
+                        "page": page,
+                        "orderBy": "timestamp.desc",
+                    },
+                    repo_config=repo_config,
                 )
-                break
+                if body is None:
+                    log.warning(
+                        "aggregate_cost_by_name: Langfuse request failed on page %d",
+                        page,
+                    )
+                    break
 
-            data = body.get("data", [])
-            all_traces.extend(data)
+                data = body.get("data", [])
+                all_traces.extend(data)
 
-            meta = body.get("meta", {})
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages:
-                break
-            page += 1
+                meta = body.get("meta", {})
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
 
-    except Exception:
-        log.exception("aggregate_cost_by_name failed")
-        return []
+        except Exception:
+            log.exception("aggregate_cost_by_name failed")
+            return []
 
     # Aggregate by name
     agg: dict[str, dict] = {}
@@ -599,10 +754,12 @@ def aggregate_cost_by_name(
 def most_expensive_ticket(
     settings: Settings,
     lookback_hours: float = 24,
+    max_tickets: int | None = None,
     repo_config: RepoConfig | None = None,
 ) -> dict | None:
     """Return the session with the highest total cost within the last
-    *lookback_hours*.
+    *lookback_hours* (default) or among the first *max_tickets*
+    distinct sessions.
 
     Groups traces by ``sessionId``, sums ``totalCost`` per session,
     and returns the single session with the highest total cost.
@@ -617,49 +774,54 @@ def most_expensive_ticket(
     ):
         return None
 
-    from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+    if max_tickets is not None:
+        all_traces = _fetch_traces_for_tickets(
+            settings, max_tickets, repo_config=repo_config
+        )
+    else:
+        from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
-    PAGE_SIZE = 100
-    EXAMINE_CAP = 500
-    all_traces: list[dict] = []
+        PAGE_SIZE = 100
+        EXAMINE_CAP = 500
+        all_traces = []
 
-    try:
-        page = 1
-        while len(all_traces) < EXAMINE_CAP:
-            body = _langfuse_api_get(
-                settings,
-                "/api/public/traces",
-                params={
-                    "fromTimestamp": from_timestamp,
-                    "limit": PAGE_SIZE,
-                    "page": page,
-                    "orderBy": "timestamp.desc",
-                },
-                repo_config=repo_config,
-            )
-            if body is None:
-                log.warning(
-                    "most_expensive_ticket: Langfuse request failed on page %d",
-                    page,
+        try:
+            page = 1
+            while len(all_traces) < EXAMINE_CAP:
+                body = _langfuse_api_get(
+                    settings,
+                    "/api/public/traces",
+                    params={
+                        "fromTimestamp": from_timestamp,
+                        "limit": PAGE_SIZE,
+                        "page": page,
+                        "orderBy": "timestamp.desc",
+                    },
+                    repo_config=repo_config,
                 )
-                break
+                if body is None:
+                    log.warning(
+                        "most_expensive_ticket: Langfuse request failed on page %d",
+                        page,
+                    )
+                    break
 
-            data = body.get("data", [])
-            all_traces.extend(data)
+                data = body.get("data", [])
+                all_traces.extend(data)
 
-            meta = body.get("meta", {})
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages:
-                break
-            page += 1
+                meta = body.get("meta", {})
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
 
-    except Exception:
-        log.exception("most_expensive_ticket failed")
-        return None
+        except Exception:
+            log.exception("most_expensive_ticket failed")
+            return None
 
     # Aggregate by session_id
     agg: dict[str, dict] = {}
-    for t in all_traces[:EXAMINE_CAP]:
+    for t in all_traces[:500]:
         sid = (t.get("sessionId") or "").strip()
         if not sid:
             continue
@@ -684,10 +846,12 @@ def most_expensive_ticket(
 def most_expensive_trace(
     settings: Settings,
     lookback_hours: float = 24,
+    max_tickets: int | None = None,
     repo_config: RepoConfig | None = None,
 ) -> dict | None:
     """Return the single trace with the highest ``totalCost`` within the
-    last *lookback_hours*.
+    last *lookback_hours* (default) or among the first *max_tickets*
+    distinct sessions.
 
     Skips unnamed/in-flight traces (same ``_named`` filter as
     ``list_recent_traces``).
@@ -702,51 +866,56 @@ def most_expensive_trace(
     ):
         return None
 
-    from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+    if max_tickets is not None:
+        all_traces = _fetch_traces_for_tickets(
+            settings, max_tickets, repo_config=repo_config
+        )
+    else:
+        from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
-    PAGE_SIZE = 100
-    EXAMINE_CAP = 500
-    all_traces: list[dict] = []
+        PAGE_SIZE = 100
+        EXAMINE_CAP = 500
+        all_traces = []
 
-    try:
-        page = 1
-        while len(all_traces) < EXAMINE_CAP:
-            body = _langfuse_api_get(
-                settings,
-                "/api/public/traces",
-                params={
-                    "fromTimestamp": from_timestamp,
-                    "limit": PAGE_SIZE,
-                    "page": page,
-                    "orderBy": "timestamp.desc",
-                },
-                repo_config=repo_config,
-            )
-            if body is None:
-                log.warning(
-                    "most_expensive_trace: Langfuse request failed on page %d",
-                    page,
+        try:
+            page = 1
+            while len(all_traces) < EXAMINE_CAP:
+                body = _langfuse_api_get(
+                    settings,
+                    "/api/public/traces",
+                    params={
+                        "fromTimestamp": from_timestamp,
+                        "limit": PAGE_SIZE,
+                        "page": page,
+                        "orderBy": "timestamp.desc",
+                    },
+                    repo_config=repo_config,
                 )
-                break
+                if body is None:
+                    log.warning(
+                        "most_expensive_trace: Langfuse request failed on page %d",
+                        page,
+                    )
+                    break
 
-            data = body.get("data", [])
-            all_traces.extend(data)
+                data = body.get("data", [])
+                all_traces.extend(data)
 
-            meta = body.get("meta", {})
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages:
-                break
-            page += 1
+                meta = body.get("meta", {})
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
 
-    except Exception:
-        log.exception("most_expensive_trace failed")
-        return None
+        except Exception:
+            log.exception("most_expensive_trace failed")
+            return None
 
     # Find the single named trace with highest cost
     best_trace: dict | None = None
     best_cost = -1.0
 
-    for t in all_traces[:EXAMINE_CAP]:
+    for t in all_traces[:500]:
         name = t.get("name")
         if not (isinstance(name, str) and name.strip() != ""):
             continue

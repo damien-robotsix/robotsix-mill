@@ -3,6 +3,8 @@ let sel=null;
 let runsOpen=false;
 let costDashboardOpen=false;
 let costLookbackHours=24;
+let costMaxTickets=20;               // default for ticket-count mode
+let costMode='time';                 // 'time' | 'tickets'
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 let activeMap={};
 let gatesCache={};                    // cached /gates response for open_() drawer ordering
@@ -763,25 +765,39 @@ async function openCostDashboard(){
  await renderCostDashboard();
 }
 async function renderCostDashboard(){
- const selOpt=lookback=>lookback==costLookbackHours?' selected':'';
+ const selTimeOpt=lookback=>lookback==costLookbackHours?' selected':'';
+ const selTickOpt=n=>n==costMaxTickets?' selected':'';
+ const timeModeActive=costMode==='time';
  document.getElementById("d").innerHTML='<h3>💰 Cost Dashboard</h3>'+
   '<div class="cost-lookback">'+
-   '<label>Last <select id="cost-lookback" onchange="costLookbackHours=parseInt(this.value);renderCostDashboard()">'+
-    '<option value="1"'+selOpt(1)+'>1 hour</option>'+
-    '<option value="6"'+selOpt(6)+'>6 hours</option>'+
-    '<option value="24"'+selOpt(24)+'>24 hours</option>'+
-    '<option value="72"'+selOpt(72)+'>3 days</option>'+
-    '<option value="168"'+selOpt(168)+'>7 days</option>'+
-   '</select></label>'+
+   '<div class="cost-mode-toggle">'+
+    '<button class="cost-mode-btn'+(timeModeActive?' active':'')+'" onclick="costMode=\'time\';renderCostDashboard()">⏱️ Time window</button>'+
+    '<button class="cost-mode-btn'+(!timeModeActive?' active':'')+'" onclick="costMode=\'tickets\';renderCostDashboard()">🎫 Last N tickets</button>'+
+   '</div>'+
+   (timeModeActive?
+    '<label>Last <select id="cost-lookback" onchange="costLookbackHours=parseInt(this.value);renderCostDashboard()">'+
+     '<option value="1"'+selTimeOpt(1)+'>1 hour</option>'+
+     '<option value="6"'+selTimeOpt(6)+'>6 hours</option>'+
+     '<option value="24"'+selTimeOpt(24)+'>24 hours</option>'+
+     '<option value="72"'+selTimeOpt(72)+'>3 days</option>'+
+     '<option value="168"'+selTimeOpt(168)+'>7 days</option>'+
+    '</select></label>'
+    :
+    '<label>Last <select id="cost-max-tickets" onchange="costMaxTickets=parseInt(this.value);renderCostDashboard()">'+
+     '<option value="20"'+selTickOpt(20)+'>20 tickets</option>'+
+     '<option value="100"'+selTickOpt(100)+'>100 tickets</option>'+
+     '<option value="1000"'+selTickOpt(1000)+'>1000 tickets</option>'+
+    '</select></label>')+
   '</div>'+
   '<canvas id="cost-sparkline" style="display:none"></canvas>'+
   '<div id="cost-chart">loading…</div>'+
   '<div id="cost-highlights"></div>';
 
- const trendUrl="/costs/trend?lookback_hours="+costLookbackHours;
- const baseUrl="/costs/by-agent?lookback_hours="+costLookbackHours;
- const ticketUrl="/costs/most-expensive-ticket?lookback_hours="+costLookbackHours;
- const traceUrl="/costs/most-expensive-trace?lookback_hours="+costLookbackHours;
+ const extraParam=timeModeActive?('lookback_hours='+costLookbackHours):('max_tickets='+costMaxTickets);
+ const trendUrl="/costs/trend?"+extraParam;
+ const baseUrl="/costs/by-agent?"+extraParam;
+ const ticketUrl="/costs/most-expensive-ticket?"+extraParam;
+ const traceUrl="/costs/most-expensive-trace?"+extraParam;
  const [trendData, data, topTicket, topTrace]=await Promise.all([
   jget(trendUrl), jget(baseUrl), jget(ticketUrl), jget(traceUrl)
  ]);
@@ -865,12 +881,14 @@ async function renderCostDashboard(){
   ctx.fillStyle="#7d828c";
   ctx.font="11px ui-monospace,monospace";
   ctx.textAlign="center";
-  ctx.fillText("No trend data available for this period.",rect.width/2,rect.height/2);
+  const emptyMsg=timeModeActive?'No trend data available for this period.':'No trend data available for the last '+costMaxTickets+' tickets.';
+  ctx.fillText(emptyMsg,rect.width/2,rect.height/2);
  }
 
  // -- per-agent bar chart -----------------------------------------------
  if(!data||!data.length){
-  document.getElementById("cost-chart").innerHTML='<div class="muted">No cost data available for this period.</div>';
+  const emptyMsg=timeModeActive?'No cost data available for this period.':'No cost data available for the last '+costMaxTickets+' tickets.';
+  document.getElementById("cost-chart").innerHTML='<div class="muted">'+emptyMsg+'</div>';
  } else {
   const colors=["#3b82f6","#8b5cf6","#22c55e","#eab308","#ef4444","#f97316","#06b6d4","#ec4899","#14b8a6","#a855f7"];
   const maxCost=Math.max(...data.map(d=>d.total_cost),0.0001);
