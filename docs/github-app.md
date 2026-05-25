@@ -110,6 +110,53 @@ or place the key under `./.data` so it's already on the volume.
 
 ---
 
+## Multi-repo installations
+
+When serving multiple repos from a single mill process (see
+`config/repos.yaml`), each repo entry can specify its own
+`FORGE_REMOTE_URL`:
+
+```yaml
+# config/repos.yaml
+repos:
+  - repo_id: repo-a
+    board_id: board-a
+    FORGE_REMOTE_URL: https://github.com/owner-a/repo-a.git
+    # … Langfuse keys …
+  - repo_id: repo-b
+    board_id: board-b
+    FORGE_REMOTE_URL: https://github.com/owner-b/repo-b.git
+    # … Langfuse keys …
+```
+
+When a ticket is processed, the mill resolves the target owner/repo
+from the ticket's `repo_id` → `RepoConfig.forge_remote_url` instead of
+the global `settings.forge_remote_url`. The installation ID is
+discovered dynamically via
+`GET /repos/{owner}/{repo}/installation` — the same mechanism works
+for different repos under the same GitHub App, or for different Apps
+if the operator registers separate credentials.
+
+**To use different GitHub App installations per repo:**
+
+1. Create and install the App(s) on each target repo as described in
+   [Option B](#option-b--github-app-bot-recommended) above.
+2. Set `FORGE_REMOTE_URL` on each repo entry in `config/repos.yaml`.
+3. The mill automatically mints installation tokens for the correct
+   repo at delivery time, caching them independently per
+   `(app_id, remote_url)` pair.
+
+> **Different Apps per repo**: if repos need separate GitHub App
+> identities, register each App, install it on the relevant repo, and
+> provide per-App credentials. Currently the mill uses a single
+> `GITHUB_APP_ID` / private key pair (from `secrets.yaml`); per-repo
+> App credentials are a future enhancement. For most deployments, one
+> App installed on all repos is sufficient.
+
+When a repo entry does **not** specify `FORGE_REMOTE_URL`, the mill
+falls back to the global `settings.forge_remote_url` for backward
+compatibility with single-repo deployments.
+
 ## Notes
 
 - The minted installation token lives only in the **mill** process,
