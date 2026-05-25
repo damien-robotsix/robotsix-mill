@@ -66,6 +66,8 @@ Shared modules used to build and equip agents.
 | Reply to thread | `agents/reply_thread.py` | `reply_to_thread` tool (replies to a comment thread on the current ticket; injected into implement agent) |
 | Retry | `agents/retry.py` | Bounded retry with exponential backoff for transient network failures |
 | Tool registry | `agents/tool_registry.py` | System-wide catalog of tool capabilities for prompt injection (not an agent registry) |
+| Expert YAML loader | `agents/expert_loader.py` | `load_expert_definition()` — parses and validates `expert_definitions/*.yaml` files |
+| Expert manager | `agents/expert_manager.py` | `ExpertManager` — single lifecycle owner for expert agent instances (load definitions, create/cache/retrieve/close agents) |
 
 ## See also
 
