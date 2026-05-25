@@ -30,6 +30,11 @@ it was blocked *from* is recorded. You can recover in two ways:
   don't need the full pipeline.  Terminal states (DONE, CLOSED,
   ANSWERED, EPIC_CLOSED, EPIC_OPEN) are rejected with 409.
 
+  A **"Mark Done"** button (green, rightmost action button) is also
+  available on every eligible kanban card — no CLI or `curl` needed.
+  The button appears on all states except `done`, `closed`, `answered`,
+  `epic_closed`, and `epic_open`.
+
 No raw database editing is ever needed to recover a blocked ticket.
 
 Implemented in `service.py:resume_blocked`, `service.py:mark_done`,
