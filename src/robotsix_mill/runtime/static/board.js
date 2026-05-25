@@ -120,6 +120,7 @@ async function refresh(){
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${t.retry_attempt>0?`<span class="retry-chip" title="${esc(t.last_transient_error||'')}">retry ${t.retry_attempt}${t.next_retry_at?` · next ${fmtRelative(t.next_retry_at)}`:''}</span>`:''}`+
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
    (s==="human_mr_approval"?
+    `<button class="approve-btn" onclick="event.stopPropagation();approveMR('${t.id}')">Approve</button>`+
     `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
@@ -132,6 +133,10 @@ async function refresh(){
 async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
+}
+async function approveMR(id){
+ const r=await jpost("/tickets/"+id+"/approve-mr");
+ if(!r.ok){const e=await r.text();alert("approve-mr failed: "+e)}else refresh()
 }
 async function mergePR(id){
  const r=await jpost("/tickets/"+id+"/merge-now");
@@ -641,11 +646,12 @@ async function generateChildren(id){
 }
 async function open_(id){
  sel=id;
- const [t,h,d,cs,rt,ch,mi,mr]=await Promise.all([jget("/tickets/"+id),
+ const [t,h,d,cs,rt,ch,mi,mr,ms]=await Promise.all([jget("/tickets/"+id),
    jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
    jget("/tickets/"+id+"/comments"),jget("/tickets/"+id+"/retrospect"),
    jget("/tickets/"+id+"/children"),jget("/tickets/"+id+"/merge-info"),
-   jget("/tickets/"+id+"/merge-reason")]);
+   jget("/tickets/"+id+"/merge-reason"),
+   jget("/tickets/"+id+"/merge-status")]);
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
@@ -657,7 +663,11 @@ async function open_(id){
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
    (t.pr_url?` · <a href="${esc(t.pr_url)}" target="_blank" rel="noopener" class="pr-link">🔗 PR</a>`:"")+
    (t.state==="human_mr_approval"?
-    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
+    (ms&&ms.can_merge===false?
+     `<button class="merge-btn" disabled title="${esc(ms.reason||'')}">Merge</button>`+
+     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(ms.reason||'not mergeable')}</p>`:
+     `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`
+    ):"")+
    (mr&&mr.reason?
     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")+
    (t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"")+

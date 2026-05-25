@@ -31,7 +31,6 @@ from ..forge import get_forge
 from .board_html import BOARD_HTML
 from .deps import (
     enrich_ticket_read,
-    get_repos_registry,
     get_run_registry,
     get_service,
     get_settings,
@@ -47,27 +46,6 @@ router = APIRouter()
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
-
-
-@router.get("/repos")
-def list_repos(
-    request: Request,
-    repos=Depends(get_repos_registry),
-) -> list[dict]:
-    """Return the registered repos for the UI repo selector.
-
-    No secrets (Langfuse keys) are included — only ``repo_id`` and
-    ``board_id``.  In single-repo mode (``--repo-id`` passed) only
-    that repo is returned.
-    """
-    single = request.app.state.single_repo_id
-    if single is not None:
-        rc = repos.repos[single]
-        return [{"repo_id": rc.repo_id, "board_id": rc.board_id}]
-    return [
-        {"repo_id": rc.repo_id, "board_id": rc.board_id}
-        for rc in repos.repos.values()
-    ]
 
 
 @router.get("/gates")
@@ -269,6 +247,50 @@ def approve_ticket(
     return enrich_ticket_read(ticket, settings, svc)
 
 
+@router.post("/tickets/{ticket_id}/approve-mr", response_model=TicketRead)
+def approve_mr(
+    ticket_id: str,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Human approves a ticket in human_mr_approval — merge the PR now.
+
+    Semantically identical to ``/merge-now``: the human is the
+    approval, so call the forge's merge endpoint directly instead of
+    transitioning to waiting_auto_merge (which would re-check the
+    reviewer's ``auto_merge_eligible`` flag and bounce back to
+    human_mr_approval whenever the reviewer set it false). The
+    docstring promised "bypasses auto-merge eligibility checks"; the
+    old implementation didn't.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    if ticket.state is not State.HUMAN_MR_APPROVAL:
+        raise HTTPException(409, "ticket is not in human_mr_approval")
+
+    forge = get_forge(settings)
+    pr = forge.pr_status(source_branch=ticket.branch)
+    if pr is None:
+        raise HTTPException(409, "no PR found for branch — nothing to merge")
+    pr_url = pr.get("url", ticket.branch)
+
+    result = forge.merge_pr(source_branch=ticket.branch)
+    if not result["merged"]:
+        raise HTTPException(409, result["reason"])
+
+    try:
+        ticket = svc.transition(
+            ticket_id,
+            State.DONE,
+            note=f"approved + merged by human: {pr_url}",
+        )
+    except TransitionError as e:
+        raise HTTPException(409, str(e)) from None
+
+    return enrich_ticket_read(ticket, settings, svc)
+
 
 @router.post("/tickets/{ticket_id}/merge-now", response_model=TicketRead)
 def merge_now(
@@ -403,6 +425,100 @@ def get_merge_reason(
     if not reason_path.exists():
         return {"reason": ""}
     return {"reason": reason_path.read_text(encoding="utf-8").strip()}
+
+
+@router.get("/tickets/{ticket_id}/merge-status")
+def get_merge_status(
+    ticket_id: str,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> dict:
+    """Return live merge-readiness for a ticket's PR.
+
+    Called by the ticket drawer before rendering the Merge button so
+    the user sees *why* they can't merge right now (conflicts, failing
+    CI, pending checks) instead of hitting a bare 409 from
+    ``/merge-now``.  Returns ``can_merge: true`` on transient forge
+    errors so the Merge button stays active — the actual merge
+    endpoint handles the real rejection.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+
+    # Only relevant for merge-ready states.  Everything else gets a
+    # clean "no" so the drawer doesn't bother rendering a button.
+    if ticket.state not in (State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE):
+        return {
+            "mergeable": None,
+            "ci_conclusion": None,
+            "can_merge": False,
+            "reason": f"ticket is not in a merge-relevant state (currently {ticket.state.value})",
+        }
+
+    forge = get_forge(settings)
+
+    # ── PR mergeability ──────────────────────────────────────────
+    mergeable: bool | None = None
+    try:
+        pr = forge.pr_status(source_branch=ticket.branch)
+    except Exception:
+        # Transient forge error — stay optimistic; merge-now will
+        # surface the real error if the user clicks.
+        return {
+            "mergeable": None,
+            "ci_conclusion": None,
+            "can_merge": True,
+            "reason": "",
+        }
+
+    if pr is None:
+        return {
+            "mergeable": None,
+            "ci_conclusion": None,
+            "can_merge": False,
+            "reason": "No PR found for this branch",
+        }
+    mergeable = pr.get("mergeable")
+
+    # ── CI status ────────────────────────────────────────────────
+    ci_conclusion: str | None = None
+    try:
+        ci = forge.check_status(source_branch=ticket.branch)
+    except Exception:
+        ci = None
+    if ci is not None:
+        ci_conclusion = ci.get("conclusion")
+
+    # ── Compose result ───────────────────────────────────────────
+    if mergeable is False:
+        return {
+            "mergeable": mergeable,
+            "ci_conclusion": ci_conclusion,
+            "can_merge": False,
+            "reason": "PR has conflicts — rebase needed",
+        }
+    if ci_conclusion == "failure":
+        return {
+            "mergeable": mergeable,
+            "ci_conclusion": ci_conclusion,
+            "can_merge": False,
+            "reason": "CI checks are failing",
+        }
+    if ci_conclusion == "pending":
+        return {
+            "mergeable": mergeable,
+            "ci_conclusion": ci_conclusion,
+            "can_merge": False,
+            "reason": "CI checks are still running",
+        }
+
+    return {
+        "mergeable": mergeable,
+        "ci_conclusion": ci_conclusion,
+        "can_merge": True,
+        "reason": "",
+    }
 
 
 @router.post(
