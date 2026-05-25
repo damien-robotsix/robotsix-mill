@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from .config import Settings, get_secrets
+from .config import RepoConfig, Settings, get_secrets
 from .core.models import SourceKind
 from .core.service import TicketService
 from .pass_runner import run_agent_pass
@@ -32,7 +32,7 @@ class CompletenessCheckPassResult:
     session_id: str = ""        # Langfuse session.id for this run
 
 
-def run_completeness_check_pass(session_id: str) -> CompletenessCheckPassResult:
+def run_completeness_check_pass(session_id: str, repo_config: RepoConfig | None = None) -> CompletenessCheckPassResult:
     """Execute one full feature-completeness inspection pass.
 
     Reads the memory ledger, invokes the completeness-check agent,
@@ -41,14 +41,29 @@ def run_completeness_check_pass(session_id: str) -> CompletenessCheckPassResult:
 
     Args:
         session_id: Langfuse session id from the poll loop.
+        repo_config: Optional per-repo configuration for multi-repo
+            serve. When provided, ticket creation and memory files
+            are scoped to this repo.
 
     Returns:
         CompletenessCheckPassResult with updated memory and created
         draft info.
     """
     settings = Settings()
-    service = TicketService(settings)
     memory_file = settings.completeness_check_memory_file
+    clone_dir: Path | None = None
+    forge_remote_url = settings.forge_remote_url
+
+    if repo_config is not None:
+        service = TicketService(settings, board_id=repo_config.board_id)
+        repo_data_dir = settings.data_dir / repo_config.repo_id
+        repo_data_dir.mkdir(parents=True, exist_ok=True)
+        memory_file = repo_data_dir / "completeness_check_memory.md"
+        if repo_config.forge_remote_url:
+            forge_remote_url = repo_config.forge_remote_url
+            clone_dir = repo_data_dir / "completeness_check_workspace" / "repo"
+    else:
+        service = TicketService(settings)
 
     # Import here to allow monkeypatching in tests.
     from .agents import completeness_check
@@ -58,16 +73,16 @@ def run_completeness_check_pass(session_id: str) -> CompletenessCheckPassResult:
     # explore/read_file instead of web-fetching the project's own
     # files. Idempotent; best-effort.
     repo_dir = None
-    if settings.forge_remote_url:
+    if forge_remote_url:
         import subprocess
 
-        cand = settings.data_dir / "completeness_check_workspace" / "repo"
+        cand = clone_dir or (settings.data_dir / "completeness_check_workspace" / "repo")
         if (cand / ".git").exists():
             repo_dir = cand
         else:
             try:
                 git_ops.clone(
-                    settings.forge_remote_url, cand,
+                    forge_remote_url, cand,
                     settings.forge_target_branch, get_secrets().forge_token,
                 )
                 repo_dir = cand

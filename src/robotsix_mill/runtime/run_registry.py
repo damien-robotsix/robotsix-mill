@@ -24,6 +24,7 @@ class RunEntry:
     status: Literal["running", "ok", "error"] = "running"
     summary: str = ""
     error: str | None = None
+    repo_id: str = ""
 
 
 class RunRegistry:
@@ -90,7 +91,7 @@ class RunRegistry:
 
     # -- public API --------------------------------------------------
 
-    def start(self, kind: str) -> str:
+    def start(self, kind: str, repo_id: str = "") -> str:
         """Create a ``"running"`` entry, persist, and return its id."""
         with self._lock:
             entry = RunEntry(
@@ -98,6 +99,7 @@ class RunRegistry:
                 kind=kind,  # type: ignore[arg-type]  # validated by callers
                 started_at=datetime.now(timezone.utc).isoformat(),
                 status="running",
+                repo_id=repo_id,
             )
             self._entries.append(entry)
             self.flush()
@@ -140,3 +142,8 @@ class RunRegistry:
         """Return all entries as dicts, newest first (includes running)."""
         with self._lock:
             return [asdict(e) for e in reversed(self._entries)]
+
+    def list_by_repo(self, repo_id: str) -> list[dict]:
+        """Return entries for *repo_id*, newest first."""
+        with self._lock:
+            return [asdict(e) for e in reversed(self._entries) if e.repo_id == repo_id]
