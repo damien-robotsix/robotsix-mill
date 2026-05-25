@@ -36,14 +36,16 @@ environment variables (highest).
 ```sh
 cp config/secrets.example.yaml config/secrets.yaml       # set openrouter_api_key
 cp config/repos.example.yaml config/repos.yaml           # edit: add your repo
-echo "MILL_REPO_ID=my-repo" >> .env                      # or set in .env
-docker compose up -d --build
+docker compose up -d --build                             # defaults to MILL_REPO_ID=robotsix-mill;
+                                                         # edit docker-compose.yml or pass -e MILL_REPO_ID=... to override
 ```
 
 Open `http://localhost:8077` — the ticket board is the primary interface.
 
-The server requires a repo identity at startup. Set `MILL_REPO_ID` in
-`.env` (or pass `--repo-id` when running outside Docker). See
+The server requires a repo identity at startup. The compose file defaults
+to `MILL_REPO_ID=robotsix-mill`; override via `-e MILL_REPO_ID=...` or by
+editing `docker-compose.yml`. When running outside Docker, pass
+`--repo-id <id>` or export `MILL_REPO_ID`. See
 [docs/configuration.md#repos-registry](docs/configuration.md#repos-registry).
 
 ```sh
