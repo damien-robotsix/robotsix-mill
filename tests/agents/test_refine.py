@@ -2328,3 +2328,16 @@ def test_file_map_present_in_system_prompt():
     assert "Keep it to ≤ 20 files" in SYSTEM_PROMPT
     assert "do not guess" in SYSTEM_PROMPT
     assert "``file_map=[]``" in SYSTEM_PROMPT
+
+
+def test_system_prompt_forbids_report_issue_for_completion():
+    """Invariant lock: the refine agent's SYSTEM_PROMPT must forbid
+    using report_issue to announce successful completion — the agent
+    completes its task by returning the structured RefineResult."""
+    from robotsix_mill.agents.refining import SYSTEM_PROMPT
+
+    sentinel = "MUST NOT use `report_issue` to announce successful completion"
+    assert sentinel in SYSTEM_PROMPT, (
+        f"SYSTEM_PROMPT must forbid completion-notification report_issue calls "
+        f"({sentinel!r}); found no match."
+    )
