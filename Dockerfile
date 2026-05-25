@@ -131,7 +131,9 @@ ARG INSTALL_EXTRAS=dev,tracing
 RUN pip install --no-cache-dir --root-user-action=ignore -e ".[${INSTALL_EXTRAS}]" \
     && chown -R mill:mill /app
 
-USER mill
+# Entrypoint runs as root, joins the host's docker.sock group, then
+# drops to mill via runuser. (No USER mill here — the privilege drop is
+# in entrypoint.sh.)
 
 # =============================================================================
 # Stage 4: production — minimal runtime image (DEFAULT target when no
@@ -143,4 +145,5 @@ FROM base AS production
 # pyproject.toml.
 COPY entrypoint.sh /app/entrypoint.sh
 
-USER mill
+# Entrypoint runs as root, joins the host's docker.sock group, then
+# drops to mill via runuser. (No USER mill here.)
