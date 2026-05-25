@@ -4,12 +4,11 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
-secrets.env
+.env
 config/secrets.yaml
 config/repos.yaml
 config/mill.local.yaml
 config/mill.production.yaml
-config/repos.yaml
 .mill-data/
 .data/
 dist/
