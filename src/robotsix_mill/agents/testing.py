@@ -20,7 +20,6 @@ def run_test_agent(
     *,
     settings: Settings,
     repo_dir: Path,
-    epic_workspace_path: Path | None = None,
 ) -> tuple[bool, str]:
     """Run the test command in the sandbox. Return ``(passed,
     feedback)``. On pass, feedback is a short confirmation; on fail it
@@ -33,8 +32,7 @@ def run_test_agent(
     if not cmd:
         return True, "no test gate configured (treated as passing)"
     try:
-        rc, out = sandbox.run(cmd, repo_dir=repo_dir, settings=settings,
-                              epic_workspace_path=epic_workspace_path)
+        rc, out = sandbox.run(cmd, repo_dir=repo_dir, settings=settings)
     except sandbox.SandboxError as e:
         return False, f"sandbox unavailable: {e}"
     if rc == 0:

@@ -145,12 +145,6 @@ class TicketService:
         shutil.rmtree(
             self.settings.workspaces_dir / ticket_id, ignore_errors=True
         )
-        # Remove the epic workspace if this ticket is an epic.
-        if ticket.kind == "epic":
-            shutil.rmtree(
-                self.settings.epic_workspaces_dir / ticket_id,
-                ignore_errors=True,
-            )
         # Remove the conversation file unconditionally.
         conv_file = self.settings.data_dir / "conversations" / f"{ticket_id}.json"
         try:
@@ -326,12 +320,6 @@ class TicketService:
             s.add(TicketEvent(ticket_id=ticket_id, state=dst, note=note))
             s.commit()
             s.refresh(ticket)
-            # Remove the epic workspace when an epic is closed.
-            if dst is State.EPIC_CLOSED:
-                shutil.rmtree(
-                    self.settings.epic_workspaces_dir / ticket_id,
-                    ignore_errors=True,
-                )
             # Purge oldest terminal tickets if we just crossed the cap.
             if dst in self._ARCHIVABLE_STATES:
                 self._maybe_purge_archived()
@@ -442,13 +430,6 @@ class TicketService:
         for descendant in self._all_descendants(ticket_id):
             total += cost_fn(descendant.id)
         return total
-
-    def epic_workspace_dir(self, epic_id: str) -> Path:
-        """Return the path to the epic workspace for *epic_id* and create
-        it (``mkdir(parents=True, exist_ok=True)``) on first access."""
-        p = self.settings.epic_workspaces_dir / epic_id
-        p.mkdir(parents=True, exist_ok=True)
-        return p
 
     def _all_descendants(self, ticket_id: str) -> list[Ticket]:
         """Return every descendant of *ticket_id* at any depth (BFS, cycle-safe)."""

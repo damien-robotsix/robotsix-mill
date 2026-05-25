@@ -59,28 +59,6 @@ class Workspace:
             self.description_path.read_bytes()
         ).hexdigest()
 
-
-def link_epic_workspace(repo_dir: Path, epic_workspace_path: Path) -> bool:
-    """Create or refresh a symlink at ``repo_dir/_epic`` →
-    ``epic_workspace_path``.
-
-    Returns ``True`` when the symlink was created (or already existed and
-    was refreshed).  Returns ``False`` when ``_epic/`` exists as a real
-    directory (not a symlink) — the repo tracks its own ``_epic/`` and
-    we must not overwrite it.  Callers should skip ALL epic-workspace
-    wiring (sandbox mount, extra_roots, prompt note) when this returns
-    ``False``.
-    """
-    link = repo_dir / "_epic"
-    if link.is_symlink():
-        link.unlink()
-    elif link.exists():
-        # Don't overwrite a real _epic/ directory that belongs to the repo
-        return False
-    link.symlink_to(epic_workspace_path)
-    return True
-
-
 def prune_clone(workspace: Workspace) -> None:
     """Delete the ``repo/`` subdirectory of *workspace*.
 

@@ -90,19 +90,6 @@ class ImplementStage(Stage):
         if epic_ctx:
             spec = epic_ctx + "\n\n" + spec
 
-        # Wire _epic/ if this ticket belongs to an epic
-        epic_workspace_path: Path | None = None
-        if ticket.parent_id:
-            parent = ctx.service.get(ticket.parent_id)
-            if parent and parent.kind == "epic":
-                from ..core.workspace import link_epic_workspace
-                epic_workspace_path = ctx.service.epic_workspace_dir(
-                    ticket.parent_id
-                )
-                if not link_epic_workspace(repo_dir, epic_workspace_path):
-                    # Repo has its own real _epic/ — skip epic wiring
-                    epic_workspace_path = None
-
         memory_text = load_memory(settings.implement_memory_file)
         max_iters = max(1, settings.max_fix_iterations)
 
@@ -141,7 +128,6 @@ class ImplementStage(Stage):
                     settings=settings, repo_dir=repo_dir, spec=spec,
                     feedback=feedback, memory=memory_text,
                     reference_files=reference_files,
-                    epic_workspace_path=epic_workspace_path,
                 )
             except AgentBudgetError as e:
                 ImplementStage._finalize(
@@ -195,7 +181,6 @@ class ImplementStage(Stage):
             # deterministic process exit code — the authoritative word.
             passed, diag = run_test_agent(
                 settings=settings, repo_dir=repo_dir,
-                epic_workspace_path=epic_workspace_path,
             )
             if not passed and diag.startswith("sandbox unavailable"):
                 # Infra failure — not the code's fault; don't burn
