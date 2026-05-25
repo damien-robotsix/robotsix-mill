@@ -203,6 +203,20 @@ class Settings(BaseSettings):
     transient_backoff_cap: float = Field(
         default=30.0, alias="MILL_TRANSIENT_BACKOFF_CAP"
     )
+    # Retry policy for stage-level transient errors (httpx.ConnectError,
+    # etc.).  These control how many times a stage is re-attempted and
+    # the exponential-backoff delay between attempts inside the worker
+    # loop.  Test-friendly: keep the defaults small enough for tests to
+    # override without needing long sleeps.
+    stage_retry_max_attempts: int = Field(
+        default=3, alias="MILL_STAGE_RETRY_MAX_ATTEMPTS"
+    )
+    stage_retry_base_delay: float = Field(
+        default=2.0, alias="MILL_STAGE_RETRY_BASE_DELAY"
+    )
+    stage_retry_max_delay: float = Field(
+        default=30.0, alias="MILL_STAGE_RETRY_MAX_DELAY"
+    )
     # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
     # are longer than transient backoff because OpenRouter/provider
     # rate-limit windows are typically ~60s.  When
