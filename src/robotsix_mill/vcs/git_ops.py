@@ -79,18 +79,28 @@ def try_rebase_onto(repo: Path, target: str) -> bool:
     base picks up current ``main`` (e.g. a fixed test-gate conftest)
     instead of failing the gate forever.
 
-    ``--autostash`` preserves uncommitted edits across the rebase. The
-    implement loop frequently re-enters with a dirty working tree
-    (half-finished agent edits not yet committed); without autostash,
-    ``git rebase`` aborts with "you have unstaged changes" and the
-    caller cycled REBASING→READY→REBASING forever.
+    Any uncommitted edits in the working tree are discarded before the
+    rebase. These come exclusively from a server interrupt mid-stage —
+    the agent had committed its real progress and started another edit
+    when the process was killed. The leftover diff is throwaway state,
+    not work-to-preserve; trying to autostash it just carried the
+    interrupted edits forward into the next cycle and re-broke things.
+    Start from a clean checkout instead.
     """
     try:
         _git(repo, "fetch", "origin", target)
     except subprocess.CalledProcessError:
         return False
+    # Discard any leftover uncommitted state from a prior interrupted
+    # stage. Best-effort — a failure here just falls through to the
+    # rebase, where the original error will surface.
     try:
-        _git(repo, "rebase", "--autostash", f"origin/{target}")
+        _git(repo, "reset", "--hard", "HEAD")
+        _git(repo, "clean", "-fd")
+    except subprocess.CalledProcessError:
+        pass
+    try:
+        _git(repo, "rebase", f"origin/{target}")
         return True
     except subprocess.CalledProcessError:
         try:
