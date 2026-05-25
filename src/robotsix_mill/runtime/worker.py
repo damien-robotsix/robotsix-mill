@@ -1075,7 +1075,7 @@ class Worker:
         for attr in (
             "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
-            "_agent_check_task", "_bc_check_task", "_test_gap_task", "_survey_task",
+            "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_test_gap_task", "_survey_task",
             "_env_sync_task",
         ):
             t = getattr(self, attr)
