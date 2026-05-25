@@ -96,8 +96,6 @@ async function refresh(){
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
    (!['draft','human_issue_approval','closed','answered','epic_closed','epic_open'].includes(s)?
     `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
-   (!['done','closed','answered','epic_closed','epic_open'].includes(s)?
-    `<button class="done-btn" title="Mark as done (skip remaining pipeline)" onclick="event.stopPropagation();markDone('${t.id}')">Mark Done</button>`:"")+
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
@@ -108,11 +106,6 @@ async function approve(id){
 async function approveMR(id){
  const r=await jpost("/tickets/"+id+"/approve-mr");
  if(!r.ok){const e=await r.text();alert("approve-mr failed: "+e)}else refresh()
-}
-async function markDone(id){
- const r=await jpost("/tickets/"+id+"/mark-done");
- if(!r.ok){const e=await r.text();alert("mark done failed: "+e)}else refresh()
-}
 }
 async function requestChanges(id){
  const body=prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
