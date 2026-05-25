@@ -63,6 +63,7 @@ Shared modules used to build and equip agents.
 | Web tools | `agents/web_tools.py` | `web_fetch` tool (HTTP GET via isolated network container) |
 | Report issue | `agents/report_issue.py` | `report_issue` tool (dedup-guarded, injected into every agent) |
 | Read ticket | `agents/read_ticket.py` | `read_ticket` tool (read-only counterpart to `report_issue`; injected into periodic agents) |
+| Reply to thread | `agents/reply_thread.py` | `reply_to_thread` tool (replies to a comment thread on the current ticket; injected into implement agent) |
 | Retry | `agents/retry.py` | Bounded retry with exponential backoff for transient network failures |
 | Tool registry | `agents/tool_registry.py` | System-wide catalog of tool capabilities for prompt injection (not an agent registry) |
 

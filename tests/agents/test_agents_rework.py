@@ -65,7 +65,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "delete_file", "edit_file", "explore", "list_dir", "read_file",
-        "report_issue", "run_command", "web_research", "write_file",
+        "reply_to_thread", "report_issue", "run_command", "web_research", "write_file",
     ]
     assert fake_ai["name"] == "implement"
 

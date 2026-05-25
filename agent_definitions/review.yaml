@@ -15,6 +15,7 @@ tools:
 
 web: false
 report_issue: false
+reply_to_thread: false
 output_type: ReviewVerdict
 retries: 2
 module: reviewing

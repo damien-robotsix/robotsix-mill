@@ -401,7 +401,10 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
         comment_lines: list[str] = []
         for c in all_comments:
             ts = c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "unknown"
-            comment_lines.append(f"[{ts}] {c.body}")
+            if c.parent_id is None:
+                comment_lines.append(f"[{ts}] {c.author}: {c.body}")
+            else:
+                comment_lines.append(f"[{ts}]   ↳ {c.author}: {c.body}")
         comments_prompt = "\n".join(comment_lines)
 
         result = run_epic_breakdown_agent(
