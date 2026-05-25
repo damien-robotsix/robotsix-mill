@@ -487,3 +487,131 @@ def test_aggregate_cost_trend_buckets_daily(monkeypatch):
     # At least two buckets have non-zero cost (each trace in its own day)
     nonzero = [b for b in result if b["total_cost"] > 0]
     assert len(nonzero) >= 2, f"expected traces in different daily buckets, got: {nonzero}"
+
+
+# ---------------------------------------------------------------------------
+# Multi-page aggregation (regression: old EXAMINE_CAP=500 silently
+# discarded traces beyond page 5, under-counting cost by up to 3×).
+# ---------------------------------------------------------------------------
+
+
+def _multi_page_mock_client(pages: dict[int, dict]):
+    """Return a mock httpx.Client that responds with *pages* keyed by
+    page number (1-indexed). Each value is a dict with ``data`` and
+    ``meta.totalPages``."""
+
+    class _PagingClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, *, params, headers):
+            page = params.get("page", 1)
+            if page in pages:
+                return _FakeResponse(200, pages[page])
+            # Simulate pagination past the end — empty page
+            return _FakeResponse(200, {"data": [], "meta": {"totalPages": max(pages.keys())}})
+
+    return _PagingClient
+
+
+def test_aggregate_cost_by_name_multi_page(monkeypatch):
+    """600 traces across 6 pages: 200 * 'refine' at $0.01, 400 *
+    'implement' at $0.02. Verify all 600 are counted (the old
+    EXAMINE_CAP=500 would silently drop 100 traces)."""
+    from datetime import datetime, timedelta
+    from robotsix_mill.langfuse_client import aggregate_cost_by_name
+
+    s = _langfuse_settings()
+    now = datetime.utcnow()
+
+    TOTAL_PAGES = 6
+    PER_PAGE = 100
+
+    # Build page payloads:
+    #   Pages 1-2 → "refine" (200 traces @ $0.01)
+    #   Pages 3-6 → "implement" (400 traces @ $0.02)
+    pages: dict[int, dict] = {}
+    seq = 0
+    for pg in range(1, TOTAL_PAGES + 1):
+        page_traces = []
+        for _ in range(PER_PAGE):
+            seq += 1
+            ts = (now - timedelta(hours=seq * 0.01)).isoformat() + "Z"
+            if pg <= 2:
+                page_traces.append(
+                    {"id": f"r{seq}", "name": "refine",
+                     "timestamp": ts, "totalCost": 0.01}
+                )
+            else:
+                page_traces.append(
+                    {"id": f"i{seq}", "name": "implement",
+                     "timestamp": ts, "totalCost": 0.02}
+                )
+        pages[pg] = {
+            "data": page_traces,
+            "meta": {"totalPages": TOTAL_PAGES},
+        }
+
+    monkeypatch.setattr(httpx, "Client", _multi_page_mock_client(pages))
+
+    result = aggregate_cost_by_name(s, lookback_hours=24)
+
+    assert len(result) == 2, f"expected 2 names, got {len(result)}: {result}"
+    by_name = {e["name"]: e for e in result}
+
+    assert "refine" in by_name
+    assert by_name["refine"]["total_cost"] == pytest.approx(2.00)  # 200 × $0.01
+    assert by_name["refine"]["trace_count"] == 200
+
+    assert "implement" in by_name
+    assert by_name["implement"]["total_cost"] == pytest.approx(8.00)  # 400 × $0.02
+    assert by_name["implement"]["trace_count"] == 400
+
+    total = sum(e["total_cost"] for e in result)
+    assert total == pytest.approx(10.00)
+
+
+def test_aggregate_cost_trend_multi_page(monkeypatch):
+    """600 traces across 6 pages in a 3-hour window. Verify all 600 are
+    accounted for in the bucket totals."""
+    from datetime import datetime, timedelta
+    from robotsix_mill.langfuse_client import aggregate_cost_trend
+
+    s = _langfuse_settings()
+    now = datetime.utcnow()
+
+    TOTAL_PAGES = 6
+    PER_PAGE = 100
+
+    pages: dict[int, dict] = {}
+    seq = 0
+    for pg in range(1, TOTAL_PAGES + 1):
+        page_traces = []
+        for _ in range(PER_PAGE):
+            seq += 1
+            # Spread traces across the lookback window
+            offset_hours = (seq % 30) / 10.0  # 0.0 – 2.9 hours ago
+            ts = (now - timedelta(hours=offset_hours)).isoformat() + "Z"
+            page_traces.append(
+                {"id": f"t{seq}", "name": "test",
+                 "timestamp": ts, "totalCost": 0.001}
+            )
+        pages[pg] = {
+            "data": page_traces,
+            "meta": {"totalPages": TOTAL_PAGES},
+        }
+
+    monkeypatch.setattr(httpx, "Client", _multi_page_mock_client(pages))
+
+    result = aggregate_cost_trend(s, lookback_hours=3)
+
+    total_cost = sum(b["total_cost"] for b in result)
+    total_count = sum(b["trace_count"] for b in result)
+    assert total_cost == pytest.approx(0.60)   # 600 × $0.001
+    assert total_count == 600
