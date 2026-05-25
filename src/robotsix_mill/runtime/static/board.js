@@ -1,4 +1,3 @@
-const ST=["draft","human_issue_approval","ready","documenting","code_review","deliverable","human_mr_approval","waiting_auto_merge","rebasing","fixing_ci","done","closed","blocked","errored","asked","answered","epic_open","epic_closed"];
 let showClosed=false;               // empty cols hidden; CLOSED and EPIC_CLOSED also hidden unless toggled
 let sel=null;
 let runsOpen=false;
@@ -97,18 +96,12 @@ async function refresh(){
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
    (!['draft','human_issue_approval','closed','answered','epic_closed','epic_open'].includes(s)?
     `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
-   (!['done','closed','answered','epic_closed','epic_open'].includes(s)?
-    `<button class="done-btn" title="Mark as done (skip remaining pipeline)" onclick="event.stopPropagation();markDone('${t.id}')">Mark Done</button>`:"")+
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
 async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
-}
-async function markDone(id){
- const r=await jpost("/tickets/"+id+"/mark-done");
- if(!r.ok){const e=await r.text();alert("mark done failed: "+e)}else refresh()
 }
 async function approveMR(id){
  const r=await jpost("/tickets/"+id+"/approve-mr");
