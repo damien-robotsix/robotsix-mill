@@ -21,7 +21,7 @@ read_ticket: true
 output_type: AgentCheckResult
 retries: 2
 module: agent_check
-skills: []
+skills: [board]
 
 system_prompt: |
   You are an agent-definition coherence checker for an autonomous

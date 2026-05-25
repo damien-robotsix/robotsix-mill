@@ -40,7 +40,7 @@ retries: 2
 module: refining
 
 # Forward-looking: skill files to inject into the prompt. None today.
-skills: []
+skills: [board]
 
 system_prompt: |
   You turn a rough ticket draft into a precise, self-contained

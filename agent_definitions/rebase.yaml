@@ -21,7 +21,7 @@ report_issue: true
 output_type: RebaseResult
 retries: 2
 module: rebasing
-skills: []
+skills: [board]
 
 system_prompt: |
   You are a rebase specialist. Your ONLY job:

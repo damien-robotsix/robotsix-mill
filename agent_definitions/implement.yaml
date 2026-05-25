@@ -23,7 +23,7 @@ report_issue: true
 output_type: ImplementResult
 retries: 2
 module: coordinating
-skills: []
+skills: [board]
 
 system_prompt: |
   You are a senior engineer implementing ONE ticket in a git repo.

@@ -23,7 +23,7 @@ reply_to_thread: false
 output_type: AuditResult
 retries: 2
 module: auditing
-skills: []
+skills: [board]
 
 system_prompt: |
   You are a meta-audit agent for an autonomous software project. Your job
