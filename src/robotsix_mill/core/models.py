@@ -32,6 +32,7 @@ class SourceKind(StrEnum):
     TEST_GAP = "test_gap"
     AGENT_CHECK = "agent_check"
     BC_CHECK = "bc_check"
+    COST_RECONCILIATION = "cost_reconciliation"
     COMPLETENESS_CHECK = "completeness_check"
     TRACE_HEALTH = "trace-health"
 

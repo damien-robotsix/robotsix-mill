@@ -535,6 +535,7 @@ class Worker:
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
         self._env_sync_task: asyncio.Task | None = None
+        self._cost_reconciliation_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -1147,6 +1148,22 @@ class Worker:
                 "Periodic env-sync enabled: interval %ds",
                 self.ctx.settings.env_sync_interval_seconds,
             )
+        # Opt-in periodic cost-reconciliation
+        if (
+            self.ctx.settings.cost_reconciliation_periodic
+            and self._cost_reconciliation_task is None
+        ):
+            from ..cost_reconciliation_runner import run_cost_reconciliation_pass
+            self._cost_reconciliation_task = asyncio.create_task(
+                self._run_periodic_pass(
+                    "cost-reconciliation", run_cost_reconciliation_pass,
+                    max(60, self.ctx.settings.cost_reconciliation_interval_seconds),
+                )
+            )
+            log.info(
+                "Periodic cost-reconciliation enabled: interval %ds",
+                self.ctx.settings.cost_reconciliation_interval_seconds,
+            )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
@@ -1154,7 +1171,7 @@ class Worker:
             "_poll_task", "_audit_task",
             "_trace_health_task", "_health_task", "_ci_monitor_task",
             "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_test_gap_task", "_survey_task",
-            "_env_sync_task",
+            "_env_sync_task", "_cost_reconciliation_task",
         ):
             t = getattr(self, attr)
             if t is not None:
