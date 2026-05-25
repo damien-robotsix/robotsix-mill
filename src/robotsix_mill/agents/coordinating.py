@@ -13,6 +13,7 @@ everything and never converged.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -20,12 +21,15 @@ from pydantic import BaseModel, model_validator
 
 from ..config import Settings
 
+log = logging.getLogger(__name__)
+
 
 class ImplementResult(BaseModel):
     """Structured output from the implement (coordinator) agent."""
 
     summary: str
     updated_memory: str = ""
+    reference_files: list[str] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -154,6 +158,7 @@ def run_coordinator(
     epic_context: str = "",
     reference_files: list[dict] | None = None,
     message_history: list | None = None,
+    previous_attempt_summary: str | None = None,
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -185,10 +190,19 @@ def run_coordinator(
 
     if reference_files and message_history is None:
         # Build pre_seeded mapping for _file_cache seeding (resolved Paths).
-        pre_seeded = {
-            (repo_dir / rf["path"]).resolve(): rf["content"]
-            for rf in reference_files
-        }
+        # Read fresh from disk every time — the artifact is paths-only.
+        pre_seeded = {}
+        for rf in reference_files:
+            file_path = repo_dir / rf["path"]
+            try:
+                pre_seeded[file_path.resolve()] = file_path.read_text(
+                    encoding="utf-8", errors="replace",
+                )
+            except OSError:
+                log.warning(
+                    "reference_files: %s not found on disk, skipping",
+                    rf["path"],
+                )
 
     extra_roots: list[Path] | None = None
 
@@ -202,7 +216,8 @@ def run_coordinator(
         ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
     ]
 
-    # Build synthetic message_history on first pass (no feedback set).
+    # Build synthetic message_history when reference files are provided
+    # and the caller hasn't supplied an explicit message_history.
     # NOTE: do NOT inject a TextPart-wrapped system prompt as the first
     # message — TextPart is only valid in ModelResponse.parts. Placing
     # it in a ModelRequest triggers pydantic-ai's "Expected code to be
@@ -210,12 +225,24 @@ def run_coordinator(
     # system prompt is already added by build_agent below; the synthetic
     # history starts directly with the preloaded read_file ToolCall /
     # ToolReturn pairs, which pydantic-ai accepts.
-    if reference_files and message_history is None and feedback is None:
+    if reference_files and message_history is None:
         from pydantic_ai.messages import (
             ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
         )
         synthetic: list = []
         for rf in reference_files:
+            file_path = repo_dir / rf["path"]
+            try:
+                content = file_path.read_text(
+                    encoding="utf-8", errors="replace",
+                )
+            except OSError:
+                log.warning(
+                    "reference_files: %s not found on disk, "
+                    "omitting from synthetic history",
+                    rf["path"],
+                )
+                continue
             tc_id = f"preload_{rf['path']}"
             synthetic.append(ModelResponse(parts=[
                 ToolCallPart(
@@ -227,7 +254,7 @@ def run_coordinator(
             synthetic.append(ModelRequest(parts=[
                 ToolReturnPart(
                     tool_name="read_file",
-                    content=rf["content"],
+                    content=content,
                     tool_call_id=tc_id,
                 )
             ]))
@@ -257,6 +284,16 @@ def run_coordinator(
             f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
         )
         if feedback:
+            if previous_attempt_summary:
+                # Inject prior summary before the feedback block so the
+                # model doesn't undo its prior correct work.
+                user_prompt = (
+                    "<previous_attempt>\n"
+                    "Your previous edit pass produced this summary "
+                    "(already on disk):\n"
+                    f"{previous_attempt_summary}\n"
+                    "</previous_attempt>\n\n"
+                ) + user_prompt
             if feedback.startswith("[REVIEW"):
                 # Review feedback — prepend to the spec so the coordinator
                 # addresses the flagged issues first.

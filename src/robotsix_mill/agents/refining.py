@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from ..config import Settings
 
@@ -84,6 +84,19 @@ class RefineResult(BaseModel):
     title: str | None = None
     epic_body: str | None = None
     file_map: list[FileMapEntry] | None = None
+    reference_files: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Relative paths from the repo root that the implement agent "
+            "should start with read_file outputs already loaded for. "
+            "These are files the refine agent read deeply and expects "
+            "to remain load-bearing for implementation. Include ONLY "
+            "files that carry architectural context or show patterns "
+            "the implementer must follow. Exclude: files only skimmed, "
+            "files whose role was just confirming a hypothesis with no "
+            "further bearing, generated artifacts, changelogs, lockfiles."
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod

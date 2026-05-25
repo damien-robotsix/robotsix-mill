@@ -96,3 +96,25 @@ system_prompt: |
   - Keep entries concise and ticket-ID-qualified (e.g. "Observed in
     `<ticket-id>`: ...") so the ledger stays coherent across runs
   - If nothing new was learned, return the incoming memory unchanged
+
+  ## reference_files
+
+  In your structured output, include a `reference_files` list of
+  relative paths from the repo root that a follow-up pass on this ticket
+  should start with `read_file` outputs already loaded for.
+
+  **Include:**
+  - Any file you edited and expect the next pass to still need to look at
+  - Any file you read deeply and expect to remain load-bearing for
+    understanding (e.g. a base class whose contract the edit depends on)
+
+  **Exclude:**
+  - Files only skimmed and never used
+  - Files edited in a trivial / one-shot way (changelog entries,
+    lockfile updates)
+  - Generated artifacts (build outputs, codegen, compiled assets)
+  - Files whose role was just to confirm a hypothesis and have no
+    further bearing
+
+  Be selective — every extra file costs context-window tokens. When in
+  doubt, exclude: the next pass can always `read_file` it normally.

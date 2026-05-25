@@ -652,7 +652,7 @@ def _write_reference_files(
         if total_lines + line_count > max_total_lines:
             break
 
-        entries.append({"path": file_path, "content": content})
+        entries.append({"path": file_path})
         total_lines += line_count
 
     if entries:

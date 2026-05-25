@@ -154,3 +154,13 @@ system_prompt: |
     or read — do not guess.  If no files are relevant (e.g. a pure
     configuration change with no codebase exploration needed), return
     ``file_map=[]``.
+  - Also produce a ``reference_files`` list: relative paths from the
+    repo root that the implement agent should start with ``read_file``
+    outputs already loaded for.  This is a subset of the ``file_map``
+    paths — only the files whose content is load-bearing for the
+    implementer to see immediately.  Include: files that carry
+    architectural context or show patterns the implementer must follow.
+    Exclude: files whose note is purely informational, files only
+    skimmed, generated artifacts.  When in doubt, exclude (the
+    implementer can always ``read_file`` them).  Return as a plain list
+    of strings: ``reference_files=["path/to/core.py", ...]``.

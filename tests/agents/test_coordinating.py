@@ -315,7 +315,8 @@ class TestRunCoordinator:
         """``reference_files`` with no ``message_history`` and no
         ``feedback`` produces synthetic ``ModelResponse``/``ModelRequest``
         pairs and seeds the fs-tools cache."""
-        ref = [{"path": "foo.py", "content": "x=1"}]
+        (tmp_path / "foo.py").write_text("x=1")
+        ref = [{"path": "foo.py"}]
         self._run(settings, tmp_path, reference_files=ref)
 
         # fs_tools cache seeded with resolved path
@@ -356,7 +357,8 @@ class TestRunCoordinator:
         """When ``message_history`` is provided it is passed directly
         to ``run_sync`` (no synthesis, no fs-cache pre-seeding —
         ``pre_seeded`` is only built when ``message_history is None``)."""
-        ref = [{"path": "bar.py", "content": "y=2"}]
+        (tmp_path / "bar.py").write_text("y=2")
+        ref = [{"path": "bar.py"}]
         existing_mh = ["existing"]
         self._run(
             settings, tmp_path,
@@ -370,22 +372,25 @@ class TestRunCoordinator:
         # message_history passed directly, not synthesised
         assert self.captured["message_history"] == existing_mh
 
-    def test_reference_files_with_feedback_no_synthesis(
+    def test_reference_files_with_feedback_synthesis(
         self, settings, tmp_path,
     ):
-        """``reference_files`` + ``feedback`` → no synthetic history
-        (retry path); feedback block present."""
-        ref = [{"path": "baz.py", "content": "z=3"}]
+        """``reference_files`` + ``feedback`` → synthetic history IS built
+        (the old first-pass-only gate is lifted per ticket §3)."""
+        (tmp_path / "baz.py").write_text("z=3")
+        ref = [{"path": "baz.py"}]
         self._run(
             settings, tmp_path,
             reference_files=ref,
             feedback="assertion failed in test_z",
         )
 
-        # No synthetic history on retry
-        assert self.captured["message_history"] is None
+        # Synthetic history IS built on retry now
+        mh = self.captured["message_history"]
+        assert isinstance(mh, list)
+        assert len(mh) == 2  # one response + one request
 
-        # But pre_seeded is still built
+        # pre_seeded is still built
         pre_seeded = self.captured["fs_pre_seeded"]
         assert pre_seeded is not None
         resolved = (tmp_path / "baz.py").resolve()
@@ -442,3 +447,95 @@ class TestRunCoordinator:
         ul = self.captured["usage_limits"]
         assert isinstance(ul, UsageLimits)
         assert ul.request_limit == 12
+
+    # -- previous_attempt_summary ----------------------------------------
+
+    def test_previous_attempt_summary_prepended_before_feedback(
+        self, settings, tmp_path,
+    ):
+        """When ``previous_attempt_summary`` and ``feedback`` are both
+        set, ``<previous_attempt>`` appears before
+        ``<review_feedback>``/``<test_failure>`` in the user prompt."""
+        self._run(
+            settings, tmp_path,
+            previous_attempt_summary="prior summary text",
+            feedback="test_x failed",
+        )
+        prompt: str = self.captured["user_prompt"]
+        prev_pos = prompt.index("<previous_attempt>")
+        test_pos = prompt.index("<test_failure>")
+        assert prev_pos < test_pos
+        assert "prior summary text" in prompt
+        assert "test_x failed" in prompt
+
+    def test_previous_attempt_summary_no_feedback_no_block(
+        self, settings, tmp_path,
+    ):
+        """When ``previous_attempt_summary`` is set but ``feedback`` is
+        None, the ``<previous_attempt>`` block is NOT injected (it is
+        only relevant on retries)."""
+        self._run(
+            settings, tmp_path,
+            previous_attempt_summary="prior summary text",
+        )
+        prompt: str = self.captured["user_prompt"]
+        assert "<previous_attempt>" not in prompt
+
+    # -- reference_files edge cases -------------------------------------
+
+    def test_reference_files_missing_on_disk_omitted(
+        self, settings, tmp_path, caplog,
+    ):
+        """A ``reference_files`` entry pointing to a file that doesn't
+        exist on disk produces a warning log and is omitted from the
+        synthetic history (no crash, no fabricated ToolReturn)."""
+        import logging
+
+        ref = [{"path": "exists.py"}, {"path": "gone.py"}]
+        (tmp_path / "exists.py").write_text("real content")
+
+        with caplog.at_level(logging.WARNING, logger="robotsix_mill.agents.coordinating"):
+            self._run(settings, tmp_path, reference_files=ref)
+
+        # Warning logged for the missing file
+        assert any(
+            "gone.py" in m and "not found" in m
+            for m in caplog.messages
+        ), f"expected warning about gone.py, got: {caplog.messages}"
+
+        # Synthetic history built only for the existing file
+        mh = self.captured["message_history"]
+        assert isinstance(mh, list)
+        assert len(mh) == 2  # one response + one request
+        tr = mh[1].parts[0]
+        assert isinstance(tr, ToolReturnPart)
+        assert tr.content == "real content"
+        assert tr.tool_call_id == "preload_exists.py"
+
+        # pre_seeded only has existing file
+        pre_seeded = self.captured["fs_pre_seeded"]
+        assert pre_seeded is not None
+        resolved = (tmp_path / "exists.py").resolve()
+        assert resolved in pre_seeded
+        assert pre_seeded[resolved] == "real content"
+        gone_resolved = (tmp_path / "gone.py").resolve()
+        assert gone_resolved not in pre_seeded
+
+    def test_reference_files_toolreturn_reflects_latest_disk_content(
+        self, settings, tmp_path,
+    ):
+        """When the file on disk is modified after reference_files is
+        built, the synthetic ToolReturn contains the *latest* on-disk
+        content, not stale cached content."""
+        (tmp_path / "foo.py").write_text("original content")
+        ref = [{"path": "foo.py"}]
+
+        self._run(settings, tmp_path, reference_files=ref)
+
+        mh = self.captured["message_history"]
+        tr = mh[1].parts[0]
+        assert isinstance(tr, ToolReturnPart)
+        # Content matches disk — the test writes and immediately calls
+        # run_coordinator, which reads fresh. There's no stale cache path
+        # because the artifact is paths-only with no content key.
+        assert tr.content == "original content"
