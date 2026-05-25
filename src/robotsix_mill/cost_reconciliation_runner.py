@@ -28,6 +28,7 @@ class CostReconciliationPassResult:
 
     drafts_created: list[dict]  # [{"id": ..., "title": ...}]
     summary: str
+    session_id: str = ""
 
 
 def _yesterday_utc_range() -> tuple[str, str]:
@@ -243,13 +244,18 @@ def _fetch_langfuse_daily(
 # ---------------------------------------------------------------------------
 
 
-def run_cost_reconciliation_pass(session_id: str = "") -> CostReconciliationPassResult:
+def run_cost_reconciliation_pass(
+    session_id: str = "",
+) -> CostReconciliationPassResult:
     """Execute one cost-reconciliation pass.
 
     1. Fetch OpenRouter yesterday total.
     2. Fetch Langfuse yesterday total.
     3. Compare.  If delta ≤ $1.00, log clean and return.
     4. If delta > $1.00, invoke agent and create draft ticket.
+
+    Args:
+        session_id: Langfuse session id from the poll loop (optional).
 
     Returns:
         ``CostReconciliationPassResult`` with created draft info.
@@ -267,6 +273,7 @@ def run_cost_reconciliation_pass(session_id: str = "") -> CostReconciliationPass
         return CostReconciliationPassResult(
             drafts_created=[],
             summary=f"OpenRouter fetch skipped (key missing or API error) for {date_str}",
+            session_id=session_id,
         )
     or_total, or_breakdown = or_result
 
@@ -286,7 +293,9 @@ def run_cost_reconciliation_pass(session_id: str = "") -> CostReconciliationPass
             f"clean: OR=${or_total:.2f} LF=${lf_total:.2f} delta=${delta:.2f}"
         )
         log.info("cost_reconciliation: %s", summary)
-        return CostReconciliationPassResult(drafts_created=[], summary=summary)
+        return CostReconciliationPassResult(
+            drafts_created=[], summary=summary, session_id=session_id,
+        )
 
     # --- Agent ---------------------------------------------------------
     from .agents.cost_reconciling import run_cost_reconciliation_agent
@@ -350,10 +359,12 @@ def run_cost_reconciliation_pass(session_id: str = "") -> CostReconciliationPass
         return CostReconciliationPassResult(
             drafts_created=[{"id": ticket.id, "title": ticket.title}],
             summary=f"delta=${delta:.2f} — draft {ticket.id}",
+            session_id=session_id,
         )
     except Exception:
         log.exception("cost_reconciliation: failed to create draft ticket")
         return CostReconciliationPassResult(
             drafts_created=[],
             summary=f"delta=${delta:.2f} — draft creation failed",
+            session_id=session_id,
         )
