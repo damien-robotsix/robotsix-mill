@@ -24,7 +24,11 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import yaml
-from robotsix_mill.config_loader import _YAML_PATH_TO_ALIAS, load_yaml_config
+from robotsix_mill.config_loader import (
+    _YAML_PATH_TO_ALIAS,
+    ConfigError,
+    load_yaml_config,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +83,16 @@ def _get_nested(d: dict[str, Any], path: str) -> object:
 
 
 def _nest_dict(flat: dict[str, object]) -> dict[str, Any]:
-    """Convert a ``{dotted.path: value}`` mapping into a nested dict."""
+    """Convert a ``{dotted.path: value}`` mapping into a nested dict.
+
+    .. note::
+
+        If two paths share a prefix where one is a leaf and the other
+        extends it (e.g. ``"a.b"`` and ``"a.b.c"``) the intermediate
+        scalar node would be overwritten by the deeper dict, causing a
+        ``TypeError``.  This cannot happen with the current alias map
+        (no alias pair exhibits this pattern), but be aware if extending.
+    """
     result: dict[str, Any] = {}
     for path, value in sorted(flat.items()):
         parts = path.split(".")
@@ -181,7 +194,14 @@ def main() -> None:
         reverse_alias[alias] = yaml_path
 
     # Load defaults (Layer 1 only — no local overrides)
-    defaults = load_yaml_config(skip_local=True)
+    try:
+        defaults = load_yaml_config(skip_local=True)
+    except ConfigError as exc:
+        print(
+            f"Error: failed to load {defaults_path}: {exc}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Diff: for each env var with a known alias, compare to default
     overrides: dict[str, object] = {}
