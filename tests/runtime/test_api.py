@@ -121,7 +121,7 @@ def test_get_ticket_detail_includes_cost_usd(client, service, monkeypatch):
     t = service.create("Cost API test")
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost",
-        lambda settings, sid: 0.0420 if sid == t.id else 0.0,
+        lambda settings, sid, **kw: 0.0420 if sid == t.id else 0.0,
     )
 
     r = client.get(f"/tickets/{t.id}").json()
@@ -140,7 +140,7 @@ def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
     called = []
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost",
-        lambda settings, sid: called.append(sid) or 0.999,
+        lambda settings, sid, **kw: called.append(sid) or 0.999,
     )
 
     ts = client.get("/tickets").json()
@@ -1473,7 +1473,7 @@ def test_epic_detail_cost_is_cumulative(client, service, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost",
-        lambda settings, sid: {
+        lambda settings, sid, **kw: {
             epic.id: 0.01,
             c1.id: 0.10,
             c2.id: 0.20,
@@ -1493,7 +1493,7 @@ def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
 
     called = []
 
-    def fake_session_cost(settings, sid):
+    def fake_session_cost(settings, sid, **kw):
         called.append(sid)
         return 0.999
 
@@ -1522,7 +1522,7 @@ def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost",
-        lambda settings, sid: {e1.id: 0.01, e2.id: 0.02, t.id: 0.30}.get(sid, 0.0),
+        lambda settings, sid, **kw: {e1.id: 0.01, e2.id: 0.02, t.id: 0.30}.get(sid, 0.0),
     )
 
     r1 = client.get(f"/tickets/{e1.id}").json()
@@ -1542,7 +1542,7 @@ def test_ticket_with_children_has_cumulative_cost(client, service, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost",
-        lambda settings, sid: {
+        lambda settings, sid, **kw: {
             parent.id: 0.05,
             c1.id: 0.10,
             c2.id: 0.07,
@@ -1560,7 +1560,7 @@ def test_leaf_ticket_cumulative_cost_is_none(client, service, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost",
-        lambda settings, sid: 0.042 if sid == leaf.id else 0.0,
+        lambda settings, sid, **kw: 0.042 if sid == leaf.id else 0.0,
     )
 
     r = client.get(f"/tickets/{leaf.id}").json()

@@ -466,17 +466,21 @@ class TicketService:
             return list(s.exec(stmt).all())
 
     def cumulative_cost(
-        self, ticket_id: str, settings: Settings, *, blocking: bool = True
+        self, ticket_id: str, settings: Settings, *, blocking: bool = True,
+        repo_config: "RepoConfig | None" = None,
     ) -> float:
         """Return the cumulative cost of *ticket_id* and all descendants (recursive).
 
         Uses the same blocking/cache-only mode as the caller — blocking
         for per-ticket detail views, cache-only for the polled /tickets list.
+
+        When *repo_config* is provided, its Langfuse credentials are used
+        for the cost lookup (per-repo isolation).
         """
         from ..langfuse_client import session_cost, session_cost_cached
 
         cost_fn = (
-            (lambda sid: session_cost(settings, sid))
+            (lambda sid: session_cost(settings, sid, repo_config=repo_config))
             if blocking
             else session_cost_cached
         )

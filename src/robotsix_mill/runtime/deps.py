@@ -93,7 +93,13 @@ def _origin_session_url(
     return None
 
 
-def with_cost(ticket: Ticket, settings: Settings, *, blocking: bool = True) -> Ticket:
+def with_cost(
+    ticket: Ticket,
+    settings: Settings,
+    *,
+    blocking: bool = True,
+    repo_config: RepoConfig | None = None,
+) -> Ticket:
     """Populate ``cost_usd`` on *ticket* (in-place) from the Langfuse session.
 
     Cost is NOT persisted — it lives in Langfuse; this is read-time
@@ -104,11 +110,14 @@ def with_cost(ticket: Ticket, settings: Settings, *, blocking: bool = True) -> T
     this for list endpoints like /tickets which the board polls every
     5s; otherwise N cold-cache tickets would issue N serial Langfuse
     HTTP calls and the response would take seconds.
+
+    When *repo_config* is provided, its Langfuse credentials are used
+    for the cost lookup (per-repo isolation).
     """
     from ..langfuse_client import session_cost, session_cost_cached
 
     if blocking:
-        ticket.cost_usd = session_cost(settings, ticket.id)
+        ticket.cost_usd = session_cost(settings, ticket.id, repo_config=repo_config)
     else:
         ticket.cost_usd = session_cost_cached(ticket.id)
     return ticket
@@ -174,14 +183,15 @@ def enrich_ticket_read(
     origin-session URL builder so per-repo project data is used.
     When ``None`` the global ``Secrets`` singleton is consulted.
     """
-    with_cost(ticket, settings, blocking=blocking_cost)
+    with_cost(ticket, settings, blocking=blocking_cost, repo_config=repo_config)
 
     # Compute cumulative cost for any ticket with descendants.
     cumulative: float | None = None
     children = service.list_children(ticket.id)
     if children:
         cum = service.cumulative_cost(
-            ticket.id, settings, blocking=blocking_cost
+            ticket.id, settings, blocking=blocking_cost,
+            repo_config=repo_config,
         )
         # Only expose cumulative when it's meaningfully larger than direct.
         if cum > ticket.cost_usd:
