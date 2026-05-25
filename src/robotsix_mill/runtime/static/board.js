@@ -131,6 +131,46 @@ async function addComment(id){
  const r=await jpost("/tickets/"+id+"/comments",{body:body.trim()});
  if(!r.ok){const e=await r.text();alert("add comment failed: "+e)}else if(sel===id)open_(id)
 }
+function renderThreads(cs){
+ const threads=cs.filter(c=>c.parent_id===null);
+ const replies=cs.filter(c=>c.parent_id!==null);
+ const replyMap={};
+ replies.forEach(r=>{(replyMap[r.parent_id]||=[]).push(r);});
+ return threads.map(t=>{
+  const isClosed=t.closed_at!==null;
+  const children=replyMap[t.id]||[];
+  const replyHtml=children.map(r=>
+   `<div class="ev reply-ev"><b class="muted">${r.created_at}</b> · <b>${esc(r.author)}</b><br>${renderMD(r.body)}</div>`
+  ).join("");
+  return `<div class="thread${isClosed?' thread-closed':''}">
+   <div class="ev"><b class="muted">${t.created_at}</b> · <b>${esc(t.author)}</b>${isClosed?' <span class="closed-badge">🔒 Closed</span>':''}<br>${renderMD(t.body)}</div>
+   ${replyHtml}
+   <div class="thread-actions">
+    <button class="add-comment-btn" onclick="replyToThread('${t.id}','${t.ticket_id}')">↩ Reply</button>
+    ${isClosed
+     ?`<button class="add-comment-btn" onclick="reopenThread('${t.id}')">🔓 Reopen</button>`
+     :`<button class="add-comment-btn" onclick="closeThread('${t.id}')">🔒 Close</button>`}
+   </div>
+  </div>`;
+ }).join("");
+}
+async function replyToThread(threadId,ticketId){
+ const body=prompt("Reply to this thread:");
+ if(body===null)return;
+ if(!body.trim())return;
+ const r=await jpost("/tickets/"+ticketId+"/comments",{body:body.trim(),parent_id:threadId});
+ if(!r.ok){const e=await r.text();alert("reply failed: "+e)}else if(sel===ticketId)open_(ticketId)
+}
+async function closeThread(commentId){
+ const tid=sel;
+ const r=await jpost("/comments/"+commentId+"/close");
+ if(!r.ok){const e=await r.text();alert("close thread failed: "+e)}else if(tid)open_(tid)
+}
+async function reopenThread(commentId){
+ const tid=sel;
+ const r=await jpost("/comments/"+commentId+"/reopen");
+ if(!r.ok){const e=await r.text();alert("reopen thread failed: "+e)}else if(tid)open_(tid)
+}
 async function newTicket(){
  // Build modal DOM
  const backdrop=document.createElement("div");
@@ -548,7 +588,7 @@ async function open_(id){
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+renderMD(e.note):""}</div>`).join("")+
    `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
-   ((cs&&cs.length)?cs.map(c=>`<div class="ev"><b class="muted">${c.created_at}</b> · <b>${esc(c.author)}</b><br>${renderMD(c.body)}</div>`).join("")
+   ((cs&&cs.length)?renderThreads(cs)
                    :`<div class="muted" style="font-size:11px">No comments yet.</div>`)+
    ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"")+
    `<h3>description.md</h3><div class="md-body">${renderMD((d&&d.description)||"")}</div>`;
