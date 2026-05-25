@@ -277,6 +277,17 @@ def run_coordinator(
                     f"{feedback}\n"
                     "</review_feedback>\n\n"
                 ) + user_prompt
+            elif feedback.startswith("[SCOPE"):
+                user_prompt += (
+                    "\n\n<scope_violation>\n"
+                    "Your previous edit pass is already on disk, but it "
+                    "modified files outside the ticket's stated scope. "
+                    "The ticket spec is the source of truth for what is "
+                    "in scope.\n"
+                    f"{feedback}\n"
+                    "</scope_violation>\n\n"
+                    "Revert the out-of-scope changes and stop."
+                )
             else:
                 user_prompt += (
                     "\n\n<test_failure>\n"

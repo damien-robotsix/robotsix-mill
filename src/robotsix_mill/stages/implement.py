@@ -112,6 +112,14 @@ class ImplementStage(Stage):
         if ref_files_path.exists():
             reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
 
+        # Load the ticket's file scope map (which files are in-scope).
+        file_map: set[str] | None = None
+        file_map_path = ws.artifacts_dir / "file_map.json"
+        if file_map_path.exists():
+            raw = json.loads(file_map_path.read_text(encoding="utf-8"))
+            if raw:  # non-empty list → extract paths
+                file_map = {entry["file"] for entry in raw}
+
         feedback: str | None = None
         summary = ""
 
@@ -157,6 +165,30 @@ class ImplementStage(Stage):
             # so a later-iteration failure can't lose the learning.
             if updated_memory:
                 persist_memory(settings.implement_memory_file, updated_memory)
+
+            # Scope guardrail: verify every changed file is listed in the
+            # ticket's file_map.  _epic/ files are always exempt (shared
+            # across tickets).  Skip the check entirely when file_map is
+            # absent or empty (graceful degradation).
+            if file_map:
+                changed = git_ops.changed_files(
+                    repo_dir, settings.forge_target_branch
+                )
+                out_of_scope = [
+                    f for f in changed
+                    if f not in file_map and not f.startswith("_epic/")
+                ]
+                if out_of_scope:
+                    file_list = "\n".join(f"  - {f}" for f in out_of_scope)
+                    feedback = (
+                        "[SCOPE] Extraneous changes detected. The following "
+                        "files were modified but are NOT listed in the "
+                        "ticket's scope:\n"
+                        f"{file_list}\n"
+                        "Revert ALL changes to these files and keep ONLY "
+                        "the changes required by the ticket spec."
+                    )
+                    continue
 
             # Stage-owned test gate: one sandbox run; on failure a cheap
             # model distills an actionable diagnosis. `passed` is the

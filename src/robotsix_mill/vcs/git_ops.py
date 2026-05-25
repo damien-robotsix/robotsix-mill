@@ -219,6 +219,20 @@ def recent_commits(repo: Path, n: int) -> list[dict]:
     return commits
 
 
+def changed_files(repo: Path, target_branch: str) -> list[str]:
+    """Return files changed between origin/<target_branch> and the
+    working tree (including unstaged modifications to tracked files).
+
+    Runs ``git diff --name-only origin/<target_branch>`` and returns
+    the list of changed file paths (relative to repo root).
+    An empty diff returns an empty list.
+    """
+    output = _git(repo, "diff", "--name-only", f"origin/{target_branch}")
+    if not output:
+        return []
+    return output.split("\n")
+
+
 def diff_base(repo: Path, target_branch: str) -> str:
     """Return the unified diff of all commits on the current branch
     vs origin/<target_branch>. Fetches first so the diff is current."""
