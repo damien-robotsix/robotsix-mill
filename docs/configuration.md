@@ -407,6 +407,25 @@ repos:
       base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
 ```
 
+### Select a repo at startup
+
+Once `config/repos.yaml` is configured, you must tell the server which
+repository to operate on. Pass `--repo-id` to the `serve` command or
+set the `MILL_REPO_ID` environment variable:
+
+```sh
+# CLI:
+robotsix-mill serve --repo-id my-repo
+
+# or via environment variable (convenient for Docker/compose):
+export MILL_REPO_ID=my-repo
+robotsix-mill serve
+```
+
+If neither is provided the server exits with an error listing the
+known repo IDs from `config/repos.yaml`. An unknown repo ID also
+causes an error exit.
+
 File path: `config/repos.yaml` (overridable via `MILL_REPOS_FILE` env var).
 Set `MILL_REPOS_FILE=""` to disable repos config entirely. Template:
 `config/repos.example.yaml`.

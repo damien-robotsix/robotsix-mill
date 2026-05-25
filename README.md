@@ -34,11 +34,17 @@ environment variables (highest).
 ### Docker (recommended)
 
 ```sh
-cp config/secrets.example.yaml config/secrets.yaml   # set openrouter_api_key
+cp config/secrets.example.yaml config/secrets.yaml       # set openrouter_api_key
+cp config/repos.example.yaml config/repos.yaml           # edit: add your repo
+echo "MILL_REPO_ID=my-repo" >> .env                      # or set in .env
 docker compose up -d --build
 ```
 
 Open `http://localhost:8077` — the ticket board is the primary interface.
+
+The server requires a repo identity at startup. Set `MILL_REPO_ID` in
+`.env` (or pass `--repo-id` when running outside Docker). See
+[docs/configuration.md#repos-registry](docs/configuration.md#repos-registry).
 
 ```sh
 docker compose exec mill robotsix-mill ticket new --title "Add X" --description-file -
@@ -52,9 +58,10 @@ docker compose exec mill robotsix-mill trace-health
 ### Local dev (no Docker)
 
 ```sh
-cp config/secrets.example.yaml config/secrets.yaml   # set openrouter_api_key
-make install                # venv + editable install
-make dev                    # hot-reload on http://127.0.0.1:8077
+cp config/secrets.example.yaml config/secrets.yaml       # set openrouter_api_key
+cp config/repos.example.yaml config/repos.yaml           # edit: add your repo
+make install                    # venv + editable install
+MILL_REPO_ID=my-repo make dev   # hot-reload on http://127.0.0.1:8077
 ```
 
 ```sh
