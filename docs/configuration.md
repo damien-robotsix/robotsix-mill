@@ -458,7 +458,9 @@ python scripts/verify_repos_config.py
 
 Once `config/repos.yaml` is configured, start the server.  By default
 the server loads **all** repos from `config/repos.yaml` and serves them
-together:
+together.  In this multi-repo mode the board UI includes a repo selector
+dropdown — pick a repo to filter the kanban, runs list, and cost
+dashboard, or select "All repos" to see everything at once.
 
 ```sh
 # Multi-repo mode: serves every repo in config/repos.yaml
