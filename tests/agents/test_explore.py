@@ -24,6 +24,20 @@ def test_no_key_degrades_not_raises(tmp_path):
     assert "unavailable" in out and "OPENROUTER_API_KEY" in out
 
 
+def test_missing_repo_degrades_not_raises(tmp_path):
+    """When repo_dir does not exist, run_explore returns an
+    'explore unavailable' message without importing pydantic_ai or
+    making any HTTP call."""
+    missing = tmp_path / "nonexistent"
+    s = _settings(tmp_path, OPENROUTER_API_KEY="valid-key")
+    out = explore.run_explore(
+        settings=s, repo_dir=missing, question="where is X?"
+    )
+    assert "explore unavailable" in out
+    assert "workspace repo directory does not exist" in out
+    assert "not been cloned yet" in out
+
+
 def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     seen = {}
