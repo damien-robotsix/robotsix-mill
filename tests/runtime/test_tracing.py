@@ -99,7 +99,7 @@ def test_session_stamp_processor_stamps_from_contextvar(monkeypatch):
     }
 
 
-def test_sub_agent_spans_inherit_session_from_contextvar():
+def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
     """Every span — parent and child (simulating agent + sub-agent) —
     receives session.id from the in-scope context-var when a
     _SessionStampProcessor-equivalent is installed on the TracerProvider.
@@ -137,46 +137,36 @@ def test_sub_agent_spans_inherit_session_from_contextvar():
             return True
 
     # ---- set up the pipeline ---------------------------------------
-    # Reset OTel's Once guard so set_tracer_provider is not a no-op.
-    otel_trace._TRACER_PROVIDER_SET_ONCE._done = False
-    otel_trace._TRACER_PROVIDER = None
-
     provider = TracerProvider()
     provider.add_span_processor(_StampAndCapture())
-    otel_trace.set_tracer_provider(provider)
+    monkeypatch.setattr(otel_trace, "get_tracer_provider", lambda: provider)
 
+    token = tracing._current_session.set("ticket-sub-agent-test")
     try:
-        token = tracing._current_session.set("ticket-sub-agent-test")
-        try:
-            tracer = otel_trace.get_tracer("test-tracer")
-            # Parent agent span
-            with tracer.start_as_current_span("parent-agent"):
-                # Sub-agent span nested inside parent (pydantic-ai
-                # sub-agents may open their own trace, but the stamp
-                # processor does not depend on parent context).
-                with tracer.start_as_current_span("sub-agent"):
-                    pass
-        finally:
-            tracing._current_session.reset(token)
-
-        # Both spans must carry the session id.
-        assert len(captured) == 2, (
-            f"Expected 2 spans, got {len(captured)}: {captured}"
-        )
-        for i, span_data in enumerate(captured):
-            assert span_data["attrs"].get("session.id") == "ticket-sub-agent-test", (
-                f"Span {i} ({span_data['name']}) missing session.id: "
-                f"{span_data['attrs']}"
-            )
-            assert span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test", (
-                f"Span {i} ({span_data['name']}) missing langfuse.session.id: "
-                f"{span_data['attrs']}"
-            )
+        tracer = otel_trace.get_tracer("test-tracer")
+        # Parent agent span
+        with tracer.start_as_current_span("parent-agent"):
+            # Sub-agent span nested inside parent (pydantic-ai
+            # sub-agents may open their own trace, but the stamp
+            # processor does not depend on parent context).
+            with tracer.start_as_current_span("sub-agent"):
+                pass
     finally:
-        # Restore a clean provider so no other test is affected.
-        otel_trace._TRACER_PROVIDER_SET_ONCE._done = False
-        otel_trace._TRACER_PROVIDER = None
-        otel_trace.set_tracer_provider(TracerProvider())
+        tracing._current_session.reset(token)
+
+    # Both spans must carry the session id.
+    assert len(captured) == 2, (
+        f"Expected 2 spans, got {len(captured)}: {captured}"
+    )
+    for i, span_data in enumerate(captured):
+        assert span_data["attrs"].get("session.id") == "ticket-sub-agent-test", (
+            f"Span {i} ({span_data['name']}) missing session.id: "
+            f"{span_data['attrs']}"
+        )
+        assert span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test", (
+            f"Span {i} ({span_data['name']}) missing langfuse.session.id: "
+            f"{span_data['attrs']}"
+        )
 
 
 def test_tracing_enabled_no_env():

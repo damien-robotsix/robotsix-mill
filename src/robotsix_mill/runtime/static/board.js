@@ -5,7 +5,7 @@ let costDashboardOpen=false;
 let costLookbackHours=24;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 let activeMap={};
-let gatesCache={};
+let gatesCache={};                   // cached from /gates so open_() can read gate values
 const ACTIVE_LABEL={
   refine: "refining…",
   implement: "implementing…",
@@ -1280,6 +1280,4 @@ function createTicketFromFinding(idx,event){
  titleEl.focus();
 }
 // -- end deep review ----------------------------------------------------
-refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);
---------------------------------------
 refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},5000);
