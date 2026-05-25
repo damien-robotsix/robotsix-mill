@@ -202,10 +202,10 @@ function renderThreads(cs){
   const isClosed=t.closed_at!==null;
   const children=replyMap[t.id]||[];
   const replyHtml=children.map(r=>
-   `<div class="ev reply-ev"><b class="muted">${r.created_at}</b> · <b>${esc(r.author)}</b><br>${renderMD(r.body)}</div>`
+   `<div class="ev reply-ev"><b class="muted">${r.created_at}</b> · <b>${esc(r.author)}</b>${r.author==="scope-triage"?' <span class="triage-badge">🤖 triage</span>':''}<br>${renderMD(r.body)}</div>`
   ).join("");
   return `<div class="thread${isClosed?' thread-closed':''}">
-   <div class="ev"><b class="muted">${t.created_at}</b> · <b>${esc(t.author)}</b>${isClosed?' <span class="closed-badge">🔒 Closed</span>':''}<br>${renderMD(t.body)}</div>
+   <div class="ev"><b class="muted">${t.created_at}</b> · <b>${esc(t.author)}</b>${t.author==="scope-triage"?' <span class="triage-badge">🤖 triage</span>':''}${isClosed?' <span class="closed-badge">🔒 Closed</span>':''}<br>${renderMD(t.body)}</div>
    ${replyHtml}
    <div class="thread-actions">
     <button class="add-comment-btn" onclick="replyToThread('${t.id}','${t.ticket_id}')">↩ Reply</button>

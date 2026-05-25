@@ -147,6 +147,9 @@ margin-top:3px;background:#1e2a3a;color:#38bdf8;text-transform:uppercase;letter-
 margin-top:3px;background:#2a1a3b;color:#c084fc;text-transform:uppercase;letter-spacing:.04em}
 .epic-ref{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
 margin-top:3px;background:#1e1a2a;color:#a78bfa;letter-spacing:.03em}
+.triage-badge{display:inline-block;font-size:10px;padding:1px 5px;
+border-radius:4px;background:#3b2f1a;color:#f59e0b;
+text-transform:uppercase;letter-spacing:.04em}
 .dr-source-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
   margin-bottom:10px;background:#1a2a3b;color:#60c0fa;text-transform:uppercase;letter-spacing:.04em}
 /* cost dashboard */
