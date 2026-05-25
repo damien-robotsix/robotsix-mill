@@ -23,6 +23,8 @@ Settings are managed through a YAML pipeline (see
   YAML value (e.g. `MILL_MODEL=anthropic/claude-sonnet-4`).
 - **`config/secrets.yaml`** — credentials (API keys, tokens).
   Template at `config/secrets.example.yaml`.
+- **`config/repos.yaml`** — per-repo board & Langfuse project config.
+  Template at `config/repos.example.yaml`.
 
 The loading order is: YAML defaults → YAML local → YAML production →
 environment variables (highest).

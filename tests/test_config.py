@@ -703,7 +703,358 @@ class TestSecretsModel:
 
 
 # ---------------------------------------------------------------------------
-# 10. Semantic validators
+# 10. Repos config — YAML loader, models, registry
+# ---------------------------------------------------------------------------
+
+
+class TestLoadReposYaml:
+    """Tests for ``config_loader.load_repos_yaml``."""
+
+    def test_missing_file_returns_empty(self):
+        """Missing file → returns empty dict (not an error)."""
+        from robotsix_mill.config_loader import load_repos_yaml
+
+        result = load_repos_yaml("/nonexistent/repos.yaml")
+        assert result == {}
+
+    def test_malformed_yaml_raises(self, tmp_path):
+        """Malformed YAML → raises ``ConfigError`` with file path in message."""
+        from robotsix_mill.config_loader import ConfigError, load_repos_yaml
+
+        bad_file = tmp_path / "bad.yaml"
+        bad_file.write_text("{ invalid: yaml: : }")
+        with pytest.raises(ConfigError, match="YAML parse error"):
+            load_repos_yaml(str(bad_file))
+
+    def test_valid_file_returns_dict(self, tmp_path):
+        """Valid YAML → returns dict keyed by repo ID with nested
+        ``board_id`` and ``langfuse`` sub-dict."""
+        from robotsix_mill.config_loader import load_repos_yaml
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  my-repo:\n"
+            "    board_id: my-board\n"
+            "    langfuse:\n"
+            "      project_name: my-project\n"
+            "      public_key: pk-abc\n"
+            "      secret_key: sk-xyz\n"
+        )
+        result = load_repos_yaml(str(repos_file))
+        assert result == {
+            "my-repo": {
+                "board_id": "my-board",
+                "langfuse": {
+                    "project_name": "my-project",
+                    "public_key": "pk-abc",
+                    "secret_key": "sk-xyz",
+                },
+            },
+        }
+
+    def test_env_var_overrides_path(self, tmp_path, monkeypatch):
+        """``MILL_REPOS_FILE`` env var overrides the default path."""
+        from robotsix_mill.config_loader import load_repos_yaml
+
+        repos_file = tmp_path / "custom.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  env-repo:\n"
+            "    board_id: env-board\n"
+            "    langfuse:\n"
+            "      project_name: env-project\n"
+            "      public_key: pk-env\n"
+            "      secret_key: sk-env\n"
+        )
+        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
+        result = load_repos_yaml()
+        assert "env-repo" in result
+        assert result["env-repo"]["board_id"] == "env-board"
+
+    def test_env_var_empty_string_returns_empty(self, monkeypatch):
+        """``MILL_REPOS_FILE=""`` returns an empty dict (test-suite mode)."""
+        from robotsix_mill.config_loader import load_repos_yaml
+
+        monkeypatch.setenv("MILL_REPOS_FILE", "")
+        result = load_repos_yaml()
+        assert result == {}
+
+    def test_explicit_arg_overrides_env_var(self, tmp_path, monkeypatch):
+        """Explicit ``file_path`` arg takes precedence over env var."""
+        from robotsix_mill.config_loader import load_repos_yaml
+
+        explicit_file = tmp_path / "explicit.yaml"
+        explicit_file.write_text(
+            "repos:\n"
+            "  explicit-repo:\n"
+            "    board_id: explicit-board\n"
+            "    langfuse:\n"
+            "      project_name: explicit-project\n"
+            "      public_key: pk-exp\n"
+            "      secret_key: sk-exp\n"
+        )
+        env_file = tmp_path / "env.yaml"
+        env_file.write_text("repos:\n  env-repo:\n    board_id: wrong\n    langfuse:\n      project_name: w\n      public_key: w\n      secret_key: w\n")
+        monkeypatch.setenv("MILL_REPOS_FILE", str(env_file))
+        result = load_repos_yaml(str(explicit_file))
+        assert "explicit-repo" in result
+        assert "env-repo" not in result
+
+
+class TestRepoConfig:
+    """Tests for the ``RepoConfig`` model."""
+
+    def test_valid_repo_config(self):
+        """A valid ``RepoConfig`` is constructable with all fields."""
+        from robotsix_mill.config import RepoConfig
+
+        rc = RepoConfig(
+            repo_id="my-repo",
+            board_id="my-board",
+            langfuse_project_name="my-project",
+            langfuse_public_key="pk-lf",
+            langfuse_secret_key="sk-lf",
+        )
+        assert rc.repo_id == "my-repo"
+        assert rc.board_id == "my-board"
+        assert rc.langfuse_project_name == "my-project"
+        assert rc.langfuse_public_key == "pk-lf"
+        assert rc.langfuse_secret_key == "sk-lf"
+        assert rc.langfuse_base_url == "https://cloud.langfuse.com"
+
+    def test_langfuse_base_url_default(self):
+        """Omitting ``langfuse_base_url`` defaults to cloud."""
+        from robotsix_mill.config import RepoConfig
+
+        rc = RepoConfig(
+            repo_id="r",
+            board_id="b",
+            langfuse_project_name="p",
+            langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+        )
+        assert rc.langfuse_base_url == "https://cloud.langfuse.com"
+
+    def test_langfuse_base_url_custom(self):
+        """``langfuse_base_url`` can be overridden."""
+        from robotsix_mill.config import RepoConfig
+
+        rc = RepoConfig(
+            repo_id="r",
+            board_id="b",
+            langfuse_project_name="p",
+            langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+            langfuse_base_url="https://lf.example.com",
+        )
+        assert rc.langfuse_base_url == "https://lf.example.com"
+
+    def test_empty_repo_id_raises(self):
+        """Empty ``repo_id`` raises ``ValidationError``."""
+        from pydantic import ValidationError
+        from robotsix_mill.config import RepoConfig
+
+        with pytest.raises(ValidationError, match="repo_id"):
+            RepoConfig(
+                repo_id="",
+                board_id="b",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+            )
+
+    def test_empty_board_id_raises(self):
+        """Empty ``board_id`` raises ``ValidationError``."""
+        from pydantic import ValidationError
+        from robotsix_mill.config import RepoConfig
+
+        with pytest.raises(ValidationError, match="board_id"):
+            RepoConfig(
+                repo_id="r",
+                board_id="",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+            )
+
+
+class TestReposRegistry:
+    """Tests for the ``ReposRegistry`` model."""
+
+    def test_empty_registry(self):
+        """``ReposRegistry`` with ``repos={}`` is valid."""
+        from robotsix_mill.config import ReposRegistry
+
+        rr = ReposRegistry(repos={})
+        assert rr.repos == {}
+
+    def test_key_mismatch_raises(self):
+        """If ``RepoConfig.repo_id`` != dict key, ``ValueError`` is raised."""
+        from pydantic import ValidationError
+        from robotsix_mill.config import RepoConfig, ReposRegistry
+
+        rc = RepoConfig(
+            repo_id="wrong-id",
+            board_id="b",
+            langfuse_project_name="p",
+            langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+        )
+        with pytest.raises(ValidationError, match="does not match"):
+            ReposRegistry(repos={"correct-id": rc})
+
+
+class TestLoadReposConfig:
+    """Tests for ``load_repos_config``, ``get_repos_config``,
+    ``get_repo_config``, and ``_reset_repos_config``."""
+
+    def test_empty_registry_from_missing_file(self):
+        """``load_repos_config()`` with no file returns an empty registry."""
+        from robotsix_mill.config import load_repos_config, ReposRegistry
+
+        rr = load_repos_config("")
+        assert isinstance(rr, ReposRegistry)
+        assert rr.repos == {}
+
+    def test_valid_yaml_produces_registry(self, tmp_path):
+        """``load_repos_config()`` from valid YAML returns populated registry."""
+        from robotsix_mill.config import load_repos_config, RepoConfig, ReposRegistry
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    langfuse:\n"
+            "      project_name: proj-a\n"
+            "      public_key: pk-a\n"
+            "      secret_key: sk-a\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert isinstance(rr, ReposRegistry)
+        assert "repo-a" in rr.repos
+        rc = rr.repos["repo-a"]
+        assert isinstance(rc, RepoConfig)
+        assert rc.repo_id == "repo-a"
+        assert rc.board_id == "board-a"
+        assert rc.langfuse_project_name == "proj-a"
+        assert rc.langfuse_public_key == "pk-a"
+        assert rc.langfuse_secret_key == "sk-a"
+        assert rc.langfuse_base_url == "https://cloud.langfuse.com"
+
+    def test_langfuse_base_url_default_in_loaded_config(self, tmp_path):
+        """Omitting ``langfuse.base_url`` in YAML defaults to cloud."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  r:\n"
+            "    board_id: b\n"
+            "    langfuse:\n"
+            "      project_name: p\n"
+            "      public_key: pk\n"
+            "      secret_key: sk\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert rr.repos["r"].langfuse_base_url == "https://cloud.langfuse.com"
+
+    def test_get_repo_config_valid_id(self, tmp_path):
+        """``get_repo_config()`` with a valid ID returns the correct config."""
+        from robotsix_mill.config import (
+            _reset_repos_config,
+            get_repo_config,
+            load_repos_config,
+        )
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  my-repo:\n"
+            "    board_id: my-board\n"
+            "    langfuse:\n"
+            "      project_name: my-proj\n"
+            "      public_key: pk\n"
+            "      secret_key: sk\n"
+        )
+        _reset_repos_config()
+        import robotsix_mill.config as _cfg
+        _cfg._repos_config = load_repos_config(str(repos_file))
+
+        rc = get_repo_config("my-repo")
+        assert rc.repo_id == "my-repo"
+        assert rc.board_id == "my-board"
+        assert rc.langfuse_project_name == "my-proj"
+
+    def test_get_repo_config_unknown_id(self):
+        """``get_repo_config()`` with unknown ID raises ``ConfigError``."""
+        from robotsix_mill.config_loader import ConfigError
+        from robotsix_mill.config import (
+            _reset_repos_config,
+            get_repo_config,
+        )
+
+        _reset_repos_config()
+        import robotsix_mill.config as _cfg
+        from robotsix_mill.config import RepoConfig, ReposRegistry
+
+        _cfg._repos_config = ReposRegistry(
+            repos={
+                "known-a": RepoConfig(
+                    repo_id="known-a",
+                    board_id="b",
+                    langfuse_project_name="p",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                ),
+            }
+        )
+        with pytest.raises(ConfigError, match="Unknown repo: 'unknown'"):
+            get_repo_config("unknown")
+
+    def test_get_repos_config_singleton(self, tmp_path):
+        """``get_repos_config()`` returns the same object on repeated calls."""
+        from robotsix_mill.config import _reset_repos_config, get_repos_config
+
+        _reset_repos_config()
+        rr1 = get_repos_config()
+        rr2 = get_repos_config()
+        assert rr1 is rr2
+        assert id(rr1) == id(rr2)
+
+    def test_reset_repos_config_clears_cache(self, tmp_path):
+        """After ``_reset_repos_config()``, next call constructs fresh instance."""
+        from robotsix_mill.config import (
+            _reset_repos_config,
+            get_repos_config,
+            load_repos_config,
+        )
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  r:\n"
+            "    board_id: b\n"
+            "    langfuse:\n"
+            "      project_name: p\n"
+            "      public_key: pk\n"
+            "      secret_key: sk\n"
+        )
+        _reset_repos_config()
+        import robotsix_mill.config as _cfg
+        _cfg._repos_config = load_repos_config(str(repos_file))
+
+        rr1 = get_repos_config()
+        _reset_repos_config()
+        rr2 = get_repos_config()
+        assert rr1 is not rr2
+        # After reset, fresh load from default location (missing) → empty
+        assert rr2.repos == {}
+
+
+# ---------------------------------------------------------------------------
+# 11. Semantic validators
 # ---------------------------------------------------------------------------
 
 class TestValidationValid:

@@ -41,6 +41,8 @@ config/
   mill.production.yaml     # gitignored: deployment overrides
   secrets.yaml             # gitignored: credentials (API keys, tokens)
   secrets.example.yaml     # committed: template for secrets.yaml
+  repos.yaml               # per-repo board & Langfuse config (create from example)
+  repos.example.yaml       # committed: template for repos.yaml
 ```
 
 ---
@@ -375,6 +377,53 @@ via `get_secrets()`.
 
 Secrets file path: `config/secrets.yaml` (overridable via
 `MILL_SECRETS_FILE` env var). Template: `config/secrets.example.yaml`.
+
+---
+
+## Repos registry
+
+The repos registry maps each repository to its own board identity and
+Langfuse observability project. It is loaded **separately** from
+`Settings` by a dedicated `ReposRegistry` Pydantic model — it never
+participates in the Settings merge. Access it via `get_repos_config()`
+or `get_repo_config("repo-id")`.
+
+### Set up
+
+```sh
+cp config/repos.example.yaml config/repos.yaml
+# Edit config/repos.yaml — add one entry per repository:
+```
+
+```yaml
+# config/repos.yaml
+repos:
+  my-repo:
+    board_id: "my-board"
+    langfuse:
+      project_name: "my-repo"
+      public_key: "pk-lf-..."
+      secret_key: "sk-lf-..."
+      base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
+```
+
+File path: `config/repos.yaml` (overridable via `MILL_REPOS_FILE` env var).
+Set `MILL_REPOS_FILE=""` to disable repos config entirely. Template:
+`config/repos.example.yaml`.
+
+### Field reference
+
+| YAML key | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
+| `repos.<id>.langfuse.project_name` | yes | — | Langfuse project name for this repo's traces |
+| `repos.<id>.langfuse.public_key` | yes | — | Langfuse public key for this repo's project |
+| `repos.<id>.langfuse.secret_key` | yes | — | Langfuse secret key for this repo's project |
+| `repos.<id>.langfuse.base_url` | no | `https://cloud.langfuse.com` | Langfuse base URL |
+
+Each repo ID must be unique and non-empty. The `board_id` must also be
+non-empty. The registry validates that every entry's `repo_id` matches
+its YAML key.
 
 ---
 

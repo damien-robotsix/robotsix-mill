@@ -176,6 +176,61 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
     return dict(data)
 
 
+def load_repos_yaml(file_path: str | None = None) -> dict:
+    """Read ``config/repos.yaml`` (or ``MILL_REPOS_FILE`` if set).
+
+    Returns a dict keyed by repo ID with nested ``board_id`` and
+    ``langfuse`` sub-dicts
+    (e.g. ``{"my-repo": {"board_id": "...", "langfuse": {...}}, ...}``).
+
+    Missing file → returns an empty dict (not an error — repos config is
+    optional).
+
+    Malformed YAML → raises ``ConfigError`` with the file path and
+    parse error details.
+    """
+    # Determine the path: explicit arg > env var > default.
+    # An explicit empty string means "no file" (used by the test suite).
+    if file_path is not None:
+        path_str = file_path
+    else:
+        path_str = os.environ.get("MILL_REPOS_FILE")
+
+    if path_str is None:
+        path_str = str(_YAML_DIR / "repos.yaml")
+    elif path_str == "":
+        return {}
+    path = Path(path_str)
+
+    if not path.exists():
+        return {}
+
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+    except yaml.YAMLError as exc:
+        raise ConfigError(
+            f"YAML parse error in {path}: {exc}"
+        ) from exc
+
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ConfigError(
+            f"Expected a mapping at top level of {path}, got {type(data).__name__}"
+        )
+    # Extract the ``repos`` key if present (standard format).
+    if "repos" in data:
+        repos_data = data["repos"]
+        if not isinstance(repos_data, dict):
+            raise ConfigError(
+                f"Expected a mapping under 'repos' key in {path}, "
+                f"got {type(repos_data).__name__}"
+            )
+        return dict(repos_data)
+    return dict(data)
+
+
 # ---------------------------------------------------------------------------
 #  YAML dotted-path → env-var alias mapping
 # ---------------------------------------------------------------------------

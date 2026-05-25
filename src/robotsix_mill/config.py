@@ -1223,3 +1223,103 @@ def _reset_secrets() -> None:
     """Clear the cached :class:`Secrets` singleton (for tests)."""
     global _secrets
     _secrets = None
+
+
+# ---------------------------------------------------------------------------
+#  Repos registry — per-repo board & Langfuse config
+# ---------------------------------------------------------------------------
+
+
+class RepoConfig(BaseModel):
+    """Configuration for a single repository — its board identity and
+    Langfuse observability project credentials."""
+
+    repo_id: str
+    board_id: str
+    langfuse_project_name: str
+    langfuse_public_key: str
+    langfuse_secret_key: str
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+
+    @field_validator("repo_id", "board_id")
+    @classmethod
+    def _validate_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("must be non-empty")
+        return v
+
+
+class ReposRegistry(BaseModel):
+    """Container holding all :class:`RepoConfig` entries keyed by repo ID."""
+
+    repos: dict[str, RepoConfig]
+
+    @model_validator(mode="after")
+    def _validate_keys_match_repo_ids(self) -> "ReposRegistry":
+        for key, config in self.repos.items():
+            if config.repo_id != key:
+                raise ValueError(
+                    f"Repo key '{key}' does not match "
+                    f"RepoConfig.repo_id '{config.repo_id}'"
+                )
+        return self
+
+
+def load_repos_config(config_file: str | None = None) -> ReposRegistry:
+    """Load repos configuration from ``config/repos.yaml`` (or override).
+
+    Reads YAML via :func:`~robotsix_mill.config_loader.load_repos_yaml`,
+    constructs a :class:`RepoConfig` for each entry, validates, and
+    returns a :class:`ReposRegistry`.
+    """
+    from .config_loader import load_repos_yaml
+
+    raw = load_repos_yaml(config_file)
+    repos: dict[str, RepoConfig] = {}
+    for repo_id, repo_data in raw.items():
+        langfuse = repo_data.get("langfuse", {}) if isinstance(repo_data, dict) else {}
+        repos[repo_id] = RepoConfig(
+            repo_id=repo_id,
+            board_id=repo_data.get("board_id", "") if isinstance(repo_data, dict) else "",
+            langfuse_project_name=langfuse.get("project_name", ""),
+            langfuse_public_key=langfuse.get("public_key", ""),
+            langfuse_secret_key=langfuse.get("secret_key", ""),
+            langfuse_base_url=langfuse.get("base_url", "https://cloud.langfuse.com"),
+        )
+    return ReposRegistry(repos=repos)
+
+
+_repos_config: ReposRegistry | None = None
+
+
+def get_repos_config() -> ReposRegistry:
+    """Return a cached :class:`ReposRegistry` singleton, constructing it
+    on first call."""
+    global _repos_config
+    if _repos_config is None:
+        _repos_config = load_repos_config()
+    return _repos_config
+
+
+def get_repo_config(repo_id: str) -> RepoConfig:
+    """Look up *repo_id* in :func:`get_repos_config` and return its
+    :class:`RepoConfig`.
+
+    Raises :class:`~robotsix_mill.config_loader.ConfigError` for unknown IDs.
+    """
+    from .config_loader import ConfigError
+
+    registry = get_repos_config()
+    try:
+        return registry.repos[repo_id]
+    except KeyError:
+        sorted_keys = sorted(registry.repos.keys())
+        raise ConfigError(
+            f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}"
+        )
+
+
+def _reset_repos_config() -> None:
+    """Clear the cached :class:`ReposRegistry` singleton (for tests)."""
+    global _repos_config
+    _repos_config = None

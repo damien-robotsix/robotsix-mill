@@ -1,0 +1,18 @@
+# Repos registry — copy to config/repos.yaml and fill in your repo configs.
+#
+#   cp config/repos.example.yaml config/repos.yaml
+#
+# Each repo gets its own board ID and Langfuse project for observability
+# isolation.  This file is NOT merged into the main Settings object — it
+# is loaded by a separate ReposRegistry Pydantic model.
+#
+# Override the file path with MILL_REPOS_FILE env var.
+
+repos:
+  example-repo:
+    board_id: "example-board"
+    langfuse:
+      project_name: "example-repo"
+      public_key: "pk-lf-..."
+      secret_key: "sk-lf-..."
+      base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
