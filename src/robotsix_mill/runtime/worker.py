@@ -404,7 +404,7 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
             if c.parent_id is None:
                 comment_lines.append(f"[{ts}] {c.author}: {c.body}")
             else:
-                comment_lines.append(f"[{ts}] ↳ {c.author}: {c.body}")
+                comment_lines.append(f"[{ts}]   ↳ {c.author}: {c.body}")
         comments_prompt = "\n".join(comment_lines)
 
         result = run_epic_breakdown_agent(
