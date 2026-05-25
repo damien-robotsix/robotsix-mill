@@ -38,6 +38,9 @@ background:#d97706;color:#fff;border:none;border-radius:4px;cursor:pointer}
 .redraft-btn{font-size:11px;margin-top:5px;margin-left:4px;padding:3px 8px;
 background:#92400e;color:#fff;border:none;border-radius:4px;cursor:pointer}
 .redraft-btn:hover{background:#b45309}
+.merge-btn{font-size:11px;margin-top:5px;margin-left:4px;padding:3px 8px;
+background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer}
+.merge-btn:hover{background:#15803d}
 .done-btn{font-size:11px;margin-top:5px;margin-left:4px;padding:3px 8px;
 background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer}
 .done-btn:hover{background:#15803d}
