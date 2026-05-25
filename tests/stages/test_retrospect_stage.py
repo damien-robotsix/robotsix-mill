@@ -703,7 +703,12 @@ def test_deep_analysis_at_frequency_triggers_api_call(ctx_factory, monkeypatch):
 
     def _fake_api_get(settings, path, params=None):
         langfuse_api_called.append((path, params))
-        return {"data": [{"id": "trace-1"}, {"id": "trace-2"}]}
+        return {
+            "data": [
+                {"id": "trace-1", "name": "implement"},
+                {"id": "trace-2", "name": "review"},
+            ]
+        }
 
     monkeypatch.setattr(retrospecting, "run_retrospect_agent", _capture_agent)
     monkeypatch.setattr(
@@ -732,7 +737,7 @@ def test_deep_analysis_at_frequency_triggers_api_call(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
     assert agent_kwargs["deep_analysis"] is True
-    assert agent_kwargs.get("trace_ids") == ["trace-1", "trace-2"]
+    assert agent_kwargs.get("trace_ids") == [("trace-1", "implement"), ("trace-2", "review")]
     # Counter reset to 0
     assert write_calls == [0]
     # _langfuse_api_get was called

@@ -199,13 +199,13 @@ class RetrospectStage(Stage):
             log.warning("could not write deep counter to %s", path)
 
     @staticmethod
-    def _resolve_deep_analysis(settings: Settings, session_id: str) -> tuple[bool, list[str]]:
+    def _resolve_deep_analysis(settings: Settings, session_id: str) -> tuple[bool, list[tuple[str, str]]]:
         """Return (deep_analysis, trace_ids) based on the frequency counter.
 
         # --- deep-analysis frequency gate ---
         """
         deep_analysis = False
-        trace_ids: list[str] = []
+        trace_ids: list[tuple[str, str]] = []
         counter = RetrospectStage._read_deep_counter(settings)
         frequency = settings.retrospect_deep_analysis_frequency
         if counter >= frequency:
@@ -220,8 +220,9 @@ class RetrospectStage(Stage):
             if traces_data:
                 for t in traces_data.get("data", []):
                     tid = t.get("id")
+                    tname = t.get("name", "")
                     if tid:
-                        trace_ids.append(tid)
+                        trace_ids.append((tid, tname))
         else:
             RetrospectStage._write_deep_counter(settings, counter + 1)
         return deep_analysis, trace_ids
