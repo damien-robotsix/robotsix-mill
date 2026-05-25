@@ -8,6 +8,7 @@ secrets.env
 config/secrets.yaml
 config/mill.local.yaml
 config/mill.production.yaml
+config/repos.yaml
 .mill-data/
 .data/
 dist/
