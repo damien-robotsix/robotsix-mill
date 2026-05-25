@@ -263,6 +263,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.models.doc": "MILL_DOC_MODEL",
     "core.models.triage": "MILL_TRIAGE_MODEL",
     "core.models.auto_approve": "MILL_AUTO_APPROVE_MODEL",
+    "core.models.scope_triage": "MILL_SCOPE_TRIAGE_MODEL",
     "core.models.rate_limit_fallback": "MILL_RATE_LIMIT_FALLBACK_MODEL",
     # -- core.limits --
     "core.limits.coordinator_requests": "MILL_COORDINATOR_REQUEST_LIMIT",
@@ -270,6 +271,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.explore_requests": "MILL_EXPLORE_REQUEST_LIMIT",
     "core.limits.dedup_requests": "MILL_DEDUP_REQUEST_LIMIT",
     "core.limits.web_research_requests": "MILL_WEB_RESEARCH_REQUEST_LIMIT",
+    "core.limits.scope_triage_requests": "MILL_SCOPE_TRIAGE_REQUEST_LIMIT",
     "core.limits.max_concurrency": "MILL_MAX_CONCURRENCY",
     "core.limits.max_fix_iterations": "MILL_MAX_FIX_ITERATIONS",
     "core.limits.max_stuck_cycles": "MILL_MAX_STUCK_CYCLES",
@@ -322,6 +324,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.auto_merge_enabled": "MILL_AUTO_MERGE_ENABLED",
     "gates.refine_triage_enabled": "MILL_REFINE_TRIAGE_ENABLED",
     "gates.spec_review_enabled": "MILL_SPEC_REVIEW_ENABLED",
+    "gates.scope_triage_enabled": "MILL_SCOPE_TRIAGE_ENABLED",
     # -- pipeline --
     "pipeline.branch_prefix": "MILL_BRANCH_PREFIX",
     "pipeline.merge_poll_seconds": "MILL_MERGE_POLL_SECONDS",

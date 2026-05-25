@@ -11,7 +11,7 @@
 
 ## 1. Complete Inventory
 
-Every configuration value consumed anywhere in the repo.  **112** env-var
+Every configuration value consumed anywhere in the repo.  **114** env-var
 aliases are defined on `Settings` (`config.py`); the table below includes
 every one plus the Docker‑/compose‑only vars and computed properties that
 other code depends on.
@@ -67,6 +67,7 @@ other code depends on.
 | `MILL_TRIAGE_MODEL` | `triage_model` | `openai/gpt-4o-mini` | `str` | Settings | non-sensitive | default | **missing** | `stages/refine.py` (pre-refine triage) | ⚠️ Undocumented |
 | `MILL_DOC_MODEL` | `doc_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | **missing** | `stages/documenting.py` | ⚠️ Undocumented |
 | `MILL_AUTO_APPROVE_MODEL` | `auto_approve_model` | `openai/gpt-4o-mini` | `str` | Settings | non-sensitive | default | §6 | `stages/refine.py` | |
+| `MILL_SCOPE_TRIAGE_MODEL` | `scope_triage_model` | `openai/gpt-4o-mini` | `str` | Settings | non-sensitive | default | §1 | `stages/implement.py`, `agents/scope_triage.py` | Cheap classifier for out-of-scope file changes |
 
 ### 1.3  Core — request limits & safety nets
 
