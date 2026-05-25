@@ -58,15 +58,29 @@ parallel:
 
 | Endpoint | What it returns |
 |---|---|
+| `GET /costs/trend?lookback_hours=N&repo_id=X` | Time-bucketed cost for the sparkline chart |
 | `GET /costs/by-agent?lookback_hours=N&repo_id=X` | Per-agent-name cost bars (total cost + trace count) |
 | `GET /costs/most-expensive-ticket?lookback_hours=N&repo_id=X` | The single ticket with the highest LLM spend in the window |
 | `GET /costs/most-expensive-trace?lookback_hours=N&repo_id=X` | The single most expensive individual agent run (trace) in the window |
 
-All three endpoints clamp `lookback_hours` to `[1, 168]` (same as the
-selector options). When tracing is disabled or no data exists, the
-most-expensive endpoints return `null` and the dashboard shows a muted
-"No data" placeholder — the per-agent bar chart continues to render
-independently.
+All four endpoints accept **two mutually exclusive filter modes**:
+
+| Parameter | Mode | Clamping | Description |
+|---|---|---|---|
+| `lookback_hours` (default `24`) | Time-window | `[1, 168]` | All traces in the last *N* hours |
+| `max_tickets` (optional) | Last-N-tickets | `[1, 1000]` | All traces belonging to the last *N* distinct ticket sessions |
+
+When both parameters are present, `max_tickets` takes precedence and
+the time window is ignored (with a debug-level log noting the override).
+The frontend never sends both — a **mode toggle** in the cost dashboard
+switches between time-window (with options 1h/6h/24h/3d/7d) and
+ticket-count mode (with options 20/100/1000).  On first load the
+dashboard defaults to time-window, 24 hours.
+
+When tracing is disabled or no data exists, the most-expensive
+endpoints return `null` and the dashboard shows a muted "No data"
+placeholder that adapts its wording to the active mode — the per-agent
+bar chart continues to render independently.
 
 The optional `repo_id` query parameter scopes the query to a single
 repo's Langfuse project.  Use `repo_id=all` to aggregate across every
@@ -75,23 +89,40 @@ used; in multi-repo mode the parameter is required.
 
 ### Langfuse functions
 
-Two new functions in `langfuse_client.py` back the most-expensive
-endpoints, following the same pagination and graceful-degradation
-patterns as `aggregate_cost_by_name`:
+Four aggregation functions in `langfuse_client.py` back the cost
+endpoints, each accepting both `lookback_hours` and an optional
+`max_tickets`:
 
-- **`most_expensive_ticket(settings, lookback_hours)`** — groups traces
-  by `sessionId`, sums `totalCost` per session, returns the session with
-  the highest total cost (or `None` when tracing is disabled / the API
-  errors). The route then looks up the matching ticket by `session_id`.
+- **`aggregate_cost_trend(settings, lookback_hours=24, max_tickets=None)`** —
+  returns time-bucketed cost.  In time-window mode buckets span the
+  lookback period (hourly if ≤ 24 h, daily otherwise).  In ticket-count
+  mode buckets span the time range covered by the collected traces,
+  with the same hourly/daily rule applied to that span.
 
-- **`most_expensive_trace(settings, lookback_hours)`** — scans traces
-  for the single highest `totalCost`, skipping unnamed/in-flight traces
-  (same `_named` filter as `list_recent_traces`). Returns the trace
-  dict directly.
+- **`aggregate_cost_by_name(settings, lookback_hours=24, max_tickets=None)`** —
+  aggregates `totalCost` and trace count by agent/stage name.
 
-Both functions cap examination at 500 traces (`EXAMINE_CAP`) to bound
-API calls, and catch all exceptions — returning `None` on failure
-rather than crashing the dashboard.
+- **`most_expensive_ticket(settings, lookback_hours=24, max_tickets=None)`** —
+  groups traces by `sessionId`, sums `totalCost` per session, returns
+  the session with the highest total cost (or `None` when tracing is
+  disabled / the API errors).  The route then looks up the matching
+  ticket by `session_id`.
+
+- **`most_expensive_trace(settings, lookback_hours=24, max_tickets=None)`** —
+  scans traces for the single highest `totalCost`, skipping
+  unnamed/in-flight traces (same `_named` filter as
+  `list_recent_traces`).  Returns the trace dict directly.
+
+All four functions share a common helper, `_fetch_traces_for_tickets`,
+which paginates Langfuse traces by `timestamp.desc` (no `fromTimestamp`),
+tracks distinct `sessionId` values, and stops after collecting traces
+from the requested number of distinct sessions.
+
+**Safety caps:** In time-window mode `most_expensive_ticket` and
+`most_expensive_trace` cap at 500 traces (`EXAMINE_CAP`).  In
+ticket-count mode all four functions cap at 100 pages × 100 traces
+(10 000 traces).  All functions catch exceptions and return gracefully
+(`None` or `[]`) rather than crashing the dashboard.
 
 ## Cost reconciliation
 

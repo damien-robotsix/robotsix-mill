@@ -136,6 +136,12 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
         def force_flush(self, timeout_millis=30000):
             return True
 
+    # ---- reset OTel's "already set" guard so we can install our own
+    # provider (a prior test or conftest fixture may have already
+    # installed a global provider via _ensure_tracing).
+    otel_trace._TRACER_PROVIDER = None
+    otel_trace._TRACER_PROVIDER_SET_ONCE._done = False
+
     # ---- set up the pipeline ---------------------------------------
     # Force-reset any previously installed global TracerProvider so the
     # test's custom provider (with _StampAndCapture) actually takes effect.
