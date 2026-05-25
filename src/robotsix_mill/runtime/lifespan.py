@@ -14,7 +14,7 @@ from typing import AsyncContextManager, Callable
 
 from fastapi import FastAPI
 
-from ..config import Settings
+from ..config import RepoConfig, Settings
 from ..core import db
 from ..core.service import TicketService
 from ..stages import StageContext
@@ -53,6 +53,7 @@ setup_logging()
 
 def create_lifespan(
     settings: Settings,
+    repo_config: RepoConfig,
 ) -> Callable[[FastAPI], AsyncContextManager]:
     """Build a FastAPI lifespan callable that performs the same startup
     and shutdown steps as the original inline ``@asynccontextmanager``:
@@ -68,7 +69,8 @@ def create_lifespan(
     async def lifespan(app: FastAPI):
         db.init_db(settings)
         service = TicketService(settings)
-        ctx = StageContext(settings=settings, service=service)
+        ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
+        app.state.repo_config = repo_config
         run_registry = RunRegistry(settings.data_dir / "runs.json")
         worker = Worker(ctx, run_registry)
         app.state.settings = settings

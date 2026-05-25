@@ -11,8 +11,8 @@ from robotsix_mill.runtime.worker import Worker, process_ticket
 
 
 @pytest.fixture
-def ctx(settings, service):
-    return StageContext(settings=settings, service=service)
+def ctx(settings, service, repo_config):
+    return StageContext(settings=settings, service=service, repo_config=repo_config)
 
 
 async def test_stub_pauses_chain(ctx, service, monkeypatch):

@@ -14,8 +14,8 @@ from robotsix_mill.stages.base import Stage
 
 
 @pytest.fixture
-def ctx(settings, service):
-    return StageContext(settings=settings, service=service)
+def ctx(settings, service, repo_config):
+    return StageContext(settings=settings, service=service, repo_config=repo_config)
 
 
 # -----------------------------------------------------------------------
