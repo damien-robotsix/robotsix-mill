@@ -68,7 +68,6 @@ def create_lifespan(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         db.init_db(settings)
-        settings.board_id = repo_config.board_id
         service = TicketService(settings, board_id=repo_config.board_id)
         ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
         app.state.repo_config = repo_config

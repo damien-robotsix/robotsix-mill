@@ -11,7 +11,7 @@
 
 ## 1. Complete Inventory
 
-Every configuration value consumed anywhere in the repo.  **116** env-var
+Every configuration value consumed anywhere in the repo.  **111** env-var
 aliases are defined on `Settings` (`config.py`); the table below includes
 every one plus the Docker‑/compose‑only vars and computed properties that
 other code depends on.
@@ -37,16 +37,12 @@ other code depends on.
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `OPENROUTER_API_KEY` | `openrouter_api_key` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `config.py`, all agents via `Settings()` | Set in `config/secrets.yaml` |
-| `FORGE_TOKEN` | `forge_token` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `forge/auth.py`, `forge/base.py` | PAT alternative to GitHub App; set in `config/secrets.yaml` |
-| `GITHUB_APP_ID` | `github_app_id` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `forge/auth.py` | Set in `config/secrets.yaml` |
-| `GITHUB_APP_PRIVATE_KEY` | `github_app_private_key` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `forge/auth.py` | Inline PEM; alternative to `*_PATH` |
-| `GITHUB_APP_PRIVATE_KEY_PATH` | `github_app_private_key_path` | `None` | `str\|None` | Settings | **secret** | default | Non-prefixed | `forge/auth.py`, `docker-compose.yml` | Host path; bind-mounted into container |
-| `LANGFUSE_PUBLIC_KEY` | `langfuse_public_key` | `None` | `str\|None` | Settings + **os.environ** | **secret** | secret | Non-prefixed | `config.py` (via `tracing_enabled`), `tracing.py` (raw `os.environ`) | **Dual-source**: read both via `Settings` AND raw `os.environ.get` in `tracing.py:_tracing_enabled()` |
-| `LANGFUSE_SECRET_KEY` | `langfuse_secret_key` | `None` | `str\|None` | Settings + **os.environ** | **secret** | secret | Non-prefixed | `config.py` (via `tracing_enabled`), `tracing.py` (raw `os.environ`) | **Dual-source** (same as above) |
-| `LANGFUSE_BASE_URL` | `langfuse_base_url` | `None` | `str\|None` | Settings + **os.environ** | identifying | absent | Non-prefixed | `config.py` (via `tracing_enabled`), `tracing.py` (raw `os.environ`) | **Dual-source**; `tracing.py` defaults to `https://cloud.langfuse.com` when unset |
-| `LANGFUSE_PROJECT_ID` | `langfuse_project_id` | `None` | `str\|None` | Settings | identifying | absent | Non-prefixed | `config.py` | Not read by `tracing.py`'s raw `os.environ` path |
-| `NTFY_TOKEN` | `ntfy_token` | `None` | `str\|None` | Settings | **secret** | secret | Non-prefixed | `notify.py` | Set in `config/secrets.yaml` |
+| `OPENROUTER_API_KEY` | `openrouter_api_key` | `None` | `str\|None` | Settings | **secret** | absent | Non-prefixed | `config.py`, all agents via `Settings()` | Set only in `secrets.env`; absent in `.env` |
+| `FORGE_TOKEN` | `forge_token` | `None` | `str\|None` | Settings | **secret** | absent | Non-prefixed | `forge/auth.py`, `forge/base.py` | PAT alternative to GitHub App; set in `secrets.env` |
+| `GITHUB_APP_ID` | `github_app_id` | `None` | `str\|None` | Settings | **secret** | absent | Non-prefixed | `forge/auth.py` | Set in `secrets.env` |
+| `GITHUB_APP_PRIVATE_KEY` | `github_app_private_key` | `None` | `str\|None` | Settings | **secret** | absent | Non-prefixed | `forge/auth.py` | Inline PEM; alternative to `*_PATH` |
+| `GITHUB_APP_PRIVATE_KEY_PATH` | `github_app_private_key_path` | `None` | `str\|None` | Settings | **secret** | active | Non-prefixed | `forge/auth.py`, `docker-compose.yml` | Host path; bind-mounted into container |
+| `NTFY_TOKEN` | `ntfy_token` | `None` | `str\|None` | Settings | **secret** | absent | Non-prefixed | `notify.py` | Set in `secrets.env` |
 
 ### 1.2  Core — model selection
 
@@ -107,11 +103,10 @@ other code depends on.
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `MILL_DATA_DIR` | `data_dir` | `.mill-data` | `Path` | Settings + Dockerfile | identifying | default | §5 | `core/db.py`, `runtime/api.py`, all `*_runner.py`, `cli.py` | Dockerfile overrides to `/data` |
-| `MILL_API_HOST` | `api_host` | `127.0.0.1` | `str` | Settings + Dockerfile | non-sensitive | default | §5 | `runtime/api.py` | Dockerfile overrides to `0.0.0.0` |
-| `MILL_API_PORT` | `api_port` | `8077` | `int` | Settings | non-sensitive | default | §5 | `runtime/api.py` | |
-| `MILL_API_URL` | `api_url` | `http://127.0.0.1:8077` | `str` | Settings + Dockerfile | identifying | default | §5 | `cli.py` | Dockerfile sets same value |
-| `MILL_BOARD_ID` | `board_id` | `""` | `str` | Settings | non-sensitive | absent | §5 | `core/service.py`, `runtime/lifespan.py` | Set at startup from `repos.yaml` |
+| `MILL_DATA_DIR` | `data_dir` | `.mill-data` | `Path` | Settings + Dockerfile | identifying | commented-out | §5 | `core/db.py`, `runtime/api.py`, all `*_runner.py`, `cli.py` | Dockerfile overrides to `/data` |
+| `MILL_API_HOST` | `api_host` | `127.0.0.1` | `str` | Settings + Dockerfile | non-sensitive | commented-out | §5 | `runtime/api.py` | Dockerfile overrides to `0.0.0.0` |
+| `MILL_API_PORT` | `api_port` | `8077` | `int` | Settings | non-sensitive | active (`8077`) | §5 | `runtime/api.py` | |
+| `MILL_API_URL` | `api_url` | `http://127.0.0.1:8077` | `str` | Settings + Dockerfile | identifying | active | §5 | `cli.py` | Dockerfile sets same value |
 
 ### 1.6  Forge delivery
 
@@ -263,7 +258,7 @@ other code depends on.
 | `workspaces_dir` | `data_dir / "workspaces"` | `Path` | `core/service.py` | |
 | `epic_workspaces_dir` | `data_dir / "epic_workspaces"` | `Path` | `sandbox.py` | Bind-mount target for epic workspace in sandbox containers |
 | `db_url` | `f"sqlite:///{db_path}"` | `str` | `core/db.py` | |
-| `tracing_enabled` | `bool(langfuse_base_url and langfuse_public_key and langfuse_secret_key)` | `bool` | `runtime/tracing.py`, `runtime/api.py` | Gate: all 3 must be truthy |
+| `tracing_enabled` | `bool(get_secrets().langfuse_base_url and get_secrets().langfuse_public_key and get_secrets().langfuse_secret_key)` | `bool` | `runtime/tracing.py`, `runtime/api.py` | Gate: all 3 must be truthy; populated from `RepoConfig` at startup |
 | `retrospect_memory_file` | `retrospect_memory_path or data_dir / "retrospect_memory.md"` | `Path` | `stages/retrospect.py` | |
 | `trace_inspector_memory_file` | `trace_inspector_memory_path or data_dir / "trace_inspector_memory.md"` | `Path` | Trace inspector | |
 | `audit_memory_file` | `audit_memory_path or data_dir / "audit_memory.md"` | `Path` | `audit_runner.py` | |
@@ -331,9 +326,6 @@ in `docs/configuration.md`:
 
 | Env var | File | Line(s) | Usage |
 |---|---|---|---|
-| `LANGFUSE_PUBLIC_KEY` | `src/robotsix_mill/runtime/tracing.py` | L58 (`os.environ.get`), L90 (`os.environ[...]`) | `_tracing_enabled()` check + OTLP exporter config |
-| `LANGFUSE_SECRET_KEY` | `src/robotsix_mill/runtime/tracing.py` | L59 (`os.environ.get`), L91 (`os.environ[...]`) | `_tracing_enabled()` check + OTLP exporter config |
-| `LANGFUSE_BASE_URL` | `src/robotsix_mill/runtime/tracing.py` | L83 (`os.environ.get`) | OTLP endpoint base; defaults to `https://cloud.langfuse.com` |
 | `SKIP_MIGRATION_GUARD` | `tests/test_migration_guard.py` | L48 (`os.environ.get`) | Escape hatch for CI migration guard |
 | `GIT_BASE_REF` | `tests/test_migration_guard.py` | L54 (`os.environ.get`) | Base ref for git diff in CI |
 | `PYTHONPATH` | `tests/runtime/test_tracing.py` | L140 | Subprocess environment; test-only. Standard Python runtime variable, not an app-config concern. |

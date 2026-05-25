@@ -23,12 +23,14 @@ from __future__ import annotations
 from robotsix_mill.config import Settings
 
 
-def _settings(tmp_path):
+def _settings(tmp_path, secrets_set):
+    secrets_set(
+        langfuse_base_url="https://lf.example.com",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+    )
     return Settings(
         MILL_DATA_DIR=str(tmp_path),
-        LANGFUSE_BASE_URL="https://lf.example.com",
-        LANGFUSE_PUBLIC_KEY="pk",
-        LANGFUSE_SECRET_KEY="sk",
     )
 
 
@@ -39,7 +41,7 @@ def _trace(tid: str, cost: float = 0.0, name: str = "n") -> dict:
             "sessionId": "s", "totalCost": cost, "userId": None}
 
 
-def test_no_cost_filter_single_fetch(tmp_path, monkeypatch):
+def test_no_cost_filter_single_fetch(tmp_path, monkeypatch, secrets_set):
     """Without cost filter: one Langfuse call, returns up to limit."""
     calls = []
 
@@ -50,7 +52,7 @@ def test_no_cost_filter_single_fetch(tmp_path, monkeypatch):
     from robotsix_mill import langfuse_client
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
-    out = langfuse_client.list_recent_traces(_settings(tmp_path), limit=10)
+    out = langfuse_client.list_recent_traces(_settings(tmp_path, secrets_set), limit=10)
     assert len(out) == 10
     assert len(calls) == 1  # single fetch
     # ``page`` should NOT be sent for the no-filter happy path (preserves
@@ -58,7 +60,7 @@ def test_no_cost_filter_single_fetch(tmp_path, monkeypatch):
     assert "page" not in calls[0][1]
 
 
-def test_cost_filter_does_not_break_at_limit_21(tmp_path, monkeypatch):
+def test_cost_filter_does_not_break_at_limit_21(tmp_path, monkeypatch, secrets_set):
     """Regression for the 'limit > 20' cliff bug.
 
     Previously: limit=21 with any cost filter produced fetch_limit=105,
@@ -79,7 +81,7 @@ def test_cost_filter_does_not_break_at_limit_21(tmp_path, monkeypatch):
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
     out = langfuse_client.list_recent_traces(
-        _settings(tmp_path), limit=21, min_cost=0.0,
+        _settings(tmp_path, secrets_set), limit=21, min_cost=0.0,
     )
     assert len(out) == 21
     # Every Langfuse request must have limit <= 100 (the API cap).
@@ -87,7 +89,7 @@ def test_cost_filter_does_not_break_at_limit_21(tmp_path, monkeypatch):
         assert c["limit"] <= 100, f"oversized fetch: {c['limit']}"
 
 
-def test_cost_filter_paginates_for_sparse_matches(tmp_path, monkeypatch):
+def test_cost_filter_paginates_for_sparse_matches(tmp_path, monkeypatch, secrets_set):
     """Sparse matches: filter applied AS WE PAGE, not after one bounded
     fetch. If only 1 in every 100 traces matches, we have to read
     multiple pages to get ``limit`` of them — which is the new
@@ -110,7 +112,7 @@ def test_cost_filter_paginates_for_sparse_matches(tmp_path, monkeypatch):
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
     out = langfuse_client.list_recent_traces(
-        _settings(tmp_path), limit=5, min_cost=0.01,
+        _settings(tmp_path, secrets_set), limit=5, min_cost=0.01,
     )
     assert len(out) == 5
     assert all(t["id"].startswith("b") for t in out), \
@@ -118,7 +120,7 @@ def test_cost_filter_paginates_for_sparse_matches(tmp_path, monkeypatch):
     assert calls == [1, 2], "must have requested two pages"
 
 
-def test_examine_cap_bounds_pagination(tmp_path, monkeypatch):
+def test_examine_cap_bounds_pagination(tmp_path, monkeypatch, secrets_set):
     """A too-strict filter that matches nothing must not paginate
     forever. The examine_cap (max(limit * 20, 500) traces examined)
     bounds the worst case."""
@@ -134,14 +136,14 @@ def test_examine_cap_bounds_pagination(tmp_path, monkeypatch):
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
     out = langfuse_client.list_recent_traces(
-        _settings(tmp_path), limit=10, min_cost=999.0,
+        _settings(tmp_path, secrets_set), limit=10, min_cost=999.0,
     )
     assert out == []
     # examine_cap = max(10*20, 500) = 500, page size 100 → at most 5 pages.
     assert len(calls) <= 5, f"unbounded pagination: {len(calls)} pages"
 
 
-def test_unnamed_traces_filtered_out_no_cost_filter(tmp_path, monkeypatch):
+def test_unnamed_traces_filtered_out_no_cost_filter(tmp_path, monkeypatch, secrets_set):
     """In-flight traces show as unnamed (root span hasn't closed +
     propagated a name yet). They can't be deep-reviewed (partial
     observation tree), so the picker excludes them."""
@@ -158,11 +160,11 @@ def test_unnamed_traces_filtered_out_no_cost_filter(tmp_path, monkeypatch):
     from robotsix_mill import langfuse_client
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
-    out = langfuse_client.list_recent_traces(_settings(tmp_path), limit=10)
+    out = langfuse_client.list_recent_traces(_settings(tmp_path, secrets_set), limit=10)
     assert [t["id"] for t in out] == ["t1", "t4", "t5"]
 
 
-def test_unnamed_traces_filtered_out_with_cost_filter(tmp_path, monkeypatch):
+def test_unnamed_traces_filtered_out_with_cost_filter(tmp_path, monkeypatch, secrets_set):
     """Same filter applies under the paginated cost-filter path."""
     def fake_get(settings, path, params=None, repo_config=None):
         p = dict(params or {})
@@ -178,12 +180,12 @@ def test_unnamed_traces_filtered_out_with_cost_filter(tmp_path, monkeypatch):
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
     out = langfuse_client.list_recent_traces(
-        _settings(tmp_path), limit=10, min_cost=0.01,
+        _settings(tmp_path, secrets_set), limit=10, min_cost=0.01,
     )
     assert [t["id"] for t in out] == ["t1", "t3"]
 
 
-def test_cost_filter_handles_empty_page(tmp_path, monkeypatch):
+def test_cost_filter_handles_empty_page(tmp_path, monkeypatch, secrets_set):
     """If Langfuse returns an empty page mid-pagination, stop cleanly
     and return what we have."""
     calls = []
@@ -199,7 +201,7 @@ def test_cost_filter_handles_empty_page(tmp_path, monkeypatch):
     monkeypatch.setattr(langfuse_client, "_langfuse_api_get", fake_get)
 
     out = langfuse_client.list_recent_traces(
-        _settings(tmp_path), limit=10, min_cost=0.01,
+        _settings(tmp_path, secrets_set), limit=10, min_cost=0.01,
     )
     assert len(out) == 3
     assert calls == [1, 2]

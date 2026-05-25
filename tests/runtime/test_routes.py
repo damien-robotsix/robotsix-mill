@@ -27,9 +27,9 @@ from robotsix_mill.runtime.api import create_app
 # -- fixtures -----------------------------------------------------------
 
 @pytest.fixture
-def client(settings):
+def client(settings, repo_config):
     """Reusable TestClient wired to the same lifespan as test_api.py."""
-    with TestClient(create_app(settings)) as c:
+    with TestClient(create_app(repo_config, settings)) as c:
         yield c
 
 
