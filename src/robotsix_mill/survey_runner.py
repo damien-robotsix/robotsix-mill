@@ -30,12 +30,15 @@ class SurveyPassResult:
     session_id: str = ""        # Langfuse session.id for this survey run
 
 
-def run_survey_pass() -> SurveyPassResult:
+def run_survey_pass(session_id: str) -> SurveyPassResult:
     """Execute one full survey pass.
 
     Reads the memory ledger, invokes the survey agent, writes the
     returned memory verbatim, and creates draft tickets for identified
     improvements.
+
+    Args:
+        session_id: Langfuse session id from the poll loop.
 
     Returns:
         SurveyPassResult with updated memory and created draft info.
@@ -45,7 +48,6 @@ def run_survey_pass() -> SurveyPassResult:
     memory_file = settings.survey_memory_file
 
     from .agents import surveying
-    from .runtime import tracing
     from .vcs import git_ops
 
     # Clone the repo locally so the survey agent can inspect it.
@@ -71,24 +73,16 @@ def run_survey_pass() -> SurveyPassResult:
                     (e.stderr or "")[:200],
                 )
 
-    from .runtime.tracing import make_session_id
-
-    session_id = make_session_id("survey")
     log.info("survey pass starting (session %s)", session_id)
-    try:
-        with tracing.start_ticket_root_span(session_id, "survey"):
-            agent_fn = partial(surveying.run_survey_agent, repo_dir=repo_dir)
-            result = run_agent_pass(
-                agent_fn=agent_fn,
-                memory_file=memory_file,
-                source_label=SourceKind.SURVEY,
-                service=service,
-                settings=settings,
-                origin_session=session_id,
-            )
-    except Exception as e:  # noqa: BLE001
-        log.exception("survey agent failed")
-        raise RuntimeError(f"survey agent failed: {e}") from e
+    agent_fn = partial(surveying.run_survey_agent, repo_dir=repo_dir)
+    result = run_agent_pass(
+        agent_fn=agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.SURVEY,
+        service=service,
+        settings=settings,
+        origin_session=session_id,
+    )
 
     return SurveyPassResult(
         updated_memory=result.updated_memory,

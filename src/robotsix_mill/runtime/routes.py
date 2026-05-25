@@ -719,12 +719,14 @@ def audit_pass(
     tickets appear on the board when it finishes.
     """
     from ..audit_runner import run_audit_pass
+    from ..runtime.tracing import make_session_id
 
     run_id = registry.start("audit")
+    session_id = make_session_id("audit")
 
     def _run() -> None:
         try:
-            r = run_audit_pass()
+            r = run_audit_pass(session_id=session_id)
             draft_ids = [d["id"] for d in r.drafts_created[:5]]
             summary = (
                 f"Created {len(r.drafts_created)} drafts: "
@@ -757,12 +759,14 @@ def bc_check_pass(
     finishes.
     """
     from ..bc_check_runner import run_bc_check_pass
+    from ..runtime.tracing import make_session_id
 
     run_id = registry.start("bc-check")
+    session_id = make_session_id("bc-check")
 
     def _run() -> None:
         try:
-            r = run_bc_check_pass()
+            r = run_bc_check_pass(session_id=session_id)
             draft_ids = [d["id"] for d in r.drafts_created[:5]]
             summary = (
                 f"Created {len(r.drafts_created)} drafts: "
@@ -788,11 +792,14 @@ def completeness_check_pass(
     registry=Depends(get_run_registry),
 ) -> dict:
     from ..completeness_check_runner import run_completeness_check_pass
+    from ..runtime.tracing import make_session_id
+
     run_id = registry.start("completeness-check")
+    session_id = make_session_id("completeness-check")
 
     def _run() -> None:
         try:
-            r = run_completeness_check_pass()
+            r = run_completeness_check_pass(session_id=session_id)
             draft_ids = [d["id"] for d in r.drafts_created[:5]]
             summary = (
                 f"Created {len(r.drafts_created)} drafts: "
@@ -820,12 +827,14 @@ def agent_check_pass(
     appear on the board when it finishes.
     """
     from ..agent_check_runner import run_agent_check_pass
+    from ..runtime.tracing import make_session_id
 
     run_id = registry.start("agent_check")
+    session_id = make_session_id("agent-check")
 
     def _run() -> None:
         try:
-            r = run_agent_check_pass()
+            r = run_agent_check_pass(session_id=session_id)
             draft_ids = [d["id"] for d in r.drafts_created[:5]]
             summary = (
                 f"Created {len(r.drafts_created)} drafts: "
@@ -1224,12 +1233,14 @@ def health_check_pass(
     board reports nothing.
     """
     from ..health_runner import run_health_pass
+    from ..runtime.tracing import make_session_id
 
     run_id = registry.start("health")
+    session_id = make_session_id("health")
 
     def _run() -> None:
         try:
-            r = run_health_pass()
+            r = run_health_pass(session_id=session_id)
             draft_ids = [d["id"] for d in r.drafts_created[:5]]
             summary = (
                 f"Created {len(r.drafts_created)} drafts: "
@@ -1256,12 +1267,14 @@ def test_gap_pass(
 ) -> dict:
     """Kick off a test-gap inspection pass in the BACKGROUND."""
     from ..test_gap_runner import run_test_gap_pass
+    from ..runtime.tracing import make_session_id
 
     run_id = registry.start("test-gap")
+    session_id = make_session_id("test-gap")
 
     def _run() -> None:
         try:
-            r = run_test_gap_pass()
+            r = run_test_gap_pass(session_id=session_id)
             draft_ids = [d["id"] for d in r.drafts_created[:5]]
             summary = (
                 f"Created {len(r.drafts_created)} drafts: "
@@ -1293,12 +1306,14 @@ def survey_pass(
     tickets. New drafts appear on the board when it finishes.
     """
     from ..survey_runner import run_survey_pass
+    from ..runtime.tracing import make_session_id
 
     run_id = registry.start("survey")
+    session_id = make_session_id("survey")
 
     def _run() -> None:
         try:
-            r = run_survey_pass()
+            r = run_survey_pass(session_id=session_id)
             draft_ids = [d["id"] for d in r.drafts_created[:5]]
             summary = (
                 f"Created {len(r.drafts_created)} drafts: "
@@ -1325,12 +1340,14 @@ def env_sync_pass(
 ) -> dict:
     """Kick off an env-sync drift detection pass in the BACKGROUND."""
     from ..env_sync_runner import run_env_sync_pass
+    from ..runtime.tracing import make_session_id
 
     run_id = registry.start("env-sync")
+    session_id = make_session_id("env-sync")
 
     def _run() -> None:
         try:
-            r = run_env_sync_pass()
+            r = run_env_sync_pass(session_id=session_id)
             draft_ids = [d["id"] for d in r.drafts_created[:5]]
             summary = (
                 f"Created {len(r.drafts_created)} drafts: "

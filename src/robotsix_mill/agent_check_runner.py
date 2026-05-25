@@ -30,7 +30,7 @@ class AgentCheckPassResult:
     session_id: str = ""        # Langfuse session.id for this run
 
 
-def run_agent_check_pass(root: str | None = None) -> AgentCheckPassResult:
+def run_agent_check_pass(session_id: str) -> AgentCheckPassResult:
     """Execute one full agent-check pass.
 
     Reads the memory ledger, invokes the agent-check agent, writes the
@@ -38,9 +38,7 @@ def run_agent_check_pass(root: str | None = None) -> AgentCheckPassResult:
     gaps.
 
     Args:
-        root: repository root (unused directly — the agent uses
-              forge_remote_url for repo context; kept for API
-              compatibility).
+        session_id: Langfuse session id from the poll loop.
 
     Returns:
         AgentCheckPassResult with updated memory and created draft info.
@@ -51,7 +49,6 @@ def run_agent_check_pass(root: str | None = None) -> AgentCheckPassResult:
 
     # Import here to allow monkeypatching in tests.
     from .agents import agent_check
-    from .runtime import tracing
     from .vcs import git_ops
 
     # Clone the repo locally so the agent inspects it via
@@ -79,30 +76,20 @@ def run_agent_check_pass(root: str | None = None) -> AgentCheckPassResult:
                     (e.stderr or "")[:200],
                 )
 
-    # One Langfuse session per agent-check run, so its model calls are
-    # attributed (no untagged traces). No-op if tracing isn't ready.
-    from .runtime.tracing import make_session_id
-
-    session_id = make_session_id("agent-check")
     log.info("agent-check pass starting (session %s)", session_id)
-    try:
-        with tracing.start_ticket_root_span(session_id, "agent-check"):
-            agent_fn = partial(
-                agent_check.run_agent_check_agent,
-                repo_dir=repo_dir,
-                memory_dir=settings.data_dir,
-            )
-            result = run_agent_pass(
-                agent_fn=agent_fn,
-                memory_file=memory_file,
-                source_label=SourceKind.AGENT_CHECK,
-                service=service,
-                settings=settings,
-                origin_session=session_id,
-            )
-    except Exception as e:  # noqa: BLE001
-        log.exception("agent-check agent failed")
-        raise RuntimeError(f"agent-check agent failed: {e}") from e
+    agent_fn = partial(
+        agent_check.run_agent_check_agent,
+        repo_dir=repo_dir,
+        memory_dir=settings.data_dir,
+    )
+    result = run_agent_pass(
+        agent_fn=agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AGENT_CHECK,
+        service=service,
+        settings=settings,
+        origin_session=session_id,
+    )
 
     return AgentCheckPassResult(
         updated_memory=result.updated_memory,

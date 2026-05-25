@@ -32,7 +32,7 @@ class CompletenessCheckPassResult:
     session_id: str = ""        # Langfuse session.id for this run
 
 
-def run_completeness_check_pass(root: str | None = None) -> CompletenessCheckPassResult:
+def run_completeness_check_pass(session_id: str) -> CompletenessCheckPassResult:
     """Execute one full feature-completeness inspection pass.
 
     Reads the memory ledger, invokes the completeness-check agent,
@@ -40,9 +40,7 @@ def run_completeness_check_pass(root: str | None = None) -> CompletenessCheckPas
     identified wiring gaps.
 
     Args:
-        root: repository root (unused directly — the agent uses
-              forge_remote_url for repo context; kept for API
-              compatibility).
+        session_id: Langfuse session id from the poll loop.
 
     Returns:
         CompletenessCheckPassResult with updated memory and created
@@ -54,7 +52,6 @@ def run_completeness_check_pass(root: str | None = None) -> CompletenessCheckPas
 
     # Import here to allow monkeypatching in tests.
     from .agents import completeness_check
-    from .runtime import tracing
     from .vcs import git_ops
 
     # Clone the repo locally so the agent inspects it via
@@ -80,28 +77,19 @@ def run_completeness_check_pass(root: str | None = None) -> CompletenessCheckPas
                     (e.stderr or "")[:200],
                 )
 
-    # One Langfuse session per completeness-check run.
-    from .runtime.tracing import make_session_id
-
-    session_id = make_session_id("completeness-check")
     log.info("completeness-check pass starting (session %s)", session_id)
-    try:
-        with tracing.start_ticket_root_span(session_id, "completeness-check"):
-            agent_fn = partial(
-                completeness_check.run_completeness_check_agent, repo_dir=repo_dir
-            )
-            result = run_agent_pass(
-                agent_fn=agent_fn,
-                memory_file=memory_file,
-                source_label=SourceKind.COMPLETENESS_CHECK,
-                service=service,
-                settings=settings,
-                origin_session=session_id,
-                max_drafts=completeness_check.MAX_GAPS,
-            )
-    except Exception as e:  # noqa: BLE001
-        log.exception("completeness-check agent failed")
-        raise RuntimeError(f"completeness-check agent failed: {e}") from e
+    agent_fn = partial(
+        completeness_check.run_completeness_check_agent, repo_dir=repo_dir
+    )
+    result = run_agent_pass(
+        agent_fn=agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.COMPLETENESS_CHECK,
+        service=service,
+        settings=settings,
+        origin_session=session_id,
+        max_drafts=completeness_check.MAX_GAPS,
+    )
 
     return CompletenessCheckPassResult(
         updated_memory=result.updated_memory,

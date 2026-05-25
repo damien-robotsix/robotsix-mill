@@ -27,7 +27,7 @@ class HealthPassResult:
     session_id: str = ""        # Langfuse session.id for this health run
 
 
-def run_health_pass(root: str | None = None) -> HealthPassResult:
+def run_health_pass(session_id: str) -> HealthPassResult:
     """Execute one full health pass.
 
     Reads the memory ledger, invokes the health agent, writes the
@@ -35,9 +35,7 @@ def run_health_pass(root: str | None = None) -> HealthPassResult:
     gaps.
 
     Args:
-        root: repository root (unused directly — the agent uses
-              forge_remote_url for repo context; kept for API
-              compatibility).
+        session_id: Langfuse session id from the poll loop.
 
     Returns:
         HealthPassResult with updated memory and created draft info.
@@ -48,7 +46,6 @@ def run_health_pass(root: str | None = None) -> HealthPassResult:
 
     # Import here to allow monkeypatching in tests.
     from .agents import health
-    from .runtime import tracing
     from .vcs import git_ops
 
     # Clone the repo locally so the health agent inspects it via
@@ -76,29 +73,19 @@ def run_health_pass(root: str | None = None) -> HealthPassResult:
                     (e.stderr or "")[:200],
                 )
 
-    # One Langfuse session per health run, so its model calls are
-    # attributed (no untagged traces). No-op if tracing isn't ready.
-    from .runtime.tracing import make_session_id
-
-    session_id = make_session_id("health")
     log.info("health pass starting (session %s)", session_id)
-    try:
-        with tracing.start_ticket_root_span(session_id, "health"):
-            from functools import partial
-            from .pass_runner import run_agent_pass
+    from functools import partial
+    from .pass_runner import run_agent_pass
 
-            agent_fn = partial(health.run_health_agent, repo_dir=repo_dir)
-            result = run_agent_pass(
-                agent_fn=agent_fn,
-                memory_file=memory_file,
-                source_label=SourceKind.HEALTH,
-                service=service,
-                settings=settings,
-                origin_session=session_id,
-            )
-    except Exception as e:  # noqa: BLE001
-        log.exception("health agent failed")
-        raise RuntimeError(f"health agent failed: {e}") from e
+    agent_fn = partial(health.run_health_agent, repo_dir=repo_dir)
+    result = run_agent_pass(
+        agent_fn=agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.HEALTH,
+        service=service,
+        settings=settings,
+        origin_session=session_id,
+    )
 
     return HealthPassResult(
         updated_memory=result.updated_memory,

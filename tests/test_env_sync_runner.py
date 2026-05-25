@@ -42,7 +42,7 @@ def test_run_env_sync_pass_empty_memory(tmp_path, monkeypatch):
         "robotsix_mill.env_sync_runner.Settings", lambda: settings
     )
 
-    run_env_sync_pass()
+    run_env_sync_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -71,7 +71,7 @@ def test_run_env_sync_pass_reads_existing_memory(tmp_path, monkeypatch):
         "robotsix_mill.env_sync_runner.Settings", lambda: settings
     )
 
-    run_env_sync_pass()
+    run_env_sync_pass(session_id="test-sid")
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
 
 
@@ -95,7 +95,7 @@ def test_run_env_sync_pass_writes_memory_verbatim(tmp_path, monkeypatch):
         "robotsix_mill.env_sync_runner.Settings", lambda: settings
     )
 
-    run_env_sync_pass()
+    run_env_sync_pass(session_id="test-sid")
     memory_file = settings.env_sync_memory_file
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == updated
@@ -125,7 +125,7 @@ def test_run_env_sync_pass_creates_draft_tickets(tmp_path, monkeypatch):
         "robotsix_mill.env_sync_runner.Settings", lambda: settings
     )
 
-    result = run_env_sync_pass()
+    result = run_env_sync_pass(session_id="test-sid")
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="env_sync"
     tickets = service.list()
@@ -155,7 +155,7 @@ def test_run_env_sync_pass_no_drafts_when_empty(tmp_path, monkeypatch):
         "robotsix_mill.env_sync_runner.Settings", lambda: settings
     )
 
-    result = run_env_sync_pass()
+    result = run_env_sync_pass(session_id="test-sid")
     assert len(result.drafts_created) == 0
 
 
@@ -184,7 +184,7 @@ def test_run_env_sync_pass_missing_memory_file(tmp_path, monkeypatch):
         "robotsix_mill.env_sync_runner.Settings", lambda: settings
     )
 
-    result = run_env_sync_pass()
+    result = run_env_sync_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -207,67 +207,36 @@ def test_env_sync_pass_result_structure(tmp_path, monkeypatch):
         "robotsix_mill.env_sync_runner.Settings", lambda: settings
     )
 
-    result = run_env_sync_pass()
+    result = run_env_sync_pass(session_id="test-sid")
     assert isinstance(result, EnvSyncPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
     assert result.drafts_created[0]["title"] == "t1"
 
 
-# --- Langfuse session tests ---
+# --- Session id pass-through tests ---
 
 
-def test_run_env_sync_pass_opens_langfuse_session(tmp_path, monkeypatch):
-    """Each env-sync run wraps the agent in a Langfuse session span with a
-    unique per-run id."""
-    import contextlib
-
+def test_run_env_sync_pass_session_id_passed_through(tmp_path, monkeypatch):
+    """session_id is stored in the result — the agent runs under it via
+    origin_session on the ticket."""
     from robotsix_mill.agents import env_syncing
-    from robotsix_mill.runtime import tracing
 
     settings = _make_settings(tmp_path)
     seen = {}
 
-    @contextlib.contextmanager
-    def fake_root(sid, name=None):
-        seen["session_id"] = sid
-        seen["stage"] = name
-        yield
-
     def mock_agent(**kwargs):
-        seen["agent_ran_under"] = seen.get("session_id")
+        seen["agent_ran"] = True
         return env_syncing.EnvSyncResult(
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         )
 
-    monkeypatch.setattr(tracing, "start_ticket_root_span", fake_root)
     monkeypatch.setattr(env_syncing, "run_env_sync_agent", mock_agent)
     monkeypatch.setattr(
         "robotsix_mill.env_sync_runner.Settings", lambda: settings
     )
 
-    res = run_env_sync_pass()
+    res = run_env_sync_pass(session_id="test-sid")
 
-    assert res.session_id.startswith("env-sync-")
-    assert seen["session_id"] == res.session_id
-    assert seen["stage"] == "env-sync"
-    assert seen["agent_ran_under"] == res.session_id
-
-
-def test_env_sync_session_ids_are_unique_per_run(tmp_path, monkeypatch):
-    """Session IDs are unique across runs."""
-    from robotsix_mill.agents import env_syncing
-
-    settings = _make_settings(tmp_path)
-    monkeypatch.setattr(
-        env_syncing, "run_env_sync_agent",
-        lambda **k: env_syncing.EnvSyncResult(
-            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
-        ),
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.env_sync_runner.Settings", lambda: settings
-    )
-    a = run_env_sync_pass().session_id
-    b = run_env_sync_pass().session_id
-    assert a != b and a.startswith("env-sync-") and b.startswith("env-sync-")
+    assert res.session_id == "test-sid"
+    assert seen["agent_ran"] is True
