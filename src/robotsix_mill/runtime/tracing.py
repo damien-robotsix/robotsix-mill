@@ -88,80 +88,83 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         return
 
     # --- heavy imports: gated behind the env-var check ---
-    from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-        OTLPSpanExporter,
-    )
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-    if repo_config is not None:
-        base_url = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-        public_key = repo_config.langfuse_public_key
-        secret_key = repo_config.langfuse_secret_key
-        project_name = repo_config.langfuse_project_name
-    else:
-        secrets = get_secrets()
-        base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-        public_key = secrets.langfuse_public_key
-        secret_key = secrets.langfuse_secret_key
-        project_name = None
+        if repo_config is not None:
+            base_url = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+            public_key = repo_config.langfuse_public_key
+            secret_key = repo_config.langfuse_secret_key
+            project_name = repo_config.langfuse_project_name
+        else:
+            secrets = get_secrets()
+            base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+            public_key = secrets.langfuse_public_key
+            secret_key = secrets.langfuse_secret_key
+            project_name = None
 
-    endpoint = f"{base_url}/api/public/otel/v1/traces"
+        endpoint = f"{base_url}/api/public/otel/v1/traces"
 
-    from base64 import b64encode as _b64encode
+        from base64 import b64encode as _b64encode
 
-    exporter = OTLPSpanExporter(
-        endpoint=endpoint,
-        headers={
-            "Authorization": "Basic "
-            + _b64encode(f"{public_key}:{secret_key}".encode()).decode(),
-        },
-    )
+        exporter = OTLPSpanExporter(
+            endpoint=endpoint,
+            headers={
+                "Authorization": "Basic "
+                + _b64encode(f"{public_key}:{secret_key}".encode()).decode(),
+            },
+        )
 
-    from opentelemetry.sdk.trace import SpanProcessor
+        from opentelemetry.sdk.trace import SpanProcessor
 
-    class _SessionStampProcessor(SpanProcessor):
-        """Stamp ``session.id`` (+ Langfuse's alias) onto every span at
-        creation from the in-scope context-var. This makes the session
-        association independent of span nesting, so pydantic-ai
-        sub-agent runs (which open their own trace) are attributed to
-        the same Langfuse session as the ticket/audit that spawned
-        them — instead of appearing as orphan, untagged traces."""
+        class _SessionStampProcessor(SpanProcessor):
+            """Stamp ``session.id`` (+ Langfuse's alias) onto every span at
+            creation from the in-scope context-var. This makes the session
+            association independent of span nesting, so pydantic-ai
+            sub-agent runs (which open their own trace) are attributed to
+            the same Langfuse session as the ticket/audit that spawned
+            them — instead of appearing as orphan, untagged traces."""
 
-        def on_start(self, span, parent_context=None):  # noqa: ANN001
-            sid = _current_session.get()
-            if sid:
-                span.set_attribute("session.id", sid)
-                # Langfuse also accepts this explicit alias.
-                span.set_attribute("langfuse.session.id", sid)
+            def on_start(self, span, parent_context=None):  # noqa: ANN001
+                sid = _current_session.get()
+                if sid:
+                    span.set_attribute("session.id", sid)
+                    # Langfuse also accepts this explicit alias.
+                    span.set_attribute("langfuse.session.id", sid)
 
-        def on_end(self, span):  # noqa: ANN001
-            pass
+            def on_end(self, span):  # noqa: ANN001
+                pass
 
-        def shutdown(self):
-            pass
+            def shutdown(self):
+                pass
 
-        def force_flush(self, timeout_millis: int = 30000):
-            return True
+            def force_flush(self, timeout_millis: int = 30000):
+                return True
 
-    resource_attrs: dict[str, str] = {SERVICE_NAME: "robotsix-mill"}
-    if project_name:
-        resource_attrs["langfuse.project.name"] = project_name
-    provider = TracerProvider(
-        resource=Resource.create(resource_attrs),
-    )
-    # on_start stamp first, then the batch exporter.
-    provider.add_span_processor(_SessionStampProcessor())
-    provider.add_span_processor(BatchSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
+        resource_attrs: dict[str, str] = {SERVICE_NAME: "robotsix-mill"}
+        if project_name:
+            resource_attrs["langfuse.project.name"] = project_name
+        provider = TracerProvider(
+            resource=Resource.create(resource_attrs),
+        )
+        # on_start stamp first, then the batch exporter.
+        provider.add_span_processor(_SessionStampProcessor())
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
 
-    from pydantic_ai.agent import Agent
+        from pydantic_ai.agent import Agent
 
-    Agent.instrument_all()
+        Agent.instrument_all()
 
-    _tracing_ready = True
+        _tracing_ready = True
+    except ImportError:
+        _tracing_ready = False
 
 
 
