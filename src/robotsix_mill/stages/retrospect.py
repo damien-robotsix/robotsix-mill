@@ -199,19 +199,21 @@ class RetrospectStage(Stage):
             log.warning("could not write deep counter to %s", path)
 
     @staticmethod
-    def _resolve_deep_analysis(settings: Settings, session_id: str) -> tuple[bool, list[str]]:
-        """Return (deep_analysis, trace_ids) based on the frequency counter.
+    def _resolve_deep_analysis(settings: Settings, session_id: str) -> tuple[bool, list[tuple[str, str]]]:
+        """Return (deep_analysis, trace_pairs) based on the frequency counter.
 
-        # --- deep-analysis frequency gate ---
+        Each element of *trace_pairs* is ``(trace_id, stage_name)`` so
+        the retrospect agent can render stage context in its prompt and
+        format per-trace summaries for cross-trace analysis.
         """
         deep_analysis = False
-        trace_ids: list[str] = []
+        trace_ids: list[tuple[str, str]] = []
         counter = RetrospectStage._read_deep_counter(settings)
         frequency = settings.retrospect_deep_analysis_frequency
         if counter >= frequency:
             deep_analysis = True
             RetrospectStage._write_deep_counter(settings, 0)
-            # Fetch the session trace list to extract trace IDs.
+            # Fetch the session trace list to extract trace IDs + stage names.
             traces_data = langfuse_client._langfuse_api_get(
                 settings,
                 "/api/public/traces",
@@ -221,7 +223,8 @@ class RetrospectStage(Stage):
                 for t in traces_data.get("data", []):
                     tid = t.get("id")
                     if tid:
-                        trace_ids.append(tid)
+                        tname = t.get("name", "?")
+                        trace_ids.append((tid, tname))
         else:
             RetrospectStage._write_deep_counter(settings, counter + 1)
         return deep_analysis, trace_ids

@@ -650,7 +650,8 @@ def test_frequency_gate_deep_run_resets(tmp_path):
 
 
 def test_deep_analysis_passes_trace_ids_to_agent(tmp_path, monkeypatch):
-    """In deep mode, trace_ids are passed to run_retrospect_agent."""
+    """In deep mode, trace_ids (with stage names) are passed to
+    run_retrospect_agent."""
     from robotsix_mill.stages.retrospect import RetrospectStage
 
     ctx = _ctx(tmp_path, MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="1")
@@ -659,7 +660,7 @@ def test_deep_analysis_passes_trace_ids_to_agent(tmp_path, monkeypatch):
     # Force deep analysis: set counter >= frequency
     RetrospectStage._write_deep_counter(ctx.settings, 5)
 
-    # Mock the Langfuse trace list to return trace IDs.
+    # Mock the Langfuse trace list to return trace IDs + names.
     monkeypatch.setattr(
         langfuse_client,
         "_langfuse_api_get",
@@ -683,7 +684,7 @@ def test_deep_analysis_passes_trace_ids_to_agent(tmp_path, monkeypatch):
     out = RetrospectStage().run(t, ctx)
     assert out.next_state is State.CLOSED
     assert captured_kwargs.get("deep_analysis") is True
-    assert captured_kwargs.get("trace_ids") == ["trace-a", "trace-b"]
+    assert captured_kwargs.get("trace_ids") == [("trace-a", "implement"), ("trace-b", "test")]
 
 
 def test_light_analysis_unchanged(tmp_path, monkeypatch):
@@ -782,6 +783,44 @@ def test_deep_analysis_handles_missing_langfuse_traces(tmp_path, monkeypatch):
     assert out.next_state is State.CLOSED
     assert captured_kwargs.get("deep_analysis") is True
     assert captured_kwargs.get("trace_ids") == []
+
+
+def test_cross_trace_tool_wired_in_deep_mode(tmp_path, monkeypatch):
+    """When deep_analysis=True, the cross_trace_analyze tool is present
+    in the agent alongside trace_inspect."""
+    ctx = _ctx(tmp_path, MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY="1")
+    _no_langfuse(monkeypatch)
+
+    RetrospectStage._write_deep_counter(ctx.settings, 5)
+
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda s, path, params: {
+            "data": [
+                {"id": "trace-a", "name": "implement"},
+            ]
+        },
+    )
+
+    # Intercept build_agent_from_definition to check tools list.
+    from unittest.mock import patch
+
+    with patch(
+        "robotsix_mill.agents.base.build_agent_from_definition"
+    ) as mock_build:
+        mock_build.return_value = type(
+            "FakeAgent", (), {"run_sync": lambda self, prompt: type("R", (), {"output": _default_result()})()}
+        )()
+        t = _done(ctx)
+        RetrospectStage().run(t, ctx)
+
+        call_kwargs = mock_build.call_args.kwargs
+        tools = call_kwargs.get("tools", [])
+        tool_names = [t.__name__ for t in tools]
+
+        assert "trace_inspect" in tool_names
+        assert "cross_trace_analyze" in tool_names
 
 
 # ---------------------------------------------------------------------------
