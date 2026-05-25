@@ -265,9 +265,15 @@ class RefineStage(Stage):
         try:
             comments = ctx.service.list_comments(ticket.id)
             if comments:
-                reviewer_comments = "\n".join(
-                    f"[{c.created_at.isoformat()}] {c.body}" for c in comments
-                )
+                # Only count non-closed top-level threads for sendback detection.
+                open_threads = [
+                    c for c in comments
+                    if c.parent_id is None and c.closed_at is None
+                ]
+                if open_threads:
+                    reviewer_comments = "\n".join(
+                        f"[{c.created_at.isoformat()}] {c.body}" for c in comments
+                    )
         except Exception:
             log.warning("%s: list_comments failed, proceeding without", ticket.id)
 

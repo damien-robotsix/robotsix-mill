@@ -28,12 +28,17 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
 
     prior_comments = ctx.service.list_comments(ticket.id)
     if prior_comments:
+        # Identify closed thread IDs — skip those threads and their replies.
+        closed_ids = {c.id for c in prior_comments if c.closed_at is not None}
         formatted = "\n".join(
-            f"[{c.author}] {c.body}" for c in prior_comments
+            f"{'  ↳ ' if c.parent_id is not None else ''}[{c.author}] {c.body}"
+            for c in prior_comments
+            if c.id not in closed_ids and c.parent_id not in closed_ids
         )
-        parts.append(
-            f"<prior_review_comments>\n{formatted}\n</prior_review_comments>"
-        )
+        if formatted:
+            parts.append(
+                f"<prior_review_comments>\n{formatted}\n</prior_review_comments>"
+            )
 
     implement_md = ws.artifacts_dir / "implement.md"
     if implement_md.exists():

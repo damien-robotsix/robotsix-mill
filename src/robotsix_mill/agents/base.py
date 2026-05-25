@@ -123,6 +123,7 @@ def build_agent_from_definition(
         web=definition.web,
         report_issue=definition.report_issue,
         read_ticket=definition.read_ticket,
+        reply_to_thread=definition.reply_to_thread,
         retries=definition.retries,
         output_type=resolved_output_type,
     )
@@ -161,6 +162,7 @@ def build_agent(
     web: bool = False,
     report_issue: bool = True,
     read_ticket: bool = False,
+    reply_to_thread: bool = True,
     model_name: str | None = None,
     name: str | None = None,
     retries: int = 2,
@@ -206,6 +208,12 @@ def build_agent(
         from .read_ticket import make_read_ticket_tool
 
         all_tools.append(make_read_ticket_tool(settings))
+    if reply_to_thread:
+        # Tool so agents can reply to a comment thread on the current
+        # ticket, enabling real conversation with humans.
+        from .reply_thread import make_reply_to_thread_tool
+
+        all_tools.append(make_reply_to_thread_tool(settings, agent_name=name))
     if web:
         # Not ":online", not web_fetch on the main agent — a cheap
         # sub-agent does the searching and hands back only a conclusion.
