@@ -164,6 +164,7 @@ def run_env_sync_agent(
         tools=tools,
         web=False,
         report_issue=False,
+        read_ticket=True,
         model_name=settings.env_sync_model,
         name="env-sync",
     )

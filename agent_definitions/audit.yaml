@@ -18,6 +18,7 @@ tools:
 
 web: true
 report_issue: false
+read_ticket: true
 output_type: AuditResult
 retries: 2
 module: auditing

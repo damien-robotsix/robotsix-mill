@@ -24,6 +24,7 @@ web: false
 
 # Emits draft tickets via structured output (PromptedOutput[BcCheckResult]).
 report_issue: false
+read_ticket: true
 
 output_type: BcCheckResult
 retries: 2

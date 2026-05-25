@@ -14,6 +14,7 @@ tools: []
 
 web: false
 report_issue: false
+read_ticket: true
 output_type: RetrospectResult
 retries: 2
 module: retrospecting
