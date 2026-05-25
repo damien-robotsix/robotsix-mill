@@ -100,20 +100,16 @@ class ImplementStage(Stage):
             reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
 
         # Load the ticket's file scope map (which files are in-scope).
+        # Three cases:
+        #   - file_map.json missing entirely → refine broken → BLOCK.
+        #   - file_map.json contains [] → scope-free mode (split child
+        #     or triage-SKIP path); allow with a warning.
+        #   - file_map.json contains [{file: …}, …] → enforce scope.
         file_map: set[str] | None = None
         file_map_path = ws.artifacts_dir / "file_map.json"
-        if file_map_path.exists():
-            raw = json.loads(file_map_path.read_text(encoding="utf-8"))
-            if raw:  # non-empty list → extract paths
-                file_map = {entry["file"] for entry in raw}
-
-        # Hard gate: refuse to proceed without a file_map.  The refine
-        # stage must produce one; a missing or empty map means we cannot
-        # enforce scope — proceed and risk the incidents seen in
-        # 20260525T113211Z / 20260525T115012Z.
-        if file_map is None:
+        if not file_map_path.exists():
             log.warning(
-                "%s: file_map.json missing or empty — cannot verify scope",
+                "%s: file_map.json missing — refine never wrote it",
                 ticket.id,
             )
             ImplementStage._finalize(
@@ -121,8 +117,19 @@ class ImplementStage(Stage):
             )
             return Outcome(
                 State.BLOCKED,
-                "file_map.json missing or empty — refine stage must "
-                "produce a file_map for scope enforcement",
+                "file_map.json missing — refine stage must produce a "
+                "file_map for scope enforcement",
+            )
+        raw = json.loads(file_map_path.read_text(encoding="utf-8"))
+        if raw:  # non-empty list → extract paths
+            file_map = {entry["file"] for entry in raw}
+        else:
+            # Empty file_map → scope-free mode (split children, triage
+            # SKIPs). Proceed without scope enforcement; the agent's
+            # spec still constrains the work.
+            log.warning(
+                "%s: file_map.json is empty — proceeding in scope-free mode",
+                ticket.id,
             )
 
         feedback: str | None = None

@@ -254,6 +254,13 @@ class RefineStage(Stage):
                     "(split child — spec written by parent's refine agent)",
                     encoding="utf-8",
                 )
+            # Split children skip the refine agent — but implement still
+            # demands a file_map.json. Write an empty one so the
+            # downstream gate treats this as scope-free mode rather
+            # than "refine broken" → BLOCKED.
+            file_map_path = ws.artifacts_dir / "file_map.json"
+            if not file_map_path.exists():
+                file_map_path.write_text("[]", encoding="utf-8")
             next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id)
             note = "split child — spec already refined"
             if auto_note:
@@ -301,6 +308,13 @@ class RefineStage(Stage):
                         draft if draft else "(title-only ticket, no body provided)",
                         encoding="utf-8",
                     )
+                    # Skipping the refine agent skips the file_map.json
+                    # write too. Implement requires one — write an
+                    # empty (scope-free) marker so it doesn't BLOCK on
+                    # "refine broken".
+                    file_map_path = ws.artifacts_dir / "file_map.json"
+                    if not file_map_path.exists():
+                        file_map_path.write_text("[]", encoding="utf-8")
                     next_state, auto_note = _resolve_next_state(ctx, draft, ticket.id)
                     note = f"triage SKIP: {triage.reason}"
                     if auto_note:
