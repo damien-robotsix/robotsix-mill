@@ -199,6 +199,7 @@ Every setting below shows:
 | `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-pro` | Documentation agent |
 | `core.models.triage` | `MILL_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Pre-refine triage — fast/cheap classification |
 | `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `openai/gpt-4o-mini` | Model for the auto-approve triage call (must be fast and cheap) |
+| `core.models.scope_triage` | `MILL_SCOPE_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Scope-triage model — classifies out-of-scope changes as EXPAND/REJECT/ESCALATE |
 
 ### 2. Request limits
 
@@ -209,6 +210,7 @@ Every setting below shows:
 | `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `8` | Per-call request cap for the test sub-agent |
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
 | `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap for the dedup check |
+| `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `4` | Per-call request cap for the scope-triage agent |
 | — (env-var only) | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
 | — (env-var only) | `MILL_REVIEW_REQUEST_LIMIT` | `20` | Per-run request cap for the review agent |
 
@@ -271,6 +273,7 @@ Every setting below shows:
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
 | `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `false` | Post-refinement spec narrative stripping |
+| `gates.scope_triage_enabled` | `MILL_SCOPE_TRIAGE_ENABLED` | `true` | Cheap scope-violation triage before blocking (EXPAND/REJECT/ESCALATE) |
 | `gates.auto_merge_enabled` | `MILL_AUTO_MERGE_ENABLED` | `false` | Auto-merge PR when CI passes |
 
 ### 8. Forge
