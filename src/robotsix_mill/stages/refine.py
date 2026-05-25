@@ -383,12 +383,25 @@ class RefineStage(Stage):
                 encoding="utf-8",
             )
 
-        # --- write reference_files artifact ---
-        if repo_dir is not None and result.file_map:
-            _write_reference_files(
-                repo_dir, ws.artifacts_dir,
-                max_count=s.reference_files_max_count,
-                max_total_lines=s.reference_files_max_total_lines,
+        # --- write reference_files artifact (agent-curated, paths-only) ---
+        if result.reference_files:
+            (ws.artifacts_dir / "reference_files.json").write_text(
+                json.dumps(
+                    [{"path": p} for p in result.reference_files],
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        elif result.file_map:
+            # Fallback: derive paths from file_map when the agent does not
+            # return a curated reference_files list (older models, or the
+            # field isn't yet filled in).
+            (ws.artifacts_dir / "reference_files.json").write_text(
+                json.dumps(
+                    [{"path": e.file} for e in result.file_map],
+                    indent=2,
+                ),
+                encoding="utf-8",
             )
 
         # --- normal single-scope path ---
@@ -608,55 +621,3 @@ class RefineStage(Stage):
             f"split into {ids_note}",
         )
 
-
-def _write_reference_files(
-    repo_dir: Path,
-    artifacts_dir: Path,
-    *,
-    max_count: int,
-    max_total_lines: int,
-) -> None:
-    """Read top-N files from ``file_map.json`` and write ``reference_files.json``."""
-    file_map_path = artifacts_dir / "file_map.json"
-    try:
-        raw = file_map_path.read_text(encoding="utf-8")
-    except OSError:
-        return
-    if not raw.strip():
-        return
-    try:
-        file_map = json.loads(raw)
-    except json.JSONDecodeError:
-        log.warning("reference_files: file_map.json is not valid JSON, skipping")
-        return
-    if not isinstance(file_map, list) or not file_map:
-        return
-
-    entries: list[dict[str, str]] = []
-    total_lines = 0
-
-    for fm_entry in file_map[:max_count]:
-        file_path = fm_entry.get("file") if isinstance(fm_entry, dict) else getattr(fm_entry, "file", None)
-        if not file_path:
-            continue
-        candidate = repo_dir / file_path
-        try:
-            content = candidate.read_text(encoding="utf-8", errors="replace")
-        except (OSError, UnicodeDecodeError):
-            log.warning(
-                "reference_files: cannot read %s, skipping", file_path
-            )
-            continue
-
-        line_count = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
-        if total_lines + line_count > max_total_lines:
-            break
-
-        entries.append({"path": file_path, "content": content})
-        total_lines += line_count
-
-    if entries:
-        (artifacts_dir / "reference_files.json").write_text(
-            json.dumps(entries, indent=2),
-            encoding="utf-8",
-        )

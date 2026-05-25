@@ -49,9 +49,10 @@ def run_implement_agent(
     message_history: list | None = None,
     memory: str = "",
     epic_context: str = "",
-) -> tuple[str, list, str]:
+    previous_attempt_summary: str | None = None,
+) -> tuple[str, list[str], str]:
     """Run ONE coordinator pass for this ticket. Returns
-    ``(summary, [], updated_memory)``.
+    ``(summary, reference_files, updated_memory)``.
 
     ``feedback`` — set by the implement stage when it re-invokes after a
     failed test gate — is a distilled diagnosis of that failure,
@@ -61,7 +62,10 @@ def run_implement_agent(
     on the first coordinator pass so the model starts with those files
     already "read."
     ``message_history`` — advanced/test use: pre-built pydantic-ai
-    message history passed through to the coordinator unchanged."""
+    message history passed through to the coordinator unchanged.
+    ``previous_attempt_summary`` — the coordinator's summary from a
+    prior pass, injected as a ``<previous_attempt>`` block on retries
+    so the model doesn't undo its prior correct work."""
     from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
     from .coordinating import run_coordinator
@@ -72,6 +76,7 @@ def run_implement_agent(
             feedback=feedback, epic_context=epic_context,
             reference_files=reference_files,
             message_history=message_history,
+            previous_attempt_summary=previous_attempt_summary,
         )
     except UsageLimitExceeded as e:
         raise AgentBudgetError(str(e), []) from e
@@ -88,6 +93,7 @@ def run_implement_agent(
                 epic_context=epic_context,
                 reference_files=reference_files,
                 message_history=message_history,
+                previous_attempt_summary=previous_attempt_summary,
             )
         except Exception as fallback_e:
             raise AgentRunError(
@@ -100,7 +106,7 @@ def run_implement_agent(
     except Exception as e:  # noqa: BLE001 — block-as-resumable
         raise AgentRunError(str(e), []) from e
 
-    return result.summary, [], result.updated_memory
+    return result.summary, result.reference_files, result.updated_memory
 
 
 

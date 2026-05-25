@@ -39,58 +39,6 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.implement")
 
 
-def _persist_post_edit_reference_files(
-    repo_dir: Path,
-    artifacts_dir: Path,
-    file_map: set[str],
-    summary: str,
-    settings,
-) -> None:
-    """Persist current content of in-scope files as reference_files.json
-    and the agent summary as implement_summary.txt.
-
-    Best-effort: never raises; logs warnings on individual file errors.
-    """
-    if not file_map:
-        return
-
-    entries: list[dict[str, str]] = []
-    total_lines = 0
-    max_count = getattr(settings, "reference_files_max_count", 5)
-    max_total_lines = getattr(settings, "reference_files_max_total_lines", 3000)
-
-    for fname in sorted(file_map)[:max_count]:
-        candidate = repo_dir / fname
-        try:
-            content = candidate.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            log.warning(
-                "_persist_post_edit_reference_files: cannot read %s, skipping",
-                fname,
-            )
-            continue
-
-        line_count = (
-            content.count("\n")
-            + (1 if content and not content.endswith("\n") else 0)
-        )
-        if total_lines + line_count > max_total_lines:
-            break
-
-        entries.append({"path": fname, "content": content})
-        total_lines += line_count
-
-    if entries:
-        (artifacts_dir / "reference_files.json").write_text(
-            json.dumps(entries, indent=2),
-            encoding="utf-8",
-        )
-
-    (artifacts_dir / "implement_summary.txt").write_text(
-        summary, encoding="utf-8",
-    )
-
-
 class ImplementStage(Stage):
     name = "implement"
     input_state = State.READY
@@ -151,6 +99,11 @@ class ImplementStage(Stage):
         if ref_files_path.exists():
             reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
 
+        # Load the previous attempt summary (if available from a prior
+        # pass). Threaded through to run_coordinator so the retry prompt
+        # includes a <previous_attempt> block.
+        prev_summary: str | None = None
+
         # Load the ticket's file scope map (which files are in-scope).
         # Three cases:
         #   - file_map.json missing entirely → refine never ran or
@@ -192,16 +145,32 @@ class ImplementStage(Stage):
                 feedback = review_feedback
 
         for attempt in range(1, max_iters + 1):
+            # On retry: reload reference_files from the previous pass's
+            # artifact so the next coordinator gets fresh curated paths.
+            if attempt > 1:
+                if ref_files_path.exists():
+                    reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
+                # Load previous attempt summary for the <previous_attempt>
+                # prompt block.
+                summary_path = ws.artifacts_dir / "implement_summary.md"
+                if summary_path.exists():
+                    prev_summary = summary_path.read_text(encoding="utf-8").strip()
+
+            ref_files: list[str] = []  # default in case agent raises before returning
             try:
-                summary, _, updated_memory = coding.run_implement_agent(
+                summary, ref_files, updated_memory = coding.run_implement_agent(
                     settings=settings, repo_dir=repo_dir, spec=spec,
                     feedback=feedback, memory=memory_text,
                     reference_files=reference_files,
+                    previous_attempt_summary=prev_summary,
                 )
             except AgentBudgetError as e:
                 ImplementStage._finalize(
                     ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
                     ok=False,
+                )
+                ImplementStage._persist_pass_artifacts(
+                    ws.artifacts_dir, summary, ref_files,
                 )
                 return Outcome(
                     State.BLOCKED,
@@ -212,6 +181,9 @@ class ImplementStage(Stage):
                     ctx, ticket, repo_dir, branch, f"agent error: {e}",
                     ok=False,
                 )
+                ImplementStage._persist_pass_artifacts(
+                    ws.artifacts_dir, summary, ref_files,
+                )
                 return Outcome(
                     State.BLOCKED, f"agent error — resumable: {e}"
                 )
@@ -221,16 +193,11 @@ class ImplementStage(Stage):
             if updated_memory:
                 persist_memory(settings.implement_memory_file, updated_memory)
 
-            # Persist post-edit reference_files + summary so the next
-            # iteration's agent starts warm with current file content.
-            if file_map:
-                _persist_post_edit_reference_files(
-                    repo_dir=repo_dir,
-                    artifacts_dir=ws.artifacts_dir,
-                    file_map=file_map,
-                    summary=summary,
-                    settings=settings,
-                )
+            # Persist pass artifacts so retries and BLOCKED resumes
+            # benefit from the agent-curated file list + summary.
+            ImplementStage._persist_pass_artifacts(
+                ws.artifacts_dir, summary, ref_files,
+            )
 
             # Scope guardrail: verify every changed file is listed in the
             # ticket's file_map.  file_map may be None; scope check is
@@ -378,14 +345,7 @@ class ImplementStage(Stage):
                 )
 
             # retry → feed the diagnosis into the next edit pass.
-            # Reload reference_files so the next iteration gets post-edit content.
-            prev_summary = summary
-            ref_files_path = ws.artifacts_dir / "reference_files.json"
-            if ref_files_path.exists():
-                reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
-            else:
-                reference_files = None
-            feedback = f"[Previous attempt]: {prev_summary}\n\n{diag}"
+            feedback = diag
 
         # The escalate branch fires on the final attempt, so the loop
         # always returns above. This is a defensive fallback.
@@ -409,6 +369,44 @@ class ImplementStage(Stage):
                 repo_dir,
                 f"mill: {ticket.title} ({ticket.id})"
                 + ("" if ok else " [WIP]"),
+            )
+
+    @staticmethod
+    def _persist_pass_artifacts(
+        artifacts_dir: Path,
+        summary: str,
+        reference_files: list[str],
+    ) -> None:
+        """Write per-pass artifacts so retries and BLOCKED resumes
+        benefit from the agent-curated file list + summary.
+
+        Best-effort: failures are logged at WARNING and never abort
+        the implement loop.
+        """
+        # implement_summary.md — standalone summary for <previous_attempt>
+        # prompt block injection on the next pass.
+        try:
+            (artifacts_dir / "implement_summary.md").write_text(
+                summary, encoding="utf-8",
+            )
+        except (OSError, UnicodeEncodeError) as e:
+            log.warning(
+                "implement_summary.md write failed: %s", e,
+            )
+
+        # reference_files.json — paths-only, agent-curated. Overwrites
+        # refine's version unconditionally.
+        try:
+            (artifacts_dir / "reference_files.json").write_text(
+                json.dumps(
+                    [{"path": p} for p in reference_files],
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except (OSError, UnicodeEncodeError) as e:
+            log.warning(
+                "reference_files.json write failed: %s", e,
             )
 
     @staticmethod

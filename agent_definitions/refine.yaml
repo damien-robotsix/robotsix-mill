@@ -154,3 +154,28 @@ system_prompt: |
     or read — do not guess.  If no files are relevant (e.g. a pure
     configuration change with no codebase exploration needed), return
     ``file_map=[]``.
+
+  - Always produce a ``reference_files`` list: the subset of ``file_map``
+    paths (no notes — just the relative paths as strings) that the
+    implement agent should start its next pass with already "read."
+    This saves the implement agent from re-exploring what you already
+    mapped.  Format: ``reference_files=["path/to/file.py", ...]``.
+
+    **Include** a file when:
+    - It is central to implementing the change (the main module where
+      edits will land, its test file, key interfaces/types it depends
+      on).
+    - You read it deeply during refinement and expect the implement
+      agent to need the same context.
+
+    **Exclude** files that are:
+    - Only skimmed and not load-bearing (e.g. a top-level `__init__.py`
+      you opened just to confirm the package name).
+    - Configuration files, docs, or CI scripts that don't constrain the
+      implementation.
+    - Files whose relevance was only to answer a refinement question
+      (e.g. "does this function exist?") and have no further bearing.
+
+    When in doubt, include — the failure mode is one extra `read_file`
+    call, which is cheap.  If no files are load-bearing, return
+    ``reference_files=[]``.

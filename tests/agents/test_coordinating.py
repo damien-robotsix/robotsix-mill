@@ -315,7 +315,8 @@ class TestRunCoordinator:
         """``reference_files`` with no ``message_history`` and no
         ``feedback`` produces synthetic ``ModelResponse``/``ModelRequest``
         pairs and seeds the fs-tools cache."""
-        ref = [{"path": "foo.py", "content": "x=1"}]
+        (tmp_path / "foo.py").write_text("x=1")
+        ref = [{"path": "foo.py"}]
         self._run(settings, tmp_path, reference_files=ref)
 
         # fs_tools cache seeded with resolved path
@@ -356,7 +357,8 @@ class TestRunCoordinator:
         """When ``message_history`` is provided it is passed directly
         to ``run_sync`` (no synthesis, no fs-cache pre-seeding —
         ``pre_seeded`` is only built when ``message_history is None``)."""
-        ref = [{"path": "bar.py", "content": "y=2"}]
+        (tmp_path / "bar.py").write_text("y=2")
+        ref = [{"path": "bar.py"}]
         existing_mh = ["existing"]
         self._run(
             settings, tmp_path,
@@ -370,22 +372,25 @@ class TestRunCoordinator:
         # message_history passed directly, not synthesised
         assert self.captured["message_history"] == existing_mh
 
-    def test_reference_files_with_feedback_no_synthesis(
+    def test_reference_files_with_feedback_synthesis(
         self, settings, tmp_path,
     ):
-        """``reference_files`` + ``feedback`` → no synthetic history
-        (retry path); feedback block present."""
-        ref = [{"path": "baz.py", "content": "z=3"}]
+        """``reference_files`` + ``feedback`` → synthetic history IS built
+        (the old first-pass-only gate is lifted)."""
+        (tmp_path / "baz.py").write_text("z=3")
+        ref = [{"path": "baz.py"}]
         self._run(
             settings, tmp_path,
             reference_files=ref,
             feedback="assertion failed in test_z",
         )
 
-        # No synthetic history on retry
-        assert self.captured["message_history"] is None
+        # Synthetic history IS built on retry now
+        mh = self.captured["message_history"]
+        assert isinstance(mh, list)
+        assert len(mh) == 2  # one response + one request
 
-        # But pre_seeded is still built
+        # pre_seeded is still built
         pre_seeded = self.captured["fs_pre_seeded"]
         assert pre_seeded is not None
         resolved = (tmp_path / "baz.py").resolve()
@@ -393,6 +398,78 @@ class TestRunCoordinator:
 
         # feedback block in prompt
         assert "assertion failed in test_z" in self.captured["user_prompt"]
+
+    def test_reference_files_disk_content_over_stale_artifact(
+        self, settings, tmp_path,
+    ):
+        """Synthetic ToolReturn content matches on-disk content even when
+        the file was modified after the artifact was written."""
+        (tmp_path / "stale.py").write_text("old content")
+        ref = [{"path": "stale.py"}]
+        # Simulate: artifact says stale.py, but then file is mutated.
+        (tmp_path / "stale.py").write_text("fresh content")
+        self._run(settings, tmp_path, reference_files=ref)
+
+        mh = self.captured["message_history"]
+        assert isinstance(mh, list)
+        assert len(mh) == 2
+        tr = mh[1].parts[0]
+        assert tr.content == "fresh content"
+
+    def test_reference_files_missing_file_skipped(
+        self, settings, tmp_path, caplog,
+    ):
+        """A reference_files entry pointing at a missing file produces a
+        warning and is omitted from synthetic history."""
+        ref = [{"path": "ghost.py"}, {"path": "real.py"}]
+        (tmp_path / "real.py").write_text("real content")
+        with caplog.at_level("WARNING"):
+            self._run(settings, tmp_path, reference_files=ref)
+
+        # Warning was logged
+        assert "ghost.py" in caplog.text
+        assert "not found" in caplog.text
+
+        # Only real.py gets synthetic history
+        mh = self.captured["message_history"]
+        assert len(mh) == 2  # one pair for real.py only
+
+        # pre_seeded only has real.py
+        pre_seeded = self.captured["fs_pre_seeded"]
+        assert (tmp_path / "real.py").resolve() in pre_seeded
+        assert (tmp_path / "ghost.py").resolve() not in pre_seeded
+
+    def test_previous_attempt_summary_block(
+        self, settings, tmp_path,
+    ):
+        """When ``previous_attempt_summary`` is passed and ``feedback`` is
+        set, the prompt contains ``<previous_attempt>`` before the feedback
+        block."""
+        self._run(
+            settings, tmp_path,
+            feedback="test_x failed",
+            previous_attempt_summary="I edited foo.py to fix the bug.",
+        )
+        prompt: str = self.captured["user_prompt"]
+        assert "<previous_attempt>" in prompt
+        assert "I edited foo.py to fix the bug." in prompt
+        assert "</previous_attempt>" in prompt
+        # Order: previous_attempt before test_failure
+        prev_pos = prompt.index("<previous_attempt>")
+        fail_pos = prompt.index("<test_failure>")
+        assert prev_pos < fail_pos
+
+    def test_previous_attempt_summary_without_feedback_no_block(
+        self, settings, tmp_path,
+    ):
+        """When ``previous_attempt_summary`` is passed but ``feedback`` is
+        not set, the prompt does NOT contain a ``<previous_attempt>`` block."""
+        self._run(
+            settings, tmp_path,
+            previous_attempt_summary="I edited foo.py to fix the bug.",
+        )
+        prompt: str = self.captured["user_prompt"]
+        assert "<previous_attempt>" not in prompt
 
     # -- model_name ------------------------------------------------------
 

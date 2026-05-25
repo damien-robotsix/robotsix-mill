@@ -96,3 +96,30 @@ system_prompt: |
   - Keep entries concise and ticket-ID-qualified (e.g. "Observed in
     `<ticket-id>`: ...") so the ledger stays coherent across runs
   - If nothing new was learned, return the incoming memory unchanged
+
+
+  ## `reference_files` — declaring files for follow-up passes
+
+  Your structured output includes a `reference_files` field — a list of
+  relative paths from the repo root that a follow-up pass should start
+  with `read_file` outputs already loaded for. The stage will use this
+  list to pre-seed the next pass's context, saving the next run from
+  re-exploration.
+
+  **Include** a file in `reference_files` when:
+  - You edited the file **and** expect the next pass to still need to
+    look at it (load-bearing edits, not one-shot fixes).
+  - You read a file deeply and expect it to remain load-bearing for
+    understanding (e.g. a base class whose contract your edit depends on,
+    a central interface that constrains the change).
+
+  **Exclude** files that are:
+  - Only skimmed and never used in your actual edit.
+  - Edited in a trivial, one-shot way that won't need revisiting
+    (changelog entries, lockfile updates, version bumps).
+  - Generated artifacts (build outputs, auto-formatted files).
+  - Files whose only role was to confirm a hypothesis and have no
+    further bearing on the change.
+
+  When in doubt, include — the failure mode is one extra `read_file`
+  call in the next pass, which is cheap.

@@ -13,6 +13,7 @@ everything and never converged.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -20,12 +21,15 @@ from pydantic import BaseModel, model_validator
 
 from ..config import Settings
 
+log = logging.getLogger(__name__)
+
 
 class ImplementResult(BaseModel):
     """Structured output from the implement (coordinator) agent."""
 
     summary: str
     updated_memory: str = ""
+    reference_files: list[str] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -154,6 +158,7 @@ def run_coordinator(
     epic_context: str = "",
     reference_files: list[dict] | None = None,
     message_history: list | None = None,
+    previous_attempt_summary: str | None = None,
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -164,7 +169,11 @@ def run_coordinator(
     which is appended to the prompt as a ``<test_failure>`` block. The
     partial edits from earlier passes persist on disk in ``repo_dir``,
     so a retry continues from the current working tree. The seam tests
-    monkeypatch this."""
+    monkeypatch this.
+
+    ``previous_attempt_summary`` — the coordinator's summary from a
+    prior pass, injected as a ``<previous_attempt>`` block on retries
+    so the model doesn't undo its prior correct work."""
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
@@ -179,16 +188,30 @@ def run_coordinator(
     )
 
     # Pre-seed fs_tools cache and build synthetic message_history when
-    # reference files are provided (first invocation only, not a retry).
+    # reference files are provided. Content is always re-read fresh from
+    # disk at prompt-prep time — never trusted from the artifact.
     pre_seeded: dict[str, str] | None = None
     final_message_history: list | None = message_history
 
     if reference_files and message_history is None:
-        # Build pre_seeded mapping for _file_cache seeding (resolved Paths).
-        pre_seeded = {
-            (repo_dir / rf["path"]).resolve(): rf["content"]
-            for rf in reference_files
-        }
+        pre_seeded = {}
+        for rf in reference_files:
+            file_path = repo_dir / rf["path"]
+            if not file_path.exists():
+                log.warning(
+                    "reference_files: %s not found on disk, skipping",
+                    rf["path"],
+                )
+                continue
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+            except (OSError, UnicodeDecodeError) as e:
+                log.warning(
+                    "reference_files: cannot read %s, skipping: %s",
+                    rf["path"], e,
+                )
+                continue
+            pre_seeded[file_path.resolve()] = content
 
     extra_roots: list[Path] | None = None
 
@@ -202,7 +225,11 @@ def run_coordinator(
         ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
     ]
 
-    # Build synthetic message_history on first pass (no feedback set).
+    # Build synthetic message_history from reference_files.  Injected
+    # whenever reference_files is present and the caller didn't supply
+    # an explicit message_history — not only on first pass.  Synthetic
+    # history is just preloaded read_file outputs; it doesn't carry the
+    # model's prior reasoning, commitments, or rejected hypotheses.
     # NOTE: do NOT inject a TextPart-wrapped system prompt as the first
     # message — TextPart is only valid in ModelResponse.parts. Placing
     # it in a ModelRequest triggers pydantic-ai's "Expected code to be
@@ -210,12 +237,21 @@ def run_coordinator(
     # system prompt is already added by build_agent below; the synthetic
     # history starts directly with the preloaded read_file ToolCall /
     # ToolReturn pairs, which pydantic-ai accepts.
-    if reference_files and message_history is None and not feedback:
+    if reference_files and message_history is None:
         from pydantic_ai.messages import (
             ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
         )
         synthetic: list = []
         for rf in reference_files:
+            file_path = repo_dir / rf["path"]
+            # Re-read from disk (even though pre_seeded already read it)
+            # so the ToolReturn always reflects current on-disk content.
+            if not file_path.exists():
+                continue  # already warned in pre_seeded loop above
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+            except (OSError, UnicodeDecodeError):
+                continue
             tc_id = f"preload_{rf['path']}"
             synthetic.append(ModelResponse(parts=[
                 ToolCallPart(
@@ -227,7 +263,7 @@ def run_coordinator(
             synthetic.append(ModelRequest(parts=[
                 ToolReturnPart(
                     tool_name="read_file",
-                    content=rf["content"],
+                    content=content,
                     tool_call_id=tc_id,
                 )
             ]))
@@ -287,6 +323,20 @@ def run_coordinator(
                     "</test_failure>\n\n"
                     "Fix exactly this failure and stop."
                 )
+
+        # Inject prior-attempt summary so the model doesn't undo its
+        # previous correct work. Placed after feedback blocks so the
+        # retry directive (review_feedback / test_failure) still takes
+        # priority — the summary is context, not instruction.
+        if feedback and previous_attempt_summary:
+            user_prompt = (
+                "<previous_attempt>\n"
+                "Your previous edit pass produced this summary "
+                "(already on disk):\n"
+                f"{previous_attempt_summary}\n"
+                "</previous_attempt>\n\n"
+            ) + user_prompt
+
         result = call_with_retry(
             lambda: agent.run_sync(
                 user_prompt,

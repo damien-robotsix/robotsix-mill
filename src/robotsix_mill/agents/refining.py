@@ -84,6 +84,9 @@ class RefineResult(BaseModel):
     title: str | None = None
     epic_body: str | None = None
     file_map: list[FileMapEntry] | None = None
+    reference_files: list[str] = []
+    """Relative paths from the repo root that a follow-up pass on this
+    ticket should start with read_file outputs already loaded for."""
 
     @model_validator(mode="before")
     @classmethod
