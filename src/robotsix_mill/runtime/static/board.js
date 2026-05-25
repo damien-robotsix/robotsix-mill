@@ -5,6 +5,7 @@ let costDashboardOpen=false;
 let costLookbackHours=24;
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 let activeMap={};
+let gatesCache={};                    // cached /gates response for open_() drawer ordering
 const ACTIVE_LABEL={
   refine: "refining…",
   implement: "implementing…",
@@ -31,6 +32,7 @@ function fmtRelative(iso){
 async function fetchGates() {
   const g = await jget("/gates");
   if (!g) return;
+  gatesCache = g;
   document.getElementById("gates").innerHTML = [
     { key: "auto_approve", label: "auto-approve", on: g.auto_approve,
       yaml: "gates.auto_approve_enabled",
@@ -43,7 +45,10 @@ async function fetchGates() {
       tip: "Auto-merge green PRs after review approves; when off, tickets stop at waiting_auto_merge" },
     { key: "require_approval", label: "require-approval", on: g.require_approval,
       yaml: "gates.require_approval",
-      tip: "Human approval gate on refine output; when off, tickets skip human_issue_approval" }
+      tip: "Human approval gate on refine output; when off, tickets skip human_issue_approval" },
+    { key: "comments_after_body", label: "comments-after-body", on: g.comments_after_body,
+      yaml: "gates.comments_after_body",
+      tip: "Comments render below description.md in ticket detail drawer" }
   ].map(p => `<span class="gate-pill ${p.on ? "gate-on" : "gate-off"}" title="${esc(p.yaml)} — ${esc(p.tip)}">${esc(p.label)} ${p.on ? "✓" : "✗"}</span>`).join("");
 }
 
@@ -681,12 +686,34 @@ async function open_(id){
    `<h3>History</h3>`+
    (h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}
      ${e.note?"<br>"+renderMD(e.note):""}</div>`).join("")+
-   `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
-   ((cs&&cs.length)?renderThreads(cs)
-                   :`<div class="muted" style="font-size:11px">No comments yet.</div>`)+
-   ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"")+
-   `<h3>description.md</h3><div class="md-body">${renderMD((d&&d.description)||"")}</div>`;
+   (gatesCache.comments_after_body ?
+     // Body first, then comments (body is collapsible)
+     `<h3>description.md <button class="toggle-body-btn" onclick="toggleBody(this)" style="font-size:11px;margin-left:8px">▲ Hide</button></h3>
+      <div class="md-body" id="ticket-body">${renderMD((d&&d.description)||"")}</div>`+
+     ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"")+
+     `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
+     ((cs&&cs.length)?renderThreads(cs)
+                     :`<div class="muted" style="font-size:11px">No comments yet.</div>`)
+   :
+     // Current behaviour: comments first, then body
+     `<h3>Comments <button class="add-comment-btn" onclick="addComment('${t.id}')">+ Add</button></h3>`+
+     ((cs&&cs.length)?renderThreads(cs)
+                     :`<div class="muted" style="font-size:11px">No comments yet.</div>`)+
+     ((rt&&rt.retrospect)?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"")+
+     `<h3>description.md</h3><div class="md-body">${renderMD((d&&d.description)||"")}</div>`
+   );
  document.getElementById("drawer").classList.add("open");
+}
+function toggleBody(btn) {
+  const body = document.getElementById("ticket-body");
+  if (!body) return;
+  if (body.style.display === "none") {
+    body.style.display = "";
+    btn.textContent = "▲ Hide";
+  } else {
+    body.style.display = "none";
+    btn.textContent = "▼ Show";
+  }
 }
 function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
  if(deepReviewPollTimer){clearInterval(deepReviewPollTimer);deepReviewPollTimer=null}
