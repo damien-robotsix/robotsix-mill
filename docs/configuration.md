@@ -258,6 +258,7 @@ Every setting below shows:
 | `service.api_host` | `MILL_API_HOST` | `127.0.0.1` | FastAPI listen address |
 | `service.api_port` | `MILL_API_PORT` | `8077` | FastAPI listen port |
 | `service.api_url` | `MILL_API_URL` | `http://127.0.0.1:8077` | Base URL the CLI client uses to reach the API |
+| `service.board_id` | `MILL_BOARD_ID` | `""` | Board identifier for per-repo ticket isolation; set automatically from `repos.yaml` at startup |
 
 ### 7. Approval & review
 
