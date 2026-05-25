@@ -777,6 +777,14 @@ def create_epic(
         board_id = repos.repos[repo_id].board_id
     elif len(repos.repos) == 1:
         board_id = next(iter(repos.repos.values())).board_id
+    else:
+        # Multi-repo mode with no repo_id: require it.
+        sorted_keys = sorted(repos.repos.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"repo_id is required when multiple repos are configured. "
+            f"Available repos: {sorted_keys}",
+        )
 
     try:
         ticket = svc.create(
