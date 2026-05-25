@@ -58,15 +58,20 @@ parallel:
 
 | Endpoint | What it returns |
 |---|---|
-| `GET /costs/by-agent?lookback_hours=N` | Per-agent-name cost bars (total cost + trace count) |
-| `GET /costs/most-expensive-ticket?lookback_hours=N` | The single ticket with the highest LLM spend in the window |
-| `GET /costs/most-expensive-trace?lookback_hours=N` | The single most expensive individual agent run (trace) in the window |
+| `GET /costs/by-agent?lookback_hours=N&repo_id=X` | Per-agent-name cost bars (total cost + trace count) |
+| `GET /costs/most-expensive-ticket?lookback_hours=N&repo_id=X` | The single ticket with the highest LLM spend in the window |
+| `GET /costs/most-expensive-trace?lookback_hours=N&repo_id=X` | The single most expensive individual agent run (trace) in the window |
 
 All three endpoints clamp `lookback_hours` to `[1, 168]` (same as the
 selector options). When tracing is disabled or no data exists, the
 most-expensive endpoints return `null` and the dashboard shows a muted
 "No data" placeholder — the per-agent bar chart continues to render
 independently.
+
+The optional `repo_id` query parameter scopes the query to a single
+repo's Langfuse project.  Use `repo_id=all` to aggregate across every
+registered repo.  When omitted in single-repo mode the sole repo is
+used; in multi-repo mode the parameter is required.
 
 ### Langfuse functions
 
