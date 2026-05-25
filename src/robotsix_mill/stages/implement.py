@@ -153,8 +153,7 @@ class ImplementStage(Stage):
                 persist_memory(settings.implement_memory_file, updated_memory)
 
             # Scope guardrail: verify every changed file is listed in the
-            # ticket's file_map.  _epic/ files are always exempt (shared
-            # across tickets).  Skip the check entirely when file_map is
+            # ticket's file_map.  Skip the check entirely when file_map is
             # absent or empty (graceful degradation).
             if file_map:
                 changed = git_ops.changed_files(
@@ -162,7 +161,7 @@ class ImplementStage(Stage):
                 )
                 out_of_scope = [
                     f for f in changed
-                    if f not in file_map and not f.startswith("_epic/")
+                    if f not in file_map
                 ]
                 if out_of_scope:
                     file_list = "\n".join(f"  - {f}" for f in out_of_scope)
