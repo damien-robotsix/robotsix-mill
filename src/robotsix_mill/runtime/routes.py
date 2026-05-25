@@ -254,22 +254,41 @@ def approve_mr(
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
-    """Approve a ticket in human_mr_approval, moving it to waiting_auto_merge.
+    """Human approves a ticket in human_mr_approval — merge the PR now.
 
-    The merge stage picks it up, polls CI, and auto-merges when green.
-    This is the human's explicit go-ahead for merge — it bypasses
-    auto-merge eligibility checks (the human is making the call).
+    Semantically identical to ``/merge-now``: the human is the
+    approval, so call the forge's merge endpoint directly instead of
+    transitioning to waiting_auto_merge (which would re-check the
+    reviewer's ``auto_merge_eligible`` flag and bounce back to
+    human_mr_approval whenever the reviewer set it false). The
+    docstring promised "bypasses auto-merge eligibility checks"; the
+    old implementation didn't.
     """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    if ticket.state is not State.HUMAN_MR_APPROVAL:
+        raise HTTPException(409, "ticket is not in human_mr_approval")
+
+    forge = get_forge(settings)
+    pr = forge.pr_status(source_branch=ticket.branch)
+    if pr is None:
+        raise HTTPException(409, "no PR found for branch — nothing to merge")
+    pr_url = pr.get("url", ticket.branch)
+
+    result = forge.merge_pr(source_branch=ticket.branch)
+    if not result["merged"]:
+        raise HTTPException(409, result["reason"])
+
     try:
         ticket = svc.transition(
-            ticket_id, State.WAITING_AUTO_MERGE, note="approved by human"
+            ticket_id,
+            State.DONE,
+            note=f"approved + merged by human: {pr_url}",
         )
-    except KeyError:
-        raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
 
-    maybe_enqueue(ticket, worker)  # merge stage polls immediately
     return enrich_ticket_read(ticket, settings, svc)
 
 
