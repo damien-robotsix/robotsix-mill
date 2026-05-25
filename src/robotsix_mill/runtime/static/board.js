@@ -120,7 +120,6 @@ async function refresh(){
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${t.retry_attempt>0?`<span class="retry-chip" title="${esc(t.last_transient_error||'')}">retry ${t.retry_attempt}${t.next_retry_at?` · next ${fmtRelative(t.next_retry_at)}`:''}</span>`:''}`+
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
    (s==="human_mr_approval"?
-    `<button class="approve-btn" onclick="event.stopPropagation();approveMR('${t.id}')">Approve</button>`+
     `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
@@ -133,10 +132,6 @@ async function refresh(){
 async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
-}
-async function approveMR(id){
- const r=await jpost("/tickets/"+id+"/approve-mr");
- if(!r.ok){const e=await r.text();alert("approve-mr failed: "+e)}else refresh()
 }
 async function mergePR(id){
  const r=await jpost("/tickets/"+id+"/merge-now");
