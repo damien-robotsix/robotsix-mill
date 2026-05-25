@@ -180,7 +180,7 @@ def test_board_renders_gate_pill_wiring(client):
     """The board JS includes gate-fetching and pill-rendering logic,
     and the CSS includes the gate-pill / gate-on / gate-off classes."""
     js = client.get("/static/board.js").text
-    assert 'jget("/gates")' in js
+    assert '"/gates"' in js
     assert "fetchGates" in js
     assert "gate-pill" in js
     assert "gate-on" in js
@@ -648,7 +648,7 @@ def test_board_html_includes_agent_check_button(client):
     assert "runAgentCheck()" in body
     js = client.get("/static/board.js").text
     assert "runAgentCheck" in js
-    assert 'jpost("/agent-check")' in js
+    assert '"/agent-check"' in js
 
 
 def test_board_has_last_reviews_panel(client):

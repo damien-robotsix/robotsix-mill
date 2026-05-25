@@ -228,6 +228,14 @@ text-transform:uppercase;letter-spacing:.04em}
   margin: 2px 0;
 }
 
+.repo-badge {
+  font-size: 10px;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+}
 .retry-now-btn {
   background: #f59e0b;
   color: #fff;

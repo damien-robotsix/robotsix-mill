@@ -8,6 +8,8 @@ let costMode='time';                 // 'time' | 'tickets'
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 let activeMap={};
 let gatesCache={};                    // cached /gates response for open_() drawer ordering
+let reposCache=null;                  // cached from GET /repos: [{repo_id, board_id}, …]
+let currentRepoId=null;               // current selection, resolved lazily from URL → localStorage → "all"
 const ACTIVE_LABEL={
   refine: "refining…",
   implement: "implementing…",
@@ -30,9 +32,51 @@ function fmtRelative(iso){
  if(m<60)return"in "+m+"m";
  return new Date(iso).toLocaleTimeString();
 }
+// -- repo selector -------------------------------------------------------
+function getRepoId(){
+  if(currentRepoId!==null)return currentRepoId;
+  const params=new URLSearchParams(window.location.search);
+  currentRepoId=params.get("repo")||localStorage.getItem("robotsix-mill:repo-id")||"all";
+  return currentRepoId;
+}
+function onRepoChange(value){
+  currentRepoId=value;
+  localStorage.setItem("robotsix-mill:repo-id",value);
+  const url=new URL(window.location);
+  if(value==="all")url.searchParams.delete("repo");
+  else url.searchParams.set("repo",value);
+  window.history.replaceState({},"",url);
+  refresh();
+}
+async function fetchRepos(){
+  if(reposCache)return reposCache;
+  const data=await jget("/repos");
+  reposCache=data||[];
+  const sel=document.getElementById("repo-selector");
+  if(!sel)return reposCache;
+  const cur=getRepoId();
+  if(reposCache.length<=1){
+    // Single repo: no "All" option.
+    sel.innerHTML=reposCache.map(r=>`<option value="${esc(r.repo_id)}">${esc(r.repo_id)}</option>`).join("");
+    if(reposCache.length===1)currentRepoId=reposCache[0].repo_id;
+    sel.value=currentRepoId;
+  } else {
+    sel.innerHTML='<option value="all">All repos</option>'+
+      reposCache.map(r=>`<option value="${esc(r.repo_id)}">${esc(r.repo_id)}</option>`).join("");
+    sel.value=cur==="all"||!reposCache.some(r=>r.repo_id===cur)?"all":cur;
+  }
+  return reposCache;
+}
+function repoIdForBoardId(boardId){
+  if(!reposCache||!boardId)return boardId;
+  const r=reposCache.find(r=>r.board_id===boardId);
+  return r?r.repo_id:boardId;
+}
 // -- gate pills (pipeline behaviour flags surfaced in the header) -----
 async function fetchGates() {
-  const g = await jget("/gates");
+  const repoId=getRepoId();
+  const gatesUrl=repoId!=="all"?"/gates?repo_id="+encodeURIComponent(repoId):"/gates";
+  const g = await jget(gatesUrl);
   if (!g) return;
   gatesCache = g;
   document.getElementById("gates").innerHTML = [
@@ -95,9 +139,13 @@ async function refresh(){
  // and the last response to land wins — making "show closed" flicker.)
  const wantClosed=showClosed;
  const tok=++refreshSeq;
- const url=wantClosed?"/tickets":"/tickets?include_closed=false";
+ await fetchRepos();
+ const repoId=getRepoId();
+ const ticketsBase=repoId!=="all"?"/tickets?repo_id="+encodeURIComponent(repoId):"/tickets";
+ const url=wantClosed?ticketsBase:(ticketsBase+(ticketsBase.includes("?")?"&":"?")+"include_closed=false");
+ const activeUrl=repoId!=="all"?"/active?repo_id="+encodeURIComponent(repoId):"/active";
  fetchGates();
- const [ts, activeList]=await Promise.all([jget(url), jget("/active")]);
+ const [ts, activeList]=await Promise.all([jget(url), jget(activeUrl)]);
  if(!ts)return;
  const active={};
  if(activeList) activeList.forEach(a=>{ active[a.ticket_id]=a; });
@@ -121,6 +169,7 @@ async function refresh(){
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <button class="del-btn" title="Delete ticket" onclick="event.stopPropagation();del_('${t.id}')">✕</button>
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
+   ${repoId==="all"&&t.board_id?`<span class="repo-badge">${esc(repoIdForBoardId(t.board_id))}</span>`:""}
    ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
    ${t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:""}
    ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:""}
@@ -246,6 +295,13 @@ async function newTicket(){
  backdrop.className="modal-backdrop";
  const modal=document.createElement("div");
  modal.className="modal";
+ const repoId=getRepoId();
+ const repoField=repoId==="all"
+  ? `<label class="modal-label">Repo <span class="modal-req">*</span></label>
+     <select class="modal-input" id="modal-repo" style="width:100%">
+       ${(reposCache||[]).map(r=>`<option value="${esc(r.repo_id)}">${esc(r.repo_id)}</option>`).join("")}
+     </select>`
+  : `<input type="hidden" id="modal-repo" value="${esc(repoId)}">`;
  modal.innerHTML=
   `<h2>New Ticket</h2>
    <label class="modal-label">Title <span class="modal-req">*</span></label>
@@ -253,6 +309,8 @@ async function newTicket(){
    <div class="modal-field-error" id="modal-title-err"></div>
    <label class="modal-label">Description</label>
    <textarea class="modal-textarea" id="modal-desc" rows="8" placeholder="Rough idea, context, constraints… (optional)"></textarea>
+   ${repoField}
+   <div class="modal-field-error" id="modal-repo-err"></div>
    <div class="modal-buttons">
     <span class="modal-submit-error" id="modal-submit-err"></span>
     <button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>
@@ -281,7 +339,7 @@ async function newTicket(){
   if(!title){showTitleErr("Title is required");titleEl.focus();return}
   clearTitleErr();clearSubmitErr();
   createBtn.disabled=true;createBtn.textContent="Creating…";
-  const r=await jpost("/tickets",{title:title,description:descEl.value});
+  const r=await jpost("/tickets",{title:title,description:descEl.value,repo_id:document.getElementById("modal-repo").value});
   if(!r.ok){const e=await r.text();showSubmitErr("create failed: "+e);
    createBtn.disabled=false;createBtn.textContent="Create"}
   else{close();refresh()}
@@ -312,6 +370,13 @@ async function newInquiry(){
  backdrop.className="modal-backdrop";
  const modal=document.createElement("div");
  modal.className="modal";
+ const repoId=getRepoId();
+ const repoField=repoId==="all"
+  ? `<label class="modal-label">Repo <span class="modal-req">*</span></label>
+     <select class="modal-input" id="modal-repo" style="width:100%">
+       ${(reposCache||[]).map(r=>`<option value="${esc(r.repo_id)}">${esc(r.repo_id)}</option>`).join("")}
+     </select>`
+  : `<input type="hidden" id="modal-repo" value="${esc(repoId)}">`;
  modal.innerHTML=
   `<h2>New Inquiry</h2>
    <label class="modal-label">Question / investigation prompt <span class="modal-req">*</span></label>
@@ -319,6 +384,8 @@ async function newInquiry(){
    <div class="modal-field-error" id="modal-title-err"></div>
    <label class="modal-label">Context / background</label>
    <textarea class="modal-textarea" id="modal-desc" rows="8" placeholder="Rough idea, context, constraints… (optional)"></textarea>
+   ${repoField}
+   <div class="modal-field-error" id="modal-repo-err"></div>
    <div class="modal-buttons">
     <span class="modal-submit-error" id="modal-submit-err"></span>
     <button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>
@@ -347,7 +414,7 @@ async function newInquiry(){
   if(!title){showTitleErr("Question is required");titleEl.focus();return}
   clearTitleErr();clearSubmitErr();
   createBtn.disabled=true;createBtn.textContent="Creating…";
-  const r=await jpost("/tickets",{title:title,description:descEl.value,kind:"inquiry"});
+  const r=await jpost("/tickets",{title:title,description:descEl.value,kind:"inquiry",repo_id:document.getElementById("modal-repo").value});
   if(!r.ok){const e=await r.text();showSubmitErr("create failed: "+e);
    createBtn.disabled=false;createBtn.textContent="Create"}
   else{close();refresh()}
@@ -524,7 +591,9 @@ async function runAudit(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await jpost("/audit");
+   const repoId=getRepoId();
+   const auditUrl=repoId!=="all"?"/audit?repo_id="+encodeURIComponent(repoId):"/audit";
+   const r=await jpost(auditUrl);
    if(!r.ok){throw new Error(await r.text())}
    alert("Audit started — it runs for a few minutes; new draft tickets will appear on the board when it finishes.");
    setTimeout(refresh,4000);
@@ -538,7 +607,9 @@ async function runTraceHealth(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await jpost("/trace-health");
+   const repoId=getRepoId();
+   const thUrl=repoId!=="all"?"/trace-health?repo_id="+encodeURIComponent(repoId):"/trace-health";
+   const r=await jpost(thUrl);
    if(!r.ok){throw new Error(await r.text())}
    alert("Trace-health check started — new draft tickets will appear on the board if unsessioned traces are found.");
    setTimeout(refresh,3000);
@@ -552,7 +623,9 @@ async function runHealth(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await jpost("/health-check");
+   const repoId=getRepoId();
+   const hUrl=repoId!=="all"?"/health-check?repo_id="+encodeURIComponent(repoId):"/health-check";
+   const r=await jpost(hUrl);
    if(!r.ok){throw new Error(await r.text())}
    alert("Health check started — new draft tickets will appear on the board if issues are found.");
    setTimeout(refresh,3000);
@@ -566,7 +639,9 @@ async function runTestGap(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await jpost("/test-gap");
+   const repoId=getRepoId();
+   const tgUrl=repoId!=="all"?"/test-gap?repo_id="+encodeURIComponent(repoId):"/test-gap";
+   const r=await jpost(tgUrl);
    if(!r.ok){throw new Error(await r.text())}
    alert("Test-gap inspection started — new draft tickets will appear on the board if gaps are found.");
    setTimeout(refresh,3000);
@@ -580,7 +655,9 @@ async function runAgentCheck(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await jpost("/agent-check");
+   const repoId=getRepoId();
+   const acUrl=repoId!=="all"?"/agent-check?repo_id="+encodeURIComponent(repoId):"/agent-check";
+   const r=await jpost(acUrl);
    if(!r.ok){throw new Error(await r.text())}
    alert("Agent-check started — it inspects every agent's prompt/tools for coherence gaps. New draft tickets appear on the board when it finishes.");
    setTimeout(refresh,4000);
@@ -594,7 +671,9 @@ async function runSurvey(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await jpost("/survey");
+   const repoId=getRepoId();
+   const sUrl=repoId!=="all"?"/survey?repo_id="+encodeURIComponent(repoId):"/survey";
+   const r=await jpost(sUrl);
    if(!r.ok){throw new Error(await r.text())}
    alert("Survey started — it discovers similar OSS projects and proposes improvements. New draft tickets appear on the board when it finishes.");
    setTimeout(refresh,4000);
@@ -608,7 +687,9 @@ async function runBcCheck(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await jpost("/bc-check");
+   const repoId=getRepoId();
+   const bcUrl=repoId!=="all"?"/bc-check?repo_id="+encodeURIComponent(repoId):"/bc-check";
+   const r=await jpost(bcUrl);
    if(!r.ok){throw new Error(await r.text())}
    alert("BC-check started — it scans for backward-compat shims and dead-code branches ripe for removal. New draft tickets appear on the board when it finishes.");
    setTimeout(refresh,4000);
@@ -622,7 +703,9 @@ async function runCompletenessCheck(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
-   const r=await jpost("/completeness-check");
+   const repoId=getRepoId();
+   const ccUrl=repoId!=="all"?"/completeness-check?repo_id="+encodeURIComponent(repoId):"/completeness-check";
+   const r=await jpost(ccUrl);
    if(!r.ok){throw new Error(await r.text())}
    alert("Completeness-check started — it scans for half-wired features and files draft tickets for discovered gaps. New drafts appear on the board when it finishes.");
    setTimeout(refresh,4000);
@@ -722,7 +805,9 @@ function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
  deepReviewOpen=false;deepReviewTraceId=null;deepReviewFindings=[];
  document.getElementById("drawer").classList.remove("open")}
 async function renderRuns(){
- const rs=await jget("/runs");
+ const repoId=getRepoId();
+ const runsUrl=repoId!=="all"?"/runs?repo_id="+encodeURIComponent(repoId):"/runs";
+ const rs=await jget(runsUrl);
  document.getElementById("d").innerHTML=rs&&rs.length?
   rs.map(r=>{
    const s=Date.parse(r.started_at);
@@ -768,7 +853,10 @@ async function renderCostDashboard(){
  const selTimeOpt=lookback=>lookback==costLookbackHours?' selected':'';
  const selTickOpt=n=>n==costMaxTickets?' selected':'';
  const timeModeActive=costMode==='time';
- document.getElementById("d").innerHTML='<h3>💰 Cost Dashboard</h3>'+
+ const repoId=getRepoId();
+ const hoursLabel=costLookbackHours===1?"1 hour":costLookbackHours+" hours";
+ const repoLabel=repoId==="all"?"Costs across all repos (last "+hoursLabel+")":"Costs for "+esc(repoId)+" (last "+hoursLabel+")";
+ document.getElementById("d").innerHTML='<h3>💰 Cost Dashboard <span class="muted" style="font-size:11px;font-weight:normal">— '+repoLabel+'</span></h3>'+
   '<div class="cost-lookback">'+
    '<div class="cost-mode-toggle">'+
     '<button class="cost-mode-btn'+(timeModeActive?' active':'')+'" onclick="costMode=\'time\';renderCostDashboard()">⏱️ Time window</button>'+
@@ -793,7 +881,7 @@ async function renderCostDashboard(){
   '<div id="cost-chart">loading…</div>'+
   '<div id="cost-highlights"></div>';
 
- const extraParam=timeModeActive?('lookback_hours='+costLookbackHours):('max_tickets='+costMaxTickets);
+ const extraParam=(timeModeActive?('lookback_hours='+costLookbackHours):('max_tickets='+costMaxTickets))+'&repo_id='+(repoId==="all"?"all":encodeURIComponent(repoId));
  const trendUrl="/costs/trend?"+extraParam;
  const baseUrl="/costs/by-agent?"+extraParam;
  const ticketUrl="/costs/most-expensive-ticket?"+extraParam;
