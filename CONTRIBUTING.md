@@ -185,8 +185,9 @@ Tests live in `tests/` and mirror the source tree
 - `fake_sandbox` — monkeypatches `sandbox.run` and `sandbox.fetch` with
   a tiny shell interpreter (supports `echo`, `false`, `true`). No
   Docker needed for tests.
-- `_no_dotenv` (autouse) — blocks `.env` and `secrets.env` leakage into tests
-  (legacy compat; the fixture also prevents accidental YAML config reads).
+- `_no_dotenv` (autouse) — clears all ambient credential/endpoint env vars
+  so tests stay hermetic (``Settings`` reads only ``os.environ`` and
+  ``config/*.yaml``; ``.env``/``secrets.env`` are no longer loaded).
 - `settings` — inits an isolated SQLite DB in `tmp_path` with
   `MILL_REQUIRE_APPROVAL=false`.
 - `service` — a `TicketService` bound to the test settings.
