@@ -16,9 +16,24 @@ it was blocked *from* is recorded. You can recover in two ways:
 
   Use the generic transition endpoint or the board.
 
+- **Mark as done** (abandon the ticket from any non-terminal state):
+  ```sh
+  robotsix-mill ticket mark-done <id> --note "abandoned: no longer needed"
+  ```
+  or via API:
+  ```
+  POST /tickets/{id}/mark-done  {"note": "abandoned: no longer needed"}
+  ```
+  Transitions *any* non-terminal ticket directly to `DONE`, bypassing
+  the state machine's `can_transition()` rules.  This is an escape
+  hatch for stuck tickets (BLOCKED, ERRORED, etc.) or tickets that
+  don't need the full pipeline.  Terminal states (DONE, CLOSED,
+  ANSWERED, EPIC_CLOSED, EPIC_OPEN) are rejected with 409.
+
 No raw database editing is ever needed to recover a blocked ticket.
 
-Implemented in `service.py:resume_blocked` and `states.py:TRANSITIONS`.
+Implemented in `service.py:resume_blocked`, `service.py:mark_done`,
+and `states.py:TRANSITIONS`.
 
 ## See also
 

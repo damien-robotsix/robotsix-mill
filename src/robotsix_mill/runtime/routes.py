@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from ..core.models import (
@@ -325,6 +325,31 @@ def redraft(
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc)}
+
+
+@router.post("/tickets/{ticket_id}/mark-done")
+def mark_done(
+    ticket_id: str,
+    body: dict = Body({}),
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Mark a ticket as DONE from any non-terminal state.
+
+    Accepts an optional ``note`` in the JSON body that is recorded
+    as the event note.  Returns the updated ticket on success, 404
+    when the ticket is unknown, and 409 when the ticket is already in
+    a terminal state or an epic.
+    """
+    try:
+        raw_note = body.get("note", "")
+        note = str(raw_note) if raw_note else ""
+        comment, ticket = svc.mark_done(ticket_id, note=note)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    except TransitionError as e:
+        raise HTTPException(409, str(e)) from None
+    return enrich_ticket_read(ticket, settings, svc)
 
 
 @router.post("/epics", response_model=TicketRead, status_code=201)

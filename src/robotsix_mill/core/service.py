@@ -723,3 +723,49 @@ class TicketService:
                 s.refresh(comment)
             s.refresh(ticket)
             return comment, ticket
+
+    def mark_done(
+        self, ticket_id: str, note: str = "", author: str = "user"
+    ) -> tuple[Comment | None, Ticket]:
+        """Mark a ticket as DONE from any non-terminal state.
+
+        This is an escape hatch that bypasses ``can_transition()`` —
+        similar to ``redraft()`` and ``request_changes()``.  Terminal
+        states (DONE, CLOSED, ANSWERED, EPIC_CLOSED) and EPIC_OPEN are
+        rejected.
+
+        Returns ``(Comment | None, Ticket)``.  Raises ``KeyError`` if
+        the ticket does not exist, ``TransitionError`` if the state is
+        not eligible.
+        """
+        _NON_MARK_DONEABLE: set[State] = {
+            State.DONE, State.CLOSED, State.ANSWERED,
+            State.EPIC_CLOSED, State.EPIC_OPEN,
+        }
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            if ticket.state in _NON_MARK_DONEABLE:
+                raise TransitionError(
+                    f"{ticket_id}: cannot mark done — "
+                    f"state {ticket.state} is not eligible for mark-done"
+                )
+            comment = None
+            if note.strip():
+                comment = Comment(ticket_id=ticket_id, body=note, author=author)
+                s.add(comment)
+            event_note = f"mark done: {note}" if note else "mark done"
+            ticket.state = State.DONE
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.add(
+                TicketEvent(
+                    ticket_id=ticket_id, state=State.DONE, note=event_note
+                )
+            )
+            s.commit()
+            if comment is not None:
+                s.refresh(comment)
+            s.refresh(ticket)
+            return comment, ticket

@@ -663,3 +663,71 @@ def test_all_descendants_is_cycle_safe(service):
     assert len(result) == 1
     assert result[0].id == "cyc-B"
 
+
+# -- mark_done ----------------------------------------------------------
+
+
+def test_mark_done_from_draft(service):
+    """mark_done transitions a DRAFT ticket to DONE and records a
+    TicketEvent."""
+    t = service.create("mark me done")
+    comment, ticket = service.mark_done(t.id)
+    assert comment is None
+    assert ticket.state is State.DONE
+    hist = service.history(t.id)
+    assert hist[-1].state is State.DONE
+    assert hist[-1].note == "mark done"
+
+
+def test_mark_done_from_blocked(service):
+    """mark_done transitions a BLOCKED ticket to DONE."""
+    t = service.create("blocked mark done")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck")
+    comment, ticket = service.mark_done(t.id)
+    assert comment is None
+    assert ticket.state is State.DONE
+
+
+def test_mark_done_with_note_creates_comment(service):
+    """A non-empty note creates a Comment alongside the event."""
+    t = service.create("with note")
+    comment, ticket = service.mark_done(t.id, note="done manually")
+    assert comment is not None
+    assert comment.body == "done manually"
+    assert ticket.state is State.DONE
+    hist = service.history(t.id)
+    assert hist[-1].note == "mark done: done manually"
+
+
+def test_mark_done_rejects_terminal(service):
+    """mark_done raises TransitionError for CLOSED (terminal)."""
+    t = service.create("closed ticket")
+    # walk to CLOSED
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.DELIVERABLE)
+    service.transition(t.id, State.HUMAN_MR_APPROVAL)
+    service.transition(t.id, State.DONE)
+    service.transition(t.id, State.CLOSED)
+    with pytest.raises(TransitionError):
+        service.mark_done(t.id)
+
+
+def test_mark_done_rejects_already_done(service):
+    """mark_done raises TransitionError for DONE tickets."""
+    t = service.create("already done")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.DELIVERABLE)
+    service.transition(t.id, State.HUMAN_MR_APPROVAL)
+    service.transition(t.id, State.DONE)
+    with pytest.raises(TransitionError):
+        service.mark_done(t.id)
+
+
+def test_mark_done_rejects_epic_open(service):
+    """mark_done raises TransitionError for EPIC_OPEN tickets."""
+    t = service.create("epic open", kind="epic")
+    assert t.state is State.EPIC_OPEN
+    with pytest.raises(TransitionError):
+        service.mark_done(t.id)
+
