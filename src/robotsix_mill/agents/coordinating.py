@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 
 from ..config import Settings
 
@@ -29,14 +29,7 @@ class ImplementResult(BaseModel):
 
     summary: str
     updated_memory: str = ""
-    reference_files: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Relative paths from the repo root that a follow-up pass on "
-            "this ticket should start with read_file outputs already "
-            "loaded for."
-        ),
-    )
+    reference_files: list[str] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -176,11 +169,7 @@ def run_coordinator(
     which is appended to the prompt as a ``<test_failure>`` block. The
     partial edits from earlier passes persist on disk in ``repo_dir``,
     so a retry continues from the current working tree. The seam tests
-    monkeypatch this.
-
-    ``previous_attempt_summary`` — the coordinator's summary from a
-    prior pass, injected as a ``<previous_attempt>`` block on retries
-    so the model doesn't undo its prior correct work."""
+    monkeypatch this."""
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
@@ -195,30 +184,25 @@ def run_coordinator(
     )
 
     # Pre-seed fs_tools cache and build synthetic message_history when
-    # reference files are provided. Content is always re-read fresh from
-    # disk at prompt-prep time — never trusted from the artifact.
+    # reference files are provided (first invocation only, not a retry).
     pre_seeded: dict[str, str] | None = None
     final_message_history: list | None = message_history
 
     if reference_files and message_history is None:
+        # Build pre_seeded mapping for _file_cache seeding (resolved Paths).
+        # Read fresh from disk every time — the artifact is paths-only.
         pre_seeded = {}
         for rf in reference_files:
             file_path = repo_dir / rf["path"]
-            if not file_path.exists():
+            try:
+                pre_seeded[file_path.resolve()] = file_path.read_text(
+                    encoding="utf-8", errors="replace",
+                )
+            except OSError:
                 log.warning(
                     "reference_files: %s not found on disk, skipping",
                     rf["path"],
                 )
-                continue
-            try:
-                content = file_path.read_text(encoding="utf-8", errors="replace")
-            except (OSError, UnicodeDecodeError) as e:
-                log.warning(
-                    "reference_files: cannot read %s, skipping: %s",
-                    rf["path"], e,
-                )
-                continue
-            pre_seeded[file_path.resolve()] = content
 
     extra_roots: list[Path] | None = None
 
@@ -232,11 +216,8 @@ def run_coordinator(
         ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
     ]
 
-    # Build synthetic message_history from reference_files.  Injected
-    # whenever reference_files is present and the caller didn't supply
-    # an explicit message_history — not only on first pass.  Synthetic
-    # history is just preloaded read_file outputs; it doesn't carry the
-    # model's prior reasoning, commitments, or rejected hypotheses.
+    # Build synthetic message_history when reference files are provided
+    # and the caller hasn't supplied an explicit message_history.
     # NOTE: do NOT inject a TextPart-wrapped system prompt as the first
     # message — TextPart is only valid in ModelResponse.parts. Placing
     # it in a ModelRequest triggers pydantic-ai's "Expected code to be
@@ -251,18 +232,15 @@ def run_coordinator(
         synthetic: list = []
         for rf in reference_files:
             file_path = repo_dir / rf["path"]
-            if not file_path.exists():
-                log.warning(
-                    "reference_files: %s not found on disk, skipping",
-                    rf["path"],
-                )
-                continue
             try:
-                content = file_path.read_text(encoding="utf-8", errors="replace")
-            except (OSError, UnicodeDecodeError) as e:
+                content = file_path.read_text(
+                    encoding="utf-8", errors="replace",
+                )
+            except OSError:
                 log.warning(
-                    "reference_files: cannot read %s, skipping: %s",
-                    rf["path"], e,
+                    "reference_files: %s not found on disk, "
+                    "omitting from synthetic history",
+                    rf["path"],
                 )
                 continue
             tc_id = f"preload_{rf['path']}"
@@ -306,6 +284,16 @@ def run_coordinator(
             f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
         )
         if feedback:
+            if previous_attempt_summary:
+                # Inject prior summary before the feedback block so the
+                # model doesn't undo its prior correct work.
+                user_prompt = (
+                    "<previous_attempt>\n"
+                    "Your previous edit pass produced this summary "
+                    "(already on disk):\n"
+                    f"{previous_attempt_summary}\n"
+                    "</previous_attempt>\n\n"
+                ) + user_prompt
             if feedback.startswith("[REVIEW"):
                 # Review feedback — prepend to the spec so the coordinator
                 # addresses the flagged issues first.
@@ -336,20 +324,6 @@ def run_coordinator(
                     "</test_failure>\n\n"
                     "Fix exactly this failure and stop."
                 )
-
-        # Inject prior-attempt summary so the model doesn't undo its
-        # previous correct work. Placed before feedback blocks so the
-        # summary is context, not instruction — the retry directive
-        # (review_feedback / test_failure) still takes priority.
-        if feedback and previous_attempt_summary:
-            user_prompt = (
-                "<previous_attempt>\n"
-                "Your previous edit pass produced this summary "
-                "(already on disk):\n"
-                f"{previous_attempt_summary}\n"
-                "</previous_attempt>\n\n"
-            ) + user_prompt
-
         result = call_with_retry(
             lambda: agent.run_sync(
                 user_prompt,

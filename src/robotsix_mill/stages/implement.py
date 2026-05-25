@@ -99,11 +99,6 @@ class ImplementStage(Stage):
         if ref_files_path.exists():
             reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
 
-        # Load the previous attempt summary (if available from a prior
-        # pass). Threaded through to run_coordinator so the retry prompt
-        # includes a <previous_attempt> block.
-        prev_summary: str | None = None
-
         # Load the ticket's file scope map (which files are in-scope).
         # Three cases:
         #   - file_map.json missing entirely → refine never ran or
@@ -144,34 +139,32 @@ class ImplementStage(Stage):
                 )
                 feedback = review_feedback
 
-        for attempt in range(1, max_iters + 1):
-            # On retry: reload reference_files from the previous pass's
-            # artifact so the next coordinator gets fresh curated paths.
-            if attempt > 1:
-                if ref_files_path.exists():
-                    reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
-                # Load previous attempt summary for the <previous_attempt>
-                # prompt block.
-                summary_path = ws.artifacts_dir / "implement_summary.md"
-                if summary_path.exists():
-                    prev_summary = summary_path.read_text(encoding="utf-8").strip()
+        # Load prior summary for <previous_attempt> injection on retries.
+        previous_attempt_summary: str | None = None
+        summary_path = ws.artifacts_dir / "implement_summary.md"
+        if summary_path.exists():
+            try:
+                previous_attempt_summary = summary_path.read_text(
+                    encoding="utf-8",
+                ).strip()
+            except OSError:
+                log.warning(
+                    "%s: failed to read implement_summary.md", ticket.id,
+                    exc_info=True,
+                )
 
-            summary = ""
-            ref_files: list[str] = []  # default in case agent raises before returning
+        for attempt in range(1, max_iters + 1):
             try:
                 summary, ref_files, updated_memory = coding.run_implement_agent(
                     settings=settings, repo_dir=repo_dir, spec=spec,
                     feedback=feedback, memory=memory_text,
                     reference_files=reference_files,
-                    previous_attempt_summary=prev_summary,
+                    previous_attempt_summary=previous_attempt_summary,
                 )
             except AgentBudgetError as e:
                 ImplementStage._finalize(
                     ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
                     ok=False,
-                )
-                ImplementStage._persist_pass_artifacts(
-                    ws.artifacts_dir, summary, ref_files,
                 )
                 return Outcome(
                     State.BLOCKED,
@@ -182,9 +175,6 @@ class ImplementStage(Stage):
                     ctx, ticket, repo_dir, branch, f"agent error: {e}",
                     ok=False,
                 )
-                ImplementStage._persist_pass_artifacts(
-                    ws.artifacts_dir, summary, ref_files,
-                )
                 return Outcome(
                     State.BLOCKED, f"agent error — resumable: {e}"
                 )
@@ -194,11 +184,33 @@ class ImplementStage(Stage):
             if updated_memory:
                 persist_memory(settings.implement_memory_file, updated_memory)
 
-            # Persist pass artifacts so retries and BLOCKED resumes
-            # benefit from the agent-curated file list + summary.
-            ImplementStage._persist_pass_artifacts(
-                ws.artifacts_dir, summary, ref_files,
-            )
+            # Update reference_files from the agent's curated list for
+            # the next retry iteration (and persist to disk for
+            # BLOCKED-resume). Overwrites refine's artifact.
+            if ref_files:
+                reference_files = [{"path": p} for p in ref_files]
+                try:
+                    ref_path = ws.artifacts_dir / "reference_files.json"
+                    ref_path.write_text(
+                        json.dumps(reference_files, indent=2),
+                        encoding="utf-8",
+                    )
+                except OSError:
+                    log.warning(
+                        "%s: failed to write reference_files.json",
+                        ticket.id, exc_info=True,
+                    )
+            # Persist summary for <previous_attempt> injection on retry.
+            try:
+                (ws.artifacts_dir / "implement_summary.md").write_text(
+                    summary, encoding="utf-8",
+                )
+                previous_attempt_summary = summary
+            except OSError:
+                log.warning(
+                    "%s: failed to write implement_summary.md",
+                    ticket.id, exc_info=True,
+                )
 
             # Scope guardrail: verify every changed file is listed in the
             # ticket's file_map.  file_map may be None; scope check is
@@ -265,7 +277,7 @@ class ImplementStage(Stage):
                                 "\n".join(f"- `{f}`" for f in out_of_scope),
                                 author="scope-triage",
                             )
-                            ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
+                            ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False, reference_files=ref_files)
                             return Outcome(State.READY,
                                 f"scope-triage REJECT: {verdict.justification[:120]}")
 
@@ -282,12 +294,13 @@ class ImplementStage(Stage):
                             "\n".join(f"- `{f}`" for f in out_of_scope),
                             author="scope-triage",
                         )
-                        ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False)
+                        ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False, reference_files=ref_files)
                         return Outcome(State.BLOCKED, reason)
 
                     # scope_triage_enabled is False — existing behaviour.
                     ImplementStage._finalize(
                         ctx, ticket, repo_dir, branch, summary, ok=False,
+                        reference_files=ref_files,
                     )
                     return Outcome(
                         State.BLOCKED,
@@ -311,7 +324,8 @@ class ImplementStage(Stage):
                 # Infra failure — not the code's fault; don't burn
                 # iterations retrying against a broken sandbox.
                 ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, summary, ok=False
+                    ctx, ticket, repo_dir, branch, summary, ok=False,
+                    reference_files=ref_files,
                 )
                 return Outcome(State.BLOCKED, diag)
 
@@ -324,7 +338,8 @@ class ImplementStage(Stage):
                 if not git_ops.has_changes(repo_dir) and not resuming:
                     return Outcome(State.BLOCKED, "no changes produced")
                 ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, summary, ok=True
+                    ctx, ticket, repo_dir, branch, summary, ok=True,
+                    reference_files=ref_files,
                 )
                 next_state = (
                     State.CODE_REVIEW
@@ -337,7 +352,8 @@ class ImplementStage(Stage):
 
             if decision.next_action == "escalate":
                 ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, summary, ok=False
+                    ctx, ticket, repo_dir, branch, summary, ok=False,
+                    reference_files=ref_files,
                 )
                 return Outcome(
                     State.BLOCKED,
@@ -351,63 +367,54 @@ class ImplementStage(Stage):
         # The escalate branch fires on the final attempt, so the loop
         # always returns above. This is a defensive fallback.
         ImplementStage._finalize(
-            ctx, ticket, repo_dir, branch, summary, ok=False
+            ctx, ticket, repo_dir, branch, summary, ok=False,
+            reference_files=ref_files,
         )
         return Outcome(
             State.BLOCKED, "implement loop exhausted — resumable"
         )
 
     @staticmethod
-    def _finalize(ctx, ticket, repo_dir, branch, summary, *, ok: bool) -> None:
+    def _finalize(ctx, ticket, repo_dir, branch, summary, *,
+                  ok: bool, reference_files: list[str] | None = None) -> None:
         ws = ctx.service.workspace(ticket)
         (ws.artifacts_dir / "implement.md").write_text(
             f"# Implement ({'passed' if ok else 'BLOCKED — resumable'})\n"
             f"branch: {branch}\n\n{summary}\n",
             encoding="utf-8",
         )
+        # Persist agent-curated reference_files (paths-only) for retry
+        # pre-seeding. Overwrite refine's version unconditionally.
+        try:
+            ref_path = ws.artifacts_dir / "reference_files.json"
+            ref_path.write_text(
+                json.dumps(
+                    [{"path": p} for p in (reference_files or [])],
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except OSError:
+            log.warning(
+                "%s: failed to write reference_files.json", ticket.id,
+                exc_info=True,
+            )
+        # Persist the summary as a standalone artifact for
+        # `<previous_attempt>` injection on retry.
+        try:
+            (ws.artifacts_dir / "implement_summary.md").write_text(
+                summary, encoding="utf-8",
+            )
+        except OSError:
+            log.warning(
+                "%s: failed to write implement_summary.md", ticket.id,
+                exc_info=True,
+            )
         if git_ops.has_changes(repo_dir):
             git_ops.commit_all(
                 repo_dir,
                 f"mill: {ticket.title} ({ticket.id})"
                 + ("" if ok else " [WIP]"),
-            )
-
-    @staticmethod
-    def _persist_pass_artifacts(
-        artifacts_dir: Path,
-        summary: str,
-        reference_files: list[str],
-    ) -> None:
-        """Write per-pass artifacts so retries and BLOCKED resumes
-        benefit from the agent-curated file list + summary.
-
-        Best-effort: failures are logged at WARNING and never abort
-        the implement loop.
-        """
-        # implement_summary.md — standalone summary for <previous_attempt>
-        # prompt block injection on the next pass.
-        try:
-            (artifacts_dir / "implement_summary.md").write_text(
-                summary, encoding="utf-8",
-            )
-        except (OSError, UnicodeEncodeError) as e:
-            log.warning(
-                "implement_summary.md write failed: %s", e,
-            )
-
-        # reference_files.json — paths-only, agent-curated. Overwrites
-        # refine's version unconditionally.
-        try:
-            (artifacts_dir / "reference_files.json").write_text(
-                json.dumps(
-                    [{"path": p} for p in reference_files],
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-        except (OSError, UnicodeEncodeError) as e:
-            log.warning(
-                "reference_files.json write failed: %s", e,
             )
 
     @staticmethod
