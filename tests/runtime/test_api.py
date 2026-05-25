@@ -1572,3 +1572,149 @@ def test_board_js_references_cumulative_cost(client):
     badge and drawer rendering."""
     js = client.get("/static/board.js").text
     assert "cumulative_cost" in js
+
+
+# ---------------------------------------------------------------------------
+# merge-now / merge-reason tests
+# ---------------------------------------------------------------------------
+
+
+class _FakeForge:
+    """Minimal forge stub for merge-now endpoint tests."""
+
+    _UNSET = object()
+
+    def __init__(self, merge_result=_UNSET, pr_status_result=_UNSET):
+        if merge_result is self._UNSET:
+            merge_result = {"merged": True, "reason": "merged"}
+        if pr_status_result is self._UNSET:
+            pr_status_result = {
+                "url": "https://github.com/test/pr/1",
+                "merged": False,
+                "state": "open",
+                "mergeable": True,
+            }
+        self._merge_result = merge_result
+        self._pr_status_result = pr_status_result
+        self.merge_calls: list[dict] = []
+        self.pr_status_calls: list[dict] = []
+
+    def merge_pr(self, *, source_branch: str) -> dict:
+        self.merge_calls.append({"source_branch": source_branch})
+        return self._merge_result
+
+    def pr_status(self, *, source_branch: str) -> dict | None:
+        self.pr_status_calls.append({"source_branch": source_branch})
+        return self._pr_status_result
+
+
+def _patch_forge(monkeypatch, fake_forge):
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes.get_forge",
+        lambda s: fake_forge,
+    )
+
+
+def test_merge_now_happy_path(client, service, monkeypatch):
+    """POST /tickets/{id}/merge-now on human_mr_approval merges and
+    transitions to done."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = service.create("Merge me please")
+    service.transition(t.id, State.READY, note="approved (autonomous)")
+    service.transition(t.id, State.DELIVERABLE, note="delivered")
+    service.transition(t.id, State.HUMAN_MR_APPROVAL, note="awaiting merge")
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+    data = r.json()
+    assert data["id"] == t.id
+    assert data["state"] == "done"
+
+    # Verify the forge was called with the right branch.
+    assert len(fake.merge_calls) == 1
+    assert fake.merge_calls[0]["source_branch"] == t.branch
+
+    # Verify the history contains the merge note.
+    history = service.history(t.id)
+    notes = " ".join(e.note or "" for e in history)
+    assert "merged via board" in notes
+
+
+def test_merge_now_wrong_state_409(client, service, monkeypatch):
+    """POST /tickets/{id}/merge-now on a non-human_mr_approval ticket
+    returns 409."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = service.create("Ready ticket")
+    service.transition(t.id, State.READY, note="approved (autonomous)")
+    assert service.get(t.id).state is State.READY
+
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 409
+    assert "not in human_mr_approval" in r.text.lower()
+
+    # Forge should never have been called.
+    assert len(fake.merge_calls) == 0
+
+
+def test_merge_now_missing_ticket_404(client, monkeypatch):
+    """POST /tickets/{id}/merge-now with a bogus id returns 404."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+    r = client.post("/tickets/nonexistent/merge-now")
+    assert r.status_code == 404
+
+
+def test_merge_now_forge_rejection_409(client, service, monkeypatch):
+    """POST /tickets/{id}/merge-now when the forge rejects returns 409
+    and leaves the ticket state unchanged."""
+    fake = _FakeForge(
+        merge_result={"merged": False, "reason": "branch protection rules"},
+    )
+    _patch_forge(monkeypatch, fake)
+
+    t = service.create("Blocked merge")
+    service.transition(t.id, State.READY, note="approved (autonomous)")
+    service.transition(t.id, State.DELIVERABLE, note="delivered")
+    service.transition(t.id, State.HUMAN_MR_APPROVAL, note="awaiting merge")
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 409
+    assert "branch protection rules" in r.text
+
+    # Ticket state must be unchanged.
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+
+
+def test_merge_reason_returns_file(client, service):
+    """GET /tickets/{id}/merge-reason returns the contents of
+    merge_reason.txt from the workspace."""
+    t = service.create("Reason ticket")
+    reason_path = service.workspace(t).artifacts_dir / "merge_reason.txt"
+    reason_path.parent.mkdir(parents=True, exist_ok=True)
+    reason_path.write_text("auto-merge disabled in config", encoding="utf-8")
+
+    r = client.get(f"/tickets/{t.id}/merge-reason")
+    assert r.status_code == 200
+    assert r.json() == {"reason": "auto-merge disabled in config"}
+
+
+def test_merge_reason_empty_when_no_file(client, service):
+    """GET /tickets/{id}/merge-reason returns an empty reason when the
+    file doesn't exist."""
+    t = service.create("No reason file ticket")
+
+    r = client.get(f"/tickets/{t.id}/merge-reason")
+    assert r.status_code == 200
+    assert r.json() == {"reason": ""}
+
+
+def test_merge_reason_missing_ticket_404(client):
+    """GET /tickets/{id}/merge-reason with a bogus id returns 404."""
+    r = client.get("/tickets/nonexistent/merge-reason")
+    assert r.status_code == 404

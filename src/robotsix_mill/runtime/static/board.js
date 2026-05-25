@@ -120,7 +120,8 @@ async function refresh(){
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${t.retry_attempt>0?`<span class="retry-chip" title="${esc(t.last_transient_error||'')}">retry ${t.retry_attempt}${t.next_retry_at?` · next ${fmtRelative(t.next_retry_at)}`:''}</span>`:''}`+
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
    (s==="human_mr_approval"?
-    `<button class="approve-btn" onclick="event.stopPropagation();approveMR('${t.id}')">Approve</button>`:"")+
+    `<button class="approve-btn" onclick="event.stopPropagation();approveMR('${t.id}')">Approve</button>`+
+    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
@@ -136,6 +137,10 @@ async function approve(id){
 async function approveMR(id){
  const r=await jpost("/tickets/"+id+"/approve-mr");
  if(!r.ok){const e=await r.text();alert("approve-mr failed: "+e)}else refresh()
+}
+async function mergePR(id){
+ const r=await jpost("/tickets/"+id+"/merge-now");
+ if(!r.ok){const e=await r.text();alert("merge failed: "+e)}else refresh()
 }
 async function requestChanges(id){
  const body=prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
@@ -602,10 +607,10 @@ async function generateChildren(id){
 }
 async function open_(id){
  sel=id;
- const [t,h,d,cs,rt,ch]=await Promise.all([jget("/tickets/"+id),
+ const [t,h,d,cs,rt,ch,mr]=await Promise.all([jget("/tickets/"+id),
    jget("/tickets/"+id+"/history"),jget("/tickets/"+id+"/description"),
    jget("/tickets/"+id+"/comments"),jget("/tickets/"+id+"/retrospect"),
-   jget("/tickets/"+id+"/children")]);
+   jget("/tickets/"+id+"/children"),jget("/tickets/"+id+"/merge-reason")]);
  if(!t)return;
  document.getElementById("d").innerHTML=
   `<h3>${esc(t.title)}</h3>
@@ -616,6 +621,10 @@ async function open_(id){
    (t.origin_session_url?` · origin <a href="${esc(t.origin_session_url)}" target="_blank" rel="noopener" class="origin-link">${esc(t.origin_session)}</a>`:
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
    (t.pr_url?` · <a href="${esc(t.pr_url)}" target="_blank" rel="noopener" class="pr-link">🔗 PR</a>`:"")+
+   (t.state==="human_mr_approval"?
+    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
+   (mr&&mr.reason?
+    `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")+
    `<br>
    · cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
    (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+

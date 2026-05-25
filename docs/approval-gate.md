@@ -47,16 +47,37 @@ and why.
 
 After the implement stage completes and a PR exists, the merge stage
 may return the ticket to `human_mr_approval` (e.g. after a successful
-rebase). The ticket waits for an explicit human go-ahead before the
-merge stage polls CI and auto-merges. Approve via:
+rebase). The ticket waits for an explicit human go-ahead. Two paths are
+available on the board and via the API:
 
-- **Web board:** click the "Approve" button on any card in the
-  `human_mr_approval` column.
+### Approve (delegate to auto-merge)
+
+Use when auto-merge is eligible (CI is green, `auto_merge_enabled` is
+true, and the merge stage has written a `review.md` approving the PR).
+
+- **Web board:** click the green **Approve** button on the card.
 - **API:** `POST /tickets/{id}/approve-mr`
 
-This bypasses auto-merge eligibility checks — the human is making the
-call. The ticket moves directly to `waiting_auto_merge`, where the merge
-stage picks it up on the next poll.
+The ticket moves to `waiting_auto_merge`, where the merge stage picks it
+up on the next poll and calls the forge's merge endpoint automatically.
+
+### Merge (merge directly via forge)
+
+Use when auto-merge is **not** eligible — for example because
+`auto_merge_enabled` is `false`, or because the ticket bypassed code
+review and has no `review.md`. This calls the forge's merge API
+immediately, identical to clicking "Merge pull request" on GitHub.
+
+- **Web board:** click the green **Merge** button on the card, or in the
+  ticket-detail drawer.
+- **API:** `POST /tickets/{id}/merge-now`
+
+On success the ticket transitions directly to `done` and retrospect runs.
+If the forge rejects the merge (branch protection, conflicts, etc.), the
+endpoint returns 409 and the ticket remains in `human_mr_approval`.
+
+The drawer also calls `GET /tickets/{id}/merge-reason` to display an
+amber annotation explaining *why* auto-merge is ineligible when it is.
 
 ## See also
 

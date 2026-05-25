@@ -27,6 +27,7 @@ from ..core.models import (
 from ..config import get_secrets
 from ..core.service import TransitionError
 from ..core.states import State
+from ..forge import get_forge
 from .board_html import BOARD_HTML
 from .deps import (
     enrich_ticket_read,
@@ -270,6 +271,72 @@ def approve_mr(
 
     maybe_enqueue(ticket, worker)  # merge stage polls immediately
     return enrich_ticket_read(ticket, settings, svc)
+
+
+@router.post("/tickets/{ticket_id}/merge-now", response_model=TicketRead)
+def merge_now(
+    ticket_id: str,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Merge the PR for a ticket in human_mr_approval directly via the
+    forge API, then transition to done.  This is the explicit human
+    merge path — it bypasses auto-merge eligibility and calls the
+    forge's merge endpoint immediately.
+
+    Returns 409 when the ticket is not in human_mr_approval or when
+    the forge rejects the merge (branch protection, conflict, etc.).
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    if ticket.state is not State.HUMAN_MR_APPROVAL:
+        raise HTTPException(
+            409, "ticket is not in human_mr_approval"
+        )
+
+    forge = get_forge(settings)
+    pr = forge.pr_status(source_branch=ticket.branch)
+    if pr is None:
+        raise HTTPException(
+            409, "no PR found for branch — nothing to merge"
+        )
+    pr_url = pr.get("url", ticket.branch)
+
+    result = forge.merge_pr(source_branch=ticket.branch)
+    if not result["merged"]:
+        raise HTTPException(409, result["reason"])
+
+    try:
+        ticket = svc.transition(
+            ticket_id,
+            State.DONE,
+            note=f"merged via board: {pr_url}",
+        )
+    except TransitionError as e:
+        raise HTTPException(409, str(e)) from None
+
+    maybe_enqueue(ticket, worker)  # retrospect picks up DONE
+    return enrich_ticket_read(ticket, settings, svc)
+
+
+@router.get("/tickets/{ticket_id}/merge-reason")
+def get_merge_reason(
+    ticket_id: str,
+    svc=Depends(get_service),
+) -> dict:
+    """Return the auto-merge blocking reason written by the merge
+    stage, or an empty string when no reason has been recorded."""
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    reason_path = (
+        svc.workspace(ticket).artifacts_dir / "merge_reason.txt"
+    )
+    if not reason_path.exists():
+        return {"reason": ""}
+    return {"reason": reason_path.read_text(encoding="utf-8").strip()}
 
 
 @router.post(
