@@ -387,7 +387,8 @@ def aggregate_cost_trend(
     - Bucket width: 1 hour when lookback ≤ 24, 1 day when > 24.
     - Each bucket has ``ts`` (ISO-8601 start), ``total_cost``, and
       ``trace_count``.
-    - Examines at most 500 traces to bound API calls.
+    - Paginates through all traces in the window (up to 100 pages /
+      10,000 traces as a safety bound).
 
     Graceful: returns ``[]`` when tracing is disabled or the API errors.
     """
@@ -403,13 +404,13 @@ def aggregate_cost_trend(
     ).isoformat() + "Z"
 
     PAGE_SIZE = 100
-    EXAMINE_CAP = 500
+    MAX_PAGES = 100
     all_traces: list[dict] = []
     api_ok = False  # distinguish "API error" from "no traces in window"
 
     try:
         page = 1
-        while len(all_traces) < EXAMINE_CAP:
+        while page <= MAX_PAGES:
             body = _langfuse_api_get(
                 settings,
                 "/api/public/traces",
@@ -445,9 +446,6 @@ def aggregate_cost_trend(
     # API error → return [] so the frontend shows the empty state.
     if not api_ok:
         return []
-
-    # Truncate to cap
-    traces = all_traces[:EXAMINE_CAP]
 
     # Determine bucket width
     if lookback_hours <= 24:
@@ -486,7 +484,7 @@ def aggregate_cost_trend(
     bucket_keys = sorted(buckets.keys())
 
     # Assign traces to buckets
-    for t in traces:
+    for t in all_traces:
         ts_str = t.get("timestamp")
         if not ts_str:
             continue
@@ -528,7 +526,8 @@ def aggregate_cost_by_name(
     the last *lookback_hours*.
 
     Graceful: returns ``[]`` when tracing is disabled or the API errors.
-    Examines at most 500 traces to bound API calls.
+    Paginates through all traces in the window (up to 100 pages /
+    10,000 traces as a safety bound).
     """
     if repo_config is None and not settings.tracing_enabled:
         return []
@@ -540,12 +539,12 @@ def aggregate_cost_by_name(
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
     PAGE_SIZE = 100
-    EXAMINE_CAP = 500
+    MAX_PAGES = 100
     all_traces: list[dict] = []
 
     try:
         page = 1
-        while len(all_traces) < EXAMINE_CAP:
+        while page <= MAX_PAGES:
             body = _langfuse_api_get(
                 settings,
                 "/api/public/traces",
@@ -577,12 +576,9 @@ def aggregate_cost_by_name(
         log.exception("aggregate_cost_by_name failed")
         return []
 
-    # Truncate to cap
-    traces = all_traces[:EXAMINE_CAP]
-
     # Aggregate by name
     agg: dict[str, dict] = {}
-    for t in traces:
+    for t in all_traces:
         name = (t.get("name") or "").strip()
         if not name:
             continue
