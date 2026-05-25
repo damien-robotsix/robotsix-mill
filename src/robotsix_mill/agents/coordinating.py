@@ -252,10 +252,18 @@ def run_coordinator(
         for rf in reference_files:
             file_path = repo_dir / rf["path"]
             if not file_path.exists():
+                log.warning(
+                    "reference_files: %s not found on disk, skipping",
+                    rf["path"],
+                )
                 continue
             try:
                 content = file_path.read_text(encoding="utf-8", errors="replace")
-            except (OSError, UnicodeDecodeError):
+            except (OSError, UnicodeDecodeError) as e:
+                log.warning(
+                    "reference_files: cannot read %s, skipping: %s",
+                    rf["path"], e,
+                )
                 continue
             tc_id = f"preload_{rf['path']}"
             synthetic.append(ModelResponse(parts=[
@@ -330,9 +338,9 @@ def run_coordinator(
                 )
 
         # Inject prior-attempt summary so the model doesn't undo its
-        # previous correct work. Placed after feedback blocks so the
-        # retry directive (review_feedback / test_failure) still takes
-        # priority — the summary is context, not instruction.
+        # previous correct work. Placed before feedback blocks so the
+        # summary is context, not instruction — the retry directive
+        # (review_feedback / test_failure) still takes priority.
         if feedback and previous_attempt_summary:
             user_prompt = (
                 "<previous_attempt>\n"

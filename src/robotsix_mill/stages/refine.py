@@ -392,17 +392,10 @@ class RefineStage(Stage):
                 ),
                 encoding="utf-8",
             )
-        elif result.file_map:
-            # Fallback: derive paths from file_map when the agent does not
-            # return a curated reference_files list (older models, or the
-            # field isn't yet filled in).
-            (ws.artifacts_dir / "reference_files.json").write_text(
-                json.dumps(
-                    [{"path": e.file} for e in result.file_map],
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
+        # No fallback: reference_files is agent-curated only per
+        # ticket spec — do not derive from file_map or any mechanical
+        # source. An empty agent-curated list means the agent decided
+        # no files are relevant for the next pass.
 
         # --- normal single-scope path ---
         if not result.split:

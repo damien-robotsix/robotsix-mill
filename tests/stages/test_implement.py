@@ -344,6 +344,9 @@ def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypat
     # re-runs the coordinator fresh).
     ws = ctx.service.workspace(t)
     assert "WIP" in _commits(ws.dir / "repo")[0]
+    # Artifacts written even on BLOCKED-as-resumable path.
+    assert (ws.artifacts_dir / "reference_files.json").exists()
+    assert (ws.artifacts_dir / "implement_summary.md").exists()
 
 
 def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkeypatch):
