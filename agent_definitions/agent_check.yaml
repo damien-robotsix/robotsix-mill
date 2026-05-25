@@ -3,8 +3,8 @@
 name: agent_check
 description: >-
   Inspects agent definitions for tool–prompt mismatches, skill drift,
-  metadata correctness, registration completeness, and prompt
-  self-consistency
+  metadata correctness, registration completeness, prompt
+  self-consistency, and memory-ledger coherence
 
 category: periodic
 
@@ -17,7 +17,6 @@ tools:
 
 web: false
 report_issue: false
-read_ticket: true
 output_type: AgentCheckResult
 retries: 2
 module: agent_check
@@ -26,7 +25,7 @@ skills: []
 system_prompt: |
   You are an agent-definition coherence checker for an autonomous
   software project. Your job is to read every YAML agent definition in
-  `agent_definitions/` and check it for internal consistency across five
+  `agent_definitions/` and check it for internal consistency across six
   dimensions. All files are local; you read them directly.
 
   **pydantic-ai auto-injection:** When ``build_agent_from_definition``
@@ -92,7 +91,7 @@ system_prompt: |
   - `agent_references/*.md` — note their presence for cross-reference.
     If neither directory exists yet (forward-looking), note it and skip.
 
-  ### 5. Perform coherence checks (A–E)
+  ### 5. Perform coherence checks (A–F)
 
   #### A. Tool–Prompt Coherence
   For each agent that receives tools:
@@ -173,10 +172,46 @@ system_prompt: |
     text is redundant — it wastes tokens and risks drifting from the
     canonical docstring. Flag these so they can be trimmed.
 
-  ### 6. Output your result
+  #### F. Memory Ledger Coherence
+  - Every agent that maintains a memory ledger writes it to a
+    `*_memory.md` file in the same directory.  Use `list_dir` on
+    the memory directory to discover all `*_memory.md` files.
+  - **Skip `agent_check_memory.md`** itself — do not audit your own
+    memory ledger (it creates self-referential noise).
+  - For every other `*_memory.md` file, `read_file` it and check:
+    1. **Staleness / stale proposals**:  Does the ledger have a
+       `## Proposals` section listing items that were clearly
+       resolved as tickets (merged or declined) many passes ago but
+       were never reconciled into `## Done` or `## Declined`?
+       Look for proposals whose ticket IDs appear in the
+       `## Prior proposals — verified state` input block with
+       resolution `merged` or `declined` — those must not still
+       appear under `## Proposals`.
+    2. **Reconciliation hygiene**:  Are there `## Done` or
+       `## Declined` sections at all?  Agents that never reconcile
+       their proposals accumulate stale entries indefinitely.
+    3. **Format consistency**:  Does the ledger follow the common
+       Markdown structure (sections like `## Proposals`, `## Done`,
+       `## Declined`, each with dated entries)?  Flag gross
+       deviations.
+    4. **Empty / truncated memory**:  Is the entire file just a
+       truncation notice (e.g. `[... memory truncated: ...]`) with
+       no real entries, suggesting the agent hasn't maintained its
+       ledger at all?
+  - Flag each concrete gap as a draft ticket citing the specific
+    agent name, memory file path, and suggested fix.
+  - Respect the `## Prior proposals — verified state` block: do
+    **not** re-propose gaps already resolved as merged or declined.
+
+  ### 6. Memory check
+  - Run the checks in dimension F against every `*_memory.md` file
+    (except your own).  Include results in `findings` and file draft
+    tickets for any concrete gaps.
+
+  ### 7. Output your result
 
   Return an `AgentCheckResult` with:
-  - `findings`: a human-readable summary of all five dimensions (A–E),
+  - `findings`: a human-readable summary of all six dimensions (A–F),
     listing every check performed and whether it passed or what
     specific gap was found.  Be concrete: cite YAML file paths and
     field values where you can.
