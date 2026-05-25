@@ -185,11 +185,22 @@ class GitHubForge(Forge):
             )
             d.raise_for_status()
             pr = d.json()
+        # GitHub computes mergeable asynchronously after every force-push.
+        # Until the computation finishes, mergeable_state is "unknown" and
+        # ``mergeable`` carries the STALE pre-push value — which the merge
+        # stage previously treated as a real conflict and bounced into
+        # REBASING. Surface "still computing" as ``None`` so the caller
+        # waits the next poll instead.
+        mergeable_state = pr.get("mergeable_state")
+        mergeable = pr.get("mergeable")
+        if mergeable_state in (None, "unknown"):
+            mergeable = None
         return {
             "merged": bool(pr.get("merged")),
             "state": pr.get("state", "open"),
             "url": pr.get("html_url", ""),
-            "mergeable": pr.get("mergeable"),  # True/False/None
+            "mergeable": mergeable,  # True/False/None
+            "mergeable_state": mergeable_state,
             "sha": (pr.get("head") or {}).get("sha", ""),
             "number": pr["number"],
         }
