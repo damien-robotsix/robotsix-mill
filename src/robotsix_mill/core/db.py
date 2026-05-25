@@ -36,7 +36,19 @@ def init_db(settings: Settings) -> None:
     # import models so SQLModel.metadata is populated before create_all
     from . import models  # noqa: F401
 
-    SQLModel.metadata.create_all(get_engine(settings))
+    engine = get_engine(settings)
+    SQLModel.metadata.create_all(engine)
+
+    # SQLite / SQLModel do not auto-add columns to existing tables.
+    # Ensure the board_id column from RepoConfig exists so the model
+    # and schema stay in sync.  Ignore "duplicate column" errors.
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE ticket ADD COLUMN board_id TEXT NOT NULL DEFAULT ''"
+            )
+    except Exception:
+        pass
 
 
 def session(settings: Settings) -> Session:

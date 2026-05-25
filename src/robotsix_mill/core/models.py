@@ -72,6 +72,9 @@ class Ticket(SQLModel, table=True):
     # optional JSON list of ticket IDs that must reach CLOSED/DONE before
     # this ticket can leave READY (implement-stage gate).
     depends_on: str | None = Field(default=None)
+    # board_id from RepoConfig — stamped at creation so every ticket
+    # is tagged with its repository.  Empty string for legacy rows.
+    board_id: str = Field(default="", index=True)
     created_at: datetime = Field(
         default_factory=_now,
         sa_column=Column(TZDateTime(), index=True),
