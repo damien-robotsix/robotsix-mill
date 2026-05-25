@@ -31,6 +31,7 @@ from ..forge import get_forge
 from .board_html import BOARD_HTML
 from .deps import (
     enrich_ticket_read,
+    get_repos_registry,
     get_run_registry,
     get_service,
     get_settings,
@@ -46,6 +47,27 @@ router = APIRouter()
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@router.get("/repos")
+def list_repos(
+    request: Request,
+    repos=Depends(get_repos_registry),
+) -> list[dict]:
+    """Return the registered repos for the UI repo selector.
+
+    No secrets (Langfuse keys) are included — only ``repo_id`` and
+    ``board_id``.  In single-repo mode (``--repo-id`` passed) only
+    that repo is returned.
+    """
+    single = request.app.state.single_repo_id
+    if single is not None:
+        rc = repos.repos[single]
+        return [{"repo_id": rc.repo_id, "board_id": rc.board_id}]
+    return [
+        {"repo_id": rc.repo_id, "board_id": rc.board_id}
+        for rc in repos.repos.values()
+    ]
 
 
 @router.get("/gates")

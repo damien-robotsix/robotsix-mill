@@ -42,13 +42,16 @@ docker compose up -d --build                             # defaults to MILL_REPO
 
 Open `http://localhost:8077` — the ticket board is the primary interface.
 
-The server requires a repo identity at startup. The compose file defaults
-to `MILL_REPO_ID=robotsix-mill`; override via `-e MILL_REPO_ID=...` or by
-editing `docker-compose.yml`. When running outside Docker, pass
-`--repo-id <id>` or export `MILL_REPO_ID`. See
+By default the server loads **all** repos from `config/repos.yaml` and
+serves them together (multi-repo mode).  To scope the process to a single
+repo — useful for tests or dev — pass `--repo-id <id>` or set the
+`MILL_REPO_ID` environment variable.  The compose file defaults to
+`MILL_REPO_ID=robotsix-mill` (single-repo override); remove the env var
+to run in multi-repo mode.  See
 [docs/configuration.md#repos-registry](docs/configuration.md#repos-registry).
 
 ```sh
+docker compose exec mill robotsix-mill repos list
 docker compose exec mill robotsix-mill ticket new --title "Add X" --description-file -
 docker compose exec mill robotsix-mill ticket list
 docker compose exec mill robotsix-mill ticket show <id>

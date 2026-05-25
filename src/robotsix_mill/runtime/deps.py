@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from ..config import Settings, get_secrets
+from ..config import ReposRegistry, Settings, get_secrets
 from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE, State
@@ -35,6 +35,11 @@ def get_settings(request: Request) -> Settings:
 def get_run_registry(request: Request) -> RunRegistry:
     """Return the ``RunRegistry`` stored on app state during lifespan startup."""
     return request.app.state.run_registry
+
+
+def get_repos_registry(request: Request) -> ReposRegistry:
+    """Return the ``ReposRegistry`` stored on app state during lifespan startup."""
+    return request.app.state.repos
 
 
 def maybe_enqueue(ticket: Ticket, worker: Worker) -> None:

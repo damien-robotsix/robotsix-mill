@@ -25,9 +25,9 @@ from robotsix_mill.langfuse_client import list_all_traces_since
 
 
 @pytest.fixture
-def client(settings, repo_config):
+def client(settings, repos_registry):
     """TestClient wired to the shared `settings` fixture from conftest."""
-    with TestClient(create_app(repo_config, settings)) as c:
+    with TestClient(create_app(repos_registry, settings, single_repo_id="test-repo")) as c:
         yield c
 
 

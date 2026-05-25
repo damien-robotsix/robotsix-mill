@@ -30,8 +30,9 @@ services:
       # source=ci ticket to fix them. Short interval for fast reaction.
       - MILL_CI_MONITOR_PERIODIC=true
       - MILL_CI_MONITOR_INTERVAL_SECONDS=600
-      # Per-repo config is keyed by --repo-id / MILL_REPO_ID. Matches
-      # the entry in config/repos.yaml.
+      # Single-repo override (optional). When set, only this repo
+      # is served. Remove or comment out to serve all repos from
+      # config/repos.yaml (multi-repo mode).
       - MILL_REPO_ID=robotsix-mill
     # No group_add: entrypoint.sh inspects /var/run/docker.sock at
     # start-up and joins the matching group automatically (any host

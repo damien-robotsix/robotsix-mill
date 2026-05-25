@@ -249,9 +249,9 @@ class TestMostRecent:
 
 class TestGetRunsEndpoint:
     @pytest.fixture
-    def client(self, settings, repo_config):
+    def client(self, settings, repos_registry):
         """TestClient that gives access to the app's run_registry."""
-        app = create_app(repo_config, settings)
+        app = create_app(repos_registry, settings, single_repo_id="test-repo")
         with TestClient(app) as c:
             yield c
 
@@ -309,8 +309,8 @@ class TestAuditTraceHealthEndpoints:
     """Regression: the pass endpoints return 202 and record runs."""
 
     @pytest.fixture
-    def client(self, settings, repo_config):
-        app = create_app(repo_config, settings)
+    def client(self, settings, repos_registry):
+        app = create_app(repos_registry, settings, single_repo_id="test-repo")
         with TestClient(app) as c:
             yield c
 

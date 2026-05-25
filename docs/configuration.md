@@ -255,6 +255,7 @@ Every setting below shows:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `service.data_dir` | `MILL_DATA_DIR` | `.mill-data` | Data directory for DB, workspaces, and memory ledgers |
+| `service.default_repo_id` | `MILL_DEFAULT_REPO_ID` | `""` | Default repo for legacy tickets that lack a `board_id` |
 | `service.api_host` | `MILL_API_HOST` | `127.0.0.1` | FastAPI listen address |
 | `service.api_port` | `MILL_API_PORT` | `8077` | FastAPI listen port |
 | `service.api_url` | `MILL_API_URL` | `http://127.0.0.1:8077` | Base URL the CLI client uses to reach the API |
@@ -398,9 +399,10 @@ Secrets file path: `config/secrets.yaml` (overridable via
 `MILL_SECRETS_FILE` env var). Template: `config/secrets.example.yaml`.
 
 > ¹ The `langfuse_*` fields on `Secrets` are **not** user-configurable
-> via `secrets.yaml` or environment variables.  They are populated
-> automatically at startup from the per-repo `RepoConfig` (loaded from
-> `config/repos.yaml`).  See [Repos registry](#repos-registry) below.
+> via `secrets.yaml` or environment variables.  They exist on the model
+> for backward compatibility but are no longer populated at startup —
+> per-repo Langfuse credentials are read directly from ``RepoConfig``
+> at call time.  See [Repos registry](#repos-registry) above.
 
 ---
 
@@ -412,12 +414,10 @@ Langfuse observability project. It is loaded **separately** from
 participates in the Settings merge. Access it via `get_repos_config()`
 or `get_repo_config("repo-id")`.
 
-When a repo is selected at startup (via `--repo-id`), its
-`langfuse.public_key`, `langfuse.secret_key`, and `langfuse.base_url`
-are stamped onto the `Secrets` singleton and used for **all** Langfuse
-operations — OTel trace export and read-side API calls (cost tracking,
-trace inspection, session summaries, etc.). There is no global
-fallback; every Langfuse operation requires a valid per-repo config.
+Langfuse credentials are read from ``RepoConfig`` at call time (per
+ticket, per operation) — they are **not** stamped onto the global
+``Secrets`` singleton.  Each ticket's ``board_id`` determines which
+repo entry (and thus which Langfuse project) is used for its traces.
 
 ### Set up
 
@@ -447,12 +447,20 @@ python scripts/verify_repos_config.py
 
 ### Select a repo at startup
 
-Once `config/repos.yaml` is configured, you must tell the server which
-repository to operate on. Pass `--repo-id` to the `serve` command or
-set the `MILL_REPO_ID` environment variable:
+Once `config/repos.yaml` is configured, start the server.  By default
+the server loads **all** repos from `config/repos.yaml` and serves them
+together:
 
 ```sh
-# CLI:
+# Multi-repo mode: serves every repo in config/repos.yaml
+robotsix-mill serve
+```
+
+To scope the process to a single repo (useful for tests/dev), pass
+`--repo-id` or set the `MILL_REPO_ID` environment variable:
+
+```sh
+# Single-repo override:
 robotsix-mill serve --repo-id my-repo
 
 # or via environment variable (convenient for Docker/compose):
@@ -460,9 +468,15 @@ export MILL_REPO_ID=my-repo
 robotsix-mill serve
 ```
 
-If neither is provided the server exits with an error listing the
-known repo IDs from `config/repos.yaml`. An unknown repo ID also
-causes an error exit.
+When `config/repos.yaml` is empty, the server refuses to start (exit
+code 2) with an error message.  An unknown `--repo-id` also causes an
+error exit.
+
+List the registered repos from the CLI:
+
+```sh
+robotsix-mill repos list
+```
 
 File path: `config/repos.yaml` (overridable via `MILL_REPOS_FILE` env var).
 Set `MILL_REPOS_FILE=""` to disable repos config entirely. Template:

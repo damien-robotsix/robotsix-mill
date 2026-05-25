@@ -269,6 +269,12 @@ class Settings(BaseSettings):
     # sets MILL_DATA_DIR=/data explicitly, so the container is unaffected.
     data_dir: Path = Field(default=Path(".mill-data"), alias="MILL_DATA_DIR")
 
+    # Default repo ID for legacy tickets that lack a board_id.
+    # Set in config/mill.local.yaml.  When empty (default), accessing
+    # a legacy ticket without a board_id raises an error telling the
+    # operator to configure this.
+    default_repo_id: str = Field(default="", alias="MILL_DEFAULT_REPO_ID")
+
     # --- management-plane service ---
     api_host: str = Field(default="127.0.0.1", alias="MILL_API_HOST")
     api_port: int = Field(default=8077, alias="MILL_API_PORT")
