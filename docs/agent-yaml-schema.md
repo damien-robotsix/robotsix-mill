@@ -274,20 +274,22 @@ structured output validation fails. Set to `0` to disable retries.
 | Default | `[]` (empty list) |
 
 Skill names to inject into the agent's prompt. Each entry references a
-`skills/<name>/SKILL.md` file that the loader reads and appends to the
-system prompt. For example:
+`skills/<name>/SKILL.md` file whose Markdown body (with YAML frontmatter
+stripped) is injected under a `## Skills` heading, between the system
+prompt and the `## Available tools` table. For example:
 
 ```yaml
 skills:
-  - "python-testing"
-  - "git-workflow"
+  - board
 ```
 
-This field is consumed by the agent factory at construction time:
-each skill name resolves to a `skills/<name>/SKILL.md` file whose
-content is injected into the system prompt.  If the `skills/` directory
-does not exist yet (or a named skill is absent), the skill is silently
-skipped.
+The only skill shipped today is `board` (board interaction guidance —
+`report_issue` usage rules, `read_ticket` usage rules, and execution-tool
+preference). Additional skills (e.g. `vcs`, `testing`) can be added by
+creating a `skills/<name>/SKILL.md` file with a `name:` frontmatter key.
+
+If a skill file is missing, the factory logs a warning and continues
+(no crash).
 
 ---
 
@@ -326,7 +328,7 @@ demonstrates:
 - `output_type: RefineResult` and `retries: 2`
 - `category: pipeline`
 - `module: refining` — explicit module path
-- `skills: []` — placeholder for forward compatibility
+- `skills: [board]` — the board interaction skill, injected between the system prompt and the tool table
 
 ## Extensibility guarantee
 
