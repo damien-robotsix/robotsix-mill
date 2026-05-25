@@ -547,3 +547,22 @@ def test_cost_trend_empty_when_disabled(client, monkeypatch):
     assert r.status_code == 200
     data = r.json()
     assert data == {"buckets": []}
+
+
+# -- POST /tickets/{id}/mark-done ---------------------------------------
+
+
+def test_mark_done_happy_path(client, service):
+    """POST /tickets/{id}/mark-done transitions a draft ticket to done
+    and returns the updated ticket."""
+    t = service.create("Mark done test")
+
+    r = client.post(
+        f"/tickets/{t.id}/mark-done",
+        json={"note": "done manually"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == t.id
+    assert data["title"] == "Mark done test"
+    assert data["state"] == "done"
