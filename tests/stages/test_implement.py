@@ -916,16 +916,16 @@ def test_scope_check_passes_when_all_in_scope(ctx_factory, tmp_path, monkeypatch
     ), f"expected scope-passed info log, got: {caplog.messages}"
 
 
-def test_scope_check_fails_when_no_file_map(ctx_factory, tmp_path, monkeypatch):
-    """When file_map.json is absent, the stage blocks immediately —
-    the implement agent is never invoked."""
+def test_scope_check_skipped_when_no_file_map(ctx_factory, tmp_path, monkeypatch, caplog):
+    """When file_map.json is absent, the stage logs a warning and
+    proceeds — scope enforcement is skipped, not blocked."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
         MILL_REVIEW_ENABLED="false",
     )
     t = _ticket(ctx)
-    # No file_map.json written → stage should block before agent runs.
+    # No file_map.json written → stage should warn and proceed.
 
     agent_called = []
 
@@ -933,20 +933,26 @@ def test_scope_check_fails_when_no_file_map(ctx_factory, tmp_path, monkeypatch):
              message_history=None, memory="", epic_workspace_path=None):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
+        (Path(repo_dir) / "out.txt").write_text("done")
         return ("done", [], "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
-    out = ImplementStage().run(t, ctx)
+    import logging
 
-    assert out.next_state is State.BLOCKED
-    assert "file_map.json missing" in out.note
-    assert len(agent_called) == 0, "agent must not be called without file_map"
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.stages.implement"):
+        out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING, f"expected DOCUMENTING, got {out.next_state}"
+    assert len(agent_called) == 1, "agent must be called when file_map is missing"
+    assert any(
+        "skipping scope enforcement" in m for m in caplog.messages
+    ), f"expected scope-skip warning, got: {caplog.messages}"
 
 
-def test_scope_check_fails_when_file_map_empty(ctx_factory, tmp_path, monkeypatch):
-    """When file_map.json exists but is an empty array, the stage blocks
-    immediately — same as a missing file_map."""
+def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypatch, caplog):
+    """When file_map.json exists but is an empty array, the stage logs
+    a warning and proceeds — same as a missing file_map."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
@@ -963,12 +969,18 @@ def test_scope_check_fails_when_file_map_empty(ctx_factory, tmp_path, monkeypatc
              message_history=None, memory="", epic_workspace_path=None):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
+        (Path(repo_dir) / "out.txt").write_text("done")
         return ("done", [], "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
-    out = ImplementStage().run(t, ctx)
+    import logging
 
-    assert out.next_state is State.BLOCKED
-    assert "file_map.json missing" in out.note
-    assert len(agent_called) == 0, "agent must not be called with empty file_map"
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.stages.implement"):
+        out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING, f"expected DOCUMENTING, got {out.next_state}"
+    assert len(agent_called) == 1, "agent must be called when file_map is empty"
+    assert any(
+        "skipping scope enforcement" in m for m in caplog.messages
+    ), f"expected scope-skip warning, got: {caplog.messages}"

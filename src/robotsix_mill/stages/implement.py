@@ -107,28 +107,19 @@ class ImplementStage(Stage):
         #   - file_map.json contains [{file: …}, …] → enforce scope.
         file_map: set[str] | None = None
         file_map_path = ws.artifacts_dir / "file_map.json"
-        if not file_map_path.exists():
+        if file_map_path.exists():
+            raw = json.loads(file_map_path.read_text(encoding="utf-8"))
+            if raw:  # non-empty list → extract paths
+                file_map = {entry["file"] for entry in raw}
+
+        # file_map is a scope-enforcement guardrail, not a correctness
+        # prerequisite.  When it's missing or empty we log a warning
+        # and skip the scope check; the agent can still produce valid
+        # changes and the test gate still runs.
+        if file_map is None:
             log.warning(
-                "%s: file_map.json missing — refine never wrote it",
-                ticket.id,
-            )
-            ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, "", ok=False,
-            )
-            return Outcome(
-                State.BLOCKED,
-                "file_map.json missing — refine stage must produce a "
-                "file_map for scope enforcement",
-            )
-        raw = json.loads(file_map_path.read_text(encoding="utf-8"))
-        if raw:  # non-empty list → extract paths
-            file_map = {entry["file"] for entry in raw}
-        else:
-            # Empty file_map → scope-free mode (split children, triage
-            # SKIPs). Proceed without scope enforcement; the agent's
-            # spec still constrains the work.
-            log.warning(
-                "%s: file_map.json is empty — proceeding in scope-free mode",
+                "%s: file_map.json missing or empty — "
+                "skipping scope enforcement",
                 ticket.id,
             )
 
@@ -178,8 +169,8 @@ class ImplementStage(Stage):
                 persist_memory(settings.implement_memory_file, updated_memory)
 
             # Scope guardrail: verify every changed file is listed in the
-            # ticket's file_map.  file_map is guaranteed non-None here
-            # (missing/empty → hard-fail before the loop above).
+            # ticket's file_map.  file_map may be None; scope check is
+            # simply skipped in that case.
             if file_map:
                 changed = git_ops.changed_files(
                     repo_dir, settings.forge_target_branch
