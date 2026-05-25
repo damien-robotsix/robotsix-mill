@@ -248,7 +248,7 @@ def add_comment(
     persisted.
     """
     try:
-        comment = svc.add_comment(ticket_id, body.body, author=body.author)
+        comment = svc.add_comment(ticket_id, body.body, author=body.author, parent_id=body.parent_id)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
 

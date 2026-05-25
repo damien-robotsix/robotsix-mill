@@ -567,14 +567,26 @@ class TicketService:
         return unmet
 
     # --- comments ---
-    def add_comment(self, ticket_id: str, body: str, author: str = "user") -> Comment:
+    def add_comment(self, ticket_id: str, body: str, author: str = "user", parent_id: int | None = None) -> Comment:
         """Add a reviewer comment to a ticket. Raises ``KeyError`` if
-        the ticket does not exist."""
+        the ticket does not exist.
+
+        When *parent_id* is given, validates that the parent Comment
+        exists and belongs to the same ticket, raising ``ValueError``
+        otherwise."""
         with db.session(self.settings) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
-            comment = Comment(ticket_id=ticket_id, body=body, author=author)
+            if parent_id is not None:
+                parent = s.get(Comment, parent_id)
+                if parent is None:
+                    raise ValueError(f"parent comment {parent_id} not found")
+                if parent.ticket_id != ticket_id:
+                    raise ValueError(
+                        f"parent comment {parent_id} does not belong to ticket {ticket_id}"
+                    )
+            comment = Comment(ticket_id=ticket_id, body=body, author=author, parent_id=parent_id)
             s.add(comment)
             s.commit()
             s.refresh(comment)
@@ -593,6 +605,42 @@ class TicketService:
                 .order_by(Comment.created_at)
             )
             return list(s.exec(stmt).all())
+
+    def close_thread(self, comment_id: int) -> Comment:
+        """Close a top-level comment thread.  Raises ``KeyError`` if
+        the comment does not exist, ``ValueError`` if it is a reply
+        (non-NULL parent_id) or is already closed."""
+        with db.session(self.settings) as s:
+            comment = s.get(Comment, comment_id)
+            if comment is None:
+                raise KeyError(comment_id)
+            if comment.parent_id is not None:
+                raise ValueError("only top-level threads can be closed")
+            if comment.closed_at is not None:
+                raise ValueError("thread already closed")
+            comment.closed_at = datetime.now(timezone.utc)
+            s.add(comment)
+            s.commit()
+            s.refresh(comment)
+            return comment
+
+    def reopen_thread(self, comment_id: int) -> Comment:
+        """Reopen a closed top-level comment thread.  Raises
+        ``KeyError`` if the comment does not exist, ``ValueError`` if
+        it is a reply (non-NULL parent_id) or is not currently closed."""
+        with db.session(self.settings) as s:
+            comment = s.get(Comment, comment_id)
+            if comment is None:
+                raise KeyError(comment_id)
+            if comment.parent_id is not None:
+                raise ValueError("only top-level threads can be closed")
+            if comment.closed_at is None:
+                raise ValueError("thread is not closed")
+            comment.closed_at = None
+            s.add(comment)
+            s.commit()
+            s.refresh(comment)
+            return comment
 
     def redraft(
         self, ticket_id: str, body: str = "", author: str = "user"
