@@ -16,7 +16,9 @@ MAX_ENTRIES = 50
 @dataclass
 class RunEntry:
     id: str
-    kind: Literal["audit", "trace-health", "health", "agent_check", "deep-review", "survey", "epic-breakdown", "env-sync", "test-gap", "bc-check"]
+    kind: Literal["audit", "trace-health", "health", "agent_check",
+                   "completeness-check", "deep-review", "survey",
+                   "epic-breakdown", "env-sync", "test-gap", "bc-check"]
     started_at: str  # ISO-8601 UTC
     finished_at: str | None = None
     status: Literal["running", "ok", "error"] = "running"

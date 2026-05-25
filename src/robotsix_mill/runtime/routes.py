@@ -583,6 +583,32 @@ def bc_check_pass(
     return {"status": "started"}
 
 
+@router.post("/completeness-check", status_code=202)
+def completeness_check_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
+    from ..completeness_check_runner import run_completeness_check_pass
+    run_id = registry.start("completeness-check")
+
+    def _run() -> None:
+        try:
+            r = run_completeness_check_pass()
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info("completeness-check pass done: %d draft(s)", len(r.drafts_created))
+        except Exception as e:
+            log.exception("completeness-check pass failed")
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="completeness-check-pass", daemon=True).start()
+    return {"status": "started"}
+
+
 @router.post("/agent-check", status_code=202)
 def agent_check_pass(
     registry=Depends(get_run_registry),
