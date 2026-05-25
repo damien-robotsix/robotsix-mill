@@ -156,6 +156,7 @@ class ImplementStage(Stage):
                 if summary_path.exists():
                     prev_summary = summary_path.read_text(encoding="utf-8").strip()
 
+            summary = ""
             ref_files: list[str] = []  # default in case agent raises before returning
             try:
                 summary, ref_files, updated_memory = coding.run_implement_agent(

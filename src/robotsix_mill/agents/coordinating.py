@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from ..config import Settings
 
@@ -29,7 +29,14 @@ class ImplementResult(BaseModel):
 
     summary: str
     updated_memory: str = ""
-    reference_files: list[str] = []
+    reference_files: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Relative paths from the repo root that a follow-up pass on "
+            "this ticket should start with read_file outputs already "
+            "loaded for."
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -244,10 +251,8 @@ def run_coordinator(
         synthetic: list = []
         for rf in reference_files:
             file_path = repo_dir / rf["path"]
-            # Re-read from disk (even though pre_seeded already read it)
-            # so the ToolReturn always reflects current on-disk content.
             if not file_path.exists():
-                continue  # already warned in pre_seeded loop above
+                continue
             try:
                 content = file_path.read_text(encoding="utf-8", errors="replace")
             except (OSError, UnicodeDecodeError):
