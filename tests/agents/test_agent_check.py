@@ -38,7 +38,7 @@ def _empty_result():
 
 
 def test_agent_check_prompt_covers_all_coherence_dimensions():
-    """The agent-check prompt must cover all five coherence dimensions A-E
+    """The agent-check prompt must cover all six coherence dimensions A-F
     and now targets YAML files instead of Python source."""
     p = agent_check.SYSTEM_PROMPT.lower()
     # Dimension A: Tool–Prompt Coherence
@@ -65,6 +65,10 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
     # Dimension E: Prompt Self-Consistency
     for kw in ("self-consistency", "copy-paste", "drift"):
         assert kw in p, f"agent-check prompt missing self-consistency cue: {kw}"
+    # Dimension F: Memory Ledger Coherence
+    for kw in ("memory ledger", "*_memory.md", "staleness", "reconciliation", "format consistency", "truncated"):
+        assert kw in p, f"agent-check prompt missing memory-ledger cue: {kw}"
+    assert "skip `agent_check_memory.md`" in p or "agent_check_memory.md" in p
     # Must reference YAML files and agent_definitions/
     assert "agent_definitions/" in p
     assert ".yaml" in p
@@ -492,14 +496,14 @@ def test_agent_check_session_ids_are_unique_per_run(tmp_path, monkeypatch):
 
 def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     """With a forge configured, the agent-check run clones the repo
-    locally and hands the agent repo_dir. Idempotent + best-effort."""
+    locally and hands the agent repo_dir and memory_dir. Idempotent + best-effort."""
     from robotsix_mill.vcs import git_ops
 
     settings = _make_settings(
         tmp_path, FORGE_REMOTE_URL="https://example.test/r.git",
         FORGE_TARGET_BRANCH="main",
     )
-    seen = {"clone": 0, "repo_dir": "unset"}
+    seen = {"clone": 0, "repo_dir": "unset", "memory_dir": "unset"}
 
     def fake_clone(url, dest, branch, token):
         seen["clone"] += 1
@@ -507,6 +511,7 @@ def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     def mock_agent(**kwargs):
         seen["repo_dir"] = kwargs.get("repo_dir")
+        seen["memory_dir"] = kwargs.get("memory_dir")
         return _empty_result()
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
@@ -518,10 +523,70 @@ def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     run_agent_check_pass()
     repo = settings.data_dir / "agent_check_workspace" / "repo"
     assert seen["clone"] == 1 and seen["repo_dir"] == repo
+    assert seen["memory_dir"] == settings.data_dir
 
     seen["clone"] = 0
     run_agent_check_pass()
     assert seen["clone"] == 0 and seen["repo_dir"] == repo
+    assert seen["memory_dir"] == settings.data_dir
+
+
+def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
+    """When both repo_dir and memory_dir are provided,
+    build_fs_tools is called with extra_roots=[memory_dir]."""
+    from robotsix_mill.agents import fs_tools, explore, base, retry
+
+    captured_extra_roots = None
+    settings = Settings()
+
+    def _fake_read(path, *, offset=1, limit=None):
+        return "content"
+
+    def _fake_list(path="."):
+        return "entries"
+
+    _fake_read.__name__ = "read_file"
+    _fake_list.__name__ = "list_dir"
+
+    def fake_build_fs_tools(root, s, *, extra_roots=None):
+        nonlocal captured_extra_roots
+        captured_extra_roots = extra_roots
+        return [_fake_read, _fake_list]
+
+    def fake_explore_tool(s, repo_dir):
+        async def _explore(ctx, question):
+            return "answer"
+        _explore.__name__ = "explore"
+        return _explore
+
+    class FakeRunResult:
+        output = agent_check.AgentCheckResult(
+            findings="ok",
+            updated_memory="mem",
+        )
+
+    class FakeAgent:
+        def run_sync(self, prompt):
+            return FakeRunResult()
+
+    def fake_build_agent(*args, **kwargs):
+        return FakeAgent()
+
+    def fake_call_with_retry(fn, *, settings=None, what=""):
+        return fn()
+
+    monkeypatch.setattr(fs_tools, "build_fs_tools", fake_build_fs_tools)
+    monkeypatch.setattr(explore, "make_explore_tool", fake_explore_tool)
+    monkeypatch.setattr(base, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(retry, "call_with_retry", fake_call_with_retry)
+
+    agent_check.run_agent_check_agent(
+        settings=settings,
+        repo_dir=Path("/fake/repo"),
+        memory_dir=Path("/fake/data"),
+    )
+
+    assert captured_extra_roots == [Path("/fake/data")]
 
 
 def test_run_agent_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):

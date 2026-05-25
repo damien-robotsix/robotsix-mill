@@ -34,6 +34,7 @@ def run_agent_check_agent(
     *,
     settings: Settings,
     repo_dir=None,
+    memory_dir: Path | None = None,
     memory: str = "",
     recent_proposals: str = "",
 ) -> AgentCheckResult:
@@ -47,8 +48,9 @@ def run_agent_check_agent(
         from .explore import make_explore_tool
         from .fs_tools import build_fs_tools
 
+        extra_roots = [memory_dir] if memory_dir is not None else None
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
             if t.__name__ in ("read_file", "list_dir")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
