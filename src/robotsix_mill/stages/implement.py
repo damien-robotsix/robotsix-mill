@@ -101,9 +101,10 @@ class ImplementStage(Stage):
 
         # Load the ticket's file scope map (which files are in-scope).
         # Three cases:
-        #   - file_map.json missing entirely → refine broken → BLOCK.
+        #   - file_map.json missing entirely → refine never ran or
+        #     crashed mid-write; warn and proceed scope-free.
         #   - file_map.json contains [] → scope-free mode (split child
-        #     or triage-SKIP path); allow with a warning.
+        #     or triage-SKIP path); warn and proceed scope-free.
         #   - file_map.json contains [{file: …}, …] → enforce scope.
         file_map: set[str] | None = None
         file_map_path = ws.artifacts_dir / "file_map.json"
@@ -117,18 +118,8 @@ class ImplementStage(Stage):
         # and skip the scope check; the agent can still produce valid
         # changes and the test gate still runs.
         if file_map is None:
-            if file_map_path.exists():
-                # File exists but is empty — no scoped files to implement.
-                ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, "", ok=False,
-                )
-                return Outcome(
-                    State.BLOCKED,
-                    "file_map.json is empty — refine stage must produce a "
-                    "file_map for scope enforcement",
-                )
             log.warning(
-                "%s: file_map.json missing — "
+                "%s: file_map.json missing or empty — "
                 "skipping scope enforcement",
                 ticket.id,
             )
