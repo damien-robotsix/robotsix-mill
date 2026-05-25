@@ -95,12 +95,15 @@ class TicketEvent(SQLModel, table=True):
 
 
 class Comment(SQLModel, table=True):
-    """Reviewer comment on a ticket — append-only, single-level."""
+    """Reviewer comment on a ticket — supports threading via parent_id
+    and open/closed tracking on top-level threads via closed_at."""
 
     id: int | None = Field(default=None, primary_key=True)
     ticket_id: str = Field(foreign_key="ticket.id", index=True)
     body: str
     author: str = Field(default="user")
+    parent_id: int | None = Field(default=None, foreign_key="comment.id", nullable=True)
+    closed_at: datetime | None = Field(default=None, sa_column=Column(TZDateTime(), nullable=True))
     created_at: datetime = Field(
         default_factory=_now,
         sa_column=Column(TZDateTime()),
@@ -147,6 +150,7 @@ class TicketRead(SQLModel):
 class CommentCreate(SQLModel):
     body: str
     author: str = "user"
+    parent_id: int | None = None
 
 
 class CommentRead(SQLModel):
@@ -154,4 +158,6 @@ class CommentRead(SQLModel):
     ticket_id: str
     body: str
     author: str
+    parent_id: int | None
+    closed_at: datetime | None
     created_at: datetime

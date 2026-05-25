@@ -241,6 +241,10 @@ def add_comment(
 ) -> Comment:
     """Add a comment to a ticket (any state).
 
+    Set *parent_id* to reply to an existing comment, forming a
+    threaded discussion.  Omit it (or pass ``null``) to start a new
+    top-level thread.
+
     For epic tickets, the comment triggers a background re-processing:
     the epic is re-broken-down by the breakdown agent with the full
     comment history as operator direction, and net-new children are
@@ -248,9 +252,11 @@ def add_comment(
     persisted.
     """
     try:
-        comment = svc.add_comment(ticket_id, body.body, author=body.author)
+        comment = svc.add_comment(ticket_id, body.body, author=body.author, parent_id=body.parent_id)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
 
     # Fire-and-forget: re-process the epic in a daemon thread.
     ticket = svc.get(ticket_id)
