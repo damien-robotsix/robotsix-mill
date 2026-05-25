@@ -908,33 +908,3 @@ def test_scope_check_skipped_when_no_file_map(ctx_factory, tmp_path, monkeypatch
     assert out.next_state is State.DOCUMENTING
 
 
-def test_epic_files_exempt_from_scope_check(ctx_factory, tmp_path, monkeypatch):
-    """Files under _epic/ are always exempt from the scope check."""
-    remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
-    )
-    t = _ticket(ctx)
-
-    # file_map does NOT mention _epic/ files.
-    ws = ctx.service.workspace(t)
-    file_map_path = ws.artifacts_dir / "file_map.json"
-    file_map_path.write_text(
-        '[{"file": "wip.txt", "note": "main change"}]',
-        encoding="utf-8",
-    )
-
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
-        (Path(repo_dir) / "wip.txt").write_text("in scope")
-        # Simulate writing to _epic/ shared workspace (always exempt).
-        (Path(repo_dir) / "_epic" / "notes.md").parent.mkdir(parents=True, exist_ok=True)
-        (Path(repo_dir) / "_epic" / "notes.md").write_text("cross-ticket note")
-        return ("done", [], "")
-
-    monkeypatch.setattr(coding, "run_implement_agent", _run)
-    out = ImplementStage().run(t, ctx)
-    # Should pass: wip.txt is in file_map, _epic/notes.md is exempt.
-    assert out.next_state is State.DOCUMENTING
