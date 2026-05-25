@@ -335,7 +335,8 @@ Each periodic agent shares this pattern:
 | `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² |
 
 Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
-`agent_check`, `survey`, `ci_monitor`, `env_sync`, `bc_check`, `completeness_check`.
+`agent_check`, `survey`, `ci_monitor`, `env_sync`, `bc_check`,
+`completeness_check`, `cost_reconciliation`.
 
 > ¹ `survey` is the exception — its default is `enabled: true`.
 >
@@ -389,6 +390,7 @@ via `get_secrets()`.
 | YAML key | Env var override | Description |
 |----------|-----------------|-------------|
 | `openrouter_api_key` | `OPENROUTER_API_KEY` | OpenRouter API key (required for any LLM call) |
+| `openrouter_management_key` | — | OpenRouter management API key for cost-reconciliation (`GET /api/v1/activity`). Separate from the inference key; leave blank to skip OpenRouter-side cost fetching. |
 | `forge_token` | `FORGE_TOKEN` | PAT for forge authentication |
 | `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `FORGE_AUTH=app`) |
 | `github_app_private_key` | `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (inline PEM, newlines as `\n`) |
