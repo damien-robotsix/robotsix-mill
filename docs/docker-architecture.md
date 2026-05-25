@@ -47,7 +47,7 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   check).
 - **Delivery:** pluggable forge adapter (GitHub / GitLab), invoked only
   by the `deliver` stage.
-- **Tracing:** optional Langfuse; a no-op unless per-repo Langfuse credentials are configured in `config/repos.yaml`.
+- **Tracing:** optional Langfuse; a no-op unless per-repo Langfuse credentials are configured in `config/repos.yaml`. On SIGTERM/SIGINT the worker flushes any pending trace spans before exiting so cost/latency data is not lost.
 
 ## Container topology
 
