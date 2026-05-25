@@ -89,6 +89,7 @@ def create_lifespan(
         app.state.deep_review_store = DeepReviewStore(
             settings.data_dir / "deep_review_results.json"
         )
+        tracing.install_signal_handlers()
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
         try:

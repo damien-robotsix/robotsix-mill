@@ -25,6 +25,8 @@ from ..config import RepoConfig, get_secrets
 
 _tracing_ready: bool | None = None  # tri-state: None=unchecked, True/False
 
+_shutdown_requested: bool = False  # set by signal handlers to prevent double-flush
+
 # The session id (ticket id / audit id) currently in scope. A
 # context-var, not a parent span: pydantic-ai sub-agent runs (explore,
 # web_research, test, rebase) start their OWN pydantic-ai trace, so the
@@ -178,8 +180,11 @@ def current_session() -> str | None:
     return _current_session.get()
 
 
-def flush_tracing() -> None:
+def flush_tracing(timeout: int = 10_000) -> None:
     """Force-flush any pending spans.  Call at worker shutdown.
+
+    *timeout*: milliseconds to wait for the flush (passed to
+    ``provider.force_flush(timeout_millis=...)``).  Default 10 s.
 
     No-op when tracing is off (env vars absent).
     """
@@ -189,7 +194,34 @@ def flush_tracing() -> None:
 
     provider = trace.get_tracer_provider()
     if hasattr(provider, "force_flush"):
-        provider.force_flush()  # type: ignore[union-attr]
+        provider.force_flush(timeout_millis=timeout)  # type: ignore[union-attr]
+
+
+def install_signal_handlers() -> None:
+    """Register handlers for SIGTERM and SIGINT that flush pending traces
+    before the process exits.
+
+    Each handler sets a module-level ``_shutdown_requested`` flag so
+    double-\\^C or repeated signals don't deadlock on a slow flush.
+    After the flush the handler raises ``SystemExit(0)``.
+
+    All imports are lazy — no OTel symbols at module level.
+    """
+    import signal
+
+    def _handler(signum: int, frame: object) -> None:
+        global _shutdown_requested
+        if _shutdown_requested:
+            return  # already flushing; avoid re-entrant calls
+        _shutdown_requested = True
+        flush_tracing()
+        raise SystemExit(0)
+
+    try:
+        signal.signal(signal.SIGTERM, _handler)
+        signal.signal(signal.SIGINT, _handler)
+    except ValueError:
+        pass  # not in main thread (e.g. under TestClient)
 
 
 @contextmanager
