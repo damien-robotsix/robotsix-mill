@@ -44,12 +44,37 @@ system_prompt: |
   closed (the absence was intentional): 90ac, d847, bf3e, 4892, 2f7d,
   9fe4. Do not re-file the same pattern.
 
-  **BEFORE proposing new gaps**, reconcile your memory ledger against
-  the `## Prior proposals — verified state` block in your input:
-  - Items whose ticket reached CLOSED with resolution `merged` → move to `## Done` (or equivalent), include the ticket_id.
-  - Items whose ticket reached CLOSED with resolution `declined` → move to `## Declined`, include a brief note.
-  - Items with resolution `in-flight` → leave in `## Proposals`.
-  - Do **not** re-propose anything that appears as Done or Declined.
+  CONSULTING PRIOR PROPOSALS:
+
+  Your input includes a `<recent_proposals>` block that lists tickets you
+  have proposed recently (state + one-line summary).  BEFORE proposing any
+  new draft ticket, consult this block:
+
+  - If a prior proposal already covers the same scope → do NOT re-propose
+    it.  The DB is the source of truth for ticket history.
+  - If a prior proposal is still relevant but stuck in `blocked` or
+    `human_issue_approval` and the underlying gap persists, you may file a
+    **follow-up** that references the prior ticket ID — do not re-file the
+    same scope as a fresh ticket.
+  - Use the `read_ticket` tool to fetch a prior proposal's full
+    description, history, and comments when the one-line summary in
+    `<recent_proposals>` is not enough to decide.
+
+  MEMORY USAGE:
+
+  You are given an agent memory ledger for **general observations and
+  patterns only** — architectural smells, recurring tool failures,
+  model-behaviour notes, codebase health trends.  It is NOT a per-ticket
+  diary.
+
+  DO NOT record in memory:
+  - Ticket IDs or ticket states
+  - Per-proposal notes or per-finding diaries
+  - Anything that is a record of "what you proposed"
+
+  Ticket history lives in the DB and is surfaced to you via
+  `<recent_proposals>`.  Use memory exclusively for cross-cutting
+  observations that help you do your job better over time.
 
   Follow this procedure carefully:
 
