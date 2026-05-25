@@ -534,19 +534,54 @@ def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
     """When both repo_dir and memory_dir are provided,
     build_fs_tools is called with extra_roots=[memory_dir]."""
-    from robotsix_mill.agents import fs_tools
+    from robotsix_mill.agents import fs_tools, explore, base, retry
 
     captured_extra_roots = None
+    settings = Settings()
 
-    def fake_build_fs_tools(root, settings, *, extra_roots=None):
+    def _fake_read(path, *, offset=1, limit=None):
+        return "content"
+
+    def _fake_list(path="."):
+        return "entries"
+
+    _fake_read.__name__ = "read_file"
+    _fake_list.__name__ = "list_dir"
+
+    def fake_build_fs_tools(root, s, *, extra_roots=None):
         nonlocal captured_extra_roots
         captured_extra_roots = extra_roots
-        return [fs_tools.read_file, fs_tools.list_dir]
+        return [_fake_read, _fake_list]
+
+    def fake_explore_tool(s, repo_dir):
+        async def _explore(ctx, question):
+            return "answer"
+        _explore.__name__ = "explore"
+        return _explore
+
+    class FakeRunResult:
+        output = agent_check.AgentCheckResult(
+            findings="ok",
+            updated_memory="mem",
+        )
+
+    class FakeAgent:
+        def run_sync(self, prompt):
+            return FakeRunResult()
+
+    def fake_build_agent(*args, **kwargs):
+        return FakeAgent()
+
+    def fake_call_with_retry(fn, *, settings=None, what=""):
+        return fn()
 
     monkeypatch.setattr(fs_tools, "build_fs_tools", fake_build_fs_tools)
+    monkeypatch.setattr(explore, "make_explore_tool", fake_explore_tool)
+    monkeypatch.setattr(base, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(retry, "call_with_retry", fake_call_with_retry)
 
     agent_check.run_agent_check_agent(
-        settings=Settings(),
+        settings=settings,
         repo_dir=Path("/fake/repo"),
         memory_dir=Path("/fake/data"),
     )
