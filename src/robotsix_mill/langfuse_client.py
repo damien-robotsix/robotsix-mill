@@ -37,7 +37,11 @@ def _langfuse_api_get(settings: Settings, path: str, params: dict | None = None,
 
     Returns the JSON-decoded response body, or ``None`` when Langfuse is
     unconfigured / unreachable / the request fails."""
-    if not settings.tracing_enabled:
+    if repo_config is None and not settings.tracing_enabled:
+        return None
+    if repo_config is not None and not (
+        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
+    ):
         return None
     if repo_config is not None:
         host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
@@ -46,7 +50,7 @@ def _langfuse_api_get(settings: Settings, path: str, params: dict | None = None,
             .encode()
         ).decode()
     else:
-        host = (get_secrets().langfuse_base_url or "").rstrip("/")
+        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
         auth = base64.b64encode(
             f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
             .encode()
@@ -335,7 +339,11 @@ def list_all_traces_since(
     or any HTTP / JSON error occurs — the caller must treat ``[]`` as
     "no data available."
     """
-    if not settings.tracing_enabled:
+    if repo_config is None and not settings.tracing_enabled:
+        return []
+    if repo_config is not None and not (
+        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
+    ):
         return []
     if repo_config is not None:
         host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
@@ -344,7 +352,7 @@ def list_all_traces_since(
             .encode()
         ).decode()
     else:
-        host = (get_secrets().langfuse_base_url or "").rstrip("/")
+        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
         auth = base64.b64encode(
             f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
             .encode()
@@ -400,7 +408,11 @@ def aggregate_cost_trend(
 
     Graceful: returns ``[]`` when tracing is disabled or the API errors.
     """
-    if not settings.tracing_enabled:
+    if repo_config is None and not settings.tracing_enabled:
+        return []
+    if repo_config is not None and not (
+        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
+    ):
         return []
 
     from_timestamp = (
@@ -418,7 +430,7 @@ def aggregate_cost_trend(
             f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
             .encode()
         ).decode()
-        host = (get_secrets().langfuse_base_url or "").rstrip("/")
+        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
 
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
@@ -552,7 +564,11 @@ def aggregate_cost_by_name(
     Graceful: returns ``[]`` when tracing is disabled or the API errors.
     Examines at most 500 traces to bound API calls.
     """
-    if not settings.tracing_enabled:
+    if repo_config is None and not settings.tracing_enabled:
+        return []
+    if repo_config is not None and not (
+        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
+    ):
         return []
 
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
@@ -568,7 +584,7 @@ def aggregate_cost_by_name(
             f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
             .encode()
         ).decode()
-        host = (get_secrets().langfuse_base_url or "").rstrip("/")
+        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
 
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
@@ -649,7 +665,11 @@ def most_expensive_ticket(
     Graceful: returns ``None`` when tracing is disabled or the API
     errors.  Examines at most 500 traces to bound API calls.
     """
-    if not settings.tracing_enabled:
+    if repo_config is None and not settings.tracing_enabled:
+        return None
+    if repo_config is not None and not (
+        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
+    ):
         return None
 
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
@@ -665,7 +685,7 @@ def most_expensive_ticket(
             f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
             .encode()
         ).decode()
-        host = (get_secrets().langfuse_base_url or "").rstrip("/")
+        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
 
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
@@ -747,7 +767,11 @@ def most_expensive_trace(
     Graceful: returns ``None`` when tracing is disabled or the API
     errors.  Examines at most 500 traces to bound API calls.
     """
-    if not settings.tracing_enabled:
+    if repo_config is None and not settings.tracing_enabled:
+        return None
+    if repo_config is not None and not (
+        repo_config.langfuse_public_key and repo_config.langfuse_secret_key
+    ):
         return None
 
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
@@ -763,7 +787,7 @@ def most_expensive_trace(
             f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
             .encode()
         ).decode()
-        host = (get_secrets().langfuse_base_url or "").rstrip("/")
+        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
 
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
