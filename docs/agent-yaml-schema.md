@@ -228,6 +228,26 @@ other on-demand agents typically leave this `false`.
 
 ---
 
+### `reply_to_thread` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `true` |
+
+Whether the `reply_to_thread` replying tool is injected. When `true`, the
+agent can reply to a comment thread on the current ticket, enabling
+conversation with humans through threaded comments. When `false`, the
+tool is omitted.
+
+Pipeline agents that interact with human reviewers (`implement`) keep
+this at the default `true`. Agents that produce one-shot structured
+output (`review`, `refine`, `audit`) set this to `false` since they
+don't participate in ongoing conversations.
+
+---
+
 ### `output_type` (optional)
 
 | Attribute | Value |
