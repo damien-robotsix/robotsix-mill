@@ -360,6 +360,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.agent_check.enabled": "MILL_AGENT_CHECK_PERIODIC",
     "periodic.agent_check.interval_seconds": "MILL_AGENT_CHECK_INTERVAL_SECONDS",
     "periodic.agent_check.memory_path": "MILL_AGENT_CHECK_MEMORY_PATH",
+    # -- periodic.bc_check --
+    "periodic.bc_check.model": "MILL_BC_CHECK_MODEL",
+    "periodic.bc_check.enabled": "MILL_BC_CHECK_PERIODIC",
+    "periodic.bc_check.interval_seconds": "MILL_BC_CHECK_INTERVAL_SECONDS",
+    "periodic.bc_check.memory_path": "MILL_BC_CHECK_MEMORY_PATH",
     # -- periodic.survey --
     "periodic.survey.model": "MILL_SURVEY_MODEL",
     "periodic.survey.enabled": "MILL_SURVEY_PERIODIC",

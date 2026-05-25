@@ -478,6 +478,20 @@ async function runSurvey(){
    btn.disabled=false; btn.textContent='Survey';
  }
 }
+async function runBcCheck(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/bc-check");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("BC-check started — it scans for backward-compat shims and dead-code branches ripe for removal. New draft tickets appear on the board when it finishes.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("BC-check failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='BC Check';
+ }
+}
 async function generateChildren(id){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Generating…';

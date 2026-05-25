@@ -185,6 +185,13 @@ periodic:
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/agent_check_memory.md
 
+  # -- bc-check — detects backward-compat shims/dead code ripe for removal -
+  bc_check:
+    model: *default_model           # bc-check agent model
+    enabled: false                  # enable periodic bc-check passes
+    interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
+    memory_path: null               # defaults to <data_dir>/bc_check_memory.md
+
   # -- survey agent — discovers OSS projects; proposes improvements --------
   survey:
     model: *default_model           # survey agent model

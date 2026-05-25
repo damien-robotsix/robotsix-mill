@@ -486,6 +486,44 @@ def audit_pass(
     return {"status": "started"}
 
 
+@router.post("/bc-check", status_code=202)
+def bc_check_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a bc-check pass in the BACKGROUND and return at once.
+
+    The bc-check agent inspects the codebase for backward-compat shims
+    and dead-code branches that are ripe for removal, drafting tickets
+    when it finds candidates. New drafts appear on the board when it
+    finishes.
+    """
+    from ..bc_check_runner import run_bc_check_pass
+
+    run_id = registry.start("bc-check")
+
+    def _run() -> None:
+        try:
+            r = run_bc_check_pass()
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "bc-check pass done: %d draft(s)", len(r.drafts_created)
+            )
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("bc-check pass failed")
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="bc-check-pass", daemon=True
+    ).start()
+    return {"status": "started"}
+
+
 @router.post("/agent-check", status_code=202)
 def agent_check_pass(
     registry=Depends(get_run_registry),
