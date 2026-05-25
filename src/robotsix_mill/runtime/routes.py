@@ -241,6 +241,10 @@ def add_comment(
 ) -> Comment:
     """Add a comment to a ticket (any state).
 
+    Set *parent_id* to reply to an existing comment, forming a
+    threaded discussion.  Omit it (or pass ``null``) to start a new
+    top-level thread.
+
     For epic tickets, the comment triggers a background re-processing:
     the epic is re-broken-down by the breakdown agent with the full
     comment history as operator direction, and net-new children are
