@@ -445,7 +445,7 @@ async function redraft(id){
  if(!r.ok){const e=await r.text();alert("redraft failed: "+e)}else{refresh();if(sel===id)open_(id)}
 }
 async function resumeRetry(id){
- const r=await fetch("/tickets/"+id+"/resume-blocked",{method:"POST"});
+ const r=await jpost("/tickets/"+id+"/resume-blocked");
  if(!r.ok){const e=await r.text();alert("resume failed: "+e);return}
  refresh();if(sel===id)open_(id);
 }
