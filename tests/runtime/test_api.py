@@ -1,3 +1,4 @@
+import json
 import pytest
 from fastapi.testclient import TestClient
 
@@ -26,11 +27,30 @@ def test_board_serves_html(client):
     assert "cdn.jsdelivr.net/npm/marked" in body
     assert '<div id="board">' in body
     assert '<div id="drawer">' in body
-    # state labels live in the external JS; verify they're served there
+    # State labels are injected into the HTML as a <script>const ST=[...]
+    # so the board column order always matches the server-side State enum.
+    from robotsix_mill.core.states import State
+
+    st_json = json.dumps([s.value for s in State])
+    assert f"const ST={st_json}" in body
+
+    # A subset of state labels also appear as string literals in
+    # board.js (conditionals, sort keys); verify those remain.
     js = client.get("/static/board.js").text
-    for s in ("draft", "human_issue_approval", "ready", "deliverable", "done", "blocked"):
+    for s in ("draft", "human_issue_approval", "done"):
         assert s in js
     assert "/tickets" in js  # board polls the JSON API
+
+
+def test_board_injected_st_matches_state_enum(client):
+    """The injected <script>const ST=[…] in GET / must exactly match
+    [s.value for s in State], so any drift between the State enum and
+    the board column order is detected by the test suite."""
+    from robotsix_mill.core.states import State
+
+    body = client.get("/").text
+    expected = json.dumps([s.value for s in State])
+    assert f"const ST={expected}" in body
 
 
 def test_create_and_get(client):

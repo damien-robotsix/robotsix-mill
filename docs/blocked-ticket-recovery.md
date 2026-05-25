@@ -31,10 +31,7 @@ recorded. You can recover in two ways:
   don't need the full pipeline.  Terminal states (DONE, CLOSED,
   ANSWERED, EPIC_CLOSED, EPIC_OPEN) are rejected with 409.
 
-  A **"Mark Done"** button (green, rightmost action button) is also
-  available on every eligible kanban card — no CLI or `curl` needed.
-  The button appears on all states except `done`, `closed`, `answered`,
-  `epic_closed`, and `epic_open`.
+  Use the CLI or API — the board no longer exposes a dedicated button.
 
 No raw database editing is ever needed to recover a blocked ticket.
 

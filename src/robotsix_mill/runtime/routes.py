@@ -9,6 +9,7 @@ defined inside ``create_app()``.
 
 from __future__ import annotations
 
+import json as _json
 import logging
 import threading
 
@@ -48,7 +49,8 @@ def health() -> dict:
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def board() -> str:
-    return BOARD_HTML
+    st_json = _json.dumps([s.value for s in State])
+    return BOARD_HTML.replace("{ST_STATES}", st_json)
 
 
 @router.post("/tickets", response_model=TicketRead, status_code=201)
