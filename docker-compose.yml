@@ -21,12 +21,6 @@ services:
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    env_file:
-      - .env
-      # secrets.env is gitignored and user-supplied — a missing file
-      # must not hard-break `docker compose` (fresh checkouts, CI).
-      - path: secrets.env
-        required: false
     environment:
       # sibling sandbox containers must bind the host path of ./.data
       # (the docker daemon resolves -v on the host, not in this container)
