@@ -75,7 +75,10 @@ class TicketService:
     def get(self, ticket_id: str) -> Ticket | None:
         """Look up a :class:`Ticket` by id, or return ``None``."""
         with db.session(self.settings) as s:
-            return s.get(Ticket, ticket_id)
+            ticket = s.get(Ticket, ticket_id)
+        if ticket is not None:
+            self._resolve_board_id(ticket)
+        return ticket
 
     def list(
         self,
@@ -93,7 +96,25 @@ class TicketService:
                 stmt = stmt.where(Ticket.state == state)
             if exclude_states:
                 stmt = stmt.where(Ticket.state.notin_(list(exclude_states)))
-            return list(s.exec(stmt).all())
+            tickets = list(s.exec(stmt).all())
+        for t in tickets:
+            self._resolve_board_id(t)
+        return tickets
+
+    def _resolve_board_id(self, ticket: Ticket) -> None:
+        """Assign *ticket* a ``board_id`` when it is missing (legacy rows).
+
+        Legacy tickets (created before multi-repo support) have an empty
+        ``board_id``.  They are assigned ``settings.default_repo_id`` at
+        read time when it is configured.  When ``default_repo_id`` is
+        also empty the ticket is left as-is (the operator must configure
+        the default before multi-repo routing can work for legacy rows).
+        """
+        if ticket.board_id:
+            return
+        default = self.settings.default_repo_id
+        if default:
+            ticket.board_id = default
 
     def history(self, ticket_id: str) -> list[TicketEvent]:
         """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``."""

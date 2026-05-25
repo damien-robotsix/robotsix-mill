@@ -169,8 +169,14 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument(
         "--repo-id",
         default=os.environ.get("MILL_REPO_ID"),
-        help="repository identifier (default from MILL_REPO_ID env var)",
+        help="repository identifier (default from MILL_REPO_ID env var; "
+        "omit to serve all repos from config/repos.yaml)",
     )
+
+    # --- repos list command ---
+    p_repos = sub.add_parser("repos", help="repository operations")
+    rsub = p_repos.add_subparsers(dest="rcmd", required=True)
+    rsub.add_parser("list", help="list registered repos and their boards")
 
     p_ticket = sub.add_parser("ticket", help="ticket operations")
     tsub = p_ticket.add_subparsers(dest="tcmd", required=True)
@@ -295,47 +301,60 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
 
         from .runtime.api import create_app
-        from .config import get_repo_config
+        from .config import get_repos_config, ReposRegistry
         from .config_loader import ConfigError
 
-        if not args.repo_id:
-            from .config import get_repos_config
-            known = sorted(get_repos_config().repos.keys())
-            print(f"Error: --repo-id is required. Known repos: {known}", file=sys.stderr)
-            return 2
-
-        try:
-            repo_config = get_repo_config(args.repo_id)
-        except ConfigError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-
-        # Stamp per-repo Langfuse credentials onto the Secrets singleton
-        # so tracing_enabled and the Langfuse API helpers pick them up.
-        from .config import Secrets, _reset_secrets, get_secrets
-        _reset_secrets()
-        existing = get_secrets()
-        import robotsix_mill.config as _cfg
-        _cfg._secrets = Secrets(
-            openrouter_api_key=existing.openrouter_api_key,
-            forge_token=existing.forge_token,
-            github_app_id=existing.github_app_id,
-            github_app_private_key=existing.github_app_private_key,
-            github_app_private_key_path=existing.github_app_private_key_path,
-            langfuse_public_key=repo_config.langfuse_public_key,
-            langfuse_secret_key=repo_config.langfuse_secret_key,
-            langfuse_base_url=repo_config.langfuse_base_url,
-            langfuse_project_id=repo_config.langfuse_project_name,
-            ntfy_url=existing.ntfy_url,
-            ntfy_token=existing.ntfy_token,
-        )
+        if args.repo_id:
+            # Single-repo override for tests/dev.
+            try:
+                repos = get_repos_config()
+            except ConfigError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 2
+            if args.repo_id not in repos.repos:
+                known = sorted(repos.repos.keys())
+                print(
+                    f"Error: Unknown repo '{args.repo_id}'. Known repos: {known}",
+                    file=sys.stderr,
+                )
+                return 2
+            single_repo_id: str | None = args.repo_id
+        else:
+            # Multi-repo mode: load all repos from config/repos.yaml.
+            try:
+                repos = get_repos_config()
+            except ConfigError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 2
+            if not repos.repos:
+                print(
+                    "Error: no repos defined in config/repos.yaml",
+                    file=sys.stderr,
+                )
+                return 2
+            single_repo_id = None
 
         uvicorn.run(
-            create_app(repo_config, settings),
+            create_app(repos, settings, single_repo_id=single_repo_id),
             host=settings.api_host,
             port=settings.api_port,
         )
         return 0
+
+    if args.cmd == "repos":
+        if args.rcmd == "list":
+            from .config import get_repos_config
+            from .config_loader import ConfigError
+
+            try:
+                repos = get_repos_config()
+            except ConfigError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 2
+            print(f"{'REPO_ID':30s} {'BOARD_ID'}")
+            for rc in repos.repos.values():
+                print(f"{rc.repo_id:30s} {rc.board_id}")
+            return 0
 
     if args.cmd in _RUNNERS:
         return _run_and_print(args.cmd, args)

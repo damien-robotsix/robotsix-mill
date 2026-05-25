@@ -579,7 +579,7 @@ async def test_worker_test_gap_task_not_created_when_periodic_false(tmp_path, mo
 # --- API endpoint tests ---
 
 
-def test_post_test_gap_returns_202(tmp_path, monkeypatch, repo_config):
+def test_post_test_gap_returns_202(tmp_path, monkeypatch, repos_registry):
     """POST /test-gap returns 202 immediately, runs in background."""
     from fastapi.testclient import TestClient
 
@@ -604,7 +604,7 @@ def test_post_test_gap_returns_202(tmp_path, monkeypatch, repo_config):
 
     from robotsix_mill.runtime.api import create_app
 
-    app = create_app(repo_config, settings)
+    app = create_app(repos_registry, settings, single_repo_id="test-repo")
     with TestClient(app) as client:
         response = client.post("/test-gap")
         assert response.status_code == 202
@@ -617,7 +617,7 @@ def test_post_test_gap_returns_202(tmp_path, monkeypatch, repo_config):
         finished.set()
 
 
-def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repo_config):
+def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry):
     """POST /test-gap runs in background thread, drafts appear."""
     from fastapi.testclient import TestClient
 
@@ -643,7 +643,7 @@ def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repo_config):
 
     from robotsix_mill.runtime.api import create_app
 
-    app = create_app(repo_config, settings)
+    app = create_app(repos_registry, settings, single_repo_id="test-repo")
     with TestClient(app) as client:
         response = client.post("/test-gap")
         assert response.status_code == 202

@@ -623,7 +623,7 @@ async def test_worker_health_task_not_created_when_periodic_false(tmp_path, monk
 # --- API endpoint tests ---
 
 
-def test_post_health_check_returns_202(tmp_path, monkeypatch, repo_config):
+def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
     """POST /health-check returns 202 immediately, runs in background."""
     from fastapi.testclient import TestClient
 
@@ -648,7 +648,7 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repo_config):
 
     from robotsix_mill.runtime.api import create_app
 
-    app = create_app(repo_config, settings)
+    app = create_app(repos_registry, settings, single_repo_id="test-repo")
     # `with TestClient(app)` triggers FastAPI lifespan startup, which
     # populates app.state.run_registry — required now that /health-check
     # registers its in-flight run there for the board's Runs panel.
@@ -664,7 +664,7 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repo_config):
         finished.set()
 
 
-def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repo_config):
+def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_registry):
     """POST /health-check runs in background thread, drafts appear."""
     from fastapi.testclient import TestClient
 
@@ -690,7 +690,7 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repo_config
 
     from robotsix_mill.runtime.api import create_app
 
-    app = create_app(repo_config, settings)
+    app = create_app(repos_registry, settings, single_repo_id="test-repo")
     # Lifespan-aware client so app.state.run_registry is initialised
     # (the /health-check route now records the in-flight run there).
     with TestClient(app) as client:
