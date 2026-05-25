@@ -235,15 +235,7 @@ def changed_files(repo: Path, target_branch: str) -> list[str]:
 
 def diff_base(repo: Path, target_branch: str) -> str:
     """Return the unified diff of all commits on the current branch
-    vs the merge-base with origin/<target_branch> (three-dot diff).
-
-    Uses ``A...B`` syntax, which diffs from the common ancestor rather
-    than the tip of A.  Changes merged into origin/<target> *after*
-    the branch diverged are excluded — only the commits on the current
-    branch appear in the diff.
-
-    Fetches first so the remote ref is current (harmless with three-dot
-    because the merge-base is determined by commit ancestry)."""
+    vs origin/<target_branch>. Fetches first so the diff is current."""
     _git(repo, "fetch", "origin", target_branch)
     return subprocess.run(
         ["git", "-C", str(repo), "diff", f"origin/{target_branch}...HEAD"],
