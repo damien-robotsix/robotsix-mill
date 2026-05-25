@@ -36,6 +36,7 @@ class AgentDefinition(BaseModel):
     tools: list[str] = []
     web: bool = False
     report_issue: bool = True
+    read_ticket: bool = False
     output_type: str | None = None
     retries: int = 2
     module: str | None = None

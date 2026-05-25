@@ -16,6 +16,7 @@ tools:
 
 web: false
 report_issue: true
+read_ticket: true
 output_type: DedupResult
 retries: 2
 module: dedup

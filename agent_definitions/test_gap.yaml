@@ -16,6 +16,7 @@ tools:
 
 web: true
 report_issue: false
+read_ticket: true
 output_type: TestGapResult
 retries: 2
 module: test_gap

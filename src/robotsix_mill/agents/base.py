@@ -122,6 +122,7 @@ def build_agent_from_definition(
         model_name=definition.model,
         web=definition.web,
         report_issue=definition.report_issue,
+        read_ticket=definition.read_ticket,
         retries=definition.retries,
         output_type=resolved_output_type,
     )
@@ -159,6 +160,7 @@ def build_agent(
     tools: list | None = None,
     web: bool = False,
     report_issue: bool = True,
+    read_ticket: bool = False,
     model_name: str | None = None,
     name: str | None = None,
     retries: int = 2,
@@ -197,6 +199,13 @@ def build_agent(
         # tool, error, workflow gap, missing input) as a draft ticket.
         # Dedup-guarded so a looping agent can't spam identical tickets.
         all_tools.append(make_report_issue_tool(settings, agent_name=name))
+    if read_ticket:
+        # Read-only tool so periodic agents can fetch full context of a
+        # past proposal when the one-line summary in <recent_proposals>
+        # isn't enough. Only injected when explicitly requested.
+        from .read_ticket import make_read_ticket_tool
+
+        all_tools.append(make_read_ticket_tool(settings))
     if web:
         # Not ":online", not web_fetch on the main agent — a cheap
         # sub-agent does the searching and hands back only a conclusion.

@@ -294,7 +294,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
 
     assert cap["tools"] == [
         "detect_duplication", "explore", "list_dir",
-        "read_file", "run_command", "web_research",
+        "read_file", "read_ticket", "run_command", "web_research",
     ]
 
 
