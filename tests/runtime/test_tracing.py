@@ -139,34 +139,39 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
     # ---- set up the pipeline ---------------------------------------
     provider = TracerProvider()
     provider.add_span_processor(_StampAndCapture())
-    monkeypatch.setattr(otel_trace, "get_tracer_provider", lambda: provider)
+    # Don't set globally — use provider directly to avoid OTel's
+    # _TRACER_PROVIDER_SET_ONCE guard.
+    tracer = provider.get_tracer("test-tracer")
 
     token = tracing._current_session.set("ticket-sub-agent-test")
     try:
-        tracer = otel_trace.get_tracer("test-tracer")
-        # Parent agent span
-        with tracer.start_as_current_span("parent-agent"):
-            # Sub-agent span nested inside parent (pydantic-ai
-            # sub-agents may open their own trace, but the stamp
-            # processor does not depend on parent context).
-            with tracer.start_as_current_span("sub-agent"):
-                pass
-    finally:
-        tracing._current_session.reset(token)
+        token = tracing._current_session.set("ticket-sub-agent-test")
+        try:
+            # Parent agent span
+            with tracer.start_as_current_span("parent-agent"):
+                # Sub-agent span nested inside parent (pydantic-ai
+                # sub-agents may open their own trace, but the stamp
+                # processor does not depend on parent context).
+                with tracer.start_as_current_span("sub-agent"):
+                    pass
+        finally:
+            tracing._current_session.reset(token)
 
-    # Both spans must carry the session id.
-    assert len(captured) == 2, (
-        f"Expected 2 spans, got {len(captured)}: {captured}"
-    )
-    for i, span_data in enumerate(captured):
-        assert span_data["attrs"].get("session.id") == "ticket-sub-agent-test", (
-            f"Span {i} ({span_data['name']}) missing session.id: "
-            f"{span_data['attrs']}"
+        # Both spans must carry the session id.
+        assert len(captured) == 2, (
+            f"Expected 2 spans, got {len(captured)}: {captured}"
         )
-        assert span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test", (
-            f"Span {i} ({span_data['name']}) missing langfuse.session.id: "
-            f"{span_data['attrs']}"
-        )
+        for i, span_data in enumerate(captured):
+            assert span_data["attrs"].get("session.id") == "ticket-sub-agent-test", (
+                f"Span {i} ({span_data['name']}) missing session.id: "
+                f"{span_data['attrs']}"
+            )
+            assert span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test", (
+                f"Span {i} ({span_data['name']}) missing langfuse.session.id: "
+                f"{span_data['attrs']}"
+            )
+    finally:
+        pass
 
 
 def test_tracing_enabled_no_env():

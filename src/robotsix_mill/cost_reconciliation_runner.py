@@ -243,7 +243,7 @@ def _fetch_langfuse_daily(
 # ---------------------------------------------------------------------------
 
 
-def run_cost_reconciliation_pass() -> CostReconciliationPassResult:
+def run_cost_reconciliation_pass(session_id: str = "") -> CostReconciliationPassResult:
     """Execute one cost-reconciliation pass.
 
     1. Fetch OpenRouter yesterday total.
