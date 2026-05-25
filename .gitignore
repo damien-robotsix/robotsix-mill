@@ -6,6 +6,7 @@ __pycache__/
 venv/
 secrets.env
 config/secrets.yaml
+config/repos.yaml
 config/mill.local.yaml
 config/mill.production.yaml
 config/repos.yaml

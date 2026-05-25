@@ -427,6 +427,13 @@ repos:
       base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
 ```
 
+After editing, verify the config is valid and uses real (non-placeholder)
+keys:
+
+```sh
+python scripts/verify_repos_config.py
+```
+
 ### Select a repo at startup
 
 Once `config/repos.yaml` is configured, you must tell the server which
