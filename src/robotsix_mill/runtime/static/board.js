@@ -3,8 +3,6 @@ let sel=null;
 let runsOpen=false;
 let costDashboardOpen=false;
 let costLookbackHours=24;
-let costMaxTickets=20;               // default for ticket-count mode
-let costMode='time';                 // 'time' | 'tickets'
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 let activeMap={};
 let gatesCache={};                    // cached /gates response for open_() drawer ordering
@@ -177,7 +175,7 @@ async function refresh(){
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${t.retry_attempt>0?`<span class="retry-chip" title="${esc(t.last_transient_error||'')}">retry ${t.retry_attempt}${t.next_retry_at?` · next ${fmtRelative(t.next_retry_at)}`:''}</span>`:''}`+
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
    (s==="human_mr_approval"?
-    `<button class="merge-btn" data-ticket-id="${t.id}" onclick="event.stopPropagation();mergePR('${t.id}')"${mergingSet.has(t.id)?' disabled':''}>${mergingSet.has(t.id)?'<span class="live-spinner"></span> Merging…':'Merge'}</button>`:"")+
+    `<button class="merge-btn${mergingSet.has(t.id)?' merging':''}" data-ticket="${t.id}"${mergingSet.has(t.id)?' disabled':''} onclick="event.stopPropagation();mergePR('${t.id}')">${mergingSet.has(t.id)?'Merging…':'Merge'}</button>`:"")+
    (s==="human_issue_approval"?
     `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
     `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
@@ -190,26 +188,19 @@ async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
  if(!r.ok){const e=await r.text();alert("approve failed: "+e)}else refresh()
 }
-function updateMergeButtons(ticketId,merging){
- document.querySelectorAll('button.merge-btn[data-ticket-id="'+ticketId+'"]').forEach(function(btn){
-  if(merging){
-   btn.disabled=true;
-   btn.innerHTML='<span class="live-spinner"></span> Merging…';
-   btn.classList.add('merging');
-  } else {
-   btn.disabled=false;
-   btn.textContent='Merge';
-   btn.classList.remove('merging');
-  }
- });
-}
 async function mergePR(id){
- if(mergingSet.has(id))return;         // ignore double-clicks
+ if(mergingSet.has(id))return;
  mergingSet.add(id);
- updateMergeButtons(id,true);
+ updateMergeButtonsDOM(id,true);
  const r=await jpost("/tickets/"+id+"/merge-now");
- if(!r.ok){const e=await r.text();mergingSet.delete(id);updateMergeButtons(id,false);alert("merge failed: "+e)}
- else{mergingSet.delete(id);refresh()}
+ if(!r.ok){mergingSet.delete(id);updateMergeButtonsDOM(id,false);const e=await r.text();alert("merge failed: "+e)}else refresh()
+}
+function updateMergeButtonsDOM(id,merging){
+ document.querySelectorAll(`.merge-btn[data-ticket="${id}"]`).forEach(b=>{
+  b.disabled=merging;
+  b.textContent=merging?'Merging…':'Merge';
+  b.classList.toggle('merging',merging);
+ });
 }
 async function requestChanges(id){
  const body=prompt("Send this ticket back to draft. What needs to change?\n(your comment goes to the refine agent so it can re-process with this feedback.)");
@@ -770,7 +761,7 @@ async function open_(id){
     (ms&&ms.can_merge===false?
      `<button class="merge-btn" disabled title="${esc(ms.reason||'')}">Merge</button>`+
      `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(ms.reason||'not mergeable')}</p>`:
-     `<button class="merge-btn" data-ticket-id="${t.id}" onclick="event.stopPropagation();mergePR('${t.id}')"${mergingSet.has(t.id)?' disabled':''}>${mergingSet.has(t.id)?'<span class="live-spinner"></span> Merging…':'Merge'}</button>`
+     `<button class="merge-btn${mergingSet.has(t.id)?' merging':''}" data-ticket="${t.id}"${mergingSet.has(t.id)?' disabled':''} onclick="event.stopPropagation();mergePR('${t.id}')">${mergingSet.has(t.id)?'Merging…':'Merge'}</button>`
     ):"")+
    (mr&&mr.reason?
     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")+
@@ -987,14 +978,12 @@ async function renderCostDashboard(){
   ctx.fillStyle="#7d828c";
   ctx.font="11px ui-monospace,monospace";
   ctx.textAlign="center";
-  const emptyMsg=timeModeActive?'No trend data available for this period.':'No trend data available for the last '+costMaxTickets+' tickets.';
-  ctx.fillText(emptyMsg,rect.width/2,rect.height/2);
+  ctx.fillText("No trend data available for this period.",rect.width/2,rect.height/2);
  }
 
  // -- per-agent bar chart -----------------------------------------------
  if(!data||!data.length){
-  const emptyMsg=timeModeActive?'No cost data available for this period.':'No cost data available for the last '+costMaxTickets+' tickets.';
-  document.getElementById("cost-chart").innerHTML='<div class="muted">'+emptyMsg+'</div>';
+  document.getElementById("cost-chart").innerHTML='<div class="muted">No cost data available for this period.</div>';
  } else {
   const colors=["#3b82f6","#8b5cf6","#22c55e","#eab308","#ef4444","#f97316","#06b6d4","#ec4899","#14b8a6","#a855f7"];
   const maxCost=Math.max(...data.map(d=>d.total_cost),0.0001);
