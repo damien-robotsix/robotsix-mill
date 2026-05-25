@@ -30,6 +30,7 @@ from ..agents import coding
 from ..agents.coding import AgentBudgetError, AgentRunError
 from ..agents.coordinating import ValidationResult
 from ..agents.testing import run_test_agent
+from ..config import get_secrets
 from ..core.models import Ticket
 from ..core.states import State
 from ..pass_runner import load_memory, persist_memory
@@ -90,19 +91,6 @@ class ImplementStage(Stage):
         if epic_ctx:
             spec = epic_ctx + "\n\n" + spec
 
-        # Wire _epic/ if this ticket belongs to an epic
-        epic_workspace_path: Path | None = None
-        if ticket.parent_id:
-            parent = ctx.service.get(ticket.parent_id)
-            if parent and parent.kind == "epic":
-                from ..core.workspace import link_epic_workspace
-                epic_workspace_path = ctx.service.epic_workspace_dir(
-                    ticket.parent_id
-                )
-                if not link_epic_workspace(repo_dir, epic_workspace_path):
-                    # Repo has its own real _epic/ — skip epic wiring
-                    epic_workspace_path = None
-
         memory_text = load_memory(settings.implement_memory_file)
         max_iters = max(1, settings.max_fix_iterations)
 
@@ -133,7 +121,6 @@ class ImplementStage(Stage):
                     settings=settings, repo_dir=repo_dir, spec=spec,
                     feedback=feedback, memory=memory_text,
                     reference_files=reference_files,
-                    epic_workspace_path=epic_workspace_path,
                 )
             except AgentBudgetError as e:
                 ImplementStage._finalize(
@@ -163,7 +150,6 @@ class ImplementStage(Stage):
             # deterministic process exit code — the authoritative word.
             passed, diag = run_test_agent(
                 settings=settings, repo_dir=repo_dir,
-                epic_workspace_path=epic_workspace_path,
             )
             if not passed and diag.startswith("sandbox unavailable"):
                 # Infra failure — not the code's fault; don't burn
@@ -250,7 +236,7 @@ class ImplementStage(Stage):
                     settings.forge_remote_url,
                     repo_dir,
                     settings.forge_target_branch,
-                    settings.forge_token,
+                    get_secrets().forge_token,
                 )
             except subprocess.CalledProcessError as e:
                 return Outcome(
@@ -263,9 +249,9 @@ class ImplementStage(Stage):
         # origin/<target> can silently revert newer commits.
         if not git_ops.try_rebase_onto(repo_dir, settings.forge_target_branch):
             return Outcome(
-                State.REBASING,
+                State.BLOCKED,
                 f"rebase onto origin/{settings.forge_target_branch} "
-                "failed — handing to rebase agent",
+                "failed — resolve conflicts manually",
             )
 
         # Hard invariant: NEVER run the agent / sandbox without a
@@ -280,7 +266,7 @@ class ImplementStage(Stage):
             try:
                 git_ops.clone(
                     settings.forge_remote_url, repo_dir,
-                    settings.forge_target_branch, settings.forge_token,
+                    settings.forge_target_branch, get_secrets().forge_token,
                 )
                 git_ops.create_branch(repo_dir, branch)
             except subprocess.CalledProcessError as e:

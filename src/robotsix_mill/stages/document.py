@@ -63,18 +63,6 @@ class DocumentStage(Stage):
 
         spec = ws.read_description()
 
-        # Wire _epic/ if this ticket belongs to an epic
-        extra_roots: list[Path] | None = None
-        if ticket.parent_id:
-            parent = ctx.service.get(ticket.parent_id)
-            if parent and parent.kind == "epic":
-                from ..core.workspace import link_epic_workspace
-                epic_workspace_path = ctx.service.epic_workspace_dir(
-                    ticket.parent_id
-                )
-                if link_epic_workspace(repo_dir, epic_workspace_path):
-                    extra_roots = [epic_workspace_path]
-
         # --- Documentation agent ---
         try:
             doc_result = self._run_doc_agent(
@@ -82,7 +70,7 @@ class DocumentStage(Stage):
                 repo_dir=repo_dir,
                 diff=diff,
                 spec=spec,
-                extra_roots=extra_roots,
+                extra_roots=None,
             )
         except Exception:
             log.warning(

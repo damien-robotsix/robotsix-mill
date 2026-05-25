@@ -28,7 +28,7 @@ def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Pat
     p = (root / rel).resolve()
     root = root.resolve()
     if p != root and not p.is_relative_to(root):
-        # Allow paths that resolve into an extra root (e.g. _epic/)
+        # Allow paths that resolve into an extra root
         if extra_roots:
             for extra in extra_roots:
                 if p.is_relative_to(extra.resolve()):
