@@ -18,6 +18,19 @@ def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_gates(client, settings):
+    """GET /gates returns the four pipeline gate flags from the live Settings."""
+    r = client.get("/gates")
+    assert r.status_code == 200
+    body = r.json()
+    assert body == {
+        "auto_approve": settings.auto_approve_enabled,
+        "review": settings.review_enabled,
+        "auto_merge": settings.auto_merge_enabled,
+        "require_approval": settings.require_approval,
+    }
+
+
 def test_board_serves_html(client):
     r = client.get("/")
     assert r.status_code == 200
@@ -27,6 +40,7 @@ def test_board_serves_html(client):
     assert "cdn.jsdelivr.net/npm/marked" in body
     assert '<div id="board">' in body
     assert '<div id="drawer">' in body
+    assert '<span id="gates">' in body  # gate pills placeholder
     # State labels are injected into the HTML as a <script>const ST=[...]
     # so the board column order always matches the server-side State enum.
     from robotsix_mill.core.states import State
@@ -159,6 +173,29 @@ def test_board_renders_cost_snippet(client):
     assert "toFixed(4)" in js  # 4 decimal places
     css = client.get("/static/board.css").text
     assert ".cost" in css      # CSS class for cost display
+
+
+def test_board_renders_gate_pill_wiring(client):
+    """The board JS includes gate-fetching and pill-rendering logic,
+    and the CSS includes the gate-pill / gate-on / gate-off classes."""
+    js = client.get("/static/board.js").text
+    assert 'jget("/gates")' in js
+    assert "fetchGates" in js
+    assert "gate-pill" in js
+    assert "gate-on" in js
+    assert "gate-off" in js
+    # All four labels must appear.
+    for label in ("auto-approve", "review", "auto-merge", "require-approval"):
+        assert label in js, f"gate label '{label}' missing from board.js"
+    # The YAML paths (from the tooltip) should also appear.
+    assert "gates.auto_approve_enabled" in js
+    assert "gates.review_enabled" in js
+    assert "gates.auto_merge_enabled" in js
+    assert "gates.require_approval" in js
+    css = client.get("/static/board.css").text
+    assert ".gate-pill" in css
+    assert ".gate-on" in css
+    assert ".gate-off" in css
 
 
 def test_board_no_langfuse_calls(client, monkeypatch):

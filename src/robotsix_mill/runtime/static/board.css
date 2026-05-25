@@ -227,3 +227,8 @@ margin-top:3px;background:#1e1a2a;color:#a78bfa;letter-spacing:.03em}
   margin-left: 6px;
 }
 .retry-now-btn:hover { background: #d97706; }
+/* gate pills in board header */
+.gate-pill{display:inline-block;font-size:11px;padding:2px 7px;
+  border-radius:4px;margin-left:4px;cursor:default}
+.gate-on{background:#1a3b2f;color:#34d399}
+.gate-off{background:#3b1f1f;color:#f87171}

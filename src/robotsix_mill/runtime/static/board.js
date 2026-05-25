@@ -27,6 +27,26 @@ function fmtRelative(iso){
  if(m<60)return"in "+m+"m";
  return new Date(iso).toLocaleTimeString();
 }
+// -- gate pills (pipeline behaviour flags surfaced in the header) -----
+async function fetchGates() {
+  const g = await jget("/gates");
+  if (!g) return;
+  document.getElementById("gates").innerHTML = [
+    { key: "auto_approve", label: "auto-approve", on: g.auto_approve,
+      yaml: "gates.auto_approve_enabled",
+      tip: "Cheap-LLM auto-approves safe refined specs; when off, every ticket pauses at human_issue_approval" },
+    { key: "review", label: "review", on: g.review,
+      yaml: "gates.review_enabled",
+      tip: "Dual-model code review before deliver; when off, tickets skip code_review" },
+    { key: "auto_merge", label: "auto-merge", on: g.auto_merge,
+      yaml: "gates.auto_merge_enabled",
+      tip: "Auto-merge green PRs after review approves; when off, tickets stop at waiting_auto_merge" },
+    { key: "require_approval", label: "require-approval", on: g.require_approval,
+      yaml: "gates.require_approval",
+      tip: "Human approval gate on refine output; when off, tickets skip human_issue_approval" }
+  ].map(p => `<span class="gate-pill ${p.on ? "gate-on" : "gate-off"}" title="${esc(p.yaml)} — ${esc(p.tip)}">${esc(p.label)} ${p.on ? "✓" : "✗"}</span>`).join("");
+}
+
 // HTTP helpers built on XMLHttpRequest, not fetch().
 // `fetch` is wrapped by SES / hardened-JS extensions (MetaMask, some
 // privacy/wallet add-ons) and can fail with "NetworkError when
@@ -69,6 +89,7 @@ async function refresh(){
  const wantClosed=showClosed;
  const tok=++refreshSeq;
  const url=wantClosed?"/tickets":"/tickets?include_closed=false";
+ fetchGates();
  const [ts, activeList]=await Promise.all([jget(url), jget("/active")]);
  if(!ts)return;
  const active={};

@@ -47,6 +47,22 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@router.get("/gates")
+def gates(settings=Depends(get_settings)) -> dict:
+    """Return the four pipeline gate flags from the live configuration.
+
+    Same open access model as ``/health`` — no auth.  The board polls
+    these every refresh cycle and renders them as header pills so the
+    operator always sees which behavioural gates are active.
+    """
+    return {
+        "auto_approve": settings.auto_approve_enabled,
+        "review": settings.review_enabled,
+        "auto_merge": settings.auto_merge_enabled,
+        "require_approval": settings.require_approval,
+    }
+
+
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def board() -> str:
     st_json = _json.dumps([s.value for s in State])
