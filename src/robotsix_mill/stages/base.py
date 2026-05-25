@@ -34,7 +34,7 @@ class StageContext:
     """
     settings: Settings
     service: TicketService
-    repo_config: RepoConfig
+    repo_config: RepoConfig | None = None
 
 
 @dataclass
