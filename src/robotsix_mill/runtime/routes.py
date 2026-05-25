@@ -31,6 +31,7 @@ from ..forge import get_forge
 from .board_html import BOARD_HTML
 from .deps import (
     enrich_ticket_read,
+    get_repos_registry,
     get_run_registry,
     get_service,
     get_settings,
@@ -46,6 +47,27 @@ router = APIRouter()
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@router.get("/repos")
+def list_repos(
+    request: Request,
+    repos=Depends(get_repos_registry),
+) -> list[dict]:
+    """Return the registered repos for the UI repo selector.
+
+    No secrets (Langfuse keys) are included — only ``repo_id`` and
+    ``board_id``.  In single-repo mode (``--repo-id`` passed) only
+    that repo is returned.
+    """
+    single = request.app.state.single_repo_id
+    if single is not None:
+        rc = repos.repos[single]
+        return [{"repo_id": rc.repo_id, "board_id": rc.board_id}]
+    return [
+        {"repo_id": rc.repo_id, "board_id": rc.board_id}
+        for rc in repos.repos.values()
+    ]
 
 
 @router.get("/gates")
@@ -246,50 +268,6 @@ def approve_ticket(
     maybe_enqueue(ticket, worker)  # implement picks it up from ready
     return enrich_ticket_read(ticket, settings, svc)
 
-
-@router.post("/tickets/{ticket_id}/approve-mr", response_model=TicketRead)
-def approve_mr(
-    ticket_id: str,
-    svc=Depends(get_service),
-    worker=Depends(get_worker),
-    settings=Depends(get_settings),
-) -> TicketRead:
-    """Human approves a ticket in human_mr_approval — merge the PR now.
-
-    Semantically identical to ``/merge-now``: the human is the
-    approval, so call the forge's merge endpoint directly instead of
-    transitioning to waiting_auto_merge (which would re-check the
-    reviewer's ``auto_merge_eligible`` flag and bounce back to
-    human_mr_approval whenever the reviewer set it false). The
-    docstring promised "bypasses auto-merge eligibility checks"; the
-    old implementation didn't.
-    """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
-    if ticket.state is not State.HUMAN_MR_APPROVAL:
-        raise HTTPException(409, "ticket is not in human_mr_approval")
-
-    forge = get_forge(settings)
-    pr = forge.pr_status(source_branch=ticket.branch)
-    if pr is None:
-        raise HTTPException(409, "no PR found for branch — nothing to merge")
-    pr_url = pr.get("url", ticket.branch)
-
-    result = forge.merge_pr(source_branch=ticket.branch)
-    if not result["merged"]:
-        raise HTTPException(409, result["reason"])
-
-    try:
-        ticket = svc.transition(
-            ticket_id,
-            State.DONE,
-            note=f"approved + merged by human: {pr_url}",
-        )
-    except TransitionError as e:
-        raise HTTPException(409, str(e)) from None
-
-    return enrich_ticket_read(ticket, settings, svc)
 
 
 @router.post("/tickets/{ticket_id}/merge-now", response_model=TicketRead)
