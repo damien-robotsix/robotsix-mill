@@ -664,7 +664,7 @@ def test_deep_analysis_passes_trace_ids_to_agent(tmp_path, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "_langfuse_api_get",
-        lambda s, path, params: {
+        lambda s, path, params, repo_config=None: {
             "data": [
                 {"id": "trace-a", "name": "implement"},
                 {"id": "trace-b", "name": "test"},
@@ -742,7 +742,7 @@ def test_deep_analysis_resets_counter(tmp_path, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "_langfuse_api_get",
-        lambda s, path, params: {"data": []},
+        lambda s, path, params, repo_config=None: {"data": []},
     )
     monkeypatch.setattr(
         retrospecting, "run_retrospect_agent",
@@ -767,7 +767,7 @@ def test_deep_analysis_handles_missing_langfuse_traces(tmp_path, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "_langfuse_api_get",
-        lambda s, path, params: None,
+        lambda s, path, params, repo_config=None: None,
     )
 
     captured_kwargs = {}
@@ -796,7 +796,7 @@ def test_cross_trace_tool_wired_in_deep_mode(tmp_path, monkeypatch):
     monkeypatch.setattr(
         langfuse_client,
         "_langfuse_api_get",
-        lambda s, path, params: {
+        lambda s, path, params, repo_config=None: {
             "data": [
                 {"id": "trace-a", "name": "implement"},
             ]

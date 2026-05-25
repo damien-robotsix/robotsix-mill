@@ -20,7 +20,7 @@ from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from typing import Iterator
 
-from ..config import get_secrets
+from ..config import RepoConfig, get_secrets
 
 _tracing_ready: bool | None = None  # tri-state: None=unchecked, True/False
 
@@ -51,22 +51,39 @@ def make_session_id(kind: str) -> str:
     )
 
 
-def _tracing_enabled() -> bool:
-    """Check secrets without importing anything heavy."""
+def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:
+    """Check credentials without importing anything heavy.
+
+    When *repo_config* is provided, its langfuse keys are checked;
+    otherwise the global :class:`Secrets` singleton is used as a
+    fallback for backward compatibility during the transition to
+    per-repo credentials.
+    """
+    if repo_config is not None:
+        return bool(
+            repo_config.langfuse_public_key
+            and repo_config.langfuse_secret_key
+        )
     return bool(
         get_secrets().langfuse_public_key
         and get_secrets().langfuse_secret_key
     )
 
 
-def _ensure_tracing() -> None:
+def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
     """Lazily configure the global OTel tracer provider and instrument
-    pydantic-ai agents.  Idempotent — subsequent calls are no-ops."""
+    pydantic-ai agents.  Idempotent — subsequent calls are no-ops.
+
+    When *repo_config* is provided, its langfuse credentials are used;
+    otherwise the global :class:`Secrets` singleton is used as a
+    fallback for backward compatibility during the transition to
+    per-repo credentials.
+    """
     global _tracing_ready
     if _tracing_ready is not None:
         return
 
-    if not _tracing_enabled():
+    if not _tracing_enabled(repo_config):
         _tracing_ready = False
         return
 
@@ -79,14 +96,21 @@ def _ensure_tracing() -> None:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-    secrets = get_secrets()
-    base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+    if repo_config is not None:
+        base_url = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        public_key = repo_config.langfuse_public_key
+        secret_key = repo_config.langfuse_secret_key
+        project_name = repo_config.langfuse_project_name
+    else:
+        secrets = get_secrets()
+        base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        public_key = secrets.langfuse_public_key
+        secret_key = secrets.langfuse_secret_key
+        project_name = None
+
     endpoint = f"{base_url}/api/public/otel/v1/traces"
 
     from base64 import b64encode as _b64encode
-
-    public_key = secrets.langfuse_public_key
-    secret_key = secrets.langfuse_secret_key
 
     exporter = OTLPSpanExporter(
         endpoint=endpoint,
@@ -122,8 +146,11 @@ def _ensure_tracing() -> None:
         def force_flush(self, timeout_millis: int = 30000):
             return True
 
+    resource_attrs: dict[str, str] = {SERVICE_NAME: "robotsix-mill"}
+    if project_name:
+        resource_attrs["langfuse.project.name"] = project_name
     provider = TracerProvider(
-        resource=Resource.create({SERVICE_NAME: "robotsix-mill"}),
+        resource=Resource.create(resource_attrs),
     )
     # on_start stamp first, then the batch exporter.
     provider.add_span_processor(_SessionStampProcessor())
@@ -166,6 +193,7 @@ def start_ticket_root_span(
     ticket_id: str,
     stage_name: str,
     extra_attributes: dict[str, str] | None = None,
+    repo_config: RepoConfig | None = None,
 ) -> Iterator[None]:
     """Open a root OTel span for one stage of a ticket, named after the
     stage (e.g. ``"refine"``, ``"implement"``) with ``session.id``
@@ -185,7 +213,7 @@ def start_ticket_root_span(
         with start_ticket_root_span(ticket_id, "refine"):
             ...  # the refine stage runs here as the root span itself
     """
-    _ensure_tracing()
+    _ensure_tracing(repo_config)
     if not _tracing_ready:
         with nullcontext():
             yield
@@ -212,7 +240,7 @@ def start_ticket_root_span(
 
 
 @contextmanager
-def trace_stage(stage_name: str) -> Iterator[None]:
+def trace_stage(stage_name: str, repo_config: RepoConfig | None = None) -> Iterator[None]:
     """Create a child span of whatever span is currently active.
 
     Usage::
@@ -220,7 +248,7 @@ def trace_stage(stage_name: str) -> Iterator[None]:
         with trace_stage("refine"):
             agent.run_sync(...)
     """
-    _ensure_tracing()
+    _ensure_tracing(repo_config)
     if not _tracing_ready:
         with nullcontext():
             yield

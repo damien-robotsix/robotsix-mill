@@ -256,7 +256,7 @@ def test_session_cost_cached_never_hits_network(monkeypatch):
 
 def _fake_api_response(traces):
     """Return a callable that mimics _langfuse_api_get for given traces."""
-    return lambda s, path, params=None: {"data": traces}
+    return lambda s, path, params=None, repo_config=None: {"data": traces}
 
 
 def test_session_total_cost_handles_missing_totalcost_key(settings, monkeypatch):

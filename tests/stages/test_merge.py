@@ -1045,7 +1045,7 @@ def test_root_span_only_on_first_rebase_attempt(tmp_path, monkeypatch):
     stage_calls = []
 
     @contextlib.contextmanager
-    def fake_root(ticket_id, stage_name, extra_attributes=None):
+    def fake_root(ticket_id, stage_name, extra_attributes=None, repo_config=None):
         root_calls.append({"ticket_id": ticket_id, "stage_name": stage_name})
         yield
 

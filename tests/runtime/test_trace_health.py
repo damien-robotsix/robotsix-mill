@@ -639,7 +639,7 @@ def test_start_ticket_root_span_not_called(tmp_path, monkeypatch):
     _init_db_for_test(settings)
     seen = {"span_called": False}
 
-    def fake_start_ticket_root_span(sid, stage_name, extra_attributes=None):
+    def fake_start_ticket_root_span(sid, stage_name, extra_attributes=None, repo_config=None):
         seen["span_called"] = True
         # If called, still need to yield so the body doesn't crash
         import contextlib

@@ -43,7 +43,7 @@ def test_no_cost_filter_single_fetch(tmp_path, monkeypatch):
     """Without cost filter: one Langfuse call, returns up to limit."""
     calls = []
 
-    def fake_get(settings, path, params=None):
+    def fake_get(settings, path, params=None, repo_config=None):
         calls.append((path, dict(params or {})))
         return {"data": [_trace(f"t{i}", 0.01) for i in range(50)]}
 
@@ -68,7 +68,7 @@ def test_cost_filter_does_not_break_at_limit_21(tmp_path, monkeypatch):
     """
     calls = []
 
-    def fake_get(settings, path, params=None):
+    def fake_get(settings, path, params=None, repo_config=None):
         p = dict(params or {})
         calls.append(p)
         # Return a full page of cost=0.01 traces (matches min_cost=0).
@@ -94,7 +94,7 @@ def test_cost_filter_paginates_for_sparse_matches(tmp_path, monkeypatch):
     behaviour."""
     calls = []
 
-    def fake_get(settings, path, params=None):
+    def fake_get(settings, path, params=None, repo_config=None):
         p = dict(params or {})
         page = p["page"]
         calls.append(page)
@@ -124,7 +124,7 @@ def test_examine_cap_bounds_pagination(tmp_path, monkeypatch):
     bounds the worst case."""
     calls = []
 
-    def fake_get(settings, path, params=None):
+    def fake_get(settings, path, params=None, repo_config=None):
         p = dict(params or {})
         calls.append(p["page"])
         # Every page is full of low-cost traces — nothing matches.
@@ -145,7 +145,7 @@ def test_unnamed_traces_filtered_out_no_cost_filter(tmp_path, monkeypatch):
     """In-flight traces show as unnamed (root span hasn't closed +
     propagated a name yet). They can't be deep-reviewed (partial
     observation tree), so the picker excludes them."""
-    def fake_get(settings, path, params=None):
+    def fake_get(settings, path, params=None, repo_config=None):
         # Mix of named and unnamed (None/empty) traces.
         return {"data": [
             _trace("t1", 0.01, name="refine"),
@@ -164,7 +164,7 @@ def test_unnamed_traces_filtered_out_no_cost_filter(tmp_path, monkeypatch):
 
 def test_unnamed_traces_filtered_out_with_cost_filter(tmp_path, monkeypatch):
     """Same filter applies under the paginated cost-filter path."""
-    def fake_get(settings, path, params=None):
+    def fake_get(settings, path, params=None, repo_config=None):
         p = dict(params or {})
         if p.get("page", 1) == 1:
             return {"data": [
@@ -188,7 +188,7 @@ def test_cost_filter_handles_empty_page(tmp_path, monkeypatch):
     and return what we have."""
     calls = []
 
-    def fake_get(settings, path, params=None):
+    def fake_get(settings, path, params=None, repo_config=None):
         p = dict(params or {})
         calls.append(p["page"])
         if p["page"] == 1:
