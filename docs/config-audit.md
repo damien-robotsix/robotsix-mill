@@ -10,7 +10,7 @@
 
 ## 1. Complete Inventory
 
-Every configuration value consumed anywhere in the repo.  **115** env-var
+Every configuration value consumed anywhere in the repo.  **116** env-var
 aliases are defined on `Settings` (`config.py`); the table below includes
 every one plus the Docker‑/compose‑only vars and computed properties that
 other code depends on.
@@ -110,6 +110,7 @@ other code depends on.
 | `MILL_API_HOST` | `api_host` | `127.0.0.1` | `str` | Settings + Dockerfile | non-sensitive | commented-out | §5 | `runtime/api.py` | Dockerfile overrides to `0.0.0.0` |
 | `MILL_API_PORT` | `api_port` | `8077` | `int` | Settings | non-sensitive | active (`8077`) | §5 | `runtime/api.py` | |
 | `MILL_API_URL` | `api_url` | `http://127.0.0.1:8077` | `str` | Settings + Dockerfile | identifying | active | §5 | `cli.py` | Dockerfile sets same value |
+| `MILL_BOARD_ID` | `board_id` | `""` | `str` | Settings | non-sensitive | absent | §5 | `core/service.py`, `runtime/lifespan.py` | Set at startup from `repos.yaml` |
 
 ### 1.6  Forge delivery
 
@@ -259,6 +260,7 @@ other code depends on.
 |---|---|---|---|---|
 | `db_path` | `data_dir / "mill.db"` | `Path` | `core/db.py`, all DB access | |
 | `workspaces_dir` | `data_dir / "workspaces"` | `Path` | `core/service.py` | |
+| `epic_workspaces_dir` | `data_dir / "epic_workspaces"` | `Path` | `sandbox.py` | Bind-mount target for epic workspace in sandbox containers |
 | `db_url` | `f"sqlite:///{db_path}"` | `str` | `core/db.py` | |
 | `tracing_enabled` | `bool(langfuse_base_url and langfuse_public_key and langfuse_secret_key)` | `bool` | `runtime/tracing.py`, `runtime/api.py` | Gate: all 3 must be truthy |
 | `retrospect_memory_file` | `retrospect_memory_path or data_dir / "retrospect_memory.md"` | `Path` | `stages/retrospect.py` | |

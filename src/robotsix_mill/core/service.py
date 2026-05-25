@@ -55,12 +55,15 @@ class TransitionError(RuntimeError):
 class TicketService:
     _ARCHIVABLE_STATES: set[State] = {State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, board_id: str = "") -> None:
         """Create a service backed by the given :class:`Settings`.
 
         The settings provide the database path and workspace root directory.
+        *board_id* identifies the repository this service stamps on tickets.
+        When empty, falls back to ``settings.board_id``.
         """
         self.settings = settings
+        self.board_id = board_id or settings.board_id
 
     def workspace(self, ticket: Ticket) -> Workspace:
         """Return the :class:`Workspace` for *ticket*.
@@ -272,6 +275,7 @@ class TicketService:
                 origin_session=origin_session,
                 depends_on=depends_on,
                 parent_id=parent_id,
+                board_id=self.board_id,
             )
             s.add(ticket)
             s.add(

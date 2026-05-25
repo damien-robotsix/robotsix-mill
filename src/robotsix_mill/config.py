@@ -767,6 +767,9 @@ class Settings(BaseSettings):
     ntfy_url: str | None = Field(default=None, alias="NTFY_URL")
     ntfy_token: str | None = Field(default=None, alias="NTFY_TOKEN")
 
+    # --- board ---
+    board_id: str = Field(default="", alias="MILL_BOARD_ID")
+
     @property
     def db_path(self) -> Path:
         """Resolved path to the SQLite database file."""
