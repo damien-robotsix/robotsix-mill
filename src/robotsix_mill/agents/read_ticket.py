@@ -114,9 +114,19 @@ def make_read_ticket_tool(settings: Settings):
 
             result = "\n".join(lines)
 
-            # Soft overall cap at ~6000 characters
+            # Soft overall cap at ~6000 characters.
+            # Truncate at a section/paragraph boundary when possible
+            # to avoid cutting mid-word or mid-heading.
             if len(result) > 6000:
-                result = result[:6000] + "\n\n... [truncated]"
+                cutoff = 6000
+                # Prefer cutting before a section heading, then a
+                # paragraph break, then any newline.
+                for marker in ("\n### ", "\n## ", "\n\n", "\n"):
+                    pos = result.rfind(marker, 0, 6000)
+                    if pos != -1 and pos > 5400:
+                        cutoff = pos
+                        break
+                result = result[:cutoff] + "\n\n... [truncated]"
 
             return result
 
