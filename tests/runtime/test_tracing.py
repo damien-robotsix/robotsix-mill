@@ -157,9 +157,9 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
     # _TRACER_PROVIDER_SET_ONCE guard.
     tracer = provider.get_tracer("test-tracer")
 
-    token = tracing._current_session.set("ticket-sub-agent-test")
+    token_outer = tracing._current_session.set("ticket-sub-agent-test")
     try:
-        token = tracing._current_session.set("ticket-sub-agent-test")
+        token_inner = tracing._current_session.set("ticket-sub-agent-test")
         try:
             # Parent agent span
             with tracer.start_as_current_span("parent-agent"):
@@ -169,7 +169,7 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
                 with tracer.start_as_current_span("sub-agent"):
                     pass
         finally:
-            tracing._current_session.reset(token)
+            tracing._current_session.reset(token_inner)
 
         # Both spans must carry the session id.
         assert len(captured) == 2, (
@@ -185,7 +185,7 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
                 f"{span_data['attrs']}"
             )
     finally:
-        pass
+        tracing._current_session.reset(token_outer)
 
 
 def test_tracing_enabled_no_env():

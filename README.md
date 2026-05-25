@@ -43,11 +43,14 @@ docker compose up -d --build                             # defaults to MILL_REPO
 Open `http://localhost:8077` — the ticket board is the primary interface.
 
 By default the server loads **all** repos from `config/repos.yaml` and
-serves them together (multi-repo mode).  To scope the process to a single
-repo — useful for tests or dev — pass `--repo-id <id>` or set the
-`MILL_REPO_ID` environment variable.  The compose file defaults to
-`MILL_REPO_ID=robotsix-mill` (single-repo override); remove the env var
-to run in multi-repo mode.  See
+serves them together (multi-repo mode).  The board UI shows a repo
+selector dropdown that filters tickets, runs, and costs to the selected
+repo; choose "All repos" to see everything at once.  To scope the process
+to a single repo — useful for tests or dev — pass `--repo-id <id>` or set
+the `MILL_REPO_ID` environment variable.  In single-repo mode the
+selector still appears but shows only the one repo.  The compose file
+defaults to `MILL_REPO_ID=robotsix-mill` (single-repo override); remove
+the env var to run in multi-repo mode.  See
 [docs/configuration.md#repos-registry](docs/configuration.md#repos-registry).
 
 ```sh

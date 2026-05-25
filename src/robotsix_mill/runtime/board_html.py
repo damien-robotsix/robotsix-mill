@@ -11,6 +11,9 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <header><h1>robotsix-mill</h1>
 <span id="gates"></span>
 <span class="muted" id="meta">loading…</span>
+<select id="repo-selector" onchange="onRepoChange(this.value)" style="font-size:11px;background:#1d212c;border:1px solid #2c313d;color:#cfd3db;border-radius:4px;padding:3px 6px">
+  <option value="all">All repos</option>
+</select>
 <label class="muted" style="margin-left:auto">
   <input type="checkbox" onchange="showClosed=this.checked;refresh()"> show closed</label>
 <span class="muted">auto-refresh 5s</span>
