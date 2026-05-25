@@ -345,49 +345,32 @@ def list_all_traces_since(
         repo_config.langfuse_public_key and repo_config.langfuse_secret_key
     ):
         return []
-    if repo_config is not None:
-        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-        auth = base64.b64encode(
-            f"{repo_config.langfuse_public_key}:{repo_config.langfuse_secret_key}"
-            .encode()
-        ).decode()
-    else:
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-        auth = base64.b64encode(
-            f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
-            .encode()
-        ).decode()
     try:
-        import httpx
-
         all_traces: list[dict] = []
         page = 1
-        with httpx.Client(timeout=30) as c:
-            while True:
-                r = c.get(
-                    f"{host}/api/public/traces",
-                    params={
-                        "fromTimestamp": from_timestamp,
-                        "limit": 50,
-                        "page": page,
-                    },
-                    headers={"Authorization": f"Basic {auth}"},
+        while True:
+            body = _langfuse_api_get(
+                settings,
+                "/api/public/traces",
+                params={
+                    "fromTimestamp": from_timestamp,
+                    "limit": 50,
+                    "page": page,
+                },
+                repo_config=repo_config,
+            )
+            if body is None:
+                log.warning(
+                    "Langfuse trace list failed on page %d", page
                 )
-                if r.status_code != 200:
-                    log.warning(
-                        "Langfuse trace list returned %d on page %d",
-                        r.status_code,
-                        page,
-                    )
-                    return []
-                body = r.json()
-                data = body.get("data", [])
-                all_traces.extend(data)
-                meta = body.get("meta", {})
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
+                return []
+            data = body.get("data", [])
+            all_traces.extend(data)
+            meta = body.get("meta", {})
+            total_pages = meta.get("totalPages", 1)
+            if page >= total_pages:
+                break
+            page += 1
         return all_traces
     except Exception:  # noqa: BLE001 — never crash the caller
         log.exception("failed to list Langfuse traces since %s", from_timestamp)
@@ -419,58 +402,41 @@ def aggregate_cost_trend(
         datetime.utcnow() - timedelta(hours=lookback_hours)
     ).isoformat() + "Z"
 
-    if repo_config is not None:
-        auth = base64.b64encode(
-            f"{repo_config.langfuse_public_key}:{repo_config.langfuse_secret_key}"
-            .encode()
-        ).decode()
-        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-    else:
-        auth = base64.b64encode(
-            f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
-            .encode()
-        ).decode()
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
     all_traces: list[dict] = []
     api_ok = False  # distinguish "API error" from "no traces in window"
 
     try:
-        import httpx
-
         page = 1
-        with httpx.Client(timeout=20) as c:
-            while len(all_traces) < EXAMINE_CAP:
-                r = c.get(
-                    f"{host}/api/public/traces",
-                    params={
-                        "fromTimestamp": from_timestamp,
-                        "limit": PAGE_SIZE,
-                        "page": page,
-                        "orderBy": "timestamp.desc",
-                    },
-                    headers={"Authorization": f"Basic {auth}"},
+        while len(all_traces) < EXAMINE_CAP:
+            body = _langfuse_api_get(
+                settings,
+                "/api/public/traces",
+                params={
+                    "fromTimestamp": from_timestamp,
+                    "limit": PAGE_SIZE,
+                    "page": page,
+                    "orderBy": "timestamp.desc",
+                },
+                repo_config=repo_config,
+            )
+            if body is None:
+                log.warning(
+                    "aggregate_cost_trend: Langfuse request failed on page %d",
+                    page,
                 )
-                if r.status_code != 200:
-                    log.warning(
-                        "aggregate_cost_trend: Langfuse returned %d on page %d",
-                        r.status_code,
-                        page,
-                    )
-                    break
+                break
 
-                api_ok = True
-                body = r.json()
-                data = body.get("data", [])
-                all_traces.extend(data)
+            api_ok = True
+            data = body.get("data", [])
+            all_traces.extend(data)
 
-                meta = body.get("meta", {})
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
+            meta = body.get("meta", {})
+            total_pages = meta.get("totalPages", 1)
+            if page >= total_pages:
+                break
+            page += 1
 
     except Exception:
         log.exception("aggregate_cost_trend failed")
@@ -573,56 +539,39 @@ def aggregate_cost_by_name(
 
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
-    if repo_config is not None:
-        auth = base64.b64encode(
-            f"{repo_config.langfuse_public_key}:{repo_config.langfuse_secret_key}"
-            .encode()
-        ).decode()
-        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-    else:
-        auth = base64.b64encode(
-            f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
-            .encode()
-        ).decode()
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
     all_traces: list[dict] = []
 
     try:
-        import httpx
-
         page = 1
-        with httpx.Client(timeout=20) as c:
-            while len(all_traces) < EXAMINE_CAP:
-                r = c.get(
-                    f"{host}/api/public/traces",
-                    params={
-                        "fromTimestamp": from_timestamp,
-                        "limit": PAGE_SIZE,
-                        "page": page,
-                        "orderBy": "timestamp.desc",
-                    },
-                    headers={"Authorization": f"Basic {auth}"},
+        while len(all_traces) < EXAMINE_CAP:
+            body = _langfuse_api_get(
+                settings,
+                "/api/public/traces",
+                params={
+                    "fromTimestamp": from_timestamp,
+                    "limit": PAGE_SIZE,
+                    "page": page,
+                    "orderBy": "timestamp.desc",
+                },
+                repo_config=repo_config,
+            )
+            if body is None:
+                log.warning(
+                    "aggregate_cost_by_name: Langfuse request failed on page %d",
+                    page,
                 )
-                if r.status_code != 200:
-                    log.warning(
-                        "aggregate_cost_by_name: Langfuse returned %d on page %d",
-                        r.status_code,
-                        page,
-                    )
-                    break
+                break
 
-                body = r.json()
-                data = body.get("data", [])
-                all_traces.extend(data)
+            data = body.get("data", [])
+            all_traces.extend(data)
 
-                meta = body.get("meta", {})
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
+            meta = body.get("meta", {})
+            total_pages = meta.get("totalPages", 1)
+            if page >= total_pages:
+                break
+            page += 1
 
     except Exception:
         log.exception("aggregate_cost_by_name failed")
@@ -674,56 +623,39 @@ def most_expensive_ticket(
 
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
-    if repo_config is not None:
-        auth = base64.b64encode(
-            f"{repo_config.langfuse_public_key}:{repo_config.langfuse_secret_key}"
-            .encode()
-        ).decode()
-        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-    else:
-        auth = base64.b64encode(
-            f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
-            .encode()
-        ).decode()
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
     all_traces: list[dict] = []
 
     try:
-        import httpx
-
         page = 1
-        with httpx.Client(timeout=20) as c:
-            while len(all_traces) < EXAMINE_CAP:
-                r = c.get(
-                    f"{host}/api/public/traces",
-                    params={
-                        "fromTimestamp": from_timestamp,
-                        "limit": PAGE_SIZE,
-                        "page": page,
-                        "orderBy": "timestamp.desc",
-                    },
-                    headers={"Authorization": f"Basic {auth}"},
+        while len(all_traces) < EXAMINE_CAP:
+            body = _langfuse_api_get(
+                settings,
+                "/api/public/traces",
+                params={
+                    "fromTimestamp": from_timestamp,
+                    "limit": PAGE_SIZE,
+                    "page": page,
+                    "orderBy": "timestamp.desc",
+                },
+                repo_config=repo_config,
+            )
+            if body is None:
+                log.warning(
+                    "most_expensive_ticket: Langfuse request failed on page %d",
+                    page,
                 )
-                if r.status_code != 200:
-                    log.warning(
-                        "most_expensive_ticket: Langfuse returned %d on page %d",
-                        r.status_code,
-                        page,
-                    )
-                    break
+                break
 
-                body = r.json()
-                data = body.get("data", [])
-                all_traces.extend(data)
+            data = body.get("data", [])
+            all_traces.extend(data)
 
-                meta = body.get("meta", {})
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
+            meta = body.get("meta", {})
+            total_pages = meta.get("totalPages", 1)
+            if page >= total_pages:
+                break
+            page += 1
 
     except Exception:
         log.exception("most_expensive_ticket failed")
@@ -776,56 +708,39 @@ def most_expensive_trace(
 
     from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
 
-    if repo_config is not None:
-        auth = base64.b64encode(
-            f"{repo_config.langfuse_public_key}:{repo_config.langfuse_secret_key}"
-            .encode()
-        ).decode()
-        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-    else:
-        auth = base64.b64encode(
-            f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
-            .encode()
-        ).decode()
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-
     PAGE_SIZE = 100
     EXAMINE_CAP = 500
     all_traces: list[dict] = []
 
     try:
-        import httpx
-
         page = 1
-        with httpx.Client(timeout=20) as c:
-            while len(all_traces) < EXAMINE_CAP:
-                r = c.get(
-                    f"{host}/api/public/traces",
-                    params={
-                        "fromTimestamp": from_timestamp,
-                        "limit": PAGE_SIZE,
-                        "page": page,
-                        "orderBy": "timestamp.desc",
-                    },
-                    headers={"Authorization": f"Basic {auth}"},
+        while len(all_traces) < EXAMINE_CAP:
+            body = _langfuse_api_get(
+                settings,
+                "/api/public/traces",
+                params={
+                    "fromTimestamp": from_timestamp,
+                    "limit": PAGE_SIZE,
+                    "page": page,
+                    "orderBy": "timestamp.desc",
+                },
+                repo_config=repo_config,
+            )
+            if body is None:
+                log.warning(
+                    "most_expensive_trace: Langfuse request failed on page %d",
+                    page,
                 )
-                if r.status_code != 200:
-                    log.warning(
-                        "most_expensive_trace: Langfuse returned %d on page %d",
-                        r.status_code,
-                        page,
-                    )
-                    break
+                break
 
-                body = r.json()
-                data = body.get("data", [])
-                all_traces.extend(data)
+            data = body.get("data", [])
+            all_traces.extend(data)
 
-                meta = body.get("meta", {})
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
+            meta = body.get("meta", {})
+            total_pages = meta.get("totalPages", 1)
+            if page >= total_pages:
+                break
+            page += 1
 
     except Exception:
         log.exception("most_expensive_trace failed")
