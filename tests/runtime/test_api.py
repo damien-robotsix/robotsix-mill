@@ -1612,7 +1612,7 @@ class _FakeForge:
 def _patch_forge(monkeypatch, fake_forge):
     monkeypatch.setattr(
         "robotsix_mill.runtime.routes.get_forge",
-        lambda s: fake_forge,
+        lambda s, repo_config=None: fake_forge,
     )
 
 

@@ -50,7 +50,7 @@ def test_app_mode_mints_and_caches(tmp_path, monkeypatch):
     auth._cache.clear()
     calls = {"n": 0}
 
-    def fake_mint(settings):
+    def fake_mint(settings, repo_config=None):
         calls["n"] += 1
         return "ghs_minted", time.time() + 3000
 

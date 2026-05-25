@@ -10,13 +10,19 @@ robotsix-project bot identity, without GitHub Actions.
 tests, so pyjwt/httpx aren't needed for the token-auth path or the
 suite). Minted tokens (~1 h TTL) are cached so one deliver doesn't mint
 twice (push + PR).
+
+Per-repo installations: when a ``RepoConfig`` with ``forge_remote_url``
+is provided, the target owner/repo is derived from that repo's remote
+instead of the global ``settings.forge_remote_url``.  This lets
+different repos under the same (or different) GitHub Apps mint
+installation tokens for their respective remotes.
 """
 
 from __future__ import annotations
 
 import time
 
-from ..config import Settings, get_secrets
+from ..config import RepoConfig, Settings, get_secrets
 from .github import _parse_owner_repo
 
 _cache: dict[str, tuple[str, float]] = {}
@@ -31,13 +37,29 @@ def _private_key() -> str:
     return key.replace("\\n", "\n")
 
 
-def _mint_installation_token(settings: Settings) -> tuple[str, float]:
+def _resolve_remote_url(
+    settings: Settings, repo_config: RepoConfig | None = None
+) -> str:
+    """Return the effective forge remote URL.
+
+    When *repo_config* has a ``forge_remote_url``, use it; otherwise
+    fall back to the global ``settings.forge_remote_url``.
+    """
+    if repo_config is not None and getattr(repo_config, "forge_remote_url", None):
+        return repo_config.forge_remote_url
+    return settings.forge_remote_url or ""
+
+
+def _mint_installation_token(
+    settings: Settings, repo_config: RepoConfig | None = None
+) -> tuple[str, float]:
     """Returns (token, unix_expiry). Seam: tests monkeypatch this."""
     import httpx
     import jwt
 
     api = settings.github_api_url.rstrip("/")
-    owner, repo = _parse_owner_repo(settings.forge_remote_url or "")
+    remote_url = _resolve_remote_url(settings, repo_config)
+    owner, repo = _parse_owner_repo(remote_url)
     now = int(time.time())
     bearer = jwt.encode(
         {"iat": now - 60, "exp": now + 9 * 60, "iss": get_secrets().github_app_id},
@@ -62,7 +84,9 @@ def _mint_installation_token(settings: Settings) -> tuple[str, float]:
     return data["token"], time.time() + 50 * 60
 
 
-def github_token(settings: Settings) -> str:
+def github_token(
+    settings: Settings, repo_config: RepoConfig | None = None
+) -> str:
     if settings.forge_auth != "app":
         if not get_secrets().forge_token:
             raise RuntimeError("FORGE_TOKEN not set")
@@ -76,10 +100,11 @@ def github_token(settings: Settings) -> str:
             "FORGE_AUTH=app needs GITHUB_APP_ID and "
             "GITHUB_APP_PRIVATE_KEY[_PATH]"
         )
-    ck = f"{get_secrets().github_app_id}:{settings.forge_remote_url}"
+    remote_url = _resolve_remote_url(settings, repo_config)
+    ck = f"{get_secrets().github_app_id}:{remote_url}"
     cached = _cache.get(ck)
     if cached and cached[1] - 60 > time.time():
         return cached[0]
-    token, expiry = _mint_installation_token(settings)
+    token, expiry = _mint_installation_token(settings, repo_config=repo_config)
     _cache[ck] = (token, expiry)
     return token

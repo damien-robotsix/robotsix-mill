@@ -55,7 +55,7 @@ def _make_fake_forge(monkeypatch, runs=None, logs=""):
     forge = FakeForge(runs=runs, logs=logs)
     monkeypatch.setattr(
         "robotsix_mill.forge.get_forge",
-        lambda s: forge,
+        lambda s, repo_config=None: forge,
     )
     return forge
 

@@ -228,6 +228,7 @@ class TicketService:
         depends_on: str | None = None,
         kind: str = "task",
         parent_id: str | None = None,
+        board_id: str | None = None,
     ) -> Ticket:
         """Create a new ticket with the given *title*.
 
@@ -246,6 +247,10 @@ class TicketService:
 
         If *parent_id* is provided, the parent ticket must exist; the
         created ticket is linked to it via ``set_parent``.
+
+        *board_id* overrides ``self.board_id`` when provided — used by
+        the multi-repo API surface to stamp the correct board on each
+        ticket.
 
         Raises :class:`ValueError` if *depends_on* includes the ticket's
         own ID (self-dependency), is provided for an inquiry or epic, or
@@ -295,7 +300,7 @@ class TicketService:
                 origin_session=origin_session,
                 depends_on=depends_on,
                 parent_id=parent_id,
-                board_id=self.board_id,
+                board_id=board_id if board_id is not None else self.board_id,
             )
             s.add(ticket)
             s.add(

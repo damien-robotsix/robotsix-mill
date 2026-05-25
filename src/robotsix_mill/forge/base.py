@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ..config import Settings
+from ..config import RepoConfig, Settings
 
 
 class Forge(ABC):
@@ -135,17 +135,25 @@ class Forge(ABC):
         """
 
 
-def get_forge(settings: Settings) -> Forge:
-    """Resolve the configured forge adapter."""
+def get_forge(
+    settings: Settings, repo_config: RepoConfig | None = None
+) -> Forge:
+    """Resolve the configured forge adapter.
+
+    When *repo_config* is provided, the forge adapter is built with
+    that repo's remote URL so push/PR/merge operations target the
+    correct repository.  The adapter itself receives the repo_config
+    for token minting and remote resolution.
+    """
     kind = settings.forge_kind
     if kind == "github":
         from .github import GitHubForge
 
-        return GitHubForge(settings)
+        return GitHubForge(settings, repo_config=repo_config)
     if kind == "gitlab":
         from .gitlab import GitLabForge
 
-        return GitLabForge(settings)
+        return GitLabForge(settings, repo_config=repo_config)
     raise RuntimeError(
         f"no forge configured (FORGE_KIND={kind!r}); cannot deliver"
     )

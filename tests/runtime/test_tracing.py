@@ -137,6 +137,14 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
             return True
 
     # ---- set up the pipeline ---------------------------------------
+    # Force-reset any previously installed global TracerProvider so the
+    # test's custom provider (with _StampAndCapture) actually takes effect.
+    existing = otel_trace.get_tracer_provider()
+    if hasattr(existing, "shutdown"):
+        existing.shutdown()
+    import opentelemetry.trace as _trace_mod
+    _trace_mod._TRACER_PROVIDER_SET_ONCE._done = False
+
     provider = TracerProvider()
     provider.add_span_processor(_StampAndCapture())
     monkeypatch.setattr(otel_trace, "get_tracer_provider", lambda: provider)

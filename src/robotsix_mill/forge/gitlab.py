@@ -38,6 +38,19 @@ def _parse_gitlab_project_path(remote_url: str) -> str:
 
 
 class GitLabForge(Forge):
+    def __init__(self, settings, repo_config=None):
+        super().__init__(settings)
+        self._repo_config = repo_config
+
+    @property
+    def _remote_url(self) -> str:
+        """Effective remote URL: per-repo override, else global setting."""
+        if self._repo_config is not None:
+            remote = getattr(self._repo_config, "forge_remote_url", None)
+            if remote:
+                return remote
+        return self.settings.forge_remote_url or ""
+
     # ------------------------------------------------------------------
     # Public methods mandated by Forge ABC
     # ------------------------------------------------------------------
@@ -46,7 +59,7 @@ class GitLabForge(Forge):
         self, *, source_branch: str, title: str, body: str
     ) -> str:
         s = self.settings
-        project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+        project_path = _parse_gitlab_project_path(self._remote_url)
         return self._create_mr(
             project_path=project_path,
             source_branch=source_branch,
@@ -58,7 +71,7 @@ class GitLabForge(Forge):
     def pr_status(self, *, source_branch: str) -> dict | None:
         try:
             s = self.settings
-            project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+            project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
                 return None
@@ -77,7 +90,7 @@ class GitLabForge(Forge):
     def check_status(self, *, source_branch: str) -> dict | None:
         try:
             s = self.settings
-            project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+            project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
                 return None
@@ -100,7 +113,7 @@ class GitLabForge(Forge):
     def pr_files(self, *, source_branch: str) -> list[dict]:
         try:
             s = self.settings
-            project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+            project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
                 return []
@@ -113,7 +126,7 @@ class GitLabForge(Forge):
     def merge_pr(self, *, source_branch: str) -> dict:
         try:
             s = self.settings
-            project_path = _parse_gitlab_project_path(s.forge_remote_url or "")
+            project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
                 return {"merged": False, "reason": "MR not found"}

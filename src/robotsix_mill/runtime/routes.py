@@ -24,13 +24,14 @@ from ..core.models import (
     TicketRead,
     TicketTransition,
 )
-from ..config import get_secrets
+from ..config import get_repo_config, get_secrets
 from ..core.service import TransitionError
 from ..core.states import State
 from ..forge import get_forge
 from .board_html import BOARD_HTML
 from .deps import (
     enrich_ticket_read,
+    get_repo_config_for,
     get_repos_registry,
     get_run_registry,
     get_service,
@@ -42,6 +43,52 @@ from .deps import (
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _repo_config_for_ticket(ticket, repos):
+    """Resolve the ``RepoConfig`` for *ticket*'s ``board_id``.
+
+    Returns ``None`` when the ticket has no ``board_id`` or the
+    registry has no match (legacy tickets, single-repo mode).
+    """
+    if not ticket.board_id:
+        return None
+    for rc in repos.repos.values():
+        if rc.board_id == ticket.board_id:
+            return rc
+    return None
+
+
+def _resolve_cost_repo(repo_id: str | None, request: Request):
+    """Resolve a ``RepoConfig`` (or a list of them for "all") for cost endpoints.
+
+    Returns:
+        - ``None`` when *repo_id* is omitted and there's exactly one
+          repo (backward compat — uses global secrets).
+        - A single ``RepoConfig`` when *repo_id* names a known repo.
+        - A list of ``RepoConfig`` when *repo_id* is ``"all"``.
+        - Raises 400 for unknown *repo_id* or when *repo_id* is omitted
+          in multi-repo mode.
+    """
+    repos = request.app.state.repos
+    if repo_id is None:
+        if len(repos.repos) == 1:
+            return None  # single-repo: backward compat (global Secrets)
+        sorted_keys = sorted(repos.repos.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"repo_id is required when multiple repos are configured. "
+            f"Available repos: {sorted_keys} (or use repo_id=all)",
+        )
+    if repo_id == "all":
+        return list(repos.repos.values())
+    if repo_id not in repos.repos:
+        sorted_keys = sorted(repos.repos.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}",
+        )
+    return repos.repos[repo_id]
 
 
 @router.get("/health")
@@ -96,10 +143,34 @@ def board() -> str:
 @router.post("/tickets", response_model=TicketRead, status_code=201)
 def create_ticket(
     body: TicketCreate,
+    request: Request,
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
 ) -> TicketRead:
+    repos = request.app.state.repos
+    board_id = ""
+    if body.repo_id:
+        # Explicit repo_id provided — look up its board_id.
+        if body.repo_id not in repos.repos:
+            sorted_keys = sorted(repos.repos.keys())
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown repo: '{body.repo_id}'. Known repos: {sorted_keys}",
+            )
+        board_id = repos.repos[body.repo_id].board_id
+    elif len(repos.repos) == 1:
+        # Single-repo mode: default to the sole repo.
+        board_id = next(iter(repos.repos.values())).board_id
+    else:
+        # Multi-repo mode with no repo_id: require it.
+        sorted_keys = sorted(repos.repos.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"repo_id is required when multiple repos are configured. "
+            f"Available repos: {sorted_keys}",
+        )
+
     try:
         ticket = svc.create(
             body.title,
@@ -108,6 +179,7 @@ def create_ticket(
             depends_on=body.depends_on,
             kind=body.kind,
             parent_id=body.parent_id,
+            board_id=board_id or None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -119,6 +191,8 @@ def create_ticket(
 def list_tickets(
     state: State | None = None,
     include_closed: bool = True,
+    repo_id: str | None = None,
+    request: Request = None,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
@@ -140,24 +214,40 @@ def list_tickets(
     exclude = None
     if not include_closed:
         exclude = {State.CLOSED, State.EPIC_CLOSED}
+    tickets = svc.list(state=state, exclude_states=exclude)
+
+    # When repo_id is provided, filter by the matching board_id.
+    if repo_id is not None:
+        repos = request.app.state.repos
+        if repo_id not in repos.repos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown repo: '{repo_id}'. Known repos: "
+                f"{sorted(repos.repos.keys())}",
+            )
+        target_board = repos.repos[repo_id].board_id
+        tickets = [t for t in tickets if t.board_id == target_board]
+
     return [
         enrich_ticket_read(
             t, settings, svc, blocking_cost=False, fetch_pr_url=False
         )
-        for t in svc.list(state=state, exclude_states=exclude)
+        for t in tickets
     ]
 
 
 @router.get("/tickets/{ticket_id}", response_model=TicketRead)
 def get_ticket(
     ticket_id: str,
+    request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    return enrich_ticket_read(ticket, settings, svc)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
 @router.get("/tickets/{ticket_id}/history", response_model=list[TicketEvent])
@@ -216,6 +306,7 @@ def delete_ticket(
 def transition(
     ticket_id: str,
     body: TicketTransition,
+    request: Request,
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
@@ -227,12 +318,14 @@ def transition(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)  # human unblock re-triggers the chain
-    return enrich_ticket_read(ticket, settings, svc)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
 @router.post("/tickets/{ticket_id}/approve", response_model=TicketRead)
 def approve_ticket(
     ticket_id: str,
+    request: Request,
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
@@ -267,12 +360,14 @@ def approve_ticket(
         pass  # best-effort: approval always succeeds
 
     maybe_enqueue(ticket, worker)  # implement picks it up from ready
-    return enrich_ticket_read(ticket, settings, svc)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
 @router.post("/tickets/{ticket_id}/merge-now", response_model=TicketRead)
 def merge_now(
     ticket_id: str,
+    request: Request,
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
@@ -293,7 +388,8 @@ def merge_now(
             409, "ticket is not in human_mr_approval"
         )
 
-    forge = get_forge(settings)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    forge = get_forge(settings, repo_config=repo_config)
     pr = forge.pr_status(source_branch=ticket.branch)
     if pr is None:
         raise HTTPException(
@@ -315,7 +411,7 @@ def merge_now(
         raise HTTPException(409, str(e)) from None
 
     maybe_enqueue(ticket, worker)  # retrospect picks up DONE
-    return enrich_ticket_read(ticket, settings, svc)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
 @router.get("/tickets/{ticket_id}/merge-info")
@@ -590,6 +686,7 @@ def reopen_thread(
 def request_changes(
     ticket_id: str,
     body: CommentCreate,
+    request: Request,
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
@@ -603,13 +700,15 @@ def request_changes(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
-    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc)}
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
 
 
 @router.post("/tickets/{ticket_id}/redraft")
 def redraft(
     ticket_id: str,
     body: CommentCreate,
+    request: Request,
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
@@ -623,13 +722,15 @@ def redraft(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
-    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc)}
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
 
 
 @router.post("/tickets/{ticket_id}/mark-done")
 def mark_done(
     ticket_id: str,
     body: dict = Body({}),
+    request: Request = None,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:
@@ -648,12 +749,14 @@ def mark_done(
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
-    return enrich_ticket_read(ticket, settings, svc)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
 @router.post("/epics", response_model=TicketRead, status_code=201)
 def create_epic(
     body: dict,
+    request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:
@@ -662,8 +765,25 @@ def create_epic(
     if not title:
         raise HTTPException(status_code=400, detail="title is required")
     description = body.get("description", "")
+    repo_id = body.get("repo_id")
+    repos = request.app.state.repos
+    board_id = ""
+    if repo_id:
+        if repo_id not in repos.repos:
+            sorted_keys = sorted(repos.repos.keys())
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}",
+            )
+        board_id = repos.repos[repo_id].board_id
+    elif len(repos.repos) == 1:
+        board_id = next(iter(repos.repos.values())).board_id
+
     try:
-        ticket = svc.create(title=title, description=description, kind="epic")
+        ticket = svc.create(
+            title=title, description=description, kind="epic",
+            board_id=board_id or None,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return enrich_ticket_read(ticket, settings, svc)
@@ -675,14 +795,20 @@ def create_epic(
 )
 def list_children(
     ticket_id: str,
+    request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
     """Return all tickets whose ``parent_id`` equals *ticket_id*."""
-    if svc.get(ticket_id) is None:
+    parent = svc.get(ticket_id)
+    if parent is None:
         raise HTTPException(404, "ticket not found")
+    repo_config = _repo_config_for_ticket(parent, request.app.state.repos)
     return [
-        enrich_ticket_read(t, settings, svc, blocking_cost=False, fetch_pr_url=False)
+        enrich_ticket_read(
+            t, settings, svc, blocking_cost=False, fetch_pr_url=False,
+            repo_config=repo_config,
+        )
         for t in svc.list_children(ticket_id)
     ]
 
@@ -764,6 +890,7 @@ def generate_children(
 @router.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)
 def resume_blocked(
     ticket_id: str,
+    request: Request,
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
@@ -799,7 +926,8 @@ def resume_blocked(
         )
 
     maybe_enqueue(ticket, worker)
-    return enrich_ticket_read(ticket, settings, svc)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
 @router.post("/audit", status_code=202)
@@ -999,66 +1127,170 @@ def trace_health_check(
 
 @router.get("/runs")
 def list_runs(
+    repo_id: str | None = None,
+    request: Request = None,
     registry=Depends(get_run_registry),
 ) -> list[dict]:
-    """Return recent background-run entries (newest first)."""
-    return registry.list_all()
+    """Return recent background-run entries (newest first).
+
+    ``?repo_id=X`` filters to runs associated with that repo.
+    When omitted, returns all (current behaviour preserved).
+    """
+    entries = registry.list_all()
+    if repo_id is not None:
+        repos = request.app.state.repos
+        if repo_id == "all":
+            pass  # no filtering
+        elif repo_id not in repos.repos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown repo: '{repo_id}'. Known repos: "
+                f"{sorted(repos.repos.keys())}",
+            )
+        else:
+            # Filter entries that carry a repo_id matching the request.
+            entries = [e for e in entries if e.get("repo_id") == repo_id]
+    return entries
 
 
 @router.get("/active")
-def list_active(worker=Depends(get_worker)) -> list[dict]:
-    """Return tickets currently being processed by a pipeline stage."""
-    return [
+def list_active(
+    repo_id: str | None = None,
+    request: Request = None,
+    worker=Depends(get_worker),
+) -> list[dict]:
+    """Return tickets currently being processed by a pipeline stage.
+
+    ``?repo_id=X`` filters to active tickets belonging to that repo.
+    When omitted, returns all (current behaviour preserved).
+    """
+    active = [
         {"ticket_id": tid, "stage": info["stage"], "started_at": info["started_at"]}
         for tid, info in worker._active.items()
     ]
+    if repo_id is not None:
+        repos = request.app.state.repos
+        if repo_id == "all":
+            pass  # no filtering
+        elif repo_id not in repos.repos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown repo: '{repo_id}'. Known repos: "
+                f"{sorted(repos.repos.keys())}",
+            )
+        else:
+            target_board = repos.repos[repo_id].board_id
+            # Look up each active ticket's board_id from the service
+            filtered = []
+            for item in active:
+                ticket = worker.ctx.service.get(item["ticket_id"])
+                if ticket and ticket.board_id == target_board:
+                    filtered.append(item)
+            active = filtered
+    return active
 
 
 @router.get("/costs/trend")
 def cost_trend(
     lookback_hours: float = 24,
+    repo_id: str | None = None,
+    request: Request = None,
     settings=Depends(get_settings),
 ) -> dict:
     """Return cost bucketed by time for the sparkline chart.
 
     ``?lookback_hours=N`` is clamped to [1, 168].
-
-    Response shape: ``{"buckets": [{"ts": "...", "total_cost": ..., "trace_count": ...}, ...]}``.
+    ``?repo_id=X`` scopes the query to a single repo's Langfuse project.
+    ``?repo_id=all`` aggregates across all registered repos.
+    When omitted in single-repo mode, the sole repo is used.
+    When omitted in multi-repo mode, returns 400.
     """
     from ..langfuse_client import aggregate_cost_trend
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    buckets = aggregate_cost_trend(settings, lookback_hours)
+    repo_config = _resolve_cost_repo(repo_id, request)
+    if isinstance(repo_config, list):
+        # "all" — aggregate across repos
+        all_buckets: dict[str, dict] = {}
+        for rc in repo_config:
+            buckets = aggregate_cost_trend(settings, lookback_hours, repo_config=rc)
+            for b in buckets:
+                key = b["ts"]
+                if key not in all_buckets:
+                    all_buckets[key] = {"ts": key, "total_cost": 0.0, "trace_count": 0}
+                all_buckets[key]["total_cost"] += b["total_cost"]
+                all_buckets[key]["trace_count"] += b["trace_count"]
+        return {"buckets": sorted(all_buckets.values(), key=lambda x: x["ts"])}
+    buckets = aggregate_cost_trend(settings, lookback_hours, repo_config=repo_config)
     return {"buckets": buckets}
 
 
 @router.get("/costs/by-agent")
 def cost_by_agent(
     lookback_hours: float = 24,
+    repo_id: str | None = None,
+    request: Request = None,
     settings=Depends(get_settings),
 ) -> list[dict]:
     """Return cost aggregated by agent/stage name for recent Langfuse
-    traces within *lookback_hours* (clamped 1–168)."""
+    traces within *lookback_hours* (clamped 1–168).
+
+    ``?repo_id=X`` scopes to a single repo; ``?repo_id=all`` aggregates
+    across all repos.  Omitted in single-repo mode defaults to the sole
+    repo; omitted in multi-repo returns 400.
+    """
     from ..langfuse_client import aggregate_cost_by_name
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    return aggregate_cost_by_name(settings, lookback_hours)
+    repo_config = _resolve_cost_repo(repo_id, request)
+    if isinstance(repo_config, list):
+        # "all" — aggregate across repos
+        agg: dict[str, dict] = {}
+        for rc in repo_config:
+            entries = aggregate_cost_by_name(settings, lookback_hours, repo_config=rc)
+            for e in entries:
+                name = e["name"]
+                if name not in agg:
+                    agg[name] = {"name": name, "total_cost": 0.0, "trace_count": 0}
+                agg[name]["total_cost"] += e["total_cost"]
+                agg[name]["trace_count"] += e["trace_count"]
+        result = list(agg.values())
+        result.sort(key=lambda x: x["total_cost"], reverse=True)
+        return result
+    return aggregate_cost_by_name(settings, lookback_hours, repo_config=repo_config)
 
 
 @router.get("/costs/most-expensive-ticket")
 def most_expensive_ticket_endpoint(
     lookback_hours: float = 24,
+    repo_id: str | None = None,
+    request: Request = None,
     settings=Depends(get_settings),
     svc=Depends(get_service),
 ):
     """Return the ticket with the highest total LLM cost in the last
     *lookback_hours* (clamped 1–168).  Returns ``null`` when there is
     no data, tracing is disabled, or the session has no matching ticket
-    in the database."""
+    in the database.
+
+    ``?repo_id=X`` scopes to a single repo; ``?repo_id=all`` aggregates
+    across all repos (picks the single most expensive across all).
+    """
     from ..langfuse_client import most_expensive_ticket
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    result = most_expensive_ticket(settings, lookback_hours)
+    repo_config = _resolve_cost_repo(repo_id, request)
+    if isinstance(repo_config, list):
+        # "all" — find the most expensive across all repos
+        best: dict | None = None
+        for rc in repo_config:
+            result = most_expensive_ticket(settings, lookback_hours, repo_config=rc)
+            if result and (best is None or result["total_cost"] > best["total_cost"]):
+                best = result
+        result = best
+    else:
+        result = most_expensive_ticket(settings, lookback_hours, repo_config=repo_config)
+
     if result is None:
         return None
 
@@ -1077,15 +1309,29 @@ def most_expensive_ticket_endpoint(
 @router.get("/costs/most-expensive-trace")
 def most_expensive_trace_endpoint(
     lookback_hours: float = 24,
+    repo_id: str | None = None,
+    request: Request = None,
     settings=Depends(get_settings),
 ):
     """Return the single most expensive trace in the last
     *lookback_hours* (clamped 1–168).  Returns ``null`` when there is
-    no data or tracing is disabled."""
+    no data or tracing is disabled.
+
+    ``?repo_id=X`` scopes to a single repo; ``?repo_id=all`` aggregates
+    across all repos (picks the single most expensive across all).
+    """
     from ..langfuse_client import most_expensive_trace
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    return most_expensive_trace(settings, lookback_hours)
+    repo_config = _resolve_cost_repo(repo_id, request)
+    if isinstance(repo_config, list):
+        best: dict | None = None
+        for rc in repo_config:
+            result = most_expensive_trace(settings, lookback_hours, repo_config=rc)
+            if result and (best is None or result["total_cost"] > best["total_cost"]):
+                best = result
+        return best
+    return most_expensive_trace(settings, lookback_hours, repo_config=repo_config)
 
 
 # -- deep-review --------------------------------------------------------

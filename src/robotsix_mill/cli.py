@@ -192,9 +192,18 @@ def main(argv: list[str] | None = None) -> int:
     p_new.add_argument(
         "--description-file", help="file with the body; '-' reads stdin"
     )
+    p_new.add_argument(
+        "--repo-id",
+        help="repository identifier (required when multiple repos are "
+        "registered; optional when only one)",
+    )
 
     p_list = tsub.add_parser("list", help="list tickets")
     p_list.add_argument("--state", choices=[s.value for s in State])
+    p_list.add_argument(
+        "--repo-id",
+        help="filter tickets by repository (list all when omitted)",
+    )
 
     p_show = tsub.add_parser("show", help="show one ticket + history")
     p_show.add_argument("id")
@@ -388,14 +397,40 @@ def main(argv: list[str] | None = None) -> int:
             elif args.description_file:
                 with open(args.description_file, encoding="utf-8") as f:
                     body = f.read()
+            # Resolve repo_id: required in multi-repo mode, optional in single-repo.
+            repo_id = args.repo_id
+            if repo_id is None:
+                from .config import get_repos_config
+                from .config_loader import ConfigError as _ConfigError
+                try:
+                    repos = get_repos_config()
+                except _ConfigError as exc:
+                    print(f"Error: {exc}", file=sys.stderr)
+                    return 2
+                if len(repos.repos) == 1:
+                    repo_id = next(iter(repos.repos.keys()))
+                elif not repos.repos:
+                    print("Error: no repos defined in config/repos.yaml", file=sys.stderr)
+                    return 2
+                else:
+                    sorted_keys = sorted(repos.repos.keys())
+                    print(
+                        f"Error: --repo-id is required when multiple repos are configured. "
+                        f"Available repos: {sorted_keys}",
+                        file=sys.stderr,
+                    )
+                    return 2
             r = c.post(
-                "/tickets", json={"title": args.title, "description": body}
+                "/tickets",
+                json={"title": args.title, "description": body, "repo_id": repo_id},
             )
             r.raise_for_status()
             print(r.json()["id"])
             return 0
         if args.tcmd == "list":
-            params = {"state": args.state} if args.state else {}
+            params: dict = {"state": args.state} if args.state else {}
+            if args.repo_id:
+                params["repo_id"] = args.repo_id
             r = c.get("/tickets", params=params)
             r.raise_for_status()
             for t in r.json():
