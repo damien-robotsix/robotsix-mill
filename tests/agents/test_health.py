@@ -9,7 +9,7 @@ from pathlib import Path
 
 from robotsix_mill.agents import health as health_agent
 from robotsix_mill.health_runner import run_health_pass, HealthPassResult
-from robotsix_mill.config import Settings
+from robotsix_mill.config import RepoConfig, Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
