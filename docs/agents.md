@@ -22,6 +22,7 @@ Run as stages on each ticket in the order: refine → approve → implement → 
 | Merge (rebase) | (no YAML — `agents/rebasing.py` constructs directly) | `agents/rebasing.py` | `MILL_MODEL` | `merge` stage when PR is conflicting, or when the implement-stage defensive rebase fails | Resolves git merge conflicts on stale branch |
 | Merge (CI-fix) | (no YAML — `agents/ci_fixing.py` constructs directly) | `agents/ci_fixing.py` | `MILL_MODEL` | `merge` stage when PR has failing CI (`FIXING_CI` state) | Auto-fixes failing remote CI checks on a PR branch |
 | Retrospect | `agent_definitions/retrospect.yaml` | `agents/retrospecting.py` | `MILL_RETROSPECT_MODEL` | `retrospect` stage (DONE state) | Analyses finished ticket workflow + Langfuse traces; proposes pipeline improvements |
+| Doc classifier | `agent_definitions/doc_classifier.yaml` | `agents/documenting.py` | `MILL_DOC_CLASSIFIER_MODEL` | `document` stage (pre-check gate) | Cheap classifier gate — inspects diff + spec to decide if the change is user-facing; skips the full doc agent for internal-only changes |
 
 ## Periodic / on-demand agents
 

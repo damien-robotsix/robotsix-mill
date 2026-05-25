@@ -197,6 +197,7 @@ Every setting below shows:
 | `core.models.completeness_check` | `MILL_COMPLETENESS_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Completeness-check agent — feature-wiring completeness scanner |
 | `core.models.rate_limit_fallback` | `MILL_RATE_LIMIT_FALLBACK_MODEL` | `""` (disabled) | Fallback model when rate-limit retries exhausted |
 | `core.models.doc` | `MILL_DOC_MODEL` | `deepseek/deepseek-v4-pro` | Documentation agent |
+| `core.models.doc_classifier` | `MILL_DOC_CLASSIFIER_MODEL` | `openai/gpt-4o-mini` | Doc-diff classifier gate — cheap pre-check before full doc agent |
 | `core.models.triage` | `MILL_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Pre-refine triage — fast/cheap classification |
 | `core.models.auto_approve` | `MILL_AUTO_APPROVE_MODEL` | `openai/gpt-4o-mini` | Model for the auto-approve triage call (must be fast and cheap) |
 | `core.models.scope_triage` | `MILL_SCOPE_TRIAGE_MODEL` | `openai/gpt-4o-mini` | Scope-triage model — classifies out-of-scope changes as EXPAND/REJECT/ESCALATE |
@@ -212,6 +213,7 @@ Every setting below shows:
 | `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap for the dedup check |
 | `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `4` | Per-call request cap for the scope-triage agent |
 | — (env-var only) | `MILL_DOC_REQUEST_LIMIT` | `4` | Per-run request cap for the document agent |
+| `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
 | — (env-var only) | `MILL_REVIEW_REQUEST_LIMIT` | `20` | Per-run request cap for the review agent |
 
 ### 3. Worker pool & retry

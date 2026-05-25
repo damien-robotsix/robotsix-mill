@@ -131,6 +131,7 @@ The OpenRouter model identifier. Supports two forms:
    | `${MILL_AUTO_APPROVE_MODEL}` | `auto_approve_model` | `"openai/gpt-4o-mini"` |
    | `${MILL_REVIEW_MODEL}` | `review_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_DOC_MODEL}` | `doc_model` | `"deepseek/deepseek-v4-pro"` |
+   | `${MILL_DOC_CLASSIFIER_MODEL}` | `doc_classifier_model` | `"openai/gpt-4o-mini"` |
    | `${MILL_TRACE_INSPECTOR_MODEL}` | `trace_inspector_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_TEST_GAP_MODEL}` | `test_gap_model` | `"deepseek/deepseek-v4-pro"` |
    | `${MILL_AGENT_CHECK_MODEL}` | `agent_check_model` | `"deepseek/deepseek-v4-pro"` |
