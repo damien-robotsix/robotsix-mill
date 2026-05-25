@@ -12,7 +12,7 @@ from robotsix_mill.completeness_check_runner import (
     run_completeness_check_pass,
     CompletenessCheckPassResult,
 )
-from robotsix_mill.config import Settings
+from robotsix_mill.config import RepoConfig, Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
@@ -543,7 +543,14 @@ async def test_worker_completeness_check_task_created_when_periodic(tmp_path, mo
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)
-    ctx = StageContext(settings=settings, service=service)
+    repo_config = RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-langfuse",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     # Patch _run_periodic_pass to be a no-op (avoid running immediately)
     async def noop_periodic(self, label, runner_fn, interval):
@@ -571,7 +578,14 @@ async def test_worker_completeness_check_task_not_created_when_periodic_false(tm
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)
-    ctx = StageContext(settings=settings, service=service)
+    repo_config = RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-langfuse",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     worker = Worker(ctx)
     worker.start()
