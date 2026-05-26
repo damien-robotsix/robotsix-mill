@@ -1774,3 +1774,38 @@ def env_sync_pass(
         target=_run, name="env-sync-pass", daemon=True
     ).start()
     return {"status": "started"}
+
+
+@router.post("/cost-reconciliation", status_code=202)
+def cost_reconciliation_pass(
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a cost-reconciliation drift detection pass in the BACKGROUND."""
+    from ..cost_reconciliation_runner import run_cost_reconciliation_pass
+    from ..runtime.tracing import make_session_id
+
+    run_id = registry.start("cost-reconciliation")
+    session_id = make_session_id("cost-reconciliation")
+
+    def _run() -> None:
+        try:
+            r = run_cost_reconciliation_pass(session_id=session_id)
+            draft_ids = [d["id"] for d in r.drafts_created[:5]]
+            summary = (
+                f"Created {len(r.drafts_created)} drafts: "
+                f"{', '.join(draft_ids)}"
+                f"{'…' if len(r.drafts_created) > 5 else ''}"
+            )
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "cost-reconciliation pass done: %d draft(s)",
+                len(r.drafts_created),
+            )
+        except Exception as e:
+            log.exception("cost-reconciliation pass failed")
+            registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="cost-reconciliation-pass", daemon=True
+    ).start()
+    return {"status": "started"}
