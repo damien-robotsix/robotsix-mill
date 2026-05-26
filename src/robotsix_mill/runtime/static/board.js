@@ -824,7 +824,7 @@ async function open_(id){
     t.origin_session?` · origin <span class="muted">${esc(t.origin_session)}</span>`:"")+
    (t.pr_url?` · <a href="${esc(t.pr_url)}" target="_blank" rel="noopener" class="pr-link">🔗 PR</a>`:"")+
    `<span id="ticket-merge-btn-area">`+
-   (t.state==="human_mr_approval"?`<span class="sk-inline" style="display:inline-block;width:60px;height:22px;border-radius:4px;vertical-align:middle"></span>`:"")+
+   (t.state==="human_mr_approval"?`<span class="sk-inline" style="width:60px;height:22px;vertical-align:middle"></span>`:"")+
    `</span>`+
    `<br>· cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
    (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+

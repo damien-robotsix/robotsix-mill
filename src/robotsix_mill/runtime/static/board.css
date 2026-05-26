@@ -272,5 +272,5 @@ text-transform:uppercase;letter-spacing:.04em}
 .drawer-skeleton{padding:4px 0}
 .sk-block{background:#1d212c;border-radius:5px;margin:8px 0;animation:sk-pulse 1.5s ease-in-out infinite}
 .sk-label{height:11px;width:35%;background:#1d212c;border-radius:3px;margin:14px 0 6px 0;animation:sk-pulse 1.5s ease-in-out infinite}
-.sk-inline{background:#1d212c;animation:sk-pulse 1.5s ease-in-out infinite}
+.sk-inline{display:inline-block;background:#1d212c;border-radius:3px;animation:sk-pulse 1.5s ease-in-out infinite}
 @keyframes sk-pulse{0%,100%{opacity:.35}50%{opacity:.65}}
