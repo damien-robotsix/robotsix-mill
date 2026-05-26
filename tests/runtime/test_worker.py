@@ -293,6 +293,42 @@ def test_enqueue_dedupes(ctx):
     assert w._pending == {"a", "b"}
 
 
+def test_enqueue_orders_late_stage_before_draft(ctx, service):
+    """Within a priority class, late-pipeline tickets pop before
+    drafts — drains the pipeline before starting fresh refines."""
+    w = Worker(ctx)
+    # Create three tickets at different stages on the same repo so they
+    # all land in the same per-repo queue.
+    early = service.create("early draft")
+    mid = service.create("mid review")
+    late = service.create("late done")
+    # Transition them to varied states via direct setter — bypass the
+    # state machine because we just want different queue ranks.
+    from robotsix_mill.core.states import State as _S
+    from robotsix_mill.core import db as _db
+    with _db.session(ctx.settings) as s:
+        t_mid = s.get(__import__('robotsix_mill.core.models', fromlist=['Ticket']).Ticket, mid.id)
+        t_mid.state = _S.CODE_REVIEW
+        s.add(t_mid)
+        t_late = s.get(__import__('robotsix_mill.core.models', fromlist=['Ticket']).Ticket, late.id)
+        t_late.state = _S.DONE
+        s.add(t_late)
+        s.commit()
+    # Enqueue in mixed order; the per-repo queue's sort should still
+    # pop DONE first, then CODE_REVIEW, then DRAFT.
+    w.enqueue(early.id)
+    w.enqueue(mid.id)
+    w.enqueue(late.id)
+    # Drain the right queue and capture pop order.
+    q = w._queue_for(ctx.repo_config.board_id if ctx.repo_config else "")
+    popped: list[str] = []
+    while q.qsize():
+        popped.append(q.get_nowait()[-1])
+    assert popped == [late.id, mid.id, early.id], (
+        f"expected late-stage tickets first; got {popped}"
+    )
+
+
 async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
     """One consumer task per repo per its max_concurrency, plus a
     single fallback consumer for the default (no-repo) queue."""

@@ -560,6 +560,37 @@ class Worker:
     # repo-less tickets). Always present alongside the per-repo queues.
     _DEFAULT_BOARD = ""
 
+    # Stage-rank by ticket state — used as a secondary sort key in the
+    # PriorityQueue (after priority_rank, before FIFO seq). Lower = pops
+    # first = closer to CLOSED. The intent is "drain in-flight tickets
+    # through to terminal before starting fresh refines" — so the
+    # board doesn't pile up with intermediate-state work. States not in
+    # STAGE_FOR_STATE never reach the queue (maybe_enqueue gates on
+    # state-in-pipeline) but we keep them in the table to avoid KeyError
+    # on any drift. _DEFAULT_STAGE_RANK applies to unknown states.
+    _DEFAULT_STAGE_RANK: int = 99
+    _STAGE_RANK: dict = {
+        State.DONE: 0,                    # retrospect → CLOSED
+        State.DELIVERABLE: 1,             # deliver opens the PR
+        State.DOCUMENTING: 2,             # document → DELIVERABLE
+        State.CODE_REVIEW: 3,             # review
+        State.ADDRESSING_REVIEW: 4,       # merge stage replying to reviewer
+        State.FIXING_CI: 5,               # ci_fix retries CI
+        State.REBASING: 6,                # merge stage, rebase substep
+        State.HUMAN_MR_APPROVAL: 7,       # merge polling (no-LLM)
+        State.WAITING_AUTO_MERGE: 8,      # merge polling (no-LLM)
+        State.IMPLEMENT_COMPLETE: 9,      # merge polling (no-LLM)
+        State.READY: 10,                  # implement — fresh code work
+        State.DRAFT: 11,                  # refine — earliest stage
+        State.ASKED: 12,                  # answer — inquiry side-channel
+    }
+
+    @classmethod
+    def _stage_rank(cls, ticket) -> int:
+        if ticket is None:
+            return cls._DEFAULT_STAGE_RANK
+        return cls._STAGE_RANK.get(ticket.state, cls._DEFAULT_STAGE_RANK)
+
     def __init__(self, ctx: StageContext, run_registry: "RunRegistry | None" = None) -> None:
         self.ctx = ctx
         self.run_registry = run_registry
@@ -622,14 +653,23 @@ class Worker:
         return q
 
     def enqueue(self, ticket_id: str) -> None:
-        """Enqueue *ticket_id* on its repo's queue with CURRENT priority.
+        """Enqueue *ticket_id* on its repo's queue with CURRENT priority
+        AND stage rank.
 
-        Priority is captured at enqueue time and the ``_pending`` set
-        de-duplicates concurrent enqueues. If the operator later
-        toggles priority on a ticket already in the queue, call
-        :meth:`requeue_with_current_priority` to bypass the dedup —
-        otherwise the stale rank stays in the heap and the priority
-        flip is invisible to the consumer.
+        Queue items are ``(priority_rank, stage_rank, seq, ticket_id)``.
+        Sort order: priority tickets (rank 0) first; within priority
+        class, later-pipeline tickets (lower stage_rank) first; FIFO
+        within a (priority, stage) pair. The stage tie-break drains
+        in-flight tickets through to terminal before starting fresh
+        refines — keeps the board from piling up with intermediate
+        states.
+
+        Priority AND stage are captured at enqueue time and the
+        ``_pending`` set de-duplicates concurrent enqueues. If the
+        ticket's priority or stage changes after enqueue, the pop-time
+        sanity check in :meth:`_run` re-enqueues at the correct rank.
+        Operators can also call :meth:`requeue_with_current_priority`
+        to force a refresh explicitly.
         """
         # asyncio is single-threaded; enqueue is only ever called from
         # the loop thread, so this set check needs no lock.
@@ -639,8 +679,11 @@ class Worker:
         self._enqueue_seq += 1
         ticket = self.ctx.service.get(ticket_id)
         prio_rank = 0 if (ticket is not None and getattr(ticket, "priority", False)) else 1
+        stage_rank = self._stage_rank(ticket)
         board_id = ticket.board_id if (ticket is not None and ticket.board_id) else self._DEFAULT_BOARD
-        self._queue_for(board_id).put_nowait((prio_rank, self._enqueue_seq, ticket_id))
+        self._queue_for(board_id).put_nowait(
+            (prio_rank, stage_rank, self._enqueue_seq, ticket_id)
+        )
 
     def requeue_with_current_priority(self, ticket_id: str) -> None:
         """Force a re-enqueue that picks up the ticket's current
@@ -690,25 +733,26 @@ class Worker:
         """
         queue = self._queue_for(board_id)
         while True:
-            popped_rank, _seq, ticket_id = await queue.get()
+            popped_prio, popped_stage, _seq, ticket_id = await queue.get()
             try:
                 before = self.ctx.service.get(ticket_id)
                 before_state = before.state if before else None
 
-                # Pop-time priority sanity check: the entry's rank was
-                # captured at enqueue time; if the operator has since
-                # flipped priority on this ticket, the queue may also
-                # hold a fresher entry at a different rank. If the
-                # popped entry is no longer the right rank, re-enqueue
-                # at the current rank and skip — the fresher entry (or
-                # the one we just pushed) handles the actual run.
+                # Pop-time sanity check: the entry's (priority, stage)
+                # ranks were captured at enqueue time; if either has
+                # since changed (priority flip, state transition while
+                # queued) the popped entry's order is stale. Re-enqueue
+                # at the correct ranks and skip — the fresher entry
+                # handles the actual run.
                 if before is not None:
-                    cur_rank = 0 if getattr(before, "priority", False) else 1
-                    if cur_rank != popped_rank:
+                    cur_prio = 0 if getattr(before, "priority", False) else 1
+                    cur_stage = self._stage_rank(before)
+                    if (cur_prio, cur_stage) != (popped_prio, popped_stage):
                         log.debug(
-                            "%s: popped rank=%d but current priority "
-                            "implies rank=%d; re-enqueuing at correct rank",
-                            ticket_id, popped_rank, cur_rank,
+                            "%s: popped (prio=%d, stage=%d) but current "
+                            "(prio=%d, stage=%d); re-enqueuing at correct rank",
+                            ticket_id, popped_prio, popped_stage,
+                            cur_prio, cur_stage,
                         )
                         # Drop from _pending so requeue isn't deduped away.
                         self._pending.discard(ticket_id)
