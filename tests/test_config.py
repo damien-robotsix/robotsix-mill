@@ -187,7 +187,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("doc_model", "MILL_DOC_MODEL", "doc/model", "doc/model"),
     # --- retrospect ---
     ("retrospect_spawn_drafts", "MILL_RETROSPECT_SPAWN_DRAFTS", "0", False),
-    ("retrospect_deep_analysis_frequency", "MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY", "3", 3),
     ("trace_inspector_model", "MILL_TRACE_INSPECTOR_MODEL", "ti/model", "ti/model"),
     ("trace_inspector_memory_path", "MILL_TRACE_INSPECTOR_MEMORY_PATH", "/mem/ti.md", Path("/mem/ti.md")),
     ("retrospect_memory_path", "MILL_RETROSPECT_MEMORY_PATH", "/mem/retro.md", Path("/mem/retro.md")),

@@ -337,7 +337,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.rebase_max_attempts": "MILL_REBASE_MAX_ATTEMPTS",
     "pipeline.ci_fix_max_attempts": "MILL_CI_FIX_MAX_ATTEMPTS",
     "pipeline.retrospect_spawn_drafts": "MILL_RETROSPECT_SPAWN_DRAFTS",
-    "pipeline.retrospect_deep_analysis_frequency": "MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY",
     "pipeline.prune_clone_on_close": "MILL_PRUNE_CLONE_ON_CLOSE",
     "pipeline.max_archived_tickets": "MILL_MAX_ARCHIVED_TICKETS",
     "pipeline.retrospect_memory_path": "MILL_RETROSPECT_MEMORY_PATH",

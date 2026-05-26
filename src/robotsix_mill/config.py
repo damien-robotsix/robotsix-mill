@@ -523,12 +523,10 @@ class Settings(BaseSettings):
     retrospect_spawn_drafts: bool = Field(
         default=True, alias="MILL_RETROSPECT_SPAWN_DRAFTS"
     )
-    # How many retrospect runs between deep analyses. The deep analysis
-    # gates a sub-agent per trace (`trace_inspect`) to inspect the full
-    # observation tree for systematic issues the summary misses.
-    retrospect_deep_analysis_frequency: int = Field(
-        default=10, alias="MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY"
-    )
+    # (Removed) retrospect_deep_analysis_frequency: deep-analysis mode
+    # was retired — per-trace inspection is now owned by the periodical
+    # cost-evaluation pipeline (cost_reconciliation_runner +
+    # trace_health_runner + expensive-item detector).
     # Model for the trace inspector sub-agent — a dedicated cheap model
     # that inspects a single trace's full observation tree.
     trace_inspector_model: str = Field(

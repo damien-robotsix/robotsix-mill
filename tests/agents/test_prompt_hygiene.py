@@ -112,18 +112,6 @@ def test_auditing_prompt_no_tool_signatures():
     assert "`web_research` is for external" in p
 
 
-def test_retrospecting_deep_analysis_no_tool_signatures():
-    """retrospecting _DEEP_ANALYSIS_ADDENDUM must not restate tool
-    signatures."""
-    _assert_no_tool_signatures(
-        retrospecting._DEEP_ANALYSIS_ADDENDUM, "retrospecting"
-    )
-    # Must contain orchestration: you MUST call it for every trace.
-    p = retrospecting._DEEP_ANALYSIS_ADDENDUM.lower()
-    assert "must call `trace_inspect`" in p
-    assert "every trace" in p
-
-
 def test_agent_check_prompt_no_tool_signatures():
     """agent_check SYSTEM_PROMPT must contain pydantic-ai auto-injection
     awareness.  We skip the full signature-pattern check for agent_check

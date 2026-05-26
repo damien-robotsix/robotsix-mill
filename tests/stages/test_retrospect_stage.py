@@ -116,14 +116,6 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
-    )
-    monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
@@ -171,14 +163,6 @@ def test_langfuse_none_workflow_only_still_succeeds(ctx_factory, monkeypatch):
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
-    )
-    monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
@@ -219,14 +203,6 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
@@ -281,14 +257,6 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
-    )
-    monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
@@ -340,14 +308,6 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
@@ -406,14 +366,6 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
-    )
-    monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
@@ -461,14 +413,6 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
@@ -534,14 +478,6 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
-    )
-    monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
@@ -594,14 +530,6 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
         "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
-    )
-    monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
@@ -618,132 +546,9 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
     assert len(ctx.service.list()) == 2
 
 
-# ------------------------------------------------------------------
-# 10. Deep analysis gate — below frequency
-# ------------------------------------------------------------------
-
-
-def test_deep_analysis_below_frequency_no_api_call(ctx_factory, monkeypatch):
-    """When counter < frequency, deep_analysis is False and
-    _langfuse_api_get is NOT called."""
-    from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill import pass_runner
-
-    ctx = ctx_factory()
-
-    agent_kwargs = {}
-
-    def _capture_agent(**kwargs):
-        agent_kwargs.update(kwargs)
-        return _result()
-
-    write_calls = []
-
-    monkeypatch.setattr(retrospecting, "run_retrospect_agent", _capture_agent)
-    monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
-        lambda settings, session_id: "summary",
-    )
-    langfuse_api_called = []
-
-    def _fake_api_get(settings, path, params=None, repo_config=None):
-        langfuse_api_called.append(True)
-        return None
-
-    monkeypatch.setattr(langfuse_client, "_langfuse_api_get", _fake_api_get)
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 2,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: write_calls.append(value),
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
-    )
-    monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
-        lambda service, settings, source_label: {},
-    )
-
-    t = _ticket(ctx)
-    out = RetrospectStage().run(t, ctx)
-
-    assert out.next_state is State.CLOSED
-    assert agent_kwargs["deep_analysis"] is False
-    assert agent_kwargs.get("trace_ids") == []
-    # Counter incremented: 2 → 3
-    assert write_calls == [3]
-    # _langfuse_api_get NOT called
-    assert len(langfuse_api_called) == 0
-
-
-# ------------------------------------------------------------------
-# 11. Deep analysis gate — at/above frequency
-# ------------------------------------------------------------------
-
-
-def test_deep_analysis_at_frequency_triggers_api_call(ctx_factory, monkeypatch):
-    """When counter >= frequency, deep_analysis=True, counter resets
-    to 0, and _langfuse_api_get is called."""
-    from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
-    from robotsix_mill import pass_runner
-
-    ctx = ctx_factory()
-
-    agent_kwargs = {}
-
-    def _capture_agent(**kwargs):
-        agent_kwargs.update(kwargs)
-        return _result()
-
-    write_calls = []
-    langfuse_api_called = []
-
-    def _fake_api_get(settings, path, params=None, repo_config=None):
-        langfuse_api_called.append((path, params))
-        return {
-            "data": [
-                {"id": "trace-1", "name": "implement"},
-                {"id": "trace-2", "name": "review"},
-            ]
-        }
-
-    monkeypatch.setattr(retrospecting, "run_retrospect_agent", _capture_agent)
-    monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
-        lambda settings, session_id: "summary",
-    )
-    monkeypatch.setattr(langfuse_client, "_langfuse_api_get", _fake_api_get)
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 10,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: write_calls.append(value),
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
-    )
-    monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
-        lambda service, settings, source_label: {},
-    )
-
-    t = _ticket(ctx)
-    out = RetrospectStage().run(t, ctx)
-
-    assert out.next_state is State.CLOSED
-    assert agent_kwargs["deep_analysis"] is True
-    assert agent_kwargs.get("trace_ids") == [("trace-1", "implement"), ("trace-2", "review")]
-    # Counter reset to 0
-    assert write_calls == [0]
-    # _langfuse_api_get was called
-    assert len(langfuse_api_called) == 1
+# (Removed) deep-analysis gate tests — deep-analysis mode was retired
+# from the retrospect stage; per-trace inspection is now owned by the
+# periodical cost-evaluation pipeline.
 
 
 # ------------------------------------------------------------------
@@ -772,14 +577,6 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
@@ -831,14 +628,6 @@ def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
-    )
-    monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
     )
     monkeypatch.setattr(
@@ -878,14 +667,6 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
     )
     # Mock prune_clone locally where it's called
     monkeypatch.setattr(
@@ -931,14 +712,6 @@ def test_prune_clone_on_close_false_no_prune(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         langfuse_client, "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_read_deep_counter", lambda settings: 0,
-    )
-    monkeypatch.setattr(
-        retrospect_module.RetrospectStage,
-        "_write_deep_counter", lambda settings, value: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.retrospect.prune_clone",

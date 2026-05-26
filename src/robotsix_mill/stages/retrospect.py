@@ -169,64 +169,6 @@ class RetrospectStage(Stage):
     # deep-analysis frequency gate
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _deep_counter_path(settings: Settings) -> Path:
-        return settings.data_dir / "retrospect_deep_counter"
-
-    @staticmethod
-    def _read_deep_counter(settings: Settings) -> int:
-        """Read the deep-analysis counter file. Returns 0 if missing
-        or corrupted (logs a warning for the corrupted case)."""
-        path = RetrospectStage._deep_counter_path(settings)
-        try:
-            if path.exists():
-                raw = path.read_text(encoding="utf-8").strip()
-                return int(raw)
-        except (ValueError, OSError) as e:
-            log.warning(
-                "retrospect deep counter corrupted (%s) — resetting to 0", e
-            )
-        return 0
-
-    @staticmethod
-    def _write_deep_counter(settings: Settings, value: int) -> None:
-        """Write the deep-analysis counter file."""
-        path = RetrospectStage._deep_counter_path(settings)
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(str(value), encoding="utf-8")
-        except OSError:
-            log.warning("could not write deep counter to %s", path)
-
-    @staticmethod
-    def _resolve_deep_analysis(settings: Settings, session_id: str) -> tuple[bool, list[tuple[str, str]]]:
-        """Return (deep_analysis, trace_ids) based on the frequency counter.
-
-        # --- deep-analysis frequency gate ---
-        """
-        deep_analysis = False
-        trace_ids: list[tuple[str, str]] = []
-        counter = RetrospectStage._read_deep_counter(settings)
-        frequency = settings.retrospect_deep_analysis_frequency
-        if counter >= frequency:
-            deep_analysis = True
-            RetrospectStage._write_deep_counter(settings, 0)
-            # Fetch the session trace list to extract trace IDs.
-            traces_data = langfuse_client._langfuse_api_get(
-                settings,
-                "/api/public/traces",
-                params={"sessionId": session_id, "limit": 100},
-            )
-            if traces_data:
-                for t in traces_data.get("data", []):
-                    tid = t.get("id")
-                    tname = t.get("name", "")
-                    if tid:
-                        trace_ids.append((tid, tname))
-        else:
-            RetrospectStage._write_deep_counter(settings, counter + 1)
-        return deep_analysis, trace_ids
-
     def _maybe_spawn_draft(
         self,
         res: RetrospectResult,
@@ -332,9 +274,11 @@ class RetrospectStage(Stage):
             f"id: {ticket.id}\ntitle: {ticket.title}\n"
             f"branch: {ticket.branch}\n\n{desc}"
         )
+        # Per-trace deep inspection is now handled by the periodical
+        # cost-evaluation pipeline (cost_reconciliation_runner +
+        # trace_health_runner + expensive-item detector). The retrospect
+        # only receives the pre-computed session summary.
         lf = langfuse_client.fetch_session_summary(s, ticket.id)
-
-        deep_analysis, trace_ids = self._resolve_deep_analysis(s, ticket.id)
 
         # Retrieve epic context and sibling sub-issues so the agent can
         # cross-reference incomplete-work findings against the parent
@@ -385,8 +329,6 @@ class RetrospectStage(Stage):
                 langfuse_summary=lf,
                 memory=memory_text,
                 comments_text=comments_text,
-                deep_analysis=deep_analysis,
-                trace_ids=trace_ids,
                 recent_proposals=rp_block,
                 epic_context=epic_ctx,
                 sibling_context=sibling_ctx,

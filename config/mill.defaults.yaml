@@ -144,7 +144,6 @@ pipeline:
   ci_fix_max_attempts: 2                             # max CI-fix LLM invocations before BLOCK
   review_revision_max_attempts: 2                    # max review-revision LLM invocations before BLOCK
   retrospect_spawn_drafts: true                      # allow retrospect to file improvement drafts
-  retrospect_deep_analysis_frequency: 10             # how many runs between deep trace analyses
   prune_clone_on_close: true                         # delete workspace repo/ clone on ticket close
   max_archived_tickets: 100                          # max terminal-state tickets retained (0 = no purge)
 
