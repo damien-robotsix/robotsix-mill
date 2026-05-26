@@ -231,10 +231,9 @@ periodic:
     interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/survey_memory.md
 
-  # -- CI monitor — watches forge target branch for workflow failures ------
+  # -- CI monitor — enabled/interval are now per-repo fields in repos.yaml --
+  #    ci_log_max_bytes stays here as a global operational cap.
   ci_monitor:
-    enabled: false                  # enable periodic CI failure monitoring
-    interval_seconds: 86400         # seconds between polls
     log_max_bytes: 65536            # max bytes fetched per CI job log
 
 # ---------------------------------------------------------------------------

@@ -325,9 +325,8 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 
 | Env var | YAML key | Default | Note |
 |---|---|---|---|
-| `MILL_CI_MONITOR_PERIODIC` | `periodic.ci_monitor.enabled` | `false` | |
-| `MILL_CI_MONITOR_INTERVAL_SECONDS` | `periodic.ci_monitor.interval_seconds` | `86400` | |
-| `MILL_CI_LOG_MAX_BYTES` | `periodic.ci_monitor.log_max_bytes` | `65536` | |
+| `MILL_CI_LOG_MAX_BYTES` | `periodic.ci_monitor.log_max_bytes` | `65536` | global operational cap |
+| — | (per-repo in `repos.yaml`) | `True` / `86400` | `ci_monitor.enabled` and `ci_monitor.interval_seconds` are RepoConfig fields |
 
 #### service
 
@@ -632,8 +631,7 @@ environment-specific overlay.
 | `Dockerfile` sets `ENV MILL_DATA_DIR=/data` | `config/mill.production.yaml` sets `service.data_dir: /data` |
 | `Dockerfile` sets `ENV MILL_API_HOST=0.0.0.0` | `config/mill.production.yaml` sets `service.api_host: "0.0.0.0"` |
 | `docker-compose.yml` sets `MILL_SANDBOX_DATA_MOUNT=${PWD}/.data` | `config/mill.production.yaml` sets `sandbox.data_mount: /data` (container path) |
-| `docker-compose.yml` sets `MILL_CI_MONITOR_PERIODIC=true` | `config/mill.production.yaml` overrides `periodic.ci_monitor.enabled: true` |
-| `docker-compose.yml` sets `MILL_CI_MONITOR_INTERVAL_SECONDS=600` | `config/mill.production.yaml` overrides `periodic.ci_monitor.interval_seconds: 600` |
+| CI monitor enabled in compose via env vars | per-repo `ci_monitor.enabled` / `ci_monitor.interval_seconds` in `config/repos.yaml` |
 
 The `Dockerfile` no longer contains any `ENV` directives for application
 config.  The only `ENV` directives are for system-level concerns (PATH,

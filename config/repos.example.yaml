@@ -17,3 +17,6 @@ repos:
       public_key: "pk-lf-..."
       secret_key: "sk-lf-..."
       base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
+    # ci_monitor:                 # optional — per-repo CI failure monitoring
+    #   enabled: true             #   default: true
+    #   interval_seconds: 86400   #   default: 86400 (24h)

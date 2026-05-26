@@ -5,7 +5,13 @@ import time
 
 import pytest
 
-from robotsix_mill.config import Settings
+from robotsix_mill.config import (
+    RepoConfig,
+    ReposRegistry,
+    Settings,
+    _reset_repos_config,
+    get_repos_config,
+)
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
@@ -14,7 +20,17 @@ from robotsix_mill.stages import StageContext
 from robotsix_mill.agents.ci_fixing import CiFixResult
 
 
-def _ctx(tmp_path, **env):
+def _ctx(tmp_path, repo_config=None, **env):
+    """Build a StageContext for CI monitor tests.
+
+    *repo_config* controls the per-repo CI monitor settings
+    (ci_monitor_enabled, ci_monitor_interval_seconds).  When
+    omitted, the default repo has ci_monitor_enabled=True and
+    ci_monitor_interval_seconds=1.
+
+    The repos registry is monkeypatched so the poll loop picks up
+    the test repo.
+    """
     db.reset_engine()
     env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
     env.setdefault("MILL_REQUIRE_APPROVAL", "false")
@@ -27,47 +43,64 @@ def _ctx(tmp_path, **env):
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
     db.init_db(s)
-    from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=TicketService(s), repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
 
+    if repo_config is None:
+        repo_config = RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+            ci_monitor_enabled=True,
+            ci_monitor_interval_seconds=60,
+        )
+    # Patch the repos registry so the poll loop sees our test repo.
+    _reset_repos_config()
+    import robotsix_mill.config as _cfg
+    _cfg._repos_config = ReposRegistry(repos={repo_config.repo_id: repo_config})
 
-# ---------------------------------------------------------------------------
-# Helpers: a fake forge that the worker's CI monitor uses.
-# We monkeypatch get_forge() to return a FakeForge.
-# ---------------------------------------------------------------------------
-
-class FakeForge:
-    """Controllable fake forge for CI monitor tests."""
-
-    def __init__(self, runs=None, logs=""):
-        self.runs = runs or []
-        self.logs = logs
-        self.logs_call_count = 0
-
-    def list_workflow_runs(self, *, branch=None, head_sha=None):
-        return self.runs
-
-    def fetch_workflow_job_logs(self, *, run_id):
-        self.logs_call_count += 1
-        return self.logs
+    return StageContext(
+        settings=s,
+        service=TicketService(s),
+        repo_config=repo_config,
+    )
 
 
 def _make_fake_forge(monkeypatch, runs=None, logs=""):
+    class FakeForge:
+        """Controllable fake forge for CI monitor tests."""
+
+        def __init__(self, runs=None, logs=""):
+            self.runs = runs or []
+            self.logs = logs
+            self.logs_call_count = 0
+
+        def list_workflow_runs(self, *, branch=None, head_sha=None):
+            return self.runs
+
+        def fetch_workflow_job_logs(self, *, run_id):
+            self.logs_call_count += 1
+            return self.logs
+
     forge = FakeForge(runs=runs, logs=logs)
+
+    def _fake_get_forge(settings, repo_config=None):
+        return forge
+
     monkeypatch.setattr(
         "robotsix_mill.forge.get_forge",
-        lambda s, repo_config=None: forge,
+        _fake_get_forge,
     )
     return forge
 
 
 # ---------------------------------------------------------------------------
 
+
 def test_detects_new_failure_and_creates_draft(tmp_path, monkeypatch):
     """One failing run not in dedup state → service.create called with source='ci'."""
     ctx = _ctx(
         tmp_path,
-        MILL_CI_MONITOR_PERIODIC="true",
-        MILL_CI_MONITOR_INTERVAL_SECONDS="1",
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
@@ -81,25 +114,21 @@ def test_detects_new_failure_and_creates_draft(tmp_path, monkeypatch):
     ], logs="build error\n")
 
     # Clear any existing state file.
-    state_path = ctx.settings.ci_monitor_memory_path
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     if state_path.exists():
         state_path.unlink()
 
     # Run ONE poll cycle by scheduling the task then cancelling it.
     worker = Worker(ctx)
     worker._ci_monitor_task = None  # force fresh task
-    # Directly invoke the poll method — it will sleep once but we cancel.
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
     import asyncio
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
-        # We override the sleep to complete immediately.
-        orig_sleep = asyncio.sleep
-
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()  # stop after first cycle
-
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
         try:
             await worker._ci_monitor_poll_loop()
@@ -128,8 +157,6 @@ def test_dedup_skips_already_seen_failure(tmp_path, monkeypatch):
     """State file already has (workflow_id, head_sha) → no draft created."""
     ctx = _ctx(
         tmp_path,
-        MILL_CI_MONITOR_PERIODIC="true",
-        MILL_CI_MONITOR_INTERVAL_SECONDS="1",
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
@@ -143,18 +170,18 @@ def test_dedup_skips_already_seen_failure(tmp_path, monkeypatch):
     ])
 
     # Pre-populate the dedup state with the same key.
-    state_path = ctx.settings.ci_monitor_memory_path
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"seen": {"100:abc": time.time()}}), "utf-8")
 
     worker = Worker(ctx)
     worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
-        orig_sleep = asyncio.sleep
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
@@ -176,8 +203,6 @@ def test_dedup_key_is_workflow_id_and_head_sha(tmp_path, monkeypatch):
     """Different head_sha with same workflow_id → treated as new failure."""
     ctx = _ctx(
         tmp_path,
-        MILL_CI_MONITOR_PERIODIC="true",
-        MILL_CI_MONITOR_INTERVAL_SECONDS="1",
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
@@ -191,18 +216,18 @@ def test_dedup_key_is_workflow_id_and_head_sha(tmp_path, monkeypatch):
     ])
 
     # State has 100:abc but the run is 100:def.
-    state_path = ctx.settings.ci_monitor_memory_path
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"seen": {"100:abc": time.time()}}), "utf-8")
 
     worker = Worker(ctx)
     worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
-        orig_sleep = asyncio.sleep
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
@@ -224,8 +249,6 @@ def test_prunes_old_entries_from_state(tmp_path, monkeypatch):
     """Entries older than 30 days are removed on poll."""
     ctx = _ctx(
         tmp_path,
-        MILL_CI_MONITOR_PERIODIC="true",
-        MILL_CI_MONITOR_INTERVAL_SECONDS="1",
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
@@ -235,7 +258,7 @@ def test_prunes_old_entries_from_state(tmp_path, monkeypatch):
     # Pre-populate with one old entry and one recent entry.
     now = int(time.time())
     old = now - (31 * 86400)  # 31 days ago
-    state_path = ctx.settings.ci_monitor_memory_path
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({
         "seen": {"100:old": old, "200:recent": now},
@@ -243,12 +266,12 @@ def test_prunes_old_entries_from_state(tmp_path, monkeypatch):
 
     worker = Worker(ctx)
     worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
-        orig_sleep = asyncio.sleep
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
@@ -270,8 +293,6 @@ def test_successful_run_not_filed(tmp_path, monkeypatch):
     """conclusion == 'success' → no draft."""
     ctx = _ctx(
         tmp_path,
-        MILL_CI_MONITOR_PERIODIC="true",
-        MILL_CI_MONITOR_INTERVAL_SECONDS="1",
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
@@ -284,18 +305,18 @@ def test_successful_run_not_filed(tmp_path, monkeypatch):
         },
     ])
 
-    state_path = ctx.settings.ci_monitor_memory_path
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     if state_path.exists():
         state_path.unlink()
 
     worker = Worker(ctx)
     worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
-        orig_sleep = asyncio.sleep
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
@@ -316,8 +337,6 @@ def test_pending_run_not_filed(tmp_path, monkeypatch):
     """conclusion == None (in progress) → no draft."""
     ctx = _ctx(
         tmp_path,
-        MILL_CI_MONITOR_PERIODIC="true",
-        MILL_CI_MONITOR_INTERVAL_SECONDS="1",
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
@@ -330,18 +349,18 @@ def test_pending_run_not_filed(tmp_path, monkeypatch):
         },
     ])
 
-    state_path = ctx.settings.ci_monitor_memory_path
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     if state_path.exists():
         state_path.unlink()
 
     worker = Worker(ctx)
     worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
-        orig_sleep = asyncio.sleep
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
@@ -362,8 +381,6 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
     """Draft body contains the fetched job log text."""
     ctx = _ctx(
         tmp_path,
-        MILL_CI_MONITOR_PERIODIC="true",
-        MILL_CI_MONITOR_INTERVAL_SECONDS="1",
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
@@ -376,18 +393,18 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
         },
     ], logs="Step 5/10: ERROR: build failed\n")
 
-    state_path = ctx.settings.ci_monitor_memory_path
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     if state_path.exists():
         state_path.unlink()
 
     worker = Worker(ctx)
     worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
-        orig_sleep = asyncio.sleep
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
@@ -406,22 +423,38 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
     assert "Step 5/10: ERROR: build failed" in desc
 
 
-def test_monitor_disabled_by_default(tmp_path, monkeypatch):
-    """Without MILL_CI_MONITOR_PERIODIC=true, no poll task is created."""
+def test_monitor_skips_when_disabled_per_repo(tmp_path, monkeypatch):
+    """When no repo has ci_monitor_enabled=True, the poll task is not created."""
     ctx = _ctx(
         tmp_path,
+        repo_config=RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+            ci_monitor_enabled=False,
+            ci_monitor_interval_seconds=86400,
+        ),
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
-    # CI monitor is not enabled (default false).
+    # CI monitor is not enabled for any repo — start() should not
+    # create a _ci_monitor_task.
     worker = Worker(ctx)
-    # start() should not create a _ci_monitor_task.
     worker._ci_monitor_task = None  # ensure clean state
-    # We call start() and verify _ci_monitor_task stays None.
-    # (We can't really call start() in tests easily because it creates
-    # asyncio tasks that live forever. Just verify the setting.)
-    assert ctx.settings.ci_monitor_periodic is False
+    # Call start() inside an asyncio loop to exercise the startup gate.
+    import asyncio
+
+    async def _check():
+        worker.start()
+        assert worker._ci_monitor_task is None
+        await worker.stop()
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(_check())
+    loop.close()
 
 
 def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):

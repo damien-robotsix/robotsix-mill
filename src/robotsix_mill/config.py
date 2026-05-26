@@ -590,27 +590,12 @@ class Settings(BaseSettings):
     )
 
     # --- target-branch CI monitor ---
-    # When True, the worker runs a periodic poll that watches the forge
-    # target branch for completed workflow-run failures and files a
-    # source="ci" draft for each new one. Default False (opt-in).
-    ci_monitor_periodic: bool = Field(
-        default=False, alias="MILL_CI_MONITOR_PERIODIC"
-    )
-    # Interval between CI monitor polls (seconds). Only used when
-    # MILL_CI_MONITOR_PERIODIC=true.
-    ci_monitor_interval_seconds: int = Field(
-        default=86400, alias="MILL_CI_MONITOR_INTERVAL_SECONDS"
-    )
-    # Per-job log tail cap (bytes) when fetching workflow job logs for
-    # CI-fix context and the CI monitor draft body.
+    # CI monitor enabled/interval are now per-repo fields on RepoConfig
+    # (see config/repos.yaml).  ci_log_max_bytes stays global — it is an
+    # operational cap, not a per-repo policy decision.
     ci_log_max_bytes: int = Field(
         default=65536, alias="MILL_CI_LOG_MAX_BYTES"
     )
-
-    @property
-    def ci_monitor_memory_path(self) -> Path:
-        """Resolved path to the CI monitor dedup state file."""
-        return self.data_dir / "ci_monitor_state.json"
 
     # --- audit agent (meta-audit for quality/security coverage) ---
     # When True, the worker runs periodic audit passes at the configured
@@ -1395,8 +1380,9 @@ def _reset_secrets() -> None:
 
 
 class RepoConfig(BaseModel):
-    """Configuration for a single repository — its board identity and
-    Langfuse observability project credentials."""
+    """Configuration for a single repository — its board identity,
+    Langfuse observability project credentials, and per-repo CI
+    monitor settings."""
 
     repo_id: str
     board_id: str
@@ -1405,12 +1391,21 @@ class RepoConfig(BaseModel):
     langfuse_secret_key: str
     langfuse_base_url: str = "https://cloud.langfuse.com"
     forge_remote_url: str | None = None
+    ci_monitor_enabled: bool = True
+    ci_monitor_interval_seconds: int = 86400
 
     @field_validator("repo_id", "board_id")
     @classmethod
     def _validate_non_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("must be non-empty")
+        return v
+
+    @field_validator("ci_monitor_interval_seconds")
+    @classmethod
+    def _validate_ci_monitor_interval_seconds(cls, v: int) -> int:
+        if v < 60:
+            raise ValueError("ci_monitor_interval_seconds must be ≥ 60")
         return v
 
 
@@ -1443,6 +1438,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     repos: dict[str, RepoConfig] = {}
     for repo_id, repo_data in raw.items():
         langfuse = repo_data.get("langfuse", {}) if isinstance(repo_data, dict) else {}
+        ci_monitor = repo_data.get("ci_monitor", {}) if isinstance(repo_data, dict) else {}
         repos[repo_id] = RepoConfig(
             repo_id=repo_id,
             board_id=repo_data.get("board_id", "") if isinstance(repo_data, dict) else "",
@@ -1451,6 +1447,8 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             langfuse_secret_key=langfuse.get("secret_key", ""),
             langfuse_base_url=langfuse.get("base_url", "https://cloud.langfuse.com"),
             forge_remote_url=repo_data.get("forge_remote_url") if isinstance(repo_data, dict) else None,
+            ci_monitor_enabled=ci_monitor.get("enabled", True) if isinstance(ci_monitor, dict) else True,
+            ci_monitor_interval_seconds=ci_monitor.get("interval_seconds", 86400) if isinstance(ci_monitor, dict) else 86400,
         )
     return ReposRegistry(repos=repos)
 

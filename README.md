@@ -91,7 +91,8 @@ Open `http://localhost:8077` — the ticket board is the primary interface.
 
 ```sh
 make install                    # venv + editable install
-MILL_REPO_ID=my-repo make dev   # hot-reload on http://127.0.0.1:8077
+make dev                        # hot-reload on http://127.0.0.1:8077
+                                # (use --repo-id for single-repo mode)
 ```
 
 ### 3. Create your first ticket

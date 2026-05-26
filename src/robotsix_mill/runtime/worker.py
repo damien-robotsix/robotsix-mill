@@ -966,38 +966,53 @@ class Worker:
     async def _ci_monitor_poll_loop(self) -> None:
         """Periodic CI monitor poll: watch the forge target branch for
         completed workflow-run failures and file a ``source="ci"`` draft
-        for each new one.  Only runs when ``MILL_CI_MONITOR_PERIODIC=true``.
+        for each new one.
 
-        Multi-repo: iterates all registered repos sequentially, storing
-        per-repo dedup state at ``<data_dir>/<repo_id>/ci_monitor_state.json``.
-        When no repos are registered, falls back to the global state path.
+        Per-repo enabled/interval are controlled via ``RepoConfig``
+        fields in ``config/repos.yaml``.  The loop runs when *any*
+        registered repo has ``ci_monitor_enabled=True``.
         """
+        from ..core.service import TicketService
+        from ..forge import get_forge
+
         settings = self.ctx.settings
-        interval = max(60, settings.ci_monitor_interval_seconds)
         ttl_seconds = 30 * 86400  # 30 days
 
         # ANSI strip for log text (same pattern as forge/github.py).
         _ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
+        # Per-repo tracking: last polled timestamp (epoch seconds).
+        last_polled: dict[str, float] = {}
+
+        # Determine the minimum interval across all enabled repos so
+        # the loop ticks frequently enough to honour the fastest one,
+        # but only poll each repo when its own interval has elapsed.
+        repos = get_repos_config()
+        repo_configs = [rc for rc in repos.repos.values() if rc.ci_monitor_enabled]
+
+        min_interval = 60
+        if repo_configs:
+            min_interval = max(60, min(rc.ci_monitor_interval_seconds for rc in repo_configs))
+
+        await asyncio.sleep(self._initial_delay("ci_monitor", min_interval))
         while True:
-            repos = get_repos_config()
-            repo_configs = list(repos.repos.values())
-            if not repo_configs:
-                repo_configs = [None]  # type: ignore[list-item]
-            for repo_config in repo_configs:
+            for rc in repo_configs:
+                repo_label = rc.repo_id
+                interval = max(60, rc.ci_monitor_interval_seconds)
+
+                # Honour per-repo interval.
+                now = time.time()
+                if repo_label in last_polled and (now - last_polled[repo_label]) < interval:
+                    continue
+
                 try:
-                    if repo_config is not None:
-                        state_dir = settings.data_dir / repo_config.repo_id
-                        repo_label = repo_config.repo_id
-                    else:
-                        state_dir = settings.data_dir
-                        repo_label = "default"
+                    state_dir = settings.data_dir / rc.repo_id
+                    service = TicketService(settings, board_id=rc.board_id)
+
                     state_dir.mkdir(parents=True, exist_ok=True)
                     state_path = state_dir / "ci_monitor_state.json"
-                    log.info(
-                        "CI monitor poll starting for repo %s",
-                        repo_label,
-                    )
+                    log.info("CI monitor poll starting for repo %s", repo_label)
+
                     # 1. Load dedup state.
                     state: dict = {"seen": {}}
                     if state_path.exists():
@@ -1008,7 +1023,6 @@ class Worker:
                     seen = state.setdefault("seen", {})
 
                     # 2. Prune entries older than TTL.
-                    now = int(time.time())
                     stale = [
                         key for key, val in seen.items()
                         if isinstance(val, (int, float)) and (now - val) > ttl_seconds
@@ -1017,8 +1031,7 @@ class Worker:
                         del seen[key]
 
                     # 3. List completed workflow runs on the target branch.
-                    from ..forge import get_forge
-                    forge = get_forge(settings, repo_config=repo_config)
+                    forge = get_forge(settings, repo_config=rc)
                     runs = forge.list_workflow_runs(
                         branch=settings.forge_target_branch,
                     )
@@ -1026,20 +1039,13 @@ class Worker:
                     # 4. Only the LATEST run per workflow reflects current
                     # state (the GitHub API returns runs newest-first). Take
                     # one run per workflow_id and act only on that — never
-                    # backfill every historical failed run (that filed one
-                    # ticket per commit -> board flood).
+                    # backfill every historical failed run.
                     latest_by_wf: dict = {}
                     for run in runs:
                         wf = run.get("workflow_id")
                         if wf is not None and wf not in latest_by_wf:
                             latest_by_wf[wf] = run
 
-                    from ..core.service import TicketService
-                    service = (
-                        TicketService(settings, board_id=repo_config.board_id)
-                        if repo_config is not None
-                        else self.ctx.service
-                    )
                     existing = service.list()
 
                     for wf, run in latest_by_wf.items():
@@ -1055,8 +1061,7 @@ class Worker:
 
                         # One OPEN ci ticket per workflow: if a non-terminal
                         # source=ci ticket with this title already exists,
-                        # don't duplicate (the recurring failure is already
-                        # being worked).
+                        # don't duplicate.
                         if any(
                             t.source == SourceKind.CI
                             and t.title == title
@@ -1066,8 +1071,7 @@ class Worker:
                             continue
 
                         # Also avoid re-filing for the exact same failing
-                        # commit (e.g. a prior ticket was closed but CI is
-                        # still red at that sha).
+                        # commit.
                         key = f"{wf}:{run.get('head_sha')}"
                         if key in seen:
                             continue
@@ -1100,15 +1104,12 @@ class Worker:
                         ]
                         if logs:
                             stripped = _ansi_re.sub("", logs)
-                            # Cap total body log text at ~200 KB for the
-                            # draft description (sanity limit).
                             if len(stripped) > 200_000:
                                 stripped = stripped[-200_000:]
                             body_parts.append("```")
                             body_parts.append(stripped)
                             body_parts.append("```")
 
-                        title = f"CI failure: {wf_name} on {settings.forge_target_branch}"
                         body = "\n".join(body_parts)
 
                         try:
@@ -1128,16 +1129,13 @@ class Worker:
                     # 5. Persist state.
                     state_path.write_text(json.dumps(state), "utf-8")
 
-                    log.info(
-                        "CI monitor poll completed for repo %s",
-                        repo_label,
-                    )
+                    log.info("CI monitor poll completed for repo %s", repo_label)
                 except Exception:  # noqa: BLE001 — never let the poll die
-                    log.exception(
-                        "CI monitor poll failed for repo %s",
-                        repo_label,
-                    )
-            await asyncio.sleep(interval)
+                    log.exception("CI monitor poll failed for repo %s", repo_label)
+
+                last_polled[repo_label] = time.time()
+
+            await asyncio.sleep(min_interval)
 
     def start(self) -> None:
         if not self._tasks:
@@ -1219,15 +1217,14 @@ class Worker:
                 "Periodic completeness-check enabled: interval %ds",
                 self.ctx.settings.completeness_check_interval_seconds,
             )
-        # Opt-in CI monitor
-        if self.ctx.settings.ci_monitor_periodic and self._ci_monitor_task is None:
-            self._ci_monitor_task = asyncio.create_task(
-                self._ci_monitor_poll_loop()
-            )
-            log.info(
-                "CI monitor enabled: interval %ds",
-                self.ctx.settings.ci_monitor_interval_seconds,
-            )
+        # CI monitor: enabled when any registered repo has ci_monitor_enabled=True.
+        if self._ci_monitor_task is None:
+            repos = get_repos_config()
+            if any(rc.ci_monitor_enabled for rc in repos.repos.values()):
+                self._ci_monitor_task = asyncio.create_task(
+                    self._ci_monitor_poll_loop()
+                )
+                log.info("CI monitor enabled (per-repo config)")
         # Opt-in periodic test-gap
         if self.ctx.settings.test_gap_periodic and self._test_gap_task is None:
             self._test_gap_task = asyncio.create_task(self._test_gap_poll_loop())

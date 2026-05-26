@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import importlib
-import os
 import sys
 
 import httpx
@@ -180,9 +179,9 @@ def main(argv: list[str] | None = None) -> int:
     p_serve = sub.add_parser("serve", help="run the API + event-driven worker")
     p_serve.add_argument(
         "--repo-id",
-        default=os.environ.get("MILL_REPO_ID"),
-        help="repository identifier (default from MILL_REPO_ID env var; "
-        "omit to serve all repos from config/repos.yaml)",
+        default=None,
+        help="repository identifier to serve a single repo; "
+        "omit to serve all repos from config/repos.yaml",
     )
 
     # --- repos list command ---

@@ -395,9 +395,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.env_sync.enabled": "MILL_ENV_SYNC_PERIODIC",
     "periodic.env_sync.interval_seconds": "MILL_ENV_SYNC_INTERVAL_SECONDS",
     "periodic.env_sync.memory_path": "MILL_ENV_SYNC_MEMORY_PATH",
-    # -- periodic.ci_monitor --
-    "periodic.ci_monitor.enabled": "MILL_CI_MONITOR_PERIODIC",
-    "periodic.ci_monitor.interval_seconds": "MILL_CI_MONITOR_INTERVAL_SECONDS",
+    # -- periodic.ci_monitor (global cap only — enabled/interval are per-repo) --
     "periodic.ci_monitor.log_max_bytes": "MILL_CI_LOG_MAX_BYTES",
     # -- service --
     "service.data_dir": "MILL_DATA_DIR",
