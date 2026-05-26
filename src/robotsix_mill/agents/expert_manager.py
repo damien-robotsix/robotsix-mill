@@ -18,7 +18,9 @@ Usage::
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from typing import Any
 
 from ..config import Settings
 from .expert_loader import ExpertDefinition
@@ -78,12 +80,22 @@ class ExpertManager:
 
     # -- agent lifecycle ---------------------------------------------------
 
-    def create_expert(self, definition: ExpertDefinition) -> "AgentHandle":
+    def create_expert(
+        self,
+        definition: ExpertDefinition,
+        *,
+        output_type: Any = None,
+        memory_text: str = "",
+    ) -> "AgentHandle":
         """Build (or retrieve a cached) pydantic-ai agent for *definition*.
 
         On first call per domain the agent is constructed via
         ``build_agent`` and cached; subsequent calls return the same
-        ``AgentHandle`` object.
+        ``AgentHandle`` object. The cache key is the domain alone — so
+        if you pass a different ``output_type`` or ``memory_text`` to
+        the second call, you'll still get the first call's cached agent.
+        Callers that need a non-cached behaviour (e.g. a fresh memory
+        block) should call :meth:`remove_expert` first.
 
         Tool resolution maps the string names in ``definition.tools`` to
         actual pydantic-ai callables:
@@ -96,6 +108,16 @@ class ExpertManager:
         (default ``report_issue=True``).
 
         Model fallback: ``definition.model or self._settings.model``.
+
+        ``output_type`` — when non-None, forwarded to ``build_agent`` so
+        the expert returns structured output (e.g. ``PromptedOutput
+        (ImplementResult)``). When ``None`` (default), preserves the
+        existing ``str``-output behaviour for back-compat with callers
+        that don't expect structured output.
+
+        ``memory_text`` — when non-empty, appended to the system prompt
+        inside a ``<memory>…</memory>`` block so the expert can read its
+        own ledger. When empty (default), no memory block is injected.
         """
         from .base import build_agent
 
@@ -116,17 +138,89 @@ class ExpertManager:
 
             tools.append(make_explore_tool(self._settings, self._repo_dir))
 
-        agent = build_agent(
-            self._settings,
-            system_prompt=definition.system_prompt,
+        system_prompt = definition.system_prompt
+        if memory_text:
+            system_prompt = (
+                f"{system_prompt}\n\n<memory>\n{memory_text}\n</memory>"
+            )
+
+        build_kwargs: dict[str, Any] = dict(
+            system_prompt=system_prompt,
             tools=tools,
             model_name=model_name,
             skills=definition.skills,
             name=f"expert:{definition.domain}",
         )
+        if output_type is not None:
+            build_kwargs["output_type"] = output_type
+
+        agent = build_agent(self._settings, **build_kwargs)
 
         self._cache[definition.domain] = agent
         return agent
+
+    # -- glob matching for module_paths ----------------------------------
+
+    @staticmethod
+    def _glob_to_regex(pattern: str) -> re.Pattern:
+        """Convert a POSIX-style glob to an anchored regex.
+
+        Semantics (intentionally narrow — designed for ``module_paths``,
+        not full POSIX globbing):
+
+        - ``**`` matches any number of path segments (including zero).
+          ``src/**/*.py`` matches ``src/a.py``, ``src/a/b.py``, etc.
+        - ``*`` matches any run of characters within a single segment
+          (no ``/``).
+        - ``?`` matches exactly one non-``/`` character.
+        - All other regex metacharacters are escaped literally.
+
+        The returned pattern is anchored (``^…$``) and intended for
+        :py:meth:`re.Pattern.fullmatch`.
+        """
+        # Walk the pattern char-by-char so we can detect ``**`` vs ``*``
+        # without ambiguity. ``re.escape`` would over-escape ``*``/``?``
+        # which we then have to undo, so doing it longhand is clearer.
+        i = 0
+        out: list[str] = []
+        while i < len(pattern):
+            c = pattern[i]
+            if c == "*" and i + 1 < len(pattern) and pattern[i + 1] == "*":
+                # ``**`` — zero-or-more segments, including the trailing /.
+                # Match either nothing (so `src/**/foo` covers `src/foo`)
+                # or one-or-more segments followed by a slash.
+                out.append(r"(?:.*/)?")
+                i += 2
+                # Swallow a following slash so the regex matches "src/foo"
+                # for the pattern "src/**/foo" (zero intermediate segments).
+                if i < len(pattern) and pattern[i] == "/":
+                    i += 1
+            elif c == "*":
+                out.append(r"[^/]*")
+                i += 1
+            elif c == "?":
+                out.append(r"[^/]")
+                i += 1
+            else:
+                out.append(re.escape(c))
+                i += 1
+        return re.compile(f"^{''.join(out)}$")
+
+    @staticmethod
+    def match_module_paths(
+        module_paths: list[str], file_path: str,
+    ) -> bool:
+        """Return ``True`` when *file_path* matches ANY pattern in
+        *module_paths*.
+
+        *file_path* is expected to be a POSIX-style relative path
+        (e.g. ``"src/robotsix_mill/agents/coordinating.py"``).
+        Empty *module_paths* returns ``False``.
+        """
+        for pattern in module_paths:
+            if ExpertManager._glob_to_regex(pattern).fullmatch(file_path):
+                return True
+        return False
 
     def get_expert(self, domain: str) -> "AgentHandle | None":
         """Return the cached agent for *domain*, or ``None``.

@@ -574,3 +574,135 @@ def test_close_all_calls_safe_close_on_each(monkeypatch):
     for h in handles:
         assert h.closed
     assert len(mgr._cache) == 0
+
+
+# ── extensions for ticket 0e3e: create_expert(output_type=, memory_text=) ──
+
+
+def test_create_expert_with_output_type(monkeypatch):
+    """``output_type`` is forwarded to build_agent when non-None."""
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    state = _patch_build_agent(monkeypatch)
+    _patch_build_fs_tools(monkeypatch)
+
+    class StructuredOutput:
+        pass
+
+    settings = Settings()
+    mgr = ExpertManager(settings, Path("/tmp/test-repo"))
+    d = _make_definition()
+    mgr.create_expert(d, output_type=StructuredOutput)
+
+    assert state["captured"][0].get("output_type") is StructuredOutput
+
+
+def test_create_expert_without_output_type_omits_kwarg(monkeypatch):
+    """When ``output_type=None`` (default), the kwarg is NOT passed to
+    build_agent — preserves build_agent's own default (``str``)."""
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    state = _patch_build_agent(monkeypatch)
+    _patch_build_fs_tools(monkeypatch)
+
+    settings = Settings()
+    mgr = ExpertManager(settings, Path("/tmp/test-repo"))
+    d = _make_definition()
+    mgr.create_expert(d)
+
+    assert "output_type" not in state["captured"][0]
+
+
+def test_create_expert_with_memory_text(monkeypatch):
+    """Non-empty memory_text is appended to system_prompt inside a
+    <memory> block."""
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    state = _patch_build_agent(monkeypatch)
+    _patch_build_fs_tools(monkeypatch)
+
+    settings = Settings()
+    mgr = ExpertManager(settings, Path("/tmp/test-repo"))
+    d = _make_definition(system_prompt="You are X.")
+    mgr.create_expert(d, memory_text="prior insight: foo")
+
+    sp = state["captured"][0]["system_prompt"]
+    assert sp.startswith("You are X.")
+    assert "<memory>" in sp
+    assert "prior insight: foo" in sp
+    assert "</memory>" in sp
+
+
+def test_create_expert_without_memory_text(monkeypatch):
+    """Empty memory_text leaves system_prompt untouched."""
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    state = _patch_build_agent(monkeypatch)
+    _patch_build_fs_tools(monkeypatch)
+
+    settings = Settings()
+    mgr = ExpertManager(settings, Path("/tmp/test-repo"))
+    d = _make_definition(system_prompt="You are X.")
+    mgr.create_expert(d)
+
+    sp = state["captured"][0]["system_prompt"]
+    assert sp == "You are X."
+    assert "<memory>" not in sp
+
+
+# ── glob matching ──────────────────────────────────────────────────────
+
+
+def test_match_module_paths_doublestar():
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    assert ExpertManager.match_module_paths(["src/**/*.py"], "src/a.py")
+    assert ExpertManager.match_module_paths(["src/**/*.py"], "src/a/b.py")
+    assert ExpertManager.match_module_paths(["src/**/*.py"], "src/a/b/c.py")
+    assert not ExpertManager.match_module_paths(["src/**/*.py"], "tests/x.py")
+    assert not ExpertManager.match_module_paths(["src/**/*.py"], "docs/readme.md")
+
+
+def test_match_module_paths_single_star_single_segment():
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    # `*` matches WITHIN a segment, not across `/`.
+    assert ExpertManager.match_module_paths(["*.md"], "README.md")
+    assert not ExpertManager.match_module_paths(["*.md"], "src/readme.md")
+    assert ExpertManager.match_module_paths(["src/*.py"], "src/a.py")
+    assert not ExpertManager.match_module_paths(["src/*.py"], "src/a/b.py")
+
+
+def test_match_module_paths_question_mark():
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    assert ExpertManager.match_module_paths(["src/foo/bar?.py"], "src/foo/bar1.py")
+    assert not ExpertManager.match_module_paths(["src/foo/bar?.py"], "src/foo/bar10.py")
+    assert not ExpertManager.match_module_paths(["src/foo/bar?.py"], "src/foo/bar.py")
+
+
+def test_match_module_paths_escapes_regex_metacharacters():
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    # `.` is regex-special. As a glob literal it must match a literal dot only.
+    assert ExpertManager.match_module_paths(["a.txt"], "a.txt")
+    assert not ExpertManager.match_module_paths(["a.txt"], "aXtxt")
+    # `+` is regex-special. As a glob literal it must match `+` only.
+    assert ExpertManager.match_module_paths(["a+b.txt"], "a+b.txt")
+    assert not ExpertManager.match_module_paths(["a+b.txt"], "aab.txt")
+
+
+def test_match_module_paths_multiple_patterns_any_match():
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    patterns = ["src/**/*.py", "tests/**/*.py", "*.md"]
+    assert ExpertManager.match_module_paths(patterns, "src/foo.py")
+    assert ExpertManager.match_module_paths(patterns, "tests/x.py")
+    assert ExpertManager.match_module_paths(patterns, "README.md")
+    assert not ExpertManager.match_module_paths(patterns, "docs/guide.txt")
+
+
+def test_match_module_paths_empty_list():
+    from robotsix_mill.agents.expert_manager import ExpertManager
+
+    assert not ExpertManager.match_module_paths([], "anything.py")
