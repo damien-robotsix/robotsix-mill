@@ -67,8 +67,8 @@ default feature set: `deliver` + merge gate + CI monitor):
 
 Leave everything else **No access**. Click **Create GitHub App**.
 
-> If you intentionally disable the CI monitor (`MILL_CI_MONITOR_PERIODIC=false`
-> and never call `POST /ci-fix`), you can drop **Actions** to *No access*.
+> If you intentionally disable the CI monitor (set `ci_monitor.enabled: false`
+> per-repo in `config/repos.yaml` and never call `POST /ci-fix`), you can drop **Actions** to *No access*.
 > Without `Actions: Read`, mill cannot fetch workflow-run statuses or job
 > logs, and the CI monitor silently files tickets with empty logs — refine
 > then has nothing concrete to work from and may confabulate root causes.

@@ -197,9 +197,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- rebase / CI fix ---
     ("rebase_max_attempts", "MILL_REBASE_MAX_ATTEMPTS", "2", 2),
     ("ci_fix_max_attempts", "MILL_CI_FIX_MAX_ATTEMPTS", "4", 4),
-    # --- CI monitor ---
-    ("ci_monitor_periodic", "MILL_CI_MONITOR_PERIODIC", "1", True),
-    ("ci_monitor_interval_seconds", "MILL_CI_MONITOR_INTERVAL_SECONDS", "3600", 3600),
+    # --- CI monitor (global cap only — enabled/interval are per-repo) ---
     ("ci_log_max_bytes", "MILL_CI_LOG_MAX_BYTES", "32768", 32768),
     # --- audit ---
     ("audit_periodic", "MILL_AUDIT_PERIODIC", "true", True),
@@ -372,12 +370,6 @@ class TestComputedProperties:
         )
         s = Settings()
         assert s.tracing_enabled is False
-
-    # -- ci_monitor_memory_path --
-
-    def test_ci_monitor_memory_path(self, tmp_path):
-        s = Settings(MILL_DATA_DIR=str(tmp_path))
-        assert s.ci_monitor_memory_path == tmp_path / "ci_monitor_state.json"
 
     # -- memory_file properties (14 total) --
 
@@ -819,6 +811,53 @@ class TestRepoConfig:
                 langfuse_secret_key="sk",
             )
 
+    # -- ci_monitor fields --
+
+    def test_ci_monitor_defaults(self):
+        """ci_monitor_enabled defaults to True, interval defaults to 86400."""
+        from robotsix_mill.config import RepoConfig
+
+        rc = RepoConfig(
+            repo_id="r",
+            board_id="b",
+            langfuse_project_name="p",
+            langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+        )
+        assert rc.ci_monitor_enabled is True
+        assert rc.ci_monitor_interval_seconds == 86400
+
+    def test_ci_monitor_interval_minimum(self):
+        """ci_monitor_interval_seconds < 60 raises ValidationError."""
+        from pydantic import ValidationError
+        from robotsix_mill.config import RepoConfig
+
+        with pytest.raises(ValidationError, match="ci_monitor_interval_seconds"):
+            RepoConfig(
+                repo_id="r",
+                board_id="b",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                ci_monitor_interval_seconds=30,
+            )
+
+    def test_ci_monitor_custom(self):
+        """ci_monitor fields can be overridden."""
+        from robotsix_mill.config import RepoConfig
+
+        rc = RepoConfig(
+            repo_id="r",
+            board_id="b",
+            langfuse_project_name="p",
+            langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+            ci_monitor_enabled=False,
+            ci_monitor_interval_seconds=3600,
+        )
+        assert rc.ci_monitor_enabled is False
+        assert rc.ci_monitor_interval_seconds == 3600
+
 
 class TestReposRegistry:
     """Tests for the ``ReposRegistry`` model."""
@@ -883,6 +922,47 @@ class TestLoadReposConfig:
         assert rc.langfuse_public_key == "pk-a"
         assert rc.langfuse_secret_key == "sk-a"
         assert rc.langfuse_base_url == "https://cloud.langfuse.com"
+
+    def test_yaml_parses_ci_monitor_fields(self, tmp_path):
+        """``load_repos_config()`` parses the optional ``ci_monitor`` sub-dict."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    langfuse:\n"
+            "      project_name: proj-a\n"
+            "      public_key: pk-a\n"
+            "      secret_key: sk-a\n"
+            "    ci_monitor:\n"
+            "      enabled: false\n"
+            "      interval_seconds: 7200\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        rc = rr.repos["repo-a"]
+        assert rc.ci_monitor_enabled is False
+        assert rc.ci_monitor_interval_seconds == 7200
+
+    def test_yaml_ci_monitor_defaults_when_absent(self, tmp_path):
+        """When ``ci_monitor`` is absent, fields default to True / 86400."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  repo-a:\n"
+            "    board_id: board-a\n"
+            "    langfuse:\n"
+            "      project_name: proj-a\n"
+            "      public_key: pk-a\n"
+            "      secret_key: sk-a\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        rc = rr.repos["repo-a"]
+        assert rc.ci_monitor_enabled is True
+        assert rc.ci_monitor_interval_seconds == 86400
 
     def test_langfuse_base_url_default_in_loaded_config(self, tmp_path):
         """Omitting ``langfuse.base_url`` in YAML defaults to cloud."""

@@ -184,14 +184,13 @@ other code depends on.
 | `MILL_REBASE_MAX_ATTEMPTS` | `rebase_max_attempts` | `5` | `int` | Settings | non-sensitive | default | §9 | `stages/merge.py` | |
 | `MILL_CI_FIX_MAX_ATTEMPTS` | `ci_fix_max_attempts` | `2` | `int` | Settings | non-sensitive | default | §9 | `stages/merge.py` | |
 
-### 1.13  CI monitor
+### 1.13  CI monitor (log cap only; enabled/interval are per-repo)
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `MILL_CI_MONITOR_PERIODIC` | `ci_monitor_periodic` | `false` | `bool` | Settings + compose | non-sensitive | default | §20 | `runtime/worker.py` | compose overrides to `true` |
-| `MILL_CI_MONITOR_INTERVAL_SECONDS` | `ci_monitor_interval_seconds` | `86400` | `int` | Settings + compose | non-sensitive | default | §20 | `runtime/worker.py` | compose overrides to `600` |
-| `MILL_CI_LOG_MAX_BYTES` | `ci_log_max_bytes` | `65536` | `int` | Settings | non-sensitive | default | §20 | CI monitor / CI-fix agent | |
-| `—` | *`ci_monitor_memory_path`* | `<data_dir>/ci_monitor_state.json` | `Path` | computed | non-sensitive | — | — | `runtime/worker.py` | Derived from `MILL_DATA_DIR` |
+| `MILL_CI_LOG_MAX_BYTES` | `ci_log_max_bytes` | `65536` | `int` | Settings | non-sensitive | default | §20 | CI monitor / CI-fix agent | global operational cap |
+| `—` | *ci_monitor_enabled* | `True` | `bool` | RepoConfig | non-sensitive | repos.yaml | — | `runtime/worker.py` | per-repo field in `config/repos.yaml` |
+| `—` | *ci_monitor_interval_seconds* | `86400` | `int` | RepoConfig | non-sensitive | repos.yaml | — | `runtime/worker.py` | per-repo field in `config/repos.yaml` |
 
 ### 1.14  Periodic agents — audit
 
@@ -289,8 +288,6 @@ or genuinely non-Settings vars consumed only by tooling/CI (rows 1, 3, 4).
 | `GITHUB_APP_PRIVATE_KEY_PATH` (compose use) | compose-subst | `/dev/null` | `docker-compose.yml` volumes: `${GITHUB_APP_PRIVATE_KEY_PATH:-/dev/null}` | identifying | secret | `docker-compose.yml` (volume bind-mount) | Same env var as the Settings field; compose reads it independently for the bind-mount path. Set via shell environment or `config/secrets.yaml`. |
 | `GIT_BASE_REF` | CI | (none) | `.github/workflows/ci.yml` env block | non-sensitive | absent | `tests/test_migration_guard.py` via `os.environ.get("GIT_BASE_REF", "origin/main")` | Workflow-internal only; never in `Settings`. |
 | `SKIP_MIGRATION_GUARD` | CI / developer shell | (none) | Manually exported by developers | non-sensitive | absent | `tests/test_migration_guard.py` via `os.environ.get("SKIP_MIGRATION_GUARD")` | Escape hatch; not in `Settings`. |
-| `MILL_CI_MONITOR_PERIODIC` (compose) | compose | `true` | `docker-compose.yml` environment: | non-sensitive | default (compose override) | `runtime/worker.py` via `Settings()` | Compose overrides the YAML default; listed in §1.13 as a Settings field too. |
-| `MILL_CI_MONITOR_INTERVAL_SECONDS` (compose) | compose | `600` | `docker-compose.yml` environment: | non-sensitive | default (compose override) | `runtime/worker.py` via `Settings()` | Compose overrides the default `86400`; listed in §1.13. |
 | `MILL_SANDBOX_DATA_MOUNT` (compose) | compose | `${PWD}/.data` | `docker-compose.yml` environment: | identifying | default (compose override) | `sandbox.py` via `Settings()` | Compose expands `$PWD` on the host; listed in §1.8. |
 
 ---
@@ -356,10 +353,12 @@ in `docs/configuration.md`:
 | Env var | Compose value | `config.py` default | YAML | Override effect |
 |---|---|---|---|---|
 | `MILL_SANDBOX_DATA_MOUNT` | `${PWD}/.data` | `None` | absent | Forces bind-mount path; overrides `MILL_DATA_VOLUME` |
-| `MILL_CI_MONITOR_PERIODIC` | `true` | `false` | default | Enables CI monitor in deployed container |
-| `MILL_CI_MONITOR_INTERVAL_SECONDS` | `600` | `86400` | default | 10-min poll (vs. 1-day default) |
 
-These three are the **only** vars that compose sets directly in the `environment:` block. Everything else flows through the YAML config pipeline (`mill.defaults.yaml` → `mill.local.yaml` → `os.environ`).
+CI monitor enabling/interval were previously set here but are now per-repo
+fields in `config/repos.yaml` (``RepoConfig.ci_monitor_enabled`` /
+``RepoConfig.ci_monitor_interval_seconds``).
+
+This is the **only** var that compose sets directly in the `environment:` block. Everything else flows through the YAML config pipeline (`mill.defaults.yaml` → `mill.local.yaml` → `os.environ`).
 
 ### 2.7  Vars consumed by `docker-compose.yml` variable substitution (not `environment:`)
 

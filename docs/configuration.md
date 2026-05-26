@@ -479,15 +479,11 @@ robotsix-mill serve
 ```
 
 To scope the process to a single repo (useful for tests/dev), pass
-`--repo-id` or set the `MILL_REPO_ID` environment variable:
+`--repo-id`:
 
 ```sh
 # Single-repo override:
 robotsix-mill serve --repo-id my-repo
-
-# or via environment variable (convenient for Docker/compose):
-export MILL_REPO_ID=my-repo
-robotsix-mill serve
 ```
 
 When `config/repos.yaml` is empty, the server refuses to start (exit
