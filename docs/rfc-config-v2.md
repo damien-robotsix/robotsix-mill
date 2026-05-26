@@ -167,6 +167,8 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_MAX_FIX_ITERATIONS` | `core.limits.max_fix_iterations` | `8` | |
 | `MILL_MAX_STUCK_CYCLES` | `core.limits.max_stuck_cycles` | `3` | |
 | `MILL_MAX_SPEND_USD_PER_TICKET` | `core.limits.max_spend_usd_per_ticket` | `0.0` | `0.0` = disabled |
+| `MILL_STAGE_TIMEOUT_SECONDS` | `core.limits.stage_timeout_seconds` | `1800` | seconds; `≤ 0` disables |
+| `MILL_STAGE_TIMEOUT_OVERRIDES` | `core.limits.stage_timeout_overrides` | `{}` | JSON dict; `"stage": 0` disables per-stage |
 | `MILL_MODEL_REQUEST_TIMEOUT` | `core.limits.model_request_timeout` | `900.0` | seconds |
 | `MILL_TRANSIENT_RETRIES` | `core.limits.transient_retries` | `4` | |
 | `MILL_TRANSIENT_BACKOFF_BASE` | `core.limits.transient_backoff_base` | `2.0` | seconds |

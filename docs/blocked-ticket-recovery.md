@@ -1,9 +1,9 @@
 # Blocked ticket recovery
 
 When a ticket is blocked (e.g. a fatal agent failure, a transient
-error that exhausted all retries, or a missing/empty
-`file_map.json` from the refine stage), the state it was blocked
-*from* is recorded. You can recover in three ways:
+error that exhausted all retries, a stage that timed out, or a
+missing/empty `file_map.json` from the refine stage), the state it
+was blocked *from* is recorded. You can recover in three ways:
 
 - **Resume to the originating state** (re-runs only the failed stage):
   ```sh

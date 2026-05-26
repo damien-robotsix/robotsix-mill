@@ -234,6 +234,16 @@ deduplication — the same day is never reported twice.
   than silently re-billing the LLM on every requeue. Poll stages
   (`in_review` waiting on an open PR) are exempt.
 
+- **Stage timeout.** If a single stage invocation runs longer than
+  `MILL_STAGE_TIMEOUT_SECONDS` (default 1800 s = 30 min), the worker
+  escalates the ticket to `BLOCKED` with a note and frees the worker
+  slot.  Per-stage overrides are available via
+  `MILL_STAGE_TIMEOUT_OVERRIDES` (JSON dict, e.g.
+  `{"merge":0}` to disable timeout on merge).  This complements the
+  stuck-cycle detector by catching hangs *within* a single stage
+  invocation (hung LLM call, runaway shell command, asyncio deadlock).
+  Set to 0 to disable entirely.
+
 ## See also
 
 - [index.md](index.md) — documentation home

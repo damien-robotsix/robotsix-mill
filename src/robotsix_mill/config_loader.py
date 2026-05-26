@@ -278,6 +278,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.max_fix_iterations": "MILL_MAX_FIX_ITERATIONS",
     "core.limits.max_stuck_cycles": "MILL_MAX_STUCK_CYCLES",
     "core.limits.max_spend_usd_per_ticket": "MILL_MAX_SPEND_USD_PER_TICKET",
+    "core.limits.stage_timeout_seconds": "MILL_STAGE_TIMEOUT_SECONDS",
+    "core.limits.stage_timeout_overrides": "MILL_STAGE_TIMEOUT_OVERRIDES",
     "core.limits.model_request_timeout": "MILL_MODEL_REQUEST_TIMEOUT",
     "core.limits.transient_retries": "MILL_TRANSIENT_RETRIES",
     "core.limits.transient_backoff_base": "MILL_TRANSIENT_BACKOFF_BASE",
