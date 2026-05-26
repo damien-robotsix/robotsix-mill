@@ -320,7 +320,7 @@ class TestAuditTraceHealthEndpoints:
         class _R:
             drafts_created: list = [{"id": "abc", "title": "x"}]
 
-        monkeypatch.setattr(audit_runner, "run_audit_pass", lambda session_id=None: _R())
+        monkeypatch.setattr(audit_runner, "run_audit_pass", lambda session_id=None, repo_config=None: _R())
 
         r = client.post("/audit")
         assert r.status_code == 202
@@ -348,7 +348,7 @@ class TestAuditTraceHealthEndpoints:
             window_end: str = "2025-01-02T00:00:00Z"
 
         monkeypatch.setattr(
-            trace_health_runner, "run_trace_health_check", lambda session_id=None: _R()
+            trace_health_runner, "run_trace_health_check", lambda repo_config=None: _R()
         )
 
         r = client.post("/trace-health")
@@ -369,7 +369,7 @@ class TestAuditTraceHealthEndpoints:
     def test_error_run_recorded(self, client, monkeypatch):
         from robotsix_mill import audit_runner
 
-        def _fail(session_id=None):
+        def _fail(session_id=None, repo_config=None):
             raise RuntimeError("simulated failure")
 
         monkeypatch.setattr(audit_runner, "run_audit_pass", _fail)

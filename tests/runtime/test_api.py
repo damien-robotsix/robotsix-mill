@@ -539,7 +539,7 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
     class _R:
         drafts_created: list = []
 
-    def slow_audit(session_id=None):
+    def slow_audit(session_id=None, repo_config=None):
         ran.set()
         release.wait(5)  # simulate a minutes-long run
         return _R()
@@ -567,7 +567,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
     class _R:
         drafts_created: list = []
 
-    def slow_agent_check(session_id=None):
+    def slow_agent_check(session_id=None, repo_config=None):
         ran.set()
         release.wait(5)
         return _R()

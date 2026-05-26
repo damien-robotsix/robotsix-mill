@@ -577,7 +577,7 @@ def test_post_test_gap_returns_202(tmp_path, monkeypatch, repos_registry):
     started = threading.Event()
     finished = threading.Event()
 
-    def slow_run(session_id=None):
+    def slow_run(session_id=None, repo_config=None):
         started.set()
         finished.wait(timeout=5)
         return TestGapPassResult(
@@ -614,7 +614,7 @@ def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry)
 
     run_event = threading.Event()
 
-    def mock_run(session_id=None):
+    def mock_run(session_id=None, repo_config=None):
         # Create a ticket directly in DB to simulate the runner
         svc = TicketService(settings)
         svc.create("Test-gap draft", "Test-gap body", source="test_gap")
