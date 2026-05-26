@@ -740,6 +740,23 @@ async function runCompletenessCheck(){
  }
 }
 
+async function runCostReconciliation(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const repoId=getRepoId();
+   const crUrl=repoId!=="all"?"/cost-reconciliation?repo_id="+encodeURIComponent(repoId):"/cost-reconciliation";
+   const r=await jpost(crUrl);
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Cost-reconciliation started — it compares OpenRouter vs Langfuse spend and files a draft ticket if drift exceeds $1.00.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Cost-reconciliation failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Cost Recon';
+ }
+}
+
 async function runEnvSync(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
