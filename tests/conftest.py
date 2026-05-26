@@ -137,6 +137,33 @@ def repos_registry(repo_config: RepoConfig) -> ReposRegistry:
 
 
 @pytest.fixture
+def two_repo_registry() -> ReposRegistry:
+    """Two distinct repos for multi-repo isolation tests.
+
+    Uses the same repo_id/board_id/project mapping that the ticket
+    spec mandates so assertions are unambiguous.
+    """
+    return ReposRegistry(
+        repos={
+            "repo-a": RepoConfig(
+                repo_id="repo-a",
+                board_id="board-a",
+                langfuse_project_name="proj-a",
+                langfuse_public_key="pk-a",
+                langfuse_secret_key="sk-a",
+            ),
+            "repo-b": RepoConfig(
+                repo_id="repo-b",
+                board_id="board-b",
+                langfuse_project_name="proj-b",
+                langfuse_public_key="pk-b",
+                langfuse_secret_key="sk-b",
+            ),
+        }
+    )
+
+
+@pytest.fixture
 def fake_sandbox(monkeypatch):
     """Replace the (always-containerized) sandbox seam with a tiny
     interpreter so the suite is hermetic and never invokes Docker.
