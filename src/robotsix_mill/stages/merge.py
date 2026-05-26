@@ -544,7 +544,7 @@ class MergeStage(Stage):
                     loc += f":{c['line']}"
                 loc += ")"
             parts.append(
-                f"## Comment #{i + 1}{loc}\n\n{c['body']}"
+                f"## Comment #{i + 1}{loc}\n\n{c.get('body', '')}"
             )
         review_comments_text = "\n\n".join(parts)
 
@@ -574,8 +574,8 @@ class MergeStage(Stage):
                 ok = result.status == "DONE"
                 if result.updated_memory:
                     persist_memory(s.review_revision_memory_file, result.updated_memory)
-        except Exception:  # noqa: BLE001
-            log.exception("%s: review-revision agent crashed: %s", ticket.id)
+        except Exception as e:  # noqa: BLE001
+            log.exception("%s: review-revision agent crashed: %s", ticket.id, e)
             ok = False
 
         if ok:
