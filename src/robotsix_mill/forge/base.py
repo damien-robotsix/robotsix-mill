@@ -79,6 +79,28 @@ class Forge(ABC):
         """
 
     @abstractmethod
+    def pr_review_status(self, *, source_branch: str) -> dict | None:
+        """Return the aggregate review state of the PR for *source_branch*.
+
+        Returns ``None`` when no PR exists for the branch.
+
+        Return shape:
+        ``state`` — one of ``"APPROVED"``, ``"CHANGES_REQUESTED"``,
+            ``"COMMENTED"``, ``"DISMISSED"``, or ``"PENDING"`` (no
+            reviews yet). Derived from the *latest* non-dismissed
+            review; falls back to the latest dismissed review when all
+            reviews are dismissed.
+        ``comments`` — list of dicts, each with:
+            ``body`` (str), ``path`` (str, ``""`` for review-body
+            comments), ``line`` (int | None),
+            ``review_state`` (the state of the review this comment
+            belongs to: APPROVED/CHANGES_REQUESTED/COMMENTED/DISMISSED).
+        ``files`` — list of changed file paths (str). Same source as
+            :meth:`pr_files` but returned as a plain list of strings
+            for convenience.
+        """
+
+    @abstractmethod
     def merge_pr(self, *, source_branch: str) -> dict:
         """Merge the PR for *source_branch* (squash merge).
 

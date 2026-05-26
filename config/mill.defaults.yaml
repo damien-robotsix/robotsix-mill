@@ -127,6 +127,8 @@ gates:
   review_model: *default_model             # review agent model
   review_max_rounds: 3                     # max CODE_REVIEW round-trips before escalate
   auto_merge_enabled: false                # auto-merge green PR via forge API (opt-in)
+  review_feedback_enabled: false           # enable autonomous review-revision (opt-in — implements changes requested by human reviewers)
+  review_revision_model: *default_model    # review-revision agent model
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
   spec_review_enabled: false               # post-refinement spec narrative stripping
   scope_triage_enabled: true               # cheap scope-violation triage (EXPAND/REJECT/ESCALATE)
@@ -140,6 +142,7 @@ pipeline:
   merge_poll_seconds: 120                            # poll interval for PR merge/CI status
   rebase_max_attempts: 5                             # max rebase LLM invocations before BLOCK
   ci_fix_max_attempts: 2                             # max CI-fix LLM invocations before BLOCK
+  review_revision_max_attempts: 2                    # max review-revision LLM invocations before BLOCK
   retrospect_spawn_drafts: true                      # allow retrospect to file improvement drafts
   retrospect_deep_analysis_frequency: 10             # how many runs between deep trace analyses
   prune_clone_on_close: true                         # delete workspace repo/ clone on ticket close
@@ -152,6 +155,7 @@ pipeline:
   refine_memory_path: null                # defaults to <data_dir>/refine_memory.md
   ci_fix_memory_path: null                # defaults to <data_dir>/ci_fix_memory.md
   rebase_memory_path: null                # defaults to <data_dir>/rebase_memory.md
+  review_revision_memory_path: null       # defaults to <data_dir>/review_revision_memory.md
 
 # ---------------------------------------------------------------------------
 #  periodic — background agents that run on a schedule

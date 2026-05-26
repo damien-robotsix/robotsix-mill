@@ -143,6 +143,10 @@ class GitLabForge(Forge):
     def list_review_comments(self, *, source_branch: str) -> list[dict]:
         raise NotImplementedError("GitLab forge adapter not implemented yet")
 
+    # TODO: implement GitLab MR review state
+    def pr_review_status(self, *, source_branch: str) -> dict | None:
+        return {"state": "PENDING", "comments": [], "files": []}
+
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict]:

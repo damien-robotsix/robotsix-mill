@@ -325,6 +325,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.review_enabled": "MILL_REVIEW_ENABLED",
     "gates.review_model": "MILL_REVIEW_MODEL",
     "gates.review_max_rounds": "MILL_REVIEW_MAX_ROUNDS",
+    "gates.review_feedback_enabled": "MILL_REVIEW_FEEDBACK_ENABLED",
+    "gates.review_revision_model": "MILL_REVIEW_REVISION_MODEL",
     "gates.auto_merge_enabled": "MILL_AUTO_MERGE_ENABLED",
     "gates.refine_triage_enabled": "MILL_REFINE_TRIAGE_ENABLED",
     "gates.spec_review_enabled": "MILL_SPEC_REVIEW_ENABLED",
@@ -344,6 +346,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.refine_memory_path": "MILL_REFINE_MEMORY_PATH",
     "pipeline.ci_fix_memory_path": "MILL_CI_FIX_MEMORY_PATH",
     "pipeline.rebase_memory_path": "MILL_REBASE_MEMORY_PATH",
+    "pipeline.review_revision_memory_path": "MILL_REVIEW_REVISION_MEMORY_PATH",
     # -- periodic.audit --
     "periodic.audit.model": "MILL_AUDIT_MODEL",
     "periodic.audit.enabled": "MILL_AUDIT_PERIODIC",

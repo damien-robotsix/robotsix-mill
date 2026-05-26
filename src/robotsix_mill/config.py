@@ -453,6 +453,13 @@ class Settings(BaseSettings):
     auto_merge_enabled: bool = Field(
         default=False, alias="MILL_AUTO_MERGE_ENABLED"
     )
+    # When True (and a human reviewer requests changes on the PR),
+    # the merge stage will invoke the review-revision agent to
+    # implement the requested changes automatically. Default False
+    # (opt-in — this is a powerful autonomous capability).
+    review_feedback_enabled: bool = Field(
+        default=False, alias="MILL_REVIEW_FEEDBACK_ENABLED"
+    )
     # When True (default), a cheap triage LLM call runs before the full
     # refine agent.  Drafts that are already precise, single-scoped, and
     # implementation-ready skip the full refine — saving cost & latency.
@@ -479,6 +486,11 @@ class Settings(BaseSettings):
     # perspective (the dual-model benefit).
     review_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_REVIEW_MODEL"
+    )
+    # Model for the review-revision agent. Defaults to the capable
+    # coordinator model. Override to use a different model.
+    review_revision_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_REVIEW_REVISION_MODEL"
     )
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
@@ -570,6 +582,11 @@ class Settings(BaseSettings):
     # attempts per ticket before escalating to BLOCKED.
     ci_fix_max_attempts: int = Field(
         default=2, alias="MILL_CI_FIX_MAX_ATTEMPTS"
+    )
+
+    # Maximum review-revision attempts per ticket before escalating to BLOCKED.
+    review_revision_max_attempts: int = Field(
+        default=2, alias="MILL_REVIEW_REVISION_MAX_ATTEMPTS"
     )
 
     # --- target-branch CI monitor ---
@@ -838,6 +855,12 @@ class Settings(BaseSettings):
     ci_fix_memory_path: Path | None = Field(
         default=None, alias="MILL_CI_FIX_MEMORY_PATH"
     )
+    # Path to the review-revision agent's Markdown memory ledger.
+    # Override to pin a specific path; unset (default) derives
+    # <data_dir>/review_revision_memory.md.
+    review_revision_memory_path: Path | None = Field(
+        default=None, alias="MILL_REVIEW_REVISION_MEMORY_PATH"
+    )
     # Path to the rebase agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/rebase_memory.md.
     rebase_memory_path: Path | None = Field(
@@ -988,6 +1011,13 @@ class Settings(BaseSettings):
             return self.rebase_memory_path
         return self.data_dir / "rebase_memory.md"
 
+    @property
+    def review_revision_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained review-revision memory ledger."""
+        if self.review_revision_memory_path is not None:
+            return self.review_revision_memory_path
+        return self.data_dir / "review_revision_memory.md"
+
     # ------------------------------------------------------------------
     #  Validators
     # ------------------------------------------------------------------
@@ -1097,6 +1127,13 @@ class Settings(BaseSettings):
     def _validate_ci_fix_max_attempts(cls, v: int) -> int:
         if v < 0:
             raise ValueError("ci_fix_max_attempts must be ≥ 0")
+        return v
+
+    @field_validator("review_revision_max_attempts")
+    @classmethod
+    def _validate_review_revision_max_attempts(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("review_revision_max_attempts must be ≥ 1")
         return v
 
     @field_validator("max_archived_tickets")

@@ -188,6 +188,7 @@ Every setting below shows:
 | `core.models.dedup` | `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-pro` | Dedup agent — pre-refine duplicate/already-done check |
 | `core.models.web_research` | `MILL_WEB_RESEARCH_MODEL` | `deepseek/deepseek-v4-pro` | Web-research sub-agent — web lookups, conclusion only |
 | `core.models.review` | `MILL_REVIEW_MODEL` | `deepseek/deepseek-v4-pro` | Review agent — blind dual-model diff audit (opt-in) |
+| `core.models.review_revision` | `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Review-revision agent — autonomously implements changes requested by human reviewers (opt-in) |
 | `core.models.trace_inspector` | `MILL_TRACE_INSPECTOR_MODEL` | `deepseek/deepseek-v4-pro` | Trace-inspector sub-agent — inspects full Langfuse observation tree |
 | `core.models.test_gap` | `MILL_TEST_GAP_MODEL` | `deepseek/deepseek-v4-pro` | Test-gap agent — identifies modules with zero dedicated tests |
 | `core.models.agent_check` | `MILL_AGENT_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | Agent-check agent — audits agent definitions for coherence |
@@ -248,6 +249,7 @@ Every setting below shows:
 | `pipeline.refine_memory_path` | `MILL_REFINE_MEMORY_PATH` | `None` | Override path for refine memory; defaults to `<data_dir>/refine_memory.md` |
 | `pipeline.ci_fix_memory_path` | `MILL_CI_FIX_MEMORY_PATH` | `None` | Override path for CI-fix memory; defaults to `<data_dir>/ci_fix_memory.md` |
 | `pipeline.rebase_memory_path` | `MILL_REBASE_MEMORY_PATH` | `None` | Override path for rebase memory; defaults to `<data_dir>/rebase_memory.md` |
+| `pipeline.review_revision_memory_path` | `MILL_REVIEW_REVISION_MEMORY_PATH` | `None` | Override path for review-revision memory; defaults to `<data_dir>/review_revision_memory.md` |
 
 ### 5. Dedup
 
@@ -279,6 +281,9 @@ Every setting below shows:
 | `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `false` | Post-refinement spec narrative stripping |
 | `gates.scope_triage_enabled` | `MILL_SCOPE_TRIAGE_ENABLED` | `true` | Cheap scope-violation triage before blocking (EXPAND/REJECT/ESCALATE) |
 | `gates.auto_merge_enabled` | `MILL_AUTO_MERGE_ENABLED` | `false` | Auto-merge PR when CI passes |
+| `gates.review_feedback_enabled` | `MILL_REVIEW_FEEDBACK_ENABLED` | `false` | Enable autonomous review-revision agent (opt-in — implements changes requested by human reviewers) |
+| `gates.review_revision_model` | `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Review-revision agent model |
+| `gates.comments_after_body` | `MILL_COMMENTS_AFTER_BODY` | `false` | Render description.md before comments in ticket detail drawer |
 ### 8. Forge
 
 | YAML path | Env var | Default | Description |
@@ -322,6 +327,7 @@ Every setting below shows:
 | `pipeline.merge_poll_seconds` | `MILL_MERGE_POLL_SECONDS` | `120` | Poll interval for PR merge/CI status |
 | `pipeline.rebase_max_attempts` | `MILL_REBASE_MAX_ATTEMPTS` | `5` | Max rebase LLM invocations before BLOCK |
 | `pipeline.ci_fix_max_attempts` | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Max CI-fix LLM invocations before BLOCK |
+| `pipeline.review_revision_max_attempts` | `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations before BLOCK |
 | `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
 | `pipeline.prune_clone_on_close` | `MILL_PRUNE_CLONE_ON_CLOSE` | `true` | Delete workspace repo clone on ticket close |
 | `pipeline.max_archived_tickets` | `MILL_MAX_ARCHIVED_TICKETS` | `100` | Max terminal-state tickets retained (0 = no purge) |

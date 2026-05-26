@@ -164,6 +164,15 @@ class GitHubForge(Forge):
             owner=owner, repo=repo, pull_number=pr["number"],
         )
 
+    def pr_review_status(self, *, source_branch: str) -> dict | None:
+        owner, repo = self._owner_repo
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return None
+        return self._pr_review_status(
+            owner=owner, repo=repo, pull_number=pr["number"],
+        )
+
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict]:
@@ -368,6 +377,87 @@ class GitHubForge(Forge):
             }
             for item in items
         ]
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _pr_review_status(
+        self, *, owner: str, repo: str, pull_number: int,
+    ) -> dict:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
+
+        with httpx.Client(timeout=30) as c:
+            # 1. Fetch reviews (includes state field that list_pr_reviews drops).
+            r = c.get(
+                f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+                headers=headers,
+                params={"per_page": 100},
+            )
+            r.raise_for_status()
+            reviews_raw = r.json()
+
+            # 2. Fetch inline review comments.
+            r2 = c.get(
+                f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments",
+                headers=headers,
+                params={"per_page": 100},
+            )
+            r2.raise_for_status()
+            comments_raw = r2.json()
+
+            # 3. Fetch changed files.
+            files = self._pr_files(
+                owner=owner, repo=repo, pull_number=pull_number,
+            )
+
+        # Determine aggregate review state from the latest non-dismissed
+        # review.  GitHub returns reviews oldest-first; iterate reversed.
+        state = "PENDING"
+        for rev in reversed(reviews_raw):
+            rev_state = rev.get("state", "COMMENTED")
+            if rev_state != "DISMISSED":
+                state = rev_state
+                break
+        else:
+            # All reviews are DISMISSED — use the latest one.
+            if reviews_raw:
+                state = reviews_raw[-1].get("state", "DISMISSED")
+
+        # Build a review_state lookup: review_id -> state.
+        review_state_map: dict[int, str] = {}
+        for rev in reviews_raw:
+            review_state_map[rev["id"]] = rev.get("state", "COMMENTED")
+
+        # Merge review body comments + inline comments into one list.
+        comments: list[dict] = []
+        for rev in reviews_raw:
+            body = rev.get("body")
+            if body and body.strip():
+                comments.append({
+                    "body": body,
+                    "path": "",
+                    "line": None,
+                    "review_state": rev.get("state", "COMMENTED"),
+                })
+        for c in comments_raw:
+            comments.append({
+                "body": c.get("body") or "",
+                "path": c.get("path", ""),
+                "line": c.get("line") or c.get("original_line"),
+                "review_state": review_state_map.get(
+                    c.get("pull_request_review_id"), "COMMENTED"
+                ),
+            })
+
+        return {
+            "state": state,
+            "comments": comments,
+            "files": [f["path"] for f in files],
+        }
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _check_status(
