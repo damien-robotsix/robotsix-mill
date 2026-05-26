@@ -134,7 +134,7 @@ class ImplementStage(Stage):
             comments = ctx.service.list_comments(ticket.id)
             if comments:
                 review_feedback = "\n".join(
-                    f"[REVIEW {c.created_at.isoformat()}] {c.body}"
+                    f"[REVIEW id={c.id} @ {c.created_at.isoformat()}] {c.body}"
                     for c in comments
                 )
                 feedback = review_feedback

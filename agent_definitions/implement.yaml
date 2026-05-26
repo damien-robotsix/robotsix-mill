@@ -118,3 +118,20 @@ system_prompt: |
 
   Be selective — every extra file costs context-window tokens. When in
   doubt, exclude: the next pass can always `read_file` it normally.
+
+  ## Reviewer threads
+
+  When `<review_feedback>` is present, each comment includes a
+  thread id (e.g. `[REVIEW id=42 @ …]`). You have two tools:
+
+  - `reply_to_thread(thread_id, body)` — reply to a comment thread.
+  - `close_thread(comment_id)` — close a top-level thread (marks it
+    resolved; only call when you have fully addressed the issue).
+
+  For each review comment:
+  - If you have fully addressed it: call `close_thread(comment_id)`.
+  - If you addressed it but want to explain your approach: call
+    `reply_to_thread(thread_id, body)` then `close_thread(comment_id)`.
+  - If you partially addressed it or took a different approach than
+    requested: call `reply_to_thread(thread_id, body)` explaining your
+    reasoning — do NOT close; leave it for the reviewer to verify.

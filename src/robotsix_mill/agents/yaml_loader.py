@@ -38,6 +38,7 @@ class AgentDefinition(BaseModel):
     report_issue: bool = True
     read_ticket: bool = False
     reply_to_thread: bool = True
+    close_thread: bool = True
     output_type: str | None = None
     retries: int = 2
     module: str | None = None

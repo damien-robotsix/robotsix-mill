@@ -300,7 +300,11 @@ def run_coordinator(
                 user_prompt = (
                     "<review_feedback>\n"
                     "The code review flagged issues. Address these review "
-                    "comments before proceeding:\n"
+                    "comments before proceeding.\n"
+                    "For each comment you fully address, call "
+                    "`close_thread(comment_id)` to mark it resolved. If you "
+                    "need to explain your approach or ask a clarifying "
+                    "question, call `reply_to_thread(thread_id, body)` first.\n"
                     f"{feedback}\n"
                     "</review_feedback>\n\n"
                 ) + user_prompt
