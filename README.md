@@ -97,7 +97,7 @@ Running the pipeline needs Docker (agents run in disposable containers);
 - [docs/expert-yaml-schema.md](docs/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
 - [docs/dedup-guard.md](docs/dedup-guard.md) — Pre-refine duplicate / already-done check
-- [docs/merge-stage.md](docs/merge-stage.md) — Auto-rebase of stale PRs + auto-fix of failing CI
+- [docs/merge-stage.md](docs/merge-stage.md) — Gate-check, auto-rebase, and auto-fix for merge-ready PRs
 - [docs/audit-agent.md](docs/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
 - [docs/blocked-ticket-recovery.md](docs/blocked-ticket-recovery.md) — Recovering from BLOCKED tickets
 - [docs/retrospect-memory.md](docs/retrospect-memory.md) — Retrospect agent's Markdown memory ledger

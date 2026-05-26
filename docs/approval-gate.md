@@ -45,9 +45,11 @@ and why.
 
 ## MR approval (before merge)
 
-After the implement stage completes and a PR exists, the merge stage
-may return the ticket to `human_mr_approval` (e.g. after a successful
-rebase). The ticket waits for an explicit human go-ahead:
+After the deliver stage opens a PR, the ticket enters
+`implement_complete`. The merge stage polls this state, verifying two
+gates — **CI is green** and **PR is mergeable** — before promoting to
+`human_mr_approval` and notifying the human. Only when both gates pass
+does the ticket wait for an explicit human go-ahead:
 
 ### Merge (merge via forge)
 
@@ -81,10 +83,10 @@ amber annotation explaining *why* auto-merge is ineligible when it is.
 
 ### Merge Info panel
 
-When a ticket is in `human_mr_approval`, the detail drawer displays a
-**Merge Info** block between the Merge button and the cost line.
-It is fetched from `GET /tickets/{id}/merge-info` and surfaces three
-things the human needs before clicking Merge:
+When a ticket is in `implement_complete` or `human_mr_approval`, the
+detail drawer displays a **Merge Info** block between the Merge button
+and the cost line. It is fetched from `GET /tickets/{id}/merge-info`
+and surfaces three things the human needs:
 
 - **CI status** — green checkmark (passing), red X with failing check
   names (failure), yellow spinner (pending), or grey dash (unknown).
