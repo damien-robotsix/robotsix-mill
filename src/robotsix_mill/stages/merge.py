@@ -40,10 +40,12 @@ no history spam, no busy loop.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 from pathlib import Path
 
 from ..agents.rebasing import run_rebase_agent
+from ..agents.review_revision import run_review_revision_agent
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
@@ -57,6 +59,7 @@ log = logging.getLogger("robotsix_mill.stages.merge")
 
 _REBASE_COUNTER = "rebase_attempts.txt"
 _MERGE_REASON = "merge_reason.txt"
+_REV_REV_COUNTER = "review_revision_attempts.txt"
 
 
 def _read_counter(path) -> int:
@@ -114,6 +117,10 @@ class MergeStage(Stage):
         if ticket.state is State.REBASING:
             return self._run_rebase(ticket, ctx)
 
+        # ADDRESSING_REVIEW path: run review-revision agent, force-push.
+        if ticket.state is State.ADDRESSING_REVIEW:
+            return self._run_review_revision(ticket, ctx)
+
         # WAITING_AUTO_MERGE path: re-poll CI, try auto-merge when green.
         if ticket.state is State.WAITING_AUTO_MERGE:
             return self._poll_waiting_auto_merge(ticket, ctx)
@@ -128,6 +135,7 @@ class MergeStage(Stage):
 
         if pr is None:
             return Outcome(State.HUMAN_MR_APPROVAL)  # not visible yet — re-poll
+
         if pr.get("merged"):
             ctx.service.workspace(ticket).artifacts_dir.joinpath(
                 "merge.md"
@@ -139,6 +147,38 @@ class MergeStage(Stage):
                 State.BLOCKED,
                 f"PR closed without merge — resumable: {pr.get('url', '')}",
             )
+
+        # --- Review feedback check (opt-in, gated by config flag) ---
+        if s.review_feedback_enabled:
+            try:
+                review_status = get_forge(s).pr_review_status(source_branch=branch)
+            except Exception as e:  # noqa: BLE001 — transient
+                log.warning("%s: pr_review_status failed (retry): %s", ticket.id, e)
+                review_status = None
+
+            if review_status is not None and review_status.get("state") == "CHANGES_REQUESTED":
+                # Persist the review comments as an artifact so the agent can
+                # read them even if the forge becomes unreachable on the next poll.
+                comments = review_status.get("comments", [])
+                if comments:
+                    artifact_dir = ctx.service.workspace(ticket).artifacts_dir
+                    review_json = json.dumps(review_status, indent=2)
+                    artifact_dir.joinpath("review_feedback.json").write_text(
+                        review_json, encoding="utf-8"
+                    )
+                    log.info(
+                        "%s: human requested changes (%d comments) → ADDRESSING_REVIEW",
+                        ticket.id, len(comments),
+                    )
+                    return Outcome(
+                        State.ADDRESSING_REVIEW,
+                        f"Reviewer requested changes with {len(comments)} comment(s)",
+                    )
+                # CHANGES_REQUESTED but no comments — treat as no-op (empty review body).
+                log.info(
+                    "%s: changes requested with empty body — treating as no-op",
+                    ticket.id,
+                )
 
         # PR is open.  Check mergeability.
         mergeable = pr.get("mergeable")
@@ -457,6 +497,149 @@ class MergeStage(Stage):
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         return self._handle_conflict(ticket, ctx, branch)
+
+    def _run_review_revision(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Execute the review-revision agent for a ticket in ADDRESSING_REVIEW."""
+        s = ctx.settings
+        branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
+
+        repo_dir = _workspace_repo_dir(ctx, ticket)
+        if repo_dir is None:
+            return Outcome(
+                State.BLOCKED,
+                "Review feedback received but workspace clone is missing; "
+                "cannot implement changes. Re-run implement to recreate the clone.",
+            )
+
+        # Read the persisted review feedback artifact.
+        artifact_dir = ctx.service.workspace(ticket).artifacts_dir
+        feedback_path = artifact_dir / "review_feedback.json"
+        if not feedback_path.exists():
+            return Outcome(
+                State.HUMAN_MR_APPROVAL,
+                "review_feedback.json artifact missing — re-polling from human_mr_approval",
+            )
+
+        try:
+            feedback = json.loads(feedback_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return Outcome(
+                State.HUMAN_MR_APPROVAL,
+                "review_feedback.json corrupted — re-polling from human_mr_approval",
+            )
+
+        comments = feedback.get("comments", [])
+        pr_files = feedback.get("files", [])
+
+        if not comments:
+            return Outcome(State.HUMAN_MR_APPROVAL)
+
+        # Build a formatted review-comments string for the agent.
+        parts: list[str] = []
+        for i, c in enumerate(comments):
+            loc = ""
+            if c.get("path"):
+                loc = f" ({c['path']}"
+                if c.get("line"):
+                    loc += f":{c['line']}"
+                loc += ")"
+            parts.append(
+                f"## Comment #{i + 1}{loc}\n\n{c.get('body', '')}"
+            )
+        review_comments_text = "\n\n".join(parts)
+
+        # Counter for attempt budgeting.
+        counter_path = artifact_dir / _REV_REV_COUNTER
+        attempt = _read_counter(counter_path) + 1
+        max_attempts = s.review_revision_max_attempts
+
+        log.info(
+            "%s: addressing review feedback — attempt %d/%d",
+            ticket.id, attempt, max_attempts,
+        )
+
+        try:
+            # review_revision is traced=False (like ci_fix), so wrap the
+            # LLM agent in the ticket's Langfuse session.
+            with tracing.start_ticket_root_span(ticket.id, "review_revision"):
+                memory_text = load_memory(s.review_revision_memory_file)
+                result = run_review_revision_agent(
+                    settings=s,
+                    repo_dir=Path(repo_dir),
+                    branch=branch,
+                    review_comments=review_comments_text,
+                    pr_files=pr_files,
+                    memory=memory_text,
+                )
+                ok = result.status == "DONE"
+                if result.updated_memory:
+                    persist_memory(s.review_revision_memory_file, result.updated_memory)
+        except Exception as e:  # noqa: BLE001
+            log.exception("%s: review-revision agent crashed: %s", ticket.id, e)
+            ok = False
+
+        if ok:
+            # Only force-push when the local HEAD differs from remote.
+            try:
+                local = git_ops.head_sha(repo_dir)
+                remote = git_ops.remote_branch_sha(repo_dir, branch)
+            except Exception:  # noqa: BLE001
+                local, remote = None, "force-push"
+
+            if local is not None and remote == local:
+                # Nothing to push — the agent made no changes.
+                if attempt < max_attempts:
+                    _write_counter(counter_path, attempt)
+                    log.info(
+                        "%s: review-revision no-op (remote already current) — "
+                        "retry %d/%d",
+                        ticket.id, attempt, max_attempts,
+                    )
+                    return Outcome(State.ADDRESSING_REVIEW)
+                _write_counter(counter_path, 0)
+                return Outcome(
+                    State.BLOCKED,
+                    "review-revision agent succeeded but made no changes "
+                    f"after {max_attempts} attempt(s)",
+                )
+
+            try:
+                git_ops.push(
+                    repo_dir,
+                    branch=branch,
+                    remote_url=s.forge_remote_url,
+                    token=github_token(s),
+                )
+            except Exception as e:  # noqa: BLE001
+                log.exception(
+                    "%s: force-push after review-revision failed: %s", ticket.id, e
+                )
+                _write_counter(counter_path, attempt)
+                return Outcome(
+                    State.BLOCKED,
+                    f"review revision succeeded but force-push failed: {e}",
+                )
+
+            _write_counter(counter_path, 0)
+            log.info("%s: review feedback addressed, branch force-pushed", ticket.id)
+            return Outcome(State.HUMAN_MR_APPROVAL)
+
+        # Agent failed.
+        if attempt < max_attempts:
+            _write_counter(counter_path, attempt)
+            log.warning(
+                "%s: review-revision attempt %d/%d failed — retrying next poll",
+                ticket.id, attempt, max_attempts,
+            )
+            return Outcome(State.ADDRESSING_REVIEW)
+
+        _write_counter(counter_path, 0)
+        return Outcome(
+            State.BLOCKED,
+            f"review revision failed after {max_attempts} attempt(s) — "
+            "manual intervention required. "
+            "Resume-blocked to retry from human_mr_approval.",
+        )
 
     def _handle_conflict(  # noqa: C901  # TODO: split into smaller functions (ticket: split_merge_stage)
         self, ticket: Ticket, ctx: StageContext, branch: str

@@ -1,8 +1,9 @@
-# Merge stage: gate-check, auto-rebase & CI-fix
+# Merge stage: gate-check, auto-rebase, CI-fix & review-revision
 
 The merge stage monitors open PRs and handles several scenarios:
 gate-checking new PRs before notifying humans, auto-rebasing conflicting
-PRs, and auto-fixing failing CI.
+PRs, auto-fixing failing CI, and autonomously addressing human reviewer
+change requests.
 
 ## Gate-check: `IMPLEMENT_COMPLETE` → `HUMAN_MR_APPROVAL`
 
@@ -94,6 +95,46 @@ implement agent, scoped to the ticket's clone. It never pushes, opens
 PRs, or interacts with the forge. The agent does **NOT** have web-search
 access — it works only from the failing summary and local files.
 
+## Auto-fix of review feedback (opt-in)
+
+When `MILL_REVIEW_FEEDBACK_ENABLED=true` and a human reviewer submits a
+"request changes" review on the PR, the merge stage detects the
+`CHANGES_REQUESTED` state and transitions the ticket to
+`ADDRESSING_REVIEW`. On the next poll, it invokes a **review-revision
+agent** (`agents/review_revision.py`) that reads the review comments,
+makes the requested code changes, runs local tests, and commits.
+
+- The forge adapter queries the PR's review status via
+  `pr_review_status()`. Only GitHub is supported — GitLab always
+  returns `PENDING`, so the feedback loop never triggers.
+- If the review has body text or line comments, the comments are
+  persisted as `review_feedback.json` in the ticket's artifacts
+  directory so the agent can read them even if the forge becomes
+  unreachable on the next poll.
+- The review-revision agent is invoked on the ticket's workspace clone
+  with the formatted comments and changed file list.
+- On success the ticket branch is force-pushed (the ticket goes back to
+  `HUMAN_MR_APPROVAL` for human re-review).
+- On failure with retries remaining the ticket stays in
+  `ADDRESSING_REVIEW` for the next poll.
+- On failure after exhausting retries the ticket escalates to `BLOCKED`
+  (resumable) — no half-fixed state is ever pushed.
+- If the review has an empty body and no line comments, it is treated
+  as a no-op and the ticket stays in `HUMAN_MR_APPROVAL`.
+
+| Variable | Default | Description |
+|---|---|---|
+| `MILL_REVIEW_FEEDBACK_ENABLED` | `false` | Enable autonomous review-revision agent (opt-in). |
+| `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations per ticket before escalating to BLOCKED. |
+| `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Model for the review-revision agent. |
+
+The review-revision agent uses the same sandboxed shell + file tools as
+the implement agent, scoped to the ticket's clone. It never pushes,
+opens PRs, or interacts with the forge. The agent does **NOT** have
+web-search access — it works only from the review comments and local
+files. The agent's system prompt explicitly forbids gate weakening
+(removing test assertions, lint rules, or security checks).
+
 ## State flow summary
 
 ```
@@ -113,9 +154,16 @@ HUMAN_MR_APPROVAL                                      │
     ├── closed unmerged      → BLOCKED                │
     ├── CI failing           → IMPLEMENT_COMPLETE ─────┘
     ├── conflicting          → IMPLEMENT_COMPLETE ─────┘
-    ├── CI green + eligible  → DONE (auto-merge)
-    ├── CI pending + eligible → WAITING_AUTO_MERGE
+    ├── changes requested    → ADDRESSING_REVIEW ──────┐
+    ├── CI green + eligible  → DONE (auto-merge)       │
+    ├── CI pending + eligible → WAITING_AUTO_MERGE     │
     └── CI green + not eligible → HUMAN_MR_APPROVAL (wait)
+                                                       │
+ADDRESSING_REVIEW                                      │
+    │ (merge stage runs review-revision agent)         │
+    ├── agent success        → HUMAN_MR_APPROVAL ──────┘
+    ├── agent retry          → ADDRESSING_REVIEW
+    └── agent exhausted      → BLOCKED
 ```
 
 ## See also

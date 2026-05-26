@@ -30,7 +30,13 @@ to ``BLOCKED``. ``FIXING_CI`` is an active state between
 mergeable PR with failing CI and transitions to ``FIXING_CI``, then on
 the next poll runs the CI-fix agent. On success it returns to
 ``IMPLEMENT_COMPLETE`` for gate re-verification; on failure it escalates
-to ``BLOCKED``.
+to ``BLOCKED``. ``ADDRESSING_REVIEW`` is an active state between
+``HUMAN_MR_APPROVAL`` and ``HUMAN_MR_APPROVAL``: the merge stage detects a
+PR with a human reviewer's "request changes" review and transitions to
+``ADDRESSING_REVIEW``, then on the next poll runs the review-revision
+agent. On success it returns to ``HUMAN_MR_APPROVAL`` for re-review;
+on failure with retries remaining it stays in ``ADDRESSING_REVIEW``;
+on exhaustion it escalates to ``BLOCKED``.
 
 When a ticket is blocked, the state it was blocked *from* is recorded
 (``Ticket.blocked_from``). A human can **resume** the blocked ticket
@@ -57,6 +63,7 @@ class State(StrEnum):
     WAITING_AUTO_MERGE = "waiting_auto_merge"  # PR open + CI pending; auto-merge when green
     REBASING = "rebasing"     # conflicting PR; rebase agent in progress
     FIXING_CI = "fixing_ci"   # PR open + failing CI; auto-fix in progress
+    ADDRESSING_REVIEW = "addressing_review"  # PR has human change requests; agent responding
     DONE = "done"             # PR/MR merged; awaiting retrospect
     CLOSED = "closed"        # retrospected; pipeline complete (terminal)
     ERRORED = "errored"       # a stage threw an unhandled exception
@@ -104,6 +111,7 @@ TRANSITIONS: dict[State, set[State]] = {
         State.DONE,
         State.WAITING_AUTO_MERGE,
         State.IMPLEMENT_COMPLETE,
+        State.ADDRESSING_REVIEW,
         State.ERRORED,
         State.BLOCKED,
     },
@@ -122,6 +130,8 @@ TRANSITIONS: dict[State, set[State]] = {
     State.REBASING: {State.IMPLEMENT_COMPLETE, State.READY, State.ERRORED, State.BLOCKED},
     # ci fix: on success → implement_complete (re-verify gates); on failure → blocked; on crash → errored.
     State.FIXING_CI: {State.IMPLEMENT_COMPLETE, State.BLOCKED, State.ERRORED},
+    # addressing review: on success → human_mr_approval (re-verify gates); on failure → blocked; on crash → errored.
+    State.ADDRESSING_REVIEW: {State.HUMAN_MR_APPROVAL, State.BLOCKED, State.ERRORED},
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED},
     State.CLOSED: set(),
@@ -151,6 +161,7 @@ STAGE_FOR_STATE: dict[State, str] = {
     State.WAITING_AUTO_MERGE: "merge",
     State.REBASING: "merge",
     State.FIXING_CI: "ci_fix",
+    State.ADDRESSING_REVIEW: "merge",
     State.DONE: "retrospect",
     State.ASKED: "answer",
 }
