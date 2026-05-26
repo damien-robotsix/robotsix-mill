@@ -181,16 +181,34 @@ def migrate_legacy_global_db(settings: Settings) -> dict[str, int]:
         legacy_engine.dispose()
         legacy_backup = settings.data_dir / "mill.db.legacy-pre-split"
         try:
-            legacy_path.rename(legacy_backup)
+            if legacy_backup.exists():
+                # Prior migration already produced the backup. The
+                # current legacy_path is the empty file left behind by
+                # lifespan's init_db(settings) on a fresh start —
+                # delete it rather than clobber the real backup.
+                legacy_path.unlink()
+            else:
+                legacy_path.rename(legacy_backup)
             log.info(
                 "migrate_legacy_global_db: per-repo DBs already "
-                "populated — completed migration by renaming legacy "
-                "DB to %s", legacy_backup.name,
+                "populated — completed migration by retiring the "
+                "default-board DB at %s", legacy_path,
             )
         except OSError as e:
             log.warning(
-                "migrate_legacy_global_db: could not rename legacy DB: %s", e,
+                "migrate_legacy_global_db: could not retire legacy DB: %s", e,
             )
+        # Invalidate the cached default-board engine / init flag so
+        # subsequent ``session(settings, "")`` calls recreate a fresh
+        # default DB with schema instead of inheriting the empty stub
+        # that gets created when sqlite touches the missing path.
+        if "" in _engines:
+            try:
+                _engines[""].dispose()
+            except Exception:
+                pass
+            _engines.pop("", None)
+        _initialized.discard("")
         return {}
 
     # OK to migrate. Use raw SQL for the copy — SQLAlchemy schemas
