@@ -37,6 +37,12 @@ system_prompt: |
   - A new test file for the changed code.
   - A one-line import added to an adjacent module.
   - A generated/managed file that drifted (e.g. poetry.lock).
+  - A parameter addition of the form `new_param=None` (optional keyword
+    argument with default `None`) to a mock / patched / test-double
+    function signature in a test file. This is a mechanical
+    compatibility fix required because the real function's signature
+    grew — not scope creep. The mock must accept the new keyword or the
+    test crashes with `TypeError: unexpected keyword argument`.
   - A small, obviously-necessary refactor.
   Populate `expand_files` with the exact paths to add to file_map.
 

@@ -272,6 +272,42 @@ class ImplementStage(Stage):
                             continue
 
                         if verdict is not None and verdict.action == "REJECT":
+                            # Dedup guard: if ALL current out-of-scope files
+                            # were already REJECTed in a prior scope-triage
+                            # comment on this ticket, the agent has seen this
+                            # diff before and the operator already has the
+                            # signal. Don't post another comment / bounce
+                            # back to READY — treat as implicit EXPAND so
+                            # the implement loop can make actual progress.
+                            import re as _re
+                            prior_rejects = [
+                                c for c in ctx.service.list_comments(ticket.id)
+                                if c.author == "scope-triage"
+                                and (c.body or "").find("REJECT") >= 0
+                            ]
+                            already_rejected: set[str] = set()
+                            for c in prior_rejects:
+                                for m in _re.findall(r"`([^`]+)`", c.body or ""):
+                                    already_rejected.add(m)
+                            new_oos = [
+                                f for f in out_of_scope
+                                if f not in already_rejected
+                            ]
+                            if not new_oos:
+                                log.warning(
+                                    "%s: suppressing duplicate scope-triage REJECT — "
+                                    "all %d out-of-scope file(s) already rejected in "
+                                    "prior run(s): %s",
+                                    ticket.id, len(out_of_scope),
+                                    ", ".join(out_of_scope),
+                                )
+                                # Implicit EXPAND — the prior REJECT serves as
+                                # the public record; let implement proceed.
+                                for f in out_of_scope:
+                                    file_map.add(f)
+                                feedback = None
+                                continue
+
                             log.info("%s: scope-triage REJECT — %s", ticket.id, verdict.justification)
                             ctx.service.add_comment(
                                 ticket.id,
