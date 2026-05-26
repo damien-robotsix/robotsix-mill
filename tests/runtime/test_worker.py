@@ -289,16 +289,36 @@ def test_no_progress_counter_resets_on_advance(ctx, service):
 def test_enqueue_dedupes(ctx):
     w = Worker(ctx)
     w.enqueue("a"); w.enqueue("a"); w.enqueue("b")
-    assert w.queue.qsize() == 2
+    assert w.queue_size() == 2
     assert w._pending == {"a", "b"}
 
 
-async def test_start_creates_pool_of_max_concurrency(ctx):
-    ctx.settings.max_concurrency = 3
+async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
+    """One consumer task per repo per its max_concurrency, plus a
+    single fallback consumer for the default (no-repo) queue."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    fake_repos = ReposRegistry(repos={
+        "repo-a": RepoConfig(
+            repo_id="repo-a", board_id="ba",
+            langfuse_project_name="p", langfuse_public_key="pk", langfuse_secret_key="sk",
+            max_concurrency=2,
+        ),
+        "repo-b": RepoConfig(
+            repo_id="repo-b", board_id="bb",
+            langfuse_project_name="p", langfuse_public_key="pk", langfuse_secret_key="sk",
+            max_concurrency=1,
+        ),
+    })
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.get_repos_config", lambda: fake_repos,
+    )
+
     w = Worker(ctx)
     w.start()
     try:
-        assert len(w._tasks) == 3
+        # repo-a: 2 + repo-b: 1 + default: 1 = 4 tasks
+        assert len(w._tasks) == 4
     finally:
         await w.stop()
     assert w._tasks == []
@@ -328,7 +348,22 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
             return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined")
 
     monkeypatch.setitem(registry.STAGES, "refine", SlowRefine())
-    ctx.settings.max_concurrency = 4
+    # Set up a single test repo with max_concurrency=4 so the pool
+    # sizes up to actually run things in parallel. (Per-repo model:
+    # the old global ctx.settings.max_concurrency is unused.)
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    fake_repos = ReposRegistry(repos={
+        "test-repo": RepoConfig(
+            repo_id="test-repo", board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+            langfuse_project_name="p", langfuse_public_key="pk", langfuse_secret_key="sk",
+            max_concurrency=4,
+        ),
+    })
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.get_repos_config", lambda: fake_repos,
+    )
+
     w = Worker(ctx)
     w.start()
     try:
@@ -336,7 +371,7 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
         for tid in ids:
             w.enqueue(tid)
             w.enqueue(tid)  # dup while pending -> must be ignored
-        await asyncio.wait_for(w.queue.join(), timeout=10)
+        await asyncio.wait_for(w.queue_join(), timeout=10)
     finally:
         await w.stop()
 

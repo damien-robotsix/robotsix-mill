@@ -556,15 +556,25 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
 class Worker:
     """In-process queue + consumer task, owned by the API service."""
 
+    # Default queue key for tickets without a board_id (legacy /
+    # repo-less tickets). Always present alongside the per-repo queues.
+    _DEFAULT_BOARD = ""
+
     def __init__(self, ctx: StageContext, run_registry: "RunRegistry | None" = None) -> None:
         self.ctx = ctx
         self.run_registry = run_registry
-        # PriorityQueue items: (priority_rank, seq, ticket_id).
-        # priority_rank = 0 for priority tickets, 1 otherwise → priority
-        # tickets pop first; seq breaks ties as FIFO within a rank.
-        self.queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
+        # Per-repo (board_id) PriorityQueue topology — one queue per
+        # repo, so a busy repo can't block another. Items in each queue:
+        # (priority_rank, seq, ticket_id). priority_rank = 0 for
+        # priority tickets, 1 otherwise → priority tickets pop first;
+        # seq breaks ties as FIFO within a rank. The "" key holds the
+        # fallback queue for tickets without a matching repo.
+        self.queues: dict[str, asyncio.PriorityQueue] = {
+            self._DEFAULT_BOARD: asyncio.PriorityQueue(),
+        }
         self._enqueue_seq = 0
-        # pool of consumer tasks — tickets run concurrently, not serially
+        # pool of consumer tasks — populated by start(), one or more
+        # per repo per its max_concurrency.
         self._tasks: list[asyncio.Task] = []
         self._poll_task: asyncio.Task | None = None
         self._audit_task: asyncio.Task | None = None
@@ -588,8 +598,31 @@ class Worker:
         # ticket_id -> {"stage": str, "started_at": str} while stage.run() is executing
         self._active: dict[str, dict] = {}
 
+    def queue_size(self) -> int:
+        """Aggregate ticket count across all per-repo queues."""
+        return sum(q.qsize() for q in self.queues.values())
+
+    async def queue_join(self) -> None:
+        """Wait for every per-repo queue to drain."""
+        import asyncio as _asyncio
+        await _asyncio.gather(*(q.join() for q in self.queues.values()))
+
+    def _queue_for(self, board_id: str) -> asyncio.PriorityQueue:
+        """Return the per-repo queue, creating it on first use.
+
+        Empty/unknown ``board_id`` falls through to the default queue
+        (always present at ``self._DEFAULT_BOARD``).
+        """
+        if not board_id:
+            return self.queues[self._DEFAULT_BOARD]
+        q = self.queues.get(board_id)
+        if q is None:
+            q = asyncio.PriorityQueue()
+            self.queues[board_id] = q
+        return q
+
     def enqueue(self, ticket_id: str) -> None:
-        """Enqueue *ticket_id* with its CURRENT priority.
+        """Enqueue *ticket_id* on its repo's queue with CURRENT priority.
 
         Priority is captured at enqueue time and the ``_pending`` set
         de-duplicates concurrent enqueues. If the operator later
@@ -606,7 +639,8 @@ class Worker:
         self._enqueue_seq += 1
         ticket = self.ctx.service.get(ticket_id)
         prio_rank = 0 if (ticket is not None and getattr(ticket, "priority", False)) else 1
-        self.queue.put_nowait((prio_rank, self._enqueue_seq, ticket_id))
+        board_id = ticket.board_id if (ticket is not None and ticket.board_id) else self._DEFAULT_BOARD
+        self._queue_for(board_id).put_nowait((prio_rank, self._enqueue_seq, ticket_id))
 
     def requeue_with_current_priority(self, ticket_id: str) -> None:
         """Force a re-enqueue that picks up the ticket's current
@@ -646,9 +680,17 @@ class Worker:
         except Exception:
             return None
 
-    async def _run(self) -> None:
+    async def _run(self, board_id: str = "") -> None:
+        """Consume tickets from one repo's queue.
+
+        Per-repo consumer: each repo gets ``repo.max_concurrency`` of
+        these tasks pointed at its own queue, so a busy repo can't
+        block another. ``board_id=""`` covers the fallback queue for
+        tickets without a matching repo.
+        """
+        queue = self._queue_for(board_id)
         while True:
-            popped_rank, _seq, ticket_id = await self.queue.get()
+            popped_rank, _seq, ticket_id = await queue.get()
             try:
                 before = self.ctx.service.get(ticket_id)
                 before_state = before.state if before else None
@@ -671,7 +713,7 @@ class Worker:
                         # Drop from _pending so requeue isn't deduped away.
                         self._pending.discard(ticket_id)
                         self.enqueue(ticket_id)
-                        self.queue.task_done()
+                        queue.task_done()
                         continue
 
                 # Resolve per-ticket repo_config from the ticket's board_id.
@@ -696,7 +738,7 @@ class Worker:
                 # merge-poll cycle) is accepted again.
                 self._pending.discard(ticket_id)
                 self._active.pop(ticket_id, None)
-                self.queue.task_done()
+                queue.task_done()
 
     def _check_progress(self, ticket_id: str, before, after, repo_config: RepoConfig | None = None) -> None:
         """No-progress safety net. A ticket that keeps re-entering the
@@ -1251,11 +1293,28 @@ class Worker:
 
     def start(self) -> None:
         if not self._tasks:
-            n = max(1, self.ctx.settings.max_concurrency)
-            self._tasks = [
-                asyncio.create_task(self._run()) for _ in range(n)
-            ]
-            log.info("worker pool started: concurrency=%d", n)
+            # One consumer pool per repo, sized by repo.max_concurrency.
+            # Each pool pulls only from its own per-board queue, so a
+            # busy repo can't block another. The fallback "" queue
+            # (tickets without a board_id) gets a single consumer.
+            repos = get_repos_config()
+            pool_sizes: list[tuple[str, int]] = []
+            for rc in repos.repos.values():
+                pool_sizes.append((rc.board_id, max(1, rc.max_concurrency)))
+            # Always have a single default-queue consumer for legacy /
+            # repo-less tickets — cheap insurance against drift.
+            pool_sizes.append((self._DEFAULT_BOARD, 1))
+            for board_id, n in pool_sizes:
+                for _ in range(n):
+                    self._tasks.append(
+                        asyncio.create_task(self._run(board_id))
+                    )
+            log.info(
+                "worker pool started: %s",
+                ", ".join(
+                    f"{bid or '<default>'}={n}" for bid, n in pool_sizes
+                ),
+            )
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
         # Opt-in periodic audit

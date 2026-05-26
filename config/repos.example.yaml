@@ -20,3 +20,8 @@ repos:
     # ci_monitor:                 # optional — per-repo CI failure monitoring
     #   enabled: true             #   default: true
     #   interval_seconds: 86400   #   default: 86400 (24h)
+    # max_concurrency: 1          # optional — tickets from THIS repo
+    #                             #   processed in parallel.  Default 1.
+    #                             #   Per-repo isolation: each repo
+    #                             #   gets its own consumer pool, so a
+    #                             #   busy repo can't block another.

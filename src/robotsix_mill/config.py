@@ -1431,6 +1431,11 @@ class RepoConfig(BaseModel):
     forge_remote_url: str | None = None
     ci_monitor_enabled: bool = True
     ci_monitor_interval_seconds: int = 86400
+    # Number of tickets from THIS repo the worker will process in
+    # parallel. Per-repo isolation: each repo gets its own consumer
+    # pool, so a busy repo can't starve another. Default 1 keeps the
+    # blast radius of any one ticket's bad behaviour contained.
+    max_concurrency: int = 1
 
     @field_validator("repo_id", "board_id")
     @classmethod
@@ -1444,6 +1449,13 @@ class RepoConfig(BaseModel):
     def _validate_ci_monitor_interval_seconds(cls, v: int) -> int:
         if v < 60:
             raise ValueError("ci_monitor_interval_seconds must be ≥ 60")
+        return v
+
+    @field_validator("max_concurrency")
+    @classmethod
+    def _validate_max_concurrency(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_concurrency must be ≥ 1")
         return v
 
 
@@ -1487,6 +1499,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             forge_remote_url=repo_data.get("forge_remote_url") if isinstance(repo_data, dict) else None,
             ci_monitor_enabled=ci_monitor.get("enabled", True) if isinstance(ci_monitor, dict) else True,
             ci_monitor_interval_seconds=ci_monitor.get("interval_seconds", 86400) if isinstance(ci_monitor, dict) else 86400,
+            max_concurrency=repo_data.get("max_concurrency", 1) if isinstance(repo_data, dict) else 1,
         )
     return ReposRegistry(repos=repos)
 
