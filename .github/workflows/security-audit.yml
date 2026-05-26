@@ -39,4 +39,4 @@ jobs:
             --vulnerability-service pypi \
             --ignore-vuln PYSEC-2025-183 \
             --ignore-vuln MAL-2026-4750 \
-            --inputs .
+            --path .
