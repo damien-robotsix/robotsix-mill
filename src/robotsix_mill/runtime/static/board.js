@@ -3,6 +3,8 @@ let sel=null;
 let runsOpen=false;
 let costDashboardOpen=false;
 let costLookbackHours=24;
+let costMaxTickets=20;               // default for ticket-count mode
+let costMode='time';                 // 'time' | 'tickets'
 let refreshSeq=0;                    // serialize concurrent refresh() calls
 let activeMap={};
 let gatesCache={};                    // cached /gates response for open_() drawer ordering
@@ -986,12 +988,14 @@ async function renderCostDashboard(){
   ctx.fillStyle="#7d828c";
   ctx.font="11px ui-monospace,monospace";
   ctx.textAlign="center";
-  ctx.fillText("No trend data available for this period.",rect.width/2,rect.height/2);
+  const emptyMsg=timeModeActive?'No trend data available for this period.':'No trend data available for the last '+costMaxTickets+' tickets.';
+  ctx.fillText(emptyMsg,rect.width/2,rect.height/2);
  }
 
  // -- per-agent bar chart -----------------------------------------------
  if(!data||!data.length){
-  document.getElementById("cost-chart").innerHTML='<div class="muted">No cost data available for this period.</div>';
+  const emptyMsg=timeModeActive?'No cost data available for this period.':'No cost data available for the last '+costMaxTickets+' tickets.';
+  document.getElementById("cost-chart").innerHTML='<div class="muted">'+emptyMsg+'</div>';
  } else {
   const colors=["#3b82f6","#8b5cf6","#22c55e","#eab308","#ef4444","#f97316","#06b6d4","#ec4899","#14b8a6","#a855f7"];
   const maxCost=Math.max(...data.map(d=>d.total_cost),0.0001);
