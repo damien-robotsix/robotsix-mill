@@ -182,8 +182,7 @@ def reset_branch_to_target(
     This effectively deletes the branch's changes — used for
     autoreverting unfixable CI failures.
     """
-    authed = _authed_url(remote_url, token)
-    _git(repo, "fetch", authed, target_branch)
+    fetch(repo, remote_url=remote_url, token=token, branch=target_branch)
     _git(repo, "checkout", branch)
     _git(repo, "reset", "--hard", f"origin/{target_branch}")
     push(repo, branch=branch, remote_url=remote_url, token=token)
