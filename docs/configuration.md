@@ -334,7 +334,7 @@ Each periodic agent shares this pattern:
 |-----------|---------|---------|-------------|
 | `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `false`¹ | Enable periodic passes |
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
-| `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² |
+| `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² ³ |
 
 Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `env_sync`, `bc_check`,
@@ -347,6 +347,14 @@ Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
 >
 > `env_sync`, `bc_check`, and `completeness_check` are **env-var-only** (no YAML mapping yet).
 > Set `MILL_ENV_SYNC_PERIODIC=true`, `MILL_BC_CHECK_PERIODIC=true`, etc.
+>
+> ³ In multi-repo mode, the default memory file path is
+> `<data_dir>/<repo_id>/<agent>_memory.md` — each repo gets its own
+> isolated memory ledger.  The `memory_path` override (when set) takes
+> precedence over this default, but is shared across repos (use with
+> caution in multi-repo deployments).  When no repos are registered
+> (single-repo or `--repo-id` mode), the path falls back to the
+> original `<data_dir>/<agent>_memory.md`.
 
 Additional fields:
 
@@ -507,6 +515,26 @@ Set `MILL_REPOS_FILE=""` to disable repos config entirely. Template:
 Each repo ID must be unique and non-empty. The `board_id` must also be
 non-empty. The registry validates that every entry's `repo_id` matches
 its YAML key.
+
+### Multi-repo behaviour
+
+When multiple repos are registered (default when `config/repos.yaml`
+has two or more entries), each periodic agent fans out across all repos
+sequentially — one timer per agent type iterates every enabled repo in
+turn. This means:
+
+- **Memory files** are per-repo: `<data_dir>/<repo_id>/audit_memory.md`,
+  `<data_dir>/<repo_id>/bc_check_memory.md`, etc.
+- **Run registry** entries include a `repo_id` field. `GET /runs` accepts
+  `?repo_id=X` to filter by repo.
+- **CI monitor** dedup state is per-repo:
+  `<data_dir>/<repo_id>/ci_monitor_state.json`.
+- **Agent toggles** (e.g. `MILL_AUDIT_PERIODIC`) remain global — all
+  repos share the same enabled/disabled flags.
+
+In single-repo mode (`--repo-id` on serve or one entry in
+`config/repos.yaml`) periodic agents run only for that repo, and memory
+files use the legacy flat path (`<data_dir>/audit_memory.md`).
 
 ---
 

@@ -59,7 +59,7 @@ periodic:
 |---|---|---|
 | `MILL_AUDIT_PERIODIC` | `false` | Enable periodic audit passes |
 | `MILL_AUDIT_INTERVAL_SECONDS` | `86400` | Seconds between automatic audits |
-| `MILL_AUDIT_MEMORY_PATH` | (empty) | Override path for the audit memory ledger; falls back to `<data_dir>/audit_memory.md` |
+| `MILL_AUDIT_MEMORY_PATH` | (empty) | Override path for the audit memory ledger; falls back to `<data_dir>/audit_memory.md`. In multi-repo mode, per-repo memory lives at `<data_dir>/<repo_id>/audit_memory.md` |
 
 ## Important notes
 
@@ -72,6 +72,9 @@ periodic:
   analysis.
 - All repo-side output is draft tickets that must go through the
   approval gate (`awaiting_approval` → `ready` → `implement`).
+- In multi-repo mode, the audit agent runs independently for each
+  registered repo — each with its own board, memory file, and Langfuse
+  project.
 
 ## See also
 

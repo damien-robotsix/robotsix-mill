@@ -74,6 +74,9 @@ periodic:
 - The minimum periodic interval is **3600s (1 hour)**, enforced in
   the worker to avoid hammering Langfuse.
 - When per-repo Langfuse credentials are not available (not configured in `config/repos.yaml`), the check is a zero-cost no-op.
+- In multi-repo mode, the trace-health check runs independently for each
+  registered repo — each with its own Langfuse project, ticket board, and
+  deduplication scope.
 
 ## See also
 

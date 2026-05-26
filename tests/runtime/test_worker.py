@@ -412,7 +412,7 @@ async def test_periodic_pass_fires_immediately_when_overdue(
 
     fired = {"count": 0}
 
-    def fake_pass(session_id=None):
+    def fake_pass(session_id=None, repo_config=None):
         fired["count"] += 1
         from robotsix_mill.audit_runner import AuditPassResult
         return AuditPassResult(drafts_created=[], session_id=session_id or "")
@@ -470,7 +470,7 @@ async def test_periodic_pass_waits_when_not_overdue(
 
     fired = {"count": 0}
 
-    def fake_pass(session_id=None):
+    def fake_pass(session_id=None, repo_config=None):
         fired["count"] += 1
         from robotsix_mill.audit_runner import AuditPassResult
         return AuditPassResult(drafts_created=[], session_id=session_id or "")

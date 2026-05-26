@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlmodel import select
 
-from .config import Settings
+from .config import RepoConfig, Settings
 from .core.db import session
 from .core.models import SourceKind, Ticket
 from .core.service import TicketService
@@ -38,13 +38,22 @@ class TraceHealthResult:
     window_end: str     # ISO 8601
 
 
-def run_trace_health_check() -> TraceHealthResult:
+def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealthResult:
     """Execute one trace-health check.
+
+    Args:
+        repo_config: Optional per-repo configuration for multi-repo
+            serve. When provided, ticket creation is scoped to this repo.
 
     Returns a ``TraceHealthResult``.  May create a draft ticket
     (``source="trace-health"``) when unsessioned traces are detected.
     """
     settings = Settings()
+
+    if repo_config is not None:
+        service = TicketService(settings, board_id=repo_config.board_id)
+    else:
+        service = TicketService(settings)
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(hours=24)
     window_end = now
@@ -64,7 +73,7 @@ def run_trace_health_check() -> TraceHealthResult:
         )
 
     # 2. Fetch all traces from the last 24h.
-    traces = list_all_traces_since(settings, from_ts)
+    traces = list_all_traces_since(settings, from_ts, repo_config=repo_config)
 
     # 3. Partition.
     unsessioned = [t for t in traces if not t.get("sessionId")]
@@ -88,6 +97,8 @@ def run_trace_health_check() -> TraceHealthResult:
             .where(Ticket.source == SourceKind.TRACE_HEALTH)
             .where(Ticket.state != State.CLOSED)
         )
+        if repo_config is not None:
+            stmt = stmt.where(Ticket.board_id == repo_config.board_id)
         existing = list(s.exec(stmt).all())
     if existing:
         log.info(
@@ -125,7 +136,6 @@ def run_trace_health_check() -> TraceHealthResult:
         f"be produced by the pipeline (this ticket itself is just the alert).\n"
     )
 
-    service = TicketService(settings)
     ticket = service.create(
         title, description, source=SourceKind.TRACE_HEALTH,
         origin_session=session_id,

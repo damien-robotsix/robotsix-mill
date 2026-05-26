@@ -19,7 +19,7 @@ import re
 import time
 from datetime import datetime, timezone
 
-from ..config import RepoConfig
+from ..config import RepoConfig, get_repos_config
 from ..langfuse_client import session_cost
 from ..stages import StageContext, get_stage, stage_context_for
 from ..core.states import STAGE_FOR_STATE, State
@@ -743,6 +743,76 @@ class Worker:
             return 1.0
         return interval - elapsed
 
+    async def _run_periodic_pass_per_repo(
+        self, label: str, runner_fn, interval: int,
+    ) -> None:
+        """Shared per-repo periodic pass loop.
+
+        Multi-repo: each periodic agent fans out across all repos.
+        One timer per agent type — iterates repos sequentially to avoid
+        race conditions on the shared RunRegistry.
+
+        When no repos are registered (single-repo mode), runs the pass
+        once with ``repo_config=None`` for backward compatibility.
+
+        Args:
+            label: Pass identifier (``"audit"``, ``"agent_check"``).
+            runner_fn: Callable accepting ``session_id=`` and ``repo_config=``
+                       keywords that returns a result with a ``drafts_created``
+                       field.
+            interval: Seconds between passes.
+        """
+        initial = self._initial_delay(label, interval)
+        await asyncio.sleep(initial)
+        while True:
+            session_id = tracing.make_session_id(label)
+            repos = get_repos_config()
+            repo_configs = list(repos.repos.values())
+            if not repo_configs:
+                # Single-repo / no repos.yaml: run once without repo_config.
+                repo_configs = [None]  # type: ignore[list-item]
+            for repo_config in repo_configs:
+                run_id = None
+                repo_label = repo_config.repo_id if repo_config else label
+                try:
+                    log.info(
+                        "Starting periodic %s pass for repo %s",
+                        label, repo_label,
+                    )
+                    if self.run_registry:
+                        run_id = self.run_registry.start(
+                            label,
+                            repo_id=repo_config.repo_id if repo_config else "",
+                        )
+                    with tracing.start_ticket_root_span(session_id, label):
+                        result = await asyncio.to_thread(
+                            runner_fn,
+                            session_id=session_id,
+                            repo_config=repo_config,
+                        )
+                    log.info(
+                        "%s pass (%s) completed, created %d draft(s)",
+                        label.capitalize(), repo_label,
+                        len(result.drafts_created),
+                    )
+                    if self.run_registry and run_id:
+                        draft_ids = [
+                            d["id"] for d in result.drafts_created[:5]
+                        ]
+                        summary = (
+                            f"Created {len(result.drafts_created)} drafts: "
+                            f"{', '.join(draft_ids)}"
+                            f"{'…' if len(result.drafts_created) > 5 else ''}"
+                        )
+                        self.run_registry.finish_ok(run_id, summary)
+                except Exception as e:  # noqa: BLE001 — never let the poll die
+                    log.exception(
+                        "%s poll failed for repo %s", label, repo_label,
+                    )
+                    if self.run_registry and run_id:
+                        self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
+
     async def _run_periodic_pass(
         self, label: str, runner_fn, interval: int,
     ) -> None:
@@ -794,267 +864,260 @@ class Worker:
 
     async def _trace_health_poll_loop(self) -> None:
         """Periodic trace-health check loop. Only runs when
-        ``MILL_TRACE_HEALTH_PERIODIC=true``."""
+        ``MILL_TRACE_HEALTH_PERIODIC=true``.
+
+        Multi-repo: fans out across all registered repos. When no repos
+        are registered, runs once with ``repo_config=None``.
+        """
         settings = self.ctx.settings
         interval = max(3600, settings.trace_health_interval_seconds)
         initial = self._initial_delay("trace-health", interval)
         await asyncio.sleep(initial)
         while True:
-            try:
-                log.info("Starting periodic trace-health check")
-                from ..trace_health_runner import run_trace_health_check
-                run_id = None
-                if self.run_registry:
-                    run_id = self.run_registry.start("trace-health")
-                result = await asyncio.to_thread(run_trace_health_check)
-                if result.draft_created:
+            repos = get_repos_config()
+            repo_configs = list(repos.repos.values())
+            if not repo_configs:
+                repo_configs = [None]  # type: ignore[list-item]
+            for repo_config in repo_configs:
+                repo_label = repo_config.repo_id if repo_config else "default"
+                try:
                     log.info(
-                        "Trace-health check: draft created — "
-                        "%d/%d traces unsessioned",
-                        result.unsessioned_count,
-                        result.total_traces,
+                        "Starting periodic trace-health check for repo %s",
+                        repo_label,
                     )
-                else:
-                    log.info(
-                        "Trace-health check: no alert "
-                        "(%d/%d traces unsessioned)",
-                        result.unsessioned_count,
-                        result.total_traces,
+                    from ..trace_health_runner import run_trace_health_check
+                    run_id = None
+                    if self.run_registry:
+                        run_id = self.run_registry.start(
+                            "trace-health",
+                            repo_id=repo_config.repo_id if repo_config else "",
+                        )
+                    result = await asyncio.to_thread(
+                        run_trace_health_check, repo_config=repo_config,
                     )
-                if self.run_registry and run_id:
-                    summary = (
-                        f"{result.unsessioned_count}/{result.total_traces} "
-                        f"traces unsessioned ({result.window_start} to "
-                        f"{result.window_end}) — "
-                        f"{'draft created' if result.draft_created else 'no alert'}"
+                    if result.draft_created:
+                        log.info(
+                            "Trace-health check (%s): draft created — "
+                            "%d/%d traces unsessioned",
+                            repo_label,
+                            result.unsessioned_count,
+                            result.total_traces,
+                        )
+                    else:
+                        log.info(
+                            "Trace-health check (%s): no alert "
+                            "(%d/%d traces unsessioned)",
+                            repo_label,
+                            result.unsessioned_count,
+                            result.total_traces,
+                        )
+                    if self.run_registry and run_id:
+                        summary = (
+                            f"{result.unsessioned_count}/{result.total_traces} "
+                            f"traces unsessioned ({result.window_start} to "
+                            f"{result.window_end}) — "
+                            f"{'draft created' if result.draft_created else 'no alert'}"
+                        )
+                        self.run_registry.finish_ok(run_id, summary)
+                except Exception as e:  # noqa: BLE001 — never let the poll die
+                    log.exception(
+                        "trace-health poll failed for repo %s",
+                        repo_label,
                     )
-                    self.run_registry.finish_ok(run_id, summary)
-            except Exception as e:  # noqa: BLE001 — never let the poll die
-                log.exception("trace-health poll failed")
-                if self.run_registry and run_id:
-                    self.run_registry.finish_error(run_id, str(e))
+                    if self.run_registry and run_id:
+                        self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
 
     async def _health_poll_loop(self) -> None:
         """Periodic health pass loop. Only runs when
         ``MILL_HEALTH_PERIODIC=true``."""
+        from ..health_runner import run_health_pass
         settings = self.ctx.settings
         interval = max(60, settings.health_interval_seconds)
-        initial = self._initial_delay("health", interval)
-        await asyncio.sleep(initial)
-        while True:
-            run_id = None
-            session_id = tracing.make_session_id("health")
-            try:
-                log.info("Starting periodic health pass")
-                if self.run_registry:
-                    run_id = self.run_registry.start("health")
-                from ..health_runner import run_health_pass
-                with tracing.start_ticket_root_span(session_id, "health"):
-                    result = await asyncio.to_thread(
-                        run_health_pass, session_id=session_id,
-                    )
-                log.info(
-                    "Health pass completed, created %d draft(s)",
-                    len(result.drafts_created),
-                )
-                if self.run_registry and run_id:
-                    draft_ids = [
-                        d["id"] for d in result.drafts_created[:5]
-                    ]
-                    summary = (
-                        f"Created {len(result.drafts_created)} drafts: "
-                        f"{', '.join(draft_ids)}"
-                        f"{'…' if len(result.drafts_created) > 5 else ''}"
-                    )
-                    self.run_registry.finish_ok(run_id, summary)
-            except Exception as e:  # noqa: BLE001 — never let the poll die
-                log.exception("health poll failed")
-                if self.run_registry and run_id:
-                    self.run_registry.finish_error(run_id, str(e))
-            await asyncio.sleep(interval)
+        await self._run_periodic_pass_per_repo("health", run_health_pass, interval)
 
     async def _test_gap_poll_loop(self) -> None:
         """Periodic test-gap pass loop. Only runs when
         ``MILL_TEST_GAP_PERIODIC=true``."""
+        from ..test_gap_runner import run_test_gap_pass
         settings = self.ctx.settings
         interval = max(60, settings.test_gap_interval_seconds)
-        initial = self._initial_delay("test-gap", interval)
-        await asyncio.sleep(initial)
-        while True:
-            run_id = None
-            session_id = tracing.make_session_id("test-gap")
-            try:
-                log.info("Starting periodic test-gap pass")
-                if self.run_registry:
-                    run_id = self.run_registry.start("test-gap")
-                from ..test_gap_runner import run_test_gap_pass
-                with tracing.start_ticket_root_span(session_id, "test-gap"):
-                    result = await asyncio.to_thread(
-                        run_test_gap_pass, session_id=session_id,
-                    )
-                log.info(
-                    "Test-gap pass completed, created %d draft(s)",
-                    len(result.drafts_created),
-                )
-                if self.run_registry and run_id:
-                    draft_ids = [
-                        d["id"] for d in result.drafts_created[:5]
-                    ]
-                    summary = (
-                        f"Created {len(result.drafts_created)} drafts: "
-                        f"{', '.join(draft_ids)}"
-                        f"{'…' if len(result.drafts_created) > 5 else ''}"
-                    )
-                    self.run_registry.finish_ok(run_id, summary)
-            except Exception as e:  # noqa: BLE001 — never let the poll die
-                log.exception("test-gap poll failed")
-                if self.run_registry and run_id:
-                    self.run_registry.finish_error(run_id, str(e))
-            await asyncio.sleep(interval)
+        await self._run_periodic_pass_per_repo("test-gap", run_test_gap_pass, interval)
 
     async def _ci_monitor_poll_loop(self) -> None:
         """Periodic CI monitor poll: watch the forge target branch for
         completed workflow-run failures and file a ``source="ci"`` draft
-        for each new one.  Only runs when ``MILL_CI_MONITOR_PERIODIC=true``."""
+        for each new one.  Only runs when ``MILL_CI_MONITOR_PERIODIC=true``.
+
+        Multi-repo: iterates all registered repos sequentially, storing
+        per-repo dedup state at ``<data_dir>/<repo_id>/ci_monitor_state.json``.
+        When no repos are registered, falls back to the global state path.
+        """
         settings = self.ctx.settings
         interval = max(60, settings.ci_monitor_interval_seconds)
-        state_path = settings.ci_monitor_memory_path
         ttl_seconds = 30 * 86400  # 30 days
 
         # ANSI strip for log text (same pattern as forge/github.py).
         _ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
         while True:
-            try:
-                log.info("CI monitor poll starting")
-                # 1. Load dedup state.
-                state: dict = {"seen": {}}
-                if state_path.exists():
-                    try:
-                        state = json.loads(state_path.read_text("utf-8"))
-                    except (json.JSONDecodeError, OSError):
-                        state = {"seen": {}}
-                seen = state.setdefault("seen", {})
-
-                # 2. Prune entries older than TTL.
-                now = int(time.time())
-                stale = [
-                    key for key, val in seen.items()
-                    if isinstance(val, (int, float)) and (now - val) > ttl_seconds
-                ]
-                for key in stale:
-                    del seen[key]
-
-                # 3. List completed workflow runs on the target branch.
-                from ..forge import get_forge
-                forge = get_forge(settings)
-                runs = forge.list_workflow_runs(
-                    branch=settings.forge_target_branch,
-                )
-
-                # 4. Only the LATEST run per workflow reflects current
-                # state (the GitHub API returns runs newest-first). Take
-                # one run per workflow_id and act only on that — never
-                # backfill every historical failed run (that filed one
-                # ticket per commit -> board flood).
-                latest_by_wf: dict = {}
-                for run in runs:
-                    wf = run.get("workflow_id")
-                    if wf is not None and wf not in latest_by_wf:
-                        latest_by_wf[wf] = run
-
-                existing = self.ctx.service.list()
-
-                for wf, run in latest_by_wf.items():
-                    if run.get("conclusion") != "failure":
-                        continue
-
-                    wf_name = run.get("name", "unknown")
-                    run_id_val = run.get("id")
-                    title = (
-                        f"CI failure: {wf_name} on "
-                        f"{settings.forge_target_branch}"
-                    )
-
-                    # One OPEN ci ticket per workflow: if a non-terminal
-                    # source=ci ticket with this title already exists,
-                    # don't duplicate (the recurring failure is already
-                    # being worked).
-                    if any(
-                        t.source == SourceKind.CI
-                        and t.title == title
-                        and t.state.value not in ("closed", "done")
-                        for t in existing
-                    ):
-                        continue
-
-                    # Also avoid re-filing for the exact same failing
-                    # commit (e.g. a prior ticket was closed but CI is
-                    # still red at that sha).
-                    key = f"{wf}:{run.get('head_sha')}"
-                    if key in seen:
-                        continue
+            repos = get_repos_config()
+            repo_configs = list(repos.repos.values())
+            if not repo_configs:
+                repo_configs = [None]  # type: ignore[list-item]
+            for repo_config in repo_configs:
+                try:
+                    if repo_config is not None:
+                        state_dir = settings.data_dir / repo_config.repo_id
+                        repo_label = repo_config.repo_id
+                    else:
+                        state_dir = settings.data_dir
+                        repo_label = "default"
+                    state_dir.mkdir(parents=True, exist_ok=True)
+                    state_path = state_dir / "ci_monitor_state.json"
                     log.info(
-                        "CI monitor: new failure — %s (run %s) on %s",
-                        wf_name, run_id_val, settings.forge_target_branch,
+                        "CI monitor poll starting for repo %s",
+                        repo_label,
+                    )
+                    # 1. Load dedup state.
+                    state: dict = {"seen": {}}
+                    if state_path.exists():
+                        try:
+                            state = json.loads(state_path.read_text("utf-8"))
+                        except (json.JSONDecodeError, OSError):
+                            state = {"seen": {}}
+                    seen = state.setdefault("seen", {})
+
+                    # 2. Prune entries older than TTL.
+                    now = int(time.time())
+                    stale = [
+                        key for key, val in seen.items()
+                        if isinstance(val, (int, float)) and (now - val) > ttl_seconds
+                    ]
+                    for key in stale:
+                        del seen[key]
+
+                    # 3. List completed workflow runs on the target branch.
+                    from ..forge import get_forge
+                    forge = get_forge(settings, repo_config=repo_config)
+                    runs = forge.list_workflow_runs(
+                        branch=settings.forge_target_branch,
                     )
 
-                    # Fetch job logs.
-                    logs = ""
-                    try:
-                        logs = forge.fetch_workflow_job_logs(
-                            run_id=run_id_val
+                    # 4. Only the LATEST run per workflow reflects current
+                    # state (the GitHub API returns runs newest-first). Take
+                    # one run per workflow_id and act only on that — never
+                    # backfill every historical failed run (that filed one
+                    # ticket per commit -> board flood).
+                    latest_by_wf: dict = {}
+                    for run in runs:
+                        wf = run.get("workflow_id")
+                        if wf is not None and wf not in latest_by_wf:
+                            latest_by_wf[wf] = run
+
+                    from ..core.service import TicketService
+                    service = (
+                        TicketService(settings, board_id=repo_config.board_id)
+                        if repo_config is not None
+                        else self.ctx.service
+                    )
+                    existing = service.list()
+
+                    for wf, run in latest_by_wf.items():
+                        if run.get("conclusion") != "failure":
+                            continue
+
+                        wf_name = run.get("name", "unknown")
+                        run_id_val = run.get("id")
+                        title = (
+                            f"CI failure: {wf_name} on "
+                            f"{settings.forge_target_branch}"
                         )
-                    except Exception:
-                        log.warning(
-                            "CI monitor: failed to fetch logs for run %s",
-                            run_id_val,
+
+                        # One OPEN ci ticket per workflow: if a non-terminal
+                        # source=ci ticket with this title already exists,
+                        # don't duplicate (the recurring failure is already
+                        # being worked).
+                        if any(
+                            t.source == SourceKind.CI
+                            and t.title == title
+                            and t.state.value not in ("closed", "done")
+                            for t in existing
+                        ):
+                            continue
+
+                        # Also avoid re-filing for the exact same failing
+                        # commit (e.g. a prior ticket was closed but CI is
+                        # still red at that sha).
+                        key = f"{wf}:{run.get('head_sha')}"
+                        if key in seen:
+                            continue
+                        log.info(
+                            "CI monitor (%s): new failure — %s (run %s) on %s",
+                            repo_label,
+                            wf_name, run_id_val, settings.forge_target_branch,
                         )
 
-                    # Build draft body.
-                    body_parts = [
-                        f"**Workflow:** {wf_name}",
-                        f"**Branch:** {settings.forge_target_branch}",
-                        f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
-                        f"**Commit:** `{run.get('head_sha', '')}`",
-                        f"**Created:** {run.get('created_at', '')}",
-                        "",
-                    ]
-                    if logs:
-                        stripped = _ansi_re.sub("", logs)
-                        # Cap total body log text at ~200 KB for the
-                        # draft description (sanity limit).
-                        if len(stripped) > 200_000:
-                            stripped = stripped[-200_000:]
-                        body_parts.append("```")
-                        body_parts.append(stripped)
-                        body_parts.append("```")
+                        # Fetch job logs.
+                        logs = ""
+                        try:
+                            logs = forge.fetch_workflow_job_logs(
+                                run_id=run_id_val
+                            )
+                        except Exception:
+                            log.warning(
+                                "CI monitor: failed to fetch logs for run %s",
+                                run_id_val,
+                            )
 
-                    title = f"CI failure: {wf_name} on {settings.forge_target_branch}"
-                    body = "\n".join(body_parts)
+                        # Build draft body.
+                        body_parts = [
+                            f"**Workflow:** {wf_name}",
+                            f"**Branch:** {settings.forge_target_branch}",
+                            f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
+                            f"**Commit:** `{run.get('head_sha', '')}`",
+                            f"**Created:** {run.get('created_at', '')}",
+                            "",
+                        ]
+                        if logs:
+                            stripped = _ansi_re.sub("", logs)
+                            # Cap total body log text at ~200 KB for the
+                            # draft description (sanity limit).
+                            if len(stripped) > 200_000:
+                                stripped = stripped[-200_000:]
+                            body_parts.append("```")
+                            body_parts.append(stripped)
+                            body_parts.append("```")
 
-                    try:
-                        self.ctx.service.create(
-                            title=title, description=body, source=SourceKind.CI,
-                        )
-                    except Exception:
-                        log.exception(
-                            "CI monitor: failed to create draft for run %s",
-                            run_id_val,
-                        )
-                        continue
+                        title = f"CI failure: {wf_name} on {settings.forge_target_branch}"
+                        body = "\n".join(body_parts)
 
-                    # Mark as seen.
-                    seen[key] = now
+                        try:
+                            service.create(
+                                title=title, description=body, source=SourceKind.CI,
+                            )
+                        except Exception:
+                            log.exception(
+                                "CI monitor: failed to create draft for run %s",
+                                run_id_val,
+                            )
+                            continue
 
-                # 5. Persist state.
-                state_path.parent.mkdir(parents=True, exist_ok=True)
-                state_path.write_text(json.dumps(state), "utf-8")
+                        # Mark as seen.
+                        seen[key] = now
 
-                log.info("CI monitor poll completed")
-            except Exception:  # noqa: BLE001 — never let the poll die
-                log.exception("CI monitor poll failed")
+                    # 5. Persist state.
+                    state_path.write_text(json.dumps(state), "utf-8")
+
+                    log.info(
+                        "CI monitor poll completed for repo %s",
+                        repo_label,
+                    )
+                except Exception:  # noqa: BLE001 — never let the poll die
+                    log.exception(
+                        "CI monitor poll failed for repo %s",
+                        repo_label,
+                    )
             await asyncio.sleep(interval)
 
     def start(self) -> None:
@@ -1070,7 +1133,7 @@ class Worker:
         if self.ctx.settings.audit_periodic and self._audit_task is None:
             from ..audit_runner import run_audit_pass
             self._audit_task = asyncio.create_task(
-                self._run_periodic_pass(
+                self._run_periodic_pass_per_repo(
                     "audit", run_audit_pass,
                     max(60, self.ctx.settings.audit_interval_seconds),
                 )
@@ -1102,7 +1165,7 @@ class Worker:
         ):
             from ..agent_check_runner import run_agent_check_pass
             self._agent_check_task = asyncio.create_task(
-                self._run_periodic_pass(
+                self._run_periodic_pass_per_repo(
                     "agent_check", run_agent_check_pass,
                     max(60, self.ctx.settings.agent_check_interval_seconds),
                 )
@@ -1115,7 +1178,7 @@ class Worker:
         if self.ctx.settings.bc_check_periodic and self._bc_check_task is None:
             from ..bc_check_runner import run_bc_check_pass
             self._bc_check_task = asyncio.create_task(
-                self._run_periodic_pass(
+                self._run_periodic_pass_per_repo(
                     "bc_check", run_bc_check_pass,
                     max(60, self.ctx.settings.bc_check_interval_seconds),
                 )
@@ -1128,7 +1191,7 @@ class Worker:
         if self.ctx.settings.completeness_check_periodic and self._completeness_check_task is None:
             from ..completeness_check_runner import run_completeness_check_pass
             self._completeness_check_task = asyncio.create_task(
-                self._run_periodic_pass(
+                self._run_periodic_pass_per_repo(
                     "completeness_check", run_completeness_check_pass,
                     max(60, self.ctx.settings.completeness_check_interval_seconds),
                 )
@@ -1157,7 +1220,7 @@ class Worker:
         if self.ctx.settings.survey_periodic and self._survey_task is None:
             from ..survey_runner import run_survey_pass
             self._survey_task = asyncio.create_task(
-                self._run_periodic_pass(
+                self._run_periodic_pass_per_repo(
                     "survey", run_survey_pass,
                     max(60, self.ctx.settings.survey_interval_seconds),
                 )
@@ -1170,7 +1233,7 @@ class Worker:
         if self.ctx.settings.env_sync_periodic and self._env_sync_task is None:
             from ..env_sync_runner import run_env_sync_pass
             self._env_sync_task = asyncio.create_task(
-                self._run_periodic_pass(
+                self._run_periodic_pass_per_repo(
                     "env-sync", run_env_sync_pass,
                     max(60, self.ctx.settings.env_sync_interval_seconds),
                 )

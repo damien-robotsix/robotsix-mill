@@ -110,7 +110,7 @@ def _patch_list_all_traces(monkeypatch, traces):
     (where it's imported at module level)."""
     monkeypatch.setattr(
         "robotsix_mill.trace_health_runner.list_all_traces_since",
-        lambda s, ts: traces,
+        lambda s, ts, **kwargs: traces,
     )
 
 
@@ -643,7 +643,7 @@ def test_start_ticket_root_span_not_called(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         trace_health_runner, "list_all_traces_since",
-        lambda s, ts: traces,
+        lambda s, ts, **kwargs: traces,
     )
     monkeypatch.setattr(
         trace_health_runner, "Settings", lambda: settings,
