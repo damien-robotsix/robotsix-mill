@@ -589,17 +589,42 @@ class Worker:
         self._active: dict[str, dict] = {}
 
     def enqueue(self, ticket_id: str) -> None:
+        """Enqueue *ticket_id* with its CURRENT priority.
+
+        Priority is captured at enqueue time and the ``_pending`` set
+        de-duplicates concurrent enqueues. If the operator later
+        toggles priority on a ticket already in the queue, call
+        :meth:`requeue_with_current_priority` to bypass the dedup —
+        otherwise the stale rank stays in the heap and the priority
+        flip is invisible to the consumer.
+        """
         # asyncio is single-threaded; enqueue is only ever called from
         # the loop thread, so this set check needs no lock.
         if ticket_id in self._pending:
             return
         self._pending.add(ticket_id)
         self._enqueue_seq += 1
-        # Resolve priority at enqueue time; if the operator flips
-        # priority later, the next sweep/event re-enqueue picks it up.
         ticket = self.ctx.service.get(ticket_id)
         prio_rank = 0 if (ticket is not None and getattr(ticket, "priority", False)) else 1
         self.queue.put_nowait((prio_rank, self._enqueue_seq, ticket_id))
+
+    def requeue_with_current_priority(self, ticket_id: str) -> None:
+        """Force a re-enqueue that picks up the ticket's current
+        priority from the DB.
+
+        Use this from callers that mutate ``Ticket.priority`` after the
+        initial enqueue (the ``POST /tickets/{id}/priority`` route, any
+        future stage transition that changes priority). Without it the
+        stale enqueue entry stays at the OLD priority rank in the heap.
+
+        The OLD heap entry is NOT removed (Python's ``PriorityQueue``
+        doesn't support removal). When it eventually pops, the
+        consumer's pop-time priority re-check (see ``_run``) either
+        accepts it at the current priority or re-enqueues it again —
+        so duplicates are tolerated, not double-processed.
+        """
+        self._pending.discard(ticket_id)
+        self.enqueue(ticket_id)
 
     def _repo_config_for_ticket(self, ticket_id: str) -> RepoConfig | None:
         """Resolve the ``RepoConfig`` for *ticket_id* from its ``board_id``.
@@ -623,10 +648,31 @@ class Worker:
 
     async def _run(self) -> None:
         while True:
-            _prio_rank, _seq, ticket_id = await self.queue.get()
+            popped_rank, _seq, ticket_id = await self.queue.get()
             try:
                 before = self.ctx.service.get(ticket_id)
                 before_state = before.state if before else None
+
+                # Pop-time priority sanity check: the entry's rank was
+                # captured at enqueue time; if the operator has since
+                # flipped priority on this ticket, the queue may also
+                # hold a fresher entry at a different rank. If the
+                # popped entry is no longer the right rank, re-enqueue
+                # at the current rank and skip — the fresher entry (or
+                # the one we just pushed) handles the actual run.
+                if before is not None:
+                    cur_rank = 0 if getattr(before, "priority", False) else 1
+                    if cur_rank != popped_rank:
+                        log.debug(
+                            "%s: popped rank=%d but current priority "
+                            "implies rank=%d; re-enqueuing at correct rank",
+                            ticket_id, popped_rank, cur_rank,
+                        )
+                        # Drop from _pending so requeue isn't deduped away.
+                        self._pending.discard(ticket_id)
+                        self.enqueue(ticket_id)
+                        self.queue.task_done()
+                        continue
 
                 # Resolve per-ticket repo_config from the ticket's board_id.
                 ticket_repo_config = self._repo_config_for_ticket(ticket_id)

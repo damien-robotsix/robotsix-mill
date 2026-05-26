@@ -26,7 +26,7 @@ from ..core.models import (
 )
 from ..config import get_repo_config, get_secrets
 from ..core.service import TransitionError
-from ..core.states import State
+from ..core.states import STAGE_FOR_STATE, State
 from ..forge import get_forge
 from .board_html import BOARD_HTML
 from .deps import (
@@ -754,7 +754,12 @@ def set_priority(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    maybe_enqueue(ticket, worker)
+    # Force a fresh enqueue with the new priority rank. `maybe_enqueue`
+    # would short-circuit on the worker's _pending dedup, leaving the
+    # stale rank in the heap (see worker.requeue_with_current_priority
+    # for the rationale).
+    if ticket.state in STAGE_FOR_STATE:
+        worker.requeue_with_current_priority(ticket_id)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
