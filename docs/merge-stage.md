@@ -70,25 +70,56 @@ PRs, or interacts with the forge.
 ## Auto-fix of failing remote CI
 
 When a PR has **failing** remote CI checks (GitHub Actions), the merge
-stage transitions the ticket to `FIXING_CI` and invokes a **ci-fix
-agent** (`agents/ci_fixing.py`) that analyses the failing check-run
-output and applies minimal fixes.
+stage transitions the ticket to `FIXING_CI`.  Before invoking the
+expensive ci-fix agent it runs a **categorizer gate**
+(`agents/ci_fixing.py:categorize_ci_failure()`) — a single cheap LLM
+inference that classifies the failure summary into one of six
+categories:
 
-- The forge adapter fetches check-run status (and falls back to the
-  combined commit-statuses API for older repos).
-- If a PR has failing CI, the merge stage transitions to `FIXING_CI`
-  (from either `IMPLEMENT_COMPLETE` or `HUMAN_MR_APPROVAL`).
+| Category | Meaning | Action |
+|---|---|---|
+| `test_failure` | Test assertions failed | **Fixable** — proceed with ci-fix agent |
+| `type_error` | Type checker (mypy/pyright/tsc) failed | **Fixable** — proceed with ci-fix agent |
+| `lint_error` | Linter/formatter (ruff/eslint/prettier) failed | **Fixable** — proceed with ci-fix agent |
+| `build_error` | Compilation or Docker build failed | **Fixable** — proceed with ci-fix agent |
+| `env_error` | Infra, rate-limit, secret, permission, or external service failure | **NOT fixable** — skip agent, autorevert if enabled |
+| `unknown` | Cannot determine from summary | **NOT fixable** (safe) — skip agent, autorevert if enabled |
+
+The categorizer gate runs on **every** attempt (not cached), so if the
+CI state changes between retries the stage re-evaluates accordingly.
+Any LLM-call failure in the categorizer itself degrades to `unknown`
+(safe default).
+
+### Fixable failures (`test_failure`, `type_error`, `lint_error`, `build_error`)
+
 - The CI-fix stage invokes `run_ci_fix_agent` on the ticket's workspace
   clone, passing it a summary of the failing checks and file-level
   annotations.
 - On success the ticket branch is force-pushed (the ticket goes back to
   `IMPLEMENT_COMPLETE` for the next poll to re-verify both gates).
-- On failure the ticket escalates to `BLOCKED` (resumable) — no
-  half-fixed state is ever pushed.
+- On failure (after exhausting `MILL_CI_FIX_MAX_ATTEMPTS`) the ticket
+  escalates to `BLOCKED` (resumable) — no half-fixed state is ever
+  pushed.
+
+### Unfixable failures (`env_error`, `unknown`)
+
+- `run_ci_fix_agent` is **never called** — the attempt counter is reset
+  to 0 so a future resume starts fresh.
+- By default (`MILL_CI_AUTOREVERT=true`), the PR branch is force-reverted
+  to the target branch tip (e.g. `origin/main`) to clean up the broken
+  code.  This prevents unfixable PRs from blocking the target branch for
+  other tickets.
+- If `MILL_CI_AUTOREVERT=false`, the stage transitions to `BLOCKED`
+  immediately with no git operations — manual intervention is required.
+- The autorevert is best-effort: if any git operation fails (fetch,
+  reset, force-push), the failure is logged at warning level and the
+  stage still transitions to `BLOCKED` with a note that manual cleanup
+  may be needed.
 
 | Variable | Default | Description |
 |---|---|---|
 | `MILL_CI_FIX_MAX_ATTEMPTS` | `2` | Max CI-fix attempts per ticket before escalating to BLOCKED. Each attempt is one LLM invocation. |
+| `MILL_CI_AUTOREVERT` | `true` | When the categorizer deems a CI failure unfixable (`env_error`/`unknown`), force-revert the PR branch to the target branch tip. Set to `false` to only skip fix attempts without reverting. |
 
 The ci-fix agent uses the same sandboxed shell + file tools as the
 implement agent, scoped to the ticket's clone. It never pushes, opens
@@ -134,6 +165,10 @@ opens PRs, or interacts with the forge. The agent does **NOT** have
 web-search access — it works only from the review comments and local
 files. The agent's system prompt explicitly forbids gate weakening
 (removing test assertions, lint rules, or security checks).
+
+The categorizer is a separate, lightweight agent (`agent_definitions/ci_categorizer.yaml`)
+using `MILL_DEDUP_MODEL` — no sandbox tools, no file access, one inference
+per attempt.  It never pushes, opens PRs, or interacts with the forge.
 
 ## State flow summary
 

@@ -142,6 +142,7 @@ pipeline:
   merge_poll_seconds: 120                            # poll interval for PR merge/CI status
   rebase_max_attempts: 5                             # max rebase LLM invocations before BLOCK
   ci_fix_max_attempts: 2                             # max CI-fix LLM invocations before BLOCK
+  ci_autorevert: true                                # force-revert PR branch when CI failure is unfixable
   review_revision_max_attempts: 2                    # max review-revision LLM invocations before BLOCK
   retrospect_spawn_drafts: true                      # allow retrospect to file improvement drafts
   retrospect_deep_analysis_frequency: 10             # how many runs between deep trace analyses

@@ -183,6 +183,7 @@ other code depends on.
 | `MILL_MAX_ARCHIVED_TICKETS` | `max_archived_tickets` | `100` | `int` | Settings | non-sensitive | default | **missing** | `core/service.py` (ticket purge) | ⚠️ Undocumented |
 | `MILL_REBASE_MAX_ATTEMPTS` | `rebase_max_attempts` | `5` | `int` | Settings | non-sensitive | default | §9 | `stages/merge.py` | |
 | `MILL_CI_FIX_MAX_ATTEMPTS` | `ci_fix_max_attempts` | `2` | `int` | Settings | non-sensitive | default | §9 | `stages/merge.py` | |
+| `MILL_CI_AUTOREVERT` | `ci_autorevert` | `true` | `bool` | Settings | non-sensitive | default | §9 | `stages/ci_fix.py` | Autorevert PR branch for unfixable CI failures |
 
 ### 1.13  CI monitor (log cap only; enabled/interval are per-repo)
 
