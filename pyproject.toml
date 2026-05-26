@@ -58,6 +58,21 @@ extend-select = ["DTZ001", "DTZ002", "DTZ003", "C90"]
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
+[tool.pip-audit]
+# PYSEC-2025-183 (pyjwt): "weak encryption" advisory disputed by the
+# supplier — the algorithm strength is determined by the *key* the
+# caller supplies, not by pyjwt itself.  No fix version is published.
+# pyjwt enters our tree only as a transitive dep (langfuse → pyjwt for
+# OTel auth signing); mill does not call its signing API directly.
+#
+# MAL-2026-4750 (fastapi): malicious undeclared dependency "fastar"
+# was added to the [standard] extras group of fastapi 0.136.3 on PyPI.
+# The mill project depends on "fastapi>=0.115" with NO extras — we
+# never install fastapi[standard], so the malicious package is not
+# pulled into our dependency tree.  Remove if we ever add a [standard]
+# extra or the advisory is fixed upstream.
+ignore-vulns = ["PYSEC-2025-183", "MAL-2026-4750"]
+
 [tool.mypy]
 strict = true
 python_version = "3.14"
