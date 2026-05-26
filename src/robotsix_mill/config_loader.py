@@ -385,6 +385,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.survey.enabled": "MILL_SURVEY_PERIODIC",
     "periodic.survey.interval_seconds": "MILL_SURVEY_INTERVAL_SECONDS",
     "periodic.survey.memory_path": "MILL_SURVEY_MEMORY_PATH",
+    # -- periodic.cost_reconciliation --
+    "periodic.cost_reconciliation.model": "MILL_COST_RECONCILIATION_MODEL",
+    "periodic.cost_reconciliation.enabled": "MILL_COST_RECONCILIATION_PERIODIC",
+    "periodic.cost_reconciliation.interval_seconds": "MILL_COST_RECONCILIATION_INTERVAL_SECONDS",
+    "periodic.cost_reconciliation.memory_path": "MILL_COST_RECONCILIATION_MEMORY_PATH",
     # -- periodic.ci_monitor --
     "periodic.ci_monitor.enabled": "MILL_CI_MONITOR_PERIODIC",
     "periodic.ci_monitor.interval_seconds": "MILL_CI_MONITOR_INTERVAL_SECONDS",
