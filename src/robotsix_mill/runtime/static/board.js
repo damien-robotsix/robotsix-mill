@@ -737,6 +737,21 @@ async function generateChildren(id){
    btn.disabled=false; btn.textContent='Generate Tickets';
  }
 }
+// State-action buttons (Approve / Request Changes / Redraft / Delete).
+// Lives in the drawer header (commit 327a800 moved them off the card,
+// then the progressive-fetch rewrite of open_() at 8fbd accidentally
+// dropped them — restoring as a single helper used by open_() and
+// refreshDetail() so they stay in sync as state changes.
+function _actionButtonsHtml(t){
+ if(!t)return"";
+ const redraftable=!['draft','human_issue_approval','closed','answered','epic_closed','epic_open','done'].includes(t.state);
+ return (t.state==="human_issue_approval"?
+   `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
+   `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
+  (redraftable?
+   `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
+  `<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_('${t.id}')">✕</button>`;
+}
 async function open_(id){
  sel=id;
  // 1. Open drawer immediately — the 150ms slide-in starts at once
@@ -834,6 +849,7 @@ async function open_(id){
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
    (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id)}</span></p>`:"")+
    (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button> <button class="add-comment-btn" style="background:#2563eb;color:#fff" onclick="newChildTicket('${t.id}')">Add Ticket</button></p>`:"")+
+   `<div id="ticket-action-buttons">${_actionButtonsHtml(t)}</div>`+
    `</div>`+
    `<div id="ticket-children"><div class="sk-label"></div>${skW('60%','12px')}</div>`+
    `<div id="ticket-history"><div class="sk-label"></div>${skW('90%','10px')}${skW('70%','10px')}</div>`+
@@ -1507,12 +1523,14 @@ async function refreshDetail(id){
   _detailLast[key]=html;
   el.innerHTML=html;
  };
- // Update only the volatile parts of the header: state badge + cost + updated_at + retry button + merge-btn-area.
+ // Update only the volatile parts of the header: state badge + cost + updated_at + retry button + merge-btn-area + action buttons.
  const stateBadge=document.querySelector("#ticket-header b.s-"+t.state)||document.querySelector("#ticket-header b[class^='s-']");
  if(stateBadge&&stateBadge.textContent!==t.state){
   stateBadge.className="s-"+t.state;
   stateBadge.textContent=t.state;
  }
+ // Action buttons depend on state — swap when state changed.
+ swap("ticket-action-buttons", _actionButtonsHtml(t));
  // Children
  swap("ticket-children", ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">`+
   ch.map(c=>`<div class="child-ticket" onclick="open_('${c.id}')"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")+`</div>`:"");
