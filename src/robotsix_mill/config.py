@@ -275,12 +275,12 @@ class Settings(BaseSettings):
     # How many days back closed tickets are considered as duplicate
     # candidates by the pre-refine dedup check.
     dedup_lookback_days: int = Field(
-        default=30, alias="MILL_DEDUP_LOOKBACK_DAYS"
+        default=7, alias="MILL_DEDUP_LOOKBACK_DAYS"
     )
     # How many recent commits on the forge target branch to inspect for
     # "already implemented" by the pre-refine dedup check.
     dedup_lookback_commits: int = Field(
-        default=20, alias="MILL_DEDUP_LOOKBACK_COMMITS"
+        default=10, alias="MILL_DEDUP_LOOKBACK_COMMITS"
     )
     # Local-dev default: a repo-local, gitignored dir. The Dockerfile
     # sets MILL_DATA_DIR=/data explicitly, so the container is unaffected.

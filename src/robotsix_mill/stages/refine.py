@@ -148,70 +148,79 @@ class RefineStage(Stage):
                     )
 
         # --- dedup / already-done guard (best-effort) ---
-        # Gather candidate tickets: all non-terminal + recently closed.
-        all_tickets = ctx.service.list()
-        now = datetime.now(timezone.utc)
-        lookback_cutoff = datetime.fromtimestamp(
-            now.timestamp() - s.dedup_lookback_days * 86400, tz=timezone.utc
-        )
-        non_terminal = {State.CLOSED, State.ERRORED}
-        candidates = [
-            t for t in all_tickets
-            if t.id != ticket.id and (
-                t.state not in non_terminal
-                or (
-                    t.state == State.CLOSED
-                    and _as_utc(t.updated_at) >= lookback_cutoff
-                )
+        # Skip dedup entirely for trivial drafts — a title-only or
+        # near-empty draft has near-zero chance of being a duplicate
+        # worth detecting and the dedup LLM call's cost dwarfs the value.
+        if len(draft) < 100:
+            log.debug(
+                "%s: trivial draft (%d chars), skipping dedup",
+                ticket.id, len(draft),
             )
-        ]
-        candidates_json = _build_candidates_json(candidates, ctx)
+        else:
+            # Gather candidate tickets: all non-terminal + recently closed.
+            all_tickets = ctx.service.list()
+            now = datetime.now(timezone.utc)
+            lookback_cutoff = datetime.fromtimestamp(
+                now.timestamp() - s.dedup_lookback_days * 86400, tz=timezone.utc
+            )
+            non_terminal = {State.CLOSED, State.ERRORED}
+            candidates = [
+                t for t in all_tickets
+                if t.id != ticket.id and (
+                    t.state not in non_terminal
+                    or (
+                        t.state == State.CLOSED
+                        and _as_utc(t.updated_at) >= lookback_cutoff
+                    )
+                )
+            ]
+            candidates_json = _build_candidates_json(candidates, ctx)
 
-        # Gather recent commits (only when we have a clone).
-        recent_commits_json: str | None = None
-        if repo_dir is not None:
+            # Gather recent commits (only when we have a clone).
+            recent_commits_json: str | None = None
+            if repo_dir is not None:
+                try:
+                    commits = git_ops.recent_commits(repo_dir, s.dedup_lookback_commits)
+                    recent_commits_json = json.dumps(
+                        [{"sha": c["sha"], "subject": c["subject"]} for c in commits]
+                    )
+                except Exception:
+                    log.warning("%s: recent_commits failed, skipping commit dedup", ticket.id)
+
             try:
-                commits = git_ops.recent_commits(repo_dir, s.dedup_lookback_commits)
-                recent_commits_json = json.dumps(
-                    [{"sha": c["sha"], "subject": c["subject"]} for c in commits]
+                verdict = dedup.run_dedup_check(
+                    settings=s,
+                    draft_title=ticket.title,
+                    draft_body=draft,
+                    candidates_json=candidates_json,
+                    recent_commits_json=recent_commits_json,
+                    repo_dir=repo_dir,
                 )
             except Exception:
-                log.warning("%s: recent_commits failed, skipping commit dedup", ticket.id)
+                log.warning(
+                    "%s: dedup check failed, proceeding with refine", ticket.id,
+                    exc_info=True,
+                )
+                verdict = {
+                    "duplicate_of": None,
+                    "already_done": None,
+                    "reason": "dedup check failed",
+                }
 
-        try:
-            verdict = dedup.run_dedup_check(
-                settings=s,
-                draft_title=ticket.title,
-                draft_body=draft,
-                candidates_json=candidates_json,
-                recent_commits_json=recent_commits_json,
-                repo_dir=repo_dir,
-            )
-        except Exception:
-            log.warning(
-                "%s: dedup check failed, proceeding with refine", ticket.id,
-                exc_info=True,
-            )
-            verdict = {
-                "duplicate_of": None,
-                "already_done": None,
-                "reason": "dedup check failed",
-            }
-
-        # Discarded drafts go to DONE (not directly CLOSED) so retrospect
-        # still analyses them — sanity-check the dedup verdict, capture
-        # any lesson in the memory ledger, and keep the audit trail
-        # consistent with every other terminal-ish ticket.
-        if verdict.get("duplicate_of"):
-            return Outcome(
-                State.DONE,
-                f"duplicate of {verdict['duplicate_of']}: {verdict.get('reason', 'no reason')}",
-            )
-        if verdict.get("already_done"):
-            return Outcome(
-                State.DONE,
-                f"already implemented in {verdict['already_done']}: {verdict.get('reason', 'no reason')}",
-            )
+            # Discarded drafts go to DONE (not directly CLOSED) so retrospect
+            # still analyses them — sanity-check the dedup verdict, capture
+            # any lesson in the memory ledger, and keep the audit trail
+            # consistent with every other terminal-ish ticket.
+            if verdict.get("duplicate_of"):
+                return Outcome(
+                    State.DONE,
+                    f"duplicate of {verdict['duplicate_of']}: {verdict.get('reason', 'no reason')}",
+                )
+            if verdict.get("already_done"):
+                return Outcome(
+                    State.DONE,
+                    f"already implemented in {verdict['already_done']}: {verdict.get('reason', 'no reason')}",
+                )
         # --- end dedup guard ---
 
         # --- skip re-refinement for split children ---

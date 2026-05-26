@@ -349,14 +349,24 @@ def test_system_prompt_forbids_guessing_line_numbers():
 
 # --- dedup guard tests ---
 
+# Substantive body — dedup is skipped for drafts under 100 chars, so
+# every dedup-exercising test below needs a body comfortably above that
+# threshold. Keep this in one place so the threshold can move without
+# rewriting every test.
+_DEDUP_BODY = (
+    "This is a substantive draft body that exceeds the trivial-draft "
+    "threshold of 100 characters so the dedup pipeline actually runs. "
+    "Without enough body content, refine skips the dedup LLM call entirely."
+)
+
 
 def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     """Exact-duplicate draft → CLOSED. Refine agent is never called."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
-    t_a = service.create("Add dark mode toggle", "Add dark mode toggle.")
-    t_b = service.create("Add dark mode toggle", "Add dark mode toggle.")
+    t_a = service.create("Add dark mode toggle", _DEDUP_BODY)
+    t_b = service.create("Add dark mode toggle", _DEDUP_BODY)
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
@@ -392,7 +402,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
-    t = service.create("Add X", "make x happen")
+    t = service.create("Add X", _DEDUP_BODY)
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
@@ -474,8 +484,10 @@ def test_dedup_skipped_for_empty_title_and_draft(ctx, service, monkeypatch):
     assert not dedup_called
 
 
-def test_dedup_runs_for_title_only(ctx, service, monkeypatch):
-    """When title is set but body is empty, dedup IS called (not skipped)."""
+def test_dedup_skipped_for_trivial_draft(ctx, service, monkeypatch):
+    """Trivial drafts (body <100 chars) skip dedup — the LLM call cost
+    dwarfs the value when there's barely anything to compare. Refine
+    still proceeds normally."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
@@ -485,15 +497,14 @@ def test_dedup_runs_for_title_only(ctx, service, monkeypatch):
                    candidates_json, recent_commits_json):
         nonlocal dedup_called
         dedup_called = True
-        assert draft_title == "Add dark mode toggle"
-        assert draft_body == ""
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
 
     monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
 
+    # body="" → trivial → dedup must be skipped.
     out = RefineStage().run(service.create("Add dark mode toggle", ""), ctx)
     assert out.next_state is State.READY
-    assert dedup_called
+    assert not dedup_called, "dedup should be skipped for trivial drafts"
 
 
 def test_dedup_never_flags_self(ctx, service, monkeypatch):
@@ -501,7 +512,7 @@ def test_dedup_never_flags_self(ctx, service, monkeypatch):
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
-    t = service.create("my ticket", "my draft")
+    t = service.create("my ticket", _DEDUP_BODY)
     # Create another ticket so the candidate list isn't empty
     service.create("other ticket", "other draft")
 
@@ -530,7 +541,7 @@ def test_dedup_candidate_bodies_included(ctx, service, monkeypatch):
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     # Create the current ticket (will be excluded from candidates).
-    t = service.create("my ticket", "my draft body")
+    t = service.create("my ticket", _DEDUP_BODY)
 
     # Create two candidate tickets with distinctive bodies.
     t_a = service.create("candidate A", "body of ticket A\nline two")
@@ -599,7 +610,7 @@ def test_dedup_no_forge_passes_none_commits(ctx, service, monkeypatch):
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
-    t = service.create("Add X", "make x happen")
+    t = service.create("Add X", _DEDUP_BODY)
 
     seen_commits = "unset"
 
@@ -642,7 +653,7 @@ def test_dedup_clone_failure_passes_none_commits(ctx, service, monkeypatch):
     monkeypatch.setattr(git_ops, "clone", boom_clone)
     monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
 
-    t = service.create("Add X", "make x happen")
+    t = service.create("Add X", _DEDUP_BODY)
 
     out = RefineStage().run(t, ctx)
 

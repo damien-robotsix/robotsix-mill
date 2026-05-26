@@ -72,8 +72,8 @@ core:
     max_memory_chars: 8000               # max chars loaded from any memory ledger per pass
     reference_files_max_count: 5         # max files whose full content refine stores
     reference_files_max_total_lines: 3000  # max total lines across selected reference files
-    dedup_lookback_days: 30              # days back closed tickets are dup candidates
-    dedup_lookback_commits: 20           # recent commits to inspect for "already done"
+    dedup_lookback_days: 7               # days back closed tickets are dup candidates
+    dedup_lookback_commits: 10           # recent commits to inspect for "already done"
 
 # ---------------------------------------------------------------------------
 #  forge — delivery platform configuration
