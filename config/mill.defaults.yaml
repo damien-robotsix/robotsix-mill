@@ -41,7 +41,7 @@ core:
     triage: &cheap_model openai/gpt-4o-mini               # pre-refine triage — fast/cheap classification
     auto_approve: *cheap_model                            # auto-approve triage — must be fast and cheap
     scope_triage: *cheap_model                            # scope-violation triage — fast and cheap
-    doc_classifier: *cheap_model                            # doc-diff classifier gate (fast + cheap)
+    doc_classifier: *cheap_model                          # doc-diff classifier gate (fast + cheap)
     rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
 
   # -- request caps, concurrency, retry, and timeouts (18 fields) -----------
@@ -50,9 +50,9 @@ core:
     test_requests: 8                   # per-call cap for test-distillation sub-agent
     explore_requests: 20               # per-call cap for explore sub-agent
     dedup_requests: 4                  # per-call cap for dedup check
-    doc_classifier_requests: 3          # per-call cap for doc-classifier gate
     web_research_requests: 8           # per-call cap for web-research sub-agent
     scope_triage_requests: 4           # per-call cap for scope-triage agent
+    doc_classifier_requests: 3         # per-call cap for doc-classifier gate
     max_concurrency: 4                 # max parallel tickets in the worker pool
     max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
@@ -130,7 +130,6 @@ gates:
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
   spec_review_enabled: false               # post-refinement spec narrative stripping
   scope_triage_enabled: true               # cheap scope-violation triage (EXPAND/REJECT/ESCALATE)
-  comments_after_body: false               # move comments below description.md in ticket detail drawer
 
 # ---------------------------------------------------------------------------
 #  pipeline — merge, rebase, ci-fix, retrospect, prune, archive, memory paths
@@ -200,19 +199,19 @@ periodic:
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/bc_check_memory.md
 
-  # -- cost-reconciliation — detects OpenRouter ↔ Langfuse cost drift -----
-  cost_reconciliation:
-    model: *default_model           # cost-reconciliation agent model
-    enabled: false                  # enable periodic cost-reconciliation passes
-    interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
-    memory_path: null               # defaults to <data_dir>/cost_reconciliation_memory.md
-
   # -- completeness-check — detects half-wired features --------------
   completeness_check:
     model: *default_model           # completeness-check agent model
     enabled: false                  # enable periodic completeness-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/completeness_check_memory.md
+
+  # -- cost-reconciliation — detects OpenRouter ↔ Langfuse cost drift -----
+  cost_reconciliation:
+    model: *default_model
+    enabled: false
+    interval_seconds: 86400
+    memory_path: null
 
   # -- survey agent — discovers OSS projects; proposes improvements --------
   survey:

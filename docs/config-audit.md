@@ -165,8 +165,6 @@ other code depends on.
 | `MILL_REFINE_TRIAGE_ENABLED` | `refine_triage_enabled` | `true` | `bool` | Settings | non-sensitive | default | **missing** | `stages/refine.py` | ⚠️ Undocumented |
 | `MILL_SPEC_REVIEW_ENABLED` | `spec_review_enabled` | `false` | `bool` | Settings | non-sensitive | default | **missing** | `stages/refine.py` | ⚠️ Undocumented |
 | `MILL_REVIEW_MAX_ROUNDS` | `review_max_rounds` | `3` | `int` | Settings | non-sensitive | default | **missing** | `stages/review.py` | ⚠️ Undocumented |
-| `MILL_COMMENTS_AFTER_BODY` | `comments_after_body` | `false` | `bool` | Settings | non-sensitive | default | §7 | `runtime/routes.py` | Board drawer rendering order |
-
 ### 1.11  Retrospect stage
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |

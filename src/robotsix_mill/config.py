@@ -474,12 +474,6 @@ class Settings(BaseSettings):
     scope_triage_enabled: bool = Field(
         default=True, alias="MILL_SCOPE_TRIAGE_ENABLED"
     )
-    # When True, the ticket detail drawer renders description.md before
-    # comments (instead of the current comments-first order). The body
-    # section is collapsible when this is active.
-    comments_after_body: bool = Field(
-        default=False, alias="MILL_COMMENTS_AFTER_BODY"
-    )
     # Model for the review agent. Defaults to the capable coordinator model.
     # Override to use a *different* model for a genuinely independent review
     # perspective (the dual-model benefit).

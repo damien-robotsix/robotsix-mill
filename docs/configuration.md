@@ -279,8 +279,6 @@ Every setting below shows:
 | `gates.spec_review_enabled` | `MILL_SPEC_REVIEW_ENABLED` | `false` | Post-refinement spec narrative stripping |
 | `gates.scope_triage_enabled` | `MILL_SCOPE_TRIAGE_ENABLED` | `true` | Cheap scope-violation triage before blocking (EXPAND/REJECT/ESCALATE) |
 | `gates.auto_merge_enabled` | `MILL_AUTO_MERGE_ENABLED` | `false` | Auto-merge PR when CI passes |
-| `gates.comments_after_body` | `MILL_COMMENTS_AFTER_BODY` | `false` | Render description.md before comments in ticket detail drawer |
-
 ### 8. Forge
 
 | YAML path | Env var | Default | Description |
