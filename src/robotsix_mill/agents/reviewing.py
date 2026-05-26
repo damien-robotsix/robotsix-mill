@@ -53,6 +53,7 @@ def run_review_agent(
     model_name: str | None = None,
     prior_context: str | None = None,
     repo_dir: Path | None = None,
+    reference_files: list[str] | None = None,
 ) -> ReviewVerdict:
     """Run a blind review of *diff* against *spec*.
 
@@ -69,7 +70,17 @@ def run_review_agent(
     filesystem tools (``read_file`` and ``list_dir``) sandboxed to
     that directory, allowing it to verify claims before raising them.
     ``run_command`` is deliberately excluded — even sandboxed, executing
-    shell is not read-only."""
+    shell is not read-only.
+
+    When *reference_files* is provided (paths relative to *repo_dir*),
+    each file's contents are preloaded as a synthetic read_file
+    ToolCall / ToolReturn pair in the agent's ``message_history``. The
+    reviewer "wakes up" with those files already in context — saving
+    one LLM round-trip per file (the "decide to call read_file →
+    consume the result" cycle). Pass the union of the implement
+    stage's ``ImplementResult.reference_files`` and paths parsed from
+    the diff so the common case (reviewer wants every modified file)
+    skips all its read_file round-trips."""
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
@@ -91,6 +102,16 @@ def run_review_agent(
         readonly_names = {"read_file", "list_dir"}
         tools = [t for t in all_fs_tools if t.__name__ in readonly_names]
 
+    # Build the synthetic-message_history pre-seed when paths are
+    # supplied. Same helper implement uses (fs_tools.build_preseed_history).
+    message_history = None
+    if reference_files and repo_dir is not None:
+        from .fs_tools import build_preseed_history
+
+        preseed = build_preseed_history(repo_dir, list(reference_files))
+        if preseed:
+            message_history = preseed
+
     overrides = {}
     if model_name is not None:
         overrides["model_name"] = model_name
@@ -110,8 +131,11 @@ def run_review_agent(
             f"<git_diff>\n{diff}\n</git_diff>"
         )
         limits = UsageLimits(request_limit=settings.review_request_limit)
+        run_kwargs: dict = {"usage_limits": limits}
+        if message_history is not None:
+            run_kwargs["message_history"] = message_history
         result = call_with_retry(
-            lambda: agent.run_sync(user_prompt, usage_limits=limits),
+            lambda: agent.run_sync(user_prompt, **run_kwargs),
             settings=settings, what="review",
         )
     finally:

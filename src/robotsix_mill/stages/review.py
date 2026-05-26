@@ -9,6 +9,7 @@ comments stored); NEEDS_DISCUSSION → BLOCKED (with comments stored).
 from __future__ import annotations
 
 import logging
+import re
 
 from ..agents.reviewing import ReviewVerdict, run_review_agent
 from ..core.models import Ticket
@@ -17,6 +18,24 @@ from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.review")
+
+
+def _paths_from_diff(diff: str) -> list[str]:
+    """Extract modified file paths from a unified git diff.
+
+    Reads `+++ b/<path>` lines (skipping `+++ /dev/null` for deletions),
+    deduplicates, preserves first-seen order. Used to pre-seed the
+    review agent's message_history with every modified file's content
+    so the reviewer doesn't pay for one read_file round-trip per file.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in re.finditer(r"^\+\+\+ b/(.+)$", diff, re.MULTILINE):
+        path = m.group(1).strip()
+        if path and path != "/dev/null" and path not in seen:
+            seen.add(path)
+            out.append(path)
+    return out
 
 
 def _build_prior_context(ticket, ctx, ws) -> str | None:
@@ -91,6 +110,12 @@ class ReviewStage(Stage):
 
         prior_context = _build_prior_context(ticket, ctx, ws)
 
+        # Pre-seed the review agent with every modified file's content —
+        # the reviewer otherwise burns one read_file round-trip per file
+        # to verify claims, which is most of its observation count on
+        # any non-trivial diff. See fs_tools.build_preseed_history.
+        modified_paths = _paths_from_diff(diff)
+
         # Run the blind review agent.
         try:
             verdict: ReviewVerdict = run_review_agent(
@@ -99,6 +124,7 @@ class ReviewStage(Stage):
                 spec=spec,
                 prior_context=prior_context,
                 repo_dir=repo_dir,
+                reference_files=modified_paths,
             )
         except Exception as e:
             log.exception("%s: review agent error", ticket.id)

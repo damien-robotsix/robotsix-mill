@@ -224,41 +224,15 @@ def run_coordinator(
     # unreachable" assertion and aborts the entire implement run. The
     # system prompt is already added by build_agent below; the synthetic
     # history starts directly with the preloaded read_file ToolCall /
-    # ToolReturn pairs, which pydantic-ai accepts.
+    # ToolReturn pairs, which pydantic-ai accepts (helper shared with
+    # the review agent — see fs_tools.build_preseed_history).
     if reference_files and message_history is None:
-        from pydantic_ai.messages import (
-            ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
+        from .fs_tools import build_preseed_history
+
+        final_message_history = build_preseed_history(
+            repo_dir,
+            [rf["path"] for rf in reference_files],
         )
-        synthetic: list = []
-        for rf in reference_files:
-            file_path = repo_dir / rf["path"]
-            try:
-                content = file_path.read_text(
-                    encoding="utf-8", errors="replace",
-                )
-            except OSError:
-                log.warning(
-                    "reference_files: %s not found on disk, "
-                    "omitting from synthetic history",
-                    rf["path"],
-                )
-                continue
-            tc_id = f"preload_{rf['path']}"
-            synthetic.append(ModelResponse(parts=[
-                ToolCallPart(
-                    tool_name="read_file",
-                    args={"path": rf["path"], "offset": 1, "limit": None},
-                    tool_call_id=tc_id,
-                )
-            ]))
-            synthetic.append(ModelRequest(parts=[
-                ToolReturnPart(
-                    tool_name="read_file",
-                    content=content,
-                    tool_call_id=tc_id,
-                )
-            ]))
-        final_message_history = synthetic
 
     overrides = {}
     if model_name is not None:

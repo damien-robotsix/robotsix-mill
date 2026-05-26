@@ -24,6 +24,93 @@ log = logging.getLogger(__name__)
 _PRUNED_PLACEHOLDER = "[content pruned — more recent content above]"
 
 
+def build_preseed_history(
+    repo_dir: Path,
+    paths: list[str],
+    *,
+    max_files: int = 20,
+    max_total_bytes: int = 200_000,
+) -> list:
+    """Build a synthetic ``message_history`` of preloaded read_file
+    pairs for *paths* under *repo_dir*.
+
+    Each path becomes a (ModelResponse(ToolCallPart(read_file, path)),
+    ModelRequest(ToolReturnPart(read_file, content))) pair — the same
+    shape pydantic-ai would have produced had the agent itself called
+    ``read_file`` on each entry. Prepending this history to an agent
+    run makes those file contents "already in context" without paying
+    for a round-trip per file.
+
+    Returns an empty list when *paths* is empty.
+
+    Defensive checks:
+    - Files that don't exist on disk are skipped (with a warning) so
+      a deleted-file entry in the caller's list doesn't abort the run.
+    - The combined payload is capped at *max_files* / *max_total_bytes*;
+      paths past the cap are dropped (with a warning) so a huge diff
+      can't blow the context window.
+
+    Used by:
+    - implement (``coordinating.py``) — preloads reference_files the
+      refine agent curated.
+    - review (``reviewing.py``) — preloads every file the implement
+      stage actually modified.
+    """
+    if not paths:
+        return []
+
+    from pydantic_ai.messages import (
+        ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
+    )
+
+    synthetic: list = []
+    total_bytes = 0
+    for path in paths:
+        if len(synthetic) >= max_files * 2:
+            log.warning(
+                "build_preseed_history: max_files=%d reached, dropping "
+                "remaining paths: %s",
+                max_files, paths[paths.index(path):],
+            )
+            break
+        file_path = repo_dir / path
+        try:
+            content = file_path.read_text(
+                encoding="utf-8", errors="replace",
+            )
+        except OSError:
+            log.warning(
+                "build_preseed_history: %s not found on disk, skipping",
+                path,
+            )
+            continue
+        if total_bytes + len(content) > max_total_bytes:
+            log.warning(
+                "build_preseed_history: max_total_bytes=%d would be "
+                "exceeded by %s (size %d, cumulative %d) — dropping "
+                "this and remaining paths",
+                max_total_bytes, path, len(content), total_bytes,
+            )
+            break
+        total_bytes += len(content)
+        tc_id = f"preload_{path}"
+        synthetic.append(ModelResponse(parts=[
+            ToolCallPart(
+                tool_name="read_file",
+                args={"path": path, "offset": 1, "limit": None},
+                tool_call_id=tc_id,
+            )
+        ]))
+        synthetic.append(ModelRequest(parts=[
+            ToolReturnPart(
+                tool_name="read_file",
+                content=content,
+                tool_call_id=tc_id,
+            )
+        ]))
+    return synthetic
+
+
 def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Path:
     if not root.exists():
         raise ValueError(

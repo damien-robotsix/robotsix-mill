@@ -80,8 +80,8 @@ def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="APPROVE", comments="lgtm")
 
     monkeypatch.setattr(
@@ -99,8 +99,8 @@ def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="X is broken")
 
     monkeypatch.setattr(
@@ -122,8 +122,8 @@ def test_needs_discussion_transitions_to_blocked(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="NEEDS_DISCUSSION", comments="questionable design")
 
     monkeypatch.setattr(
@@ -146,7 +146,7 @@ def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
 
     captured: dict = {}
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
         captured["diff"] = diff
         captured["spec"] = spec
         captured["model_name"] = model_name
@@ -173,8 +173,8 @@ def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         raise RuntimeError("model unavailable")
 
     monkeypatch.setattr(
@@ -198,7 +198,7 @@ def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
 
     agent_called = []
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
         agent_called.append(1)
         return ReviewVerdict(verdict="APPROVE", comments="")
 
@@ -233,8 +233,8 @@ def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
             verdict="APPROVE", comments="lgtm", auto_merge_eligible=True,
         )
@@ -256,8 +256,8 @@ def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(
             verdict="REQUEST_CHANGES", comments="fix X",
             auto_merge_eligible=False,
@@ -300,8 +300,8 @@ def test_request_changes_under_cap(ctx_factory, monkeypatch):
     ctx.service.set_review_rounds(t.id, 1)  # 1 round already used
     t = ctx.service.get(t.id)  # refresh in-memory object
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="fix X")
 
     monkeypatch.setattr(
@@ -332,8 +332,8 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
     ctx.service.set_review_rounds(t.id, 2)  # round 3 is the cap
     t = ctx.service.get(t.id)  # refresh in-memory object
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="still broken")
 
     monkeypatch.setattr(
@@ -362,8 +362,8 @@ def test_approve_resets_counter(ctx_factory, monkeypatch):
     ctx.service.set_review_rounds(t.id, 2)
     t = ctx.service.get(t.id)  # refresh in-memory object
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="APPROVE", comments="lgtm")
 
     monkeypatch.setattr(
@@ -385,8 +385,8 @@ def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
     ctx.service.set_review_rounds(t.id, 1)
     t = ctx.service.get(t.id)  # refresh in-memory object
 
-    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None):
-        del settings, diff, spec, model_name, prior_context, repo_dir
+    def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="NEEDS_DISCUSSION", comments="questionable")
 
     monkeypatch.setattr(
