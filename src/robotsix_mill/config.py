@@ -334,7 +334,7 @@ class Settings(BaseSettings):
     branch_prefix: str = Field(default="mill/", alias="MILL_BRANCH_PREFIX")
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.
-    command_timeout: int = Field(default=900, alias="MILL_COMMAND_TIMEOUT")
+    command_timeout: int = Field(default=1800, alias="MILL_COMMAND_TIMEOUT")
     # Safety net: if a ticket re-enters the *same* model-driven stage
     # this many times without ever progressing (e.g. its run keeps being
     # interrupted, or a stage churns), the worker escalates it to BLOCKED
@@ -349,11 +349,11 @@ class Settings(BaseSettings):
     )
     # Per-stage wall-clock timeout (seconds).  A stage that exceeds this
     # limit is escalated to BLOCKED, freeing the worker slot.  ≤ 0
-    # disables the timeout entirely.  1800 s (30 min) comfortably
+    # disables the timeout entirely.  2400 s (40 min) comfortably
     # exceeds worst-case LLM latency (~190 s per call) and multiple
     # shell-command runs while still catching a true hang.
     stage_timeout_seconds: int = Field(
-        default=1800, alias="MILL_STAGE_TIMEOUT_SECONDS"
+        default=2400, alias="MILL_STAGE_TIMEOUT_SECONDS"
     )
     # Per-stage timeout overrides (JSON dict via env var, e.g.
     # MILL_STAGE_TIMEOUT_OVERRIDES='{"merge":0,"deliver":0}').

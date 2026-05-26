@@ -131,7 +131,7 @@ other code depends on.
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_TEST_COMMAND` | `test_command` | `pytest -q` | `str` | Settings | non-sensitive | default | §19 | `stages/implement.py` | |
 | `MILL_BRANCH_PREFIX` | `branch_prefix` | `mill/` | `str` | Settings | non-sensitive | default | §19 | `forge/*.py` | |
-| `MILL_COMMAND_TIMEOUT` | `command_timeout` | `900` | `int` | Settings | non-sensitive | default | §7 | `sandbox.py` | Listed in §7 (sandbox), not §19 |
+| `MILL_COMMAND_TIMEOUT` | `command_timeout` | `1800` | `int` | Settings | non-sensitive | default | §7 | `sandbox.py` | Listed in §7 (sandbox), not §19 |
 | `MILL_SKILLS_DIR` | `skills_dir` | `skills` | `Path` | Settings | non-sensitive | default | §21 | `stages/refine.py`, `stages/implement.py` | |
 
 ### 1.8  Command sandbox

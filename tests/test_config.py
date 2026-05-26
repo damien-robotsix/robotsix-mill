@@ -31,7 +31,7 @@ def test_default_numeric_limits():
     s = Settings()
     assert s.max_concurrency == 4
     assert s.transient_retries == 4
-    assert s.command_timeout == 900
+    assert s.command_timeout == 1800
     assert s.max_fix_iterations == 8
     assert s.model_request_timeout == 900.0
     assert s.transient_backoff_cap == 30.0
