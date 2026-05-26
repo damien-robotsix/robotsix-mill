@@ -30,8 +30,6 @@ web: true
 # Refine does not emit draft tickets through structured output —
 # it produces a RefineResult. Let it self-report blocking issues.
 report_issue: true
-reply_to_thread: false
-
 output_type: RefineResult
 retries: 2
 
