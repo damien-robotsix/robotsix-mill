@@ -67,6 +67,7 @@ Shared modules used to build and equip agents.
 | Report issue | `agents/report_issue.py` | `report_issue` tool (dedup-guarded, injected into every agent) |
 | Read ticket | `agents/read_ticket.py` | `read_ticket` tool (read-only counterpart to `report_issue`; injected into periodic agents) |
 | Reply to thread | `agents/reply_thread.py` | `reply_to_thread` tool (replies to a comment thread on the current ticket; injected into implement agent) |
+| Close thread | `agents/close_thread.py` | `close_thread` tool (closes a resolved comment thread on the current ticket; injected into implement agent) |
 | Retry | `agents/retry.py` | Bounded retry with exponential backoff for transient network failures |
 | Tool registry | `agents/tool_registry.py` | System-wide catalog of tool capabilities for prompt injection (not an agent registry) |
 | Expert YAML loader | `agents/expert_loader.py` | `load_expert_definition()` — parses and validates `expert_definitions/*.yaml` files |

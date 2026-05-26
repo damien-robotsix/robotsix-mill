@@ -249,6 +249,26 @@ don't participate in ongoing conversations.
 
 ---
 
+### `close_thread` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `true` |
+
+Whether the `close_thread` closing tool is injected. When `true`, the
+agent can close (resolve) a top-level comment thread on the current
+ticket after addressing the feedback it contains. When `false`, the
+tool is omitted.
+
+Pipeline agents that address human reviewer feedback (`implement`)
+keep this at the default `true`. Agents that produce one-shot
+structured output (`review`, `refine`, `audit`) set this to `false`
+since they don't need to mark threads as resolved.
+
+---
+
 ### `output_type` (optional)
 
 | Attribute | Value |
