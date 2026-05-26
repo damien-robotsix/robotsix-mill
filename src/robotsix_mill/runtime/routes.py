@@ -759,7 +759,13 @@ def create_epic(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:
-    """Create a new epic — accepts ``{"title": str, "description": str}``."""
+    """Create a new epic — accepts ``{"title": str, "description": str}``.
+
+    An optional ``repo_id`` field scopes the epic to a specific repo's
+    board.  When omitted in single-repo mode the sole repo is used;
+    in multi-repo mode ``repo_id`` is required and a 400 is returned
+    if it is missing.
+    """
     title = body.get("title", "")
     if not title:
         raise HTTPException(status_code=400, detail="title is required")
