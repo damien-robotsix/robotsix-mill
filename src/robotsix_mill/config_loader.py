@@ -343,6 +343,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.trace_inspector_memory_path": "MILL_TRACE_INSPECTOR_MEMORY_PATH",
     "pipeline.implement_memory_path": "MILL_IMPLEMENT_MEMORY_PATH",
     "pipeline.refine_memory_path": "MILL_REFINE_MEMORY_PATH",
+    "pipeline.doc_memory_path": "MILL_DOC_MEMORY_PATH",
     "pipeline.ci_fix_memory_path": "MILL_CI_FIX_MEMORY_PATH",
     "pipeline.rebase_memory_path": "MILL_REBASE_MEMORY_PATH",
     "pipeline.ci_patterns_path": "MILL_CI_PATTERNS_PATH",

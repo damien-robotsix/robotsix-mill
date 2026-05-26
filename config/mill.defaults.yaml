@@ -152,6 +152,7 @@ pipeline:
   trace_inspector_memory_path: null       # defaults to <data_dir>/trace_inspector_memory.md
   implement_memory_path: null             # defaults to <data_dir>/implement_memory.md
   refine_memory_path: null                # defaults to <data_dir>/refine_memory.md
+  doc_memory_path: null                   # defaults to <data_dir>/doc_memory.md
   ci_fix_memory_path: null                # defaults to <data_dir>/ci_fix_memory.md
   rebase_memory_path: null                # defaults to <data_dir>/rebase_memory.md
   review_revision_memory_path: null       # defaults to <data_dir>/review_revision_memory.md

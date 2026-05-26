@@ -848,6 +848,11 @@ class Settings(BaseSettings):
     refine_memory_path: Path | None = Field(
         default=None, alias="MILL_REFINE_MEMORY_PATH"
     )
+    # Path to the document agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives <data_dir>/doc_memory.md.
+    doc_memory_path: Path | None = Field(
+        default=None, alias="MILL_DOC_MEMORY_PATH"
+    )
     # Path to the ci-fix agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/ci_fix_memory.md.
     ci_fix_memory_path: Path | None = Field(
@@ -1000,6 +1005,13 @@ class Settings(BaseSettings):
         if self.refine_memory_path is not None:
             return self.refine_memory_path
         return self.data_dir / "refine_memory.md"
+
+    @property
+    def doc_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained document memory ledger."""
+        if self.doc_memory_path is not None:
+            return self.doc_memory_path
+        return self.data_dir / "doc_memory.md"
 
     @property
     def ci_fix_memory_file(self) -> Path:

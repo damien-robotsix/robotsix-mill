@@ -53,6 +53,15 @@ class DocResult(BaseModel):
         description="Summary of documentation changes made, or a note "
                     "that no changes were needed.",
     )
+    updated_memory: str = Field(
+        default="",
+        description="Updated memory ledger — record the repo's doc "
+                    "layout, README sections, doc subdirs, and any "
+                    "conventions discovered during this run. Subsequent "
+                    "doc agents read this ledger so they don't have to "
+                    "explore the structure from scratch. Empty = no "
+                    "updates (incoming memory was complete).",
+    )
 
 
 def run_doc_classifier(
@@ -119,7 +128,11 @@ def run_doc_agent(
 
     The agent receives the ticket spec and git diff. It surveys the
     repo's docs (README.md, docs/*, AGENT.md) and applies targeted
-    edits for user-facing changes. Internal-only changes are a no-op."""
+    edits for user-facing changes. Internal-only changes are a no-op.
+
+    A persistent memory ledger (``settings.doc_memory_file``) records
+    the repo's doc layout across runs so subsequent passes don't have
+    to re-explore the structure from scratch."""
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
@@ -127,9 +140,17 @@ def run_doc_agent(
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import call_with_retry
+    from ..pass_runner import load_memory, persist_memory
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent / "agent_definitions" / "document.yaml"
+    )
+
+    # Load the doc memory ledger (empty string if unset / missing /
+    # unreadable — first run starts a fresh ledger).
+    memory_text = load_memory(
+        settings.doc_memory_file,
+        max_chars=settings.max_memory_chars,
     )
 
     fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
@@ -138,8 +159,18 @@ def run_doc_agent(
         overrides["model_name"] = model_name
     elif not definition.model:
         overrides["model_name"] = settings.doc_model
+
+    # Inject the memory block into the agent's system prompt — the
+    # YAML's static prompt + a dynamic <memory>…</memory> block at the
+    # end. The same pattern implement/refine/retrospect already use.
+    system_prompt = definition.system_prompt
+    system_prompt += (
+        f"\n\n<memory>\n{memory_text or '(empty — start a new ledger)'}\n</memory>"
+    )
+
     agent = build_agent_from_definition(
         settings, definition,
+        system_prompt=system_prompt,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
             *(t for t in fs if t.__name__ in ("read_file", "write_file", "list_dir", "edit_file")),
@@ -156,6 +187,11 @@ def run_doc_agent(
             lambda: agent.run_sync(user_prompt, usage_limits=limits),
             settings=settings, what="document",
         )
-        return result.output
+        output: DocResult = result.output
+        # Persist the agent's updated ledger; empty string = keep
+        # existing memory unchanged.
+        if output.updated_memory:
+            persist_memory(settings.doc_memory_file, output.updated_memory)
+        return output
     finally:
         _safe_close(agent)

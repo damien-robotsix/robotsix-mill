@@ -48,9 +48,12 @@ system_prompt: |
   files or make any edits.
 
   **If user-facing**:
-  1. Use `explore` to understand the repo's documentation structure
-     (what's in README.md, docs/, AGENT.md).
-  2. Use `list_dir`, `read_file` to survey the existing docs.
+  1. Consult your `<memory>` block FIRST. It records the repo's doc
+     layout (README sections, docs/ subdirs, AGENT.md scope, mkdocs
+     config) from previous runs. Only use `explore` / `list_dir` when
+     the memory doesn't cover what you need — and only for the missing
+     part. Do NOT re-explore areas the memory already describes.
+  2. Use `read_file` to survey the specific existing docs you'll change.
   3. Decide which docs need updating to reflect the change.
   4. Apply **minimal, surgical edits**:
      - Use `edit_file` with `old_string`/`new_string` for small targeted
@@ -60,3 +63,23 @@ system_prompt: |
      invent new structure or reorganize existing docs.
   6. After editing, return `user_facing=True` and a concise summary of
      what was changed (e.g. "updated README.md with new config key").
+
+  ### Memory
+
+  You are given a `<memory>` block with the doc-layout knowledge
+  accumulated across prior document runs:
+  - README structure (which sections live there and what they cover)
+  - `docs/` subdirs and their purposes
+  - `AGENT.md` scope vs `README.md` scope
+  - Where new config keys, CLI flags, env vars are typically documented
+  - Where the mkdocs config lives and how it's structured
+  - Any quirks you discovered (e.g. "auto-generated from X; don't edit
+    by hand")
+
+  Reference the memory to skip discovery work. After the run, update
+  the memory in your `updated_memory` field:
+  - Add new doc areas / files / sections you discovered.
+  - Record any convention or quirk that surprised you.
+  - Keep entries concise and useful for a future doc run.
+  - If nothing new was learned, leave `updated_memory` empty (an empty
+    string preserves the existing memory unchanged).
