@@ -120,7 +120,7 @@ def session_cost(settings: Settings, session_id: str, repo_config: RepoConfig | 
 def session_cost_cached(session_id: str) -> float:
     """Non-blocking cost lookup: return the cached value if any, else
     0.0. NEVER hits the network. Use this in hot paths like the board's
-    /tickets list, which polls every 5s; with N tickets cold the full
+    /tickets list, which polls every 1s; with N tickets cold the full
     ``session_cost`` would issue N Langfuse HTTP calls and block the
     response for seconds, long enough that the next poll tick cancels
     its predecessor. Per-ticket detail GETs still use the full

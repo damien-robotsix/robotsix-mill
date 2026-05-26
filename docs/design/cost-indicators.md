@@ -195,7 +195,7 @@ with a blocking/non-blocking split:
 
 | Context | Blocking | Cost function |
 |---------|----------|---------------|
-| `/tickets` list (polled every 5 s) | `False` | `session_cost_cached` for all tree nodes |
+| `/tickets` list (polled every 1 s) | `False` | `session_cost_cached` for all tree nodes |
 | `/tickets/{id}` drawer | `True` | `session_cost` — authoritative Langfuse HTTP per uncached session |
 
 ### Data model change
@@ -378,5 +378,5 @@ wrapper so the whole string is muted).
 - Changes to the existing agent bar chart layout or styling.
 - Persisting cost in the `ticket` table — `cost_usd` remains a read-time
   enrichment.
-- Real-time push updates — the existing 5 s poll cycle is sufficient.
+- Real-time push updates — the existing 1 s poll cycle is sufficient.
 - Export / CSV / alerting on cost thresholds.

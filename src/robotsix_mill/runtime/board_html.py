@@ -16,7 +16,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 </select>
 <label class="muted" style="margin-left:auto">
   <input type="checkbox" onchange="showClosed=this.checked;refresh()"> show closed</label>
-<span class="muted">auto-refresh 5s</span>
+<span class="muted">auto-refresh 1s</span>
 <button onclick="runAudit()" style="font-size:11px;padding:3px 10px;
 background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">
   Audit

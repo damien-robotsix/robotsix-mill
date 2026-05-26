@@ -132,7 +132,7 @@ def test_get_ticket_detail_includes_cost_usd(client, service, monkeypatch):
 def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
     """GET /tickets (the polled list) must NEVER call the blocking
     Langfuse session_cost — that would cost N serial HTTP roundtrips
-    on cold cache and stall the response past the board's 5s poll
+    on cold cache and stall the response past the board's 1s poll
     interval. Cost comes from session_cost_cached (no network), so
     the list value is 0.0 for an unseeded cache, regardless of what
     session_cost is monkeypatched to return."""

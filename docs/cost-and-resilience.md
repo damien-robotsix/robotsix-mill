@@ -24,7 +24,7 @@ mutates the ticket object in-place:
 - **Non-blocking path** (`blocking=False`): calls `session_cost_cached()`
   which returns the cached value if present, else `0.0`, and **never**
   hits the network. This is used by the `/tickets` list endpoint,
-  which the board polls every 5 seconds — otherwise N cold-cache
+  which the board polls every 1 second — otherwise N cold-cache
   tickets would issue N serial Langfuse HTTP calls.
 
 The board and `/tickets` API read `cost_usd` directly from the DB
