@@ -57,7 +57,7 @@ core:
     max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
     max_spend_usd_per_ticket: 0.0      # dollar cap per ticket (0.0 = disabled)
-    stage_timeout_seconds: 1800        # per-stage wall-clock timeout before BLOCK (0 = disabled)
+    stage_timeout_seconds: 2400        # per-stage wall-clock timeout before BLOCK (0 = disabled)
     stage_timeout_overrides: {}        # per-stage timeout overrides as JSON dict, e.g. {"merge": 300}
     model_request_timeout: 900.0       # hard per-call timeout in seconds
     transient_retries: 4               # max retries for transient network/model failures
@@ -99,7 +99,7 @@ sandbox:
   readonly: true                # mount rootfs read-only (except tmpfs /tmp)
   data_volume: mill_data        # named Docker volume for data (fallback)
   data_mount: null              # host path for bind-mounted data (overrides data_volume)
-  command_timeout: 900          # wall-clock cap (seconds) for shell/test commands
+  command_timeout: 1800          # wall-clock cap (seconds) for shell/test commands
   test_command: pytest -q       # command run to verify implementation (empty = skip)
   skills_dir: skills            # directory of skill docs injected into system prompts
 
