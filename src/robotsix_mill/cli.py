@@ -313,6 +313,19 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings()
 
     if args.cmd == "serve":
+        # Raise nofile soft cap: docker-compose's ulimits only set the
+        # hard cap, and PAM (via runuser in the container entrypoint)
+        # clamps the soft back to 1024. Workers cascade-crash with
+        # OSError: [Errno 24] once they exhaust it across parallel
+        # git/trivy/agent subprocesses.
+        import resource
+        try:
+            _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            target = max(65536, hard) if hard != resource.RLIM_INFINITY else 65536
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+        except (ValueError, OSError):
+            pass
+
         import uvicorn
 
         from .runtime.api import create_app
