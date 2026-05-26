@@ -32,8 +32,20 @@ def get_settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
-def get_run_registry(request: Request) -> RunRegistry:
-    """Return the ``RunRegistry`` stored on app state during lifespan startup."""
+def get_run_registry(request: Request, repo_id: str | None = Query(None)) -> RunRegistry:
+    """Return the per-repo ``RunRegistry`` (lifespan creates one per
+    board). Routes that pass ``?repo_id=X`` get X's registry; routes
+    without that query fall back to ``app.state.run_registry`` —
+    today the lead repo's, so legacy callers still record somewhere.
+    """
+    registries: dict[str, RunRegistry] = getattr(
+        request.app.state, "run_registries", {}
+    )
+    if repo_id:
+        repos: ReposRegistry = request.app.state.repos
+        rc = repos.repos.get(repo_id)
+        if rc is not None and rc.board_id in registries:
+            return registries[rc.board_id]
     return request.app.state.run_registry
 
 

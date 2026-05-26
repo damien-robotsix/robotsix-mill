@@ -188,6 +188,7 @@ class CIFixStage(Stage):
                     failing_summary=failing_summary,
                     memory=memory_text,
                     ticket_id=ticket.id,
+                    board_id=ctx.repo_config.board_id if ctx.repo_config else "",
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:

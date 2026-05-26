@@ -39,6 +39,7 @@ def run_ci_fix_agent(
     failing_summary: str,
     memory: str = "",
     ticket_id: str = "",
+    board_id: str = "",
 ) -> CiFixResult:
     """Run one CI-fix attempt based on *failing_summary*.
 
@@ -73,7 +74,8 @@ def run_ci_fix_agent(
         save_patterns,
     )
 
-    patterns = load_patterns(settings.ci_patterns_file)
+    patterns_file = settings.ci_patterns_file_for(board_id)
+    patterns = load_patterns(patterns_file)
     relevant = find_relevant_patterns(patterns, failing_summary, limit=3)
 
     if relevant:
@@ -125,12 +127,12 @@ def run_ci_fix_agent(
         )
         patterns.append(entry)
         try:
-            save_patterns(settings.ci_patterns_file, patterns)
+            save_patterns(patterns_file, patterns)
         except Exception:
             import logging
             logging.getLogger(__name__).warning(
                 "ci_fix: failed to save patterns to %s",
-                settings.ci_patterns_file,
+                patterns_file,
                 exc_info=True,
             )
 

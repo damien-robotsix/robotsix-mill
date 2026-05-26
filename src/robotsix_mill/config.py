@@ -126,7 +126,7 @@ class Settings(BaseSettings):
         default="deepseek/deepseek-v4-flash", alias="MILL_EXPLORE_MODEL"
     )
     test_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_TEST_MODEL"
+        default="deepseek/deepseek-v4-flash", alias="MILL_TEST_MODEL"
     )
     refine_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_REFINE_MODEL"
@@ -164,8 +164,12 @@ class Settings(BaseSettings):
     coordinator_request_limit: int = Field(
         default=200, alias="MILL_COORDINATOR_REQUEST_LIMIT"
     )
+    # The test agent inspects failing output, reads the relevant
+    # sources, and distills the cause — exploration-heavy work that
+    # easily exceeds 8 calls on a non-trivial failure. 50 leaves ample
+    # headroom (flash is cheap; cost-bounded by ticket-level cap).
     test_request_limit: int = Field(
-        default=8, alias="MILL_TEST_REQUEST_LIMIT"
+        default=50, alias="MILL_TEST_REQUEST_LIMIT"
     )
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
@@ -1066,6 +1070,18 @@ class Settings(BaseSettings):
         """Resolved path to the ci-fix agent's structured pattern memory."""
         if self.ci_patterns_path is not None:
             return self.ci_patterns_path
+        return self.data_dir / "ci_patterns.json"
+
+    def ci_patterns_file_for(self, board_id: str = "") -> Path:
+        """Per-repo resolved path for the ci-fix pattern memory.
+
+        Falls back to the global path when no board_id is provided or
+        when ``ci_patterns_path`` is explicitly overridden in config.
+        """
+        if self.ci_patterns_path is not None:
+            return self.ci_patterns_path
+        if board_id:
+            return self.data_dir / board_id / "ci_patterns.json"
         return self.data_dir / "ci_patterns.json"
 
     @property

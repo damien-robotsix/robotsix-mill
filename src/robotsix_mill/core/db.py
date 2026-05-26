@@ -480,3 +480,147 @@ def migrate_legacy_memories(settings: Settings) -> dict[str, int]:
         )
 
     return copied
+
+
+def migrate_legacy_ci_patterns(settings: Settings) -> dict[str, int]:
+    """One-shot migration: seed each registered repo's
+    ``<data_dir>/<board_id>/ci_patterns.json`` from a pre-existing
+    global ``<data_dir>/ci_patterns.json``.
+
+    Patterns are generic (failure-class signatures, not repo-specific
+    file paths in most cases) so the safest default is to copy the
+    legacy file into every repo. Idempotent — skips a repo whose own
+    file already exists. After seeding, the legacy file is renamed
+    to ``ci_patterns.json.legacy-pre-split``.
+
+    Returns ``{board_id: True_if_seeded}`` count map.
+    """
+    import shutil
+
+    legacy = settings.data_dir / "ci_patterns.json"
+    if not legacy.exists() or not legacy.is_file():
+        return {}
+
+    from ..config import get_repos_config
+
+    try:
+        repos = get_repos_config()
+    except Exception:
+        return {}
+    if not repos.repos:
+        return {}
+
+    seeded: dict[str, int] = {}
+    for rc in repos.repos.values():
+        dest = settings.data_dir / rc.board_id / "ci_patterns.json"
+        if dest.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(legacy, dest)
+            seeded[rc.board_id] = 1
+        except OSError as e:
+            log.warning(
+                "migrate_legacy_ci_patterns: could not copy %s → %s: %s",
+                legacy, dest, e,
+            )
+
+    backup = settings.data_dir / "ci_patterns.json.legacy-pre-split"
+    if not backup.exists():
+        try:
+            legacy.rename(backup)
+        except OSError as e:
+            log.warning(
+                "migrate_legacy_ci_patterns: could not rename %s → %s: %s",
+                legacy, backup, e,
+            )
+
+    for board_id in seeded:
+        log.info(
+            "migrate_legacy_ci_patterns: seeded ci_patterns.json into "
+            "<data_dir>/%s/", board_id,
+        )
+
+    return seeded
+
+
+def migrate_legacy_runs(settings: Settings) -> dict[str, int]:
+    """One-shot migration: split the pre-per-repo global
+    ``<data_dir>/runs.json`` into per-repo
+    ``<data_dir>/<board_id>/runs.json`` by each entry's ``repo_id``.
+
+    Idempotent. After the split the legacy file is renamed to
+    ``runs.json.legacy-pre-split``. Entries whose ``repo_id`` does
+    not match any registered repo are left under the lead repo's
+    file so they are not silently lost.
+
+    Returns ``{board_id: entries_migrated}``.
+    """
+    legacy = settings.data_dir / "runs.json"
+    if not legacy.exists() or not legacy.is_file():
+        return {}
+
+    from ..config import get_repos_config
+    import json
+
+    try:
+        repos = get_repos_config()
+    except Exception:
+        return {}
+    if not repos.repos:
+        return {}
+
+    try:
+        raw = json.loads(legacy.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.warning("migrate_legacy_runs: could not parse %s: %s", legacy, e)
+        return {}
+    if not isinstance(raw, list):
+        return {}
+
+    repo_id_to_board: dict[str, str] = {
+        rc.repo_id: rc.board_id for rc in repos.repos.values()
+    }
+    by_board: dict[str, list] = {rc.board_id: [] for rc in repos.repos.values()}
+    lead_board = next(iter(repos.repos.values())).board_id
+
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        rid = entry.get("repo_id") or ""
+        board = repo_id_to_board.get(rid, lead_board)
+        by_board.setdefault(board, []).append(entry)
+
+    migrated: dict[str, int] = {}
+    for board, entries in by_board.items():
+        if not entries:
+            continue
+        dest = settings.data_dir / board / "runs.json"
+        if dest.exists():
+            continue  # Don't clobber per-repo data already accumulated.
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+            migrated[board] = len(entries)
+        except OSError as e:
+            log.warning(
+                "migrate_legacy_runs: could not write %s: %s", dest, e,
+            )
+
+    backup = settings.data_dir / "runs.json.legacy-pre-split"
+    if not backup.exists():
+        try:
+            legacy.rename(backup)
+        except OSError as e:
+            log.warning(
+                "migrate_legacy_runs: could not rename %s → %s: %s",
+                legacy, backup, e,
+            )
+
+    for board, n in migrated.items():
+        log.info(
+            "migrate_legacy_runs: migrated %d run entries into "
+            "<data_dir>/%s/runs.json", n, board,
+        )
+
+    return migrated

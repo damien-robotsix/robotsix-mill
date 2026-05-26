@@ -83,6 +83,7 @@ def create_lifespan(
         db.migrate_legacy_global_db(settings)
         db.migrate_legacy_workspaces(settings)
         db.migrate_legacy_memories(settings)
+        db.migrate_legacy_ci_patterns(settings)
         # In single-repo mode use the specified repo; in multi-repo mode
         # pick the first repo as the initial repo_config for the worker.
         if single_repo_id is not None:
@@ -93,12 +94,29 @@ def create_lifespan(
         ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
         app.state.repos = repos
         app.state.single_repo_id = single_repo_id
-        run_registry = RunRegistry(settings.data_dir / "runs.json")
-        worker = Worker(ctx, run_registry)
+        # Per-repo run registries — each repo's audit/health/etc. run
+        # log lands in <data_dir>/<board_id>/runs.json so the operator
+        # can inspect a single repo's history without filtering. A
+        # one-shot migration moves a pre-existing legacy global
+        # <data_dir>/runs.json into each repo by entry.repo_id and
+        # renames the source.
+        db.migrate_legacy_runs(settings)
+        run_registries: dict[str, RunRegistry] = {
+            rc.board_id: RunRegistry(
+                settings.data_dir / rc.board_id / "runs.json",
+            )
+            for rc in repos.repos.values()
+        }
+        # Default registry for the worker's own (board-less) periodic
+        # ticks — points at the lead repo's registry so legacy
+        # callers without repo context still record somewhere.
+        default_registry = run_registries[repo_config.board_id]
+        worker = Worker(ctx, default_registry)
         app.state.settings = settings
         app.state.service = service
         app.state.worker = worker
-        app.state.run_registry = run_registry
+        app.state.run_registry = default_registry
+        app.state.run_registries = run_registries
         app.state.deep_review_results = {}
         app.state.deep_review_store = DeepReviewStore(
             settings.data_dir / "deep_review_results.json"
