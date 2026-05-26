@@ -8,6 +8,38 @@ immediately. The only time it touches GitHub/GitLab is the final
 
 **Status:** Full pipeline runs end-to-end.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## What is robotsix-mill?
+
+robotsix-mill is a **self-contained, LLM-driven ticket-to-merge-request
+pipeline**. It is not a CI plugin, a scheduler, or a webhook handler —
+the mill *is* the orchestrator. Emit a ticket and it runs the full
+autonomous pipeline: refine the spec → wait for human approval →
+implement the change → deliver the merge request → merge once CI is green.
+
+**Core design principles**
+
+- **Self-contained.** No forge webhooks, no CI plugins, no external
+  scheduler. The mill polls its own SQLite-backed task queue and drives
+  the pipeline from end to end.
+- **Autonomous pipeline.** Each ticket proceeds through refine →
+  approve → implement → deliver → merge, with a human gate after
+  refine. Everything after approval runs hands-off.
+- **SQLite management plane.** All ticket state, run logs, and cost
+  tracking live in a single SQLite database — zero external DB
+  dependencies.
+- **Containerized agents.** Every agent runs in a disposable Docker
+  container (`--network none`, non-root, read-only rootfs). The host
+  filesystem is protected by path confinement.
+
+**Scope and tone**
+
+This is a solo/hobby project — no SLAs, no enterprise ceremony, no
+compliance theatre. It is provided as-is, built for a single developer
+and their AI assistant. See [SECURITY.md](SECURITY.md) for the
+pragmatic security stance.
+
 ## Configuration
 
 Settings are managed through a YAML pipeline (see
@@ -29,51 +61,61 @@ Settings are managed through a YAML pipeline (see
 The loading order is: YAML defaults → YAML local → YAML production →
 environment variables (highest).
 
-## Quickstart
+## Getting started
 
-### Docker (recommended)
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) (agents run in disposable containers).
+- Python 3.14 (for local dev; not needed if using Docker exclusively).
+
+### 1. Clone and configure
 
 ```sh
+git clone https://github.com/damien-robotsix/robotsix-mill.git
+cd robotsix-mill
 cp config/secrets.example.yaml config/secrets.yaml       # set openrouter_api_key
 cp config/repos.example.yaml config/repos.yaml           # edit: add your repo
-docker compose up -d --build                             # defaults to MILL_REPO_ID=robotsix-mill;
-                                                         # edit docker-compose.yml or pass -e MILL_REPO_ID=... to override
+```
+
+### 2. Start the server
+
+**Docker (recommended):**
+
+```sh
+docker compose up -d --build
 ```
 
 Open `http://localhost:8077` — the ticket board is the primary interface.
 
-By default the server loads **all** repos from `config/repos.yaml` and
-serves them together (multi-repo mode).  The board UI shows a repo
-selector dropdown that filters tickets, runs, and costs to the selected
-repo; choose "All repos" to see everything at once.  To scope the process
-to a single repo — useful for tests or dev — pass `--repo-id <id>` or set
-the `MILL_REPO_ID` environment variable.  In single-repo mode the
-selector still appears but shows only the one repo.  The compose file
-defaults to `MILL_REPO_ID=robotsix-mill` (single-repo override); remove
-the env var to run in multi-repo mode.  See
-[docs/configuration.md#repos-registry](docs/configuration.md#repos-registry).
+**Local dev (hot-reload):**
 
 ```sh
-docker compose exec mill robotsix-mill repos list
+make install                    # venv + editable install
+MILL_REPO_ID=my-repo make dev   # hot-reload on http://127.0.0.1:8077
+```
+
+### 3. Create your first ticket
+
+```sh
+# Docker:
 docker compose exec mill robotsix-mill ticket new --title "Add X" --description-file -
+
+# Local:
+.venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
+```
+
+The pipeline runs automatically from here. Other useful commands:
+
+```sh
+# Docker:
+docker compose exec mill robotsix-mill repos list
 docker compose exec mill robotsix-mill ticket list
 docker compose exec mill robotsix-mill ticket show <id>
 docker compose exec mill robotsix-mill ticket approve <id>
 docker compose exec mill robotsix-mill audit
 docker compose exec mill robotsix-mill trace-health
-```
 
-### Local dev (no Docker)
-
-```sh
-cp config/secrets.example.yaml config/secrets.yaml       # set openrouter_api_key
-cp config/repos.example.yaml config/repos.yaml           # edit: add your repo
-make install                    # venv + editable install
-MILL_REPO_ID=my-repo make dev   # hot-reload on http://127.0.0.1:8077
-```
-
-```sh
-.venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
+# Local:
 .venv/bin/robotsix-mill ticket list
 .venv/bin/robotsix-mill ticket show <id>
 .venv/bin/robotsix-mill ticket approve <id>
@@ -84,6 +126,9 @@ make test
 
 Running the pipeline needs Docker (agents run in disposable containers);
 `make test` works without it.
+
+Configuration loading order, multi-repo mode, and the full settings
+reference are covered in [docs/configuration.md](docs/configuration.md).
 
 ## Documentation
 
@@ -113,4 +158,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+robotsix-mill is licensed under the [MIT License](LICENSE).
+Copyright (c) 2026 Damien Robotsix. See [LICENSE](LICENSE) for the full text.
