@@ -792,7 +792,9 @@ async function open_(id){
  // 2. Show skeleton placeholder while data loads
  const afterBody=gatesCache.comments_after_body;
  const skW=(w,h)=>`<div class="sk-block" style="width:${w};height:${h}"></div>`;
- document.getElementById("d").innerHTML='<div class="drawer-skeleton">'+
+ document.getElementById("d").innerHTML=
+  '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+  '<div class="drawer-skeleton">'+
   skW('70%','18px')+skW('30%','12px')+skW('90%','12px')+
   '<div class="sk-label"></div>'+skW('100%','14px')+skW('80%','14px')+
   '<div class="sk-label"></div>'+skW('90%','10px')+skW('70%','10px')+
@@ -860,7 +862,9 @@ async function open_(id){
   if(!t){document.getElementById("d").innerHTML='<div class="muted">Ticket not found</div>';return}
   tData=t;
   document.getElementById("d").innerHTML=
-   `<div id="ticket-header">`+
+   '<div class="drawer-sticky-head">'+
+   '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+   '<div id="ticket-header">'+
    `<h3>${esc(t.title)}</h3>`+
    `<div class="muted">${t.id}</div>`+
    `<p>state <b class="s-${t.state}" style="border-left:3px solid var(--c);padding-left:6px">${t.state}</b>`+
@@ -883,6 +887,7 @@ async function open_(id){
    (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id)}</span></p>`:"")+
    (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button> <button class="add-comment-btn" style="background:#2563eb;color:#fff" onclick="newChildTicket('${t.id}')">Add Ticket</button></p>`:"")+
    `<div id="ticket-action-buttons">${_actionButtonsHtml(t)}</div>`+
+   `</div>`+
    `</div>`+
    `<div id="ticket-children"><div class="sk-label"></div>${skW('60%','12px')}</div>`+
    `<div id="ticket-history"><div class="sk-label"></div>${skW('90%','10px')}${skW('70%','10px')}</div>`+

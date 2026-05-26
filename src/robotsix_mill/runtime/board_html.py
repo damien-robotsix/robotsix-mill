@@ -95,7 +95,7 @@ margin-left:4px">
 </button>
 </header>
 <div id="board"></div>
-<div id="drawer"><span class="x" onclick="close_()">&times;</span><div id="d"></div></div>
+<div id="drawer"><div id="d"><div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js"></script>
 <script>const ST={ST_STATES};</script>
 <script src="/static/board.js"></script></body></html>"""
