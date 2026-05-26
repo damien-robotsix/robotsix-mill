@@ -1162,7 +1162,15 @@ def list_runs(
             )
         else:
             # Filter entries that carry a repo_id matching the request.
-            entries = [e for e in entries if e.get("repo_id") == repo_id]
+            # Empty repo_id is treated as "applies to any repo" — covers
+            # legacy entries filed before per-repo tagging landed plus
+            # global runs from periodic agents that don't carry a
+            # repo_id today. Strict equality on a non-empty filter would
+            # hide every pre-wiring run in single-repo deployments.
+            entries = [
+                e for e in entries
+                if e.get("repo_id") == repo_id or not e.get("repo_id")
+            ]
     return entries
 
 
