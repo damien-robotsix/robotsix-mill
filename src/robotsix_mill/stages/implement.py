@@ -162,6 +162,7 @@ class ImplementStage(Stage):
                     feedback=feedback, memory=memory_text,
                     reference_files=reference_files,
                     previous_attempt_summary=previous_attempt_summary,
+                    file_map=file_map,
                 )
             except AgentBudgetError as e:
                 ImplementStage._finalize(

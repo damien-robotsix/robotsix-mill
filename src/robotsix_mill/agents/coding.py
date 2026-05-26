@@ -50,6 +50,7 @@ def run_implement_agent(
     memory: str = "",
     epic_context: str = "",
     previous_attempt_summary: str | None = None,
+    file_map: set[str] | None = None,
 ) -> tuple[str, list[str], str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory)``.
@@ -65,19 +66,38 @@ def run_implement_agent(
     message history passed through to the coordinator unchanged.
     ``previous_attempt_summary`` — the coordinator's summary from a
     prior pass, injected as a ``<previous_attempt>`` block on retries
-    so the model doesn't undo its prior correct work."""
+    so the model doesn't undo its prior correct work.
+    ``file_map`` — set of in-scope file paths from the ticket's
+    ``file_map.json``. When non-empty AND expert definitions exist on
+    disk, dispatch through :func:`run_coordinator_with_experts` which
+    routes each domain's matching files to its own expert agent. When
+    None / empty / no matching experts, falls back transparently to
+    :func:`run_coordinator` — no behaviour change for callers that
+    don't supply a file_map."""
     from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
-    from .coordinating import run_coordinator
+    from .coordinating import run_coordinator, run_coordinator_with_experts
 
-    try:
-        result = run_coordinator(
+    def _run_primary():
+        if file_map:
+            return run_coordinator_with_experts(
+                settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
+                feedback=feedback, epic_context=epic_context,
+                reference_files=reference_files,
+                message_history=message_history,
+                previous_attempt_summary=previous_attempt_summary,
+                file_map=file_map,
+            )
+        return run_coordinator(
             settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
             feedback=feedback, epic_context=epic_context,
             reference_files=reference_files,
             message_history=message_history,
             previous_attempt_summary=previous_attempt_summary,
         )
+
+    try:
+        result = _run_primary()
     except UsageLimitExceeded as e:
         raise AgentBudgetError(str(e), []) from e
     except UnexpectedModelBehavior as e:

@@ -76,7 +76,7 @@ def _write_file_map(ctx, ticket, *files):
 
 
 def _fake_agent(write: dict | None):
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path, previous_attempt_summary  # signature must match the seam
         if write:
             for name, content in write.items():
@@ -290,7 +290,7 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     )
     calls = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, reference_files, message_history, memory, epic_workspace_path  # seam signature
         calls.append(feedback)
         (Path(repo_dir) / "wip.txt").write_text("did work")
@@ -327,7 +327,7 @@ def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypat
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         (Path(repo_dir) / "partial.txt").write_text("half done")
         raise coding.AgentBudgetError("request_limit of 50", [])
@@ -356,7 +356,7 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
     n = {"i": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         n["i"] += 1
         if n["i"] == 1:  # first pass: partial work, hit the cap
@@ -447,7 +447,7 @@ def test_fresh_clone_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monke
     seen_files: list[str] = []
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         # Record what the agent can see in the working tree.
         for p in sorted(Path(repo_dir).iterdir()):
@@ -484,7 +484,7 @@ def test_resume_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monkeypatc
     seen_files: list[list[str]] = [[], []]
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         idx = n["i"]
         n["i"] += 1
@@ -531,7 +531,7 @@ def test_rebase_conflict_blocks_on_resume(ctx_factory, tmp_path, monkeypatch):
     n = {"i": 0}
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         n["i"] += 1
         if n["i"] == 1:
@@ -592,7 +592,7 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
     agent_called = []
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         return ("done", [], "")
@@ -625,7 +625,7 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
@@ -748,7 +748,7 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
@@ -772,7 +772,7 @@ def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, mo
     _write_file_map(ctx, t, "feature.txt")
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
@@ -802,7 +802,7 @@ def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, mo
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
@@ -831,7 +831,7 @@ def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_p
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
@@ -869,7 +869,7 @@ def test_scope_violation_blocks_ticket(ctx_factory, tmp_path, monkeypatch):
     call_count = {"n": 0}
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         call_count["n"] += 1
         # Write wip.txt (in-scope) AND modify README.md (out-of-scope)
@@ -936,7 +936,7 @@ def test_scope_check_skipped_when_no_file_map(ctx_factory, tmp_path, monkeypatch
     agent_called = []
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
@@ -972,7 +972,7 @@ def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypa
     agent_called = []
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
@@ -1013,7 +1013,7 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
     call_count = {"n": 0}
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         call_count["n"] += 1
         (Path(repo_dir) / "wip.txt").write_text("in scope")
@@ -1059,7 +1059,7 @@ def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):
     )
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
@@ -1101,7 +1101,7 @@ def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
     )
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
@@ -1147,7 +1147,7 @@ def test_scope_triage_disabled_falls_through(ctx_factory, tmp_path, monkeypatch)
     call_count = {"n": 0}
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         call_count["n"] += 1
         (Path(repo_dir) / "wip.txt").write_text("in scope")
@@ -1179,7 +1179,7 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
     )
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
@@ -1218,7 +1218,7 @@ def test_post_edit_reference_files_persisted(ctx_factory, tmp_path, monkeypatch)
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
              message_history=None, memory="", epic_workspace_path=None,
-             previous_attempt_summary=None):
+             previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path, previous_attempt_summary
         agent_called.append(1)
         # Agent edits a file AND curates a list that includes an
@@ -1266,7 +1266,7 @@ def test_reference_files_reloaded_on_retry(ctx_factory, tmp_path, monkeypatch):
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
              message_history=None, memory="", epic_workspace_path=None,
-             previous_attempt_summary=None):
+             previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, message_history, memory, epic_workspace_path, previous_attempt_summary
         captured_refs.append(reference_files)
         (Path(repo_dir) / "wip.txt").write_text("post-edit pass content")
@@ -1304,7 +1304,7 @@ def test_summary_included_in_retry_feedback(ctx_factory, tmp_path, monkeypatch):
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
              message_history=None, memory="", epic_workspace_path=None,
-             previous_attempt_summary=None):
+             previous_attempt_summary=None, **_kwargs):
         del settings, spec, reference_files, message_history, memory, epic_workspace_path
         captured_feedback.append(feedback)
         captured_prev_summaries.append(previous_attempt_summary)
@@ -1347,7 +1347,7 @@ def test_persistence_without_file_map_still_writes(ctx_factory, tmp_path, monkey
     agent_called = []
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None):
+             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
