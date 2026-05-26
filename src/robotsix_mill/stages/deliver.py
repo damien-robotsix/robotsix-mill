@@ -4,10 +4,6 @@ Push the ticket's branch to the configured forge and open a PR/MR
 against ``FORGE_TARGET_BRANCH``. The forge adapter only does the API
 call; this stage owns the git push (it has the workspace clone).
 
-The ticket enters ``IMPLEMENT_COMPLETE`` (not ``HUMAN_MR_APPROVAL``)
-so the merge stage verifies CI and mergeability gates before notifying
-the human.
-
 Anything that isn't success is BLOCKED-resumable (move back to
 DELIVERABLE to retry) — never terminal FAILED, so a transient forge/
 network problem doesn't lose the implemented branch. The PR URL is
@@ -93,6 +89,5 @@ class DeliverStage(Stage):
             encoding="utf-8",
         )
         log.info("%s: delivered → %s", ticket.id, url)
-        # PR opened — merge stage verifies CI & mergeability gates
-        # before notifying the human.
+        # PR opened — gates not yet verified; merge stage will poll
         return Outcome(State.IMPLEMENT_COMPLETE, f"PR: {url}")

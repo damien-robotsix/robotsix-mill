@@ -126,7 +126,7 @@ class CIFixStage(Stage):
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion in ("pending", None):
-            # Not yet complete; re-poll from implement_complete.
+            # Not yet complete; re-poll from human_mr_approval.
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion != "failure":
@@ -213,7 +213,7 @@ class CIFixStage(Stage):
             # Reset counter on success.
             _write_counter(counter_path, 0)
             log.info("%s: ci fix succeeded, branch force-pushed", ticket.id)
-            return Outcome(State.IMPLEMENT_COMPLETE)  # re-verify gates on next poll
+            return Outcome(State.IMPLEMENT_COMPLETE)  # re-check CI on next poll
 
         # Agent failed.
         if attempt < max_attempts:

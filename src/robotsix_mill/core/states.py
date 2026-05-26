@@ -6,27 +6,31 @@ tickets in that state and transitions them onward. ``ERRORED`` and
 errors or escalates; they require human attention before re-entering the
 pipeline. ``HUMAN_ISSUE_APPROVAL`` is a human-wait state between refine
 and implement — it has no stage owner and pauses the chain until a human
-approves. ``IMPLEMENT_COMPLETE`` is a gating state between
+approves. ``IMPLEMENT_COMPLETE`` is an active state between
 ``DELIVERABLE`` and ``HUMAN_MR_APPROVAL``: the PR exists but CI and
-mergeability have not been verified. The merge stage polls it and
-promotes to ``HUMAN_MR_APPROVAL`` only when both gates pass; on CI
-failure it transitions to ``FIXING_CI``; on conflict it transitions to
-``REBASING``. ``WAITING_AUTO_MERGE`` is an active state between
+mergeability gates have not been verified yet. The merge stage polls it
+and promotes the ticket to ``HUMAN_MR_APPROVAL`` (notifying the human)
+only when both CI is green and the PR is mergeable. If either gate
+degrades while the ticket is in ``HUMAN_MR_APPROVAL``, the merge stage
+silently falls back to ``IMPLEMENT_COMPLETE`` so the robot can auto-fix
+before re-notifying. ``WAITING_AUTO_MERGE`` is an active state between
 ``HUMAN_MR_APPROVAL`` and ``DONE``: the merge stage detects a mergeable PR
 whose CI is pending and auto-merge is eligible, then on each poll
 re-checks CI; when CI goes green it auto-merges to ``DONE``, on CI
-failure it transitions to ``IMPLEMENT_COMPLETE``, and on eligibility
-changes it returns to ``HUMAN_MR_APPROVAL``. ``REBASING`` is an active
-state between ``IMPLEMENT_COMPLETE`` and ``IMPLEMENT_COMPLETE``: the merge
-stage detects a conflicting PR and transitions to ``REBASING``, then on
-the next poll runs the rebase agent and force-pushes the ticket branch.
-On success it returns to ``IMPLEMENT_COMPLETE``; on temporary failure it
-stays in ``REBASING`` for a retry; on exhaustion it escalates to
-``BLOCKED``. ``FIXING_CI`` is an active state between
-``IMPLEMENT_COMPLETE`` and ``IMPLEMENT_COMPLETE``: the merge stage detects
-a mergeable PR with failing CI and transitions to ``FIXING_CI``, then on
+failure or conflict it falls back to ``IMPLEMENT_COMPLETE``, and on
+eligibility changes it
+returns to ``HUMAN_MR_APPROVAL``. ``REBASING`` is an active state between
+``IMPLEMENT_COMPLETE`` and ``IMPLEMENT_COMPLETE``: the merge stage detects a
+conflicting PR and transitions to ``REBASING``, then on the next poll
+runs the rebase agent and force-pushes the ticket branch. On success it
+returns to ``IMPLEMENT_COMPLETE`` for gate re-verification; on temporary
+failure it stays in ``REBASING`` for a retry; on exhaustion it escalates
+to ``BLOCKED``. ``FIXING_CI`` is an active state between
+``IMPLEMENT_COMPLETE`` and ``IMPLEMENT_COMPLETE``: the merge stage detects a
+mergeable PR with failing CI and transitions to ``FIXING_CI``, then on
 the next poll runs the CI-fix agent. On success it returns to
-``IMPLEMENT_COMPLETE``; on failure it escalates to ``BLOCKED``.
+``IMPLEMENT_COMPLETE`` for gate re-verification; on failure it escalates
+to ``BLOCKED``.
 
 When a ticket is blocked, the state it was blocked *from* is recorded
 (``Ticket.blocked_from``). A human can **resume** the blocked ticket
@@ -48,8 +52,8 @@ class State(StrEnum):
     DOCUMENTING = "documenting"  # implemented; documentation agent updating docs
     CODE_REVIEW = "code_review"  # documented; awaiting automated code review
     DELIVERABLE = "deliverable"  # reviewed; awaiting MR delivery
-    IMPLEMENT_COMPLETE = "implement_complete"  # PR open; CI/mergeability gates not yet verified
     HUMAN_MR_APPROVAL = "human_mr_approval"   # PR/MR open; awaiting human merge
+    IMPLEMENT_COMPLETE = "implement_complete"  # PR open; CI/mergeability gates not yet verified
     WAITING_AUTO_MERGE = "waiting_auto_merge"  # PR open + CI pending; auto-merge when green
     REBASING = "rebasing"     # conflicting PR; rebase agent in progress
     FIXING_CI = "fixing_ci"   # PR open + failing CI; auto-fix in progress
@@ -80,23 +84,22 @@ TRANSITIONS: dict[State, set[State]] = {
     State.CODE_REVIEW: {State.DOCUMENTING, State.READY, State.ERRORED, State.BLOCKED},
     # documenting always routes to deliverable — review already happened.
     State.DOCUMENTING: {State.DELIVERABLE, State.ERRORED, State.BLOCKED},
-    # deliver stage opens PR → implement_complete for gate verification.
     State.DELIVERABLE: {State.IMPLEMENT_COMPLETE, State.ERRORED, State.BLOCKED},
-    # implement_complete: merge stage polls gates → human_mr_approval (both
-    # pass), fixing_ci (CI failing), rebasing (conflicting), or waiting_auto_merge
-    # (CI pending, auto-merge eligible).
+    # implement_complete: merge stage polls gates (CI + mergeability).
+    # Both gates green → human_mr_approval (notify human).  CI failing →
+    # fixing_ci; conflicting → rebasing; CI pending → same-state re-poll.
     State.IMPLEMENT_COMPLETE: {
         State.HUMAN_MR_APPROVAL,
         State.FIXING_CI,
         State.REBASING,
         State.WAITING_AUTO_MERGE,
         State.DONE,
-        State.ERRORED,
         State.BLOCKED,
+        State.ERRORED,
     },
-    # PR open + gates verified: merge stage polls -> merged=done,
-    # closed-unmerged=blocked, CI failure/conflict falls back silently
-    # to implement_complete (no human re-notification).
+    # PR open in human review: merge stage polls → merged=done,
+    # closed-unmerged=blocked, gates degrade → implement_complete
+    # (silent fallback — no human re-notification).
     State.HUMAN_MR_APPROVAL: {
         State.DONE,
         State.WAITING_AUTO_MERGE,
@@ -105,7 +108,8 @@ TRANSITIONS: dict[State, set[State]] = {
         State.BLOCKED,
     },
     # waiting_auto_merge: merge stage polls CI; when green → done (auto-merge),
-    # on CI failure → implement_complete, on eligibility change → human_mr_approval.
+    # on CI failure or conflict → implement_complete (gate re-check),
+    # on eligibility change → human_mr_approval.
     State.WAITING_AUTO_MERGE: {
         State.DONE,
         State.IMPLEMENT_COMPLETE,
@@ -113,11 +117,10 @@ TRANSITIONS: dict[State, set[State]] = {
         State.ERRORED,
         State.BLOCKED,
     },
-    # rebasing: merge stage runs rebase agent -> back to implement_complete
-    # for gate re-verification; retry on failure; block on exhaustion.
+    # rebasing: merge stage runs rebase agent → back to implement_complete on
+    # success (re-verify gates), retry on failure, block on exhaustion.
     State.REBASING: {State.IMPLEMENT_COMPLETE, State.READY, State.ERRORED, State.BLOCKED},
-    # ci fix: on success -> implement_complete for gate re-verification;
-    # on failure -> blocked; on crash -> errored.
+    # ci fix: on success → implement_complete (re-verify gates); on failure → blocked; on crash → errored.
     State.FIXING_CI: {State.IMPLEMENT_COMPLETE, State.BLOCKED, State.ERRORED},
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED},
