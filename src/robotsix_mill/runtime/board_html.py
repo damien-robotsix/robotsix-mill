@@ -56,6 +56,11 @@ background:#84cc16;color:#000;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Completeness
 </button>
+<button onclick="runCostReconciliation()" style="font-size:11px;padding:3px 10px;
+background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;
+margin-left:4px">
+  Cost Recon
+</button>
 <button onclick="runEnvSync()" style="font-size:11px;padding:3px 10px;
 background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
