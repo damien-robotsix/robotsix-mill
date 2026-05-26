@@ -29,11 +29,17 @@ jobs:
       - name: Install project + tracing extras
         run: .venv/bin/pip install ".[tracing]"
 
-      - uses: pypa/gh-action-pip-audit@v1.1.0
-        with:
-          virtual-environment: .venv/
-          local: true
-          inputs: .
+      - name: Install pip-audit
+        run: .venv/bin/pip install "pip-audit>=2.5.6"
+
+      - name: Audit installed packages
+        run: |
+          .venv/bin/pip-audit \
+            --path . \
+            --vulnerability-service pypi \
+            --ignore-vuln PYSEC-2025-183 \
+            --ignore-vuln MAL-2026-4750
+        env:
           # PYSEC-2025-183 (pyjwt): "weak encryption" advisory disputed
           # by the supplier — the algorithm strength is determined by
           # the *key* the caller supplies, not by pyjwt itself. No fix
@@ -42,4 +48,9 @@ jobs:
           # transitive dep (langfuse → pyjwt for OTel auth signing);
           # mill does not call its signing API directly. Re-evaluate
           # if a fix version is ever published.
-          ignore-vulns: PYSEC-2025-183
+          #
+          # MAL-2026-4750 (fastapi 0.136.3): undocument "fastar" dep
+          # injected into fastapi[standard] extras on PyPI.  mill
+          # depends on "fastapi>=0.115" (no extras), so fastapi[standard]
+          # is never installed & the malicious dep is never pulled.
+          GHA_PIP_AUDIT_INTERNAL_BE_CAREFUL_ALLOW_FAILURE: false
