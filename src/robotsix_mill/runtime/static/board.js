@@ -165,7 +165,6 @@ async function refresh(){
  document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed)).map(s=>`<div class="col">
   <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
-   <button class="del-btn" title="Delete ticket" onclick="event.stopPropagation();del_('${t.id}')">✕</button>
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
    ${repoId==="all"&&t.board_id?`<span class="repo-badge">${esc(repoIdForBoardId(t.board_id))}</span>`:""}
    ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
@@ -173,13 +172,6 @@ async function refresh(){
    ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:""}
    <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${t.retry_attempt>0?`<span class="retry-chip" title="${esc(t.last_transient_error||'')}">retry ${t.retry_attempt}${t.next_retry_at?` · next ${fmtRelative(t.next_retry_at)}`:''}</span>`:''}`+
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
-   (s==="human_mr_approval"?
-    `<button class="merge-btn" data-ticket-id="${t.id}" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`:"")+
-   (s==="human_issue_approval"?
-    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
-    `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
-   (!['draft','human_issue_approval','closed','answered','epic_closed','epic_open'].includes(s)?
-    `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
    `</div>`)
   .join("")+`</div></div>`).join("");
 }
@@ -770,6 +762,12 @@ async function open_(id){
      `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(ms.reason||'not mergeable')}</p>`:
      `<button class="merge-btn" data-ticket-id="${t.id}" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`
     ):"")+
+   (t.state==="human_issue_approval"?
+    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
+    `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
+   (!['draft','human_issue_approval','closed','answered','epic_closed','epic_open'].includes(t.state)?
+    `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
+   `<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_('${t.id}')">✕</button>`+
    (mr&&mr.reason?
     `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")+
    (t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"")+

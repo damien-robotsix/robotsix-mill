@@ -134,7 +134,7 @@ detail.
 **Dimensions:**
 - Height: 60–80 px (configurable CSS `min-height` / `max-height`).
 - Width: fills the drawer content area (constrained by `.cost-bar-row`
-  flexbox, ~560 px in the 720 px drawer minus padding).
+  flexbox, ~700 px in the 900 px drawer minus padding).
 
 **Rendering:**
 - Use an HTML `<canvas>` element with id `cost-sparkline`.
@@ -234,7 +234,6 @@ the epics special-case.
 
 ```
 ┌──────────────────────────────────────────┐
-│  ✕                                       │
 │  Add retry logic to implement agent      │
 │  abc123de                                │
 │  user                      $0.0123/0.0456│  ← split badge

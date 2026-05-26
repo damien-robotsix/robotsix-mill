@@ -23,7 +23,7 @@ In both paths, once the rebase agent runs:
 - On success the ticket branch is force-pushed.
   - If a PR already exists for the branch, the ticket returns to
     `HUMAN_MR_APPROVAL` for the next poll to observe the now-mergeable PR.
-    Click the **Merge** button on the board card (or call
+    Click the **Merge** button in the ticket detail drawer (or call
     `POST /tickets/{id}/merge-now`) to merge via the forge. The detail
     drawer shows a **Merge Info** panel with CI status, mergeable flag,
     and changed files — see [approval-gate.md](approval-gate.md) for

@@ -11,8 +11,8 @@ tickets to `awaiting_approval` instead of `ready`. The pipeline pauses
 until a human approves, giving you a chance to review the refined spec
 before the implement stage starts. Approve via:
 
-- **Web board:** click the "Approve" button on any card in the
-  `awaiting_approval` column.
+- **Web board:** open the ticket and click the "Approve" button in the
+  detail drawer.
 - **CLI:** `robotsix-mill ticket approve <id>`
 - **API:** `POST /tickets/{id}/approve`
 
@@ -55,8 +55,8 @@ The human approves the merge by clicking **Merge**, which calls the
 forge's merge API immediately — identical to clicking "Merge pull
 request" on GitHub.
 
-- **Web board:** click the green **Merge** button on the card, or in the
-  ticket-detail drawer.
+- **Web board:** click the green **Merge** button in the ticket-detail
+  drawer.
 - **API:** `POST /tickets/{id}/merge-now`
 
 On success the ticket transitions directly to `done` and retrospect runs.
@@ -75,10 +75,6 @@ mergeability and CI conclusion:
 - **Mergeable + green CI** → button is active and clickable
 - **Transient forge error** → button stays active (optimistic; the
   `merge-now` endpoint handles the actual rejection)
-
-The card-level Merge button does **not** perform this live check — it
-renders optimistically and the merge stage's poll loop transitions
-tickets to `REBASING` / `FIXING_CI` when it detects problems.
 
 The drawer also calls `GET /tickets/{id}/merge-reason` to display an
 amber annotation explaining *why* auto-merge is ineligible when it is.
@@ -106,3 +102,4 @@ break the others.
 
 - [index.md](index.md) — documentation home
 - [docs/configuration.md](configuration.md) — full env-var reference
+eference
