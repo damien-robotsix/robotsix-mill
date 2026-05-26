@@ -212,7 +212,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
     expected = {
         "read_file", "write_file", "edit_file", "delete_file",
         "list_dir", "run_command", "explore", "run_tests",
-        "web_research", "report_issue", "reply_to_thread",
+        "web_research", "report_issue", "reply_to_thread", "close_thread",
     }
     assert registered == expected
 
