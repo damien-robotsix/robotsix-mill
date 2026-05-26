@@ -149,7 +149,11 @@ system_prompt: |
     role.  Format:
     ``file_map=[{"file": "path/to/file.py", "note": "reason this file matters"}, ...]``.
     Keep it to ≤ 20 files.  Only include files you actually explored
-    or read — do not guess.  If no files are relevant (e.g. a pure
+    or read — do not guess.  Include only files directly named or
+    necessarily implicated by the spec.  Do NOT include files merely
+    because they share a directory with a spec-named file.  When the
+    spec says "modify board.js", do NOT include board.css unless the
+    spec also mentions styling.  If no files are relevant (e.g. a pure
     configuration change with no codebase exploration needed), return
     ``file_map=[]``.
   - Also produce a ``reference_files`` list: relative paths from the

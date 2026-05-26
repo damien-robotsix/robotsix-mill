@@ -445,8 +445,11 @@ def test_auto_approve_triage_failure_falls_back_to_human(ctx_factory, monkeypatc
 # ---------------------------------------------------------------------------
 
 def test_refine_triage_skip_bypasses_agent(ctx_factory, monkeypatch):
+    """When triage returns SKIP and the draft contains backtick-quoted
+    file paths, the refine agent is bypassed and those paths are written
+    to file_map.json (fast path preserved)."""
     ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="true")
-    t = _ticket(ctx, body="Add docstring to foo() in src/bar.py")
+    t = _ticket(ctx, body="Add docstring to foo() in `src/bar.py`")
 
     agent_called = []
     monkeypatch.setattr(refining, "run_refine_agent",
@@ -465,6 +468,58 @@ def test_refine_triage_skip_bypasses_agent(ctx_factory, monkeypatch):
     assert "triage SKIP" in out.note
     ws = ctx.service.workspace(t)
     assert (ws.artifacts_dir / "draft-original.md").exists()
+    # Fast path: file_map.json was written from extracted paths.
+    file_map_path = ws.artifacts_dir / "file_map.json"
+    assert file_map_path.exists()
+    file_map = json.loads(file_map_path.read_text(encoding="utf-8"))
+    assert len(file_map) == 1
+    assert file_map[0]["file"] == "src/bar.py"
+    assert file_map[0]["note"] == "from draft"
+
+
+# ---------------------------------------------------------------------------
+# 14b. refine triage SKIP + no paths → falls through to refine agent
+# ---------------------------------------------------------------------------
+
+def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkeypatch):
+    """When triage returns SKIP but the draft has no backtick-quoted
+    file paths, do NOT write an empty file_map — fall through to the
+    refine agent instead so it can produce a proper file_map."""
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="true")
+    # Draft with no backtick-quoted paths (bare filename with no
+    # directory separator won't match the regex).
+    t = _ticket(ctx, body="Add docstring to foo() in bar.py")
+
+    refine_called = []
+    monkeypatch.setattr(
+        refining, "run_refine_agent",
+        lambda *a, **k: (
+            refine_called.append(1),
+            RefineResult(
+                spec_markdown="## Problem\nDone",
+                file_map=[refining.FileMapEntry(file="src/bar.py", note="main module")],
+            ),
+        )[-1],
+    )
+    monkeypatch.setattr(refining, "triage_refine",
+                        _mock_triage_refine(decision="SKIP", reason="already precise"))
+    monkeypatch.setattr(dedup, "run_dedup_check",
+                        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"))
+    monkeypatch.setattr(refine_module, "load_memory", lambda memory_file, max_chars=None: "")
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+
+    out = RefineStage().run(t, ctx)
+
+    # Refine agent WAS called — not bypassed.
+    assert len(refine_called) == 1
+    assert out.next_state is State.READY
+    ws = ctx.service.workspace(t)
+    # file_map.json was written by the refine agent, not an empty [].
+    file_map_path = ws.artifacts_dir / "file_map.json"
+    assert file_map_path.exists()
+    file_map = json.loads(file_map_path.read_text(encoding="utf-8"))
+    assert len(file_map) == 1
+    assert file_map[0]["file"] == "src/bar.py"
 
 
 # ---------------------------------------------------------------------------
