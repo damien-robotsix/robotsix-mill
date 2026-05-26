@@ -168,6 +168,27 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
     )
 
 
+def reset_branch_to_target(
+    repo: Path,
+    branch: str,
+    target_branch: str,
+    remote_url: str,
+    token: str | None,
+) -> None:
+    """Force-reset *branch* to ``origin/<target_branch>`` and push.
+
+    Fetches *target_branch* from *remote_url*, checks out *branch*,
+    hard-resets it to ``origin/<target_branch>``, and force-pushes.
+    This effectively deletes the branch's changes — used for
+    autoreverting unfixable CI failures.
+    """
+    authed = _authed_url(remote_url, token)
+    _git(repo, "fetch", authed, target_branch)
+    _git(repo, "checkout", branch)
+    _git(repo, "reset", "--hard", f"origin/{target_branch}")
+    push(repo, branch=branch, remote_url=remote_url, token=token)
+
+
 def branch_is_ahead_of_main(repo: Path) -> bool:
     """Return True when HEAD has commits not in origin/main.
 

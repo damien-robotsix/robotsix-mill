@@ -584,6 +584,14 @@ class Settings(BaseSettings):
         default=2, alias="MILL_CI_FIX_MAX_ATTEMPTS"
     )
 
+    # When the categorizer deems a CI failure unfixable (env_error,
+    # unknown), whether to force-revert the PR branch to the target
+    # branch tip.  Default True — set to false to only skip fix
+    # attempts without reverting.
+    ci_autorevert: bool = Field(
+        default=True, alias="MILL_CI_AUTOREVERT"
+    )
+
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(
         default=2, alias="MILL_REVIEW_REVISION_MAX_ATTEMPTS"

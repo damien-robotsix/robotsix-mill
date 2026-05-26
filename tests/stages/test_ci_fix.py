@@ -17,6 +17,19 @@ from robotsix_mill.stages.ci_fix import (
 from robotsix_mill.agents.ci_fixing import CiFixResult
 
 
+@pytest.fixture(autouse=True)
+def _default_categorizer(monkeypatch):
+    """Default: categorizer returns 'test_failure' (fixable).
+
+    Individual tests that need different categories override this by
+    setting their own monkeypatch for the same target.
+    """
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.categorize_ci_failure",
+        lambda **k: "test_failure",
+    )
+
+
 def _ctx(tmp_path, **env):
     db.reset_engine()
     env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
@@ -504,3 +517,278 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
 
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+# ---------------------------------------------------------------------------
+# Categorizer integration — fixable categories proceed to agent
+# ---------------------------------------------------------------------------
+
+def test_fixable_category_proceeds_to_agent(tmp_path, monkeypatch):
+    """test_failure, type_error, lint_error, build_error → agent runs."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "test", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    agent_called = {}
+
+    def fake_agent(**k):
+        agent_called["called"] = True
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent", fake_agent,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.categorize_ci_failure",
+        lambda **k: "test_failure",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_called.get("called") is True
+
+
+# ---------------------------------------------------------------------------
+# Unfixable category (env_error) with autorevert → BLOCKED, agent not called
+# ---------------------------------------------------------------------------
+
+def test_env_error_autorevert_blocks_and_resets_counter(tmp_path, monkeypatch):
+    """env_error with ci_autorevert=True (default) → agent skipped, autorevert, BLOCKED."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "docker", "summary": "rate limit", "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    agent_called = {}
+
+    def fake_agent(**k):
+        agent_called["called"] = True
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent", fake_agent,
+    )
+    reset_calls = {}
+
+    def fake_reset(repo, branch, target_branch, remote_url, token):
+        reset_calls.update(
+            branch=branch, target_branch=target_branch,
+            remote_url=remote_url, token=token,
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.reset_branch_to_target",
+        fake_reset,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.categorize_ci_failure",
+        lambda **k: "env_error",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "env_error" in out.note
+    assert "Autorevert applied" in out.note
+    # Agent must NOT have been called.
+    assert agent_called.get("called") is None
+    # Autorevert was called.
+    assert reset_calls["branch"] == f"mill/{t.id}"
+    # Counter was reset to 0.
+    counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+    assert _read_counter(counter) == 0
+
+
+# ---------------------------------------------------------------------------
+# Unfixable category (unknown) with autorevert → BLOCKED, agent not called
+# ---------------------------------------------------------------------------
+
+def test_unknown_category_autorevert_applied(tmp_path, monkeypatch):
+    """unknown category → agent skipped, autorevert, BLOCKED."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "weird", "summary": "???", "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: (_ for _ in ()).throw(AssertionError("agent should not be called")),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.reset_branch_to_target",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.categorize_ci_failure",
+        lambda **k: "unknown",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "unknown" in out.note
+    assert "Autorevert applied" in out.note
+
+
+# ---------------------------------------------------------------------------
+# Unfixable category with autorevert disabled → BLOCKED, no git ops
+# ---------------------------------------------------------------------------
+
+def test_env_error_autorevert_disabled_blocks_without_autorevert(tmp_path, monkeypatch):
+    """With MILL_CI_AUTOREVERT=false, env_error → BLOCKED immediately, no reset call."""
+    ctx = _gh(tmp_path, MILL_CI_AUTOREVERT="false")
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "docker", "summary": "rate limit", "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: (_ for _ in ()).throw(AssertionError("agent should not be called")),
+    )
+    reset_called = {}
+
+    def fake_reset(*a, **k):
+        reset_called["called"] = True
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.reset_branch_to_target",
+        fake_reset,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.categorize_ci_failure",
+        lambda **k: "env_error",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "Autorevert disabled" in out.note
+    # reset_branch_to_target must NOT have been called.
+    assert reset_called.get("called") is None
+
+
+# ---------------------------------------------------------------------------
+# Autorevert git failure → still BLOCKED with error message
+# ---------------------------------------------------------------------------
+
+def test_autorevert_git_failure_still_blocks(tmp_path, monkeypatch):
+    """When git ops fail during autorevert, still BLOCKED with the git error."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "infra", "summary": "timeout", "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: (_ for _ in ()).throw(AssertionError("agent should not be called")),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.reset_branch_to_target",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network unreachable")),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.categorize_ci_failure",
+        lambda **k: "env_error",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "env_error" in out.note
+    assert "Autorevert failed" in out.note
+    assert "network unreachable" in out.note
+
+
+# ---------------------------------------------------------------------------
+# Unfixable → counter reset to 0
+# ---------------------------------------------------------------------------
+
+def test_unfixable_resets_counter_to_zero(tmp_path, monkeypatch):
+    """env_error resets the attempt counter to 0 regardless of prior state."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "rate-limit", "summary": "429", "text": None, "annotations": []}],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: (_ for _ in ()).throw(AssertionError("agent should not be called")),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.reset_branch_to_target",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.categorize_ci_failure",
+        lambda **k: "env_error",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
+
+    # Pre-set counter to 3 (simulate prior attempts).
+    _write_counter(counter, 3)
+    assert _read_counter(counter) == 3
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert _read_counter(counter) == 0

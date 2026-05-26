@@ -13,8 +13,9 @@ Failure after max attempts escalates to BLOCKED (resumable).
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
-from ..agents.ci_fixing import run_ci_fix_agent
+from ..agents.ci_fixing import categorize_ci_failure, run_ci_fix_agent
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
@@ -160,6 +161,59 @@ class CIFixStage(Stage):
 
         failing_summary = _build_failing_summary(failing, log_text)
 
+        # --- Categorize the CI failure ---
+        category = categorize_ci_failure(
+            settings=s, failing_summary=failing_summary
+        )
+        log.info(
+            "%s: CI failure categorized as %s",
+            ticket.id, category,
+        )
+
+        fixable = category in (
+            "test_failure", "type_error", "lint_error", "build_error"
+        )
+
+        if not fixable:
+            # Unfixable — skip the ci-fix agent entirely.
+            counter_path = (
+                ctx.service.workspace(ticket).artifacts_dir
+                / _CI_FIX_COUNTER
+            )
+            _write_counter(counter_path, 0)  # reset for any future resume
+            if s.ci_autorevert:
+                try:
+                    git_ops.reset_branch_to_target(
+                        Path(repo_dir),
+                        branch=branch,
+                        target_branch=s.forge_target_branch,
+                        remote_url=s.forge_remote_url,
+                        token=github_token(s),
+                    )
+                    return Outcome(
+                        State.BLOCKED,
+                        f"ci failure categorized as {category} — "
+                        "not fixable by code edits. Autorevert applied.",
+                    )
+                except Exception as e:  # noqa: BLE001 — best-effort
+                    log.warning(
+                        "%s: autorevert failed: %s", ticket.id, e
+                    )
+                    return Outcome(
+                        State.BLOCKED,
+                        f"ci failure categorized as {category} — "
+                        "not fixable by code edits. "
+                        f"Autorevert failed: {e}",
+                    )
+            else:
+                return Outcome(
+                    State.BLOCKED,
+                    f"ci failure categorized as {category} — "
+                    "not fixable by code edits. "
+                    "Autorevert disabled — manual intervention required.",
+                )
+
+        # --- Fixable → run the ci-fix agent ---
         counter_path = (
             ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
         )

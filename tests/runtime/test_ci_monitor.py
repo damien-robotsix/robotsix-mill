@@ -494,6 +494,10 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.categorize_ci_failure",
+        lambda *, settings, failing_summary: "test_failure",
+    )
+    monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="ok"),
     )

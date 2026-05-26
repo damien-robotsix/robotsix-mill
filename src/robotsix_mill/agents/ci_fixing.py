@@ -12,12 +12,15 @@ whether to force-push the result.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
 
 from ..config import Settings, get_secrets
+
+log = logging.getLogger("robotsix_mill.agents.ci_fixing")
 
 
 class CiFixResult(BaseModel):
@@ -29,6 +32,19 @@ class CiFixResult(BaseModel):
     pattern_category: str = ""
     pattern_signature: str = ""
     pattern_approach: str = ""
+
+
+class CategorizerResult(BaseModel):
+    """Structured output from the CI failure categorizer."""
+
+    category: Literal[
+        "test_failure",
+        "type_error",
+        "lint_error",
+        "build_error",
+        "env_error",
+        "unknown",
+    ]
 
 
 def run_ci_fix_agent(
@@ -135,3 +151,62 @@ def run_ci_fix_agent(
             )
 
     return output
+
+
+def categorize_ci_failure(
+    *,
+    settings: Settings,
+    failing_summary: str,
+) -> str:
+    """Classify a CI failure from its summary markdown.
+
+    Returns one of ``"test_failure"``, ``"type_error"``, ``"lint_error"``,
+    ``"build_error"``, ``"env_error"``, or ``"unknown"``.
+
+    Uses a single cheap LLM call (``settings.dedup_model``) — no
+    sandbox tools, no file access.  Degrades gracefully: any exception
+    returns ``"unknown"`` (safe default: skip fix, do not autorevert).
+    """
+    from .yaml_loader import load_agent_definition
+    from .base import build_agent_from_definition, _safe_close
+    from .retry import call_with_retry
+
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "ci_categorizer.yaml"
+    )
+
+    agent = build_agent_from_definition(
+        settings,
+        definition,
+        tools=[],
+        model_name=definition.model or settings.dedup_model,
+    )
+
+    user_prompt = (
+        "Classify this CI failure:\n\n"
+        f"```\n{failing_summary}\n```"
+    )
+
+    try:
+        result = call_with_retry(
+            lambda: agent.run_sync(user_prompt),
+            settings=settings,
+            what="ci failure categorizer",
+        )
+        output = result.output
+        if isinstance(output, CategorizerResult):
+            return output.category
+        log.warning(
+            "categorizer returned unexpected type: %s", type(output)
+        )
+        return "unknown"
+    except Exception:
+        log.warning(
+            "ci failure categorizer failed, returning unknown",
+            exc_info=True,
+        )
+        return "unknown"
+    finally:
+        _safe_close(agent)

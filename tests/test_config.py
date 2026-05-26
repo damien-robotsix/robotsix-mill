@@ -197,6 +197,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- rebase / CI fix ---
     ("rebase_max_attempts", "MILL_REBASE_MAX_ATTEMPTS", "2", 2),
     ("ci_fix_max_attempts", "MILL_CI_FIX_MAX_ATTEMPTS", "4", 4),
+    ("ci_autorevert", "MILL_CI_AUTOREVERT", "false", False),
     # --- CI monitor (global cap only — enabled/interval are per-repo) ---
     ("ci_log_max_bytes", "MILL_CI_LOG_MAX_BYTES", "32768", 32768),
     # --- audit ---
