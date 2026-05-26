@@ -373,6 +373,7 @@ _ENV_VAR_TO_SETTINGS_ALIAS: dict[str, str] = {
     "MILL_BC_CHECK_MODEL": "MILL_BC_CHECK_MODEL",
     "MILL_COST_RECONCILIATION_MODEL": "MILL_COST_RECONCILIATION_MODEL",
     "MILL_ENV_SYNC_MODEL": "MILL_ENV_SYNC_MODEL",
+    "MILL_REVIEW_REVISION_MODEL": "MILL_REVIEW_REVISION_MODEL",
 }
 
 
@@ -506,7 +507,7 @@ def test_report_issue_consistency(monkeypatch):
     """
     import warnings
 
-    KNOWN_EXCEPTIONS = {"refine", "implement", "ci_fix", "rebase", "dedup"}
+    KNOWN_EXCEPTIONS = {"refine", "implement", "ci_fix", "rebase", "dedup", "review_revision"}
 
     for var in _ENV_VAR_TO_SETTINGS_ALIAS:
         monkeypatch.setenv(var, "mock/model")
