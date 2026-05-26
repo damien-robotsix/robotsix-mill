@@ -68,10 +68,13 @@ def create_lifespan(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Initialize the default DB first (legacy / repo-less tickets).
-        db.init_db(settings)
-        # Then initialize each registered repo's DB so per-board
-        # services have schema available without lazy-init races.
+        # Initialize each registered repo's DB so per-board services
+        # have schema available without lazy-init races. The
+        # default-board DB at <data_dir>/mill.db is no longer created
+        # eagerly — once the legacy migration has run, every ticket
+        # lives in a per-repo DB and the default one stays unused.
+        # `migrate_legacy_global_db` below initialises it on demand
+        # if a pre-split legacy file is present.
         for rc in repos.repos.values():
             db.init_db(settings, rc.board_id)
         # One-shot migrations: split any pre-existing flat

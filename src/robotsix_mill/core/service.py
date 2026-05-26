@@ -113,7 +113,13 @@ class TicketService:
         """
         from ..config import get_repos_config
 
-        candidates: list[str] = [""]  # default DB first
+        candidates: list[str] = []
+        # Only consult the default-board DB when it actually exists —
+        # avoids lazy-creating an empty <data_dir>/mill.db on every
+        # multi-repo lookup. The default DB is only meaningful for
+        # legacy / pre-split rows.
+        if (self.settings.data_dir / "mill.db").exists():
+            candidates.append("")
         try:
             for rc in get_repos_config().repos.values():
                 if rc.board_id and rc.board_id not in candidates:
@@ -748,7 +754,10 @@ class TicketService:
         """Scan registered + disk-discovered boards for a Comment row."""
         from ..config import get_repos_config
 
-        candidates: list[str] = [self.board_id, ""]
+        candidates: list[str] = [self.board_id]
+        # Only consult the default-board DB when it actually exists.
+        if (self.settings.data_dir / "mill.db").exists() and "" not in candidates:
+            candidates.append("")
         try:
             for rc in get_repos_config().repos.values():
                 if rc.board_id and rc.board_id not in candidates:

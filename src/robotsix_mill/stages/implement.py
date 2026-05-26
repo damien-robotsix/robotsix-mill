@@ -32,7 +32,7 @@ from ..agents.coordinating import ValidationResult
 from ..agents.testing import run_test_agent
 from ..core.models import Ticket
 from ..core.states import State
-from ..forge.auth import _resolve_remote_url
+from ..forge.auth import _resolve_remote_url, github_token
 from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
@@ -473,11 +473,15 @@ class ImplementStage(Stage):
             if repo_dir.exists():
                 shutil.rmtree(repo_dir)
             try:
+                try:
+                    token = github_token(settings, repo_config=ctx.repo_config)
+                except RuntimeError:
+                    token = None
                 git_ops.clone(
                     remote_url,
                     repo_dir,
                     settings.forge_target_branch,
-                    settings.forge_token,
+                    token,
                 )
             except subprocess.CalledProcessError as e:
                 return Outcome(
@@ -505,9 +509,13 @@ class ImplementStage(Stage):
             if repo_dir.exists():
                 shutil.rmtree(repo_dir, ignore_errors=True)
             try:
+                try:
+                    token = github_token(settings, repo_config=ctx.repo_config)
+                except RuntimeError:
+                    token = None
                 git_ops.clone(
                     remote_url, repo_dir,
-                    settings.forge_target_branch, settings.forge_token,
+                    settings.forge_target_branch, token,
                 )
                 git_ops.create_branch(repo_dir, branch)
             except subprocess.CalledProcessError as e:

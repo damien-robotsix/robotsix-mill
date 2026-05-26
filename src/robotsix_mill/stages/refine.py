@@ -27,11 +27,10 @@ from pathlib import Path
 
 from ..agents import dedup
 from ..agents import refining
-from ..config import get_secrets
 from ..core.datetime_utils import _as_utc
 from ..core.models import Ticket
 from ..core.states import State
-from ..forge.auth import _resolve_remote_url
+from ..forge.auth import _resolve_remote_url, github_token
 from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
@@ -137,9 +136,13 @@ class RefineStage(Stage):
                 repo_dir = cand  # idempotent: reuse an existing clone
             else:
                 try:
+                    try:
+                        token = github_token(s, repo_config=ctx.repo_config)
+                    except RuntimeError:
+                        token = None  # no credentials configured — clone will fail
                     git_ops.clone(
                         remote_url, cand,
-                        s.forge_target_branch, get_secrets().forge_token,
+                        s.forge_target_branch, token,
                     )
                     repo_dir = cand
                 except subprocess.CalledProcessError as e:

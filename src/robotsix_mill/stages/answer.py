@@ -12,9 +12,9 @@ import logging
 import subprocess
 
 from ..agents import answering
-from ..config import get_secrets
 from ..core.models import Ticket
 from ..core.states import State
+from ..forge.auth import _resolve_remote_url, github_token
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -40,15 +40,20 @@ class AnswerStage(Stage):
         # Clone the repo (best-effort) so the answering agent can
         # explore real code. Same pattern as RefineStage.
         repo_dir = None
-        if s.forge_remote_url:
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
+        if remote_url:
             cand = ws.dir / "repo"
             if (cand / ".git").exists():
                 repo_dir = cand  # idempotent: reuse existing clone
             else:
                 try:
+                    try:
+                        token = github_token(s, repo_config=ctx.repo_config)
+                    except RuntimeError:
+                        token = None
                     git_ops.clone(
-                        s.forge_remote_url, cand,
-                        s.forge_target_branch, get_secrets().forge_token,
+                        remote_url, cand,
+                        s.forge_target_branch, token,
                     )
                     repo_dir = cand
                 except subprocess.CalledProcessError as e:

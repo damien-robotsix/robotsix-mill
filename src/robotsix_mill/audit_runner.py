@@ -13,7 +13,18 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from .config import RepoConfig, Settings, get_secrets
+from .config import RepoConfig, Settings
+from .forge.auth import github_token
+
+
+def _clone_token(settings, repo_config):
+    """Resolve a clone token via github_token; return None when no
+    credentials configured (clone will fail and be handled)."""
+    try:
+        return github_token(settings, repo_config=repo_config)
+    except RuntimeError:
+        return None
+
 from .core.models import SourceKind
 from .core.service import TicketService
 from .pass_runner import run_agent_pass
@@ -82,7 +93,7 @@ def run_audit_pass(session_id: str, repo_config: RepoConfig | None = None) -> Au
             try:
                 git_ops.clone(
                     forge_remote_url, cand,
-                    settings.forge_target_branch, get_secrets().forge_token,
+                    settings.forge_target_branch, _clone_token(settings, repo_config),
                 )
                 repo_dir = cand
             except subprocess.CalledProcessError as e:
