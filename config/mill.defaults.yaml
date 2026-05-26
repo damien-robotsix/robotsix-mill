@@ -236,6 +236,12 @@ periodic:
   ci_monitor:
     log_max_bytes: 65536            # max bytes fetched per CI job log
 
+  # -- Langfuse cleanup — caps per-project trace count, oldest deleted first
+  langfuse_cleanup:
+    enabled: false                  # enable periodic Langfuse trace cleanup
+    interval_seconds: 86400         # seconds between sweeps
+    max_traces: 1000                # per-project cap; oldest are deleted
+
 # ---------------------------------------------------------------------------
 #  service — management-plane API and data directory
 # ---------------------------------------------------------------------------

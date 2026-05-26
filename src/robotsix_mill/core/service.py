@@ -419,6 +419,22 @@ class TicketService:
             s.add(ticket)
             s.commit()
 
+    def set_priority(self, ticket_id: str, priority: bool) -> None:
+        """Toggle the operator-controlled priority flag on a ticket.
+
+        When True, the worker pulls this ticket off the queue ahead of
+        non-priority tickets — used to jump bug-fix tickets in front of
+        the normal backlog without changing dependency wiring.
+        """
+        with db.session(self.settings) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.priority = bool(priority)
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def set_branch(self, ticket_id: str, branch: str) -> None:
         """Record the git branch name for a ticket.
 

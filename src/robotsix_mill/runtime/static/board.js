@@ -6,6 +6,7 @@ let costLookbackHours=24;
 let costMaxTickets=20;               // default for ticket-count mode
 let costMode='time';                 // 'time' | 'tickets'
 let refreshSeq=0;                    // serialize concurrent refresh() calls
+let costRenderSeq=0;                  // serialize concurrent renderCostDashboard() calls
 let activeMap={};
 let gatesCache={};                    // cached /gates response for open_() drawer ordering
 let reposCache=null;                  // cached from GET /repos: [{repo_id, board_id}, …]
@@ -32,6 +33,14 @@ function fmtRelative(iso){
  const m=Math.round(s/60);
  if(m<60)return"in "+m+"m";
  return new Date(iso).toLocaleTimeString();
+}
+function renderRetryChip(t){
+ if(!(t.retry_attempt>0))return"";
+ const next=t.next_retry_at?new Date(t.next_retry_at).getTime():0;
+ const upcoming=next>Date.now()+1000;
+ const parts=[t.last_transient_error||"transient error"];
+ if(upcoming)parts.push("retry "+fmtRelative(t.next_retry_at));
+ return `<span class="retry-chip" title="${esc(parts.join(' — '))}">↻ ${t.retry_attempt}</span>`;
 }
 // -- repo selector -------------------------------------------------------
 function getRepoId(){
@@ -166,11 +175,12 @@ async function refresh(){
   <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
+   ${t.priority?`<span class="priority-badge" title="priority — pulled from the queue ahead of non-priority tickets">⚡ priority</span>`:""}
    ${repoId==="all"&&t.board_id?`<span class="repo-badge">${esc(repoIdForBoardId(t.board_id))}</span>`:""}
    ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
    ${t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:""}
    ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:""}
-   <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${t.retry_attempt>0?`<span class="retry-chip" title="${esc(t.last_transient_error||'')}">retry ${t.retry_attempt}${t.next_retry_at?` · next ${fmtRelative(t.next_retry_at)}`:''}</span>`:''}`+
+   <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${renderRetryChip(t)}`+
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
    `</div>`)
   .join("")+`</div></div>`).join("");
@@ -601,16 +611,31 @@ async function redraft(id){
  const r=await jpost("/tickets/"+id+"/redraft",{body:body.trim()});
  if(!r.ok){const e=await r.text();alert("redraft failed: "+e)}else{refresh();if(sel===id)open_(id)}
 }
-async function resumeRetry(id){
- const r=await jpost("/tickets/"+id+"/resume-blocked");
- if(!r.ok){const e=await r.text();alert("resume failed: "+e);return}
- refresh();if(sel===id)open_(id);
-}
 async function del_(id){
  if(!confirm("Delete ticket "+id+"? This is irreversible (row, history, workspace)."))return;
  const r=await jdel("/tickets/"+id);
  if(!r.ok&&r.status!==204){const e=await r.text();alert("delete failed: "+e)}else refresh()
 }
+function toggleAgentsMenu(ev){
+ ev.stopPropagation();
+ const menu=document.getElementById("agents-menu");
+ if(menu) menu.classList.toggle("open");
+}
+function closeAgentsMenu(){
+ const menu=document.getElementById("agents-menu");
+ if(menu) menu.classList.remove("open");
+}
+document.addEventListener("click",(ev)=>{
+ const menu=document.getElementById("agents-menu");
+ if(!menu||!menu.classList.contains("open"))return;
+ if(menu.contains(ev.target))return;
+ const trigger=document.querySelector(".agents-trigger");
+ if(trigger&&trigger.contains(ev.target))return;
+ menu.classList.remove("open");
+});
+document.addEventListener("keydown",(ev)=>{
+ if(ev.key==="Escape") closeAgentsMenu();
+});
 async function runAudit(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
@@ -795,12 +820,20 @@ async function generateChildren(id){
 function _actionButtonsHtml(t){
  if(!t)return"";
  const redraftable=!['draft','human_issue_approval','closed','answered','epic_closed','epic_open','done'].includes(t.state);
+ const prioLabel=t.priority?"⚡ Priority on":"⚡ Set priority";
+ const prioClass=t.priority?"prio-btn prio-btn-on":"prio-btn";
  return (t.state==="human_issue_approval"?
    `<button class="approve-btn" onclick="event.stopPropagation();approve('${t.id}')">Approve</button>`+
    `<button class="reject-btn" title="Send back to draft with a comment" onclick="event.stopPropagation();requestChanges('${t.id}')">Request Changes</button>`:"")+
   (redraftable?
    `<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft('${t.id}')">Redraft</button>`:"")+
+  `<button class="${prioClass}" title="Pulled from the queue ahead of non-priority tickets" onclick="event.stopPropagation();togglePriority('${t.id}',${t.priority?"false":"true"})">${prioLabel}</button>`+
   `<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_('${t.id}')">✕</button>`;
+}
+async function togglePriority(id,want){
+ const r=await jpost("/tickets/"+id+"/priority",{priority:want==="true"||want===true});
+ if(!r.ok){const e=await r.text();alert("priority toggle failed: "+e);return}
+ refresh();if(sel===id)open_(id);
 }
 async function open_(id){
  sel=id;
@@ -897,7 +930,6 @@ async function open_(id){
    `</span>`+
    `<br>· cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
    (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+
-   (t.retry_attempt>0?`<br><button class="retry-now-btn" onclick="event.stopPropagation();resumeRetry('${t.id}')">Retry now</button>`:"")+
    `<br>created ${t.created_at} · updated ${t.updated_at}</p>`+
    (t.depends_on?`<p><b>depends on:</b> ${esc(t.depends_on)}</p>`:"")+
    (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
@@ -1017,6 +1049,10 @@ async function openCostDashboard(){
  await renderCostDashboard();
 }
 async function renderCostDashboard(){
+ // Race guard: each call captures a token so stale responses (from a
+ // prior selector change still in flight against Langfuse) cannot
+ // overwrite the chart/highlights with the wrong max_tickets/lookback.
+ const tok=++costRenderSeq;
  const selTimeOpt=lookback=>lookback===costLookbackHours?' selected':'';
  const selTickOpt=n=>n===costMaxTickets?' selected':'';
  const timeModeActive=costMode==='time';
@@ -1056,6 +1092,8 @@ async function renderCostDashboard(){
  const [trendData, data, topTicket, topTrace]=await Promise.all([
   jget(trendUrl), jget(baseUrl), jget(ticketUrl), jget(traceUrl)
  ]);
+ if(tok!==costRenderSeq)return;       // a newer render started — drop stale results
+ if(!costDashboardOpen)return;        // user closed the drawer mid-flight
 
  // -- sparkline ----------------------------------------------------------
  const sparkCanvas=document.getElementById("cost-sparkline");
@@ -1180,14 +1218,14 @@ async function renderCostDashboard(){
  let highlightsHtml='<h4 style="margin-top:16px">🔍 Highlights</h4>';
 
  // Most Expensive Ticket
- highlightsHtml+='<div class="cost-bar-row">'+
+ highlightsHtml+='<div class="cost-bar-row cost-highlight-row">'+
   '<div class="cost-bar-label">'+
    '<span class="cost-bar-name">Most Expensive Ticket</span>'+
   '</div>';
  if(topTicket){
   highlightsHtml+=
-   '<div class="cost-bar-track" style="display:flex;align-items:center;gap:8px">'+
-    '<a href="#" onclick="open_(\''+esc(topTicket.ticket_id)+'\');return false" style="color:#8bb4f8">'+esc(topTicket.title)+'</a>'+
+   '<div class="cost-bar-track">'+
+    '<a href="#" onclick="open_(\''+esc(topTicket.ticket_id)+'\');return false">'+esc(topTicket.title)+'</a>'+
     '<span class="cost-bar-count">'+esc(topTicket.ticket_id)+'</span>'+
    '</div>'+
    '<div class="cost-bar-amount">$'+topTicket.cost_usd.toFixed(4)+'</div>';
@@ -1199,14 +1237,14 @@ async function renderCostDashboard(){
  highlightsHtml+='</div>';
 
  // Most Expensive Agent Run
- highlightsHtml+='<div class="cost-bar-row">'+
+ highlightsHtml+='<div class="cost-bar-row cost-highlight-row">'+
   '<div class="cost-bar-label">'+
    '<span class="cost-bar-name">Most Expensive Run</span>'+
   '</div>';
  if(topTrace){
   highlightsHtml+=
-   '<div class="cost-bar-track" style="display:flex;align-items:center;gap:8px">'+
-    '<span>'+esc(topTrace.name)+'</span>'+
+   '<div class="cost-bar-track">'+
+    '<span style="color:#cfd3db">'+esc(topTrace.name)+'</span>'+
     '<span class="cost-bar-count">'+esc(topTrace.id)+'</span>'+
    '</div>'+
    '<div class="cost-bar-amount">$'+topTrace.total_cost.toFixed(4)+'</div>';

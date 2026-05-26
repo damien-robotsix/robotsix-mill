@@ -172,6 +172,14 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
                 if ticket is not None:
                     send_notification(ticket, State.BLOCKED, note, ctx.settings)
             return
+        # Stage finished without raising — any prior transient-retry
+        # breadcrumbs are stale and must clear now, even when the outcome
+        # is a no-op (poll stages like merge can succeed-but-wait forever,
+        # leaving the chip stuck on the board).
+        if ticket.retry_attempt > 0:
+            ctx.service.set_retry_state(
+                ticket_id, retry_attempt=0, last_transient_error=None, next_retry_at=None,
+            )
         if outcome.next_state == ticket.state:
             # no-op (e.g. merge: PR still open) — leave it; the poll
             # re-enqueues later. No transition, no trace, no spam.
@@ -182,10 +190,6 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
             return
         ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
         log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
-        # Clear per-stage retry metadata on successful advancement.
-        ctx.service.set_retry_state(
-            ticket_id, retry_attempt=0, last_transient_error=None, next_retry_at=None,
-        )
         # Best-effort push notification for human-attention states.
         if outcome.next_state in _TRIGGER_STATES:
             ticket = ctx.service.get(ticket_id)
@@ -265,6 +269,20 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
                 epic_description=epic_desc,
                 children=child_summaries,
             )
+
+        # Safety net for the close-vs-new-children coupling enforced in
+        # the prompt: if the agent says `close` but also proposes new
+        # follow-up work, treat it as `keep_open` so the new children
+        # get created and run before the epic is sealed. The next
+        # re-eval (after those children land) gets another chance.
+        has_new_children = bool(result.new_children)
+        if result.decision == "close" and has_new_children:
+            log.warning(
+                "epic %s: agent returned close + %d new_children — "
+                "downgrading to keep_open until follow-up work lands",
+                epic_id, len(result.new_children),
+            )
+            result.decision = "keep_open"
 
         if result.decision == "close":
             svc.transition(epic_id, State.EPIC_CLOSED, note="[auto-closed] " + (result.note or ""))
@@ -541,7 +559,11 @@ class Worker:
     def __init__(self, ctx: StageContext, run_registry: "RunRegistry | None" = None) -> None:
         self.ctx = ctx
         self.run_registry = run_registry
-        self.queue: asyncio.Queue[str] = asyncio.Queue()
+        # PriorityQueue items: (priority_rank, seq, ticket_id).
+        # priority_rank = 0 for priority tickets, 1 otherwise → priority
+        # tickets pop first; seq breaks ties as FIFO within a rank.
+        self.queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
+        self._enqueue_seq = 0
         # pool of consumer tasks — tickets run concurrently, not serially
         self._tasks: list[asyncio.Task] = []
         self._poll_task: asyncio.Task | None = None
@@ -556,6 +578,7 @@ class Worker:
         self._survey_task: asyncio.Task | None = None
         self._env_sync_task: asyncio.Task | None = None
         self._cost_reconciliation_task: asyncio.Task | None = None
+        self._langfuse_cleanup_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -571,7 +594,12 @@ class Worker:
         if ticket_id in self._pending:
             return
         self._pending.add(ticket_id)
-        self.queue.put_nowait(ticket_id)
+        self._enqueue_seq += 1
+        # Resolve priority at enqueue time; if the operator flips
+        # priority later, the next sweep/event re-enqueue picks it up.
+        ticket = self.ctx.service.get(ticket_id)
+        prio_rank = 0 if (ticket is not None and getattr(ticket, "priority", False)) else 1
+        self.queue.put_nowait((prio_rank, self._enqueue_seq, ticket_id))
 
     def _repo_config_for_ticket(self, ticket_id: str) -> RepoConfig | None:
         """Resolve the ``RepoConfig`` for *ticket_id* from its ``board_id``.
@@ -595,7 +623,7 @@ class Worker:
 
     async def _run(self) -> None:
         while True:
-            ticket_id = await self.queue.get()
+            _prio_rank, _seq, ticket_id = await self.queue.get()
             try:
                 before = self.ctx.service.get(ticket_id)
                 before_state = before.state if before else None
@@ -963,6 +991,44 @@ class Worker:
         interval = max(60, settings.test_gap_interval_seconds)
         await self._run_periodic_pass_per_repo("test-gap", run_test_gap_pass, interval)
 
+    async def _langfuse_cleanup_poll_loop(self) -> None:
+        """Periodic Langfuse trace cleanup: keeps each repo's project at
+        most ``langfuse_cleanup_max_traces`` rows by deleting the oldest.
+
+        Multi-repo: iterates all registered repos sequentially. Pure
+        HTTP, no LLM — the cap exists because the self-hosted Langfuse
+        instance degrades on large trace tables.
+        """
+        settings = self.ctx.settings
+        interval = max(3600, settings.langfuse_cleanup_interval_seconds)
+        initial = self._initial_delay("langfuse-cleanup", interval)
+        await asyncio.sleep(initial)
+        while True:
+            repos = get_repos_config()
+            repo_configs = list(repos.repos.values())
+            if not repo_configs:
+                repo_configs = [None]  # type: ignore[list-item]
+            for repo_config in repo_configs:
+                label = repo_config.repo_id if repo_config else "default"
+                try:
+                    from ..langfuse_cleanup_runner import run_langfuse_cleanup_pass
+                    result = await asyncio.to_thread(
+                        run_langfuse_cleanup_pass,
+                        settings=settings,
+                        repo_config=repo_config,
+                        max_traces=settings.langfuse_cleanup_max_traces,
+                    )
+                    if result.traces_deleted > 0:
+                        log.info(
+                            "langfuse-cleanup: %s — deleted %d of %d traces "
+                            "(cap %d)",
+                            label, result.traces_deleted, result.traces_before,
+                            settings.langfuse_cleanup_max_traces,
+                        )
+                except Exception:  # noqa: BLE001 — periodic sweep must not die
+                    log.exception("langfuse-cleanup poll failed for %s", label)
+            await asyncio.sleep(interval)
+
     async def _ci_monitor_poll_loop(self) -> None:
         """Periodic CI monitor poll: watch the forge target branch for
         completed workflow-run failures and file a ``source="ci"`` draft
@@ -1216,6 +1282,19 @@ class Worker:
             log.info(
                 "Periodic completeness-check enabled: interval %ds",
                 self.ctx.settings.completeness_check_interval_seconds,
+            )
+        # Opt-in periodic Langfuse trace cleanup
+        if (
+            self.ctx.settings.langfuse_cleanup_periodic
+            and self._langfuse_cleanup_task is None
+        ):
+            self._langfuse_cleanup_task = asyncio.create_task(
+                self._langfuse_cleanup_poll_loop()
+            )
+            log.info(
+                "Periodic Langfuse cleanup enabled: interval %ds, cap %d traces/project",
+                self.ctx.settings.langfuse_cleanup_interval_seconds,
+                self.ctx.settings.langfuse_cleanup_max_traces,
             )
         # CI monitor: enabled when any registered repo has ci_monitor_enabled=True.
         if self._ci_monitor_task is None:

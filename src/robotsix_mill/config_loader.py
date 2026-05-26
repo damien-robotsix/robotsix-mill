@@ -398,6 +398,10 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.env_sync.memory_path": "MILL_ENV_SYNC_MEMORY_PATH",
     # -- periodic.ci_monitor (global cap only — enabled/interval are per-repo) --
     "periodic.ci_monitor.log_max_bytes": "MILL_CI_LOG_MAX_BYTES",
+    # -- periodic.langfuse_cleanup --
+    "periodic.langfuse_cleanup.enabled": "MILL_LANGFUSE_CLEANUP_PERIODIC",
+    "periodic.langfuse_cleanup.interval_seconds": "MILL_LANGFUSE_CLEANUP_INTERVAL_SECONDS",
+    "periodic.langfuse_cleanup.max_traces": "MILL_LANGFUSE_CLEANUP_MAX_TRACES",
     # -- service --
     "service.data_dir": "MILL_DATA_DIR",
     "service.api_host": "MILL_API_HOST",
@@ -424,12 +428,15 @@ def flatten_yaml_config(yaml_config: dict) -> dict[str, object]:
     def _walk(d: dict, prefix: str = "") -> None:
         for key, value in d.items():
             full_key = f"{prefix}.{key}" if prefix else key
+            alias = _YAML_PATH_TO_ALIAS.get(full_key)
+            if alias is not None:
+                # Dict-valued aliases (e.g. stage_timeout_overrides) must
+                # emit the dict itself — recursing would only find leaf
+                # scalars without their own alias and silently drop them.
+                result[alias] = value
+                continue
             if isinstance(value, dict):
                 _walk(value, full_key)
-            else:
-                alias = _YAML_PATH_TO_ALIAS.get(full_key)
-                if alias is not None:
-                    result[alias] = value
 
     _walk(yaml_config)
     return result

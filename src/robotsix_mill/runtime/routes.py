@@ -732,6 +732,33 @@ def request_changes(
     return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
 
 
+@router.post("/tickets/{ticket_id}/priority", response_model=TicketRead)
+def set_priority(
+    ticket_id: str,
+    body: dict,
+    request: Request,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Toggle the operator-controlled priority flag on a ticket.
+
+    Body: ``{"priority": true|false}``.  Re-enqueues the ticket so the
+    priority change is reflected in the next consumer pop.
+    """
+    priority = bool(body.get("priority", False))
+    try:
+        svc.set_priority(ticket_id, priority)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    maybe_enqueue(ticket, worker)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
 @router.post("/tickets/{ticket_id}/redraft")
 def redraft(
     ticket_id: str,

@@ -58,7 +58,7 @@ border-radius:4px;cursor:pointer;opacity:0;transition:opacity .1s}
 .card{position:relative}
 .card:hover .del-btn{opacity:1}
 .del-btn:hover{background:#7f1d1d;color:#fff}
-#drawer{position:fixed;top:0;right:0;width:min(900px,94vw);height:100vh;
+#drawer{position:fixed;top:0;right:0;width:min(1200px,95vw);height:100vh;
 background:#11141b;border-left:1px solid #2a2e37;transform:translateX(100%);
 transition:transform .15s;overflow-y:auto;padding:16px}
 #drawer.open{transform:none}#drawer h3{margin:.2em 0;color:#fff}
@@ -176,6 +176,12 @@ text-transform:uppercase;letter-spacing:.04em}
 .cost-bar-track{flex:1;height:14px;background:#1a1e27;border-radius:7px;overflow:hidden;min-width:20px}
 .cost-bar-fill{height:100%;border-radius:7px;transition:width .3s;min-width:2px}
 .cost-bar-amount{width:80px;text-align:right;font-size:12px;color:#eef0f4;font-variant-numeric:tabular-nums;flex-shrink:0}
+/* highlights reuse .cost-bar-row but carry text instead of a bar — let
+   the title wrap onto multiple lines and drop the bar-track chrome. */
+.cost-highlight-row{align-items:flex-start}
+.cost-highlight-row .cost-bar-track{height:auto;background:transparent;overflow:visible;border-radius:0;flex-direction:column;align-items:flex-start;gap:2px;padding:2px 0;min-height:14px}
+.cost-highlight-row .cost-bar-track a{color:#8bb4f8;line-height:1.35;word-break:break-word;display:block;max-width:100%}
+.cost-highlight-row .cost-bar-track .cost-bar-count{white-space:normal;word-break:break-all}
 /* epic children list */
 .children-list{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .child-ticket{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#1d212c;border:1px solid #262b36;border-radius:4px;font-size:12px;cursor:pointer}.child-ticket:hover{background:#232836}
@@ -224,13 +230,15 @@ text-transform:uppercase;letter-spacing:.04em}
 .thread-actions{display:flex;gap:4px;margin-top:6px}
 .retry-chip {
   display: inline-block;
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fcd34d;
-  border-radius: 4px;
-  padding: 1px 6px;
-  font-size: 0.75rem;
-  margin: 2px 0;
+  background: #3b2e1f;
+  color: #fbbf24;
+  border: 1px solid #78350f;
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: 11px;
+  margin-left: 6px;
+  cursor: help;
+  vertical-align: middle;
 }
 
 .repo-badge {
@@ -241,22 +249,41 @@ text-transform:uppercase;letter-spacing:.04em}
   border-radius: 3px;
   margin-left: 6px;
 }
-.retry-now-btn {
-  background: #f59e0b;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  padding: 3px 10px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  margin-left: 6px;
-}
-.retry-now-btn:hover { background: #d97706; }
+/* operator-set priority — high-visibility chip so the bumped tickets
+   are obvious at a glance on the board. */
+.priority-badge{display:inline-block;font-size:10px;padding:1px 6px;
+  border-radius:3px;margin-left:6px;background:#fbbf24;color:#1a1300;
+  font-weight:600;letter-spacing:.02em}
+.prio-btn{font-size:11px;padding:3px 10px;background:#374151;color:#fbbf24;
+  border:1px solid #4b5563;border-radius:4px;cursor:pointer;
+  margin-left:4px;margin-top:5px;display:inline-block}
+.prio-btn:hover{background:#4b5563}
+.prio-btn-on{background:#fbbf24;color:#1a1300;border-color:#f59e0b}
+.prio-btn-on:hover{background:#f59e0b;color:#1a1300}
 /* gate pills in board header */
 .gate-pill{display:inline-block;font-size:11px;padding:2px 7px;
   border-radius:4px;margin-left:4px;cursor:default}
 .gate-on{background:#1a3b2f;color:#34d399}
 .gate-off{background:#3b1f1f;color:#f87171}
+/* periodic-agents dropdown in board header */
+.agents-dropdown{position:relative;display:inline-block;margin-left:4px}
+.agents-trigger{font-size:11px;padding:3px 10px;background:#374151;color:#fff;
+  border:none;border-radius:4px;cursor:pointer;font-family:ui-monospace,monospace}
+.agents-trigger:hover{background:#4b5563}
+.agents-menu{display:none;position:absolute;top:calc(100% + 4px);right:0;
+  background:#11141b;border:1px solid #2a2e37;border-radius:6px;padding:4px;
+  min-width:180px;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,0.4)}
+.agents-menu.open{display:flex;flex-direction:column;gap:2px}
+.agents-menu button{display:flex;align-items:center;gap:8px;font-size:11px;
+  padding:5px 10px;background:transparent;color:#e5e7eb;border:none;
+  border-radius:4px;cursor:pointer;text-align:left;
+  font-family:ui-monospace,monospace}
+/* dot is a ::before pseudo so the existing btn.textContent='Running...'
+   pattern in run* handlers can't wipe it */
+.agents-menu button::before{content:"";width:8px;height:8px;border-radius:50%;
+  flex-shrink:0;display:inline-block;background:var(--agent-color,#6b7280)}
+.agents-menu button:hover{background:#1d212c}
+.agents-menu button:disabled{color:#6b7280;cursor:wait}
 /* merge-info in drawer */
 .mi-section{border-left:2px solid var(--c);font-size:12px;padding:8px 12px;
  margin:10px 0;background:#161922;border-radius:4px}

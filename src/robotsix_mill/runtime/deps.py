@@ -222,6 +222,7 @@ def enrich_ticket_read(
         retry_attempt=ticket.retry_attempt,
         last_transient_error=ticket.last_transient_error,
         next_retry_at=ticket.next_retry_at,
+        priority=bool(getattr(ticket, "priority", False)),
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )

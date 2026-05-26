@@ -49,6 +49,14 @@ def init_db(settings: Settings) -> None:
             )
     except Exception:
         pass
+    # Same pattern for the operator-set ``priority`` flag.
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE ticket ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
+            )
+    except Exception:
+        pass
 
 
 def session(settings: Settings) -> Session:

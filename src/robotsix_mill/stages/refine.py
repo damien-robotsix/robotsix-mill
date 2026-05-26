@@ -30,6 +30,7 @@ from ..config import get_secrets
 from ..core.datetime_utils import _as_utc
 from ..core.models import Ticket
 from ..core.states import State
+from ..forge.auth import _resolve_remote_url
 from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
@@ -123,16 +124,20 @@ class RefineStage(Stage):
         # refine agent uses explore/read_file instead of web-fetching
         # the project's own files. Best-effort — a clone failure (or no
         # forge configured) just falls back to draft-only refinement.
+        # Honour the per-ticket repo_config so multi-repo tickets clone
+        # their own repo, not the mill's own (same bug fixed for
+        # implement/deliver in 4518cd1).
         s = ctx.settings
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
         repo_dir = None
-        if s.forge_remote_url:
+        if remote_url:
             cand = ws.dir / "repo"
             if (cand / ".git").exists():
                 repo_dir = cand  # idempotent: reuse an existing clone
             else:
                 try:
                     git_ops.clone(
-                        s.forge_remote_url, cand,
+                        remote_url, cand,
                         s.forge_target_branch, get_secrets().forge_token,
                     )
                     repo_dir = cand

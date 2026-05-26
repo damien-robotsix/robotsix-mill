@@ -16,6 +16,7 @@ When the credentials are absent, every function is a cheap no-op.
 from __future__ import annotations
 
 import contextvars
+import os
 import uuid
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
@@ -23,7 +24,15 @@ from typing import Iterator
 
 from ..config import RepoConfig, get_secrets
 
-_tracing_ready: bool | None = None  # tri-state: None=unchecked, True/False
+# Tri-state init flag for the global TracerProvider (one per process).
+# Per-repo exporters are then registered lazily under the SAME provider —
+# see _registered_keys + _FilteredBatchSpanProcessor below.
+_provider_ready: bool | None = None  # None=unchecked, True=installed, False=disabled
+
+# Set of Langfuse public_keys for which an exporter has been wired in.
+# Used to keep _ensure_tracing idempotent per-repo without short-circuiting
+# the whole function the way a single global flag did.
+_registered_keys: set[str] = set()
 
 _shutdown_requested: bool = False  # set by signal handlers to prevent double-flush
 
@@ -37,6 +46,14 @@ _shutdown_requested: bool = False  # set by signal handlers to prevent double-fl
 # this survives the agents' internal threading.
 _current_session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "mill_session_id", default=None
+)
+
+# The Langfuse public_key for the repo whose stage is currently running.
+# Stamped onto every span at start; _FilteredBatchSpanProcessor reads it
+# at on_end to route the span to the matching repo's exporter, so traces
+# for repo A never get billed to repo B's Langfuse project.
+_current_pk: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "mill_langfuse_pk", default=None
 )
 
 
@@ -74,48 +91,65 @@ def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:
 
 
 def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
-    """Lazily configure the global OTel tracer provider and instrument
-    pydantic-ai agents.  Idempotent — subsequent calls are no-ops.
+    """Lazily configure the global OTel tracer provider and register a
+    Langfuse exporter for *repo_config*'s project.
 
-    When *repo_config* is provided, its langfuse credentials are used;
-    otherwise the global :class:`Secrets` singleton is used as a
-    fallback for backward compatibility during the transition to
-    per-repo credentials.
+    Two-phase idempotence: the global :class:`TracerProvider` is set up
+    on the FIRST call (any repo); subsequent calls with a NEW repo only
+    add another filtered exporter to the same provider, so traces are
+    routed per-repo via the ``langfuse.public_key`` span attribute
+    stamped by :class:`_SessionStampProcessor`.
+
+    When *repo_config* is ``None``, the global :class:`Secrets`
+    singleton's langfuse keys are used (single-repo / legacy mode).
     """
-    global _tracing_ready
-    if _tracing_ready is not None:
+    global _provider_ready
+    if _provider_ready is False:
+        return  # tracing disabled (no creds) — nothing to do
+    if not _tracing_enabled(repo_config):
+        if _provider_ready is None:
+            _provider_ready = False
         return
 
-    if not _tracing_enabled(repo_config):
-        _tracing_ready = False
+    # Resolve credentials for THIS call.
+    if repo_config is not None:
+        base_url = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        public_key = repo_config.langfuse_public_key
+        secret_key = repo_config.langfuse_secret_key
+        project_name = repo_config.langfuse_project_name
+    else:
+        secrets = get_secrets()
+        base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        public_key = secrets.langfuse_public_key
+        secret_key = secrets.langfuse_secret_key
+        project_name = None
+
+    # Already registered for this Langfuse project? Nothing to do.
+    if public_key in _registered_keys:
         return
 
     # --- heavy imports: gated behind the env-var check ---
     try:
+        # Pydantic-ai stamps full prompt / message content into span
+        # attributes — multi-MB strings are routine. Langfuse self-hosted
+        # nginx ingresses cap request bodies (~1 MB by default), so big
+        # spans return 413 Request Entity Too Large and the whole batch
+        # is dropped. Truncate attribute values aggressively so spans
+        # stay shippable. Caller can override via env if they really
+        # need more.
+        os.environ.setdefault("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT", "8192")
+
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
             OTLPSpanExporter,
         )
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-        if repo_config is not None:
-            base_url = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-            public_key = repo_config.langfuse_public_key
-            secret_key = repo_config.langfuse_secret_key
-            project_name = repo_config.langfuse_project_name
-        else:
-            secrets = get_secrets()
-            base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-            public_key = secrets.langfuse_public_key
-            secret_key = secrets.langfuse_secret_key
-            project_name = None
-
-        endpoint = f"{base_url}/api/public/otel/v1/traces"
 
         from base64 import b64encode as _b64encode
 
+        endpoint = f"{base_url}/api/public/otel/v1/traces"
         exporter = OTLPSpanExporter(
             endpoint=endpoint,
             headers={
@@ -124,50 +158,75 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             },
         )
 
-        from opentelemetry.sdk.trace import SpanProcessor
+        # --- one-time global provider setup -----------------------------
+        if _provider_ready is None:
+            class _SessionStampProcessor(SpanProcessor):
+                """Stamp ``session.id`` (+ Langfuse alias) and the
+                in-scope ``langfuse.public_key`` onto every span at
+                creation, from contextvars. Independent of span nesting
+                so pydantic-ai sub-agent runs — which open their own
+                trace — are still attributed to the right session AND
+                routed to the right repo's Langfuse project at export
+                time by :class:`_FilteredBatchSpanProcessor`."""
 
-        class _SessionStampProcessor(SpanProcessor):
-            """Stamp ``session.id`` (+ Langfuse's alias) onto every span at
-            creation from the in-scope context-var. This makes the session
-            association independent of span nesting, so pydantic-ai
-            sub-agent runs (which open their own trace) are attributed to
-            the same Langfuse session as the ticket/audit that spawned
-            them — instead of appearing as orphan, untagged traces."""
+                def on_start(self, span, parent_context=None):  # noqa: ANN001
+                    sid = _current_session.get()
+                    if sid:
+                        span.set_attribute("session.id", sid)
+                        span.set_attribute("langfuse.session.id", sid)
+                    pk = _current_pk.get()
+                    if pk:
+                        # Read at on_end by _FilteredBatchSpanProcessor.
+                        span.set_attribute("langfuse.public_key", pk)
 
-            def on_start(self, span, parent_context=None):  # noqa: ANN001
-                sid = _current_session.get()
-                if sid:
-                    span.set_attribute("session.id", sid)
-                    # Langfuse also accepts this explicit alias.
-                    span.set_attribute("langfuse.session.id", sid)
+                def on_end(self, span):  # noqa: ANN001
+                    pass
+
+                def shutdown(self):
+                    pass
+
+                def force_flush(self, timeout_millis: int = 30000):
+                    return True
+
+            resource_attrs: dict[str, str] = {SERVICE_NAME: "robotsix-mill"}
+            provider = TracerProvider(
+                resource=Resource.create(resource_attrs),
+            )
+            provider.add_span_processor(_SessionStampProcessor())
+            trace.set_tracer_provider(provider)
+
+            from pydantic_ai.agent import Agent
+
+            Agent.instrument_all()
+            _provider_ready = True
+
+        # --- register this repo's filtered exporter ---------------------
+        class _FilteredBatchSpanProcessor(BatchSpanProcessor):
+            """Forward spans to a Langfuse project's OTLP endpoint only
+            when their ``langfuse.public_key`` attribute matches —
+            otherwise drop. Multiple instances coexist under the same
+            global TracerProvider so each repo's traces land in its own
+            Langfuse project."""
+
+            def __init__(self, exp, *, target_public_key: str):
+                super().__init__(exp)
+                self._target_pk = target_public_key
 
             def on_end(self, span):  # noqa: ANN001
-                pass
+                attrs = span.attributes or {}
+                if attrs.get("langfuse.public_key") != self._target_pk:
+                    return
+                super().on_end(span)
 
-            def shutdown(self):
-                pass
-
-            def force_flush(self, timeout_millis: int = 30000):
-                return True
-
-        resource_attrs: dict[str, str] = {SERVICE_NAME: "robotsix-mill"}
-        if project_name:
-            resource_attrs["langfuse.project.name"] = project_name
-        provider = TracerProvider(
-            resource=Resource.create(resource_attrs),
+        provider = trace.get_tracer_provider()
+        provider.add_span_processor(
+            _FilteredBatchSpanProcessor(exporter, target_public_key=public_key)
         )
-        # on_start stamp first, then the batch exporter.
-        provider.add_span_processor(_SessionStampProcessor())
-        provider.add_span_processor(BatchSpanProcessor(exporter))
-        trace.set_tracer_provider(provider)
-
-        from pydantic_ai.agent import Agent
-
-        Agent.instrument_all()
-
-        _tracing_ready = True
+        _registered_keys.add(public_key)
+        # project_name is informational; routing is by public_key.
+        del project_name
     except ImportError:
-        _tracing_ready = False
+        _provider_ready = False
 
 
 
@@ -188,7 +247,7 @@ def flush_tracing(timeout: int = 10_000) -> None:
 
     No-op when tracing is off (env vars absent).
     """
-    if _tracing_ready is not True:
+    if _provider_ready is not True:
         return
     from opentelemetry import trace
 
@@ -250,17 +309,25 @@ def start_ticket_root_span(
             ...  # the refine stage runs here as the root span itself
     """
     _ensure_tracing(repo_config)
-    if not _tracing_ready:
+    if not _provider_ready:
         with nullcontext():
             yield
         return
 
     from opentelemetry import trace
 
-    # Set the session context-var FIRST so the SpanProcessor stamps it
+    # Resolve the public_key for routing: per-repo first, fall back to
+    # the global secrets pk (single-repo / legacy mode). Set BOTH the
+    # session and pk context-vars FIRST so the SpanProcessor stamps them
     # on the root span and every (sub-agent) span opened within — even
     # ones that start their own pydantic-ai trace.
-    token = _current_session.set(ticket_id)
+    if repo_config is not None and repo_config.langfuse_public_key:
+        pk = repo_config.langfuse_public_key
+    else:
+        pk = get_secrets().langfuse_public_key or ""
+
+    session_token = _current_session.set(ticket_id)
+    pk_token = _current_pk.set(pk or None)
     try:
         tracer = trace.get_tracer("robotsix-mill")
         attrs: dict[str, str] = {"session.id": ticket_id}
@@ -272,7 +339,8 @@ def start_ticket_root_span(
         ):
             yield
     finally:
-        _current_session.reset(token)
+        _current_pk.reset(pk_token)
+        _current_session.reset(session_token)
 
 
 @contextmanager
@@ -285,7 +353,7 @@ def trace_stage(stage_name: str, repo_config: RepoConfig | None = None) -> Itera
             agent.run_sync(...)
     """
     _ensure_tracing(repo_config)
-    if not _tracing_ready:
+    if not _provider_ready:
         with nullcontext():
             yield
         return

@@ -80,6 +80,10 @@ class Ticket(SQLModel, table=True):
     # board_id from RepoConfig — stamped at creation so every ticket
     # is tagged with its repository.  Empty string for legacy rows.
     board_id: str = Field(default="", index=True)
+    # Operator-controlled priority: when True the worker pulls this
+    # ticket off the queue ahead of non-priority ones (used to jump
+    # bug-fix tickets in front of the normal backlog).
+    priority: bool = Field(default=False, index=True)
     created_at: datetime = Field(
         default_factory=_now,
         sa_column=Column(TZDateTime(), index=True),
@@ -156,6 +160,7 @@ class TicketRead(SQLModel):
     retry_attempt: int
     last_transient_error: str | None
     next_retry_at: datetime | None
+    priority: bool = False
     created_at: datetime
     updated_at: datetime
 

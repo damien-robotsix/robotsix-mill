@@ -597,6 +597,21 @@ class Settings(BaseSettings):
         default=65536, alias="MILL_CI_LOG_MAX_BYTES"
     )
 
+    # --- langfuse cleanup (caps trace count per project) ---
+    # When True, the worker runs a periodic sweep that deletes the oldest
+    # traces from each repo's Langfuse project, keeping at most
+    # langfuse_cleanup_max_traces rows. Default False (opt-in).
+    langfuse_cleanup_periodic: bool = Field(
+        default=False, alias="MILL_LANGFUSE_CLEANUP_PERIODIC"
+    )
+    langfuse_cleanup_interval_seconds: int = Field(
+        default=86400, alias="MILL_LANGFUSE_CLEANUP_INTERVAL_SECONDS"
+    )
+    langfuse_cleanup_max_traces: int = Field(
+        default=1000, alias="MILL_LANGFUSE_CLEANUP_MAX_TRACES"
+    )
+
+
     # --- audit agent (meta-audit for quality/security coverage) ---
     # When True, the worker runs periodic audit passes at the configured
     # interval. Default False (opt-in).

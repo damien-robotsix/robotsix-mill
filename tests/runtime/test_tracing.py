@@ -13,33 +13,35 @@ def _clear_env():
     """Ensure no tracing secrets leak in via the cached Secrets singleton."""
     _reset_secrets()
     # Reset the module-level state so tests are independent.
-    tracing._tracing_ready = None
+    tracing._provider_ready = None
+    tracing._registered_keys.clear()
     tracing._shutdown_requested = False
     tracing._current_session.set(None)
+    tracing._current_pk.set(None)
 
 
 def test_ensure_tracing_disabled():
-    """_ensure_tracing must set _tracing_ready=False when env vars absent."""
-    assert tracing._tracing_ready is None
+    """_ensure_tracing must set _provider_ready=False when env vars absent."""
+    assert tracing._provider_ready is None
     tracing._ensure_tracing()
-    assert tracing._tracing_ready is False
+    assert tracing._provider_ready is False
 
 
 def test_flush_tracing_noop():
     """flush_tracing must not raise when tracing is off."""
-    tracing._tracing_ready = False
+    tracing._provider_ready = False
     tracing.flush_tracing()  # no-op, no error
 
 
 def test_flush_tracing_noop_before_ensure():
     """flush_tracing must not raise even before _ensure_tracing is called."""
-    tracing._tracing_ready = None
+    tracing._provider_ready = None
     tracing.flush_tracing()  # no-op, no error
 
 
 def test_start_ticket_root_span_noop():
     """start_ticket_root_span must yield without error when tracing is off."""
-    tracing._tracing_ready = False
+    tracing._provider_ready = False
     with tracing.start_ticket_root_span("test-ticket-id", "test"):
         assert True  # body executed
     # Should not have imported anything
@@ -47,7 +49,7 @@ def test_start_ticket_root_span_noop():
 
 def test_trace_stage_noop():
     """trace_stage must yield without error when tracing is off."""
-    tracing._tracing_ready = False
+    tracing._provider_ready = False
     with tracing.trace_stage("refine"):
         assert True  # body executed
 
@@ -57,7 +59,7 @@ def test_session_contextvar_only_set_when_tracing_ready():
     session context-var (the SpanProcessor that consumes it only exists
     when tracing is configured; stamping otherwise would be dead/noise).
     The var must also be cleanly reset after the block."""
-    tracing._tracing_ready = False
+    tracing._provider_ready = False
     assert tracing._current_session.get() is None
     with tracing.start_ticket_root_span("sess-xyz", "test"):
         assert tracing._current_session.get() is None  # untouched (off)
@@ -351,7 +353,7 @@ def test_double_sigterm_no_deadlock(monkeypatch):
 def test_flush_tracing_timeout_passed_to_force_flush(monkeypatch):
     """flush_tracing(timeout=5000) passes timeout_millis=5000 to
     provider.force_flush."""
-    tracing._tracing_ready = True
+    tracing._provider_ready = True
 
     import opentelemetry.trace  # ensure module is importable for patching
 

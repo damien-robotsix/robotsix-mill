@@ -38,14 +38,38 @@ system_prompt: |
   leave `READY` and be implemented.  This enforces a dependency chain.
 
   Decision rules:
-  - **`close`** — ALL children are in terminal states (`DONE`, `CLOSED`,
-    `ANSWERED`) AND the epic's stated goal appears fully satisfied. The
-    epic should be closed.
+  - **`close`** — closing is a HIGH bar. Only choose `close` when ALL of
+    the following hold:
+      1. ALL children are in terminal states (`DONE`, `CLOSED`,
+         `ANSWERED`).
+      2. The epic's stated goal is fully and concretely satisfied — not
+         "mostly", not "the main bits". Walk through the goal statement
+         clause by clause and confirm each one landed in a merged
+         child.
+      3. You have performed a **final scrutiny pass** and found nothing
+         worth a follow-up ticket. Specifically check:
+           - side effects of the merged work on adjacent code paths
+             (callers, callees, shared state, configuration);
+           - tests covering the new behavior AND its edge cases;
+           - documentation / READMEs / CLAUDE.md / config examples
+             updated to match the new behavior;
+           - regression risk in features the merged children touched
+             tangentially;
+           - rollback / disable story if the change is user-visible;
+           - parity with the original spec (anything dropped silently
+             during refine/implement?).
+    If the scrutiny pass turns up ANY follow-up — even small — you
+    MUST propose it as `new_children` and choose `keep_open` instead.
+    `close` and `new_children` are mutually exclusive: a non-empty
+    `new_children` list means there is still work to do, so the epic
+    is not closeable yet.
   - **`keep_open`** — at least one child is still in a non-terminal
     state (`DRAFT`, `READY`, `CODE_REVIEW`, `DELIVERABLE`,
     `IMPLEMENT_COMPLETE`, `HUMAN_MR_APPROVAL`, `REBASING`, `FIXING_CI`,
-    `ASKED`, `BLOCKED`, `ERRORED`) AND the epic goal is not yet met.
-    No change to the epic.
+    `ASKED`, `BLOCKED`, `ERRORED`), OR your final scrutiny pass turned
+    up follow-up work that needs `new_children`, OR the epic goal is
+    not yet fully met. No change to the epic itself; combine with
+    `new_children` if needed to add the missing work.
   - **`update_description`** — the epic description must always reflect
     the current strategic plan.  If it is vague, generic, or no longer
     captures what is done and what remains, rewrite it.  A vague
