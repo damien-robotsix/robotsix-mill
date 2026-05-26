@@ -52,7 +52,6 @@ A retrying ticket displays an amber **retry chip** on its board card:
 
 ```
 ┌──────────────────────────────────────────┐
-│  ✕                                       │
 │  Fix login redirect                      │
 │  abc123de                                │
 │  user                      $0.0123      │
