@@ -32,6 +32,7 @@ from ..agents.coordinating import ValidationResult
 from ..agents.testing import run_test_agent
 from ..core.models import Ticket
 from ..core.states import State
+from ..forge.auth import _resolve_remote_url
 from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
@@ -57,7 +58,8 @@ class ImplementStage(Stage):
             )
             return Outcome(State.READY)
 
-        if not s.forge_remote_url:
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
+        if not remote_url:
             return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
 
         # Phase 1: clone and branch (or resume)
@@ -422,6 +424,7 @@ class ImplementStage(Stage):
         ws = ctx.service.workspace(ticket)
         repo_dir = ws.dir / "repo"
         branch = f"{settings.branch_prefix}{ticket.id}"
+        remote_url = _resolve_remote_url(settings, ctx.repo_config)
 
         # Resume iff a prior run left this ticket's clone + branch behind.
         resuming = (repo_dir / ".git").exists() and git_ops.branch_exists(
@@ -434,7 +437,7 @@ class ImplementStage(Stage):
                 shutil.rmtree(repo_dir)
             try:
                 git_ops.clone(
-                    settings.forge_remote_url,
+                    remote_url,
                     repo_dir,
                     settings.forge_target_branch,
                     settings.forge_token,
@@ -466,7 +469,7 @@ class ImplementStage(Stage):
                 shutil.rmtree(repo_dir, ignore_errors=True)
             try:
                 git_ops.clone(
-                    settings.forge_remote_url, repo_dir,
+                    remote_url, repo_dir,
                     settings.forge_target_branch, settings.forge_token,
                 )
                 git_ops.create_branch(repo_dir, branch)

@@ -18,7 +18,7 @@ import subprocess
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
-from ..forge.auth import github_token
+from ..forge.auth import _resolve_remote_url, github_token
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -32,12 +32,13 @@ class DeliverStage(Stage):
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         s = ctx.settings
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
         if s.forge_kind == "none":
             return Outcome(State.BLOCKED, "FORGE_KIND not configured")
-        if not s.forge_remote_url:
+        if not remote_url:
             return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
         try:
-            token = github_token(s)  # PAT or minted App installation token
+            token = github_token(s, repo_config=ctx.repo_config)  # PAT or minted App installation token
         except RuntimeError as e:
             return Outcome(State.BLOCKED, f"forge auth not configured: {e}")
 
@@ -53,7 +54,7 @@ class DeliverStage(Stage):
             )
 
         try:
-            git_ops.push(repo_dir, branch, s.forge_remote_url, token)
+            git_ops.push(repo_dir, branch, remote_url, token)
         except subprocess.CalledProcessError as e:
             return Outcome(
                 State.BLOCKED,
