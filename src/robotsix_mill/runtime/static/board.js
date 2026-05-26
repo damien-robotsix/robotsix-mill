@@ -872,34 +872,62 @@ function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
  if(deepReviewPollTimer){clearInterval(deepReviewPollTimer);deepReviewPollTimer=null}
  deepReviewOpen=false;deepReviewTraceId=null;deepReviewFindings=[];
  document.getElementById("drawer").classList.remove("open")}
+// Cache the last runs payload (sans elapsed) so the 1s auto-refresh
+// only rebuilds the list DOM when something material changed (new run,
+// status flip, summary edit). Elapsed times are advanced in-place
+// every tick so the user doesn't see the panel flash.
+let _runsLastSig=null;
+function _runRowHtml(r,elapsed){
+ const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':r.kind==='survey'?'#f59e0b':'#6b7280';
+ const sc=r.status==='running'?'#eab308':r.status==='ok'?'#22c55e':'#ef4444';
+ const st=r.status==='running'?'running…':r.status;
+ return `<div data-run-id="${esc(r.id||'')}" data-run-status="${esc(r.status||'')}" style="padding:8px 0;border-bottom:1px solid #262b36">
+  <span style="display:inline-block;padding:1px 6px;border-radius:4px;
+   background:${kc};color:#fff;font-size:10px;margin-right:6px">${r.kind}</span>
+  <span style="display:inline-block;padding:1px 6px;border-radius:4px;
+   background:${sc};color:#fff;font-size:10px">${st}</span>
+  <span style="color:#7d828c;font-size:10px;margin-left:6px">${r.started_at}</span>
+  <span class="run-elapsed" style="color:#7d828c;font-size:10px;margin-left:3px">${elapsed}</span>
+  <div style="font-size:11px;color:#aab0bd;margin-top:3px">${esc(r.summary||'')}</div>
+  ${r.error?`<div style="font-size:11px;color:#f87171;margin-top:2px">${esc(r.error)}</div>`:''}
+ </div>`;
+}
+function _runElapsed(r){
+ const s=Date.parse(r.started_at);
+ const f=r.finished_at?Date.parse(r.finished_at):null;
+ const e=f?f:(Date.now());
+ const ms=e-s;
+ const sec=Math.floor(ms/1000);
+ const min=Math.floor(sec/60);
+ const sss=sec%60;
+ return f?(min+'m '+sss+'s'):'running…';
+}
 async function renderRuns(){
  const repoId=getRepoId();
  const runsUrl=repoId!=="all"?"/runs?repo_id="+encodeURIComponent(repoId):"/runs";
  const rs=await jget(runsUrl);
- document.getElementById("d").innerHTML=rs&&rs.length?
-  rs.map(r=>{
-   const s=Date.parse(r.started_at);
-   const f=r.finished_at?Date.parse(r.finished_at):null;
-   const e=f?f:(Date.now());
-   const ms=e-s;
-   const sec=Math.floor(ms/1000);
-   const min=Math.floor(sec/60);
-   const sss=sec%60;
-   const elapsed=f?(min+'m '+sss+'s'):'running…';
-   const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':r.kind==='survey'?'#f59e0b':'#6b7280';
-   const sc=r.status==='running'?'#eab308':r.status==='ok'?'#22c55e':'#ef4444';
-   const st=r.status==='running'?'running…':r.status;
-   return `<div style="padding:8px 0;border-bottom:1px solid #262b36">
-    <span style="display:inline-block;padding:1px 6px;border-radius:4px;
-     background:${kc};color:#fff;font-size:10px;margin-right:6px">${r.kind}</span>
-    <span style="display:inline-block;padding:1px 6px;border-radius:4px;
-     background:${sc};color:#fff;font-size:10px">${st}</span>
-    <span style="color:#7d828c;font-size:10px;margin-left:6px">${r.started_at}</span>
-    <span style="color:#7d828c;font-size:10px;margin-left:3px">${elapsed}</span>
-    <div style="font-size:11px;color:#aab0bd;margin-top:3px">${esc(r.summary||'')}</div>
-    ${r.error?`<div style="font-size:11px;color:#f87171;margin-top:2px">${esc(r.error)}</div>`:''}
-   </div>`
-  }).join("")
+ // Signature = identity columns only, NOT elapsed (which would change
+ // every tick and force a full re-render the user sees as a flash).
+ const sig=rs?JSON.stringify(rs.map(r=>[r.id||r.started_at, r.status, r.finished_at, r.summary, r.error])):"null";
+ const d=document.getElementById("d");
+ // In-place elapsed update only when the DOM is already showing runs
+ // (data-run-id markers present). Otherwise the cached signature would
+ // skip a needed redraw when the drawer was showing something else.
+ const domHasRuns=d.querySelector("[data-run-id]")!==null||(rs&&!rs.length);
+ if(sig===_runsLastSig && domHasRuns){
+  if(rs&&rs.length){
+   const rows=d.querySelectorAll("[data-run-id]");
+   rows.forEach((row,i)=>{
+    if(!rs[i])return;
+    const el=row.querySelector(".run-elapsed");
+    if(el)el.textContent=_runElapsed(rs[i]);
+   });
+  }
+  return;
+ }
+ _runsLastSig=sig;
+ d.innerHTML=rs&&rs.length?
+  rs.map(r=>_runRowHtml(r,_runElapsed(r))).join("")
   :`<div class="muted">No runs yet. Click Run Audit or Trace Health to start one.</div>`;
 }
 async function toggleRuns(){
