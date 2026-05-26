@@ -339,3 +339,311 @@ def run_coordinator(
     finally:
         _safe_close(agent)
     return result.output
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Expert-aware coordinator (ticket 0e3e)
+#
+# `run_coordinator_with_experts` is the seam `coding.run_implement_agent`
+# *would* drive when expert definitions exist. It:
+#
+#   1. Loads all expert definitions; falls back to `run_coordinator`
+#      if the definitions dir is missing, empty, or fails to parse.
+#   2. Routes the work to one-or-more experts:
+#       - With `file_map`: match each domain's `module_paths` glob
+#         against every file in scope. The set of domains with ≥1
+#         matching file are the active experts.
+#       - Without `file_map`: a lightweight routing LLM call picks
+#         domains by name from the spec. (Future work; for the first
+#         cut we fall back to `run_coordinator` when file_map is None.)
+#   3. Invokes each active expert sequentially with structured
+#      `ImplementResult` output, its own per-domain memory ledger
+#      injected via `memory_text=`, and a `<domain_context>` block
+#      naming the other active domains.
+#   4. Persists each expert's `updated_memory` to its memory file.
+#   5. Aggregates the per-expert summaries + reference_files into
+#      a single ImplementResult and returns it.
+#
+# Failure modes are caught — UsageLimitExceeded / UnexpectedModelBehavior
+# in one expert is logged, that expert is skipped, others still run.
+# If ALL experts fail (or zero matched), falls back to `run_coordinator`.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _resolve_expert_memory_path(settings: "Settings", definition) -> Path:
+    """Resolve the on-disk memory ledger path for an expert.
+
+    Prefers ``definition.memory.memory_path`` when explicitly set;
+    otherwise derives ``{data_dir}/expert_{domain}_memory.md``.
+    """
+    explicit = definition.memory.memory_path if definition.memory else None
+    if explicit:
+        return Path(explicit)
+    return Path(settings.data_dir) / f"expert_{definition.domain}_memory.md"
+
+
+def _build_expert_prompt(
+    *,
+    spec: str,
+    domain: str,
+    matched_files: list[str],
+    other_domains: list[str],
+    feedback: str | None,
+    previous_attempt_summary: str | None,
+    epic_context: str,
+) -> str:
+    """Build the user prompt for one expert agent.
+
+    Mirrors `run_coordinator`'s prompt structure but adds a
+    `<domain_context>` block scoping the expert to its files.
+    Memory is NOT injected here — `create_expert(memory_text=…)`
+    puts it in the system prompt instead.
+    """
+    parts: list[str] = []
+    if epic_context:
+        parts.append(epic_context)
+    parts.append(f"<ticket_spec>\n{spec}\n</ticket_spec>")
+    other_line = (
+        f"Other experts also working this ticket: {', '.join(other_domains)}."
+        if other_domains
+        else "You are the only expert assigned to this ticket."
+    )
+    files_block = (
+        "\n".join(f"  - {p}" for p in matched_files)
+        if matched_files
+        else "  (no in-scope files passed; fall back to module_paths in your definition)"
+    )
+    parts.append(
+        "<domain_context>\n"
+        f"You are the `{domain}` expert. Focus on these in-scope files "
+        f"matched against your domain's module_paths:\n"
+        f"{files_block}\n"
+        f"{other_line}\n"
+        "</domain_context>"
+    )
+    user_prompt = "\n\n".join(parts)
+    if feedback:
+        prefix = ""
+        if previous_attempt_summary:
+            prefix = (
+                "<previous_attempt>\n"
+                "Your previous edit pass produced this summary "
+                "(already on disk):\n"
+                f"{previous_attempt_summary}\n"
+                "</previous_attempt>\n\n"
+            )
+        if feedback.startswith("[REVIEW"):
+            block = (
+                "<review_feedback>\n"
+                "The code review flagged issues. Address these review "
+                "comments before proceeding:\n"
+                f"{feedback}\n"
+                "</review_feedback>"
+            )
+            user_prompt = prefix + block + "\n\n" + user_prompt
+        elif feedback.startswith("[SCOPE"):
+            user_prompt = (
+                prefix + user_prompt
+                + "\n\n<scope_violation>\n"
+                "Your previous edit pass is already on disk, but it "
+                "modified files outside the ticket's stated scope. "
+                f"{feedback}\n"
+                "</scope_violation>\n\n"
+                "Revert the out-of-scope changes and stop."
+            )
+        else:
+            user_prompt = (
+                prefix + user_prompt
+                + "\n\n<test_failure>\n"
+                "Your previous edit pass is already on disk, but the test "
+                "suite then failed. Diagnosis:\n"
+                f"{feedback}\n"
+                "</test_failure>\n\n"
+                "Fix exactly this failure and stop."
+            )
+    return user_prompt
+
+
+def _aggregate_expert_results(
+    results: list[tuple[str, ImplementResult]],
+) -> ImplementResult:
+    """Merge per-expert `(domain, ImplementResult)` tuples into one.
+
+    - summary: ``[{domain}] {expert.summary}`` joined by newlines.
+    - reference_files: deduplicated union, preserving first-seen order.
+    - updated_memory: empty string (per-expert memory is persisted by
+      the runner; the implement-stage memory ledger is the coordinator's
+      responsibility, handled at the stage level).
+    """
+    lines: list[str] = []
+    seen_refs: set[str] = set()
+    merged_refs: list[str] = []
+    for domain, r in results:
+        if r.summary:
+            lines.append(f"[{domain}] {r.summary}")
+        for f in r.reference_files:
+            if f not in seen_refs:
+                seen_refs.add(f)
+                merged_refs.append(f)
+    return ImplementResult(
+        summary="\n".join(lines) if lines else "(no expert produced a summary)",
+        updated_memory="",
+        reference_files=merged_refs,
+    )
+
+
+def run_coordinator_with_experts(
+    *,
+    settings: Settings,
+    repo_dir: Path,
+    spec: str,
+    memory: str = "",
+    model_name: str | None = None,
+    feedback: str | None = None,
+    epic_context: str = "",
+    reference_files: list[dict] | None = None,
+    message_history: list | None = None,
+    previous_attempt_summary: str | None = None,
+    file_map: set[str] | None = None,
+) -> ImplementResult:
+    """Route the implement pass through one-or-more domain experts.
+
+    Behaviour and fallback rules — see the module-level comment above.
+
+    Returns an aggregated :class:`ImplementResult`. Falls back to
+    :func:`run_coordinator` (with the same kwargs minus ``file_map``)
+    when no expert routes the work.
+    """
+    from .expert_manager import ExpertManager
+    from ..pass_runner import load_memory, persist_memory
+    from .retry import call_with_retry
+    from .base import _safe_close
+
+    def _fallback(reason: str) -> ImplementResult:
+        log.info("run_coordinator_with_experts: falling back (%s)", reason)
+        return run_coordinator(
+            settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
+            model_name=model_name, feedback=feedback,
+            epic_context=epic_context, reference_files=reference_files,
+            message_history=message_history,
+            previous_attempt_summary=previous_attempt_summary,
+        )
+
+    # Step 1: Load definitions. Failure → fallback.
+    mgr = ExpertManager(settings, repo_dir)
+    try:
+        definitions = mgr.load_definitions()
+    except FileNotFoundError as e:
+        return _fallback(f"no expert definitions: {e}")
+    except Exception as e:  # noqa: BLE001 — pessimistic on YAML parse errors
+        return _fallback(f"failed to load definitions: {e}")
+    if not definitions:
+        return _fallback("definitions dir loaded but empty")
+
+    # Step 2: Route. Today we only support the file_map path; the
+    # LLM-routing fallback is documented and left as a future hook.
+    if not file_map:
+        return _fallback(
+            "file_map missing or empty (LLM routing not yet implemented)"
+        )
+
+    files_by_domain: dict[str, list[str]] = {}
+    for domain, definition in definitions.items():
+        matched = [
+            f for f in sorted(file_map)
+            if ExpertManager.match_module_paths(definition.module_paths, f)
+        ]
+        if matched:
+            files_by_domain[domain] = matched
+
+    if not files_by_domain:
+        return _fallback("no expert's module_paths matched any in-scope file")
+
+    log.info(
+        "run_coordinator_with_experts: routing to %d expert(s): %s",
+        len(files_by_domain), sorted(files_by_domain.keys()),
+    )
+
+    # Step 3: Delegate sequentially.
+    from pydantic_ai import PromptedOutput
+    from pydantic_ai.usage import UsageLimits
+    from pydantic_ai.exceptions import (
+        UnexpectedModelBehavior, UsageLimitExceeded,
+    )
+
+    results: list[tuple[str, ImplementResult]] = []
+    active_domains = sorted(files_by_domain.keys())
+    try:
+        for domain in active_domains:
+            definition = definitions[domain]
+            memory_path = _resolve_expert_memory_path(settings, definition)
+            try:
+                expert_memory = load_memory(
+                    memory_path,
+                    max_chars=definition.memory.max_memory_chars,
+                )
+            except Exception:  # noqa: BLE001
+                log.warning(
+                    "could not load memory for expert %s at %s",
+                    domain, memory_path, exc_info=True,
+                )
+                expert_memory = ""
+
+            agent = mgr.create_expert(
+                definition,
+                output_type=PromptedOutput(ImplementResult),
+                memory_text=expert_memory,
+            )
+
+            other_domains = [d for d in active_domains if d != domain]
+            user_prompt = _build_expert_prompt(
+                spec=spec,
+                domain=domain,
+                matched_files=files_by_domain[domain],
+                other_domains=other_domains,
+                feedback=feedback,
+                previous_attempt_summary=previous_attempt_summary,
+                epic_context=epic_context,
+            )
+            limits = UsageLimits(
+                request_limit=settings.coordinator_request_limit,
+            )
+            try:
+                run_result = call_with_retry(
+                    lambda: agent.run_sync(
+                        user_prompt, usage_limits=limits,
+                    ),
+                    settings=settings, what=f"expert:{domain}",
+                )
+            except (UsageLimitExceeded, UnexpectedModelBehavior) as e:
+                log.warning(
+                    "expert %s failed (%s); skipping and continuing",
+                    domain, type(e).__name__,
+                )
+                continue
+            except Exception:  # noqa: BLE001
+                log.exception(
+                    "expert %s raised; skipping and continuing", domain,
+                )
+                continue
+
+            expert_output: ImplementResult = run_result.output
+            results.append((domain, expert_output))
+
+            # Persist this expert's memory eagerly so a later failure
+            # in another expert can't lose the learning.
+            if expert_output.updated_memory:
+                try:
+                    persist_memory(memory_path, expert_output.updated_memory)
+                except Exception:  # noqa: BLE001
+                    log.warning(
+                        "failed to persist memory for expert %s at %s",
+                        domain, memory_path, exc_info=True,
+                    )
+    finally:
+        mgr.close_all()
+
+    if not results:
+        return _fallback("every expert failed")
+
+    return _aggregate_expert_results(results)
