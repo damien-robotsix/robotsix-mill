@@ -42,4 +42,12 @@ jobs:
           # transitive dep (langfuse → pyjwt for OTel auth signing);
           # mill does not call its signing API directly. Re-evaluate
           # if a fix version is ever published.
-          ignore-vulns: PYSEC-2025-183
+          #
+          # MAL-2026-4750 (fastapi): malicious undeclared dependency
+          # "fastar>=0.9.0" was added to the [standard] extras group
+          # of fastapi 0.136.3 on PyPI. The mill project depends on
+          # "fastapi>=0.115" with NO extras — we never install
+          # fastapi[standard], so the malicious package is not pulled
+          # into our dependency tree. Remove this ignore if we ever
+          # add a [standard] extra or the advisory is fixed upstream.
+          ignore-vulns: PYSEC-2025-183,MAL-2026-4750
