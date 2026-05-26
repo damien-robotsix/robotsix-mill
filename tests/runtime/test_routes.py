@@ -669,7 +669,7 @@ def test_survey_fire_and_forget(client, monkeypatch):
     class _R:
         drafts_created: list = []
 
-    def slow_survey(session_id: str = ""):
+    def slow_survey(session_id: str = "", repo_config=None):
         ran.set()
         release.wait(5)
         return _R()

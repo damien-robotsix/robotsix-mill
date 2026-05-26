@@ -621,7 +621,7 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
     started = threading.Event()
     finished = threading.Event()
 
-    def slow_run(session_id=None):
+    def slow_run(session_id=None, repo_config=None):
         started.set()
         finished.wait(timeout=5)
         return HealthPassResult(
@@ -661,7 +661,7 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
 
     run_event = threading.Event()
 
-    def mock_run(session_id=None):
+    def mock_run(session_id=None, repo_config=None):
         # Create a ticket directly in DB to simulate the runner
         svc = TicketService(settings)
         svc.create("Health draft", "Health body", source="health")

@@ -342,7 +342,7 @@ def test_trace_health_endpoint_is_fire_and_forget(client, monkeypatch):
     ran = threading.Event()
     release = threading.Event()
 
-    def slow_check():
+    def slow_check(repo_config=None):
         ran.set()
         release.wait(5)  # simulate a long run
         return TraceHealthResult(
