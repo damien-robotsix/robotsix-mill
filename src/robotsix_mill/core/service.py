@@ -67,18 +67,69 @@ class TicketService:
     def workspace(self, ticket: Ticket) -> Workspace:
         """Return the :class:`Workspace` for *ticket*.
 
-        Resolved from :attr:`Settings.workspaces_dir` and the ticket's ``id``.
+        Routed via :meth:`Settings.workspaces_dir_for` using the
+        ticket's ``board_id`` (falling back to this service's
+        ``board_id``), so workspaces live under the per-repo subtree
+        ``<data_dir>/<board_id>/workspaces/<ticket_id>/``.
         """
-        return Workspace(self.settings.workspaces_dir, ticket.id)
+        board = ticket.board_id or self.board_id
+        return Workspace(self.settings.workspaces_dir_for(board), ticket.id)
 
     # --- reads ---
     def get(self, ticket_id: str) -> Ticket | None:
-        """Look up a :class:`Ticket` by id, or return ``None``."""
-        with db.session(self.settings) as s:
+        """Look up a :class:`Ticket` by id, or return ``None``.
+
+        With per-repo DBs, callers that don't carry a ``board_id``
+        (most prominently the agent tools at
+        ``agents/read_ticket.py``, ``close_thread.py``,
+        ``reply_thread.py``) need a single ID-based lookup that
+        works across every repo. When ``self.board_id`` is empty,
+        fan out: try the default DB first (legacy / repo-less rows),
+        then each registered repo's DB until we find the ticket.
+        """
+        if not self.board_id:
+            return self._get_anywhere(ticket_id)
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
         if ticket is not None:
             self._resolve_board_id(ticket)
         return ticket
+
+    def _get_anywhere(self, ticket_id: str) -> Ticket | None:
+        """Search every per-repo DB for *ticket_id*. Ticket IDs are
+        globally unique so the first hit is the answer.
+
+        Discovers candidate boards two ways so we don't miss any:
+        1. From the registered :class:`ReposRegistry` (production path
+           — repos.yaml configured).
+        2. By scanning ``data_dir`` for ``<board>/mill.db`` files
+           (robust to test setups that don't register repos but write
+           per-board DBs via the migration / direct-board service).
+        """
+        from ..config import get_repos_config
+
+        candidates: list[str] = [""]  # default DB first
+        try:
+            for rc in get_repos_config().repos.values():
+                if rc.board_id and rc.board_id not in candidates:
+                    candidates.append(rc.board_id)
+        except Exception:
+            pass
+        # Disk-scan fallback for boards not in the registry.
+        try:
+            for sub in self.settings.data_dir.iterdir():
+                if sub.is_dir() and (sub / "mill.db").exists():
+                    if sub.name not in candidates:
+                        candidates.append(sub.name)
+        except OSError:
+            pass
+        for board_id in candidates:
+            with db.session(self.settings, board_id) as s:
+                ticket = s.get(Ticket, ticket_id)
+                if ticket is not None:
+                    self._resolve_board_id(ticket)
+                    return ticket
+        return None
 
     def list(
         self,
@@ -90,7 +141,7 @@ class TicketService:
 
         Results are ordered by ``created_at`` ascending.
         """
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             stmt = select(Ticket).order_by(Ticket.created_at)
             if state is not None:
                 stmt = stmt.where(Ticket.state == state)
@@ -118,7 +169,7 @@ class TicketService:
 
     def history(self, ticket_id: str) -> list[TicketEvent]:
         """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             stmt = (
                 select(TicketEvent)
                 .where(TicketEvent.ticket_id == ticket_id)
@@ -132,7 +183,7 @@ class TicketService:
         limit: int = 100,
     ) -> list[Ticket]:
         """Return up to *limit* tickets from *source*, most recent first."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             stmt = (
                 select(Ticket)
                 .where(Ticket.source == source)
@@ -151,7 +202,7 @@ class TicketService:
         the worker is mid-processing it: the next ``get()`` returns
         None and the worker treats it as a vanished ticket and stops.
         """
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 return False
@@ -164,9 +215,11 @@ class TicketService:
             s.delete(ticket)
             s.commit()
         # Remove the workspace dir directly (don't construct Workspace —
-        # its __init__ would recreate the directory).
+        # its __init__ would recreate the directory). Route via the
+        # per-repo workspaces dir.
         shutil.rmtree(
-            self.settings.workspaces_dir / ticket_id, ignore_errors=True
+            self.settings.workspaces_dir_for(self.board_id) / ticket_id,
+            ignore_errors=True,
         )
         # Remove the conversation file unconditionally.
         conv_file = self.settings.data_dir / "conversations" / f"{ticket_id}.json"
@@ -189,7 +242,7 @@ class TicketService:
         if max_archived <= 0:
             return
 
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             stmt = (
                 select(Ticket)
                 .where(Ticket.state.in_(list(self._ARCHIVABLE_STATES)))
@@ -215,7 +268,7 @@ class TicketService:
     def _has_active_child(self, ticket_id: str) -> bool:
         """Return True if *ticket_id* has at least one child whose
         state is NOT in ``_ARCHIVABLE_STATES``."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             stmt = select(Ticket).where(
                 Ticket.parent_id == ticket_id,
                 Ticket.state.notin_(list(self._ARCHIVABLE_STATES)),
@@ -279,16 +332,22 @@ class TicketService:
         else:
             initial_state = State.DRAFT
 
-        # Validate parent_id
+        # Route to the right per-repo DB / workspace: use the
+        # explicit board_id override when provided (the route
+        # creates a ticket for a different repo than this service
+        # is bound to), else self.board_id.
+        effective_board = board_id if board_id is not None else self.board_id
+
+        # Validate parent_id against the EFFECTIVE board's DB.
         if parent_id is not None:
-            with db.session(self.settings) as s:
+            with db.session(self.settings, effective_board) as s:
                 parent = s.get(Ticket, parent_id)
             if parent is None:
                 raise ValueError(f"parent_id {parent_id!r} does not exist")
 
-        ws = Workspace(self.settings.workspaces_dir, ticket_id)
+        ws = Workspace(self.settings.workspaces_dir_for(effective_board), ticket_id)
         content_hash = ws.write_description(description)
-        with db.session(self.settings) as s:
+        with db.session(self.settings, effective_board) as s:
             ticket = Ticket(
                 id=ticket_id,
                 title=title,
@@ -324,7 +383,7 @@ class TicketService:
         When transitioning to :class:`State.BLOCKED`, the originating
         state is recorded in ``blocked_from`` so it can be resumed later.
         """
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -360,7 +419,7 @@ class TicketService:
         Reads ``ticket.blocked_from`` and transitions the ticket back to
         that state so only the failed stage is re-run.
         """
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -408,7 +467,7 @@ class TicketService:
 
         Does NOT create a ``TicketEvent`` — the workflow state hasn't changed.
         """
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -426,7 +485,7 @@ class TicketService:
         non-priority tickets — used to jump bug-fix tickets in front of
         the normal backlog without changing dependency wiring.
         """
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -440,7 +499,7 @@ class TicketService:
 
         Raises :class:`KeyError` if the ticket does not exist.
         """
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -452,7 +511,7 @@ class TicketService:
     def set_parent(self, ticket_id: str, parent_id: str) -> None:
         """Link a spawned ticket to the ticket it originated from
         (e.g. a retrospect improvement draft -> the reviewed ticket)."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -477,7 +536,7 @@ class TicketService:
 
     def list_children(self, ticket_id: str) -> list[Ticket]:
         """Return all tickets whose ``parent_id`` equals *ticket_id*."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             stmt = select(Ticket).where(Ticket.parent_id == ticket_id)
             return list(s.exec(stmt).all())
 
@@ -511,7 +570,7 @@ class TicketService:
         result: list[Ticket] = []
         visited: set[str] = {ticket_id}
         queue: list[str] = [ticket_id]
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             while queue:
                 parent = queue.pop(0)
                 children = list(
@@ -527,7 +586,7 @@ class TicketService:
     def set_title(self, ticket_id: str, title: str) -> None:
         """Update the title of a ticket. Raises :class:`KeyError` if
         the ticket does not exist."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -539,7 +598,7 @@ class TicketService:
     def set_content_hash(self, ticket_id: str, content_hash: str) -> None:
         """Keep the DB pointer in sync after a stage rewrites the
         file-canonical description (so it isn't seen as an external edit)."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -550,7 +609,7 @@ class TicketService:
 
     def set_review_rounds(self, ticket_id: str, value: int) -> None:
         """Set the ``review_rounds`` counter on *ticket_id*."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -568,7 +627,7 @@ class TicketService:
                 f"Ticket cannot depend on itself: {ticket_id}"
             )
         raw = json.dumps(depends_on_ids) if depends_on_ids else None
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -630,7 +689,7 @@ class TicketService:
         When *parent_id* is given, validates that the parent Comment
         exists and belongs to the same ticket, raising ``ValueError``
         otherwise."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -651,7 +710,7 @@ class TicketService:
     def list_comments(self, ticket_id: str) -> list[Comment]:
         """Return all comments for *ticket_id*, ordered oldest-first.
         Raises ``KeyError`` if the ticket does not exist."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -666,7 +725,7 @@ class TicketService:
         """Close a top-level comment thread.  Raises ``KeyError`` if
         the comment does not exist, ``ValueError`` if it is a reply
         (non-NULL parent_id) or is already closed."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             comment = s.get(Comment, comment_id)
             if comment is None:
                 raise KeyError(comment_id)
@@ -684,7 +743,7 @@ class TicketService:
         """Reopen a closed top-level comment thread.  Raises
         ``KeyError`` if the comment does not exist, ``ValueError`` if
         it is a reply (non-NULL parent_id) or is not currently closed."""
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             comment = s.get(Comment, comment_id)
             if comment is None:
                 raise KeyError(comment_id)
@@ -713,7 +772,7 @@ class TicketService:
             State.DRAFT, State.CLOSED, State.ANSWERED,
             State.EPIC_CLOSED, State.EPIC_OPEN,
         }
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -752,7 +811,7 @@ class TicketService:
         ``KeyError`` if the ticket does not exist, ``TransitionError``
         if it is not in ``human_issue_approval``.
         """
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
@@ -798,7 +857,7 @@ class TicketService:
             State.DONE, State.CLOSED, State.ANSWERED,
             State.EPIC_CLOSED, State.EPIC_OPEN,
         }
-        with db.session(self.settings) as s:
+        with db.session(self.settings, self.board_id) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)

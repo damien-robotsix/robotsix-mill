@@ -257,7 +257,14 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
     from ..agents.epic_status import run_epic_status_agent
     from ..runtime import tracing
 
-    svc = TicketService(settings)
+    # Discover the epic's board via fanout, then bind the service to
+    # it so subsequent transitions / writes go to the right per-repo DB.
+    discovery = TicketService(settings)
+    epic = discovery.get(epic_id)
+    if epic is None:
+        log.warning("epic %s vanished before re-evaluation", epic_id)
+        return
+    svc = TicketService(settings, board_id=epic.board_id)
     try:
         epic = svc.get(epic_id)
         if epic is None:
@@ -496,7 +503,14 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
     from ..core.service import TicketService
     from ..agents.epic_breakdown import run_epic_breakdown_agent
 
-    svc = TicketService(settings)
+    # Discover the epic's board via fanout, then bind the service to
+    # it so subsequent writes go to the right per-repo DB.
+    discovery = TicketService(settings)
+    epic = discovery.get(epic_id)
+    if epic is None:
+        log.warning("epic %s vanished before re-processing", epic_id)
+        return
+    svc = TicketService(settings, board_id=epic.board_id)
     try:
         epic = svc.get(epic_id)
         if epic is None:
@@ -1548,7 +1562,29 @@ class Worker:
 
     def requeue_unfinished(self) -> None:
         """On startup, re-enqueue any ticket left mid-pipeline so a
-        restart resumes work (idempotent: stages are re-entrant)."""
-        for ticket in self.ctx.service.list():
-            if ticket.state in STAGE_FOR_STATE:
-                self.enqueue(ticket.id)
+        restart resumes work (idempotent: stages are re-entrant).
+
+        With per-repo DBs, fan out across every registered repo plus
+        the default (legacy / repo-less) DB so nothing is missed.
+        """
+        from ..config import get_repos_config
+        from ..core.service import TicketService
+
+        boards: list[str] = [""]
+        try:
+            for rc in get_repos_config().repos.values():
+                if rc.board_id and rc.board_id not in boards:
+                    boards.append(rc.board_id)
+        except Exception:
+            pass
+        for board_id in boards:
+            svc = TicketService(self.ctx.settings, board_id=board_id)
+            try:
+                for ticket in svc.list():
+                    if ticket.state in STAGE_FOR_STATE:
+                        self.enqueue(ticket.id)
+            except Exception:
+                log.exception(
+                    "requeue_unfinished: failed to enumerate board %r",
+                    board_id or "<default>",
+                )

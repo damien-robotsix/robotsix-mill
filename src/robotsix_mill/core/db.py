@@ -1,14 +1,20 @@
 """SQLite engine + schema lifecycle.
 
-One engine per process. ``check_same_thread=False`` because stage work
-runs in a threadpool while the worker coroutine owns DB access; all
-writes are still serialized through the single worker, so SQLite's
-single-writer model is respected.
+Per-repo databases: each registered repo gets its own SQLite file at
+``<data_dir>/<board_id>/mill.db``; the default ``<data_dir>/mill.db``
+holds anything without a board_id (legacy / unmapped). Engines are
+cached process-wide, one per board.
+
+``check_same_thread=False`` because stage work runs in a threadpool
+while the worker coroutine owns DB access; all writes for a given
+board are still serialized through that board's single worker, so
+SQLite's single-writer model is respected.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -16,27 +22,46 @@ from ..config import Settings
 
 log = logging.getLogger("robotsix_mill.db")
 
-_engine = None
+# Per-board engine cache. "" key is the default DB at <data_dir>/mill.db.
+_engines: dict[str, object] = {}
+
+# Tracks which boards have had init_db() called so we can lazily
+# materialize schema on first access for a fresh repo.
+_initialized: set[str] = set()
 
 
-def get_engine(settings: Settings):
-    """Return the process-wide SQLite engine, creating it on first call."""
-    global _engine
-    if _engine is None:
-        settings.data_dir.mkdir(parents=True, exist_ok=True)
-        _engine = create_engine(
-            settings.db_url,
+def _db_path(settings: Settings, board_id: str) -> Path:
+    """Return the on-disk path for *board_id*'s SQLite file."""
+    if board_id:
+        return settings.data_dir / board_id / "mill.db"
+    return settings.data_dir / "mill.db"
+
+
+def get_engine(settings: Settings, board_id: str = ""):
+    """Return the per-board SQLite engine, creating it on first call.
+
+    *board_id* selects the repo whose DB to open. Empty string uses
+    the default DB at ``<data_dir>/mill.db``.
+    """
+    engine = _engines.get(board_id)
+    if engine is None:
+        path = _db_path(settings, board_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        url = f"sqlite:///{path}"
+        engine = create_engine(
+            url,
             connect_args={"check_same_thread": False},
         )
-    return _engine
+        _engines[board_id] = engine
+    return engine
 
 
-def init_db(settings: Settings) -> None:
-    """Create tables (if missing)."""
+def init_db(settings: Settings, board_id: str = "") -> None:
+    """Create tables (if missing) on the per-board DB."""
     # import models so SQLModel.metadata is populated before create_all
     from . import models  # noqa: F401
 
-    engine = get_engine(settings)
+    engine = get_engine(settings, board_id)
     SQLModel.metadata.create_all(engine)
 
     # SQLite / SQLModel do not auto-add columns to existing tables.
@@ -57,14 +82,268 @@ def init_db(settings: Settings) -> None:
             )
     except Exception:
         pass
+    _initialized.add(board_id)
 
 
-def session(settings: Settings) -> Session:
-    """Return a new SQLModel Session bound to the process-wide engine."""
-    return Session(get_engine(settings))
+def session(settings: Settings, board_id: str = "") -> Session:
+    """Return a new SQLModel Session bound to the per-board engine.
+
+    Lazily initializes the per-board schema on first access — so a
+    fresh repo's DB is created on its first session() call without
+    requiring an explicit init_db() at startup.
+    """
+    if board_id not in _initialized:
+        init_db(settings, board_id)
+    return Session(get_engine(settings, board_id))
 
 
 def reset_engine() -> None:
-    """Test hook: drop the cached engine so a fresh DB path is picked up."""
-    global _engine
-    _engine = None
+    """Test hook: drop the cached engines so fresh DB paths are picked up."""
+    global _engines, _initialized
+    _engines = {}
+    _initialized = set()
+
+
+def migrate_legacy_global_db(settings: Settings) -> dict[str, int]:
+    """One-shot migration: split the pre-per-repo global ``mill.db`` into
+    per-repo DBs at ``<data_dir>/<board_id>/mill.db``.
+
+    Idempotent. Runs at startup. The legacy DB is renamed to
+    ``mill.db.legacy-pre-split`` after a successful copy so the
+    operator can rollback by renaming it back if needed.
+
+    Returns a dict ``{board_id: rows_copied}`` summarizing what moved.
+    Skips entirely when:
+    - The legacy global DB doesn't exist (fresh install, nothing to do).
+    - The legacy DB has zero tickets (nothing to copy).
+    - At least one per-repo DB already exists and has rows (treat as
+      "already migrated" — don't risk clobbering).
+    """
+    legacy_path = settings.data_dir / "mill.db"
+    if not legacy_path.exists():
+        return {}
+
+    from . import models  # noqa: F401
+    from sqlalchemy import inspect
+
+    # Open the legacy DB directly without entering the per-board cache —
+    # if we re-enter via get_engine(""), every subsequent session("")
+    # would re-target it after we rename below.
+    legacy_engine = create_engine(
+        f"sqlite:///{legacy_path}",
+        connect_args={"check_same_thread": False},
+    )
+
+    # Schema sanity check — old DBs may predate the board_id / priority
+    # columns. If the legacy file is empty / has no ticket table, skip.
+    try:
+        insp = inspect(legacy_engine)
+        if "ticket" not in insp.get_table_names():
+            legacy_engine.dispose()
+            return {}
+    except Exception:
+        legacy_engine.dispose()
+        return {}
+
+    # If any per-repo DB already has rows, the migration has already
+    # run (or the operator has a hybrid state). Don't touch.
+    from ..config import get_repos_config
+
+    repos = get_repos_config()
+    for repo_id, rc in repos.repos.items():
+        per_repo_path = _db_path(settings, rc.board_id)
+        if per_repo_path.exists():
+            try:
+                eng = create_engine(
+                    f"sqlite:///{per_repo_path}",
+                    connect_args={"check_same_thread": False},
+                )
+                with Session(eng) as s:
+                    from .models import Ticket as _T  # local import
+                    count = s.exec(_T.__table__.select()).first()
+                    eng.dispose()
+                    if count is not None:
+                        log.info(
+                            "migrate_legacy_global_db: per-repo DB at %s "
+                            "already has rows — skipping migration",
+                            per_repo_path,
+                        )
+                        legacy_engine.dispose()
+                        return {}
+            except Exception:
+                pass
+
+    # OK to migrate. Use raw SQL for the copy — SQLAlchemy schemas
+    # might mismatch between legacy + new and we just want row-faithful.
+    from .models import Ticket, TicketEvent, Comment
+
+    moved: dict[str, int] = {}
+
+    # Ensure each repo's destination DB has the schema in place.
+    for rc in repos.repos.values():
+        init_db(settings, rc.board_id)
+    init_db(settings, "")  # default — for legacy/no-board rows
+
+    # Pull each ticket and route it.
+    with Session(legacy_engine) as legacy_s:
+        tickets = legacy_s.exec(Ticket.__table__.select()).all()
+        events = legacy_s.exec(TicketEvent.__table__.select()).all()
+        comments = legacy_s.exec(Comment.__table__.select()).all()
+
+        # Group ticket_ids by destination board.
+        ticket_to_board: dict[str, str] = {}
+        for row in tickets:
+            tid = row[Ticket.__table__.c.id]
+            board = (row[Ticket.__table__.c.board_id] or "") if "board_id" in row._mapping else ""
+            # When the legacy DB pre-dates board_id, route by repo match
+            # on the ticket_id substring would be guesswork — leave them
+            # in the default DB.
+            ticket_to_board[tid] = board
+
+        # Pre-build per-board lists for batched insert.
+        per_board_rows: dict[str, dict[str, list]] = {}
+        for row in tickets:
+            board = ticket_to_board[row[Ticket.__table__.c.id]]
+            per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
+            per_board_rows[board]["ticket"].append(dict(row._mapping))
+        for row in events:
+            tid = row[TicketEvent.__table__.c.ticket_id]
+            board = ticket_to_board.get(tid, "")
+            per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
+            per_board_rows[board]["event"].append(dict(row._mapping))
+        for row in comments:
+            tid = row[Comment.__table__.c.ticket_id]
+            board = ticket_to_board.get(tid, "")
+            per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
+            per_board_rows[board]["comment"].append(dict(row._mapping))
+
+    # Insert into each destination DB.
+    for board, rows in per_board_rows.items():
+        if not rows["ticket"] and not rows["event"] and not rows["comment"]:
+            continue
+        dest = get_engine(settings, board)
+        with Session(dest) as dest_s:
+            for r in rows["ticket"]:
+                dest_s.execute(Ticket.__table__.insert().values(**r))
+            for r in rows["event"]:
+                # event id is auto-increment in the new DB; drop the old PK.
+                r = {k: v for k, v in r.items() if k != "id"}
+                dest_s.execute(TicketEvent.__table__.insert().values(**r))
+            for r in rows["comment"]:
+                r = {k: v for k, v in r.items() if k != "id"}
+                dest_s.execute(Comment.__table__.insert().values(**r))
+            dest_s.commit()
+        moved[board] = len(rows["ticket"])
+        log.info(
+            "migrate_legacy_global_db: moved %d tickets to board %r",
+            len(rows["ticket"]), board or "<default>",
+        )
+
+    legacy_engine.dispose()
+
+    # Rename the legacy DB so subsequent runs don't repeat the
+    # migration (and the operator can rollback by renaming back).
+    legacy_backup = settings.data_dir / "mill.db.legacy-pre-split"
+    try:
+        legacy_path.rename(legacy_backup)
+        log.info(
+            "migrate_legacy_global_db: renamed legacy DB to %s",
+            legacy_backup.name,
+        )
+    except OSError as e:
+        log.warning(
+            "migrate_legacy_global_db: could not rename legacy DB: %s", e,
+        )
+
+    return moved
+
+
+def migrate_legacy_workspaces(settings: Settings) -> dict[str, int]:
+    """One-shot migration: move per-ticket workspace dirs from the
+    flat ``<data_dir>/workspaces/<ticket_id>/`` layout to the per-repo
+    ``<data_dir>/<board_id>/workspaces/<ticket_id>/`` layout.
+
+    Runs after :func:`migrate_legacy_global_db` so each ticket's
+    board_id is available in its per-repo DB.
+
+    Idempotent: only moves workspaces whose ticket lives in a
+    per-repo DB (not in the default DB) AND whose dir is still under
+    the legacy root. Skips silently when the legacy workspaces dir
+    is missing or empty.
+
+    Returns ``{board_id: dirs_moved}``.
+    """
+    legacy_root = settings.data_dir / "workspaces"
+    if not legacy_root.exists() or not legacy_root.is_dir():
+        return {}
+
+    from ..config import get_repos_config
+    from .models import Ticket
+
+    repos = get_repos_config()
+    if not repos.repos:
+        return {}
+
+    # Build ticket_id → board_id mapping by sweeping each per-repo DB.
+    ticket_to_board: dict[str, str] = {}
+    for rc in repos.repos.values():
+        try:
+            engine = get_engine(settings, rc.board_id)
+            with Session(engine) as s:
+                rows = s.exec(Ticket.__table__.select()).all()
+                for row in rows:
+                    tid = row[Ticket.__table__.c.id]
+                    ticket_to_board[tid] = rc.board_id
+        except Exception as e:
+            log.warning(
+                "migrate_legacy_workspaces: could not read tickets for "
+                "board %r: %s", rc.board_id, e,
+            )
+
+    moved: dict[str, int] = {}
+    for entry in legacy_root.iterdir():
+        if not entry.is_dir():
+            continue
+        ticket_id = entry.name
+        board_id = ticket_to_board.get(ticket_id)
+        if not board_id:
+            # Ticket not in any per-repo DB → leave at legacy root.
+            continue
+        dest_root = settings.data_dir / board_id / "workspaces"
+        dest_root.mkdir(parents=True, exist_ok=True)
+        dest = dest_root / ticket_id
+        if dest.exists():
+            log.warning(
+                "migrate_legacy_workspaces: destination %s already exists, "
+                "leaving legacy %s in place",
+                dest, entry,
+            )
+            continue
+        try:
+            entry.rename(dest)
+            moved[board_id] = moved.get(board_id, 0) + 1
+        except OSError as e:
+            log.warning(
+                "migrate_legacy_workspaces: could not move %s → %s: %s",
+                entry, dest, e,
+            )
+
+    for board_id, n in moved.items():
+        log.info(
+            "migrate_legacy_workspaces: moved %d workspace(s) to "
+            "<data_dir>/%s/workspaces/", n, board_id,
+        )
+
+    # If the legacy workspaces dir is empty now (post-migration),
+    # remove it so the data root is clean.
+    try:
+        if not any(legacy_root.iterdir()):
+            legacy_root.rmdir()
+            log.info(
+                "migrate_legacy_workspaces: removed empty legacy "
+                "<data_dir>/workspaces/ root",
+            )
+    except OSError:
+        pass
+
+    return moved

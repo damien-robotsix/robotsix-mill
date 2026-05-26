@@ -306,7 +306,7 @@ def test_enqueue_orders_late_stage_before_draft(ctx, service):
     # state machine because we just want different queue ranks.
     from robotsix_mill.core.states import State as _S
     from robotsix_mill.core import db as _db
-    with _db.session(ctx.settings) as s:
+    with _db.session(ctx.settings, service.board_id) as s:
         t_mid = s.get(__import__('robotsix_mill.core.models', fromlist=['Ticket']).Ticket, mid.id)
         t_mid.state = _S.CODE_REVIEW
         s.add(t_mid)

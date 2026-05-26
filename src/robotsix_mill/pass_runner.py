@@ -55,7 +55,9 @@ def _verify_prior_proposals(
             continue
 
         # 2. Read description and parse marker.
-        desc = Workspace(settings.workspaces_dir, ticket.id).read_description()
+        desc = Workspace(
+            settings.workspaces_dir_for(ticket.board_id), ticket.id
+        ).read_description()
         for m in _GAP_ID_RE.finditer(desc):
             marker_label, gap_id = m.group(1), m.group(2)
             if marker_label != source_label:

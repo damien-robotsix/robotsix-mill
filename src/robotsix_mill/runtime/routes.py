@@ -242,19 +242,36 @@ def list_tickets(
     exclude = None
     if not include_closed:
         exclude = {State.CLOSED, State.EPIC_CLOSED}
-    tickets = svc.list(state=state, exclude_states=exclude)
 
-    # When repo_id is provided, filter by the matching board_id.
-    if repo_id is not None:
-        repos = request.app.state.repos
+    # With per-repo DBs the default svc only sees its own board's
+    # tickets. Build a list of services to query: one per repo when
+    # repo_id is omitted or "all", else just the requested repo.
+    from ..core.service import TicketService as _TicketService
+
+    repos = request.app.state.repos
+    if repo_id and repo_id != "all":
         if repo_id not in repos.repos:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unknown repo: '{repo_id}'. Known repos: "
                 f"{sorted(repos.repos.keys())}",
             )
-        target_board = repos.repos[repo_id].board_id
-        tickets = [t for t in tickets if t.board_id == target_board]
+        services = [_TicketService(settings, board_id=repos.repos[repo_id].board_id)]
+    else:
+        services = [
+            _TicketService(settings, board_id=rc.board_id)
+            for rc in repos.repos.values()
+        ]
+        # Include the default DB too (legacy / repo-less tickets) when
+        # repo_id is omitted or "all".
+        services.append(_TicketService(settings, board_id=""))
+
+    tickets: list = []
+    for s in services:
+        try:
+            tickets.extend(s.list(state=state, exclude_states=exclude))
+        except Exception:
+            log.exception("list_tickets: failed to query board %r", s.board_id)
 
     return [
         enrich_ticket_read(

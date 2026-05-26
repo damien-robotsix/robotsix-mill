@@ -234,7 +234,7 @@ def test_resume_blocked_rejects_missing_blocked_from(service):
     t = service.create("no blocked_from")
     # Manually set the ticket to BLOCKED with blocked_from=None via
     # direct DB manipulation to simulate a legacy record.
-    with db.session(service.settings) as s:
+    with db.session(service.settings, service.board_id) as s:
         ticket = s.get(Ticket, t.id)
         ticket.state = State.BLOCKED
         ticket.blocked_from = None
@@ -305,7 +305,7 @@ def test_origin_session_is_none_by_default(service):
 def test_delete_removes_row_events_and_workspace(service, settings):
     t = service.create("junk: no notable issues clean run", "noise")
     service.transition(t.id, State.READY)  # creates a TicketEvent too
-    ws_dir = settings.workspaces_dir / t.id
+    ws_dir = settings.workspaces_dir_for(service.board_id) / t.id
     assert ws_dir.exists()
 
     # Pre-create a dummy conversation file to verify it's cleaned up.
@@ -431,7 +431,7 @@ def test_unmet_dependencies_direct_cycle_satisfied(service, caplog):
     # Manually set mutual deps via DB (no update API)
     from robotsix_mill.core import db as core_db
     from robotsix_mill.core.models import Ticket as TicketModel
-    with core_db.session(service.settings) as s:
+    with core_db.session(service.settings, service.board_id) as s:
         ta = s.get(TicketModel, a.id)
         tb = s.get(TicketModel, b.id)
         ta.depends_on = f'["{b.id}"]'
@@ -656,7 +656,7 @@ def test_all_descendants_is_cycle_safe(service):
     from robotsix_mill.core import db
     from robotsix_mill.core.models import Ticket
 
-    with db.session(service.settings) as s:
+    with db.session(service.settings, service.board_id) as s:
         ta = Ticket(id="cyc-A", title="A", kind="task", workspace_path="")
         tb = Ticket(id="cyc-B", title="B", kind="task", parent_id="cyc-A", workspace_path="")
         s.add_all([ta, tb])

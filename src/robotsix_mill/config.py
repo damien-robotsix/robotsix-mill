@@ -896,7 +896,20 @@ class Settings(BaseSettings):
 
     @property
     def workspaces_dir(self) -> Path:
-        """Resolved path to the directory holding per-ticket workspaces."""
+        """Legacy default-workspaces dir at ``<data_dir>/workspaces``.
+
+        Prefer :meth:`workspaces_dir_for` which routes to the per-repo
+        location ``<data_dir>/<board_id>/workspaces`` — the default is
+        retained only for the rare repo-less ticket and for
+        migration code that needs to know where legacy clones lived.
+        """
+        return self.data_dir / "workspaces"
+
+    def workspaces_dir_for(self, board_id: str) -> Path:
+        """Per-repo workspaces directory. Empty *board_id* falls back
+        to the legacy default at ``<data_dir>/workspaces``."""
+        if board_id:
+            return self.data_dir / board_id / "workspaces"
         return self.data_dir / "workspaces"
 
     @property

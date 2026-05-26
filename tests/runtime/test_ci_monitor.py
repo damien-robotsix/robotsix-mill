@@ -61,7 +61,7 @@ def _ctx(tmp_path, repo_config=None, **env):
 
     return StageContext(
         settings=s,
-        service=TicketService(s),
+        service=TicketService(s, board_id=repo_config.board_id),
         repo_config=repo_config,
     )
 
