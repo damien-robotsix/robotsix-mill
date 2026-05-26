@@ -114,6 +114,7 @@ docker compose exec mill robotsix-mill ticket show <id>
 docker compose exec mill robotsix-mill ticket approve <id>
 docker compose exec mill robotsix-mill audit
 docker compose exec mill robotsix-mill trace-health
+docker compose exec mill robotsix-mill cost-reconciliation
 
 # Local:
 .venv/bin/robotsix-mill ticket list
