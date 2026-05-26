@@ -28,6 +28,7 @@ class CostReconciliationPassResult:
 
     drafts_created: list[dict]  # [{"id": ..., "title": ...}]
     summary: str
+    updated_memory: str = ""
     session_id: str = ""
 
 
@@ -273,6 +274,7 @@ def run_cost_reconciliation_pass(
         return CostReconciliationPassResult(
             drafts_created=[],
             summary=f"OpenRouter fetch skipped (key missing or API error) for {date_str}",
+            updated_memory="",
             session_id=session_id,
         )
     or_total, or_breakdown = or_result
@@ -294,7 +296,7 @@ def run_cost_reconciliation_pass(
         )
         log.info("cost_reconciliation: %s", summary)
         return CostReconciliationPassResult(
-            drafts_created=[], summary=summary, session_id=session_id,
+            drafts_created=[], summary=summary, updated_memory="", session_id=session_id,
         )
 
     # --- Agent ---------------------------------------------------------
@@ -359,6 +361,7 @@ def run_cost_reconciliation_pass(
         return CostReconciliationPassResult(
             drafts_created=[{"id": ticket.id, "title": ticket.title}],
             summary=f"delta=${delta:.2f} — draft {ticket.id}",
+            updated_memory=getattr(agent_result, "updated_memory", ""),
             session_id=session_id,
         )
     except Exception:
@@ -366,5 +369,6 @@ def run_cost_reconciliation_pass(
         return CostReconciliationPassResult(
             drafts_created=[],
             summary=f"delta=${delta:.2f} — draft creation failed",
+            updated_memory=getattr(agent_result, "updated_memory", ""),
             session_id=session_id,
         )

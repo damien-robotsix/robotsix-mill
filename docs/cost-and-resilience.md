@@ -154,6 +154,19 @@ The pass proceeds as follows:
    agent (a single LLM call with zero tools) and creates a DRAFT ticket
    with the analysis.
 
+### Usage
+
+**CLI:**
+```sh
+robotsix-mill cost-reconciliation              # summary output
+robotsix-mill cost-reconciliation --json       # full JSON result
+```
+
+**API:**
+```sh
+curl -X POST http://localhost:8077/cost-reconciliation
+```
+
 ### Sources of divergence
 
 The agent considers these possible causes:

@@ -81,6 +81,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Completeness-check pass",
         "format": "memory_drafts",
     },
+    "cost-reconciliation": {
+        "module": "cost_reconciliation_runner",
+        "function": "run_cost_reconciliation_pass",
+        "label": "Cost-reconciliation pass",
+        "format": "memory_drafts",
+    },
 }
 
 
@@ -295,6 +301,16 @@ def main(argv: list[str] | None = None) -> int:
         "completeness-check", help="run a feature-completeness inspection pass"
     )
     p_completeness_check.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- cost-reconciliation command ---
+    p_cost_reconciliation = sub.add_parser(
+        "cost-reconciliation", help="run an OpenRouter vs Langfuse cost drift detection pass"
+    )
+    p_cost_reconciliation.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
