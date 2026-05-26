@@ -136,6 +136,18 @@ class MergeStage(Stage):
         if pr is None:
             return Outcome(State.HUMAN_MR_APPROVAL)  # not visible yet — re-poll
 
+        if pr.get("merged"):
+            ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                "merge.md"
+            ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
+            log.info("%s: PR merged → done", ticket.id)
+            return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
+        if pr.get("state") == "closed":
+            return Outcome(
+                State.BLOCKED,
+                f"PR closed without merge — resumable: {pr.get('url', '')}",
+            )
+
         # --- Review feedback check (opt-in, gated by config flag) ---
         if s.review_feedback_enabled:
             try:
@@ -167,18 +179,6 @@ class MergeStage(Stage):
                     "%s: changes requested with empty body — treating as no-op",
                     ticket.id,
                 )
-
-        if pr.get("merged"):
-            ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                "merge.md"
-            ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
-            log.info("%s: PR merged → done", ticket.id)
-            return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
-        if pr.get("state") == "closed":
-            return Outcome(
-                State.BLOCKED,
-                f"PR closed without merge — resumable: {pr.get('url', '')}",
-            )
 
         # PR is open.  Check mergeability.
         mergeable = pr.get("mergeable")
