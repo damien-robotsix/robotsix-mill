@@ -145,6 +145,17 @@ class RunRegistry:
             return [asdict(e) for e in reversed(self._entries)]
 
     def list_by_repo(self, repo_id: str) -> list[dict]:
-        """Return entries for *repo_id*, newest first."""
+        """Return entries for *repo_id*, newest first.
+
+        Also includes entries with empty ``repo_id`` — legacy entries
+        filed before per-repo tagging landed, plus runs filed by global
+        contexts (periodic agents that don't carry a repo_id today).
+        Strict equality on a non-empty filter would hide every run
+        from before the per-repo wiring shipped, breaking the Runs UI
+        in single-repo deployments.
+        """
         with self._lock:
-            return [asdict(e) for e in reversed(self._entries) if e.repo_id == repo_id]
+            return [
+                asdict(e) for e in reversed(self._entries)
+                if e.repo_id == repo_id or e.repo_id == ""
+            ]
