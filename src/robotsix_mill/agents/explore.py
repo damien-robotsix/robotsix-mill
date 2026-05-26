@@ -17,6 +17,30 @@ from pathlib import Path
 
 from ..config import Settings, get_secrets
 
+
+# --------------------------------------------------------------------------
+# Budget-exhausted sentinel — set when the explore sub-agent exceeds its
+# UsageLimits.request_limit even after a bounded retry.  ``coding.py``
+# checks this after the coordinator run to escalate to BLOCKED.
+# --------------------------------------------------------------------------
+
+_explore_budget_exhausted: bool = False
+
+
+def mark_explore_budget_exhausted() -> None:
+    global _explore_budget_exhausted
+    _explore_budget_exhausted = True
+
+
+def is_explore_budget_exhausted() -> bool:
+    return _explore_budget_exhausted
+
+
+def reset_explore_budget_exhausted() -> None:
+    global _explore_budget_exhausted
+    _explore_budget_exhausted = False
+
+
 _SYSTEM_PROMPT = """\
 You are a code-orientation scout for ONE git repository. You have
 read-only tools (run_command, read_file, list_dir). The caller will read the files
@@ -97,6 +121,8 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
 
     fallback_client = None
     try:
+        from pydantic_ai.exceptions import UsageLimitExceeded
+
         from .retry import call_with_retry
 
         # Build fallback agent if a fallback model is configured
@@ -121,17 +147,43 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
                 question, usage_limits=limits
             )
 
-        result = call_with_retry(
-            lambda: agent.run_sync(question, usage_limits=limits),
-            settings=settings, what="explore", fallback_fn=fallback_fn,
-        )
+        try:
+            result = call_with_retry(
+                lambda: agent.run_sync(question, usage_limits=limits),
+                settings=settings, what="explore", fallback_fn=fallback_fn,
+            )
+        except UsageLimitExceeded:
+            # Budget exhausted — retry ONCE with a stricter prompt and no tools
+            retry_agent = Agent(
+                model=model,
+                system_prompt=(
+                    "You already exceeded your exploration budget on a "
+                    "previous attempt. Return ONLY your single best answer "
+                    "now — at most 3 file paths with one-line notes. Do "
+                    "NOT call any tools. No speculation, no preamble. If "
+                    "you cannot answer, say 'unable to answer'."
+                ),
+                output_type=str,
+                tools=[],
+                name="explore-retry",
+            )
+            retry_limits = UsageLimits(request_limit=2)
+            try:
+                retry_result = retry_agent.run_sync(
+                    question, usage_limits=retry_limits,
+                )
+            except UsageLimitExceeded:
+                mark_explore_budget_exhausted()
+                raise
+            return str(retry_result.output).strip()
+
+        return str(result.output).strip()
     except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
         return f"explore failed: {e}"
     finally:
         _close_async_client(main_client)
         if fallback_client is not None:
             _close_async_client(fallback_client)
-    return str(result.output).strip()
 
 
 def make_explore_tool(settings: Settings, repo_dir: Path,

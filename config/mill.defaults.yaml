@@ -48,7 +48,7 @@ core:
   limits:
     coordinator_requests: 200          # per-ticket request cap for implement (coordinator)
     test_requests: 8                   # per-call cap for test-distillation sub-agent
-    explore_requests: 20               # per-call cap for explore sub-agent
+    explore_requests: 100              # per-call cap for explore sub-agent
     dedup_requests: 4                  # per-call cap for dedup check
     web_research_requests: 8           # per-call cap for web-research sub-agent
     scope_triage_requests: 4           # per-call cap for scope-triage agent

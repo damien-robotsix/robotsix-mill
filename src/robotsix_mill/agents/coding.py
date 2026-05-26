@@ -126,6 +126,16 @@ def run_implement_agent(
     except Exception as e:  # noqa: BLE001 — block-as-resumable
         raise AgentRunError(str(e), []) from e
 
+    from .explore import is_explore_budget_exhausted, reset_explore_budget_exhausted
+    if is_explore_budget_exhausted():
+        reset_explore_budget_exhausted()
+        raise AgentBudgetError(
+            f"explore sub-agent exceeded request_limit="
+            f"{settings.explore_request_limit}; "
+            f"coordinator could not proceed without exploration",
+            [],
+        )
+
     return result.summary, result.reference_files, result.updated_memory
 
 

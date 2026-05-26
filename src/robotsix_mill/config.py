@@ -238,7 +238,7 @@ class Settings(BaseSettings):
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     explore_request_limit: int = Field(
-        default=20, alias="MILL_EXPLORE_REQUEST_LIMIT"
+        default=100, alias="MILL_EXPLORE_REQUEST_LIMIT"
     )
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(

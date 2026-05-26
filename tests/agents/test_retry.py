@@ -175,37 +175,25 @@ def test_is_rate_limited_walks_chain():
 
 # --- rate-limit retry behaviour ------------------------------------------
 
-def test_rate_limit_backoff_then_success(tmp_path):
-    """UsageLimitExceeded on attempts 1-2, then success on attempt 3.
-    Backoff delays must respect the rate-limit schedule (≥30s base,
-    jitter-tolerant; ≤120s cap)."""
-    s = _settings(
-        tmp_path,
-        MILL_RATE_LIMIT_BACKOFF_BASE="30.0",
-        MILL_RATE_LIMIT_BACKOFF_CAP="120.0",
-    )
+def test_rate_limit_raises_immediately_without_fallback(tmp_path):
+    """UsageLimitExceeded without a fallback_fn must re-raise
+    immediately — no backoff, no retries."""
+    s = _settings(tmp_path)
     slept, calls = [], {"n": 0}
 
     def fn():
         calls["n"] += 1
-        if calls["n"] < 3:
-            raise _FakeUsageLimitExceeded("cap")
-        return "ok"
+        raise _FakeUsageLimitExceeded("cap")
 
-    out = call_with_retry(fn, settings=s, sleep=slept.append)
-    assert out == "ok" and calls["n"] == 3
-    assert len(slept) == 2  # two backoffs before the 3rd, successful call
-    # First backoff: 30 * 2^0 = 30, with jitter up to 15 → [30, 45]
-    # Second backoff: 30 * 2^1 = 60, with jitter up to 30 → [60, 90]
-    assert slept[0] >= 30.0
-    assert slept[0] <= 120.0
-    assert slept[1] >= 60.0
-    assert slept[1] <= 120.0
+    with pytest.raises(_FakeUsageLimitExceeded):
+        call_with_retry(fn, settings=s, sleep=slept.append)
+    assert calls["n"] == 1  # exactly one call, no retries
+    assert len(slept) == 0   # no backoff delay
 
 
 def test_rate_limit_exhausts_then_raises(tmp_path):
-    """Persistent UsageLimitExceeded with no fallback — must retry
-    transient_retries times then raise."""
+    """Persistent UsageLimitExceeded with no fallback — must raise
+    immediately without retrying (UsageLimitExceeded is never retried)."""
     s = _settings(tmp_path, MILL_TRANSIENT_RETRIES="2")
     slept, calls = [], {"n": 0}
 
@@ -215,15 +203,13 @@ def test_rate_limit_exhausts_then_raises(tmp_path):
 
     with pytest.raises(_FakeUsageLimitExceeded):
         call_with_retry(fn, settings=s, sleep=slept.append)
-    assert calls["n"] == 3          # 1 try + 2 retries
-    assert len(slept) == 2
-    # Backoff still respects rate-limit cap
-    assert all(d <= s.rate_limit_backoff_cap * 1.5 for d in slept)
+    assert calls["n"] == 1  # exactly one call, no retries
+    assert len(slept) == 0   # no backoff
 
 
 def test_rate_limit_fallback_activates(tmp_path):
-    """UsageLimitExceeded on attempts 1-3, then fallback_fn is invoked
-    and succeeds on attempt 4."""
+    """UsageLimitExceeded on first attempt — fallback_fn is invoked
+    immediately (not after rate_limit_fallback_retries)."""
     s = _settings(
         tmp_path,
         MILL_TRANSIENT_RETRIES="4",
@@ -244,13 +230,13 @@ def test_rate_limit_fallback_activates(tmp_path):
         primary, settings=s, sleep=lambda _: None, fallback_fn=fallback,
     )
     assert out == "fallback-ok"
-    assert primary_calls["n"] == 3   # 3 rate-limited attempts before fallback
+    assert primary_calls["n"] == 1   # fallback activates on first failure
     assert fallback_calls["n"] == 1  # fallback succeeds on first try
 
 
 def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
-    """Fallback also fails with UsageLimitExceeded — retries exhausted,
-    last error raised."""
+    """Fallback also fails with UsageLimitExceeded — re-raises
+    immediately (no retries)."""
     s = _settings(
         tmp_path,
         MILL_TRANSIENT_RETRIES="4",
@@ -271,12 +257,8 @@ def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
         call_with_retry(
             primary, settings=s, sleep=lambda _: None, fallback_fn=fallback,
         )
-    assert primary_calls["n"] == 3
-    # Remaining retries after fallback activation: 4 - 3 = 1 more attempt
-    # But fallback starts on attempt 4 (0-indexed attempt=3), and there are
-    # 5 total attempts (0..4). So fallback gets called for attempt 3 and 4.
-    # That's 2 fallback calls, both fail → raises.
-    assert fallback_calls["n"] == 2
+    assert primary_calls["n"] == 1  # fallback activates on first failure
+    assert fallback_calls["n"] == 1  # fallback also fails immediately
 
 
 def test_rate_limit_fallback_not_called_for_transient(tmp_path):
