@@ -351,8 +351,8 @@ Periodic agents: `audit`, `trace_health`, `health`, `test_gap`,
 > ² `trace_health` and `ci_monitor` do **not** have a `memory_path`
 > field — they write no per-agent memory ledger.
 >
-> `env_sync`, `bc_check`, and `completeness_check` are **env-var-only** (no YAML mapping yet).
-> Set `MILL_ENV_SYNC_PERIODIC=true`, `MILL_BC_CHECK_PERIODIC=true`, etc.
+> `bc_check` and `completeness_check` are **env-var-only** (no YAML mapping yet).
+> Set `MILL_BC_CHECK_PERIODIC=true`, `MILL_COMPLETENESS_CHECK_PERIODIC=true`, etc.
 >
 > ³ In multi-repo mode, the default memory file path is
 > `<data_dir>/<repo_id>/<agent>_memory.md` — each repo gets its own
@@ -374,14 +374,11 @@ Additional fields:
 
 #### Env-var-only periodic agents
 
-`env_sync`, `bc_check`, and `completeness_check` have no YAML mapping yet — set them via
+`bc_check` and `completeness_check` have no YAML mapping yet — set them via
 environment variables only:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_ENV_SYNC_PERIODIC` | `false` | Enable periodic config/docs drift detection |
-| `MILL_ENV_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between env-sync passes |
-| `MILL_ENV_SYNC_MODEL` | `openai/gpt-4o-mini` | Env-sync agent model |
 | `MILL_BC_CHECK_PERIODIC` | `false` | Enable periodic backward-compatibility inspection |
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
 | `MILL_BC_CHECK_MODEL` | `deepseek/deepseek-v4-pro` | BC-check agent model |
