@@ -1580,7 +1580,12 @@ class Worker:
         from ..config import get_repos_config
         from ..core.service import TicketService
 
-        boards: list[str] = [""]
+        boards: list[str] = []
+        # Only enumerate the default-board DB when it already exists —
+        # otherwise the lazy init_db("") via svc.list() creates an
+        # empty stub at <data_dir>/mill.db that nothing ever writes to.
+        if (self.ctx.settings.data_dir / "mill.db").exists():
+            boards.append("")
         try:
             for rc in get_repos_config().repos.values():
                 if rc.board_id and rc.board_id not in boards:
