@@ -124,6 +124,7 @@ def with_cost(
 
 
 _REVIEW_STATES: frozenset[State] = frozenset({
+    State.IMPLEMENT_COMPLETE,
     State.HUMAN_MR_APPROVAL,
     State.HUMAN_ISSUE_APPROVAL,
     State.FIXING_CI,

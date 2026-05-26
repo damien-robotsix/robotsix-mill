@@ -160,22 +160,127 @@ def test_draft_to_human_issue_approval():
     assert can_transition(State.DRAFT, State.HUMAN_ISSUE_APPROVAL) is True
 
 
-def test_human_mr_approval_to_fixing_ci():
-    assert can_transition(State.HUMAN_MR_APPROVAL, State.FIXING_CI) is True
+# --- IMPLEMENT_COMPLETE gate-check state ---
+
+def test_implement_complete_to_human_mr_approval():
+    """IMPLEMENT_COMPLETE → HUMAN_MR_APPROVAL is valid (gates passed)."""
+    assert can_transition(State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL) is True
 
 
-def test_fixing_ci_to_human_mr_approval():
-    assert can_transition(State.FIXING_CI, State.HUMAN_MR_APPROVAL) is True
+def test_implement_complete_to_fixing_ci():
+    """IMPLEMENT_COMPLETE → FIXING_CI is valid (CI failing)."""
+    assert can_transition(State.IMPLEMENT_COMPLETE, State.FIXING_CI) is True
+
+
+def test_implement_complete_to_rebasing():
+    """IMPLEMENT_COMPLETE → REBASING is valid (PR conflicting)."""
+    assert can_transition(State.IMPLEMENT_COMPLETE, State.REBASING) is True
+
+
+def test_implement_complete_to_done():
+    """IMPLEMENT_COMPLETE → DONE is valid (PR merged while polling)."""
+    assert can_transition(State.IMPLEMENT_COMPLETE, State.DONE) is True
+
+
+def test_implement_complete_to_blocked():
+    """IMPLEMENT_COMPLETE → BLOCKED is valid."""
+    assert can_transition(State.IMPLEMENT_COMPLETE, State.BLOCKED) is True
+
+
+def test_implement_complete_to_errored():
+    """IMPLEMENT_COMPLETE → ERRORED is valid."""
+    assert can_transition(State.IMPLEMENT_COMPLETE, State.ERRORED) is True
+
+
+def test_implement_complete_to_waiting_auto_merge():
+    """IMPLEMENT_COMPLETE → WAITING_AUTO_MERGE is valid."""
+    assert can_transition(State.IMPLEMENT_COMPLETE, State.WAITING_AUTO_MERGE) is True
+
+
+def test_implement_complete_stage_for_state():
+    """IMPLEMENT_COMPLETE is consumed by the merge stage."""
+    assert STAGE_FOR_STATE[State.IMPLEMENT_COMPLETE] == "merge"
+
+
+# --- HUMAN_MR_APPROVAL transitions (updated for silent fallback) ---
+
+def test_human_mr_approval_to_implement_complete():
+    """HUMAN_MR_APPROVAL → IMPLEMENT_COMPLETE is valid (silent fallback)."""
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.IMPLEMENT_COMPLETE) is True
+
+
+def test_human_mr_approval_to_rebasing_removed():
+    """HUMAN_MR_APPROVAL → REBASING is INVALID (removed — falls back via IMPLEMENT_COMPLETE)."""
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.REBASING) is False
+
+
+def test_human_mr_approval_to_fixing_ci_removed():
+    """HUMAN_MR_APPROVAL → FIXING_CI is INVALID (removed — falls back via IMPLEMENT_COMPLETE)."""
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.FIXING_CI) is False
+
+
+# --- REBASING transitions (now go to IMPLEMENT_COMPLETE) ---
+
+def test_rebasing_to_implement_complete():
+    """REBASING → IMPLEMENT_COMPLETE is valid (rebase success → re-verify gates)."""
+    assert can_transition(State.REBASING, State.IMPLEMENT_COMPLETE) is True
+
+
+def test_rebasing_to_human_mr_approval_removed():
+    """REBASING → HUMAN_MR_APPROVAL is INVALID (removed — goes via IMPLEMENT_COMPLETE)."""
+    assert can_transition(State.REBASING, State.HUMAN_MR_APPROVAL) is False
+
+
+# --- FIXING_CI transitions (now go to IMPLEMENT_COMPLETE) ---
+
+def test_fixing_ci_to_implement_complete():
+    """FIXING_CI → IMPLEMENT_COMPLETE is valid (ci fix success → re-verify gates)."""
+    assert can_transition(State.FIXING_CI, State.IMPLEMENT_COMPLETE) is True
+
+
+def test_fixing_ci_to_human_mr_approval_removed():
+    """FIXING_CI → HUMAN_MR_APPROVAL is INVALID (removed — goes via IMPLEMENT_COMPLETE)."""
+    assert can_transition(State.FIXING_CI, State.HUMAN_MR_APPROVAL) is False
 
 
 def test_fixing_ci_to_blocked():
     assert can_transition(State.FIXING_CI, State.BLOCKED) is True
 
 
+# --- DELIVERABLE transitions (now go to IMPLEMENT_COMPLETE) ---
+
+def test_deliverable_to_implement_complete():
+    """DELIVERABLE → IMPLEMENT_COMPLETE is valid (PR opened, gates not yet checked)."""
+    assert can_transition(State.DELIVERABLE, State.IMPLEMENT_COMPLETE) is True
+
+
+def test_deliverable_to_human_mr_approval_removed():
+    """DELIVERABLE → HUMAN_MR_APPROVAL is INVALID (removed — goes via IMPLEMENT_COMPLETE)."""
+    assert can_transition(State.DELIVERABLE, State.HUMAN_MR_APPROVAL) is False
+
+
+# --- WAITING_AUTO_MERGE transitions (now use IMPLEMENT_COMPLETE fallback) ---
+
+def test_waiting_auto_merge_to_implement_complete():
+    """WAITING_AUTO_MERGE → IMPLEMENT_COMPLETE is valid (CI failure or conflict → gate-check)."""
+    assert can_transition(State.WAITING_AUTO_MERGE, State.IMPLEMENT_COMPLETE) is True
+
+
+def test_waiting_auto_merge_to_fixing_ci_removed():
+    """WAITING_AUTO_MERGE → FIXING_CI is INVALID (falls back via IMPLEMENT_COMPLETE)."""
+    assert can_transition(State.WAITING_AUTO_MERGE, State.FIXING_CI) is False
+
+
+def test_waiting_auto_merge_to_rebasing_removed():
+    """WAITING_AUTO_MERGE → REBASING is INVALID (falls back via IMPLEMENT_COMPLETE)."""
+    assert can_transition(State.WAITING_AUTO_MERGE, State.REBASING) is False
+
+
 def test_errored_as_destination():
     """States that declare ERRORED in TRANSITIONS can reach it."""
     for src in (State.DRAFT, State.HUMAN_ISSUE_APPROVAL, State.READY,
-                State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.REBASING,
+                State.DELIVERABLE, State.IMPLEMENT_COMPLETE,
+                State.HUMAN_MR_APPROVAL, State.REBASING,
                 State.FIXING_CI, State.DONE, State.ASKED):
         assert can_transition(src, State.ERRORED) is True, (
             f"{src.value} → ERRORED should be valid"

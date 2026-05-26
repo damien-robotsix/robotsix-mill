@@ -649,6 +649,7 @@ def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     dep = ctx.service.create("Dep ticket")
     ctx.service.transition(dep.id, State.READY)
     ctx.service.transition(dep.id, State.DELIVERABLE)
+    ctx.service.transition(dep.id, State.IMPLEMENT_COMPLETE)
     ctx.service.transition(dep.id, State.HUMAN_MR_APPROVAL)
     ctx.service.transition(dep.id, State.DONE)
     ctx.service.transition(dep.id, State.CLOSED)

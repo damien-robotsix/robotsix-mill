@@ -207,27 +207,36 @@ async def test_notifies_on_blocked(ctx, service, monkeypatch, _notify_settings, 
 
 async def test_notifies_on_human_mr_approval(ctx, service, monkeypatch, _notify_settings, _recording):
     """Worker-driven transition into human_mr_approval fires a notification.
-    The valid path is deliverable -> human_mr_approval; mock the deliver stage
-    and pre-transition through draft -> ready -> deliverable."""
+    The valid path is deliverable -> implement_complete -> human_mr_approval;
+    mock the deliver and merge stages and pre-transition through draft -> ready -> deliverable."""
     # Mock refine and implement as no-ops so they don't interfere.
     class NoOp(Stage):
         def run(self, t, _c):
             return Outcome(t.state)
 
     for sn in list(registry.STAGES.keys()):
-        if sn not in ("deliver",):
+        if sn not in ("deliver", "merge"):
             s = NoOp()
             s.name = sn
             monkeypatch.setitem(registry.STAGES, sn, s)
 
-    class DeliverStage(Stage):
+    class MockDeliver(Stage):
         name = "deliver"
         input_state = State.DELIVERABLE
 
         def run(self, _t, _c):
-            return Outcome(State.HUMAN_MR_APPROVAL, "PR opened")
+            return Outcome(State.IMPLEMENT_COMPLETE, "PR opened")
 
-    monkeypatch.setitem(registry.STAGES, "deliver", DeliverStage())
+    monkeypatch.setitem(registry.STAGES, "deliver", MockDeliver())
+
+    class MockMerge(Stage):
+        name = "merge"
+        input_state = State.IMPLEMENT_COMPLETE
+
+        def run(self, _t, _c):
+            return Outcome(State.HUMAN_MR_APPROVAL, "gates passed")
+
+    monkeypatch.setitem(registry.STAGES, "merge", MockMerge())
     t = service.create("in-review test")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.DELIVERABLE)

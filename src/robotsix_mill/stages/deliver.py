@@ -1,8 +1,12 @@
-"""Deliver stage: DELIVERABLE -> HUMAN_MR_APPROVAL.
+"""Deliver stage: DELIVERABLE -> IMPLEMENT_COMPLETE.
 
 Push the ticket's branch to the configured forge and open a PR/MR
 against ``FORGE_TARGET_BRANCH``. The forge adapter only does the API
 call; this stage owns the git push (it has the workspace clone).
+
+The ticket enters ``IMPLEMENT_COMPLETE`` (not ``HUMAN_MR_APPROVAL``)
+so the merge stage verifies CI and mergeability gates before notifying
+the human.
 
 Anything that isn't success is BLOCKED-resumable (move back to
 DELIVERABLE to retry) — never terminal FAILED, so a transient forge/
@@ -89,5 +93,6 @@ class DeliverStage(Stage):
             encoding="utf-8",
         )
         log.info("%s: delivered → %s", ticket.id, url)
-        # PR opened — await human merge (the merge stage polls for it)
-        return Outcome(State.HUMAN_MR_APPROVAL, f"PR: {url}")
+        # PR opened — merge stage verifies CI & mergeability gates
+        # before notifying the human.
+        return Outcome(State.IMPLEMENT_COMPLETE, f"PR: {url}")

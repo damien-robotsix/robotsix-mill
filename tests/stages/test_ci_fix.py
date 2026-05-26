@@ -1,4 +1,4 @@
-"""Tests for the CIFixStage (FIXING_CI → HUMAN_MR_APPROVAL | BLOCKED)."""
+"""Tests for the CIFixStage (FIXING_CI → IMPLEMENT_COMPLETE | BLOCKED)."""
 
 import pytest
 
@@ -34,7 +34,7 @@ def _ctx(tmp_path, **env):
 
 def _fixing_ci(ctx):
     t = ctx.service.create("x", "y")
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.FIXING_CI):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.FIXING_CI):
         ctx.service.transition(t.id, st)
     ctx.service.set_branch(t.id, f"mill/{t.id}")
     return ctx.service.get(t.id)
@@ -55,9 +55,9 @@ def _setup_repo(ctx, ticket):
     return str(repo_dir)
 
 
-# --- E.27: Fix success + push success → HUMAN_MR_APPROVAL ---
+# --- Fix success + push success → IMPLEMENT_COMPLETE ---
 
-def test_fix_success_push_success_returns_human_mr_approval(tmp_path, monkeypatch):
+def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -88,7 +88,7 @@ def test_fix_success_push_success_returns_human_mr_approval(tmp_path, monkeypatc
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.IMPLEMENT_COMPLETE
     assert push_seen["branch"] == f"mill/{t.id}"
 
     # Counter reset to 0.
@@ -96,7 +96,7 @@ def test_fix_success_push_success_returns_human_mr_approval(tmp_path, monkeypatc
     assert _read_counter(counter) == 0
 
 
-# --- E.28: Fix success + push failure → BLOCKED ---
+# --- Fix success + push failure → BLOCKED ---
 
 def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
@@ -128,7 +128,7 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
     assert "force-push failed" in out.note
 
 
-# --- E.29: Fix failure, attempts remaining → HUMAN_MR_APPROVAL ---
+# --- Fix failure, attempts remaining → IMPLEMENT_COMPLETE ---
 
 def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="3")
@@ -159,14 +159,14 @@ def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
     counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
 
-    # Attempt 1: fails → HUMAN_MR_APPROVAL, counter=1
+    # Attempt 1: fails → IMPLEMENT_COMPLETE, counter=1
     out1 = CIFixStage().run(t, ctx)
-    assert out1.next_state is State.HUMAN_MR_APPROVAL
+    assert out1.next_state is State.IMPLEMENT_COMPLETE
     assert _read_counter(counter) == 1
     assert push_calls == []  # never pushed on failure
 
 
-# --- E.30: Fix failure, attempts exhausted → BLOCKED ---
+# --- Fix failure, attempts exhausted → BLOCKED ---
 
 def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="2")
@@ -194,9 +194,9 @@ def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
     counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_attempts.txt"
 
-    # Attempt 1: fails → HUMAN_MR_APPROVAL
+    # Attempt 1: fails → IMPLEMENT_COMPLETE
     out1 = CIFixStage().run(t, ctx)
-    assert out1.next_state is State.HUMAN_MR_APPROVAL
+    assert out1.next_state is State.IMPLEMENT_COMPLETE
 
     # Attempt 2: fails → BLOCKED (exhausted)
     out2 = CIFixStage().run(t, ctx)
@@ -207,7 +207,7 @@ def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
     assert _read_counter(counter) == 0
 
 
-# --- E.31: Agent crash → treated as failure ---
+# --- Agent crash → treated as failure ---
 
 def test_agent_crash_treated_as_failure(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="1")
@@ -235,7 +235,7 @@ def test_agent_crash_treated_as_failure(tmp_path, monkeypatch):
     assert "ci fix failed after 1 attempt" in out.note
 
 
-# --- E.32: Missing workspace clone → BLOCKED ---
+# --- Missing workspace clone → BLOCKED ---
 
 def test_missing_workspace_clone_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
@@ -247,7 +247,7 @@ def test_missing_workspace_clone_blocks(tmp_path, monkeypatch):
     assert "workspace clone is missing" in out.note
 
 
-# --- E.33: Forge not configured → BLOCKED ---
+# --- Forge not configured → BLOCKED ---
 
 def test_forge_not_configured_blocks(tmp_path):
     ctx = _ctx(tmp_path)
@@ -256,7 +256,7 @@ def test_forge_not_configured_blocks(tmp_path):
     assert "forge not configured" in out.note
 
 
-# --- E.34: Force-push refspec is ticket branch only ---
+# --- Force-push refspec is ticket branch only ---
 
 def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
@@ -290,10 +290,10 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     assert push_args["branch"] != "main"
 
 
-# --- CI green/pending while in FIXING_CI → back to HUMAN_MR_APPROVAL ---
+# --- CI green/pending while in FIXING_CI → back to IMPLEMENT_COMPLETE ---
 
-def test_ci_green_while_in_fixing_ci_returns_human_mr_approval(tmp_path, monkeypatch):
-    """If CI turns green while we're in FIXING_CI, go back to HUMAN_MR_APPROVAL."""
+def test_ci_green_while_in_fixing_ci_returns_implement_complete(tmp_path, monkeypatch):
+    """If CI turns green while we're in FIXING_CI, go back to IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -304,10 +304,10 @@ def test_ci_green_while_in_fixing_ci_returns_human_mr_approval(tmp_path, monkeyp
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
-def test_ci_pending_while_in_fixing_ci_returns_human_mr_approval(tmp_path, monkeypatch):
+def test_ci_pending_while_in_fixing_ci_returns_implement_complete(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -318,11 +318,11 @@ def test_ci_pending_while_in_fixing_ci_returns_human_mr_approval(tmp_path, monke
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
 def test_check_status_returns_none_while_in_fixing_ci(tmp_path, monkeypatch):
-    """PR disappeared → back to HUMAN_MR_APPROVAL."""
+    """PR disappeared → back to IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -333,11 +333,11 @@ def test_check_status_returns_none_while_in_fixing_ci(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
 def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
-    """Transient error → back to HUMAN_MR_APPROVAL for re-poll."""
+    """Transient error → back to IMPLEMENT_COMPLETE for re-poll."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -348,13 +348,13 @@ def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
 # --- Counter location ---
 
 def test_counter_location_is_artifacts_dir(tmp_path, monkeypatch):
-    """E.36: Counter is at artifacts_dir / ci_fix_attempts.txt."""
+    """Counter is at artifacts_dir / ci_fix_attempts.txt."""
     ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="3")
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
@@ -503,4 +503,4 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.IMPLEMENT_COMPLETE

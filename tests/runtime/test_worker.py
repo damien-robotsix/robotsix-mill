@@ -163,7 +163,7 @@ async def test_done_is_not_terminal_retrospect_runs(ctx, service, monkeypatch):
 
     monkeypatch.setitem(registry.STAGES, "retrospect", FakeRetrospect())
     t = service.create("x")
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         service.transition(t.id, st)
     await process_ticket(t.id, ctx)
     assert service.get(t.id).state is State.CLOSED
@@ -193,7 +193,7 @@ def test_no_progress_guard_exempts_poll_stage(ctx, service):
     across many poll cycles — it must NEVER be auto-blocked."""
     w = Worker(ctx)
     t = service.create("x")
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
         service.transition(t.id, st)
     for _ in range(ctx.settings.max_stuck_cycles + 3):
         w._check_progress(t.id, State.HUMAN_MR_APPROVAL, State.HUMAN_MR_APPROVAL)
@@ -276,6 +276,7 @@ def test_no_progress_counter_resets_on_advance(ctx, service):
     w._check_progress(t.id, State.READY, State.DELIVERABLE)  # progressed
     assert t.id not in w._stuck
     service.transition(t.id, State.DELIVERABLE)
+    service.transition(t.id, State.IMPLEMENT_COMPLETE)
     service.transition(t.id, State.HUMAN_MR_APPROVAL)
     service.transition(t.id, State.DONE)  # retrospect (traced) stage
     for _ in range(ctx.settings.max_stuck_cycles - 1):

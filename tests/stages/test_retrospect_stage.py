@@ -52,6 +52,7 @@ def _ticket(ctx, title="Test ticket", body="Test description", branch="mill/test
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DOCUMENTING)
     ctx.service.transition(t.id, State.DELIVERABLE)
+    ctx.service.transition(t.id, State.IMPLEMENT_COMPLETE)
     ctx.service.transition(t.id, State.HUMAN_MR_APPROVAL)
     ctx.service.transition(t.id, State.DONE)
     if branch:
@@ -509,6 +510,7 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
     ctx.service.transition(pre.id, State.READY)
     ctx.service.transition(pre.id, State.DOCUMENTING)
     ctx.service.transition(pre.id, State.DELIVERABLE)
+    ctx.service.transition(pre.id, State.IMPLEMENT_COMPLETE)
     ctx.service.transition(pre.id, State.HUMAN_MR_APPROVAL)
     ctx.service.transition(pre.id, State.DONE)
     ctx.service.transition(pre.id, State.CLOSED)

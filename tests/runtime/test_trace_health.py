@@ -269,9 +269,10 @@ def test_closed_ticket_does_not_block(tmp_path, monkeypatch):
     svc = TicketService(settings)
 
     old = svc.create("old alert", "old body", source="trace-health")
-    # Valid path to CLOSED: DRAFT → READY → DELIVERABLE → HUMAN_MR_APPROVAL → DONE → CLOSED
+    # Valid path to CLOSED: DRAFT → READY → DELIVERABLE → IMPLEMENT_COMPLETE → HUMAN_MR_APPROVAL → DONE → CLOSED
     svc.transition(old.id, State.READY, note="auto")
     svc.transition(old.id, State.DELIVERABLE, note="auto")
+    svc.transition(old.id, State.IMPLEMENT_COMPLETE, note="auto")
     svc.transition(old.id, State.HUMAN_MR_APPROVAL, note="auto")
     svc.transition(old.id, State.DONE, note="auto")
     svc.transition(old.id, State.CLOSED, note="resolved")

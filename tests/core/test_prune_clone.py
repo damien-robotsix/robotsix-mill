@@ -39,7 +39,7 @@ def _ctx(tmp_path: Path, **env_overrides):
 def _done(ctx):
     """Create a ticket, move it to DONE, return the ticket."""
     t = ctx.service.create("prune test", "body")
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(t.id, st)
     return ctx.service.get(t.id)
 

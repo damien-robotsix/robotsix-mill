@@ -521,7 +521,7 @@ def get_merge_status(
 
     # Only relevant for merge-ready states.  Everything else gets a
     # clean "no" so the drawer doesn't bother rendering a button.
-    if ticket.state not in (State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE):
+    if ticket.state not in (State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE, State.IMPLEMENT_COMPLETE):
         return {
             "mergeable": None,
             "ci_conclusion": None,

@@ -43,8 +43,9 @@ system_prompt: |
     epic should be closed.
   - **`keep_open`** — at least one child is still in a non-terminal
     state (`DRAFT`, `READY`, `CODE_REVIEW`, `DELIVERABLE`,
-    `HUMAN_MR_APPROVAL`, `REBASING`, `FIXING_CI`, `ASKED`, `BLOCKED`,
-    `ERRORED`) AND the epic goal is not yet met. No change to the epic.
+    `IMPLEMENT_COMPLETE`, `HUMAN_MR_APPROVAL`, `REBASING`, `FIXING_CI`,
+    `ASKED`, `BLOCKED`, `ERRORED`) AND the epic goal is not yet met.
+    No change to the epic.
   - **`update_description`** — the epic description must always reflect
     the current strategic plan.  If it is vague, generic, or no longer
     captures what is done and what remains, rewrite it.  A vague

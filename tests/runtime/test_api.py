@@ -372,6 +372,7 @@ def test_resume_blocked_from_done(client, service):
     t = service.create("Retrospect resume via API")
     service.transition(t.id, State.READY, note="refined")
     service.transition(t.id, State.DELIVERABLE, note="implemented")
+    service.transition(t.id, State.IMPLEMENT_COMPLETE, note="gates checking")
     service.transition(t.id, State.HUMAN_MR_APPROVAL, note="PR opened")
     service.transition(t.id, State.DONE, note="merged")
     service.transition(t.id, State.BLOCKED, note="retrospect failed")
@@ -1627,6 +1628,7 @@ def test_merge_now_happy_path(client, service, monkeypatch):
     t = service.create("Merge me please")
     service.transition(t.id, State.READY, note="approved (autonomous)")
     service.transition(t.id, State.DELIVERABLE, note="delivered")
+    service.transition(t.id, State.IMPLEMENT_COMPLETE, note="gates checking")
     service.transition(t.id, State.HUMAN_MR_APPROVAL, note="awaiting merge")
     assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
 
@@ -1683,6 +1685,7 @@ def test_merge_now_forge_rejection_409(client, service, monkeypatch):
     t = service.create("Blocked merge")
     service.transition(t.id, State.READY, note="approved (autonomous)")
     service.transition(t.id, State.DELIVERABLE, note="delivered")
+    service.transition(t.id, State.IMPLEMENT_COMPLETE, note="gates checking")
     service.transition(t.id, State.HUMAN_MR_APPROVAL, note="awaiting merge")
     assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
 
