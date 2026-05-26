@@ -195,7 +195,7 @@ def list_tickets(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
-    # The board polls this every 1s. Both expensive enrichments are
+    # The board polls this every 5s. Both expensive enrichments are
     # downgraded for the list:
     #   blocking_cost=False — cache-only Langfuse cost lookup (no HTTP).
     #   fetch_pr_url=False  — skip the per-ticket forge pr_status call.
@@ -521,7 +521,7 @@ def get_merge_status(
 
     # Only relevant for merge-ready states.  Everything else gets a
     # clean "no" so the drawer doesn't bother rendering a button.
-    if ticket.state not in (State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE):
+    if ticket.state not in (State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE, State.IMPLEMENT_COMPLETE):
         return {
             "mergeable": None,
             "ci_conclusion": None,
@@ -1135,10 +1135,11 @@ def list_runs(
     ``?repo_id=X`` filters to runs associated with that repo.
     When omitted, returns all (current behaviour preserved).
     """
+    entries = registry.list_all()
     if repo_id is not None:
         repos = request.app.state.repos
         if repo_id == "all":
-            entries = registry.list_all()
+            pass  # no filtering
         elif repo_id not in repos.repos:
             raise HTTPException(
                 status_code=400,
@@ -1146,9 +1147,8 @@ def list_runs(
                 f"{sorted(repos.repos.keys())}",
             )
         else:
-            entries = registry.list_by_repo(repo_id)
-    else:
-        entries = registry.list_all()
+            # Filter entries that carry a repo_id matching the request.
+            entries = [e for e in entries if e.get("repo_id") == repo_id]
     return entries
 
 

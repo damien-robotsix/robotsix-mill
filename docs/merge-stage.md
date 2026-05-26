@@ -1,8 +1,38 @@
-# Merge stage: auto-rebase & CI-fix
+# Merge stage: gate-check, auto-rebase & CI-fix
 
-The merge stage monitors open PRs and automatically handles three
-scenarios: implement-stage rebase failures, merge conflicts from a
-stale PR branch, and failing remote CI checks.
+The merge stage monitors open PRs and handles several scenarios:
+gate-checking new PRs before notifying humans, auto-rebasing conflicting
+PRs, and auto-fixing failing CI.
+
+## Gate-check: `IMPLEMENT_COMPLETE` → `HUMAN_MR_APPROVAL`
+
+After the deliver stage creates a PR, the ticket enters `IMPLEMENT_COMPLETE`
+instead of `HUMAN_MR_APPROVAL`.  The merge stage polls this new state and
+verifies two gates before promoting the ticket:
+
+1. **CI is green** — the PR's CI checks must all pass.
+2. **PR is mergeable** — no conflicts with the target branch.
+
+When both gates pass, the ticket transitions to `HUMAN_MR_APPROVAL`
+(triggering an ntfy notification to the human).  If either gate fails:
+
+- **Failing CI** → `FIXING_CI` (auto-fix agent runs next poll).
+- **Conflicting PR** → `REBASING` (rebase agent runs next poll).
+- After auto-fix, the ticket returns to `IMPLEMENT_COMPLETE` so both
+  gates are re-verified before another human notification.
+
+This means humans are only notified when the PR is actually ready for
+review and merge — no premature noise for PRs with failing CI or
+conflicts.
+
+## Silent fallback from `HUMAN_MR_APPROVAL`
+
+If a ticket is already in `HUMAN_MR_APPROVAL` (gates passed) and the
+merge stage later detects CI failure or a merge conflict, it silently
+transitions back to `IMPLEMENT_COMPLETE`.  No ntfy notification is
+fired — the ticket leaves the human-review state and the robot
+attempts auto-fix.  The human is only re-notified when both gates
+pass again.
 
 ## Auto-rebase
 
@@ -14,20 +44,15 @@ using the LLM. It is invoked from two paths:
    remote target. If that rebase fails (conflict), the ticket transitions
    to `REBASING` instead of blocking.
 
-2. **Stale-PR conflict** — when a PR sits `in_review` while other PRs
-   merge onto the target branch, it may become stale and develop merge
-   conflicts. The forge's `mergeable` flag drives this detection.
+2. **Stale-PR conflict** — when a PR sits in `IMPLEMENT_COMPLETE`
+   or `HUMAN_MR_APPROVAL` while other PRs merge onto the target branch, it
+   may become stale and develop merge conflicts. The forge's `mergeable`
+   flag drives this detection.
 
 In both paths, once the rebase agent runs:
 
-- On success the ticket branch is force-pushed.
-  - If a PR already exists for the branch, the ticket returns to
-    `HUMAN_MR_APPROVAL` for the next poll to observe the now-mergeable PR.
-    Click the **Merge** button in the ticket detail drawer (or call
-    `POST /tickets/{id}/merge-now`) to merge via the forge. The detail
-    drawer shows a **Merge Info** panel with CI status, mergeable flag,
-    and changed files — see [approval-gate.md](approval-gate.md) for
-    details.
+- On success the ticket branch is force-pushed and the ticket returns to
+  `IMPLEMENT_COMPLETE` for gate re-verification.
   - If no PR exists yet (implement-stage path), the ticket routes to
     `READY` and re-enters the implement stage on the next worker tick.
 - On failure (after exhausting retries) the ticket escalates to
@@ -43,20 +68,20 @@ PRs, or interacts with the forge.
 
 ## Auto-fix of failing remote CI
 
-When a PR sits `in_review` with mergeable code but **failing** remote CI
-checks (GitHub Actions), the merge stage transitions the ticket to
-`fixing_ci` and invokes a **ci-fix agent** (`agents/ci_fixing.py`) that
-analyses the failing check-run output and applies minimal fixes.
+When a PR has **failing** remote CI checks (GitHub Actions), the merge
+stage transitions the ticket to `FIXING_CI` and invokes a **ci-fix
+agent** (`agents/ci_fixing.py`) that analyses the failing check-run
+output and applies minimal fixes.
 
 - The forge adapter fetches check-run status (and falls back to the
   combined commit-statuses API for older repos).
-- If a mergeable PR has failing CI, the merge stage transitions to
-  `FIXING_CI` instead of staying `IN_REVIEW`.
+- If a PR has failing CI, the merge stage transitions to `FIXING_CI`
+  (from either `IMPLEMENT_COMPLETE` or `HUMAN_MR_APPROVAL`).
 - The CI-fix stage invokes `run_ci_fix_agent` on the ticket's workspace
   clone, passing it a summary of the failing checks and file-level
   annotations.
 - On success the ticket branch is force-pushed (the ticket goes back to
-  `IN_REVIEW` for the next poll to observe the now-green CI).
+  `IMPLEMENT_COMPLETE` for the next poll to re-verify both gates).
 - On failure the ticket escalates to `BLOCKED` (resumable) — no
   half-fixed state is ever pushed.
 
@@ -68,6 +93,30 @@ The ci-fix agent uses the same sandboxed shell + file tools as the
 implement agent, scoped to the ticket's clone. It never pushes, opens
 PRs, or interacts with the forge. The agent does **NOT** have web-search
 access — it works only from the failing summary and local files.
+
+## State flow summary
+
+```
+DELIVERABLE
+    │ (deliver stage opens PR)
+    ▼
+IMPLEMENT_COMPLETE  ←────────────────────────────────┐
+    │ (merge stage polls gates)                       │
+    ├── CI green + mergeable → HUMAN_MR_APPROVAL      │
+    ├── CI failing            → FIXING_CI ────────────┤
+    ├── conflicting           → REBASING ─────────────┤
+    └── CI pending            → IMPLEMENT_COMPLETE (wait)
+                                                        │
+HUMAN_MR_APPROVAL                                      │
+    │ (merge stage re-polls)                           │
+    ├── merged               → DONE                    │
+    ├── closed unmerged      → BLOCKED                │
+    ├── CI failing           → IMPLEMENT_COMPLETE ─────┘
+    ├── conflicting          → IMPLEMENT_COMPLETE ─────┘
+    ├── CI green + eligible  → DONE (auto-merge)
+    ├── CI pending + eligible → WAITING_AUTO_MERGE
+    └── CI green + not eligible → HUMAN_MR_APPROVAL (wait)
+```
 
 ## See also
 

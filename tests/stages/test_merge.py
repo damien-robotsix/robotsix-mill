@@ -27,7 +27,16 @@ def _ctx(tmp_path, **env):
 
 def _human_mr_approval(ctx):
     t = ctx.service.create("x", "y")
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    return ctx.service.get(t.id)
+
+
+def _implement_complete(ctx):
+    """Create a ticket in IMPLEMENT_COMPLETE state (PR open, gates not verified)."""
+    t = ctx.service.create("x", "y")
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
         ctx.service.transition(t.id, st)
     ctx.service.set_branch(t.id, f"mill/{t.id}")
     return ctx.service.get(t.id)
@@ -35,7 +44,7 @@ def _human_mr_approval(ctx):
 
 def _in_rebasing(ctx):
     """Create a ticket already in REBASING state."""
-    t = _human_mr_approval(ctx)
+    t = _implement_complete(ctx)
     ctx.service.transition(t.id, State.REBASING, note="PR conflicting")
     return ctx.service.get(t.id)
 
@@ -47,7 +56,176 @@ def _gh(tmp_path, **extra):
     )
 
 
-# --- existing paths (unchanged) ---
+# ============================================================
+# IMPLEMENT_COMPLETE gate-check poll path (new)
+# ============================================================
+
+def test_implement_complete_ci_green_mergeable_promotes_to_human_mr_approval(tmp_path, monkeypatch):
+    """CI green + PR mergeable → HUMAN_MR_APPROVAL (gates passed)."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_implement_complete_ci_failing_transitions_to_fixing_ci(tmp_path, monkeypatch):
+    """CI failing → FIXING_CI."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.FIXING_CI
+
+
+def test_implement_complete_conflicting_transitions_to_rebasing(tmp_path, monkeypatch):
+    """PR conflicting → REBASING."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": False,
+        },
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.REBASING
+
+
+def test_implement_complete_ci_pending_stays_same_state(tmp_path, monkeypatch):
+    """CI pending → same-state IMPLEMENT_COMPLETE (re-poll)."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_implement_complete_no_check_status_stays_same_state(tmp_path, monkeypatch):
+    """check_status returns None → same-state IMPLEMENT_COMPLETE."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: None,
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_implement_complete_merged_transitions_to_done(tmp_path, monkeypatch):
+    """PR merged while polling → DONE."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": True, "state": "closed", "url": "https://gh/o/r/pull/3",
+        },
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_implement_complete_closed_unmerged_blocks(tmp_path, monkeypatch):
+    """PR closed unmerged → BLOCKED."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "closed", "url": "u",
+        },
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+
+
+def test_implement_complete_pr_status_none_stays_same_state(tmp_path, monkeypatch):
+    """pr_status returns None → same-state IMPLEMENT_COMPLETE (re-poll)."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: None,
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_implement_complete_transient_error_stays_same_state(tmp_path, monkeypatch):
+    """pr_status raises → same-state IMPLEMENT_COMPLETE (re-poll)."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("api down")),
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_implement_complete_check_status_transient_error_stays_same_state(tmp_path, monkeypatch):
+    """check_status raises → same-state IMPLEMENT_COMPLETE (re-poll)."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("api down")),
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+# --- existing paths (updated for IMPLEMENT_COMPLETE) ---
 
 def test_blocked_when_forge_unconfigured(tmp_path):
     ctx = _ctx(tmp_path)
@@ -162,10 +340,10 @@ def test_mergeable_pr_never_enters_rebasing(tmp_path, monkeypatch):
         assert "REBASING" not in str(out.next_state.value)
 
 
-# --- New: conflicting PR on HUMAN_MR_APPROVAL → REBASING (detection only) ---
+# --- HUMAN_MR_APPROVAL silent fallback: conflicting → IMPLEMENT_COMPLETE ---
 
-def test_conflicting_pr_transitions_to_rebasing(tmp_path, monkeypatch):
-    """HUMAN_MR_APPROVAL + mergeable=False → REBASING, no rebase agent called."""
+def test_human_mr_approval_conflicting_falls_back_to_implement_complete(tmp_path, monkeypatch):
+    """HUMAN_MR_APPROVAL + mergeable=False → IMPLEMENT_COMPLETE (silent fallback)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -174,32 +352,39 @@ def test_conflicting_pr_transitions_to_rebasing(tmp_path, monkeypatch):
             "mergeable": False,
         },
     )
-
-    agent_called = []
-
-    def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
-        agent_called.append(1)
-        return RebaseResult(status="DONE", summary="ok")
-
-    monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
-    )
-
     t = _human_mr_approval(ctx)
-    # Even with a valid workspace clone, the rebase agent must NOT be called
-    repo_dir = ctx.service.workspace(t).dir / "repo"
-    repo_dir.mkdir(parents=True, exist_ok=True)
-    (repo_dir / ".git").mkdir(exist_ok=True)
-
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.REBASING
-    assert agent_called == []  # rebase agent NOT invoked
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "gates no longer pass" in out.note
 
 
-# --- New: REBASING path — clean rebase → HUMAN_MR_APPROVAL ---
+def test_human_mr_approval_ci_failing_falls_back_to_implement_complete(tmp_path, monkeypatch):
+    """HUMAN_MR_APPROVAL + mergeable=True + CI failure → IMPLEMENT_COMPLETE."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge, "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+        },
+    )
+    t = _human_mr_approval(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "gates no longer pass" in out.note
 
-def test_rebasing_clean_rebase_returns_to_human_mr_approval(tmp_path, monkeypatch):
-    """Ticket in REBASING → rebase agent succeeds → force-push → HUMAN_MR_APPROVAL."""
+
+# --- REBASING path: clean rebase → IMPLEMENT_COMPLETE ---
+
+def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypatch):
+    """Ticket in REBASING → rebase agent succeeds → force-push → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
 
     def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
@@ -223,7 +408,7 @@ def test_rebasing_clean_rebase_returns_to_human_mr_approval(tmp_path, monkeypatc
     )
 
     # Post-rebase routing checks whether a PR exists; mock so the
-    # forge reports a PR → route stays HUMAN_MR_APPROVAL (regression).
+    # forge reports a PR → route stays IMPLEMENT_COMPLETE (regression).
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -238,7 +423,7 @@ def test_rebasing_clean_rebase_returns_to_human_mr_approval(tmp_path, monkeypatc
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.IMPLEMENT_COMPLETE
     assert push_calls["branch"] == f"mill/{t.id}"
 
 
@@ -281,6 +466,7 @@ def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.READY
     assert push_calls["branch"] == f"mill/{t.id}"
+
 
 def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     """Rebase agent succeeds but the remote already has this exact
@@ -388,7 +574,7 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.REBASING  # retry, not HUMAN_MR_APPROVAL
+    assert out.next_state is State.REBASING  # retry, not IMPLEMENT_COMPLETE
 
     counter_path = (
         ctx.service.workspace(t).artifacts_dir / "rebase_attempts.txt"
@@ -433,10 +619,10 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
     assert push_called == []  # never force-pushed on failure
 
 
-# --- original conflicting PR tests, now running through REBASING state ---
+# --- Full cycle: IMPLEMENT_COMPLETE → REBASING → IMPLEMENT_COMPLETE ---
 
-def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
-    """Full cycle: HUMAN_MR_APPROVAL + mergeable=False → REBASING → then rebase on next poll."""
+def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
+    """Full cycle: IMPLEMENT_COMPLETE + mergeable=False → REBASING → then rebase success → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -467,12 +653,12 @@ def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.push", fake_push,
     )
 
-    t = _human_mr_approval(ctx)
+    t = _implement_complete(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
 
-    # Step 1: HUMAN_MR_APPROVAL + conflicting → REBASING (detection only).
+    # Step 1: IMPLEMENT_COMPLETE + conflicting → REBASING.
     out1 = MergeStage().run(t, ctx)
     assert out1.next_state is State.REBASING
     assert calls == {}  # agent not called yet
@@ -482,7 +668,7 @@ def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
     t = ctx.service.get(t.id)
 
     # Switch pr_status to report a PR exists (mergeable=True) so the
-    # post-rebase routing stays HUMAN_MR_APPROVAL.
+    # post-rebase routing stays IMPLEMENT_COMPLETE.
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -491,16 +677,16 @@ def test_conflicting_pr_invokes_rebase_agent(tmp_path, monkeypatch):
         },
     )
 
-    # Step 2: REBASING → rebase agent runs, succeeds → HUMAN_MR_APPROVAL.
+    # Step 2: REBASING → rebase agent runs, succeeds → IMPLEMENT_COMPLETE.
     out2 = MergeStage().run(t, ctx)
     assert calls["branch"] == f"mill/{t.id}"
     assert calls["target"] == "main"
     assert str(repo_dir) in calls["repo_dir"]
     assert push_calls["branch"] == f"mill/{t.id}"
-    assert out2.next_state is State.HUMAN_MR_APPROVAL
+    assert out2.next_state is State.IMPLEMENT_COMPLETE
 
 
-def test_conflicting_pr_no_workspace_clone_blocks(tmp_path, monkeypatch):
+def test_rebasing_no_workspace_clone_blocks(tmp_path, monkeypatch):
     """If the workspace clone is missing in REBASING, cannot rebase → BLOCKED."""
     ctx = _gh(tmp_path)
     # No repo dir created — workspace is empty.
@@ -640,8 +826,8 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
 ):
     """A push is NOT proof the conflict is resolved (git rebase rewrites
     SHAs every run). The attempt counter must persist across rebase+push
-    cycles and only reset to 0 when the HUMAN_MR_APPROVAL poll sees a mergeable
-    PR — otherwise the loop is unbounded."""
+    cycles and only reset to 0 when the IMPLEMENT_COMPLETE poll sees a
+    mergeable PR — otherwise the loop is unbounded."""
     ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="3")
 
     call_count = [0]
@@ -691,22 +877,23 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
     assert out1.next_state is State.REBASING
     assert _read_counter(counter_path) == 1
 
-    # Attempt 2 succeeds+pushes → back to HUMAN_MR_APPROVAL, but counter is
+    # Attempt 2 succeeds+pushes → back to IMPLEMENT_COMPLETE, but counter is
     # PERSISTED (==2), NOT reset — a push doesn't prove resolution.
     out2 = MergeStage().run(t, ctx)
-    assert out2.next_state is State.HUMAN_MR_APPROVAL
+    assert out2.next_state is State.IMPLEMENT_COMPLETE
     assert _read_counter(counter_path) == 2
 
-    # Now the HUMAN_MR_APPROVAL poll sees a genuinely mergeable PR → the
-    # conflict is really gone → counter resets to 0.
+    # Now the IMPLEMENT_COMPLETE poll sees a genuinely mergeable + CI green PR
+    # → the conflict is really gone → counter resets to 0 AND ticket
+    # promotes to HUMAN_MR_APPROVAL (gates passed).
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
         lambda self, *, source_branch: {"conclusion": "success"},
     )
-    ctx.service.transition(t.id, State.HUMAN_MR_APPROVAL, note="rebased")
+    ctx.service.transition(t.id, State.IMPLEMENT_COMPLETE, note="rebased")
     out3 = MergeStage().run(ctx.service.get(t.id), ctx)
-    assert out3.next_state is State.HUMAN_MR_APPROVAL
-    assert _read_counter(counter_path) == 0
+    assert out3.next_state is State.HUMAN_MR_APPROVAL  # promoted
+    assert _read_counter(counter_path) == 0  # counter reset during poll
 
 
 def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
@@ -794,11 +981,11 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
 
 
 # ============================================================
-# D. Merge-stage CI branching (new)
+# D. Merge-stage CI branching (updated for IMPLEMENT_COMPLETE)
 # ============================================================
 
-def test_mergeable_failing_ci_transitions_to_fixing_ci(tmp_path, monkeypatch):
-    """D.20: Mergeable PR + failing CI → FIXING_CI."""
+def test_mergeable_failing_ci_falls_back_to_implement_complete(tmp_path, monkeypatch):
+    """Mergeable PR + failing CI → IMPLEMENT_COMPLETE (silent fallback from HUMAN_MR_APPROVAL)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -815,11 +1002,11 @@ def test_mergeable_failing_ci_transitions_to_fixing_ci(tmp_path, monkeypatch):
         },
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
-    assert out.next_state is State.FIXING_CI
+    assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
 def test_mergeable_green_ci_stays_human_mr_approval(tmp_path, monkeypatch):
-    """D.21: Mergeable PR + green CI → HUMAN_MR_APPROVAL."""
+    """Mergeable PR + green CI → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -837,7 +1024,7 @@ def test_mergeable_green_ci_stays_human_mr_approval(tmp_path, monkeypatch):
 
 
 def test_mergeable_none_ci_stays_human_mr_approval(tmp_path, monkeypatch):
-    """D.21: check_status returns None (no checks) → HUMAN_MR_APPROVAL."""
+    """check_status returns None (no checks) → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -855,7 +1042,7 @@ def test_mergeable_none_ci_stays_human_mr_approval(tmp_path, monkeypatch):
 
 
 def test_mergeable_pending_ci_stays_human_mr_approval(tmp_path, monkeypatch):
-    """D.22: Mergeable PR + pending CI → HUMAN_MR_APPROVAL."""
+    """Mergeable PR + pending CI → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -873,7 +1060,7 @@ def test_mergeable_pending_ci_stays_human_mr_approval(tmp_path, monkeypatch):
 
 
 def test_check_status_exception_is_noop(tmp_path, monkeypatch):
-    """D.23: check_status raises → transient re-poll."""
+    """check_status raises → transient re-poll."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -891,7 +1078,7 @@ def test_check_status_exception_is_noop(tmp_path, monkeypatch):
 
 
 def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
-    """D.24: Conflicting PR → rebase path; check_status never called."""
+    """Conflicting PR → silent fallback to IMPLEMENT_COMPLETE; check_status never called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -907,22 +1094,15 @@ def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
         return {"conclusion": "success", "failing": []}
 
     monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
-    monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent",
-        lambda **k: RebaseResult(status="FAILED", summary="nope"),
-    )
 
     t = _human_mr_approval(ctx)
-    repo_dir = ctx.service.workspace(t).dir / "repo"
-    repo_dir.mkdir(parents=True, exist_ok=True)
-    (repo_dir / ".git").mkdir(exist_ok=True)
-
-    MergeStage().run(t, ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
     assert check_calls == []  # never called for conflicting PR
 
 
 def test_merged_pr_skips_check_status(tmp_path, monkeypatch):
-    """D.25: Merged PR → DONE; check_status never called."""
+    """Merged PR → DONE; check_status never called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -943,7 +1123,7 @@ def test_merged_pr_skips_check_status(tmp_path, monkeypatch):
 
 
 def test_closed_pr_skips_check_status(tmp_path, monkeypatch):
-    """D.26: Closed PR → BLOCKED; check_status never called."""
+    """Closed PR → BLOCKED; check_status never called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -1284,7 +1464,7 @@ def test_auto_merge_skipped_when_ci_pending(tmp_path, monkeypatch):
 
 
 def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
-    """CI conclusion is 'failure' → FIXING_CI (auto-merge gate never entered)."""
+    """CI conclusion is 'failure' → IMPLEMENT_COMPLETE (silent fallback)."""
     ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -1308,12 +1488,12 @@ def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
     _write_review_artifact(ctx, t)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.FIXING_CI
+    assert out.next_state is State.IMPLEMENT_COMPLETE
     assert merge_called == []
 
 
 def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
-    """mergeable=False → REBASING (auto-merge gate never entered)."""
+    """mergeable=False → IMPLEMENT_COMPLETE (silent fallback)."""
     ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -1333,7 +1513,7 @@ def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
     _write_review_artifact(ctx, t)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.REBASING
+    assert out.next_state is State.IMPLEMENT_COMPLETE
     assert merge_called == []
 
 
@@ -1396,7 +1576,7 @@ def test_auto_merge_writes_merge_artifact(tmp_path, monkeypatch):
 
 
 # ============================================================
-# F. WAITING_AUTO_MERGE — new state and comment routing
+# F. WAITING_AUTO_MERGE — updated for IMPLEMENT_COMPLETE fallback
 # ============================================================
 
 def test_eligible_pending_ci_goes_to_waiting_auto_merge(
@@ -1669,10 +1849,10 @@ def test_comment_dedup_different_reason_new_comment(
     assert len(ctx.service.list_comments(t.id)) == 2
 
 
-def test_waiting_auto_merge_becomes_fixing_ci_on_ci_failure(
+def test_waiting_auto_merge_becomes_implement_complete_on_ci_failure(
     tmp_path, monkeypatch
 ):
-    """WAITING_AUTO_MERGE poll where CI now fails → FIXING_CI."""
+    """WAITING_AUTO_MERGE poll where CI now fails → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
@@ -1693,7 +1873,7 @@ def test_waiting_auto_merge_becomes_fixing_ci_on_ci_failure(
     t = ctx.service.get(t.id)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.FIXING_CI
+    assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
 def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
@@ -1758,3 +1938,30 @@ def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.DONE
+
+
+# ============================================================
+# WAITING_AUTO_MERGE → IMPLEMENT_COMPLETE on conflict
+# ============================================================
+
+def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE + mergeable=False → IMPLEMENT_COMPLETE."""
+    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False, "state": "open", "url": "u",
+            "mergeable": False,
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "gates no longer pass" in out.note

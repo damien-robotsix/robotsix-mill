@@ -23,7 +23,7 @@ def _ctx(tmp_path, **env):
 
 def _done(ctx):
     t = ctx.service.create("Add X", "spec body")
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(t.id, st)
     return ctx.service.get(t.id)
 
@@ -891,6 +891,7 @@ def test_verified_state_block_in_memory(tmp_path, monkeypatch):
     # Transition it to DONE then CLOSED (simulates a merged draft).
     ctx.service.transition(draft.id, State.READY)
     ctx.service.transition(draft.id, State.DELIVERABLE)
+    ctx.service.transition(draft.id, State.IMPLEMENT_COMPLETE)
     ctx.service.transition(draft.id, State.HUMAN_MR_APPROVAL)
     ctx.service.transition(draft.id, State.DONE)
     ctx.service.transition(draft.id, State.CLOSED)
@@ -925,7 +926,7 @@ def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path
     # Create a retrospect-sourced ticket with NO gap-id marker.
     ticket = svc.create("Old retrospect draft", "No marker here.", source=SourceKind.RETROSPECT)
     # Move it to CLOSED (with DONE in history).
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
         svc.transition(ticket.id, st)
 
     result = _verify_prior_proposals(svc, s, SourceKind.RETROSPECT)
@@ -1051,7 +1052,7 @@ def test_follow_up_dedup_allows_refile_when_closed(tmp_path, monkeypatch):
         "Wire real doc agent in DocumentStage._run_doc_agent",
         "Already closed.",
     )
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
         ctx.service.transition(closed_ticket.id, st)
 
     monkeypatch.setattr(
@@ -1127,7 +1128,7 @@ def test_epic_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
         "Connect the YAML loader.",
         parent_id=epic.id,
     )
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(child.id, st)
     child = ctx.service.get(child.id)
 
@@ -1158,7 +1159,7 @@ def test_sibling_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
     sibling_a = ctx.service.create("Refactor implement stage", "desc", parent_id=epic.id)
     sibling_b = ctx.service.create("Refactor retrospect stage", "desc", parent_id=epic.id)
 
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(current.id, st)
     current = ctx.service.get(current.id)
 
@@ -1206,7 +1207,7 @@ def test_no_epic_context_for_non_epic_parent(tmp_path, monkeypatch):
 
     parent = ctx.service.create("Regular parent ticket", "Not an epic.")
     child = ctx.service.create("Child of regular ticket", "desc", parent_id=parent.id)
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(child.id, st)
     child = ctx.service.get(child.id)
 
@@ -1235,7 +1236,7 @@ def test_follow_up_suppressed_when_sibling_covers_gap(tmp_path, monkeypatch):
     current = ctx.service.create("Wire doc agent stub", "desc", parent_id=epic.id)
     ctx.service.create("Doc agent unit tests", "desc", parent_id=epic.id)
 
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(current.id, st)
     current = ctx.service.get(current.id)
 
@@ -1264,7 +1265,7 @@ def test_sibling_context_empty_when_no_other_children(tmp_path, monkeypatch):
 
     epic = ctx.service.create("Epic: Solo mission", "Just one child.", kind="epic")
     child = ctx.service.create("The only child", "desc", parent_id=epic.id)
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(child.id, st)
     child = ctx.service.get(child.id)
 
@@ -1290,7 +1291,7 @@ def test_sibling_title_truncated_at_80_chars(tmp_path, monkeypatch):
     long_title = "A" * 100 + " suffix"
     ctx.service.create(long_title, "desc", parent_id=epic.id)
 
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         ctx.service.transition(current.id, st)
     current = ctx.service.get(current.id)
 

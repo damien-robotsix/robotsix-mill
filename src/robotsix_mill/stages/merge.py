@@ -1,25 +1,37 @@
-"""Merge stage: HUMAN_MR_APPROVAL -> DONE (merged) | BLOCKED (closed unmerged)
-                                    -> REBASING (conflicting, deferred)
-                                    -> FIXING_CI (failing CI, deferred).
+"""Merge stage: IMPLEMENT_COMPLETE -> HUMAN_MR_APPROVAL (gates passed)
+                     -> DONE (merged) | BLOCKED (closed unmerged)
+                     -> FIXING_CI (failing CI, deferred)
+                     -> REBASING (conflicting, deferred)
+
+HUMAN_MR_APPROVAL -> DONE (merged) | BLOCKED (closed unmerged)
+              -> IMPLEMENT_COMPLETE (gate degradation — silent fallback)
+              -> WAITING_AUTO_MERGE (eligible, CI pending)
+
+REBASING -> IMPLEMENT_COMPLETE (rebase succeeded, re-verify gates)
+
+FIXING_CI -> IMPLEMENT_COMPLETE (fix succeeded, re-verify gates)
 
 The PR is the review. This stage is re-run by the worker's lightweight
-poll while the ticket sits in HUMAN_MR_APPROVAL, REBASING, or FIXING_CI; it
-checks the forge:
+poll while the ticket sits in IMPLEMENT_COMPLETE, HUMAN_MR_APPROVAL,
+REBASING, FIXING_CI, or WAITING_AUTO_MERGE; it checks the forge:
+
+IMPLEMENT_COMPLETE (gate-check):
+- merged            -> DONE
+- closed, unmerged  -> BLOCKED (resumable)
+- open, mergeable   -> check CI status:
+    - failing CI    -> FIXING_CI (auto-fix agent)
+    - green CI      -> HUMAN_MR_APPROVAL (gates passed! notify human)
+    - pending CI    -> IMPLEMENT_COMPLETE (no-op; re-poll)
+- open, conflicting -> REBASING (defer rebase agent)
 
 HUMAN_MR_APPROVAL:
 - merged            -> DONE
 - closed, unmerged  -> BLOCKED (resumable)
 - open, mergeable   -> check CI status:
-    - failing CI    -> FIXING_CI (auto-fix agent)
+    - failing CI    -> IMPLEMENT_COMPLETE (silent fallback)
     - green CI      -> HUMAN_MR_APPROVAL (no-op; re-poll)
     - pending CI    -> HUMAN_MR_APPROVAL (no-op; re-poll)
-- open, conflicting -> REBASING (deferred; the rebase agent runs on
-                       the next poll via the REBASING path, not inline).
-
-REBASING:
-- invokes rebase agent; on success force-pushes the ticket branch and
-  returns to HUMAN_MR_APPROVAL; on failure with attempts remaining stays in
-  REBASING for a retry; on exhaustion → BLOCKED.
+- open, conflicting -> IMPLEMENT_COMPLETE (silent fallback)
 
 Returning the *same* state is the worker's "leave it, re-poll" signal —
 no history spam, no busy loop.
@@ -94,6 +106,10 @@ class MergeStage(Stage):
         except RuntimeError as e:
             return Outcome(State.BLOCKED, f"forge auth not configured: {e}")
 
+        # IMPLEMENT_COMPLETE path: poll gates (CI + mergeability).
+        if ticket.state is State.IMPLEMENT_COMPLETE:
+            return self._poll_implement_complete(ticket, ctx)
+
         # REBASING path: skip PR status, go straight to rebase execution.
         if ticket.state is State.REBASING:
             return self._run_rebase(ticket, ctx)
@@ -127,18 +143,16 @@ class MergeStage(Stage):
         # PR is open.  Check mergeability.
         mergeable = pr.get("mergeable")
         if mergeable is False:
-            # PR is open and conflicting → defer to the REBASING state.
-            # The (expensive, LLM-driven) rebase agent runs on the next
-            # poll via the REBASING path — keeping the HUMAN_MR_APPROVAL poll
-            # cheap and the rebase activity visible (#26). Running it
-            # inline here regressed that and starved the worker pool.
+            # PR is open and conflicting → silent fallback to
+            # IMPLEMENT_COMPLETE so the robot can auto-fix (via
+            # REBASING) without notifying the human.
             log.info(
-                "%s: PR conflicting — deferring to REBASING state",
+                "%s: PR conflicting — falling back to IMPLEMENT_COMPLETE",
                 ticket.id,
             )
             return Outcome(
-                State.REBASING,
-                "PR is conflicting; rebase agent will run next poll",
+                State.IMPLEMENT_COMPLETE,
+                "PR is now conflicting; gates no longer pass",
             )
 
         # mergeable=True or None (unchecked) → no conflict. This is the
@@ -166,8 +180,8 @@ class MergeStage(Stage):
 
         conclusion = ci_status.get("conclusion")
         if conclusion == "failure":
-            log.info("%s: mergeable PR has failing CI → fixing_ci", ticket.id)
-            return Outcome(State.FIXING_CI)
+            log.info("%s: mergeable PR has failing CI → falling back to IMPLEMENT_COMPLETE", ticket.id)
+            return Outcome(State.IMPLEMENT_COMPLETE, "CI is failing; gates no longer pass")
 
         # success, pending, or None — evaluate auto-merge eligibility.
         eligible, eligibility_reason = self._auto_merge_eligible(ticket, ctx)
@@ -305,10 +319,10 @@ class MergeStage(Stage):
         mergeable = pr.get("mergeable")
         if mergeable is False:
             log.info(
-                "%s: PR became conflicting while waiting for CI → REBASING",
+                "%s: PR became conflicting while waiting for CI → IMPLEMENT_COMPLETE",
                 ticket.id,
             )
-            return Outcome(State.REBASING, "PR is now conflicting")
+            return Outcome(State.IMPLEMENT_COMPLETE, "PR is now conflicting; gates no longer pass")
 
         # Check CI.
         try:
@@ -324,9 +338,9 @@ class MergeStage(Stage):
 
         conclusion = ci_status.get("conclusion")
         if conclusion == "failure":
-            log.info("%s: CI failed while waiting for auto-merge → fixing_ci", ticket.id)
-            self._maybe_comment(ticket, ctx, "CI failed — auto-fixing")
-            return Outcome(State.FIXING_CI)
+            log.info("%s: CI failed while waiting for auto-merge → IMPLEMENT_COMPLETE", ticket.id)
+            self._maybe_comment(ticket, ctx, "CI failed — falling back to gate check")
+            return Outcome(State.IMPLEMENT_COMPLETE, "CI failed; gates no longer pass")
 
         if conclusion == "success":
             # CI is green — attempt auto-merge.
@@ -355,6 +369,88 @@ class MergeStage(Stage):
         # Pending or None — keep waiting.
         self._maybe_comment(ticket, ctx, "CI pending — will auto-merge when green")
         return Outcome(State.WAITING_AUTO_MERGE)
+
+    def _poll_implement_complete(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Poll PR status for a ticket in IMPLEMENT_COMPLETE.
+
+        Verify two gates before promoting to HUMAN_MR_APPROVAL:
+        1. CI is green.
+        2. PR is mergeable (no conflict with target).
+
+        - Both gates pass → HUMAN_MR_APPROVAL (notify human).
+        - CI failing → FIXING_CI (defer CI-fix agent).
+        - Conflicting → REBASING (defer rebase agent).
+        - CI pending / no data → same-state IMPLEMENT_COMPLETE (re-poll).
+        - PR merged while polling → DONE.
+        - PR closed → BLOCKED.
+        """
+        s = ctx.settings
+        branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
+
+        try:
+            pr = get_forge(s).pr_status(source_branch=branch)
+        except Exception as e:  # noqa: BLE001 — transient: retry next poll
+            log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
+        if pr is None:
+            return Outcome(State.IMPLEMENT_COMPLETE)  # not visible yet — re-poll
+        if pr.get("merged"):
+            ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                "merge.md"
+            ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
+            log.info("%s: PR merged → done", ticket.id)
+            return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
+        if pr.get("state") == "closed":
+            return Outcome(
+                State.BLOCKED,
+                f"PR closed without merge — resumable: {pr.get('url', '')}",
+            )
+
+        # PR is open.  Check mergeability.
+        mergeable = pr.get("mergeable")
+        if mergeable is False:
+            log.info(
+                "%s: PR conflicting in IMPLEMENT_COMPLETE → REBASING",
+                ticket.id,
+            )
+            return Outcome(
+                State.REBASING,
+                "PR is conflicting; rebase agent will run next poll",
+            )
+
+        # mergeable=True or None (unchecked) → no conflict.
+        # Clear rebase attempt counter — this is signal of progress.
+        _write_counter(
+            ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER,
+            0,
+        )
+
+        # Check remote CI.
+        try:
+            ci_status = get_forge(s).check_status(source_branch=branch)
+        except Exception as e:  # noqa: BLE001 — transient
+            log.warning(
+                "%s: check_status failed (retry): %s", ticket.id, e
+            )
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
+        if ci_status is None:
+            # No CI data yet — keep waiting.
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
+        conclusion = ci_status.get("conclusion")
+        if conclusion == "failure":
+            log.info("%s: CI failing → FIXING_CI", ticket.id)
+            return Outcome(State.FIXING_CI)
+
+        if conclusion == "success":
+            # Both gates passed! Promote to human review.
+            log.info("%s: gates passed → HUMAN_MR_APPROVAL", ticket.id)
+            return Outcome(State.HUMAN_MR_APPROVAL)
+
+        # pending or None — keep waiting.
+        return Outcome(State.IMPLEMENT_COMPLETE)
 
     def _run_rebase(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Execute the rebase agent for a ticket already in REBASING."""
@@ -500,12 +596,12 @@ class MergeStage(Stage):
             log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
             if attempt < max_attempts:
                 _write_counter(counter_path, attempt)
-                # Route by context: no PR yet → back to implement; PR exists → re-check merge.
+                # Route by context: no PR yet → back to implement; PR exists → re-check gates.
                 try:
                     pr = get_forge(s).pr_status(source_branch=branch)
                 except Exception:
                     pr = None
-                next_state = State.READY if pr is None else State.HUMAN_MR_APPROVAL
+                next_state = State.READY if pr is None else State.IMPLEMENT_COMPLETE
                 return Outcome(next_state)
             _write_counter(counter_path, 0)  # reset for a future resume
             return Outcome(

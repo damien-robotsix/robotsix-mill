@@ -425,7 +425,7 @@ def test_monitor_disabled_by_default(tmp_path, monkeypatch):
 
 
 def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
-    """The existing test_fix_success_push_success_returns_human_mr_approval still
+    """The existing test_fix_success_push_success_returns_implement_complete still
     passes after the refactor — i.e., the ci_fix stage still works
     when log fetching fails (the exception path is handled)."""
     from robotsix_mill.forge import github as gh_mod
@@ -475,7 +475,7 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
 
     # Create a FIXING_CI ticket via helper.
     t = ctx.service.create("x", "y")
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.FIXING_CI):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.FIXING_CI):
         ctx.service.transition(t.id, st)
     ctx.service.set_branch(t.id, f"mill/{t.id}")
 
@@ -484,5 +484,5 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
     (repo_dir / ".git").mkdir(exist_ok=True)
 
     out = CFS().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.IMPLEMENT_COMPLETE
     assert push_seen["branch"] == f"mill/{t.id}"

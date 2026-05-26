@@ -46,7 +46,7 @@ async def test_hook_fires_on_done_for_epic_parent(ctx, service, monkeypatch):
 
     epic = service.create("My Epic", "Big goal", kind="epic")
     child = service.create("Child", "do the thing", parent_id=epic.id)
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
         service.transition(child.id, st)
 
     await _process_ticket_inner(child.id, ctx)
@@ -77,7 +77,7 @@ async def test_hook_does_not_fire_for_non_epic_parent(ctx, service, monkeypatch)
 
     parent = service.create("Parent task", "some task")
     child = service.create("Child", "do the thing", parent_id=parent.id)
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
         service.transition(child.id, st)
 
     await _process_ticket_inner(child.id, ctx)
@@ -696,7 +696,7 @@ async def test_hook_fires_on_closed_for_epic_parent(ctx, service, monkeypatch):
 
     epic = service.create("My Epic", "Big goal", kind="epic")
     child = service.create("Child", "do the thing", parent_id=epic.id)
-    for st in (State.READY, State.DELIVERABLE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
         service.transition(child.id, st)
 
     await _process_ticket_inner(child.id, ctx)

@@ -1,10 +1,11 @@
-"""CI-fix stage: FIXING_CI -> HUMAN_MR_APPROVAL (fix succeeded) | BLOCKED.
+"""CI-fix stage: FIXING_CI -> IMPLEMENT_COMPLETE (fix succeeded) | BLOCKED.
 
 When the merge stage detects a mergeable PR with failing remote CI
 checks, it transitions the ticket to FIXING_CI.  This stage invokes
 the ci-fix agent to auto-resolve the failures, commits locally, and
 force-pushes only the ticket branch.  On success the ticket goes back
-to HUMAN_MR_APPROVAL so the merge stage re-checks CI.
+to IMPLEMENT_COMPLETE so the merge stage re-verifies both gates before
+promoting to HUMAN_MR_APPROVAL.
 
 Failure after max attempts escalates to BLOCKED (resumable).
 """
@@ -112,25 +113,25 @@ class CIFixStage(Stage):
             status = get_forge(s).check_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
-            return Outcome(State.HUMAN_MR_APPROVAL)
+            return Outcome(State.IMPLEMENT_COMPLETE)
 
         if status is None:
             # PR disappeared.
-            return Outcome(State.HUMAN_MR_APPROVAL)
+            return Outcome(State.IMPLEMENT_COMPLETE)
 
         conclusion = status.get("conclusion")
 
         if conclusion == "success":
             # CI turned green while we were waiting.
-            return Outcome(State.HUMAN_MR_APPROVAL)
+            return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion in ("pending", None):
             # Not yet complete; re-poll from human_mr_approval.
-            return Outcome(State.HUMAN_MR_APPROVAL)
+            return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion != "failure":
             # Unknown conclusion — treat as pending, re-poll.
-            return Outcome(State.HUMAN_MR_APPROVAL)
+            return Outcome(State.IMPLEMENT_COMPLETE)
 
         # --- CI is failing → attempt fix ---
         failing = status.get("failing", [])
@@ -212,7 +213,7 @@ class CIFixStage(Stage):
             # Reset counter on success.
             _write_counter(counter_path, 0)
             log.info("%s: ci fix succeeded, branch force-pushed", ticket.id)
-            return Outcome(State.HUMAN_MR_APPROVAL)  # re-check CI on next poll
+            return Outcome(State.IMPLEMENT_COMPLETE)  # re-check CI on next poll
 
         # Agent failed.
         if attempt < max_attempts:
@@ -221,7 +222,7 @@ class CIFixStage(Stage):
                 "%s: ci-fix attempt %d/%d failed — retrying next poll",
                 ticket.id, attempt, max_attempts,
             )
-            return Outcome(State.HUMAN_MR_APPROVAL)  # no-op; retry next poll
+            return Outcome(State.IMPLEMENT_COMPLETE)  # no-op; retry next poll
 
         # Exhausted all attempts.
         _write_counter(counter_path, 0)  # reset for any future resume
