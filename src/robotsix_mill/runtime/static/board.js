@@ -1454,4 +1454,66 @@ function createTicketFromFinding(idx,event){
  titleEl.focus();
 }
 // -- end deep review ----------------------------------------------------
-refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)open_(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},1000);
+// Re-fetch detail sections WITHOUT resetting the drawer to skeleton.
+// The auto-refresh tick used to call open_(sel) every 1s which reset
+// the whole drawer to skeleton placeholders then progressively repainted
+// — visible as a 1Hz blink. refreshDetail() re-fetches the same
+// endpoints and only re-renders a section when its rendered HTML
+// changed (cached in _detailLast).
+const _detailLast={};
+async function refreshDetail(id){
+ if(!document.getElementById("ticket-header"))return; // header not yet rendered → let open_() handle
+ const [t,ch,h,d,rt,cs,mi,mr,ms]=await Promise.all([
+  jget("/tickets/"+id), jget("/tickets/"+id+"/children"),
+  jget("/tickets/"+id+"/history"), jget("/tickets/"+id+"/description"),
+  jget("/tickets/"+id+"/retrospect"), jget("/tickets/"+id+"/comments"),
+  jget("/tickets/"+id+"/merge-info"), jget("/tickets/"+id+"/merge-reason"),
+  jget("/tickets/"+id+"/merge-status"),
+ ]);
+ if(sel!==id||!t)return;
+ const swap=(elId,html)=>{
+  const el=document.getElementById(elId);
+  if(!el)return;
+  const key=elId+":"+id;
+  if(_detailLast[key]===html)return;
+  _detailLast[key]=html;
+  el.innerHTML=html;
+ };
+ // Update only the volatile parts of the header: state badge + cost + updated_at + retry button + merge-btn-area.
+ const stateBadge=document.querySelector("#ticket-header b.s-"+t.state)||document.querySelector("#ticket-header b[class^='s-']");
+ if(stateBadge&&stateBadge.textContent!==t.state){
+  stateBadge.className="s-"+t.state;
+  stateBadge.textContent=t.state;
+ }
+ // Children
+ swap("ticket-children", ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">`+
+  ch.map(c=>`<div class="child-ticket" onclick="open_('${c.id}')"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")+`</div>`:"");
+ // History
+ swap("ticket-history", `<h3>History</h3>`+(h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}${e.note?"<br>"+renderMD(e.note):""}</div>`).join(""));
+ // Description (only swap if content changed; respects the after-body layout)
+ const afterBody=gatesCache.comments_after_body;
+ swap("ticket-body-area", afterBody?
+  `<h3>description.md <button class="toggle-body-btn" onclick="toggleBody(this)" style="font-size:11px;margin-left:8px">▲ Hide</button></h3><div class="md-body" id="ticket-body">${renderMD((d&&d.description)||"")}</div>`:
+  `<h3>description.md</h3><div class="md-body">${renderMD((d&&d.description)||"")}</div>`);
+ // Retrospect
+ swap("ticket-retrospect", rt&&rt.retrospect?`<h3>retrospect.md</h3><div class="md-body">${renderMD(rt.retrospect)}</div>`:"");
+ // Comments
+ swap("ticket-comments", `<h3>Comments <button class="add-comment-btn" onclick="addComment('${id}')">+ Add</button></h3>`+
+  ((cs&&cs.length)?renderThreads(cs):`<div class="muted" style="font-size:11px">No comments yet.</div>`));
+ // Merge button area + merge details
+ const ba=document.getElementById("ticket-merge-btn-area");
+ if(ba){
+  const baHtml=t.state==="human_mr_approval"?(
+   (ms&&ms.can_merge===false?
+    `<button class="merge-btn" disabled title="${esc(ms.reason||'')}">Merge</button>`+
+    `<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ${esc(ms.reason||'not mergeable')}</p>`:
+    `<button class="merge-btn" onclick="event.stopPropagation();mergePR('${t.id}')">Merge</button>`
+   )+
+   (mr&&mr.reason?`<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ${esc(mr.reason)}</p>`:"")
+  ):"";
+  const k="ticket-merge-btn-area:"+id;
+  if(_detailLast[k]!==baHtml){_detailLast[k]=baHtml;ba.innerHTML=baHtml;}
+ }
+ swap("ticket-merge", t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"");
+}
+refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)refreshDetail(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},1000);
