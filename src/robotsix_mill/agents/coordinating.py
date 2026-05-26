@@ -538,6 +538,21 @@ def run_coordinator_with_experts(
         len(files_by_domain), sorted(files_by_domain.keys()),
     )
 
+    # Build the same synthetic read_file message_history that
+    # ``run_coordinator`` uses for reference_files, so each expert
+    # starts with the refine-curated files already "read". Without
+    # this every expert pass had to re-explore the codebase from
+    # scratch and burned tokens on read_file calls that the refine
+    # stage already paid for.
+    preseed_history: list | None = message_history
+    if reference_files and message_history is None:
+        from .fs_tools import build_preseed_history
+
+        preseed_history = build_preseed_history(
+            repo_dir,
+            [rf["path"] for rf in reference_files],
+        )
+
     # Step 3: Delegate sequentially.
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
@@ -585,7 +600,9 @@ def run_coordinator_with_experts(
             try:
                 run_result = call_with_retry(
                     lambda: agent.run_sync(
-                        user_prompt, usage_limits=limits,
+                        user_prompt,
+                        usage_limits=limits,
+                        message_history=preseed_history,
                     ),
                     settings=settings, what=f"expert:{domain}",
                 )

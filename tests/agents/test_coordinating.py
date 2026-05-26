@@ -572,8 +572,12 @@ class _CapturingExpertAgent:
         self.calls: list[dict] = []
         self.closed = False
 
-    def run_sync(self, user_prompt, *, usage_limits=None):
-        self.calls.append({"prompt": user_prompt, "usage_limits": usage_limits})
+    def run_sync(self, user_prompt, *, usage_limits=None, message_history=None):
+        self.calls.append({
+            "prompt": user_prompt,
+            "usage_limits": usage_limits,
+            "message_history": message_history,
+        })
         if self._exc is not None:
             raise self._exc
         class _R:
