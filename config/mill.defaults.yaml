@@ -39,7 +39,7 @@ core:
     survey: *default_model                                # discovers OSS projects; proposes improvements
     doc: *default_model                                   # documentation agent
     triage: &cheap_model openai/gpt-4o-mini               # pre-refine triage — fast/cheap classification
-    auto_approve: *cheap_model                            # auto-approve triage — must be fast and cheap
+    auto_approve: deepseek/deepseek-v4-flash              # auto-approve triage — flash is plenty for spec-shape classification
     scope_triage: *cheap_model                            # scope-violation triage — fast and cheap
     doc_classifier: *cheap_model                          # doc-diff classifier gate (fast + cheap)
     rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
@@ -122,7 +122,7 @@ web:
 gates:
   require_approval: true                   # pause after refine for human approval
   auto_approve_enabled: false              # conservative auto-approve triage
-  auto_approve_model: *cheap_model         # model for auto-approve triage (fast + cheap)
+  auto_approve_model: deepseek/deepseek-v4-flash  # model for auto-approve triage (flash is plenty for spec-shape classification)
   review_enabled: false                    # enable dual-model code review before deliver
   review_model: *default_model             # review agent model
   review_max_rounds: 3                     # max CODE_REVIEW round-trips before escalate

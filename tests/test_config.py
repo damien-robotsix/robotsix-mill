@@ -23,7 +23,7 @@ def test_default_model_settings():
     assert s.triage_model == "openai/gpt-4o-mini"
     assert s.explore_model == "deepseek/deepseek-v4-flash"
     assert s.test_model == "deepseek/deepseek-v4-pro"
-    assert s.auto_approve_model == "openai/gpt-4o-mini"
+    assert s.auto_approve_model == "deepseek/deepseek-v4-flash"
 
 
 def test_default_numeric_limits():
