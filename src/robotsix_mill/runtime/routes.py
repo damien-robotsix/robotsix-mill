@@ -759,7 +759,13 @@ def create_epic(
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:
-    """Create a new epic — accepts ``{"title": str, "description": str}``."""
+    """Create a new epic — accepts ``{"title": str, "description": str}``.
+
+    An optional ``repo_id`` field scopes the epic to a specific repo's
+    board.  When omitted in single-repo mode the sole repo is used;
+    in multi-repo mode ``repo_id`` is required and a 400 is returned
+    if it is missing.
+    """
     title = body.get("title", "")
     if not title:
         raise HTTPException(status_code=400, detail="title is required")
@@ -777,6 +783,14 @@ def create_epic(
         board_id = repos.repos[repo_id].board_id
     elif len(repos.repos) == 1:
         board_id = next(iter(repos.repos.values())).board_id
+    else:
+        # Multi-repo mode with no repo_id: require it.
+        sorted_keys = sorted(repos.repos.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"repo_id is required when multiple repos are configured. "
+            f"Available repos: {sorted_keys}",
+        )
 
     try:
         ticket = svc.create(
@@ -1200,25 +1214,27 @@ def cost_trend(
     """Return cost bucketed by time for the sparkline chart.
 
     ``?lookback_hours=N`` is clamped to [1, 168].
-    ``?max_tickets=N`` (1–1000) switches to ticket-count mode; the
-    time span is derived from the collected traces' timestamps.
+    ``?max_tickets=N`` switches to ticket-count mode (last N distinct
+    sessions) instead of the lookback window.
     ``?repo_id=X`` scopes the query to a single repo's Langfuse project.
     ``?repo_id=all`` aggregates across all registered repos.
     When omitted in single-repo mode, the sole repo is used.
     When omitted in multi-repo mode, returns 400.
-
-    Response shape: ``{"buckets": [{"ts": "...", "total_cost": ..., "trace_count": ...}, ...]}``.
     """
     from ..langfuse_client import aggregate_cost_trend
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    max_tickets = max(1, min(max_tickets, 1000)) if max_tickets is not None else None
+    if max_tickets is not None:
+        max_tickets = max(1, min(max_tickets, 1000))
     repo_config = _resolve_cost_repo(repo_id, request)
     if isinstance(repo_config, list):
         # "all" — aggregate across repos
         all_buckets: dict[str, dict] = {}
         for rc in repo_config:
-            buckets = aggregate_cost_trend(settings, lookback_hours, repo_config=rc, max_tickets=max_tickets)
+            buckets = aggregate_cost_trend(
+                settings, lookback_hours,
+                max_tickets=max_tickets, repo_config=rc,
+            )
             for b in buckets:
                 key = b["ts"]
                 if key not in all_buckets:
@@ -1226,7 +1242,10 @@ def cost_trend(
                 all_buckets[key]["total_cost"] += b["total_cost"]
                 all_buckets[key]["trace_count"] += b["trace_count"]
         return {"buckets": sorted(all_buckets.values(), key=lambda x: x["ts"])}
-    buckets = aggregate_cost_trend(settings, lookback_hours, repo_config=repo_config, max_tickets=max_tickets)
+    buckets = aggregate_cost_trend(
+        settings, lookback_hours,
+        max_tickets=max_tickets, repo_config=repo_config,
+    )
     return {"buckets": buckets}
 
 
@@ -1239,8 +1258,10 @@ def cost_by_agent(
     settings=Depends(get_settings),
 ) -> list[dict]:
     """Return cost aggregated by agent/stage name for recent Langfuse
-    traces within *lookback_hours* (clamped 1–168) or among the first
-    *max_tickets* distinct sessions (1–1000).
+    traces within *lookback_hours* (clamped 1–168).
+
+    ``?max_tickets=N`` switches to ticket-count mode (last N distinct
+    sessions) instead of the lookback window.
 
     ``?repo_id=X`` scopes to a single repo; ``?repo_id=all`` aggregates
     across all repos.  Omitted in single-repo mode defaults to the sole
@@ -1249,13 +1270,17 @@ def cost_by_agent(
     from ..langfuse_client import aggregate_cost_by_name
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    max_tickets = max(1, min(max_tickets, 1000)) if max_tickets is not None else None
+    if max_tickets is not None:
+        max_tickets = max(1, min(max_tickets, 1000))
     repo_config = _resolve_cost_repo(repo_id, request)
     if isinstance(repo_config, list):
         # "all" — aggregate across repos
         agg: dict[str, dict] = {}
         for rc in repo_config:
-            entries = aggregate_cost_by_name(settings, lookback_hours, repo_config=rc, max_tickets=max_tickets)
+            entries = aggregate_cost_by_name(
+                settings, lookback_hours,
+                max_tickets=max_tickets, repo_config=rc,
+            )
             for e in entries:
                 name = e["name"]
                 if name not in agg:
@@ -1265,7 +1290,10 @@ def cost_by_agent(
         result = list(agg.values())
         result.sort(key=lambda x: x["total_cost"], reverse=True)
         return result
-    return aggregate_cost_by_name(settings, lookback_hours, repo_config=repo_config, max_tickets=max_tickets)
+    return aggregate_cost_by_name(
+        settings, lookback_hours,
+        max_tickets=max_tickets, repo_config=repo_config,
+    )
 
 
 @router.get("/costs/most-expensive-ticket")
@@ -1278,10 +1306,12 @@ def most_expensive_ticket_endpoint(
     svc=Depends(get_service),
 ):
     """Return the ticket with the highest total LLM cost in the last
-    *lookback_hours* (clamped 1–168) or among the first *max_tickets*
-    distinct sessions (1–1000).  Returns ``null`` when there is no
-    data, tracing is disabled, or the session has no matching ticket
+    *lookback_hours* (clamped 1–168).  Returns ``null`` when there is
+    no data, tracing is disabled, or the session has no matching ticket
     in the database.
+
+    ``?max_tickets=N`` switches to ticket-count mode (last N distinct
+    sessions) instead of the lookback window.
 
     ``?repo_id=X`` scopes to a single repo; ``?repo_id=all`` aggregates
     across all repos (picks the single most expensive across all).
@@ -1289,18 +1319,26 @@ def most_expensive_ticket_endpoint(
     from ..langfuse_client import most_expensive_ticket
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    max_tickets = max(1, min(max_tickets, 1000)) if max_tickets is not None else None
+    if max_tickets is not None:
+        max_tickets = max(1, min(max_tickets, 1000))
     repo_config = _resolve_cost_repo(repo_id, request)
     if isinstance(repo_config, list):
         # "all" — find the most expensive across all repos
         best: dict | None = None
         for rc in repo_config:
-            result = most_expensive_ticket(settings, lookback_hours, repo_config=rc, max_tickets=max_tickets)
+            result = most_expensive_ticket(
+                settings, lookback_hours,
+                max_tickets=max_tickets, repo_config=rc,
+            )
             if result and (best is None or result["total_cost"] > best["total_cost"]):
                 best = result
         result = best
     else:
-        result = most_expensive_ticket(settings, lookback_hours, repo_config=repo_config, max_tickets=max_tickets)
+        result = most_expensive_ticket(
+            settings, lookback_hours,
+            max_tickets=max_tickets, repo_config=repo_config,
+        )
+
     if result is None:
         return None
 
@@ -1325,9 +1363,11 @@ def most_expensive_trace_endpoint(
     settings=Depends(get_settings),
 ):
     """Return the single most expensive trace in the last
-    *lookback_hours* (clamped 1–168) or among the first *max_tickets*
-    distinct sessions (1–1000).  Returns ``null`` when there is no
-    data or tracing is disabled.
+    *lookback_hours* (clamped 1–168).  Returns ``null`` when there is
+    no data or tracing is disabled.
+
+    ``?max_tickets=N`` switches to ticket-count mode (last N distinct
+    sessions) instead of the lookback window.
 
     ``?repo_id=X`` scopes to a single repo; ``?repo_id=all`` aggregates
     across all repos (picks the single most expensive across all).
@@ -1335,16 +1375,23 @@ def most_expensive_trace_endpoint(
     from ..langfuse_client import most_expensive_trace
 
     lookback_hours = max(1.0, min(lookback_hours, 168.0))
-    max_tickets = max(1, min(max_tickets, 1000)) if max_tickets is not None else None
+    if max_tickets is not None:
+        max_tickets = max(1, min(max_tickets, 1000))
     repo_config = _resolve_cost_repo(repo_id, request)
     if isinstance(repo_config, list):
         best: dict | None = None
         for rc in repo_config:
-            result = most_expensive_trace(settings, lookback_hours, repo_config=rc, max_tickets=max_tickets)
+            result = most_expensive_trace(
+                settings, lookback_hours,
+                max_tickets=max_tickets, repo_config=rc,
+            )
             if result and (best is None or result["total_cost"] > best["total_cost"]):
                 best = result
         return best
-    return most_expensive_trace(settings, lookback_hours, repo_config=repo_config, max_tickets=max_tickets)
+    return most_expensive_trace(
+        settings, lookback_hours,
+        max_tickets=max_tickets, repo_config=repo_config,
+    )
 
 
 # -- deep-review --------------------------------------------------------
