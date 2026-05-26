@@ -177,7 +177,10 @@ class CIFixStage(Stage):
             # reason as the rebase agent: keep its cost/traces attributed
             # to the ticket instead of an orphan root trace.
             with tracing.start_ticket_root_span(ticket.id, "ci_fix"):
-                memory_text = load_memory(s.ci_fix_memory_file)
+                ci_fix_memory_path = s.memory_file_for(
+                    "ci_fix", ctx.repo_config.board_id if ctx.repo_config else ""
+                )
+                memory_text = load_memory(ci_fix_memory_path)
                 result = run_ci_fix_agent(
                     settings=s,
                     repo_dir=repo_dir,
@@ -188,7 +191,7 @@ class CIFixStage(Stage):
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:
-                    persist_memory(s.ci_fix_memory_file, result.updated_memory)
+                    persist_memory(ci_fix_memory_path, result.updated_memory)
         except Exception as e:  # noqa: BLE001
             log.exception("%s: ci-fix agent crashed: %s", ticket.id, e)
             ok = False

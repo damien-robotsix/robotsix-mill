@@ -589,7 +589,10 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     t = _ticket(ctx)
     RetrospectStage().run(t, ctx)
 
-    memory_file = ctx.settings.retrospect_memory_file
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect",
+        ctx.repo_config.board_id if ctx.repo_config else "",
+    )
     assert memory_file.exists()
     assert memory_file.read_text() == memory_content
 

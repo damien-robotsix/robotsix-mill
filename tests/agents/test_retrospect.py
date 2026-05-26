@@ -169,7 +169,7 @@ def test_memory_passed_to_agent(tmp_path, monkeypatch):
     """Memory file contents are passed to the agent."""
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
-    memory_file = ctx.settings.retrospect_memory_file
+    memory_file = ctx.settings.memory_file_for("retrospect", ctx.repo_config.board_id if ctx.repo_config else "")
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text("## Issue: slow tests\n- ticket-A: 3 retries\n", encoding="utf-8")
 
@@ -238,7 +238,7 @@ def test_updated_memory_written_back(tmp_path, monkeypatch):
         ),
     )
     RetrospectStage().run(_done(ctx), ctx)
-    memory_file = ctx.settings.retrospect_memory_file
+    memory_file = ctx.settings.memory_file_for("retrospect", ctx.repo_config.board_id if ctx.repo_config else "")
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == (
         "## Issue: slow tests\n- ticket-A: 3 retries\n- ticket-B: 2 retries\n"
@@ -251,7 +251,7 @@ def test_missing_memory_file_still_closed(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     # Ensure memory file doesn't exist.
-    memory_file = ctx.settings.retrospect_memory_file
+    memory_file = ctx.settings.memory_file_for("retrospect", ctx.repo_config.board_id if ctx.repo_config else "")
     if memory_file.exists():
         memory_file.unlink()
 
@@ -342,8 +342,13 @@ def test_no_draft_when_memory_not_sufficient(tmp_path, monkeypatch):
 def test_memory_default_path_derives_from_data_dir(tmp_path, monkeypatch):
     """When MILL_RETROSPECT_MEMORY_PATH is not set, the path derives from data_dir."""
     ctx = _ctx(tmp_path)
-    expected = ctx.settings.data_dir / "retrospect_memory.md"
-    assert ctx.settings.retrospect_memory_file == expected
+    board = ctx.repo_config.board_id if ctx.repo_config else ""
+    expected = (
+        ctx.settings.data_dir / board / "retrospect_memory.md"
+        if board
+        else ctx.settings.data_dir / "retrospect_memory.md"
+    )
+    assert ctx.settings.memory_file_for("retrospect", board) == expected
 
 
 def test_noop_draft_is_not_spawned(tmp_path, monkeypatch):

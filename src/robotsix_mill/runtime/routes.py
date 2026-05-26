@@ -1617,7 +1617,7 @@ def deep_review_trace(
                     )
 
             # Read inspector memory (best-effort).
-            memory_file = settings.trace_inspector_memory_file
+            memory_file = settings.memory_file_for("trace_inspector", "")
             memory = ""
             if memory_file.exists():
                 try:

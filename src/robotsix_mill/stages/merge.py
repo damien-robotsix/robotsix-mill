@@ -562,7 +562,11 @@ class MergeStage(Stage):
             # review_revision is traced=False (like ci_fix), so wrap the
             # LLM agent in the ticket's Langfuse session.
             with tracing.start_ticket_root_span(ticket.id, "review_revision"):
-                memory_text = load_memory(s.review_revision_memory_file)
+                review_revision_memory_path = s.memory_file_for(
+                    "review_revision",
+                    ctx.repo_config.board_id if ctx.repo_config else "",
+                )
+                memory_text = load_memory(review_revision_memory_path)
                 result = run_review_revision_agent(
                     settings=s,
                     repo_dir=Path(repo_dir),
@@ -573,7 +577,7 @@ class MergeStage(Stage):
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:
-                    persist_memory(s.review_revision_memory_file, result.updated_memory)
+                    persist_memory(review_revision_memory_path, result.updated_memory)
         except Exception as e:  # noqa: BLE001
             log.exception("%s: review-revision agent crashed: %s", ticket.id, e)
             ok = False
@@ -695,7 +699,10 @@ class MergeStage(Stage):
                     token=github_token(s),
                     branch=target,
                 )
-                memory_text = load_memory(s.rebase_memory_file)
+                rebase_memory_path = s.memory_file_for(
+                    "rebase", ctx.repo_config.board_id if ctx.repo_config else ""
+                )
+                memory_text = load_memory(rebase_memory_path)
                 result = run_rebase_agent(
                     settings=s,
                     repo_dir=repo_dir,
@@ -705,7 +712,7 @@ class MergeStage(Stage):
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:
-                    persist_memory(s.rebase_memory_file, result.updated_memory)
+                    persist_memory(rebase_memory_path, result.updated_memory)
         except Exception as e:  # noqa: BLE001
             log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False

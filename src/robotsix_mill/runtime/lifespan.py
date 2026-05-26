@@ -79,6 +79,7 @@ def create_lifespan(
         # move the per-ticket workspaces under each repo's subtree.
         db.migrate_legacy_global_db(settings)
         db.migrate_legacy_workspaces(settings)
+        db.migrate_legacy_memories(settings)
         # In single-repo mode use the specified repo; in multi-repo mode
         # pick the first repo as the initial repo_config for the worker.
         if single_repo_id is not None:

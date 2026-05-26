@@ -384,3 +384,81 @@ def migrate_legacy_workspaces(settings: Settings) -> dict[str, int]:
         pass
 
     return moved
+
+
+# All known memory ledger file basenames — kept in sync with the names
+# passed to :meth:`Settings.memory_file_for`.
+_LEGACY_MEMORY_NAMES = (
+    "audit", "agent_check", "bc_check", "ci_fix",
+    "completeness_check", "cost_reconciliation", "doc",
+    "env_sync", "expert_python-backend", "health",
+    "implement", "rebase", "refine", "retrospect",
+    "review_revision", "survey", "test_gap",
+    "trace_inspector",
+)
+
+
+def migrate_legacy_memories(settings: Settings) -> dict[str, int]:
+    """One-shot migration: copy ``<data_dir>/<name>_memory.md`` ledger
+    files into every registered repo's subtree as
+    ``<data_dir>/<board_id>/<name>_memory.md``.
+
+    Why copy rather than move: ledgers accumulate generic patterns
+    (refine triage rules, retrospect observations) that are equally
+    relevant to every repo. Seeding each per-repo ledger with the
+    pre-split ledger gives each repo a useful warm start.
+
+    Idempotent. Skips a destination if it already exists (so a repo
+    that has begun accumulating its own ledger isn't overwritten).
+    After seeding, the legacy file at ``<data_dir>/<name>_memory.md``
+    is renamed to ``<name>_memory.md.legacy-pre-split`` so the data
+    root stays clean.
+
+    Returns ``{board_id: files_copied}``.
+    """
+    from ..config import get_repos_config
+    import shutil
+
+    try:
+        repos = get_repos_config()
+    except Exception:
+        return {}
+    if not repos.repos:
+        return {}
+
+    copied: dict[str, int] = {}
+    for name in _LEGACY_MEMORY_NAMES:
+        src = settings.data_dir / f"{name}_memory.md"
+        if not src.exists() or not src.is_file():
+            continue
+        for rc in repos.repos.values():
+            board_dir = settings.data_dir / rc.board_id
+            board_dir.mkdir(parents=True, exist_ok=True)
+            dest = board_dir / f"{name}_memory.md"
+            if dest.exists():
+                continue
+            try:
+                shutil.copy2(src, dest)
+                copied[rc.board_id] = copied.get(rc.board_id, 0) + 1
+            except OSError as e:
+                log.warning(
+                    "migrate_legacy_memories: could not copy %s → %s: %s",
+                    src, dest, e,
+                )
+        backup = settings.data_dir / f"{name}_memory.md.legacy-pre-split"
+        if not backup.exists():
+            try:
+                src.rename(backup)
+            except OSError as e:
+                log.warning(
+                    "migrate_legacy_memories: could not rename %s → %s: %s",
+                    src, backup, e,
+                )
+
+    for board_id, n in copied.items():
+        log.info(
+            "migrate_legacy_memories: seeded %d ledger(s) into "
+            "<data_dir>/%s/", n, board_id,
+        )
+
+    return copied

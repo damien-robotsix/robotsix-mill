@@ -387,7 +387,10 @@ class RefineStage(Stage):
 
         # --- run the refine agent ---
         try:
-            memory_text = load_memory(s.refine_memory_file, max_chars=s.max_memory_chars)
+            refine_memory_path = s.memory_file_for(
+                "refine", ctx.repo_config.board_id if ctx.repo_config else ""
+            )
+            memory_text = load_memory(refine_memory_path, max_chars=s.max_memory_chars)
 
             extra_roots: list[Path] | None = None
 
@@ -401,7 +404,7 @@ class RefineStage(Stage):
             )
 
             if result.updated_memory:
-                persist_memory(s.refine_memory_file, result.updated_memory)
+                persist_memory(refine_memory_path, result.updated_memory)
 
             if result.title and result.title.strip():
                 ctx.service.set_title(ticket.id, result.title.strip())

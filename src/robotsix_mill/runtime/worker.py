@@ -766,11 +766,21 @@ class Worker:
         block another. ``board_id=""`` covers the fallback queue for
         tickets without a matching repo.
         """
+        from ..core.service import TicketService
+
         queue = self._queue_for(board_id)
+        # Per-queue service bound to this board's DB — the lifespan's
+        # ctx.service is pinned to the first repo, so reads/writes via
+        # it would hit the wrong DB for any non-first repo's tickets.
+        board_service = (
+            TicketService(self.ctx.settings, board_id=board_id)
+            if board_id
+            else self.ctx.service
+        )
         while True:
             popped_prio, popped_stage, _seq, ticket_id = await queue.get()
             try:
-                before = self.ctx.service.get(ticket_id)
+                before = board_service.get(ticket_id)
                 before_state = before.state if before else None
 
                 # Pop-time sanity check: the entry's (priority, stage)
@@ -799,12 +809,12 @@ class Worker:
                 ticket_repo_config = self._repo_config_for_ticket(ticket_id)
                 per_ticket_ctx = StageContext(
                     settings=self.ctx.settings,
-                    service=self.ctx.service,
+                    service=board_service,
                     repo_config=ticket_repo_config,
                 )
 
                 await process_ticket(ticket_id, per_ticket_ctx, active_map=self._active)
-                after = self.ctx.service.get(ticket_id)
+                after = board_service.get(ticket_id)
                 self._check_progress(
                     ticket_id, before_state,
                     after.state if after else None,

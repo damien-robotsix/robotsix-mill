@@ -92,7 +92,7 @@ class ImplementStage(Stage):
         if epic_ctx:
             spec = epic_ctx + "\n\n" + spec
 
-        memory_text = load_memory(settings.implement_memory_file)
+        memory_text = load_memory(settings.memory_file_for("implement", ctx.repo_config.board_id if ctx.repo_config else ""))
         max_iters = max(1, settings.max_fix_iterations)
 
         # Load pre-loaded file content from the refine stage (if available).
@@ -185,7 +185,7 @@ class ImplementStage(Stage):
             # Persist the agent's updated memory as soon as it's produced
             # so a later-iteration failure can't lose the learning.
             if updated_memory:
-                persist_memory(settings.implement_memory_file, updated_memory)
+                persist_memory(settings.memory_file_for("implement", ctx.repo_config.board_id if ctx.repo_config else ""), updated_memory)
 
             # Update reference_files from the agent's curated list for
             # the next retry iteration (and persist to disk for

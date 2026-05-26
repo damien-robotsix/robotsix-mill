@@ -122,6 +122,7 @@ def run_doc_agent(
     spec: str,
     model_name: str | None = None,
     extra_roots: list[Path] | None = None,
+    board_id: str = "",
 ) -> DocResult:
     """Build a documentation agent, classify *diff* + *spec*, and update
     docs for user-facing changes.
@@ -130,7 +131,7 @@ def run_doc_agent(
     repo's docs (README.md, docs/*, AGENT.md) and applies targeted
     edits for user-facing changes. Internal-only changes are a no-op.
 
-    A persistent memory ledger (``settings.doc_memory_file``) records
+    A persistent memory ledger (``settings.memory_file_for("doc", board_id)``) records
     the repo's doc layout across runs so subsequent passes don't have
     to re-explore the structure from scratch."""
     from pydantic_ai.usage import UsageLimits
@@ -148,8 +149,9 @@ def run_doc_agent(
 
     # Load the doc memory ledger (empty string if unset / missing /
     # unreadable — first run starts a fresh ledger).
+    doc_memory_path = settings.memory_file_for("doc", board_id)
     memory_text = load_memory(
-        settings.doc_memory_file,
+        doc_memory_path,
         max_chars=settings.max_memory_chars,
     )
 
@@ -191,7 +193,7 @@ def run_doc_agent(
         # Persist the agent's updated ledger; empty string = keep
         # existing memory unchanged.
         if output.updated_memory:
-            persist_memory(settings.doc_memory_file, output.updated_memory)
+            persist_memory(doc_memory_path, output.updated_memory)
         return output
     finally:
         _safe_close(agent)

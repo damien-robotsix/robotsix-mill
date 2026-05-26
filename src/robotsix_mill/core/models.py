@@ -161,6 +161,7 @@ class TicketRead(SQLModel):
     last_transient_error: str | None
     next_retry_at: datetime | None
     priority: bool = False
+    board_id: str = ""
     created_at: datetime
     updated_at: datetime
 

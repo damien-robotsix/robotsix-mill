@@ -100,6 +100,7 @@ class DocumentStage(Stage):
                 diff=diff,
                 spec=spec,
                 extra_roots=None,
+                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
             )
         except Exception:
             log.warning(
@@ -144,6 +145,7 @@ class DocumentStage(Stage):
         spec: str,
         model_name: str | None = None,
         extra_roots: list[Path] | None = None,
+        board_id: str = "",
     ) -> DocResult:
         """Run the documentation agent to classify the diff and update docs.
 
@@ -159,6 +161,7 @@ class DocumentStage(Stage):
             spec=spec,
             model_name=model_name,
             extra_roots=extra_roots,
+            board_id=board_id,
         )
 
     def _run_doc_classifier(

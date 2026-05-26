@@ -47,7 +47,7 @@ def run_audit_pass(session_id: str, repo_config: RepoConfig | None = None) -> Au
         AuditPassResult with updated memory and created draft info.
     """
     settings = Settings()
-    memory_file = settings.audit_memory_file
+    memory_file = settings.memory_file_for('audit', repo_config.board_id if repo_config else '')
     clone_dir: Path | None = None
     forge_remote_url = settings.forge_remote_url
 

@@ -1086,7 +1086,7 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     service.transition(child_a_id, State.BLOCKED, "test: back to draft")
     from robotsix_mill.core import db as core_db
     from robotsix_mill.core.models import Ticket as TicketModel
-    with core_db.session(service.settings) as s:
+    with core_db.session(service.settings, service.board_id) as s:
         t = s.get(TicketModel, child_a_id)
         t.state = State.DRAFT
         t.blocked_from = None

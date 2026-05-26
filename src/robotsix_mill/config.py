@@ -912,6 +912,27 @@ class Settings(BaseSettings):
             return self.data_dir / board_id / "workspaces"
         return self.data_dir / "workspaces"
 
+    def memory_file_for(self, name: str, board_id: str = "") -> Path:
+        """Return the per-repo memory ledger path for *name*
+        (e.g. ``"implement"``, ``"refine"``, ``"audit"``).
+
+        Honors any explicit ``<name>_memory_path`` setting override
+        (env / YAML); otherwise routes to
+        ``<data_dir>/<board_id>/<name>_memory.md`` when *board_id* is
+        set, falling back to the legacy global path
+        ``<data_dir>/<name>_memory.md`` when not.
+
+        Memory ledgers are repo-specific observation logs (codebase
+        conventions, testing patterns, gotchas) — each repo
+        accumulates its own.
+        """
+        override = getattr(self, f"{name}_memory_path", None)
+        if override is not None:
+            return override
+        if board_id:
+            return self.data_dir / board_id / f"{name}_memory.md"
+        return self.data_dir / f"{name}_memory.md"
+
     @property
     def db_url(self) -> str:
         """SQLAlchemy-compatible database URL derived from :attr:`db_path`."""
