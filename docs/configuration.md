@@ -305,7 +305,7 @@ Every setting below shows:
 | `sandbox.memory` | `MILL_SANDBOX_MEMORY` | `2g` | Memory limit for sandbox containers |
 | `sandbox.pids_limit` | `MILL_SANDBOX_PIDS_LIMIT` | `512` | PID limit for sandbox containers |
 | `sandbox.readonly` | `MILL_SANDBOX_READONLY` | `true` | Mount sandbox rootfs read-only (except tmpfs `/tmp`) |
-| `sandbox.command_timeout` | `MILL_COMMAND_TIMEOUT` | `900` | Wall-clock cap (seconds) for sandbox shell/test commands |
+| `sandbox.command_timeout` | `MILL_COMMAND_TIMEOUT` | `1800` | Wall-clock cap (seconds) for sandbox shell/test commands |
 | `sandbox.data_volume` | `MILL_DATA_VOLUME` | `mill_data` | Named Docker volume for data (fallback when not bind-mounted) |
 | `sandbox.data_mount` | `MILL_SANDBOX_DATA_MOUNT` | `None` | Host path for bind-mounted data directory (overrides `data_volume`) |
 | `sandbox.test_command` | `MILL_TEST_COMMAND` | `pytest -q` | Command run to verify the implementation (empty = skip) |
