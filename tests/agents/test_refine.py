@@ -1706,7 +1706,7 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     monkeypatch.setattr(refining, "triage_refine", fake_triage)
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
 
-    t = service.create("Update README", "Change the version badge in README.md line 5.")
+    t = service.create("Update README", "Change the version badge in `docs/README.md` line 5.")
     out = RefineStage().run(t, ctx)
 
     assert not refine_called
@@ -1726,7 +1726,7 @@ def test_triage_skip_goes_to_human_issue_approval_when_gated(ctx, service, monke
     )
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("unused"))
 
-    t = service.create("Add env var", "Add FOO=bar to config.py line 42.")
+    t = service.create("Add env var", "Add FOO=bar to `src/config.py` line 42.")
 
     from robotsix_mill.config import Settings as S
     gated = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REQUIRE_APPROVAL="true")

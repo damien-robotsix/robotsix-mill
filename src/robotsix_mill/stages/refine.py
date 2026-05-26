@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -338,18 +339,45 @@ class RefineStage(Stage):
                         draft if draft else "(title-only ticket, no body provided)",
                         encoding="utf-8",
                     )
-                    # Skipping the refine agent skips the file_map.json
-                    # write too. Implement requires one — write an
-                    # empty (scope-free) marker so it doesn't BLOCK on
-                    # "refine broken".
-                    file_map_path = ws.artifacts_dir / "file_map.json"
-                    if not file_map_path.exists():
-                        file_map_path.write_text("[]", encoding="utf-8")
-                    next_state, auto_note = _resolve_next_state(ctx, draft, ticket.id)
-                    note = f"triage SKIP: {triage.reason}"
-                    if auto_note:
-                        note += f" | {auto_note}"
-                    return Outcome(next_state, note)
+                    # Try to extract backtick-quoted file paths from
+                    # the draft so the implement stage can enforce
+                    # scope even when we skip the refine agent.
+                    # Pattern: backtick-quoted strings that look like
+                    # file paths (contain a '/' directory separator
+                    # and a file extension).
+                    _PATH_RE = re.compile(
+                        r'`([^`]*/[^`]*\.[a-zA-Z]{1,10})`'
+                    )
+                    extracted = _PATH_RE.findall(draft)
+                    if extracted:
+                        file_map_path = ws.artifacts_dir / "file_map.json"
+                        if not file_map_path.exists():
+                            file_map_path.write_text(
+                                json.dumps(
+                                    [{"file": p, "note": "from draft"}
+                                     for p in extracted],
+                                    indent=2,
+                                ),
+                                encoding="utf-8",
+                            )
+                        next_state, auto_note = _resolve_next_state(
+                            ctx, draft, ticket.id,
+                        )
+                        note = f"triage SKIP: {triage.reason}"
+                        if auto_note:
+                            note += f" | {auto_note}"
+                        return Outcome(next_state, note)
+                    # No paths extracted — fall through to the refine
+                    # agent (do NOT write an empty file_map).  The
+                    # refine agent will explore the codebase and
+                    # produce a proper file_map with real file
+                    # exploration behind it.
+                    log.info(
+                        "%s: triage SKIP but no file paths in draft "
+                        "— falling through to refine agent for "
+                        "file_map",
+                        ticket.id,
+                    )
             except Exception:
                 log.warning(
                     "%s: triage failed, falling through to full refine",
