@@ -19,15 +19,6 @@ from robotsix_mill.runtime.worker import Worker
 from robotsix_mill.stages import StageContext
 from robotsix_mill.agents.ci_fixing import CiFixResult
 
-# Default RepoConfig used by test fixtures when no CI monitor opts are set.
-_DEFAULT_REPO = RepoConfig(
-    repo_id="test-repo",
-    board_id="test-board",
-    langfuse_project_name="test",
-    langfuse_public_key="pk-test",
-    langfuse_secret_key="sk-test",
-)
-
 
 def _ctx(tmp_path, repo_config=None, **env):
     """Build a StageContext for CI monitor tests.
@@ -76,8 +67,6 @@ def _ctx(tmp_path, repo_config=None, **env):
 
 
 def _make_fake_forge(monkeypatch, runs=None, logs=""):
-    from robotsix_mill.forge import get_forge as _original_get_forge
-
     class FakeForge:
         """Controllable fake forge for CI monitor tests."""
 
@@ -455,9 +444,17 @@ def test_monitor_skips_when_disabled_per_repo(tmp_path, monkeypatch):
     # create a _ci_monitor_task.
     worker = Worker(ctx)
     worker._ci_monitor_task = None  # ensure clean state
-    # Verify the startup gate: no task created.
-    repos = get_repos_config()
-    assert not any(rc.ci_monitor_enabled for rc in repos.repos.values())
+    # Call start() inside an asyncio loop to exercise the startup gate.
+    import asyncio
+
+    async def _check():
+        worker.start()
+        assert worker._ci_monitor_task is None
+        await worker.stop()
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(_check())
+    loop.close()
 
 
 def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):

@@ -989,27 +989,16 @@ class Worker:
         # but only poll each repo when its own interval has elapsed.
         repos = get_repos_config()
         repo_configs = [rc for rc in repos.repos.values() if rc.ci_monitor_enabled]
-        if not repo_configs:
-            # Also check the fallback case: no repos registered → use
-            # hardcoded defaults (single-repo backward compat).
-            repo_configs = [None]  # type: ignore[list-item]
 
         min_interval = 60
-        enabled_rcs = [rc for rc in repo_configs if rc is not None]
-        if enabled_rcs:
-            min_interval = max(60, min(rc.ci_monitor_interval_seconds for rc in enabled_rcs))
+        if repo_configs:
+            min_interval = max(60, min(rc.ci_monitor_interval_seconds for rc in repo_configs))
 
         await asyncio.sleep(self._initial_delay("ci_monitor", min_interval))
         while True:
             for rc in repo_configs:
-                if rc is not None:
-                    if not rc.ci_monitor_enabled:
-                        continue
-                    repo_label = rc.repo_id
-                    interval = max(60, rc.ci_monitor_interval_seconds)
-                else:
-                    repo_label = "default"
-                    interval = 86400  # hardcoded default for legacy mode
+                repo_label = rc.repo_id
+                interval = max(60, rc.ci_monitor_interval_seconds)
 
                 # Honour per-repo interval.
                 now = time.time()
@@ -1017,12 +1006,8 @@ class Worker:
                     continue
 
                 try:
-                    if rc is not None:
-                        state_dir = settings.data_dir / rc.repo_id
-                        service = TicketService(settings, board_id=rc.board_id)
-                    else:
-                        state_dir = settings.data_dir
-                        service = self.ctx.service
+                    state_dir = settings.data_dir / rc.repo_id
+                    service = TicketService(settings, board_id=rc.board_id)
 
                     state_dir.mkdir(parents=True, exist_ok=True)
                     state_path = state_dir / "ci_monitor_state.json"
@@ -1125,7 +1110,6 @@ class Worker:
                             body_parts.append(stripped)
                             body_parts.append("```")
 
-                        title = f"CI failure: {wf_name} on {settings.forge_target_branch}"
                         body = "\n".join(body_parts)
 
                         try:
