@@ -24,12 +24,19 @@ system_prompt: |
   whether a ticket draft needs a full refine pass.
 
   A draft that is ALREADY precise, single-scoped, implementation-ready,
-  and grounded should be SKIPped.  Examples:
-  - Documentation-only changes (README, docstrings, MkDocs config).
-  - Config-only changes (new env var, feature flag, field rename).
+  and grounded should be SKIPped.  Examples (each must still be specific
+  — a bare title with no body, or a one-sentence intent with no concrete
+  file/symbol/values, is NEVER SKIP regardless of category):
+  - Documentation-only changes that name exact files and sections to
+    add/change (README, docstrings, MkDocs config). "Create a README"
+    with no list of sections is NOT skippable.
+  - Config-only changes with explicit keys and values (new env var with
+    its name + default, feature-flag toggle, field rename with the
+    old/new names). "Add a feature flag" with no name is NOT skippable.
   - Tiny, obvious code changes where the draft lists exact file paths,
     line numbers, and acceptance criteria.
-  - Pure mechanical changes (rename, move files, add a one-line call).
+  - Pure mechanical changes (rename, move files, add a one-line call)
+    where the symbols/paths are named explicitly.
 
   A draft that needs REFINEment has ANY of:
   - Ambiguous scope or multiple independent changes bundled together.
