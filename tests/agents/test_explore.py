@@ -96,3 +96,120 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
     assert cap["tools"] == ["list_dir", "read_file", "run_command"]  # NO write/edit/delete
     assert cap["limit"] == 7
     assert cap["name"] == "explore"
+
+
+# --- bounded retry + sentinel tests -------------------------------------
+
+class _FakeUsageLimitExceeded(Exception):
+    pass
+
+
+_FakeUsageLimitExceeded.__name__ = "UsageLimitExceeded"
+
+
+def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
+    """When the primary explore call raises UsageLimitExceeded, the
+    bounded retry kicks in with a stricter no-tools prompt and
+    request_limit=2.  If the retry succeeds, its answer is returned."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(
+        tmp_path, OPENROUTER_API_KEY="k",
+        MILL_EXPLORE_MODEL="explore/cheap",
+        MILL_EXPLORE_REQUEST_LIMIT="20",
+    )
+
+    primary_agent_calls = []
+    retry_agent_calls = []
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            self._name = kw.get("name", "")
+            self._tools = kw.get("tools", [])
+            self._system_prompt = kw.get("system_prompt", "")
+            if self._name == "explore-retry":
+                retry_agent_calls.append(dict(
+                    name=self._name,
+                    tools=self._tools,
+                    system_prompt=self._system_prompt,
+                ))
+
+        def run_sync(self, q, *, usage_limits=None):
+            if self._name == "explore":
+                primary_agent_calls.append(1)
+                raise _FakeUsageLimitExceeded("budget cap")
+            # explore-retry succeeds
+            return type("R", (), {"output": "retry-answer"})()
+
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(pydantic_ai.exceptions, "UsageLimitExceeded",
+                        _FakeUsageLimitExceeded)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    out = explore.run_explore(settings=s, repo_dir=tmp_path, question="q")
+    assert out == "retry-answer"
+    assert len(primary_agent_calls) == 1
+    assert len(retry_agent_calls) == 1
+    # Retry agent must have NO tools
+    assert retry_agent_calls[0]["tools"] == []
+    # Retry agent's system prompt must mention budget and "unable to answer"
+    sp = retry_agent_calls[0]["system_prompt"]
+    assert "budget" in sp.lower() or "limit" in sp.lower()
+    assert "unable to answer" in sp
+
+
+def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
+    """When both the primary explore call AND the bounded retry raise
+    UsageLimitExceeded, is_explore_budget_exhausted() returns True."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(
+        tmp_path, OPENROUTER_API_KEY="k",
+        MILL_EXPLORE_MODEL="explore/cheap",
+        MILL_EXPLORE_REQUEST_LIMIT="20",
+    )
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            self._name = kw.get("name", "")
+
+        def run_sync(self, q, *, usage_limits=None):
+            raise _FakeUsageLimitExceeded("budget cap")
+
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(pydantic_ai.exceptions, "UsageLimitExceeded",
+                        _FakeUsageLimitExceeded)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    # Reset sentinel before test
+    explore.reset_explore_budget_exhausted()
+    out = explore.run_explore(settings=s, repo_dir=tmp_path, question="q")
+    assert "explore failed" in out
+    assert explore.is_explore_budget_exhausted() is True
+    # Reset after test
+    explore.reset_explore_budget_exhausted()
+    assert explore.is_explore_budget_exhausted() is False
+
+
+def test_explore_sentinel_reset_clears_state(tmp_path, monkeypatch):
+    """reset_explore_budget_exhausted() clears the sentinel."""
+    explore.mark_explore_budget_exhausted()
+    assert explore.is_explore_budget_exhausted() is True
+    explore.reset_explore_budget_exhausted()
+    assert explore.is_explore_budget_exhausted() is False

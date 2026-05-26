@@ -158,22 +158,21 @@ def call_with_retry(
     sleep: Callable[[float], None] = time.sleep,
     fallback_fn: Callable[[], T] | None = None,
 ) -> T:
-    """Run ``fn`` and retry it on transient / rate-limit failures.
+    """Run ``fn`` and retry it on transient failures only.
 
     Transient failures (429, 5xx, timeouts, JSON-decode) use a short
-    exponential backoff (2s base, 30s cap).  ``UsageLimitExceeded``
-    (budget cap) uses a longer, rate-limit-aware backoff (30s base,
-    120s cap) and, when ``fallback_fn`` is provided, switches to calling
-    it after ``settings.rate_limit_fallback_retries`` consecutive
-    rate-limit failures.
+    exponential backoff (2s base, 30s cap).
 
-    Re-raises immediately for non-transient, non-rate-limited errors,
-    and re-raises the last error once retries are exhausted.
+    ``UsageLimitExceeded`` (pydantic-ai budget cap) is **never retried**:
+    if a ``fallback_fn`` is provided it is tried exactly once;
+    otherwise the exception is re-raised immediately with no backoff.
+
+    Re-raises immediately for non-transient errors, and re-raises the
+    last error once retries are exhausted.
     """
     from ..runtime import tracing  # lazy import
 
     attempts = max(0, settings.transient_retries)
-    consecutive_rate_limits = 0
     using_fallback = False
     rate_limit_count = 0
     cumulative_backoff = 0.0
@@ -211,25 +210,18 @@ def call_with_retry(
                 sleep(delay)
                 continue
 
-            # --- rate-limit branch (new) --------------------------------------
+            # --- rate-limit branch ------------------------------------------
             if is_rate_limited(e):
-                consecutive_rate_limits += 1
                 rate_limit_count += 1
 
-                # Fallback activation on threshold
-                if (
-                    not using_fallback
-                    and fallback_fn is not None
-                    and consecutive_rate_limits
-                    >= settings.rate_limit_fallback_retries
-                ):
+                # Fallback activation on first UsageLimitExceeded
+                if not using_fallback and fallback_fn is not None:
                     using_fallback = True
                     fallback_model = settings.rate_limit_fallback_model
                     log.warning(
-                        "%s: rate-limit fallback activated after %d "
-                        "consecutive UsageLimitExceeded failures "
-                        "(model=%s)",
-                        what, consecutive_rate_limits, fallback_model,
+                        "%s: rate-limit fallback activated on first "
+                        "UsageLimitExceeded (model=%s)",
+                        what, fallback_model,
                     )
                     _record_rate_limit_span(
                         delay=0.0,
@@ -241,35 +233,12 @@ def call_with_retry(
                     # Try fallback immediately — same attempt slot
                     continue
 
-                # Compute rate-limit backoff delay
-                delay = min(
-                    settings.rate_limit_backoff_cap,
-                    settings.rate_limit_backoff_base * (2 ** attempt),
-                )
-                # Honor Retry-After if present in the exception chain
-                retry_after = _retry_after_seconds(e)
-                if retry_after is not None:
-                    delay = max(delay, retry_after)
-                delay += random.uniform(0, delay / 2)  # jitter
-
-                cumulative_backoff += delay
-                _record_rate_limit_span(
-                    delay=delay,
-                    cumulative_backoff=cumulative_backoff,
-                    count=rate_limit_count,
-                    fallback_activated=using_fallback,
-                    fallback_model=settings.rate_limit_fallback_model,
-                )
-                log.warning(
-                    "%s: rate-limited %s (attempt %d/%d) — retrying in %.1fs",
-                    what, type(e).__name__, attempt + 1, attempts, delay,
-                )
+                # No fallback (or fallback also exhausted) → re-raise immediately
                 try:
                     tracing.flush_tracing()
                 except Exception:
                     log.warning("flush_tracing failed", exc_info=True)
-                sleep(delay)
-                continue
+                raise
 
             # --- non-retryable -------------------------------------------------
             try:
