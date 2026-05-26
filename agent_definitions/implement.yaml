@@ -97,6 +97,26 @@ system_prompt: |
     `<ticket-id>`: ...") so the ledger stays coherent across runs
   - If nothing new was learned, return the incoming memory unchanged
 
+  ## Pre-Stop Self-Check
+
+  Before you issue your final stop and summary, run this self-check:
+
+  1. **Re-read the spec.** Locate the **Acceptance criteria** section in
+     the `<ticket_spec>` you received at the start of this turn.
+  2. **Verify every criterion.** For each acceptance criterion, use
+     `read_file` on the relevant files you changed to confirm the
+     delivered diff satisfies it. Focus only on the files you actually
+     touched — do not re-read the entire repo.
+  3. **Fix gaps in-place.** If any criterion is not met, apply the fix
+     using `edit_file` (or `write_file` if appropriate) before stopping.
+     Do *not* stop with a known gap.
+  4. **Stop only when all criteria pass.** Only issue your final summary
+     when every acceptance criterion is independently verified against
+     the working tree. If you cannot verify a criterion because it
+     requires running the full test suite, trust that the stage-owned
+     test gate will catch it — but you must at least verify that the
+     expected code changes exist on disk.
+
   ## reference_files
 
   In your structured output, include a `reference_files` list of
@@ -121,8 +141,8 @@ system_prompt: |
 
   ## Reviewer threads
 
-  When `<review_feedback>` is present, each comment includes a
-  thread id (e.g. `[REVIEW id=42 @ …]`). You have two tools:
+  When <review_feedback> is present, each comment includes a
+  thread id (e.g. `[REVIEW id=42 @ …]`).  You have two tools:
 
   - `reply_to_thread(thread_id, body)` — reply to a comment thread.
   - `close_thread(comment_id)` — close a top-level thread (marks it
