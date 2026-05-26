@@ -184,6 +184,7 @@ class CIFixStage(Stage):
                     branch=branch,
                     failing_summary=failing_summary,
                     memory=memory_text,
+                    ticket_id=ticket.id,
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:

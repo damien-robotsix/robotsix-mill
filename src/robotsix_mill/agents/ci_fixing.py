@@ -26,6 +26,9 @@ class CiFixResult(BaseModel):
     status: Literal["DONE", "FAILED"]
     summary: str
     updated_memory: str = ""
+    pattern_category: str = ""
+    pattern_signature: str = ""
+    pattern_approach: str = ""
 
 
 def run_ci_fix_agent(
@@ -35,6 +38,7 @@ def run_ci_fix_agent(
     branch: str,
     failing_summary: str,
     memory: str = "",
+    ticket_id: str = "",
 ) -> CiFixResult:
     """Run one CI-fix attempt based on *failing_summary*.
 
@@ -61,8 +65,31 @@ def run_ci_fix_agent(
     # Build tools confined to the ticket's own clone.
     tools = build_fs_tools(Path(repo_dir), settings)
 
+    # --- load structured pattern memory ---
+    from .ci_patterns import (
+        CiPatternEntry,
+        find_relevant_patterns,
+        load_patterns,
+        save_patterns,
+    )
+
+    patterns = load_patterns(settings.ci_patterns_file)
+    relevant = find_relevant_patterns(patterns, failing_summary, limit=3)
+
+    if relevant:
+        lines: list[str] = []
+        for p in relevant:
+            verdict = "SUCCESS" if p.success else "FAILED"
+            lines.append(
+                f"- [{verdict}, {p.attempts} attempt(s)] {p.category}: "
+                f"\"{p.signature}\" → {p.approach} (ticket {p.ticket_id})"
+            )
+        patterns_text = "\n".join(lines)
+    else:
+        patterns_text = "(no prior patterns for this failure)"
+
     system_prompt = definition.system_prompt.format(
-        repo_dir=repo_dir, branch=branch
+        repo_dir=repo_dir, branch=branch, patterns=patterns_text,
     )
 
     agent = build_agent_from_definition(
@@ -83,4 +110,28 @@ def run_ci_fix_agent(
     finally:
         _safe_close(agent)
 
-    return result.output
+    # --- persist structured pattern entry ---
+    output = result.output
+    if output.pattern_signature:
+        from datetime import datetime, timezone
+        entry = CiPatternEntry(
+            category=output.pattern_category or "unknown",
+            signature=output.pattern_signature,
+            approach=output.pattern_approach or "unknown",
+            success=(output.status == "DONE"),
+            attempts=1,
+            ticket_id=ticket_id or "unknown",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+        patterns.append(entry)
+        try:
+            save_patterns(settings.ci_patterns_file, patterns)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "ci_fix: failed to save patterns to %s",
+                settings.ci_patterns_file,
+                exc_info=True,
+            )
+
+    return output

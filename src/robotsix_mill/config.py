@@ -866,6 +866,12 @@ class Settings(BaseSettings):
     rebase_memory_path: Path | None = Field(
         default=None, alias="MILL_REBASE_MEMORY_PATH"
     )
+    # Path to the ci-fix agent's structured pattern memory.  Override
+    # to pin a specific path; unset (default) derives
+    # <data_dir>/ci_patterns.json.
+    ci_patterns_path: Path | None = Field(
+        default=None, alias="MILL_CI_PATTERNS_PATH"
+    )
 
     # --- tracing (optional) ---
     langfuse_base_url: str | None = Field(default=None, alias="LANGFUSE_BASE_URL")
@@ -1010,6 +1016,13 @@ class Settings(BaseSettings):
         if self.rebase_memory_path is not None:
             return self.rebase_memory_path
         return self.data_dir / "rebase_memory.md"
+
+    @property
+    def ci_patterns_file(self) -> Path:
+        """Resolved path to the ci-fix agent's structured pattern memory."""
+        if self.ci_patterns_path is not None:
+            return self.ci_patterns_path
+        return self.data_dir / "ci_patterns.json"
 
     @property
     def review_revision_memory_file(self) -> Path:

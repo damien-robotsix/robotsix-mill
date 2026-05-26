@@ -81,6 +81,10 @@ system_prompt: |
   If the failure cannot be resolved (e.g. flaky infra test, missing
   secrets, deeper design issue), report FAILED with a short reason.
 
+  ## Prior fix attempts for similar failures
+
+  {patterns}
+
   ## Memory
 
   You are given a `<memory>` block containing a Markdown ledger of
@@ -99,3 +103,15 @@ system_prompt: |
 
   After the fix completes (or you determine it cannot), set status to
   DONE or FAILED and provide a brief summary.
+
+  Additionally, populate these output fields so your attempt can help
+  future CI-fix runs:
+  - ``pattern_category``: broad failure category (e.g. "lint_error",
+    "test_failure", "docker_build_error", "type_error", "cve",
+    "workflow_yaml", "unknown").
+  - ``pattern_signature``: a short, stable description of the failure
+    pattern (e.g. "E501 line too long", "assert 5 == 4 in test_foo").
+    Keep it concise — this string is used for future matching.
+  - ``pattern_approach``: one-line description of what you tried
+    (e.g. "used edit_file to wrap line").
+  Leave these empty if nothing meaningful can be recorded.
