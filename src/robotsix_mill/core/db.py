@@ -145,11 +145,19 @@ def migrate_legacy_global_db(settings: Settings) -> dict[str, int]:
         legacy_engine.dispose()
         return {}
 
-    # If any per-repo DB already has rows, the migration has already
-    # run (or the operator has a hybrid state). Don't touch.
+    # Check whether any per-repo DB already holds data — handles two
+    # scenarios:
+    #   (a) Fully-migrated: per-repo DBs populated AND legacy file
+    #       already renamed. Then this function isn't called at all.
+    #   (b) Partial migration: per-repo DBs populated but legacy file
+    #       still in place because a previous run crashed before the
+    #       rename. Rename it now to complete the migration and exit
+    #       cleanly without re-inserting (which would collide on
+    #       UNIQUE).
     from ..config import get_repos_config
 
     repos = get_repos_config()
+    any_populated = False
     for repo_id, rc in repos.repos.items():
         per_repo_path = _db_path(settings, rc.board_id)
         if per_repo_path.exists():
@@ -158,20 +166,32 @@ def migrate_legacy_global_db(settings: Settings) -> dict[str, int]:
                     f"sqlite:///{per_repo_path}",
                     connect_args={"check_same_thread": False},
                 )
-                with Session(eng) as s:
-                    from .models import Ticket as _T  # local import
-                    count = s.exec(_T.__table__.select()).first()
-                    eng.dispose()
-                    if count is not None:
-                        log.info(
-                            "migrate_legacy_global_db: per-repo DB at %s "
-                            "already has rows — skipping migration",
-                            per_repo_path,
-                        )
-                        legacy_engine.dispose()
-                        return {}
+                with eng.connect() as conn:
+                    res = conn.exec_driver_sql("SELECT COUNT(*) FROM ticket").scalar()
+                eng.dispose()
+                if res and res > 0:
+                    any_populated = True
+                    log.info(
+                        "migrate_legacy_global_db: per-repo DB at %s "
+                        "already has %d rows", per_repo_path, res,
+                    )
             except Exception:
                 pass
+    if any_populated:
+        legacy_engine.dispose()
+        legacy_backup = settings.data_dir / "mill.db.legacy-pre-split"
+        try:
+            legacy_path.rename(legacy_backup)
+            log.info(
+                "migrate_legacy_global_db: per-repo DBs already "
+                "populated — completed migration by renaming legacy "
+                "DB to %s", legacy_backup.name,
+            )
+        except OSError as e:
+            log.warning(
+                "migrate_legacy_global_db: could not rename legacy DB: %s", e,
+            )
+        return {}
 
     # OK to migrate. Use raw SQL for the copy — SQLAlchemy schemas
     # might mismatch between legacy + new and we just want row-faithful.
@@ -184,38 +204,47 @@ def migrate_legacy_global_db(settings: Settings) -> dict[str, int]:
         init_db(settings, rc.board_id)
     init_db(settings, "")  # default — for legacy/no-board rows
 
-    # Pull each ticket and route it.
+    # Pull each ticket and route it. Use dict(row._mapping) to get
+    # column-name access regardless of how SQLAlchemy materializes rows.
     with Session(legacy_engine) as legacy_s:
-        tickets = legacy_s.exec(Ticket.__table__.select()).all()
-        events = legacy_s.exec(TicketEvent.__table__.select()).all()
-        comments = legacy_s.exec(Comment.__table__.select()).all()
+        tickets = [dict(r._mapping) for r in legacy_s.exec(Ticket.__table__.select()).all()]
+        events = [dict(r._mapping) for r in legacy_s.exec(TicketEvent.__table__.select()).all()]
+        comments = [dict(r._mapping) for r in legacy_s.exec(Comment.__table__.select()).all()]
 
-        # Group ticket_ids by destination board.
-        ticket_to_board: dict[str, str] = {}
-        for row in tickets:
-            tid = row[Ticket.__table__.c.id]
-            board = (row[Ticket.__table__.c.board_id] or "") if "board_id" in row._mapping else ""
-            # When the legacy DB pre-dates board_id, route by repo match
-            # on the ticket_id substring would be guesswork — leave them
-            # in the default DB.
-            ticket_to_board[tid] = board
+    # Group ticket_ids by destination board.
+    ticket_to_board: dict[str, str] = {}
+    for row in tickets:
+        tid = row["id"]
+        # When the legacy DB pre-dates board_id the column may be
+        # missing or empty — leave those in the default DB.
+        ticket_to_board[tid] = row.get("board_id") or ""
 
-        # Pre-build per-board lists for batched insert.
-        per_board_rows: dict[str, dict[str, list]] = {}
-        for row in tickets:
-            board = ticket_to_board[row[Ticket.__table__.c.id]]
-            per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
-            per_board_rows[board]["ticket"].append(dict(row._mapping))
-        for row in events:
-            tid = row[TicketEvent.__table__.c.ticket_id]
-            board = ticket_to_board.get(tid, "")
-            per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
-            per_board_rows[board]["event"].append(dict(row._mapping))
-        for row in comments:
-            tid = row[Comment.__table__.c.ticket_id]
-            board = ticket_to_board.get(tid, "")
-            per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
-            per_board_rows[board]["comment"].append(dict(row._mapping))
+    # Pre-build per-board lists for batched insert. Only tickets with
+    # a non-empty board_id move — empty-board (legacy) rows stay in
+    # the legacy DB; the default DB at <data_dir>/mill.db is recreated
+    # empty after the rename. Inserting into "" would collide with the
+    # legacy DB itself since _db_path(settings, "") == legacy_path.
+    per_board_rows: dict[str, dict[str, list]] = {}
+    for row in tickets:
+        board = ticket_to_board[row["id"]]
+        if not board:
+            continue
+        per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
+        per_board_rows[board]["ticket"].append(row)
+    for row in events:
+        tid = row.get("ticket_id", "")
+        board = ticket_to_board.get(tid, "")
+        if not board:
+            continue
+        per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
+        per_board_rows[board]["event"].append(row)
+    for row in comments:
+        tid = row.get("ticket_id", "")
+        board = ticket_to_board.get(tid, "")
+        if not board:
+            continue
+        per_board_rows.setdefault(board, {"ticket": [], "event": [], "comment": []})
+        per_board_rows[board]["comment"].append(row)
 
     # Insert into each destination DB.
     for board, rows in per_board_rows.items():
@@ -289,10 +318,8 @@ def migrate_legacy_workspaces(settings: Settings) -> dict[str, int]:
     for rc in repos.repos.values():
         try:
             engine = get_engine(settings, rc.board_id)
-            with Session(engine) as s:
-                rows = s.exec(Ticket.__table__.select()).all()
-                for row in rows:
-                    tid = row[Ticket.__table__.c.id]
+            with engine.connect() as conn:
+                for tid, in conn.exec_driver_sql("SELECT id FROM ticket").fetchall():
                     ticket_to_board[tid] = rc.board_id
         except Exception as e:
             log.warning(
