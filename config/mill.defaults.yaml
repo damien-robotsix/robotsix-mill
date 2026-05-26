@@ -41,6 +41,7 @@ core:
     triage: &cheap_model openai/gpt-4o-mini               # pre-refine triage — fast/cheap classification
     auto_approve: *cheap_model                            # auto-approve triage — must be fast and cheap
     scope_triage: *cheap_model                            # scope-violation triage — fast and cheap
+    doc_classifier: *cheap_model                          # doc-diff classifier gate (fast + cheap)
     rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted
 
   # -- request caps, concurrency, retry, and timeouts (16 fields) -----------
@@ -51,6 +52,7 @@ core:
     dedup_requests: 4                  # per-call cap for dedup check
     web_research_requests: 8           # per-call cap for web-research sub-agent
     scope_triage_requests: 4           # per-call cap for scope-triage agent
+    doc_classifier_requests: 3         # per-call cap for doc-classifier gate
     max_concurrency: 4                 # max parallel tickets in the worker pool
     max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
@@ -201,6 +203,13 @@ periodic:
     enabled: false                  # enable periodic completeness-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/completeness_check_memory.md
+
+  # -- cost-reconciliation — detects OpenRouter ↔ Langfuse cost drift -----
+  cost_reconciliation:
+    model: *default_model
+    enabled: false
+    interval_seconds: 86400
+    memory_path: null
 
   # -- survey agent — discovers OSS projects; proposes improvements --------
   survey:
