@@ -610,5 +610,3 @@ class RefineStage(Stage):
             State.CLOSED,
             f"split into {ids_note}",
         )
-
-
