@@ -346,6 +346,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.refine_memory_path": "MILL_REFINE_MEMORY_PATH",
     "pipeline.ci_fix_memory_path": "MILL_CI_FIX_MEMORY_PATH",
     "pipeline.rebase_memory_path": "MILL_REBASE_MEMORY_PATH",
+    "pipeline.ci_patterns_path": "MILL_CI_PATTERNS_PATH",
     "pipeline.review_revision_memory_path": "MILL_REVIEW_REVISION_MEMORY_PATH",
     # -- periodic.audit --
     "periodic.audit.model": "MILL_AUDIT_MODEL",

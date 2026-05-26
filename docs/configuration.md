@@ -250,6 +250,7 @@ Every setting below shows:
 | `pipeline.ci_fix_memory_path` | `MILL_CI_FIX_MEMORY_PATH` | `None` | Override path for CI-fix memory; defaults to `<data_dir>/ci_fix_memory.md` |
 | `pipeline.rebase_memory_path` | `MILL_REBASE_MEMORY_PATH` | `None` | Override path for rebase memory; defaults to `<data_dir>/rebase_memory.md` |
 | `pipeline.review_revision_memory_path` | `MILL_REVIEW_REVISION_MEMORY_PATH` | `None` | Override path for review-revision memory; defaults to `<data_dir>/review_revision_memory.md` |
+| `pipeline.ci_patterns_path` | `MILL_CI_PATTERNS_PATH` | `None` | Override path for the ci-fix agent's structured pattern memory; defaults to `<data_dir>/ci_patterns.json` |
 
 ### 5. Dedup
 

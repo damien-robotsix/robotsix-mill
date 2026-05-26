@@ -247,6 +247,7 @@ other code depends on.
 | `MILL_REFINE_MEMORY_PATH` | `refine_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §18 | `stages/refine.py` | |
 | `MILL_CI_FIX_MEMORY_PATH` | `ci_fix_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §18 | CI-fix agent | |
 | `MILL_REBASE_MEMORY_PATH` | `rebase_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §18 | Rebase agent | |
+| `MILL_CI_PATTERNS_PATH` | `ci_patterns_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §18 | CI-fix agent (pattern memory) | |
 
 ### 1.21  Notifications
 
@@ -274,6 +275,7 @@ other code depends on.
 | `refine_memory_file` | `refine_memory_path or data_dir / "refine_memory.md"` | `Path` | `stages/refine.py` | |
 | `ci_fix_memory_file` | `ci_fix_memory_path or data_dir / "ci_fix_memory.md"` | `Path` | CI-fix agent | |
 | `rebase_memory_file` | `rebase_memory_path or data_dir / "rebase_memory.md"` | `Path` | Rebase agent | |
+| `ci_patterns_file` | `ci_patterns_path or data_dir / "ci_patterns.json"` | `Path` | CI-fix agent (pattern memory) | |
 
 ### 1.23  Compose/CI overrides and non-Settings vars
 
