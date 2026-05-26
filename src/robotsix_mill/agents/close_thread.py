@@ -38,7 +38,7 @@ def make_close_thread_tool(settings: Settings, agent_name: str):
         try:
             svc.close_thread(comment_id)
             return f"Thread closed (id={comment_id})."
-        except ValueError as e:
+        except (ValueError, KeyError) as e:
             return f"Error: {e}"
 
     from .tool_registry import ToolInfo, ToolRegistry
