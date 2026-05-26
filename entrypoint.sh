@@ -23,7 +23,15 @@ if [[ "$(id -u)" == "0" ]]; then
       usermod -aG "$SOCK_GROUP_NAME" mill
     fi
   fi
+  # Raise the soft file-descriptor limit. Docker's `ulimits.nofile` in
+  # compose only sets the hard limit; the soft stays at 1024 by default,
+  # which workers exhaust quickly when many spawn git/trivy/agent
+  # subprocesses in parallel (saw "[Errno 24] Too many open files"
+  # cascading workers to 0). runuser preserves limits inherited from
+  # the parent shell, so raise the soft limit here before the exec.
+  ulimit -n 65536 || true
   exec runuser -u mill -- robotsix-mill serve
 fi
 
+ulimit -n 65536 || true
 exec robotsix-mill serve
