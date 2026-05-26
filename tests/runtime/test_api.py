@@ -164,6 +164,9 @@ def test_board_renders_source_badge(client):
     assert "src-badge" in css
     assert "src-user" in css
     assert "src-retrospect" in css
+    assert "src-survey" in css
+    js = client.get("/static/board.js").text
+    assert '"survey"' in js   # mapped in srcClass()
 
 
 def test_board_renders_cost_snippet(client):
