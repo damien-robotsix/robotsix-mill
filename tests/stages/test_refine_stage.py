@@ -55,8 +55,25 @@ def ctx_factory(tmp_path, fake_sandbox):
     db.reset_engine()
 
 
-def _ticket(ctx, title="Add feature", body="Please add feature.txt"):
-    """Create a DRAFT ticket — the RefineStage input state."""
+def _ticket(ctx, title="Add feature", body=None):
+    """Create a DRAFT ticket — the RefineStage input state. The default
+    body is comfortably above the 100-char trivial-draft threshold so
+    refine's dedup pipeline actually runs (matches test_refine.py's
+    _DEDUP_BODY convention). An explicit empty string is preserved (some
+    tests intentionally exercise the empty-title-and-draft block path)."""
+    if body is None:
+        body = (
+            "Add a feature. This is a substantive draft body padded "
+            "past the 100-char trivial-draft threshold so refine's "
+            "dedup pipeline actually runs against this ticket."
+        )
+    elif body and len(body) < 100:
+        # Pad non-empty short test bodies up to a substantive size.
+        body = (
+            f"{body}. This is a substantive draft body padded past "
+            "the 100-char trivial-draft threshold so refine's dedup "
+            "pipeline actually runs against this ticket."
+        )
     return ctx.service.create(title, body)
 
 
@@ -280,7 +297,9 @@ def test_recent_commits_exception_proceeds(ctx_factory, monkeypatch):
 # 7. clone failure → draft-only refine succeeds
 # ---------------------------------------------------------------------------
 
-def test_clone_failure_falls_back_to_draft_only_refine(ctx_factory, monkeypatch):
+def test_clone_failure_escalates_to_blocked_with_comment(ctx_factory, monkeypatch):
+    """A clone failure escalates to BLOCKED with an operator-visible
+    comment rather than silently degrading into a tool-less refine."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", MILL_REQUIRE_APPROVAL="false")
     t = _ticket(ctx, body="Add endpoint")
 
@@ -293,7 +312,13 @@ def test_clone_failure_falls_back_to_draft_only_refine(ctx_factory, monkeypatch)
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state is State.READY
+    assert out.next_state is State.BLOCKED
+    assert "refine clone failed" in (out.note or "")
+    comments = ctx.service.list_comments(t.id)
+    assert any(
+        c.author == "refine" and "refine clone failed" in (c.body or "")
+        for c in comments
+    )
 
 
 # ---------------------------------------------------------------------------

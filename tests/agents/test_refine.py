@@ -296,26 +296,37 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
     assert seen["repo_dir"] == repo
 
 
-def test_refine_clone_failure_falls_back_to_draft_only(ctx, service, monkeypatch):
+def test_refine_clone_failure_blocks_with_comment(ctx, service, monkeypatch):
+    """Clone failure escalates to BLOCKED with an operator-visible
+    comment — not silent fall-through to a tool-less refine."""
     import subprocess
 
     from robotsix_mill.vcs import git_ops
 
     ctx.settings.forge_remote_url = "https://example.test/repo.git"
-    got = {}
+    refine_called = []
 
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
     def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None):
-        got["repo_dir"] = repo_dir
+        refine_called.append(True)
         return _single("## Problem\nx\n")
 
     monkeypatch.setattr(git_ops, "clone", boom_clone)
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
-    out = RefineStage().run(service.create("x", "do a thing"), ctx)
-    assert out.next_state in (State.HUMAN_ISSUE_APPROVAL, State.READY)
-    assert got["repo_dir"] is None             # degraded to draft-only
+    t = service.create("x", "do a thing")
+    out = RefineStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "refine clone failed" in (out.note or "")
+    # Refine agent was NOT invoked — we bailed before reaching it.
+    assert refine_called == []
+    # An operator-visible comment was filed.
+    comments = ctx.service.list_comments(t.id)
+    assert any(
+        c.author == "refine" and "refine clone failed" in (c.body or "")
+        for c in comments
+    ), f"expected a refine-authored clone-failure comment; got {comments}"
 
 
 def test_web_fetch_confined_to_web_research_subagent():
@@ -629,8 +640,9 @@ def test_dedup_no_forge_passes_none_commits(ctx, service, monkeypatch):
     assert seen_commits is None
 
 
-def test_dedup_clone_failure_passes_none_commits(ctx, service, monkeypatch):
-    """Clone fails → dedup called with recent_commits_json=None, no crash."""
+def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
+    """Clone failure escalates to BLOCKED before dedup runs at all —
+    no half-grounded refine attempts."""
     import subprocess
 
     from robotsix_mill.vcs import git_ops
@@ -639,15 +651,15 @@ def test_dedup_clone_failure_passes_none_commits(ctx, service, monkeypatch):
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     ctx.settings.forge_remote_url = "https://example.test/repo.git"
-    seen_commits = "unset"
+    dedup_called = False
 
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json, recent_commits_json):
-        nonlocal seen_commits
-        seen_commits = recent_commits_json
+        nonlocal dedup_called
+        dedup_called = True
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
 
     monkeypatch.setattr(git_ops, "clone", boom_clone)
@@ -657,8 +669,8 @@ def test_dedup_clone_failure_passes_none_commits(ctx, service, monkeypatch):
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state in (State.HUMAN_ISSUE_APPROVAL, State.READY)
-    assert seen_commits is None
+    assert out.next_state is State.BLOCKED
+    assert not dedup_called, "dedup should not be called when clone failed"
 
 
 def test_draft_to_closed_transition_is_legal():

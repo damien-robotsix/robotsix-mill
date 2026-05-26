@@ -142,10 +142,26 @@ class RefineStage(Stage):
                     )
                     repo_dir = cand
                 except subprocess.CalledProcessError as e:
-                    log.warning(
-                        "%s: refine clone failed, draft-only: %s",
-                        ticket.id, (e.stderr or "")[:200],
+                    # Escalate clone failure to BLOCKED — running refine
+                    # with no repo grounds the agent's system prompt
+                    # against tools that aren't registered (the
+                    # `tools=[]` path in refining.py:385). The result is
+                    # an inconsistent, tool-less refine that wastes
+                    # tokens. Surface the cause to the operator instead.
+                    reason = (
+                        f"refine clone failed: {(e.stderr or '').strip()[:200]}"
                     )
+                    log.warning("%s: %s", ticket.id, reason)
+                    ctx.service.add_comment(
+                        ticket.id,
+                        f"[refine] {reason}\n\n"
+                        "The refine stage needs a working repo clone to "
+                        "ground the spec in actual code. Fix the underlying "
+                        "cause (permissions, credentials, disk space, "
+                        "network), then `resume-blocked` to re-run refine.",
+                        author="refine",
+                    )
+                    return Outcome(State.BLOCKED, reason)
 
         # --- dedup / already-done guard (best-effort) ---
         # Skip dedup entirely for trivial drafts — a title-only or
