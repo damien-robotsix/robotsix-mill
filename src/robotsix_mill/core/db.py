@@ -361,8 +361,9 @@ def migrate_legacy_workspaces(settings: Settings) -> dict[str, int]:
             "<data_dir>/%s/workspaces/", n, board_id,
         )
 
-    # If the legacy workspaces dir is empty now (post-migration),
-    # remove it so the data root is clean.
+    # Clean the data root: remove the legacy workspaces dir if empty,
+    # otherwise rename to a clearly-marked backup so the operator can
+    # inspect (and discard once happy). Mirrors mill.db.legacy-pre-split.
     try:
         if not any(legacy_root.iterdir()):
             legacy_root.rmdir()
@@ -370,6 +371,15 @@ def migrate_legacy_workspaces(settings: Settings) -> dict[str, int]:
                 "migrate_legacy_workspaces: removed empty legacy "
                 "<data_dir>/workspaces/ root",
             )
+        else:
+            backup = settings.data_dir / "workspaces.legacy-pre-split"
+            if not backup.exists():
+                legacy_root.rename(backup)
+                log.info(
+                    "migrate_legacy_workspaces: renamed leftover legacy "
+                    "<data_dir>/workspaces/ → %s (orphan/conflict "
+                    "workspaces preserved for inspection)", backup.name,
+                )
     except OSError:
         pass
 
