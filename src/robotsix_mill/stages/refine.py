@@ -280,7 +280,7 @@ class RefineStage(Stage):
                 if open_threads:
                     closed_ids = {c.id for c in comments if c.closed_at is not None}
                     reviewer_comments = "\n".join(
-                        f"[{c.created_at.isoformat()}] {c.body}"
+                        f"[id={c.id} @ {c.created_at.isoformat()}] {c.body}"
                         for c in comments
                         if c.id not in closed_ids and c.parent_id not in closed_ids
                     )
