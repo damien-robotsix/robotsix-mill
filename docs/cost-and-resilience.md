@@ -132,8 +132,15 @@ that can otherwise go unnoticed for days.
 
 ### How it works
 
-Once per day (opt-in via `MILL_COST_RECONCILIATION_PERIODIC=true`), the
-worker calls `run_cost_reconciliation_pass()`:
+The pass can be triggered in two ways:
+
+- **Periodic** — Once per day (opt-in via `MILL_COST_RECONCILIATION_PERIODIC=true`),
+  the worker calls `run_cost_reconciliation_pass()`.
+- **On-demand** — `POST /cost-reconciliation` returns `202 Accepted`
+  immediately and runs the pass in a background daemon thread. The run
+  appears in the board's "Runs" drawer (via `RunRegistry`).
+
+The pass proceeds as follows:
 
 1. **Fetch OpenRouter total** — `GET /api/v1/activity?date=<yesterday>`
    using `openrouter_management_key` from secrets. Sums `usage` +
