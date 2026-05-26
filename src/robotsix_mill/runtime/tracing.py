@@ -283,13 +283,69 @@ def install_signal_handlers() -> None:
         pass  # not in main thread (e.g. under TestClient)
 
 
+class _RootIO:
+    """Setter handle yielded by :func:`start_ticket_root_span`.
+
+    Use ``.set_input(...)`` / ``.set_output(...)`` to attach
+    human-readable input + output payloads to the root span. Both are
+    optional and any value is JSON-stringified (with a length cap to
+    avoid blowing the OTel attribute size budget). Langfuse reads
+    ``langfuse.observation.input`` / ``output`` and renders them on the
+    trace at the top level — exactly the "global view" of the run.
+
+    No-op when tracing is disabled or no span is currently recording.
+    Callers that ignore the yielded value (existing ``with
+    start_ticket_root_span(...):`` blocks without an ``as`` clause)
+    continue to work unchanged.
+    """
+
+    _MAX_LEN = 8000  # OTel attribute soft cap to keep batches shippable
+
+    def __init__(self, span):
+        self._span = span
+
+    def _serialize(self, value) -> str:
+        if isinstance(value, str):
+            s = value
+        else:
+            import json as _json
+            try:
+                s = _json.dumps(value, default=str, ensure_ascii=False)
+            except (TypeError, ValueError):
+                s = str(value)
+        if len(s) > self._MAX_LEN:
+            s = s[: self._MAX_LEN] + "… (truncated)"
+        return s
+
+    def set_input(self, value) -> None:
+        if self._span is None or not self._span.is_recording():
+            return
+        self._span.set_attribute("langfuse.observation.input", self._serialize(value))
+
+    def set_output(self, value) -> None:
+        if self._span is None or not self._span.is_recording():
+            return
+        self._span.set_attribute("langfuse.observation.output", self._serialize(value))
+
+
+class _NoopRootIO:
+    """Drop-in for ``_RootIO`` when tracing is disabled — accepts the
+    same calls and silently discards them."""
+
+    def set_input(self, value) -> None:  # noqa: D401, ARG002
+        pass
+
+    def set_output(self, value) -> None:  # noqa: D401, ARG002
+        pass
+
+
 @contextmanager
 def start_ticket_root_span(
     ticket_id: str,
     stage_name: str,
     extra_attributes: dict[str, str] | None = None,
     repo_config: RepoConfig | None = None,
-) -> Iterator[None]:
+) -> Iterator["_RootIO | _NoopRootIO"]:
     """Open a root OTel span for one stage of a ticket, named after the
     stage (e.g. ``"refine"``, ``"implement"``) with ``session.id``
     attribute set to the ticket id.
@@ -303,15 +359,20 @@ def start_ticket_root_span(
     ``extra_attributes`` — optional dict of additional span attributes
     to merge into the root span (e.g. ``{"source_trace_id": "..."}``).
 
-    Usage::
+    Yields a :class:`_RootIO` setter the caller can use to attach
+    trace-level input/output payloads (rendered at the top of the trace
+    in Langfuse). Callers that ignore the yielded value continue to
+    work unchanged::
 
-        with start_ticket_root_span(ticket_id, "refine"):
-            ...  # the refine stage runs here as the root span itself
+        with start_ticket_root_span(ticket_id, "refine") as root:
+            root.set_input({"title": …, "draft": …})
+            ...  # stage runs
+            root.set_output(result)
     """
     _ensure_tracing(repo_config)
     if not _provider_ready:
         with nullcontext():
-            yield
+            yield _NoopRootIO()
         return
 
     from opentelemetry import trace
@@ -336,8 +397,8 @@ def start_ticket_root_span(
         with tracer.start_as_current_span(
             stage_name,
             attributes=attrs,
-        ):
-            yield
+        ) as span:
+            yield _RootIO(span)
     finally:
         _current_pk.reset(pk_token)
         _current_session.reset(session_token)

@@ -77,15 +77,28 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
         traced = getattr(stage, "traced", True)
         try:
             with contextlib.ExitStack() as es:
+                root_io = None
                 if traced:
                     # One root span per stage call, named after the stage
                     # so Langfuse trace listings read "refine" / "implement"
                     # / "retrospect" instead of a generic "ticket". The
                     # session.id attribute still groups all of a ticket's
                     # stage traces together via Langfuse's session view.
-                    es.enter_context(
+                    root_io = es.enter_context(
                         tracing.start_ticket_root_span(ticket_id, stage_name, repo_config=ctx.repo_config)
                     )
+                    # Attach a top-level "input" summary to the root span
+                    # so Langfuse's trace view shows what was processed
+                    # without drilling into children. Output is set
+                    # below, once the stage returns.
+                    root_io.set_input({
+                        "ticket_id": ticket_id,
+                        "title": ticket.title,
+                        "state": ticket.state.value,
+                        "stage": stage_name,
+                        "source": ticket.source,
+                        "priority": bool(getattr(ticket, "priority", False)),
+                    })
                 # stage.run is sync (LLM/tool) — keep the loop responsive
                 if active_map is not None:
                     active_map[ticket_id] = {
@@ -104,6 +117,14 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
                 finally:
                     if active_map is not None:
                         active_map.pop(ticket_id, None)
+                # Attach the outcome to the root span — visible at the
+                # top of the trace in Langfuse alongside the input.
+                if root_io is not None:
+                    root_io.set_output({
+                        "next_state": outcome.next_state.value if outcome and outcome.next_state else None,
+                        "note": (outcome.note or "") if outcome else "",
+                        "no_op": bool(outcome and outcome.next_state == ticket.state),
+                    })
         except asyncio.TimeoutError:
             timeout = ctx.settings.stage_timeout_overrides.get(
                 stage_name, ctx.settings.stage_timeout_seconds
