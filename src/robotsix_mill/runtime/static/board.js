@@ -309,7 +309,10 @@ async function newTicket(){
      <select class="modal-input" id="modal-repo" style="width:100%">
        ${(reposCache||[]).map(r=>`<option value="${esc(r.repo_id)}">${esc(r.repo_id)}</option>`).join("")}
      </select>`
-  : `<input type="hidden" id="modal-repo" value="${esc(repoId)}">`;
+  : `<label class="modal-label">Repo</label>
+     <select class="modal-input" id="modal-repo" style="width:100%">
+       ${(reposCache||[]).map(r=>`<option value="${esc(r.repo_id)}"${r.repo_id===repoId?' selected':''}>${esc(r.repo_id)}</option>`).join("")}
+     </select>`;
  modal.innerHTML=
   `<h2>New Ticket</h2>
    <label class="modal-label">Title <span class="modal-req">*</span></label>
@@ -453,6 +456,18 @@ async function newEpic(){
  backdrop.className="modal-backdrop";
  const modal=document.createElement("div");
  modal.className="modal";
+ // Repo field: default to currently-selected repo; show a dropdown
+ // when viewing "all" so the user picks explicitly.
+ const repoId=getRepoId();
+ const repoField=repoId==="all"
+  ? `<label class="modal-label">Repo <span class="modal-req">*</span></label>
+     <select class="modal-input" id="modal-repo" style="width:100%">
+       ${(reposCache||[]).map(r=>`<option value="${esc(r.repo_id)}">${esc(r.repo_id)}</option>`).join("")}
+     </select>`
+  : `<label class="modal-label">Repo</label>
+     <select class="modal-input" id="modal-repo" style="width:100%">
+       ${(reposCache||[]).map(r=>`<option value="${esc(r.repo_id)}"${r.repo_id===repoId?' selected':''}>${esc(r.repo_id)}</option>`).join("")}
+     </select>`;
  modal.innerHTML=
   `<h2>New Epic</h2>
    <label class="modal-label">Title <span class="modal-req">*</span></label>
@@ -460,6 +475,7 @@ async function newEpic(){
    <div class="modal-field-error" id="modal-title-err"></div>
    <label class="modal-label">Description</label>
    <textarea class="modal-textarea" id="modal-desc" rows="8" placeholder="Scope, outcome, notes… (optional)"></textarea>
+   ${repoField}
    <div class="modal-buttons">
     <span class="modal-submit-error" id="modal-submit-err"></span>
     <button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>
@@ -488,7 +504,7 @@ async function newEpic(){
   if(!title){showTitleErr("Title is required");titleEl.focus();return}
   clearTitleErr();clearSubmitErr();
   createBtn.disabled=true;createBtn.textContent="Creating…";
-  const r=await jpost("/epics",{title:title,description:descEl.value});
+  const r=await jpost("/epics",{title:title,description:descEl.value,repo_id:document.getElementById("modal-repo").value});
   if(!r.ok){const e=await r.text();showSubmitErr("create failed: "+e);
    createBtn.disabled=false;createBtn.textContent="Create"}
   else{close();refresh()}
