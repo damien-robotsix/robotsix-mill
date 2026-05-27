@@ -200,24 +200,12 @@ class RefineStage(Stage):
             ]
             candidates_json = _build_candidates_json(candidates, ctx)
 
-            # Gather recent commits (only when we have a clone).
-            recent_commits_json: str | None = None
-            if repo_dir is not None:
-                try:
-                    commits = git_ops.recent_commits(repo_dir, s.dedup_lookback_commits)
-                    recent_commits_json = json.dumps(
-                        [{"sha": c["sha"], "subject": c["subject"]} for c in commits]
-                    )
-                except Exception:
-                    log.warning("%s: recent_commits failed, skipping commit dedup", ticket.id)
-
             try:
                 verdict = dedup.run_dedup_check(
                     settings=s,
                     draft_title=ticket.title,
                     draft_body=draft,
                     candidates_json=candidates_json,
-                    recent_commits_json=recent_commits_json,
                     repo_dir=repo_dir,
                 )
             except Exception:

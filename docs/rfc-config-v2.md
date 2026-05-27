@@ -185,7 +185,6 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_REFERENCE_FILES_MAX_COUNT` | `core.memory.reference_files_max_count` | `5` | |
 | `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `core.memory.reference_files_max_total_lines` | `3000` | |
 | `MILL_DEDUP_LOOKBACK_DAYS` | `core.memory.dedup_lookback_days` | `30` | |
-| `MILL_DEDUP_LOOKBACK_COMMITS` | `core.memory.dedup_lookback_commits` | `20` | |
 
 #### forge
 

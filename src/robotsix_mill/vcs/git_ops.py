@@ -194,31 +194,6 @@ def branch_is_ahead_of_main(repo: Path) -> bool:
     return True
 
 
-def recent_commits(repo: Path, n: int) -> list[dict]:
-    """Return the last *n* non-merge commits as ``[{sha, subject}]``.
-
-    Shells out to ``git log --oneline -n <N> --no-merges``.  Gracefully
-    handles shallow repos or repos with fewer than *n* commits (``git
-    log`` simply returns what it has).  The repo must exist (``.git``
-    present); raises ``FileNotFoundError`` otherwise.
-    """
-    if not (repo / ".git").exists():
-        raise FileNotFoundError(f"not a git repository: {repo}")
-    output = subprocess.run(
-        ["git", "-C", str(repo), "log", "--oneline", "-n", str(n), "--no-merges"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    if not output:
-        return []
-    commits = []
-    for line in output.split("\n"):
-        sha, _, subject = line.partition(" ")
-        commits.append({"sha": sha, "subject": subject})
-    return commits
-
-
 def changed_files(repo: Path, target_branch: str) -> list[str]:
     """Return every file that would land in the next commit vs
     ``origin/<target_branch>`` — including untracked new files.

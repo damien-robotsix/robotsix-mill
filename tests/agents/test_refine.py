@@ -380,7 +380,7 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     t_b = service.create("Add dark mode toggle", _DEDUP_BODY)
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         return {
             "duplicate_of": t_a.id,
             "already_done": None,
@@ -416,7 +416,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     t = service.create("Add X", _DEDUP_BODY)
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         return {
             "duplicate_of": None,
             "already_done": "abc1234",
@@ -452,7 +452,7 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
     t = service.create("Add X", "make x happen")
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         return {
             "duplicate_of": None,
             "already_done": None,
@@ -482,7 +482,7 @@ def test_dedup_skipped_for_empty_title_and_draft(ctx, service, monkeypatch):
     dedup_called = False
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         nonlocal dedup_called
         dedup_called = True
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
@@ -505,7 +505,7 @@ def test_dedup_skipped_for_trivial_draft(ctx, service, monkeypatch):
     dedup_called = False
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         nonlocal dedup_called
         dedup_called = True
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
@@ -530,7 +530,7 @@ def test_dedup_never_flags_self(ctx, service, monkeypatch):
     seen_candidates = None
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         nonlocal seen_candidates
         import json
         seen_candidates = json.loads(candidates_json)
@@ -561,7 +561,7 @@ def test_dedup_candidate_bodies_included(ctx, service, monkeypatch):
     seen_candidates = None
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         nonlocal seen_candidates
         import json
         seen_candidates = json.loads(candidates_json)
@@ -595,7 +595,7 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     t = service.create("Add X", "make x happen")
 
     def boom_dedup(*, settings, draft_title, draft_body,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         raise RuntimeError("dedup model down")
 
     monkeypatch.setattr(dedup, "run_dedup_check", boom_dedup)
@@ -616,30 +616,6 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     assert refine_called
 
 
-def test_dedup_no_forge_passes_none_commits(ctx, service, monkeypatch):
-    """No forge → dedup called with recent_commits_json=None, no crash."""
-    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
-
-    t = service.create("Add X", _DEDUP_BODY)
-
-    seen_commits = "unset"
-
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
-        nonlocal seen_commits
-        seen_commits = recent_commits_json
-        return {"duplicate_of": None, "already_done": None, "reason": "no match"}
-
-    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
-
-    # No forge_remote_url set — repo_dir stays None
-    out = RefineStage().run(t, ctx)
-
-    assert out.next_state is State.READY
-    assert seen_commits is None
-
-
 def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
     """Clone failure escalates to BLOCKED before dedup runs at all —
     no half-grounded refine attempts."""
@@ -657,7 +633,7 @@ def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json, recent_commits_json):
+                   candidates_json):
         nonlocal dedup_called
         dedup_called = True
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}

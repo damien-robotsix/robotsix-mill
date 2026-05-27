@@ -39,7 +39,7 @@ def test_passes_usage_limits_not_bare_request_limit(settings, monkeypatch):
 
     out = dedup.run_dedup_check(
         settings=settings, draft_title="t", draft_body="b",
-        candidates_json="[]", recent_commits_json=None,
+        candidates_json="[]",
     )
     assert out["duplicate_of"] == "T-1"  # real result, not the failure path
     assert len(agent.calls) == 1
@@ -58,7 +58,7 @@ def test_graceful_on_agent_error(settings, monkeypatch):
     _patch_agent(monkeypatch, _Boom())
     out = dedup.run_dedup_check(
         settings=settings, draft_title="t", draft_body="b",
-        candidates_json="[]", recent_commits_json=None,
+        candidates_json="[]",
     )
     assert out == {
         "duplicate_of": None,
@@ -75,7 +75,7 @@ def test_non_dedup_result_output_is_handled(settings, monkeypatch):
     _patch_agent(monkeypatch, _Weird())
     out = dedup.run_dedup_check(
         settings=settings, draft_title="t", draft_body="b",
-        candidates_json="[]", recent_commits_json=None,
+        candidates_json="[]",
     )
     assert out["duplicate_of"] is None
     assert "unexpected type" in out["reason"]
@@ -121,7 +121,7 @@ def test_fs_tools_passed_when_repo_dir_provided(settings, monkeypatch):
 
     dedup.run_dedup_check(
         settings=settings, draft_title="t", draft_body="b",
-        candidates_json="[]", recent_commits_json=None,
+        candidates_json="[]",
         repo_dir=Path("/fake/repo"),
     )
     assert captured_tools is not None
@@ -132,7 +132,7 @@ def test_fs_tools_passed_when_repo_dir_provided(settings, monkeypatch):
     captured_tools = None
     dedup.run_dedup_check(
         settings=settings, draft_title="t", draft_body="b",
-        candidates_json="[]", recent_commits_json=None,
+        candidates_json="[]",
         repo_dir=None,
     )
     assert captured_tools == []

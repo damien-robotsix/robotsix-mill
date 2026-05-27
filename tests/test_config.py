@@ -134,7 +134,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("reference_files_max_count", "MILL_REFERENCE_FILES_MAX_COUNT", "10", 10),
     ("reference_files_max_total_lines", "MILL_REFERENCE_FILES_MAX_TOTAL_LINES", "5000", 5000),
     ("dedup_lookback_days", "MILL_DEDUP_LOOKBACK_DAYS", "14", 14),
-    ("dedup_lookback_commits", "MILL_DEDUP_LOOKBACK_COMMITS", "30", 30),
     # --- paths ---
     ("data_dir", "MILL_DATA_DIR", "/custom/data", Path("/custom/data")),
     # --- API ---

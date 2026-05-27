@@ -286,11 +286,6 @@ class Settings(BaseSettings):
     dedup_lookback_days: int = Field(
         default=7, alias="MILL_DEDUP_LOOKBACK_DAYS"
     )
-    # How many recent commits on the forge target branch to inspect for
-    # "already implemented" by the pre-refine dedup check.
-    dedup_lookback_commits: int = Field(
-        default=10, alias="MILL_DEDUP_LOOKBACK_COMMITS"
-    )
     # Local-dev default: ``.data`` — the same path the docker-compose
     # volume mounts at /data, so host CLI invocations and the container
     # share state instead of leaking a separate sibling tree. The

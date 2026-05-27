@@ -258,7 +258,6 @@ Every setting below shows:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.memory.dedup_lookback_days` | `MILL_DEDUP_LOOKBACK_DAYS` | `30` | Days back to consider closed tickets as dup candidates |
-| `core.memory.dedup_lookback_commits` | `MILL_DEDUP_LOOKBACK_COMMITS` | `20` | Recent commits to inspect for "already done" |
 
 ### 6. Service (management plane)
 

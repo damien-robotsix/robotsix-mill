@@ -102,8 +102,8 @@ def _mock_refine_raises(exc):
 
 def _mock_dedup(**verdict):
     def _run(*, settings, draft_title, draft_body, candidates_json,
-             recent_commits_json=None, repo_dir=None, **kw):
-        del settings, draft_title, draft_body, candidates_json, recent_commits_json, repo_dir, kw
+             repo_dir=None, **kw):
+        del settings, draft_title, draft_body, candidates_json, repo_dir, kw
         return verdict
     return _run
 
@@ -146,8 +146,6 @@ def _apply_default_mocks(monkeypatch, **overrides):
                                       _mock_dedup(duplicate_of=None, already_done=None, reason="no match")))
     monkeypatch.setattr(git_ops, "clone",
                         overrides.get("clone", lambda *a, **k: None))
-    monkeypatch.setattr(git_ops, "recent_commits",
-                        overrides.get("recent_commits", lambda repo, n: []))
     monkeypatch.setattr(refine_module, "load_memory",
                         overrides.get("load_memory", lambda memory_file, max_chars=None: ""))
     monkeypatch.setattr(refine_module, "persist_memory",
@@ -264,33 +262,6 @@ def test_dedup_check_exception_proceeds_to_refine(ctx_factory, monkeypatch):
 
     assert out.next_state is State.READY
     assert len(refine_called) == 1
-
-
-# ---------------------------------------------------------------------------
-# 6. recent_commits exception → proceeds to refine
-# ---------------------------------------------------------------------------
-
-def test_recent_commits_exception_proceeds(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///x", MILL_REQUIRE_APPROVAL="false")
-    t = _ticket(ctx, body="Fix bug")
-
-    def _clone_touch_git(remote_url, dest, branch, token):
-        (dest / ".git").mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(git_ops, "clone", _clone_touch_git)
-    monkeypatch.setattr(git_ops, "recent_commits",
-                        lambda repo, n: (_ for _ in ()).throw(Exception("git broke")))
-    monkeypatch.setattr(dedup, "run_dedup_check",
-                        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"))
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        _mock_refine_ok())
-    monkeypatch.setattr(refining, "triage_refine", _mock_triage_refine())
-    monkeypatch.setattr(refine_module, "load_memory", lambda memory_file, max_chars=None: "")
-    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
-
-    out = RefineStage().run(t, ctx)
-
-    assert out.next_state is State.READY
 
 
 # ---------------------------------------------------------------------------
@@ -943,27 +914,24 @@ def test_memory_load_and_persist_cycle(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 30. no forge remote URL → skips clone and dedup commits
+# 30. no forge remote URL → skips clone
 # ---------------------------------------------------------------------------
 
-def test_no_forge_remote_url_skips_clone_and_dedup_commits(ctx_factory, monkeypatch):
+def test_no_forge_remote_url_skips_clone(ctx_factory, monkeypatch):
     ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
     t = _ticket(ctx, body="Fix the widget")
 
     clone_calls = []
-    recent_commits_calls = []
 
     _apply_default_mocks(
         monkeypatch,
         clone=lambda remote_url, dest, branch, token: clone_calls.append(1),
-        recent_commits=lambda repo, n: recent_commits_calls.append(1) or [],
     )
 
     out = RefineStage().run(t, ctx)
 
     assert out.next_state is State.READY
     assert len(clone_calls) == 0
-    assert len(recent_commits_calls) == 0
 
 
 # ---------------------------------------------------------------------------

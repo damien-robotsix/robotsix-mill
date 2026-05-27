@@ -103,7 +103,6 @@ other code depends on.
 | `MILL_REFERENCE_FILES_MAX_COUNT` | `reference_files_max_count` | `5` | `int` | Settings | non-sensitive | default | **missing** | `stages/refine.py` | ⚠️ Undocumented |
 | `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `reference_files_max_total_lines` | `3000` | `int` | Settings | non-sensitive | default | **missing** | `stages/refine.py` | ⚠️ Undocumented |
 | `MILL_DEDUP_LOOKBACK_DAYS` | `dedup_lookback_days` | `30` | `int` | Settings | non-sensitive | default | §17 | `stages/refine.py` (dedup) | |
-| `MILL_DEDUP_LOOKBACK_COMMITS` | `dedup_lookback_commits` | `20` | `int` | Settings | non-sensitive | default | §17 | `stages/refine.py` (dedup) | |
 
 ### 1.5  Management plane
 

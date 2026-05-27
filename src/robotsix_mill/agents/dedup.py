@@ -1,10 +1,9 @@
 """Pre-refine dedup / already-done check.
 
 A single cheap LLM call that inspects a draft against existing tickets
-and recent commits to decide whether it's a duplicate or already
-implemented.  The refiner would be wasted on such drafts — this guard
-short-circuits them straight to ``CLOSED`` before the expensive agent
-runs.
+to decide whether it's a duplicate or already implemented.  The
+refiner would be wasted on such drafts — this guard short-circuits
+them straight to ``CLOSED`` before the expensive agent runs.
 
 ``run_dedup_check`` is the mockable seam — tests monkeypatch it just
 like ``run_refine_agent``.
@@ -34,9 +33,8 @@ def _build_prompt(
     draft_title: str,
     draft_body: str,
     candidates_json: str,
-    recent_commits_json: str | None,
 ) -> str:
-    parts = [
+    return "\n".join([
         "<draft>",
         f"<title>{draft_title}</title>",
         f"<body>{draft_body}</body>",
@@ -44,16 +42,7 @@ def _build_prompt(
         "<candidates>",
         candidates_json,
         "</candidates>",
-    ]
-    if recent_commits_json is not None:
-        parts.extend([
-            "<recent_commits>",
-            recent_commits_json,
-            "</recent_commits>",
-        ])
-    else:
-        parts.append("<recent_commits>not available (no repo clone)</recent_commits>")
-    return "\n".join(parts)
+    ])
 
 
 def run_dedup_check(
@@ -62,7 +51,6 @@ def run_dedup_check(
     draft_title: str,
     draft_body: str,
     candidates_json: str,
-    recent_commits_json: str | None,
     repo_dir: Path | None = None,
 ) -> dict:
     """Return ``{"duplicate_of": ..., "already_done": ..., "reason": ...}``.
@@ -107,7 +95,6 @@ def run_dedup_check(
                     draft_title=draft_title,
                     draft_body=draft_body,
                     candidates_json=candidates_json,
-                    recent_commits_json=recent_commits_json,
                 ),
                 usage_limits=limits,
             ),
