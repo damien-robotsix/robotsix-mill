@@ -292,15 +292,31 @@ def migrate_legacy_global_db(settings: Settings) -> dict[str, int]:
     # migration (and the operator can rollback by renaming back).
     legacy_backup = settings.data_dir / "mill.db.legacy-pre-split"
     try:
-        legacy_path.rename(legacy_backup)
+        if legacy_backup.exists():
+            # Prior migration already produced the backup. The
+            # current legacy_path is the empty stub from init_db("")
+            # above — delete rather than clobber the real backup.
+            legacy_path.unlink()
+        else:
+            legacy_path.rename(legacy_backup)
         log.info(
-            "migrate_legacy_global_db: renamed legacy DB to %s",
-            legacy_backup.name,
+            "migrate_legacy_global_db: retired legacy DB at %s",
+            legacy_path,
         )
     except OSError as e:
         log.warning(
-            "migrate_legacy_global_db: could not rename legacy DB: %s", e,
+            "migrate_legacy_global_db: could not retire legacy DB: %s", e,
         )
+    # Invalidate the cached default-board engine / init flag so any
+    # subsequent ``session(settings, "")`` writes land on a fresh
+    # schema-initialised file rather than the renamed inode.
+    if "" in _engines:
+        try:
+            _engines[""].dispose()
+        except Exception:
+            pass
+        _engines.pop("", None)
+    _initialized.discard("")
 
     return moved
 
