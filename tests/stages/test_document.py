@@ -224,7 +224,7 @@ def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _failing_diff_base(repo, target_branch):
+    def _failing_diff_base(repo, target_branch, **kw):
         raise RuntimeError("network unreachable")
 
     monkeypatch.setattr(

@@ -49,7 +49,7 @@ from ..agents.review_revision import run_review_revision_agent
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
-from ..forge.auth import github_token
+from ..forge.auth import _resolve_remote_url, github_token
 from ..pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
@@ -693,10 +693,16 @@ class MergeStage(Stage):
                 # current main, not the stale ref frozen at clone time.
                 # The sandbox has --network none; git fetch MUST run
                 # here, outside the container.
+                #
+                # Use the per-repo remote_url + a freshly-minted
+                # token — the global ``forge_remote_url`` and a
+                # tokenless mint would both point at the wrong repo
+                # (or carry an expired token) for any ticket whose
+                # repo isn't the mill's own.
                 git_ops.fetch(
                     Path(repo_dir),
-                    remote_url=s.forge_remote_url,
-                    token=github_token(s),
+                    remote_url=_resolve_remote_url(s, ctx.repo_config),
+                    token=github_token(s, repo_config=ctx.repo_config),
                     branch=target,
                 )
                 rebase_memory_path = s.memory_file_for(

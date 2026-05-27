@@ -18,6 +18,7 @@ from pathlib import Path
 from ..agents.documenting import DocClassifierResult, DocResult
 from ..core.models import Ticket
 from ..core.states import State
+from ..forge.auth import _resolve_remote_url, github_token
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
@@ -44,9 +45,23 @@ class DocumentStage(Stage):
 
         target_branch = s.forge_target_branch
 
+        # Mint a fresh forge token for the fetch — the clone's baked-in
+        # GitHub App installation token expires ~1h after clone time,
+        # so a stale ``origin`` URL would 401 with exit 128. Same fix
+        # applied earlier to the review stage; document runs right
+        # after review on the same long-lived clone.
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
+        try:
+            token = github_token(s, repo_config=ctx.repo_config)
+        except RuntimeError:
+            token = None
+
         # Compute diff of all commits on the current branch vs origin/<target>.
         try:
-            diff = git_ops.diff_base(repo_dir, target_branch)
+            diff = git_ops.diff_base(
+                repo_dir, target_branch,
+                remote_url=remote_url, token=token,
+            )
         except Exception as e:
             return Outcome(
                 State.BLOCKED,
