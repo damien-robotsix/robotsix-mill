@@ -172,37 +172,88 @@ async function refresh(){
  document.getElementById("meta").textContent=
    ts.length+" tickets · "+new Date().toLocaleTimeString();
  const board=document.getElementById("board");
- // Preserve scroll: every refresh rewrites #board.innerHTML, which
- // resets the .cards scrollTop on every column and the board's own
- // horizontal scrollLeft. Snapshot both before the rewrite (keyed by
- // state name via data-state) and restore after the new DOM lands.
- const prevScroll={};
+ // Diff-based update: keep .col + .card DOM nodes alive across
+ // refreshes so .cards scrollTop and board scrollLeft persist
+ // naturally; replace only the inner content of cards whose visible
+ // signature changed. Avoids the scroll-snap and flicker that the
+ // previous wholesale innerHTML rebuild caused.
+ const visibleStates=ST.filter(s=>by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed));
+ const visibleSet=new Set(visibleStates);
+ // Drop columns whose state has no tickets (or is hidden when
+ // wantClosed=false). Their .cards' scroll state is gone, but the
+ // column wasn't visible anyway.
  board.querySelectorAll(".col").forEach(col=>{
-  const cards=col.querySelector(".cards");
-  if(cards) prevScroll[col.dataset.state]=cards.scrollTop;
+  if(!visibleSet.has(col.dataset.state)) col.remove();
  });
- const prevBoardLeft=board.scrollLeft;
- board.innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed)).map(s=>`<div class="col" data-state="${s}">
-  <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
-  by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
-   <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
-   ${t.priority?`<span class="priority-badge" title="priority — pulled from the queue ahead of non-priority tickets">⚡ priority</span>`:""}
-   ${repoId==="all"&&t.board_id?`<span class="repo-badge">${esc(repoIdForBoardId(t.board_id))}</span>`:""}
-   ${t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:""}
-   ${t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:""}
-   ${t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:""}
-   <span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span><span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>${t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:""}${renderRetryChip(t)}`+
-   `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
-   `</div>`)
-  .join("")+`</div></div>`).join("");
- board.querySelectorAll(".col").forEach(col=>{
-  const y=prevScroll[col.dataset.state];
-  if(y!==undefined){
-   const cards=col.querySelector(".cards");
-   if(cards) cards.scrollTop=y;
+ // Walk visibleStates in order; ensure each column exists in the
+ // right slot. insertBefore is a no-op when col is already there.
+ let prevCol=null;
+ visibleStates.forEach(s=>{
+  let col=board.querySelector(`.col[data-state="${s}"]`);
+  if(!col){
+   col=document.createElement("div");
+   col.className="col";
+   col.dataset.state=s;
+   col.innerHTML=`<h2>${esc(s)}<span class="n"></span></h2><div class="cards"></div>`;
   }
+  const expectedNext=prevCol?prevCol.nextSibling:board.firstChild;
+  if(col!==expectedNext) board.insertBefore(col,expectedNext);
+  col.querySelector("h2 .n").textContent=by[s].length;
+  syncCards(col,by[s],repoId,s);
+  prevCol=col;
  });
- board.scrollLeft=prevBoardLeft;
+}
+
+// Render just the inner HTML of one card, given the ticket data,
+// the currently-selected repo dropdown, and the column's state
+// (used to tweak the live-badge label for rebasing).
+function renderCardInner(t,repoId,colState){
+ return `<div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>`+
+  (t.priority?`<span class="priority-badge" title="priority — pulled from the queue ahead of non-priority tickets">⚡ priority</span>`:"")+
+  (repoId==="all"&&t.board_id?`<span class="repo-badge">${esc(repoIdForBoardId(t.board_id))}</span>`:"")+
+  (t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:"")+
+  (t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:"")+
+  (t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:"")+
+  `<span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
+  `<span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
+  (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:"")+
+  renderRetryChip(t)+
+  (activeMap[t.id]?`<span class="live-badge"><span class="live-spinner"></span> ${colState==="rebasing"?"rebasing…":(ACTIVE_LABEL[activeMap[t.id].stage]||activeMap[t.id].stage+"…")}</span>`:"");
+}
+
+// Reconcile the .cards container against the desired ticket list.
+// Existing cards are reused (preserves DOM identity → no scroll
+// reset, no animation interruption); only those whose rendered
+// signature changed get their innerHTML rewritten. Card order in
+// the column matches the ticket array order via insertBefore.
+function syncCards(col,tickets,repoId,colState){
+ const cards=col.querySelector(".cards");
+ const wantedIds=new Set(tickets.map(t=>t.id));
+ const existing=new Map();
+ cards.querySelectorAll(".card").forEach(c=>existing.set(c.dataset.id,c));
+ // Drop cards no longer in this column (moved state or deleted).
+ existing.forEach((card,id)=>{
+  if(!wantedIds.has(id)){card.remove();existing.delete(id);}
+ });
+ let prevCard=null;
+ tickets.forEach(t=>{
+  let card=existing.get(t.id);
+  if(!card){
+   card=document.createElement("div");
+   card.dataset.id=t.id;
+   card.addEventListener("click",()=>open_(t.id));
+   existing.set(t.id,card);
+  }
+  const wantClass=`card s-${t.state}`;
+  if(card.className!==wantClass) card.className=wantClass;
+  const sig=renderCardInner(t,repoId,colState);
+  // Cache last signature on the node; only touch innerHTML when it
+  // actually changed. Most ticks for an idle board are no-ops.
+  if(card._sig!==sig){card.innerHTML=sig;card._sig=sig;}
+  const expectedNext=prevCard?prevCard.nextSibling:cards.firstChild;
+  if(card!==expectedNext) cards.insertBefore(card,expectedNext);
+  prevCard=card;
+ });
 }
 async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
