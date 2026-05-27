@@ -63,6 +63,7 @@ Used as tools by primary agents.
 | Agent | Definition | Module | Model var | Called by | Role |
 |---|---|---|---|---|---|
 | Explore | (no YAML — built by `make_explore_tool()`) | `agents/explore.py` | `MILL_EXPLORE_MODEL` | Refine, Implement, Review, Retrospect, Audit, Health, Survey, Answer, Agent-check, Test-gap | Read-only scout: returns concise paths/symbols/line-ranges, never whole files |
+| Consult-expert | (no YAML — built by `make_consult_expert_tool()`) | `agents/consult_expert.py` | `MILL_MODEL` (uses expert's `model` override if set) | Implement (coordinator) | Read-only domain expert sub-agent: answers focused questions about a domain's conventions, architecture, and gotchas; the coordinator remains the sole author of every change |
 | Web-research | (no YAML — `build_agent` called directly) | `agents/web_research.py` | `MILL_WEB_RESEARCH_MODEL` | Refine, Audit, Survey, Answer, Health, Agent-check | Searches the web; returns one concise factual conclusion |
 | Dedup | (no YAML — `build_agent` called directly) | `agents/dedup.py` | `MILL_DEDUP_MODEL` | Refine stage (pre-refine guard) | Checks whether draft is duplicate or already implemented; short-circuits to CLOSED |
 | Scope-triage | `agent_definitions/scope_triage.yaml` | `agents/scope_triage.py` | `MILL_SCOPE_TRIAGE_MODEL` | Implement stage (scope-violation guard) | Cheap classifier: EXPAND (legitimate out-of-scope change), REJECT (scope creep), or ESCALATE (uncertain) |
