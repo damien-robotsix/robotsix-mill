@@ -78,7 +78,7 @@ class DeliverStage(Stage):
             + f"\n\n---\nAutomated by robotsix-mill · ticket `{ticket.id}`"
         )
         try:
-            url = get_forge(s).open_merge_request(
+            url = get_forge(s, repo_config=ctx.repo_config).open_merge_request(
                 source_branch=branch, title=title, body=body
             )
         except Exception as e:  # noqa: BLE001 — resumable, don't lose branch

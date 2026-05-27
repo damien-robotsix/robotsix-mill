@@ -110,7 +110,7 @@ class CIFixStage(Stage):
 
         # Fetch check status from the forge.
         try:
-            status = get_forge(s).check_status(source_branch=branch)
+            status = get_forge(s, repo_config=ctx.repo_config).check_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
@@ -140,7 +140,7 @@ class CIFixStage(Stage):
         # every PR poll — this stage runs infrequently).
         log_text = ""
         try:
-            forge = get_forge(s)
+            forge = get_forge(s, repo_config=ctx.repo_config)
             pr = forge.pr_status(source_branch=branch)
             head_sha = (pr or {}).get("sha", "")
             if head_sha:

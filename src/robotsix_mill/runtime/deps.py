@@ -146,12 +146,20 @@ _REVIEW_STATES: frozenset[State] = frozenset({
 })
 
 
-def _pr_url(ticket: Ticket, settings: Settings) -> str | None:
+def _pr_url(
+    ticket: Ticket,
+    settings: Settings,
+    repo_config: RepoConfig | None = None,
+) -> str | None:
     """Return the PR/merge-request URL for *ticket* from the forge, or ``None``.
 
     Only calls the forge when the ticket is in a review-relevant state
     and has (or can infer) a branch name.  Failures are silent — the
     enrichment must never crash the read path.
+
+    *repo_config* routes the forge to the ticket's actual repo —
+    without it the global ``forge_remote_url`` is hit, which yields
+    a 404/empty for any non-lead repo's PR.
     """
     if ticket.state not in _REVIEW_STATES:
         return None
@@ -159,7 +167,7 @@ def _pr_url(ticket: Ticket, settings: Settings) -> str | None:
     if not branch:
         return None
     try:
-        pr = get_forge(settings).pr_status(source_branch=branch)
+        pr = get_forge(settings, repo_config=repo_config).pr_status(source_branch=branch)
     except RuntimeError:
         return None  # forge not configured
     except Exception:
@@ -230,7 +238,7 @@ def enrich_ticket_read(
         cumulative_cost=cumulative,
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
-        pr_url=_pr_url(ticket, settings) if fetch_pr_url else None,
+        pr_url=_pr_url(ticket, settings, repo_config=repo_config) if fetch_pr_url else None,
         retry_attempt=ticket.retry_attempt,
         last_transient_error=ticket.last_transient_error,
         next_retry_at=ticket.next_retry_at,

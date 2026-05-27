@@ -464,6 +464,7 @@ def merge_now(
 @router.get("/tickets/{ticket_id}/merge-info")
 def get_merge_info(
     ticket_id: str,
+    request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> dict:
@@ -475,11 +476,12 @@ def get_merge_info(
         raise HTTPException(404, "ticket not found")
 
     branch = ticket.branch or f"{settings.branch_prefix}{ticket_id}"
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
 
     # Resolve forge once; remains None when forge is not configured.
     forge = None
     try:
-        forge = get_forge(settings)
+        forge = get_forge(settings, repo_config=repo_config)
     except RuntimeError:
         pass  # forge not configured
 
@@ -551,6 +553,7 @@ def get_merge_reason(
 @router.get("/tickets/{ticket_id}/merge-status")
 def get_merge_status(
     ticket_id: str,
+    request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> dict:
@@ -577,7 +580,8 @@ def get_merge_status(
             "reason": f"ticket is not in a merge-relevant state (currently {ticket.state.value})",
         }
 
-    forge = get_forge(settings)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    forge = get_forge(settings, repo_config=repo_config)
 
     # ── PR mergeability ──────────────────────────────────────────
     mergeable: bool | None = None

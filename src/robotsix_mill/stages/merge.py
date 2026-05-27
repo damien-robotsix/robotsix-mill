@@ -128,7 +128,7 @@ class MergeStage(Stage):
         # HUMAN_MR_APPROVAL path: poll PR status.
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         try:
-            pr = get_forge(s).pr_status(source_branch=branch)
+            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient: retry next poll
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.HUMAN_MR_APPROVAL)  # no-op
@@ -151,7 +151,7 @@ class MergeStage(Stage):
         # --- Review feedback check (opt-in, gated by config flag) ---
         if s.review_feedback_enabled:
             try:
-                review_status = get_forge(s).pr_review_status(source_branch=branch)
+                review_status = get_forge(s, repo_config=ctx.repo_config).pr_review_status(source_branch=branch)
             except Exception as e:  # noqa: BLE001 — transient
                 log.warning("%s: pr_review_status failed (retry): %s", ticket.id, e)
                 review_status = None
@@ -207,7 +207,7 @@ class MergeStage(Stage):
 
         # Check remote CI before returning no-op.
         try:
-            ci_status = get_forge(s).check_status(source_branch=branch)
+            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient
             log.warning(
                 "%s: check_status failed (retry): %s", ticket.id, e
@@ -229,7 +229,7 @@ class MergeStage(Stage):
         if conclusion == "success":
             if eligible:
                 # CI green + eligible → auto-merge now.
-                result = get_forge(s).merge_pr(source_branch=branch)
+                result = get_forge(s, repo_config=ctx.repo_config).merge_pr(source_branch=branch)
                 if result.get("merged"):
                     ctx.service.workspace(ticket).artifacts_dir.joinpath(
                         "merge.md"
@@ -338,7 +338,7 @@ class MergeStage(Stage):
 
         # Re-check PR status (could have become conflicting).
         try:
-            pr = get_forge(s).pr_status(source_branch=branch)
+            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.WAITING_AUTO_MERGE)
@@ -366,7 +366,7 @@ class MergeStage(Stage):
 
         # Check CI.
         try:
-            ci_status = get_forge(s).check_status(source_branch=branch)
+            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.WAITING_AUTO_MERGE)
@@ -384,7 +384,7 @@ class MergeStage(Stage):
 
         if conclusion == "success":
             # CI is green — attempt auto-merge.
-            result = get_forge(s).merge_pr(source_branch=branch)
+            result = get_forge(s, repo_config=ctx.repo_config).merge_pr(source_branch=branch)
             if result.get("merged"):
                 ctx.service.workspace(ticket).artifacts_dir.joinpath(
                     "merge.md"
@@ -428,7 +428,7 @@ class MergeStage(Stage):
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
 
         try:
-            pr = get_forge(s).pr_status(source_branch=branch)
+            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient: retry next poll
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
@@ -468,7 +468,7 @@ class MergeStage(Stage):
 
         # Check remote CI.
         try:
-            ci_status = get_forge(s).check_status(source_branch=branch)
+            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(source_branch=branch)
         except Exception as e:  # noqa: BLE001 — transient
             log.warning(
                 "%s: check_status failed (retry): %s", ticket.id, e
@@ -788,7 +788,7 @@ class MergeStage(Stage):
                 _write_counter(counter_path, attempt)
                 # Route by context: no PR yet → back to implement; PR exists → re-check gates.
                 try:
-                    pr = get_forge(s).pr_status(source_branch=branch)
+                    pr = get_forge(s, repo_config=ctx.repo_config).pr_status(source_branch=branch)
                 except Exception:
                     pr = None
                 next_state = State.READY if pr is None else State.IMPLEMENT_COMPLETE
