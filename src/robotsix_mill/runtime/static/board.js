@@ -390,8 +390,8 @@ function renderThreads(cs){
    <div class="thread-actions">
     <button class="add-comment-btn" onclick="replyToThread('${t.id}','${t.ticket_id}')">↩ Reply</button>
     ${isClosed
-     ?`<button class="add-comment-btn" onclick="reopenThread('${t.id}')">🔓 Reopen</button>`
-     :`<button class="add-comment-btn" onclick="closeThread('${t.id}')">🔒 Close</button>`}
+     ?`<button class="add-comment-btn" onclick="reopenThread('${t.id}','${t.ticket_id}')">🔓 Reopen</button>`
+     :`<button class="add-comment-btn" onclick="closeThread('${t.id}','${t.ticket_id}')">🔒 Close</button>`}
    </div>
   </div>`;
  }
@@ -411,14 +411,19 @@ async function replyToThread(threadId,ticketId){
  const r=await jpost("/tickets/"+ticketId+"/comments",{body:body.trim(),parent_id:threadId});
  if(!r.ok){const e=await r.text();alert("reply failed: "+e)}else if(sel===ticketId)open_(ticketId)
 }
-async function closeThread(commentId){
- const tid=sel;
- const r=await jpost("/comments/"+commentId+"/close");
+async function closeThread(commentId,ticketId){
+ // Pass ticket_id so the server resolves the correct per-board DB —
+ // comment ids are per-board (not globally unique), so a bare close
+ // call landed on the wrong board's id=N on collisions.
+ const tid=ticketId||sel;
+ const url="/comments/"+commentId+"/close"+(tid?"?ticket_id="+encodeURIComponent(tid):"");
+ const r=await jpost(url);
  if(!r.ok){const e=await r.text();alert("close thread failed: "+e)}else if(tid)open_(tid)
 }
-async function reopenThread(commentId){
- const tid=sel;
- const r=await jpost("/comments/"+commentId+"/reopen");
+async function reopenThread(commentId,ticketId){
+ const tid=ticketId||sel;
+ const url="/comments/"+commentId+"/reopen"+(tid?"?ticket_id="+encodeURIComponent(tid):"");
+ const r=await jpost(url);
  if(!r.ok){const e=await r.text();alert("reopen thread failed: "+e)}else if(tid)open_(tid)
 }
 async function newTicket(){

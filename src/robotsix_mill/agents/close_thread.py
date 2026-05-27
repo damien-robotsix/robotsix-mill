@@ -36,7 +36,10 @@ def make_close_thread_tool(settings: Settings, agent_name: str):
 
         svc = TicketService(settings)
         try:
-            svc.close_thread(comment_id)
+            # Pass ticket_id so the service resolves the correct
+            # per-board DB — comment ids are per-board, not globally
+            # unique.
+            svc.close_thread(comment_id, ticket_id=ticket_id)
             return f"Thread closed (id={comment_id})."
         except (ValueError, KeyError) as e:
             return f"Error: {e}"

@@ -827,12 +827,31 @@ class TicketService:
             )
             return list(s.exec(stmt).all())
 
-    def _board_for_comment(self, comment_id: int) -> str:
-        """Scan registered + disk-discovered boards for a Comment row."""
+    def _board_for_comment(
+        self, comment_id: int, ticket_id: str | None = None,
+    ) -> str:
+        """Resolve the board that owns *comment_id*.
+
+        ``Comment.id`` is per-board auto-increment (each repo's
+        SQLite assigns its own integer sequence), so a bare comment
+        id is ambiguous across boards. When *ticket_id* is provided
+        the lookup is unambiguous — the comment lives on the same
+        board as its ticket. The route handlers always have the
+        ticket id in hand (the user is on a ticket page when closing
+        a thread), so this is the production path.
+
+        Fall back to a cross-board fanout when *ticket_id* is missing,
+        purely for backward compatibility with callers that haven't
+        been threaded through yet. The fanout picks the first board
+        whose DB contains a matching id — wrong on collisions, but
+        no worse than the prior behaviour.
+        """
+        if ticket_id is not None:
+            return self._board_for(ticket_id)
+
         from ..config import get_repos_config
 
         candidates: list[str] = [self.board_id]
-        # Only consult the default-board DB when it actually exists.
         if (self.settings.data_dir / "mill.db").exists() and "" not in candidates:
             candidates.append("")
         try:
@@ -854,7 +873,9 @@ class TicketService:
                     return board_id
         return self.board_id
 
-    def close_thread(self, comment_id: int) -> Comment:
+    def close_thread(
+        self, comment_id: int, ticket_id: str | None = None,
+    ) -> Comment:
         """Close a top-level comment thread.  Raises ``KeyError`` if
         the comment does not exist, ``ValueError`` if it is a reply
         (non-NULL parent_id) or is already closed.
@@ -863,8 +884,16 @@ class TicketService:
         ticket in ``AWAITING_USER_REPLY``, and every other
         ``[ASK_USER]`` thread on that ticket is also closed, the ticket
         is automatically resumed to its pre-pause state.
+
+        *ticket_id* disambiguates the board in multi-repo mode (
+        ``Comment.id`` is per-board, not globally unique). When the
+        caller has the ticket id in hand (e.g. from the UI / agent
+        tool) it MUST be passed — without it the lookup falls back
+        to a cross-board fanout that picks the first board whose
+        SQLite happens to have a matching id, which is the wrong
+        comment on a collision.
         """
-        board = self._board_for_comment(comment_id)
+        board = self._board_for_comment(comment_id, ticket_id)
         with db.session(self.settings, board) as s:
             comment = s.get(Comment, comment_id)
             if comment is None:
@@ -942,11 +971,13 @@ class TicketService:
                 ticket_id, dst.value, len(ask_threads),
             )
 
-    def reopen_thread(self, comment_id: int) -> Comment:
+    def reopen_thread(
+        self, comment_id: int, ticket_id: str | None = None,
+    ) -> Comment:
         """Reopen a closed top-level comment thread.  Raises
         ``KeyError`` if the comment does not exist, ``ValueError`` if
         it is a reply (non-NULL parent_id) or is not currently closed."""
-        with db.session(self.settings, self._board_for_comment(comment_id)) as s:
+        with db.session(self.settings, self._board_for_comment(comment_id, ticket_id)) as s:
             comment = s.get(Comment, comment_id)
             if comment is None:
                 raise KeyError(comment_id)

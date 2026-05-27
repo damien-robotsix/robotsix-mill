@@ -729,11 +729,17 @@ def list_comments(
 @router.post("/comments/{comment_id}/close", response_model=Comment)
 def close_thread(
     comment_id: int,
+    ticket_id: str | None = None,
     svc=Depends(get_service),
 ) -> Comment:
-    """Close a top-level comment thread to mark it as resolved."""
+    """Close a top-level comment thread to mark it as resolved.
+
+    Pass ``ticket_id`` so the service resolves the correct per-board
+    DB — Comment.id is per-board (not globally unique), so a bare
+    ``comment_id`` lookup is ambiguous across repos.
+    """
     try:
-        return svc.close_thread(comment_id)
+        return svc.close_thread(comment_id, ticket_id=ticket_id)
     except KeyError:
         raise HTTPException(404, "comment not found") from None
     except ValueError as e:
@@ -743,11 +749,16 @@ def close_thread(
 @router.post("/comments/{comment_id}/reopen", response_model=Comment)
 def reopen_thread(
     comment_id: int,
+    ticket_id: str | None = None,
     svc=Depends(get_service),
 ) -> Comment:
-    """Reopen a previously-closed comment thread."""
+    """Reopen a previously-closed comment thread.
+
+    Pass ``ticket_id`` so the service resolves the correct per-board
+    DB — Comment.id is per-board (not globally unique).
+    """
     try:
-        return svc.reopen_thread(comment_id)
+        return svc.reopen_thread(comment_id, ticket_id=ticket_id)
     except KeyError:
         raise HTTPException(404, "comment not found") from None
     except ValueError as e:
