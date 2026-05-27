@@ -20,8 +20,17 @@ _SENTINEL = "__ASK_USER_PAUSE__"
 
 
 def check_for_pause(conversation_state: bytes | None) -> bool:
-    """Return ``True`` if the serialised message history contains a
-    ``ToolReturn`` part whose content is the ``ask_user`` sentinel.
+    """Return ``True`` when the run ended with an ``ask_user`` call.
+
+    Only the LAST message is inspected — the run halts immediately
+    after ``ask_user`` returns the sentinel, so the sentinel must be
+    in the most recent ``ToolReturn`` part. Scanning earlier messages
+    (the previous behaviour) re-triggered on the prior turn's
+    ``ask_user`` after a resume: the saved ``all_messages_json``
+    still contained the old sentinel, ``check_for_pause`` returned
+    ``True``, and the ticket was put right back into
+    ``AWAITING_USER_REPLY`` without the agent actually asking
+    anything new.
 
     Args:
         conversation_state: Raw JSON bytes from
@@ -35,12 +44,14 @@ def check_for_pause(conversation_state: bytes | None) -> bool:
     except (json.JSONDecodeError, TypeError):
         log.warning("check_for_pause: invalid JSON, treating as no-pause")
         return False
-    for msg in messages:
-        for part in msg.get("parts", []):
-            if part.get("part_kind") == "tool-return":
-                content = part.get("content", "")
-                if isinstance(content, str) and content == _SENTINEL:
-                    return True
+    if not messages:
+        return False
+    last = messages[-1]
+    for part in last.get("parts", []):
+        if part.get("part_kind") == "tool-return":
+            content = part.get("content", "")
+            if isinstance(content, str) and content == _SENTINEL:
+                return True
     return False
 
 
