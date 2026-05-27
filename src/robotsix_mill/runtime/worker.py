@@ -925,21 +925,54 @@ class Worker:
         robust to any current/future draft-creating path. States with
         no automated stage (e.g. human_issue_approval) are untouched —
         they correctly wait for a human."""
+        from ..config import get_repos_config
+        from ..core.service import TicketService
+
         interval = max(15, self.ctx.settings.merge_poll_seconds)
         while True:
             await asyncio.sleep(interval)
             try:
-                for t in self.ctx.service.list():
-                    if t.state not in STAGE_FOR_STATE:
-                        continue
-                    # Dep-gated tickets are skipped at the source —
-                    # enqueuing them would just trigger _process_ticket_inner
-                    # to short-circuit (no trace, no work), but every sweep
-                    # would still consume a queue slot + a service.get +
-                    # an unmet check. Cheaper to filter here.
-                    if self.ctx.service.unmet_dependencies(t):
-                        continue
-                    self.enqueue(t.id)
+                # Fan out across every registered repo's DB — the
+                # lifespan service is pinned to the lead repo, so
+                # without this any non-lead-repo ticket that lands in
+                # a poll-relevant state (READY after scope-triage
+                # REJECT, HUMAN_MR_APPROVAL, REBASING, …) would never
+                # be re-enqueued and would silently stall.
+                boards: list[str] = []
+                # Always sweep the worker's own context service first
+                # — covers single-repo / test setups where the lifespan
+                # service is the only one bound and get_repos_config()
+                # may not return it.
+                if self.ctx.service.board_id not in boards:
+                    boards.append(self.ctx.service.board_id)
+                if (
+                    "" not in boards
+                    and (self.ctx.settings.data_dir / "mill.db").exists()
+                ):
+                    boards.append("")
+                try:
+                    for rc in get_repos_config().repos.values():
+                        if rc.board_id and rc.board_id not in boards:
+                            boards.append(rc.board_id)
+                except Exception:
+                    pass
+                for board_id in boards:
+                    svc = (
+                        self.ctx.service
+                        if board_id == self.ctx.service.board_id
+                        else TicketService(self.ctx.settings, board_id=board_id)
+                    )
+                    for t in svc.list():
+                        if t.state not in STAGE_FOR_STATE:
+                            continue
+                        # Dep-gated tickets are skipped at the source —
+                        # enqueuing them would just trigger _process_ticket_inner
+                        # to short-circuit (no trace, no work), but every sweep
+                        # would still consume a queue slot + a service.get +
+                        # an unmet check. Cheaper to filter here.
+                        if svc.unmet_dependencies(t):
+                            continue
+                        self.enqueue(t.id)
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("reconcile sweep failed")
 
