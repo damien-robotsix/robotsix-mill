@@ -42,10 +42,32 @@ def get_engine(settings: Settings, board_id: str = ""):
 
     *board_id* selects the repo whose DB to open. Empty string uses
     the default DB at ``<data_dir>/mill.db``.
+
+    Emits a warning with a stack trace when board_id is empty AND
+    multi-repo is configured AND the file would be NEWLY created —
+    every ticket should live in a per-repo DB in that mode, so any
+    fresh ``<data_dir>/mill.db`` materialisation indicates a missing
+    board_id thread-through. The engine is still returned so the
+    caller doesn't blow up; the offending site can be fixed on its
+    own schedule.
     """
     engine = _engines.get(board_id)
     if engine is None:
         path = _db_path(settings, board_id)
+        if not board_id and not path.exists():
+            try:
+                from ..config import get_repos_config
+                if get_repos_config().repos:
+                    import logging
+                    import traceback
+                    logging.getLogger("robotsix_mill.core.db").warning(
+                        "db.get_engine: creating board-less mill.db at %s "
+                        "in multi-repo mode — board_id should be threaded "
+                        "through. Stack:\n%s",
+                        path, "".join(traceback.format_stack(limit=8)),
+                    )
+            except Exception:  # noqa: BLE001
+                pass
         path.parent.mkdir(parents=True, exist_ok=True)
         url = f"sqlite:///{path}"
         engine = create_engine(
