@@ -86,6 +86,7 @@ other code depends on.
 | `MILL_RATE_LIMIT_BACKOFF_CAP` | `rate_limit_backoff_cap` | `120.0` | `float` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
 | `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `rate_limit_fallback_retries` | `3` | `int` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
 | `MILL_EXPLORE_REQUEST_LIMIT` | `explore_request_limit` | `100` | `int` | Settings | non-sensitive | default | §2 | Explore sub-agent | |
+| `MILL_CONSULT_REQUEST_LIMIT` | `consult_request_limit` | `15` | `int` | Settings | non-sensitive | default | §2 | Domain-expert consultation sub-agent (`consult_expert`) | |
 | `MILL_DEDUP_REQUEST_LIMIT` | `dedup_request_limit` | `4` | `int` | Settings | non-sensitive | default | §2, §17 | Pre-refine dedup check | Mentioned in both §2 and §17 |
 | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `doc_classifier_request_limit` | `3` | `int` | Settings | non-sensitive | default | §2 | `stages/document.py`, doc-classifier gate | Per-call cap for the cheap doc-classifier agent |
 | `MILL_MAX_STUCK_CYCLES` | `max_stuck_cycles` | `3` | `int` | Settings | non-sensitive | default | §3 | `runtime/worker.py` | |

@@ -240,10 +240,13 @@ def run_coordinator(
     elif not definition.model:
         overrides["model_name"] = settings.model
 
+    from .consult_expert import make_consult_expert_tool
+
     agent = build_agent_from_definition(
         settings, definition,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
+            make_consult_expert_tool(settings, repo_dir),
             *fs_tools,
         ],
         **overrides,

@@ -209,6 +209,7 @@ Every setting below shows:
 |-----------|---------|---------|-------------|
 | `core.limits.coordinator_requests` | `MILL_COORDINATOR_REQUEST_LIMIT` | `200` | Per-ticket request cap for the implement (coordinator) agent |
 | `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
+| `core.limits.consult_requests` | `MILL_CONSULT_REQUEST_LIMIT` | `15` | Per-call request cap for the domain-expert consultation sub-agent |
 | `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `8` | Per-call request cap for the test sub-agent |
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
 | `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap for the dedup check |

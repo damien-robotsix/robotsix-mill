@@ -241,6 +241,11 @@ class Settings(BaseSettings):
     )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
+    # Per-call cap for the domain-expert consultation sub-agent the
+    # coordinator uses when it needs domain-specific advice.
+    consult_request_limit: int = Field(
+        default=15, alias="MILL_CONSULT_REQUEST_LIMIT"
+    )
     explore_request_limit: int = Field(
         default=100, alias="MILL_EXPLORE_REQUEST_LIMIT"
     )
@@ -1221,6 +1226,13 @@ class Settings(BaseSettings):
     def _validate_max_memory_chars(cls, v: int) -> int:
         if v < 0:
             raise ValueError("max_memory_chars must be ≥ 0")
+        return v
+
+    @field_validator("consult_request_limit")
+    @classmethod
+    def _validate_consult_request_limit(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("consult_request_limit must be ≥ 1")
         return v
 
     @field_validator("explore_request_limit")
