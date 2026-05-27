@@ -1003,21 +1003,29 @@ class TestFileReadPruning:
         assert cmd_return.content == "exit=0\nbig output"
 
     def test_no_prune_on_partial_read(self, tmp_path, settings):
-        """An offset/limit read never triggers pruning."""
+        """An offset/limit read never triggers pruning of earlier
+        partial reads. (Prior history is a partial read so the
+        already-loaded refusal doesn't kick in; this test just
+        verifies the pruning invariant.)"""
         root = tmp_path / "repo"
         root.mkdir()
         _make_file(root, "A.txt", "l1\nl2\nl3\n")
         tools = _build(root, settings)
 
-        a_return = _read_return("l1\nl2\nl3\n", "call-A")
+        a_call = ToolCallPart(
+            tool_name="read_file",
+            args={"path": "A.txt", "offset": 1, "limit": 1},
+            tool_call_id="call-A",
+        )
+        a_return = _read_return("l1\n", "call-A")
         ctx = types.SimpleNamespace(messages=[
-            _read_call("A.txt", "call-A"),
+            ModelResponse(parts=[a_call]),
             ModelRequest(parts=[a_return]),
         ])
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
         assert result == "l2\n"
-        assert a_return.content == "l1\nl2\nl3\n"
+        assert a_return.content == "l1\n"
 
     def test_no_prune_on_error(self, tmp_path, settings):
         """An error read (missing file) never triggers pruning."""
@@ -1095,3 +1103,146 @@ class TestFileReadPruning:
             tools["read_file"](ctx, path="A.txt")
             == "v2\n"
         )
+
+
+class TestPartialReadRefusalWhenAlreadyLoaded:
+    """``read_file`` refuses partial-slice calls when the same file's
+    content is already present in the conversation history as a
+    non-pruned full read — either a preload or a prior runtime full
+    read. Encourages reuse of the in-context copy rather than layering
+    a slice on top of the still-present full content."""
+
+    def _preload_msgs(self, path, content):
+        """Build (call, return) shaped like build_preseed_history."""
+        call = ToolCallPart(
+            tool_name="read_file",
+            args={"path": path, "offset": 1, "limit": None},
+            tool_call_id=f"preload_{path}",
+        )
+        ret = ToolReturnPart(
+            tool_name="read_file",
+            content=content,
+            tool_call_id=f"preload_{path}",
+        )
+        return ModelResponse(parts=[call]), ModelRequest(parts=[ret])
+
+    def test_partial_refused_when_file_preloaded(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\nl4\nl5\n")
+        tools = _build(root, settings)
+
+        resp, req = self._preload_msgs("A.txt", "l1\nl2\nl3\nl4\nl5\n")
+        ctx = types.SimpleNamespace(messages=[resp, req])
+
+        result = tools["read_file"](ctx, path="A.txt", offset=2, limit=2)
+        assert result.startswith("refused:")
+        assert "A.txt" in result
+
+    def test_partial_refused_after_prior_full_runtime_read(
+        self, tmp_path, settings,
+    ):
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\n")
+        tools = _build(root, settings)
+
+        a_call = ToolCallPart(
+            tool_name="read_file",
+            args={"path": "A.txt", "offset": 1, "limit": None},
+            tool_call_id="call-A",
+        )
+        a_return = _read_return("l1\nl2\nl3\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            ModelResponse(parts=[a_call]),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
+        assert result.startswith("refused:")
+
+    def test_partial_allowed_when_only_partial_prior(self, tmp_path, settings):
+        """A prior PARTIAL read doesn't block a later partial — the
+        slice may cover a different range. Only full prior reads
+        block."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\nl4\nl5\n")
+        tools = _build(root, settings)
+
+        a_call = ToolCallPart(
+            tool_name="read_file",
+            args={"path": "A.txt", "offset": 1, "limit": 2},
+            tool_call_id="call-A",
+        )
+        a_return = _read_return("l1\nl2\n", "call-A")
+        ctx = types.SimpleNamespace(messages=[
+            ModelResponse(parts=[a_call]),
+            ModelRequest(parts=[a_return]),
+        ])
+
+        result = tools["read_file"](ctx, path="A.txt", offset=3, limit=2)
+        assert result == "l3\nl4\n"
+
+    def test_partial_allowed_when_preload_was_pruned(
+        self, tmp_path, settings,
+    ):
+        """A pruned prior full read no longer counts — its content is
+        gone from context, so a partial read is allowed again."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\n")
+        tools = _build(root, settings)
+
+        resp, req = self._preload_msgs("A.txt", "l1\nl2\nl3\n")
+        # Pretend the preload was already pruned by an earlier full re-read.
+        req.parts[0].content = _PRUNED_PLACEHOLDER
+        ctx = types.SimpleNamespace(messages=[resp, req])
+
+        result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
+        assert result == "l2\n"
+
+    def test_full_read_of_preloaded_file_still_allowed(
+        self, tmp_path, settings,
+    ):
+        """Full reads always go through — they trigger pruning of the
+        earlier copy. Refusal only targets partial slices."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\n")
+        tools = _build(root, settings)
+
+        resp, req = self._preload_msgs("A.txt", "l1\nl2\nl3\n")
+        ctx = types.SimpleNamespace(messages=[resp, req])
+
+        result = tools["read_file"](ctx, path="A.txt")
+        assert result == "l1\nl2\nl3\n"
+        # The preload's return content was pruned to make room.
+        assert req.parts[0].content == _PRUNED_PLACEHOLDER
+
+    def test_partial_of_unrelated_file_still_allowed(
+        self, tmp_path, settings,
+    ):
+        """A preload of A.txt doesn't block partial reads of B.txt."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "A\n")
+        _make_file(root, "B.txt", "b1\nb2\nb3\n")
+        tools = _build(root, settings)
+
+        resp, req = self._preload_msgs("A.txt", "A\n")
+        ctx = types.SimpleNamespace(messages=[resp, req])
+
+        result = tools["read_file"](ctx, path="B.txt", offset=2, limit=1)
+        assert result == "b2\n"
+
+    def test_no_ctx_skips_refusal(self, tmp_path, settings):
+        """Bare invocations (no RunContext) never refuse — only the
+        agent's live calls go through the history check."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "A.txt", "l1\nl2\nl3\n")
+        tools = _build(root, settings)
+
+        result = tools["read_file"](path="A.txt", offset=2, limit=1)
+        assert result == "l2\n"

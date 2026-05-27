@@ -214,6 +214,73 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
                 "read_file: message-history pruning skipped", exc_info=True
             )
 
+    def _file_already_in_history(ctx, target: Path) -> bool:
+        """Return True if *target* is already in the live message
+        history as a non-pruned full-file ``read_file`` return — either
+        a preload (``tool_call_id`` starts with ``preload_``) or a
+        prior runtime full read (``offset=1, limit=None``).
+
+        Partial-slice prior reads do NOT count: a slice doesn't cover
+        the whole file, so a later partial of a different range is
+        legitimate. Pruned returns also do not count — their content
+        is gone from context."""
+        try:
+            messages = getattr(ctx, "messages", None)
+            if not messages:
+                return False
+            canonical = target.resolve()
+
+            full_read_ids: set[str] = set()
+            for msg in messages:
+                if getattr(msg, "kind", None) != "response":
+                    continue
+                for part in getattr(msg, "parts", []):
+                    if getattr(part, "part_kind", None) != "tool-call":
+                        continue
+                    if getattr(part, "tool_name", None) != "read_file":
+                        continue
+                    try:
+                        args = part.args_as_dict()
+                        arg_path = args.get("path")
+                        if not isinstance(arg_path, str):
+                            continue
+                        if (root / arg_path).resolve() != canonical:
+                            continue
+                    except Exception:
+                        continue
+                    tc_id = getattr(part, "tool_call_id", None)
+                    if not tc_id:
+                        continue
+                    offset = args.get("offset", 1) or 1
+                    limit = args.get("limit")
+                    if tc_id.startswith("preload_") or (
+                        offset == 1 and limit is None
+                    ):
+                        full_read_ids.add(tc_id)
+
+            if not full_read_ids:
+                return False
+
+            for msg in messages:
+                if getattr(msg, "kind", None) != "request":
+                    continue
+                for part in getattr(msg, "parts", []):
+                    if getattr(part, "part_kind", None) != "tool-return":
+                        continue
+                    if getattr(part, "tool_name", None) != "read_file":
+                        continue
+                    if getattr(part, "tool_call_id", None) not in full_read_ids:
+                        continue
+                    content = getattr(part, "content", None)
+                    if isinstance(content, str) and content != _PRUNED_PLACEHOLDER:
+                        return True
+            return False
+        except Exception:
+            log.debug(
+                "read_file: history scan skipped", exc_info=True,
+            )
+            return False
+
     # Tools return errors as strings so the model can self-correct
     # (try another path, list the dir, ...) instead of the whole agent
     # run aborting on an exception.
@@ -226,14 +293,30 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
     ) -> str:
         """Return the text content of a file in the repository.
 
-        Optionally narrow to a line range with ``offset`` and ``limit``
-        (both 1-indexed):
-        - ``offset`` — first line to return (default 1). Values ≤ 0 are
-          treated as 1.
-        - ``limit`` — maximum number of lines to return (None = to end).
-          When ``limit`` exceeds remaining lines, returns what's available.
-        - If ``offset`` is past the last line, returns a note with the
-          actual line count.
+        **CHECK YOUR CONVERSATION HISTORY FIRST.** If a prior
+        ``read_file`` return (or a preload at the top of the
+        conversation) for this path is still visible — its content
+        is already in your context. Do NOT call ``read_file`` again
+        on the same path; scroll back and quote from that existing
+        return instead. Re-asking just wastes tokens with no new
+        information.
+
+        Partial slices (``offset`` / ``limit``) are REFUSED for files
+        whose content is already present in your history as a full
+        read. The pre-loaded reference files at the start of an
+        implement run already cover every preloaded path in full —
+        asking for a slice of one is always wrong; use the full
+        content already in context.
+
+        Optionally narrow to a line range with ``offset`` and
+        ``limit`` (both 1-indexed):
+        - ``offset`` — first line to return (default 1). Values ≤ 0
+          are treated as 1.
+        - ``limit`` — maximum number of lines to return (None = to
+          end).  When ``limit`` exceeds remaining lines, returns
+          what's available.
+        - If ``offset`` is past the last line, returns a note with
+          the actual line count.
         """
         try:
             p = _safe(root, path, extra_roots=extra_roots)
@@ -243,6 +326,18 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
         # Normalize offset (offset ≤ 0 is treated as 1).
         _offset = offset if offset >= 1 else 1
         is_full_read = _offset == 1 and limit is None
+
+        # Refuse partial slices when the file is already loaded in
+        # full earlier in the conversation. Encourages the model to
+        # use the content it already has instead of layering a slice
+        # on top of a still-present preload (which doubles the token
+        # cost of that file for every later iteration).
+        if ctx is not None and not is_full_read and _file_already_in_history(ctx, p):
+            return (
+                f"refused: {path} is already loaded in full earlier in this "
+                f"conversation (preload section, or a prior full read_file). "
+                f"Use the existing content instead of re-reading a slice."
+            )
 
         # Read (or refresh) via _read_cached, then slice.
         try:
