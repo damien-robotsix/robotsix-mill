@@ -738,6 +738,22 @@ async function runTraceHealth(){
    btn.disabled=false; btn.textContent='Trace Health';
  }
 }
+async function runLangfuseCleanup(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const repoId=getRepoId();
+   const lcUrl=repoId!=="all"?"/langfuse-cleanup?repo_id="+encodeURIComponent(repoId):"/langfuse-cleanup";
+   const r=await jpost(lcUrl);
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Langfuse cleanup started — excess traces will be purged.");
+   setTimeout(refresh,3000);
+ } catch(e) {
+   alert("Langfuse cleanup failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Langfuse Cleanup';
+ }
+}
 async function runHealth(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';

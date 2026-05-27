@@ -1252,6 +1252,52 @@ def trace_health_check(
     return {"status": "started"}
 
 
+@router.post("/langfuse-cleanup", status_code=202)
+def langfuse_cleanup_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a Langfuse trace cleanup in the BACKGROUND and return at
+    once.  The cleanup deletes the oldest traces until the project is
+    at most ``max_traces`` rows.  Pure HTTP, no LLM.
+    """
+    from ..langfuse_cleanup_runner import run_langfuse_cleanup_pass
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+    settings = request.app.state.settings
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("langfuse-cleanup", repo_id=rc.repo_id if rc else "")
+                r = run_langfuse_cleanup_pass(
+                    settings=settings,
+                    repo_config=rc,
+                    max_traces=settings.langfuse_cleanup_max_traces,
+                )
+                summary = (
+                    f"Langfuse project {r.project}: "
+                    f"{r.traces_before} traces → "
+                    f"{r.traces_deleted} deleted"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info(
+                    "langfuse-cleanup: %s — %d traces → %d deleted",
+                    r.project, r.traces_before, r.traces_deleted,
+                )
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("langfuse-cleanup failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="langfuse-cleanup", daemon=True
+    ).start()
+    return {"status": "started"}
+
+
 @router.get("/runs")
 def list_runs(
     repo_id: str | None = None,
