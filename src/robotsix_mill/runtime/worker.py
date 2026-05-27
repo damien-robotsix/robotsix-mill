@@ -1063,14 +1063,23 @@ class Worker:
                         len(result.drafts_created),
                     )
                     if self.run_registry and run_id:
-                        draft_ids = [
-                            d["id"] for d in result.drafts_created[:5]
-                        ]
-                        summary = (
-                            f"Created {len(result.drafts_created)} drafts: "
-                            f"{', '.join(draft_ids)}"
-                            f"{'…' if len(result.drafts_created) > 5 else ''}"
-                        )
+                        # Prefer the runner's own summary when it set
+                        # one (e.g. cost-reconciliation reports a
+                        # delta or "no overrun"); fall back to the
+                        # generic drafts-list for runners that only
+                        # signal via drafts_created.
+                        runner_summary = (getattr(result, "summary", "") or "").strip()
+                        if runner_summary:
+                            summary = runner_summary
+                        else:
+                            draft_ids = [
+                                d["id"] for d in result.drafts_created[:5]
+                            ]
+                            summary = (
+                                f"Created {len(result.drafts_created)} drafts: "
+                                f"{', '.join(draft_ids)}"
+                                f"{'…' if len(result.drafts_created) > 5 else ''}"
+                            )
                         self.run_registry.finish_ok(run_id, summary)
                 except Exception as e:  # noqa: BLE001 — never let the poll die
                     log.exception(
@@ -1114,14 +1123,18 @@ class Worker:
                     label.capitalize(), len(result.drafts_created),
                 )
                 if self.run_registry and run_id:
-                    draft_ids = [
-                        d["id"] for d in result.drafts_created[:5]
-                    ]
-                    summary = (
-                        f"Created {len(result.drafts_created)} drafts: "
-                        f"{', '.join(draft_ids)}"
-                        f"{'…' if len(result.drafts_created) > 5 else ''}"
-                    )
+                    runner_summary = (getattr(result, "summary", "") or "").strip()
+                    if runner_summary:
+                        summary = runner_summary
+                    else:
+                        draft_ids = [
+                            d["id"] for d in result.drafts_created[:5]
+                        ]
+                        summary = (
+                            f"Created {len(result.drafts_created)} drafts: "
+                            f"{', '.join(draft_ids)}"
+                            f"{'…' if len(result.drafts_created) > 5 else ''}"
+                        )
                     self.run_registry.finish_ok(run_id, summary)
             except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("%s poll failed", label)
