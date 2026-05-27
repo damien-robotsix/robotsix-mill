@@ -92,6 +92,7 @@ border-radius:6px;padding:10px;overflow-x:auto}
 .s-errored{--c:#ef4444}
 .s-documenting{--c:#0891b2}.s-code_review{--c:#6366f1}
 .s-epic_open{--c:#9333ea}.s-epic_closed{--c:#6d28d9}
+.s-awaiting_user_reply{--c:#f59e0b}
 /* deep-review elements */
 .dr-filters{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
 .dr-filters input{font-size:11px;background:#1d212c;border:1px solid #262b36;color:#cfd3db;border-radius:4px;padding:3px 6px}
@@ -159,6 +160,13 @@ border-radius:4px;background:#3b2f1a;color:#f59e0b;
 text-transform:uppercase;letter-spacing:.04em}
 .dr-source-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
   margin-bottom:10px;background:#1a2a3b;color:#60c0fa;text-transform:uppercase;letter-spacing:.04em}
+.needs-reply-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:4px;
+  margin-top:3px;background:#3b2f1a;color:#f59e0b;text-transform:uppercase;letter-spacing:.04em}
+.ask-user-cta{background:#2a2010;border-left:3px solid #f59e0b;padding:10px 14px;
+  margin-bottom:12px;border-radius:4px;font-size:12px;line-height:1.5}
+.ask-user-cta strong{color:#f59e0b}
+.ask-user-threads{margin-bottom:16px}
+.ask-user-threads .thread{border-color:#4a3a1a;background:#1e1a10}
 /* cost dashboard */
 .cost-lookback{margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .cost-lookback label{font-size:11px;color:#aab0bd}

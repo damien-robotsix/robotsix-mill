@@ -204,7 +204,7 @@ async function refresh(){
  // naturally; replace only the inner content of cards whose visible
  // signature changed. Avoids the scroll-snap and flicker that the
  // previous wholesale innerHTML rebuild caused.
- const visibleStates=ST.filter(s=>by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed));
+ const visibleStates=ST.filter(s=>(by[s]&&by[s].length>0||s==="awaiting_user_reply")&&(s!=="closed"&&s!=="epic_closed"||wantClosed));
  const visibleSet=new Set(visibleStates);
  // Drop columns whose state has no tickets (or is hidden when
  // wantClosed=false). Their .cards' scroll state is gone, but the
@@ -241,6 +241,7 @@ function renderCardInner(t,repoId,colState){
   (t.kind==="inquiry"?`<span class="inquiry-badge">🔍 inquiry</span>`:"")+
   (t.kind==="epic"?`<span class="epic-badge">📋 epic</span>`:"")+
   (t.parent_id?`<span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id.slice(0,8)+"…")}</span>`:"")+
+  (t.state==="awaiting_user_reply"?`<span class="needs-reply-badge">🙋 needs reply</span>`:"")+
   `<span class="src-badge src-${srcClass(t.source)}">${esc(t.source||"user")}</span>`+
   `<span class="cost">$${(t.cost_usd||0).toFixed(4)}</span>`+
   (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<span class="cost-cumulative">/$${t.cumulative_cost.toFixed(4)}</span>`:"")+
@@ -281,6 +282,10 @@ function syncCards(col,tickets,repoId,colState){
   if(card!==expectedNext) cards.insertBefore(card,expectedNext);
   prevCard=card;
  });
+ // Always-visible "Awaiting Reply" column — show empty state when no tickets are paused.
+ if(col.dataset.state==="awaiting_user_reply" && tickets.length===0){
+  cards.innerHTML=`<div class="muted" style="padding:12px;font-size:11px;text-align:center">No tickets waiting on you</div>`;
+ }
 }
 async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
@@ -366,10 +371,14 @@ function renderMergeInfo(mi){
 }
 function renderThreads(cs){
  const threads=cs.filter(c=>c.parent_id===null);
+ // Separate open [ASK_USER] threads from normal threads.
+ // Closed ASK_USER threads stay in the normal section.
+ const askUserThreads=threads.filter(t=>t.body&&t.body.startsWith("[ASK_USER]")&&t.closed_at===null);
+ const normalThreads=threads.filter(t=>!askUserThreads.includes(t));
  const replies=cs.filter(c=>c.parent_id!==null);
  const replyMap={};
  replies.forEach(r=>{(replyMap[r.parent_id]||=[]).push(r);});
- return threads.map(t=>{
+ function renderOneThread(t){
   const isClosed=t.closed_at!==null;
   const children=replyMap[t.id]||[];
   const replyHtml=children.map(r=>
@@ -385,7 +394,15 @@ function renderThreads(cs){
      :`<button class="add-comment-btn" onclick="closeThread('${t.id}')">🔒 Close</button>`}
    </div>
   </div>`;
- }).join("");
+ }
+ let html="";
+ // Call-to-action banner — only when there are open ASK_USER threads
+ if(askUserThreads.length>0){
+  html+=`<div class="ask-user-cta"><strong>🙋 This ticket is waiting on your reply.</strong> Reply to the question below and close the thread to resume the ticket.</div>`;
+  html+=`<div class="ask-user-threads">${askUserThreads.map(renderOneThread).join("")}</div>`;
+ }
+ html+=normalThreads.map(renderOneThread).join("");
+ return html;
 }
 async function replyToThread(threadId,ticketId){
  const body=prompt("Reply to this thread:");
