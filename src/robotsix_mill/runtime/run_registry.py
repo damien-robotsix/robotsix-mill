@@ -131,11 +131,17 @@ class RunRegistry:
             self.flush()
 
     def most_recent(self, kind: str) -> dict | None:
-        """Return the newest completed entry (status *not* ``"running"``)
-        of the given *kind*, or ``None`` if no such entry exists."""
+        """Return the newest successful entry of the given *kind*.
+
+        Only ``status == "ok"`` counts as "ran" for the periodic
+        scheduler's purposes — an interrupted-by-restart entry or
+        an errored run hasn't actually executed the work, so the
+        next fire window should be measured from the last successful
+        run instead of bumping forward on every crash.
+        """
         with self._lock:
             for e in reversed(self._entries):
-                if e.kind == kind and e.status != "running":
+                if e.kind == kind and e.status == "ok":
                     return asdict(e)
             return None
 

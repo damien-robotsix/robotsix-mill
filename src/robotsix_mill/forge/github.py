@@ -84,6 +84,7 @@ class GitHubForge(Forge):
         title: str, body: str,
     ) -> str:
         import httpx
+        import time
 
         from .auth import github_token  # lazy: avoid import cycle
 
@@ -92,20 +93,42 @@ class GitHubForge(Forge):
         url = f"{api}/repos/{owner}/{repo}/pulls"
         headers = _build_headers(github_token(s, repo_config=self._repo_config))
         payload = {"title": title, "head": head, "base": base, "body": body}
+        # GitHub sometimes takes a few seconds to index a freshly-
+        # pushed ref before the pulls API can resolve it — the
+        # symptom is a 422 with field=head, code=invalid even
+        # though the branch is visible via git/refs. Retry the
+        # create call a few times before giving up; existing-PR
+        # detection runs each round so we don't double-open.
         with httpx.Client(timeout=30) as c:
-            r = c.post(url, headers=headers, json=payload)
-            if r.status_code == 201:
-                return r.json()["html_url"]
-            # already exists → return the open PR for this head branch
-            if r.status_code == 422:
-                q = c.get(
-                    url,
-                    headers=headers,
-                    params={"head": f"{owner}:{head}", "state": "open"},
-                )
-                items = q.json() if q.status_code == 200 else []
-                if items:
-                    return items[0]["html_url"]
+            for attempt in range(4):
+                r = c.post(url, headers=headers, json=payload)
+                if r.status_code == 201:
+                    return r.json()["html_url"]
+                # 422 — either "already exists" or a transient
+                # post-push indexing race.
+                if r.status_code == 422:
+                    q = c.get(
+                        url,
+                        headers=headers,
+                        params={"head": f"{owner}:{head}", "state": "open"},
+                    )
+                    items = q.json() if q.status_code == 200 else []
+                    if items:
+                        return items[0]["html_url"]
+                    # No existing PR; treat as a transient "head
+                    # invalid" race when the error body says so,
+                    # back off and retry. Final attempt falls
+                    # through to RuntimeError below.
+                    err_text = r.text or ""
+                    if (
+                        attempt < 3
+                        and '"field":"head"' in err_text
+                        and '"code":"invalid"' in err_text
+                    ):
+                        time.sleep(2 ** attempt)  # 1s, 2s, 4s
+                        continue
+                # Non-422 (or final attempt) — surface the error.
+                break
             raise RuntimeError(
                 f"GitHub PR create failed: {r.status_code} "
                 f"{r.text[:300]}"
