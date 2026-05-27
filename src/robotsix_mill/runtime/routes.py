@@ -771,18 +771,22 @@ def set_priority(
     """
     priority = bool(body.get("priority", False))
     try:
-        svc.set_priority(ticket_id, priority)
+        changed_ids = svc.set_priority(ticket_id, priority)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    # Force a fresh enqueue with the new priority rank. `maybe_enqueue`
+    # Force a fresh enqueue with the new priority rank for every
+    # ticket whose priority actually flipped — the target plus any
+    # descendants that inherited the flag from an epic. `maybe_enqueue`
     # would short-circuit on the worker's _pending dedup, leaving the
     # stale rank in the heap (see worker.requeue_with_current_priority
     # for the rationale).
-    if ticket.state in STAGE_FOR_STATE:
-        worker.requeue_with_current_priority(ticket_id)
+    for cid in changed_ids:
+        ct = svc.get(cid)
+        if ct is not None and ct.state in STAGE_FOR_STATE:
+            worker.requeue_with_current_priority(cid)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 

@@ -741,3 +741,73 @@ def test_mark_done_rejects_epic_open(service):
     with pytest.raises(TransitionError):
         service.mark_done(t.id)
 
+
+
+# --- Epic-priority propagation ----------------------------------------
+
+
+def test_set_priority_propagates_to_existing_children(service):
+    """When an epic is flagged priority, every existing descendant
+    inherits the flag — and set_priority returns the IDs that changed
+    so the route can re-enqueue each one."""
+    epic = service.create("an epic", kind="epic")
+    a = service.create("child a", parent_id=epic.id)
+    b = service.create("child b", parent_id=epic.id)
+    grand = service.create("grand", parent_id=a.id)
+
+    changed = service.set_priority(epic.id, True)
+    assert set(changed) == {epic.id, a.id, b.id, grand.id}
+    for tid in (epic.id, a.id, b.id, grand.id):
+        assert service.get(tid).priority is True
+
+
+def test_set_priority_false_clears_descendants(service):
+    """Flipping an epic back to non-priority clears the same set."""
+    epic = service.create("an epic", kind="epic")
+    a = service.create("child a", parent_id=epic.id)
+    service.set_priority(epic.id, True)
+    assert service.get(a.id).priority is True
+
+    changed = service.set_priority(epic.id, False)
+    assert set(changed) == {epic.id, a.id}
+    assert service.get(a.id).priority is False
+
+
+def test_set_priority_returns_only_actually_changed(service):
+    """If a descendant already has the target value, it's not in the
+    returned list (no needless re-enqueue)."""
+    epic = service.create("an epic", kind="epic")
+    a = service.create("child a", parent_id=epic.id)
+    service.set_priority(a.id, True)  # child already priority
+    changed = service.set_priority(epic.id, True)
+    assert epic.id in changed
+    assert a.id not in changed  # already True; no change
+
+
+def test_child_created_after_epic_priority_inherits(service):
+    """A ticket created with parent_id pointing at a priority-flagged
+    epic inherits the flag at create time — the key case for
+    multi-stage breakdowns that arrive after the operator marks the
+    epic priority."""
+    epic = service.create("an epic", kind="epic")
+    service.set_priority(epic.id, True)
+
+    late_child = service.create("created after", parent_id=epic.id)
+    assert late_child.priority is True
+
+
+def test_inheritance_walks_full_parent_chain(service):
+    """Grandchild of a priority epic inherits via transitive walk."""
+    epic = service.create("an epic", kind="epic")
+    service.set_priority(epic.id, True)
+    child = service.create("child", parent_id=epic.id)
+    grand = service.create("grand", parent_id=child.id)
+    assert grand.priority is True
+
+
+def test_no_inheritance_when_no_priority_ancestor(service):
+    """When the parent chain has no priority flag, the new ticket
+    defaults to non-priority."""
+    epic = service.create("an epic", kind="epic")  # not priority
+    child = service.create("child", parent_id=epic.id)
+    assert child.priority is False

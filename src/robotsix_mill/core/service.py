@@ -376,6 +376,25 @@ class TicketService:
 
         ws = Workspace(self.settings.workspaces_dir_for(effective_board), ticket_id)
         content_hash = ws.write_description(description)
+        # Inherit priority from any priority-marked ancestor at
+        # creation time. set_priority on an epic propagates to
+        # CURRENT children; this walk catches children created AFTER
+        # the epic was flagged. Loop is bounded by parent-chain depth
+        # and skips cycles (which shouldn't exist but cheap to guard).
+        inherited_priority = False
+        if parent_id is not None:
+            seen: set[str] = set()
+            cur = parent_id
+            while cur and cur not in seen:
+                seen.add(cur)
+                with db.session(self.settings, effective_board) as s:
+                    p = s.get(Ticket, cur)
+                if p is None:
+                    break
+                if getattr(p, "priority", False):
+                    inherited_priority = True
+                    break
+                cur = p.parent_id
         with db.session(self.settings, effective_board) as s:
             ticket = Ticket(
                 id=ticket_id,
@@ -389,6 +408,7 @@ class TicketService:
                 depends_on=depends_on,
                 parent_id=parent_id,
                 board_id=board_id if board_id is not None else self.board_id,
+                priority=inherited_priority,
             )
             s.add(ticket)
             s.add(
@@ -507,21 +527,46 @@ class TicketService:
             s.add(ticket)
             s.commit()
 
-    def set_priority(self, ticket_id: str, priority: bool) -> None:
+    def set_priority(self, ticket_id: str, priority: bool) -> list[str]:
         """Toggle the operator-controlled priority flag on a ticket.
 
         When True, the worker pulls this ticket off the queue ahead of
         non-priority tickets — used to jump bug-fix tickets in front of
         the normal backlog without changing dependency wiring.
+
+        Epic propagation: when the target ticket has descendants (epic
+        with children, sub-epics, etc.) the flag is applied to every
+        descendant too. Children created LATER also inherit the
+        priority via the create-time parent-chain walk (see
+        :meth:`create`). Returns the list of ticket IDs whose priority
+        was changed (the target plus any affected descendants) so the
+        caller can re-enqueue each one.
         """
+        changed: list[str] = []
         with db.session(self.settings, self._board_for(ticket_id)) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
-            ticket.priority = bool(priority)
-            ticket.updated_at = datetime.now(timezone.utc)
-            s.add(ticket)
+            new_value = bool(priority)
+            if ticket.priority != new_value:
+                ticket.priority = new_value
+                ticket.updated_at = datetime.now(timezone.utc)
+                s.add(ticket)
+                changed.append(ticket.id)
             s.commit()
+        # Propagate to every descendant. _all_descendants walks the
+        # parent_id graph and is cycle-safe.
+        for descendant in self._all_descendants(ticket_id):
+            with db.session(self.settings, self._board_for(descendant.id)) as s:
+                d = s.get(Ticket, descendant.id)
+                if d is None or d.priority == bool(priority):
+                    continue
+                d.priority = bool(priority)
+                d.updated_at = datetime.now(timezone.utc)
+                s.add(d)
+                s.commit()
+                changed.append(d.id)
+        return changed
 
     def set_branch(self, ticket_id: str, branch: str) -> None:
         """Record the git branch name for a ticket.
