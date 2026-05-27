@@ -172,12 +172,13 @@ def run_review_agent(
         **overrides,
     )
     try:
+        from .prompt_blocks import section
         user_prompt = ""
         if prior_context is not None:
             user_prompt += f"{prior_context}\n\n"
         user_prompt += (
-            f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
-            f"<git_diff>\n{diff}\n</git_diff>"
+            section("ticket-spec", spec) + "\n\n"
+            + section("git-diff", diff)
         )
         limits = UsageLimits(request_limit=settings.review_request_limit)
         run_kwargs: dict = {"usage_limits": limits}

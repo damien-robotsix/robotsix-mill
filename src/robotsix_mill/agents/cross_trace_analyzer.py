@@ -20,6 +20,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..config import Settings, get_secrets
+from .prompt_blocks import section
 
 log = logging.getLogger("robotsix_mill.cross_trace_analyzer")
 
@@ -154,10 +155,10 @@ def run_cross_trace_analyzer(
     limits = UsageLimits(request_limit=3)
     prompt = (
         "Analyse the following per-trace summaries from a single ticket "
-        "session for cross-trace patterns — redundant exploration, "
-        "information loss, retry cascades, context waste, and stage "
-        "inefficiencies. For each finding, propose a CONCRETE solution.\n\n"
-        f"<per_trace_summaries>\n{per_trace_summaries}\n</per_trace_summaries>"
+        + "session for cross-trace patterns — redundant exploration, "
+        + "information loss, retry cascades, context waste, and stage "
+        + "inefficiencies. For each finding, propose a CONCRETE solution.\n\n"
+        + section("per-trace-summaries", per_trace_summaries)
     )
     try:
         from .retry import call_with_retry

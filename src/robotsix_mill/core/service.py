@@ -627,9 +627,9 @@ class TicketService:
             s.commit()
 
     def get_epic_context(self, ticket: Ticket) -> str:
-        """Return the epic description wrapped in ``<epic_context>`` tags
-        if *ticket* has a parent whose ``kind`` is ``"epic"``, or ``""``
-        otherwise."""
+        """Return the epic description wrapped in an ``epic-context``
+        fenced block if *ticket* has a parent whose ``kind`` is
+        ``"epic"``, or ``""`` otherwise."""
         if ticket.parent_id is None:
             return ""
         parent = self.get(ticket.parent_id)
@@ -638,7 +638,8 @@ class TicketService:
         desc = self.workspace(parent).read_description()
         if not desc:
             return ""
-        return f"<epic_context>\n{desc}\n</epic_context>"
+        from ..agents.prompt_blocks import section
+        return section("epic-context", desc)
 
     def list_children(self, ticket_id: str) -> list[Ticket]:
         """Return all tickets whose ``parent_id`` equals *ticket_id*."""

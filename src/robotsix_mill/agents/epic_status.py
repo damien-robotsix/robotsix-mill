@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from .prompt_blocks import section
 
 
 class EpicStatusResult(BaseModel):
@@ -63,10 +64,10 @@ def run_epic_status_agent(
 
     children_json = json.dumps(children, indent=2, default=str)
     prompt = (
-        f"<epic_title>{epic_title}</epic_title>\n\n"
-        f"<epic_description>\n{epic_description}\n</epic_description>\n\n"
-        f"<children>\n{children_json}\n</children>\n\n"
-        "Evaluate the epic's status and return your decision."
+        section("epic-title", epic_title) + "\n\n"
+        + section("epic-description", epic_description) + "\n\n"
+        + section("children", children_json) + "\n\n"
+        + "Evaluate the epic's status and return your decision."
     )
     try:
         result = call_with_retry(

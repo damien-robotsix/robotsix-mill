@@ -18,6 +18,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from ..config import Settings, get_secrets
+from .prompt_blocks import section
 
 
 class RebaseResult(BaseModel):
@@ -71,8 +72,8 @@ def run_rebase_agent(
 
     user_prompt = (
         f"Rebase branch '{branch}' onto origin/{target} in {repo_dir}. "
-        "Follow the system prompt exactly.\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
+        + "Follow the system prompt exactly.\n\n"
+        + section("memory", memory or '(empty — start a new ledger)')
     )
 
     try:

@@ -17,6 +17,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from ..config import Settings, get_secrets
+from .prompt_blocks import section
 
 
 class ReviewRevisionResult(BaseModel):
@@ -72,11 +73,11 @@ def run_review_revision_agent(
 
     user_prompt = (
         f"A human reviewer has requested changes on PR branch '{branch}' "
-        f"in {repo_dir}. Here are the review comments:\n\n"
-        f"{review_comments}\n\n"
-        f"Changed files in this PR: {', '.join(pr_files)}\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
-        "Follow the system prompt exactly."
+        + f"in {repo_dir}. Here are the review comments:\n\n"
+        + f"{review_comments}\n\n"
+        + f"Changed files in this PR: {', '.join(pr_files)}\n\n"
+        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + "Follow the system prompt exactly."
     )
 
     try:

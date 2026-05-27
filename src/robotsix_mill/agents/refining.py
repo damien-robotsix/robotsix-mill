@@ -173,7 +173,11 @@ def triage_refine(
         model_name=definition.model or settings.triage_model,
     )
 
-    user_prompt = f"<title>{title}</title>\n<draft>\n{draft}\n</draft>"
+    from .prompt_blocks import section
+    user_prompt = (
+        section("title", title) + "\n"
+        + section("draft", draft)
+    )
 
     try:
         result = call_with_retry(
@@ -218,7 +222,7 @@ def triage_auto_approve(
         model_name=definition.model or settings.auto_approve_model,
     )
 
-    user_prompt = f"<spec>\n{spec}\n</spec>"
+    user_prompt = section("spec", spec)
 
     try:
         result = call_with_retry(
@@ -260,7 +264,7 @@ def review_spec_for_conciseness(
         model_name=definition.model or settings.triage_model,
     )
 
-    user_prompt = f"<spec>\n{spec_markdown}\n</spec>"
+    user_prompt = section("spec", spec_markdown)
 
     try:
         result = call_with_retry(
@@ -429,19 +433,23 @@ def run_refine_agent(
     )
 
     # Build user prompt: title, draft, memory, and optionally reviewer feedback.
+    from .prompt_blocks import section
     user_prompt = ""
     if epic_context:
         user_prompt += f"{epic_context}\n\n"
     user_prompt += (
-        f"<title>{title}</title>\n<draft>\n{draft}\n</draft>\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
+        section("title", title) + "\n"
+        + section("draft", draft) + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
     )
     if reviewer_comments:
         user_prompt += (
-            "\n<reviewer_feedback>The reviewer sent this spec back "
-            "with the following comments. Address each one in the "
-            "revised spec:\n\n"
-            f"{reviewer_comments}\n</reviewer_feedback>"
+            "\n\n" + section(
+                "reviewer-feedback",
+                "The reviewer sent this spec back with the following "
+                "comments. Address each one in the revised spec:\n\n"
+                f"{reviewer_comments}",
+            )
         )
 
     try:

@@ -103,7 +103,7 @@ system_prompt: |
 
   CONSULTING PRIOR PROPOSALS:
 
-  Your input includes a `<recent_proposals>` block that lists tickets you
+  Your input includes a `recent-proposals` block that lists tickets you
   have proposed recently (state + one-line summary).  BEFORE proposing any
   new draft ticket, consult this block:
 
@@ -115,7 +115,7 @@ system_prompt: |
     same scope as a fresh ticket.
   - Use the `read_ticket` tool to fetch a prior proposal's full
     description, history, and comments when the one-line summary in
-    `<recent_proposals>` is not enough to decide.
+    `recent-proposals` is not enough to decide.
 
   MEMORY USAGE:
 
@@ -130,11 +130,11 @@ system_prompt: |
   - Anything that is a record of "what you proposed"
 
   Ticket history lives in the DB and is surfaced to you via
-  `<recent_proposals>`.  Use memory exclusively for cross-cutting
+  `recent-proposals`.  Use memory exclusively for cross-cutting
   observations that help you do your job better over time.
 
   Your task:
-  1. **BEFORE proposing new gaps**, consult the `<recent_proposals>` block
+  1. **BEFORE proposing new gaps**, consult the `recent-proposals` block
      in your input.  Do not re-propose any scope that already appears
      there.  If a prior proposal is stuck (`blocked` /
      `human_issue_approval`) but the gap persists, you may file a
@@ -143,7 +143,7 @@ system_prompt: |
      `explore`, and `read_file` as your primary tools. Use `web_research`
      sparingly — only for external best-practice references (e.g. "what
      is a reasonable function-length guideline for Python?").
-  3. Compare findings against `<recent_proposals>`. Skip issues already
+  3. Compare findings against `recent-proposals`. Skip issues already
      covered by a prior proposal.
   4. For each NEW, worthwhile finding, decide whether it merits a draft
      ticket. Be conservative — only file when there is a specific,

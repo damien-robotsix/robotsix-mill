@@ -92,7 +92,7 @@ def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
     fine for the model but renders as an unreadable wall of escaped
     JSON in Langfuse's prompt viewer when an operator audits the run.
     The new format is one ``## <id>`` heading per candidate followed
-    by a short metadata list and a ``<body>...</body>`` block so each
+    by a short metadata list and a fenced ``body`` block so each
     ticket is a readable section both inline and in the trace UI.
 
     Each rendered candidate carries the same fields the dedup yaml
@@ -107,13 +107,14 @@ def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
             body = ctx.service.workspace(t).read_description()
         except Exception:
             body = ""
-        sections.append(
+        from ..agents.prompt_blocks import section as _section
+        meta = (
             f"## {t.id}\n"
             f"- title: {t.title}\n"
             f"- state: {t.state.value}\n"
             f"- source: {t.source}\n"
-            f"\n<body>\n{body.strip()}\n</body>"
         )
+        sections.append(meta + "\n" + _section("body", body.strip()))
     return "\n\n".join(sections)
 
 

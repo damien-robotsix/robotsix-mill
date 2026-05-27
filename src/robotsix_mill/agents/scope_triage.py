@@ -16,6 +16,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from ..config import Settings
+from .prompt_blocks import section
 
 
 class ScopeTriageVerdict(BaseModel):
@@ -48,15 +49,16 @@ def run_scope_triage_agent(
         model_name=definition.model or settings.scope_triage_model,
     )
 
+    file_map_body = "\n".join(f"- {f}" for f in file_map)
+    out_of_scope_body = "\n".join(f"- {f}" for f in out_of_scope_files)
+    diff_body = "\n\n".join(
+        f"--- {path} ---\n{summary}" for path, summary in diff_summaries.items()
+    )
     user_prompt = (
-        f"<ticket_spec>\n{ticket_spec}\n</ticket_spec>\n\n"
-        f"<file_map>\n" + "\n".join(f"- {f}" for f in file_map) + "\n</file_map>\n\n"
-        f"<out_of_scope_files>\n" + "\n".join(f"- {f}" for f in out_of_scope_files) + "\n</out_of_scope_files>\n\n"
-        f"<diff_summaries>\n" +
-        "\n\n".join(
-            f"--- {path} ---\n{summary}" for path, summary in diff_summaries.items()
-        ) +
-        "\n</diff_summaries>"
+        section("ticket-spec", ticket_spec) + "\n\n"
+        + section("file-map", file_map_body) + "\n\n"
+        + section("out-of-scope-files", out_of_scope_body) + "\n\n"
+        + section("diff-summaries", diff_body)
     )
 
     try:

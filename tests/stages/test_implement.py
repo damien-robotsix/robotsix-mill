@@ -759,7 +759,7 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     out = ImplementStage().run(child, ctx)
     assert out.next_state is State.DOCUMENTING
     assert len(seen_spec) == 1
-    expected = "<epic_context>\nHigh-level goal: unify UX\n</epic_context>"
+    expected = "````epic-context\nHigh-level goal: unify UX\n````\n<!-- /epic-context -->"
     assert seen_spec[0].startswith(expected)
 
 
@@ -782,7 +782,7 @@ def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, mo
 
     ImplementStage().run(t, ctx)
     assert len(seen_spec) == 1
-    assert "<epic_context>" not in seen_spec[0]
+    assert "````epic-context" not in seen_spec[0]
 
 
 def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, monkeypatch):
@@ -812,7 +812,7 @@ def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, mo
 
     ImplementStage().run(child, ctx)
     assert len(seen_spec) == 1
-    assert "<epic_context>" not in seen_spec[0]
+    assert "````epic-context" not in seen_spec[0]
 
 
 def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_path, monkeypatch):
@@ -841,7 +841,7 @@ def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_p
 
     ImplementStage().run(child, ctx)
     assert len(seen_spec) == 1
-    assert "<epic_context>" not in seen_spec[0]
+    assert "````epic-context" not in seen_spec[0]
 
 
 # --- scope guardrail ----------------------------------------------------

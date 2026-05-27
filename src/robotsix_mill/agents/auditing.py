@@ -115,12 +115,13 @@ def run_audit_agent(
         settings, definition, tools=tools,
         model_name=definition.model or settings.audit_model,
     )
+    from .prompt_blocks import section
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
         f"{recent_proposals}"
-        f"<forge_remote_url>{forge_url}</forge_remote_url>\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
-        "Perform the audit and return your result."
+        + section("forge-remote-url", forge_url) + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)") + "\n\n"
+        + "Perform the audit and return your result."
     )
     from .retry import call_with_retry
 

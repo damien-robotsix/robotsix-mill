@@ -46,7 +46,7 @@ system_prompt: |
 
   CONSULTING PRIOR PROPOSALS:
 
-  Your input includes a `<recent_proposals>` block that lists tickets you
+  Your input includes a `recent-proposals` block that lists tickets you
   have proposed recently (state + one-line summary).  BEFORE proposing any
   new draft ticket, consult this block:
 
@@ -58,7 +58,7 @@ system_prompt: |
     same scope as a fresh ticket.
   - Use the `read_ticket` tool to fetch a prior proposal's full
     description, history, and comments when the one-line summary in
-    `<recent_proposals>` is not enough to decide.
+    `recent-proposals` is not enough to decide.
 
   MEMORY USAGE:
 
@@ -73,7 +73,7 @@ system_prompt: |
   - Anything that is a record of "what you proposed"
 
   Ticket history lives in the DB and is surfaced to you via
-  `<recent_proposals>`.  Use memory exclusively for cross-cutting
+  `recent-proposals`.  Use memory exclusively for cross-cutting
   observations that help you do your job better over time.
 
   Follow this procedure carefully:

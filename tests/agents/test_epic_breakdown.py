@@ -92,7 +92,7 @@ def test_comments_parameter_appended_to_prompt(monkeypatch):
         epic_title="Test Epic",
         epic_description="Build the thing.",
     )
-    assert "<operator_comments>" not in captured_prompt
+    assert "````operator-comments" not in captured_prompt
 
     # With comments — operator_comments block present and placed
     # after </epic_description>.
@@ -102,9 +102,9 @@ def test_comments_parameter_appended_to_prompt(monkeypatch):
         epic_description="Build the thing.",
         comments="Focus on backend only.",
     )
-    assert "<operator_comments>" in captured_prompt
+    assert "````operator-comments" in captured_prompt
     assert "Focus on backend only." in captured_prompt
-    # Must appear after the closing epic_description tag.
-    assert captured_prompt.index("</epic_description>") < captured_prompt.index(
-        "<operator_comments>"
+    # Must appear after the epic-description block.
+    assert captured_prompt.index("````epic-description") < captured_prompt.index(
+        "````operator-comments"
     )

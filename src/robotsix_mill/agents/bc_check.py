@@ -15,6 +15,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
@@ -91,8 +92,8 @@ def run_bc_check_agent(
     )
     prompt = (
         f"{recent_proposals}"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
-        "Scan the repository for backward-compatibility code and return your findings."
+        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + "Scan the repository for backward-compatibility code and return your findings."
     )
     from .retry import call_with_retry
 

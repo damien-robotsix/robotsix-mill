@@ -86,12 +86,13 @@ def run_survey_agent(
         settings, definition, tools=tools,
         model_name=definition.model or settings.survey_model,
     )
+    from .prompt_blocks import section
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
         f"{recent_proposals}"
-        f"<forge_remote_url>{forge_url}</forge_remote_url>\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
-        "Survey similar open-source projects and return your proposals."
+        + section("forge-remote-url", forge_url) + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)") + "\n\n"
+        + "Survey similar open-source projects and return your proposals."
     )
     from .retry import call_with_retry
 

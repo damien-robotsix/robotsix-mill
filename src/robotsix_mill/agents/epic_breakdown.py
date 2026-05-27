@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
@@ -63,13 +64,11 @@ def run_epic_breakdown_agent(
         model_name=definition.model or settings.audit_model,
     )
     prompt = (
-        f"<epic_title>{epic_title}</epic_title>\n\n"
-        f"<epic_description>\n{epic_description}\n</epic_description>"
+        section("epic-title", epic_title) + "\n\n"
+        + section("epic-description", epic_description)
     )
     if comments:
-        prompt += (
-            f"\n\n<operator_comments>\n{comments}\n</operator_comments>"
-        )
+        prompt += "\n\n" + section("operator-comments", comments)
     prompt += "\n\nBreak this epic into well-scoped child tickets."
     try:
         result = call_with_retry(

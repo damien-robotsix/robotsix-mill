@@ -17,6 +17,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from ..config import Settings
+from .prompt_blocks import section
 
 
 class DedupResult(BaseModel):
@@ -34,15 +35,14 @@ def _build_prompt(
     draft_body: str,
     candidates_json: str,
 ) -> str:
-    return "\n".join([
-        "<draft>",
-        f"<title>{draft_title}</title>",
-        f"<body>{draft_body}</body>",
-        "</draft>",
-        "<candidates>",
-        candidates_json,
-        "</candidates>",
+    draft_block = "\n".join([
+        section("title", draft_title),
+        section("body", draft_body),
     ])
+    return (
+        section("draft", draft_block) + "\n\n"
+        + section("candidates", candidates_json)
+    )
 
 
 def run_dedup_check(

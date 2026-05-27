@@ -78,7 +78,7 @@ def test_coordinating_prompt_no_tool_signatures():
     # The coordinator no longer runs the suite itself — the stage owns
     # the test→retry→escalate loop. The prompt must say so.
     assert "test suite" in p
-    assert "<test_failure>" in p
+    assert "test-failure" in p
     # Scope guardrails: the prompt must forbid scope creep.
     assert "do not delete" in p
     assert "do not rename" in p

@@ -18,6 +18,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from ..config import Settings, get_secrets
+from .prompt_blocks import section
 
 
 class CiFixResult(BaseModel):
@@ -101,10 +102,10 @@ def run_ci_fix_agent(
 
     user_prompt = (
         f"CI is failing on branch '{branch}' in {repo_dir}. "
-        "Here is the failing check summary:\n\n"
-        f"```\n{failing_summary}\n```\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
-        "Follow the system prompt exactly."
+        + "Here is the failing check summary:\n\n"
+        + f"```\n{failing_summary}\n```\n\n"
+        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + "Follow the system prompt exactly."
     )
 
     try:

@@ -901,7 +901,7 @@ def test_epic_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
     RetrospectStage().run(child, ctx)
     ec = captured.get("epic_context", "")
     assert ec, "epic_context should be non-empty for child of epic"
-    assert "<epic_context>" in ec
+    assert "````epic-context" in ec
     assert "unified config system" in ec
 
 

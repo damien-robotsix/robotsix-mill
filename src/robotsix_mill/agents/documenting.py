@@ -99,9 +99,10 @@ def run_doc_classifier(
         model_name=definition.model or settings.doc_classifier_model,
     )
     try:
+        from .prompt_blocks import section
         user_prompt = (
-            f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
-            f"<git_diff>\n{diff}\n</git_diff>"
+            section("ticket-spec", spec) + "\n\n"
+            + section("git-diff", diff)
         )
         limits = UsageLimits(request_limit=settings.doc_classifier_request_limit)
         result = call_with_retry(
@@ -171,11 +172,15 @@ def run_doc_agent(
         overrides["model_name"] = settings.doc_model
 
     # Inject the memory block into the agent's system prompt — the
-    # YAML's static prompt + a dynamic <memory>…</memory> block at the
+    # YAML's static prompt + a dynamic ``memory`` fenced block at the
     # end. The same pattern implement/refine/retrospect already use.
+    from .prompt_blocks import section as _section
     system_prompt = definition.system_prompt
     system_prompt += (
-        f"\n\n<memory>\n{memory_text or '(empty — start a new ledger)'}\n</memory>"
+        "\n\n" + _section(
+            "memory",
+            memory_text or "(empty — start a new ledger)",
+        )
     )
 
     agent = build_agent_from_definition(
@@ -188,9 +193,10 @@ def run_doc_agent(
         **overrides,
     )
     try:
+        from .prompt_blocks import section
         user_prompt = (
-            f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
-            f"<git_diff>\n{diff}\n</git_diff>"
+            section("ticket-spec", spec) + "\n\n"
+            + section("git-diff", diff)
         )
         limits = UsageLimits(request_limit=settings.doc_request_limit)
         run_user_prompt: str | None = user_prompt

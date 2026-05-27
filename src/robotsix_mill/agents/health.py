@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
@@ -112,9 +113,9 @@ def run_health_agent(
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
         f"{recent_proposals}"
-        f"<forge_remote_url>{forge_url}</forge_remote_url>\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
-        "Perform the health inspection and return your result."
+        + section("forge-remote-url", forge_url) + "\n\n"
+        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + "Perform the health inspection and return your result."
     )
     from .retry import call_with_retry
 

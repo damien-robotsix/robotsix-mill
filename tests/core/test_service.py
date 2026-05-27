@@ -486,7 +486,7 @@ def test_get_epic_context_returns_description(service):
     epic = service.create("Epic", "Big picture description", kind="epic")
     child = service.create("Child", "detail", kind="task", parent_id=epic.id)
     ctx = service.get_epic_context(child)
-    assert ctx == "<epic_context>\nBig picture description\n</epic_context>"
+    assert ctx == "````epic-context\nBig picture description\n````\n<!-- /epic-context -->"
 
 
 def test_get_epic_context_no_parent(service):

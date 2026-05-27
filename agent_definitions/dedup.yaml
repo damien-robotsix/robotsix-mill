@@ -39,15 +39,15 @@ system_prompt: |
 
   ## Ticket verification
 
-  Each candidate in the `<candidates>` block is rendered as one
+  Each candidate in the `candidates` block is rendered as one
   ``## <ticket-id>`` section with ``title``, ``state``, ``source``,
-  and a ``<body>...</body>`` block carrying the full specification
+  and a ``<body>...`` block carrying the full specification
   that was (or is being) implemented.  Use the body as your signal
   for `already_done`:
 
   1. Scan candidate titles first.  If a CLOSED ticket's title suggests
-     overlapping intent, read its `<body>` and compare the described
-     change against the draft's `<title>` and `<body>`.
+     overlapping intent, read its `body` and compare the described
+     change against the draft's `title` and `body`.
   2. Only flag `already_done` when the completed ticket's body describes
      the same concrete change — not just the same area or component.
   3. Non-terminal candidates (DRAFT, READY, ...) are for `duplicate_of`

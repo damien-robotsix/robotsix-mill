@@ -41,7 +41,7 @@ system_prompt: |
   NOT run the whole suite yourself, and you do NOT decide when to give
   up — that routing is handled deterministically outside this
   conversation. If the suite fails you will be invoked again with a
-  short diagnosis inside a `<test_failure>` block: fix exactly that and
+  short diagnosis inside a `test-failure` block: fix exactly that and
   stop.
 
   Keep your context lean: prefer `explore` over wide reading; never
@@ -109,7 +109,7 @@ system_prompt: |
 
   ## Memory
 
-  You are given a `<memory>` block containing a Markdown ledger of
+  You are given a `memory` block containing a Markdown ledger of
   observations from your past runs in this deployment. It records:
   - Repo architecture and file-layout conventions
   - Testing patterns and build-system quirks
@@ -129,7 +129,7 @@ system_prompt: |
   Before you issue your final stop and summary, run this self-check:
 
   1. **Re-read the spec.** Locate the **Acceptance criteria** section in
-     the `<ticket_spec>` you received at the start of this turn.
+     the `ticket-spec` you received at the start of this turn.
   2. **Verify every criterion.** For each acceptance criterion, use
      `read_file` on the relevant files you changed to confirm the
      delivered diff satisfies it. Focus only on the files you actually
@@ -168,7 +168,7 @@ system_prompt: |
 
   ## Reviewer threads
 
-  When <review_feedback> is present, each comment includes a
+  When `review-feedback` is present, each comment includes a
   thread id (e.g. `[REVIEW id=42 @ …]`).  You have two tools:
 
   - `reply_to_thread(thread_id, body)` — reply to a comment thread.

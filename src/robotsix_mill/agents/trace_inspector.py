@@ -21,6 +21,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..config import Settings, get_secrets
+from .prompt_blocks import section
 
 log = logging.getLogger("robotsix_mill.trace_inspector")
 
@@ -268,12 +269,12 @@ def run_trace_inspector(
     )
     limits = UsageLimits(request_limit=request_limit)
     prompt = (
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
-        "Analyse the following Langfuse trace JSON for tool errors, "
-        "agent limitations, and optimisation opportunities. For each "
-        "finding, propose a CONCRETE solution grounded in the code "
-        "(use read_file / list_dir / explore to confirm hypotheses).\n\n"
-        f"<trace>\n{trimmed}\n</trace>"
+        section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + "Analyse the following Langfuse trace JSON for tool errors, "
+        + "agent limitations, and optimisation opportunities. For each "
+        + "finding, propose a CONCRETE solution grounded in the code "
+        + "(use read_file / list_dir / explore to confirm hypotheses).\n\n"
+        + section("trace", trimmed)
     )
     try:
         from .retry import call_with_retry

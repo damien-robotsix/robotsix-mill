@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, model_validator
 
 from ..config import Settings
+from .prompt_blocks import section
 
 # Per-trace deep inspection formerly gated by `_DEEP_ANALYSIS_ADDENDUM`
 # was removed — trace / cost evaluation is now handled by the
@@ -102,11 +103,11 @@ def run_retrospect_agent(
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (
         f"{recent_proposals}"
-        f"<ticket>\n{ticket_summary}\n</ticket>\n\n"
-        f"<workflow>\n{history_text}\n</workflow>\n\n"
-        f"<langfuse>\n{lf}\n</langfuse>\n\n"
-        f"<comments>\n{comments_text or '(no comments)'}\n</comments>\n\n"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
+        + section("ticket", ticket_summary) + "\n\n"
+        + section("workflow", history_text) + "\n\n"
+        + section("langfuse", lf) + "\n\n"
+        + section("comments", comments_text or '(no comments)') + "\n\n"
+        + section("memory", memory or '(empty — start a new ledger)')
     )
     if epic_context:
         prompt += f"\n\n{epic_context}"

@@ -48,10 +48,10 @@ def test_expand_for_new_test_file(monkeypatch):
     def fake_build_agent(settings, definition, tools, model_name):
         class FakeAgent:
             def run_sync(self, msg):
-                assert "<ticket_spec>" in msg
-                assert "<file_map>" in msg
-                assert "<out_of_scope_files>" in msg
-                assert "<diff_summaries>" in msg
+                assert "````ticket-spec" in msg
+                assert "````file-map" in msg
+                assert "````out-of-scope-files" in msg
+                assert "````diff-summaries" in msg
                 return type("R", (), {
                     "output": ScopeTriageVerdict(
                         action="EXPAND",
@@ -175,7 +175,7 @@ def test_prompt_includes_all_sections(monkeypatch):
     )
 
     msg = captured_msg[0]
-    assert "<ticket_spec>" in msg
-    assert "<file_map>" in msg
-    assert "<out_of_scope_files>" in msg
-    assert "<diff_summaries>" in msg
+    assert "````ticket-spec" in msg
+    assert "````file-map" in msg
+    assert "````out-of-scope-files" in msg
+    assert "````diff-summaries" in msg

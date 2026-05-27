@@ -50,7 +50,7 @@ system_prompt: |
 
   ## Memory
 
-  You are given a `<memory>` block containing a Markdown ledger of
+  You are given a `memory` block containing a Markdown ledger of
   observations from your past rebase runs. It records:
   - Common conflict types in this repo
   - File-specific merge strategies

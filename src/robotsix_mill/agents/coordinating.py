@@ -236,58 +236,65 @@ def run_coordinator(
         **overrides,
     )
     try:
+        from .prompt_blocks import section
         limits = UsageLimits(request_limit=settings.coordinator_request_limit)
         user_prompt = ""
         if epic_context:
             user_prompt += f"{epic_context}\n\n"
         user_prompt += (
-            f"<ticket_spec>\n{spec}\n</ticket_spec>\n\n"
-            f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>"
+            section("ticket-spec", spec) + "\n\n"
+            + section("memory", memory or "(empty — start a new ledger)")
         )
         if feedback:
             if previous_attempt_summary:
                 # Inject prior summary before the feedback block so the
                 # model doesn't undo its prior correct work.
                 user_prompt = (
-                    "<previous_attempt>\n"
-                    "Your previous edit pass produced this summary "
-                    "(already on disk):\n"
-                    f"{previous_attempt_summary}\n"
-                    "</previous_attempt>\n\n"
+                    section(
+                        "previous-attempt",
+                        "Your previous edit pass produced this summary "
+                        "(already on disk):\n"
+                        f"{previous_attempt_summary}",
+                    ) + "\n\n"
                 ) + user_prompt
             if feedback.startswith("[REVIEW"):
                 # Review feedback — prepend to the spec so the coordinator
                 # addresses the flagged issues first.
                 user_prompt = (
-                    "<review_feedback>\n"
-                    "The code review flagged issues. Address these review "
-                    "comments before proceeding.\n"
-                    "For each comment you fully address, call "
-                    "`close_thread(comment_id)` to mark it resolved. If you "
-                    "need to explain your approach or ask a clarifying "
-                    "question, call `reply_to_thread(thread_id, body)` first.\n"
-                    f"{feedback}\n"
-                    "</review_feedback>\n\n"
+                    section(
+                        "review-feedback",
+                        "The code review flagged issues. Address these review "
+                        "comments before proceeding.\n"
+                        "For each comment you fully address, call "
+                        "`close_thread(comment_id)` to mark it resolved. If you "
+                        "need to explain your approach or ask a clarifying "
+                        "question, call `reply_to_thread(thread_id, body)` first.\n"
+                        f"{feedback}",
+                    ) + "\n\n"
                 ) + user_prompt
             elif feedback.startswith("[SCOPE"):
                 user_prompt += (
-                    "\n\n<scope_violation>\n"
-                    "Your previous edit pass is already on disk, but it "
-                    "modified files outside the ticket's stated scope. "
-                    "The ticket spec is the source of truth for what is "
-                    "in scope.\n"
-                    f"{feedback}\n"
-                    "</scope_violation>\n\n"
-                    "Revert the out-of-scope changes and stop."
+                    "\n\n"
+                    + section(
+                        "scope-violation",
+                        "Your previous edit pass is already on disk, but it "
+                        "modified files outside the ticket's stated scope. "
+                        "The ticket spec is the source of truth for what is "
+                        "in scope.\n"
+                        f"{feedback}",
+                    )
+                    + "\n\nRevert the out-of-scope changes and stop."
                 )
             else:
                 user_prompt += (
-                    "\n\n<test_failure>\n"
-                    "Your previous edit pass is already on disk, but the test "
-                    "suite then failed. Diagnosis:\n"
-                    f"{feedback}\n"
-                    "</test_failure>\n\n"
-                    "Fix exactly this failure and stop."
+                    "\n\n"
+                    + section(
+                        "test-failure",
+                        "Your previous edit pass is already on disk, but the test "
+                        "suite then failed. Diagnosis:\n"
+                        f"{feedback}",
+                    )
+                    + "\n\nFix exactly this failure and stop."
                 )
         # Build the synthetic message_history AFTER the user_prompt is
         # finalized so the prompt can be prepended as a clean
@@ -395,10 +402,11 @@ def _build_expert_prompt(
     Memory is NOT injected here — `create_expert(memory_text=…)`
     puts it in the system prompt instead.
     """
+    from .prompt_blocks import section
     parts: list[str] = []
     if epic_context:
         parts.append(epic_context)
-    parts.append(f"<ticket_spec>\n{spec}\n</ticket_spec>")
+    parts.append(section("ticket-spec", spec))
     other_line = (
         f"Other experts also working this ticket: {', '.join(other_domains)}."
         if other_domains
@@ -409,53 +417,54 @@ def _build_expert_prompt(
         if matched_files
         else "  (no in-scope files passed; fall back to module_paths in your definition)"
     )
-    parts.append(
-        "<domain_context>\n"
+    parts.append(section(
+        "domain-context",
         f"You are the `{domain}` expert. Focus on these in-scope files "
         f"matched against your domain's module_paths:\n"
         f"{files_block}\n"
-        f"{other_line}\n"
-        "</domain_context>"
-    )
+        f"{other_line}",
+    ))
     user_prompt = "\n\n".join(parts)
     if feedback:
         prefix = ""
         if previous_attempt_summary:
-            prefix = (
-                "<previous_attempt>\n"
+            prefix = section(
+                "previous-attempt",
                 "Your previous edit pass produced this summary "
                 "(already on disk):\n"
-                f"{previous_attempt_summary}\n"
-                "</previous_attempt>\n\n"
-            )
+                f"{previous_attempt_summary}",
+            ) + "\n\n"
         if feedback.startswith("[REVIEW"):
-            block = (
-                "<review_feedback>\n"
+            block = section(
+                "review-feedback",
                 "The code review flagged issues. Address these review "
                 "comments before proceeding:\n"
-                f"{feedback}\n"
-                "</review_feedback>"
+                f"{feedback}",
             )
             user_prompt = prefix + block + "\n\n" + user_prompt
         elif feedback.startswith("[SCOPE"):
             user_prompt = (
                 prefix + user_prompt
-                + "\n\n<scope_violation>\n"
-                "Your previous edit pass is already on disk, but it "
-                "modified files outside the ticket's stated scope. "
-                f"{feedback}\n"
-                "</scope_violation>\n\n"
-                "Revert the out-of-scope changes and stop."
+                + "\n\n"
+                + section(
+                    "scope-violation",
+                    "Your previous edit pass is already on disk, but it "
+                    "modified files outside the ticket's stated scope. "
+                    f"{feedback}",
+                )
+                + "\n\nRevert the out-of-scope changes and stop."
             )
         else:
             user_prompt = (
                 prefix + user_prompt
-                + "\n\n<test_failure>\n"
-                "Your previous edit pass is already on disk, but the test "
-                "suite then failed. Diagnosis:\n"
-                f"{feedback}\n"
-                "</test_failure>\n\n"
-                "Fix exactly this failure and stop."
+                + "\n\n"
+                + section(
+                    "test-failure",
+                    "Your previous edit pass is already on disk, but the test "
+                    "suite then failed. Diagnosis:\n"
+                    f"{feedback}",
+                )
+                + "\n\nFix exactly this failure and stop."
             )
     return user_prompt
 

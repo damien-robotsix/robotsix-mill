@@ -14,6 +14,7 @@ import yaml as _yaml
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 _SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "agent_check.yaml"
@@ -61,8 +62,8 @@ def run_agent_check_agent(
     )
     prompt = (
         f"{recent_proposals}"
-        f"<memory>\n{memory or '(empty — start a new ledger)'}\n</memory>\n\n"
-        "Inspect all agent definitions and return your coherence findings."
+        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + "Inspect all agent definitions and return your coherence findings."
     )
     from .retry import call_with_retry
 

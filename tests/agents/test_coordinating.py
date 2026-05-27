@@ -250,7 +250,7 @@ class TestRunCoordinator:
             settings, tmp_path, feedback="test_x failed",
         )
         prompt: str = self.captured["user_prompt"]
-        assert "<test_failure>" in prompt
+        assert "````test-failure" in prompt
         assert "test_x failed" in prompt
         assert "Fix exactly this failure and stop." in prompt
 
@@ -262,11 +262,11 @@ class TestRunCoordinator:
             settings, tmp_path, feedback="[REVIEW] fix docstring",
         )
         prompt: str = self.captured["user_prompt"]
-        assert prompt.startswith("<review_feedback>")
+        assert prompt.startswith("````review-feedback")
         assert "fix docstring" in prompt
         # The review block must appear before ticket_spec.
-        review_pos = prompt.index("<review_feedback>")
-        spec_pos = prompt.index("<ticket_spec>")
+        review_pos = prompt.index("````review-feedback")
+        spec_pos = prompt.index("````ticket-spec")
         assert review_pos < spec_pos
 
     # -- epic_context ----------------------------------------------------
@@ -280,7 +280,7 @@ class TestRunCoordinator:
         )
         prompt: str = self.captured["user_prompt"]
         epic_pos = prompt.index("## Epic goal")
-        spec_pos = prompt.index("<ticket_spec>")
+        spec_pos = prompt.index("````ticket-spec")
         assert epic_pos < spec_pos
         assert "do X" in prompt
 
@@ -293,9 +293,9 @@ class TestRunCoordinator:
             memory="gotcha: use Path, not str",
         )
         prompt: str = self.captured["user_prompt"]
-        assert "<memory>" in prompt
+        assert "````memory" in prompt
         assert "gotcha: use Path, not str" in prompt
-        assert "</memory>" in prompt
+        assert "````\n<!-- /memory -->" in prompt
 
     def test_empty_memory_defaults_to_placeholder(
         self, settings, tmp_path,
@@ -304,9 +304,9 @@ class TestRunCoordinator:
         placeholder."""
         self._run(settings, tmp_path, memory="")
         prompt: str = self.captured["user_prompt"]
-        assert "<memory>" in prompt
+        assert "````memory" in prompt
         assert "(empty — start a new ledger)" in prompt
-        assert "</memory>" in prompt
+        assert "````\n<!-- /memory -->" in prompt
 
     # -- reference_files / message_history ------------------------------
 
@@ -528,8 +528,8 @@ class TestRunCoordinator:
             feedback="test_x failed",
         )
         prompt: str = self.captured["user_prompt"]
-        prev_pos = prompt.index("<previous_attempt>")
-        test_pos = prompt.index("<test_failure>")
+        prev_pos = prompt.index("````previous-attempt")
+        test_pos = prompt.index("````test-failure")
         assert prev_pos < test_pos
         assert "prior summary text" in prompt
         assert "test_x failed" in prompt
@@ -545,7 +545,7 @@ class TestRunCoordinator:
             previous_attempt_summary="prior summary text",
         )
         prompt: str = self.captured["user_prompt"]
-        assert "<previous_attempt>" not in prompt
+        assert "````previous-attempt" not in prompt
 
     # -- reference_files edge cases -------------------------------------
 

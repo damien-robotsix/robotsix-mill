@@ -582,8 +582,8 @@ def test_dedup_candidate_bodies_included(ctx, service, monkeypatch):
     assert "body of ticket B" in seen_block
 
     # Each section uses the <body>...</body> framing.
-    assert seen_block.count("<body>") == 2
-    assert seen_block.count("</body>") == 2
+    assert seen_block.count("````body") == 2
+    assert seen_block.count("````\n<!-- /body -->") == 2
 
 
 def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
@@ -1486,7 +1486,7 @@ def test_epic_context_passed_to_refine_agent(ctx, service, monkeypatch):
     assert out.next_state in (State.HUMAN_ISSUE_APPROVAL, State.READY)
     assert len(seen_epic_context) == 1
     assert "High-level: unify UX" in seen_epic_context[0]
-    assert seen_epic_context[0].startswith("<epic_context>")
+    assert seen_epic_context[0].startswith("````epic-context")
 
 
 def test_epic_context_empty_for_non_epic_parent_in_refine(ctx, service, monkeypatch):

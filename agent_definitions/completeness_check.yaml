@@ -107,7 +107,7 @@ system_prompt: |
 
   MEMORY USAGE:
 
-  Your input always begins with a ``<memory>`` block containing your
+  Your input always begins with a ``memory`` block containing your
   persistent memory ledger from previous runs.  This ledger tracks every
   gap you've previously filed so you don't re-file the same gap across
   runs.

@@ -127,9 +127,10 @@ def _spawn_dependency_tickets(
 
 def _build_prior_context(ticket, ctx, ws) -> str | None:
     """Assemble prior review comments and the implement agent's rebuttal
-    from the last round into a ``<prior_context>`` block.
+    from the last round into a ``prior-context`` fenced block.
 
     Returns ``None`` when neither source has content (first review round)."""
+    from ..agents.prompt_blocks import section
     parts: list[str] = []
 
     prior_comments = ctx.service.list_comments(ticket.id)
@@ -142,21 +143,18 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
             if c.id not in closed_ids and c.parent_id not in closed_ids
         )
         if formatted:
-            parts.append(
-                f"<prior_review_comments>\n{formatted}\n</prior_review_comments>"
-            )
+            parts.append(section("prior-review-comments", formatted))
 
     implement_md = ws.artifacts_dir / "implement.md"
     if implement_md.exists():
-        parts.append(
-            "<implement_rebuttal>\n"
-            f"{implement_md.read_text(encoding='utf-8')}\n"
-            "</implement_rebuttal>"
-        )
+        parts.append(section(
+            "implement-rebuttal",
+            implement_md.read_text(encoding="utf-8"),
+        ))
 
     if not parts:
         return None
-    return "<prior_context>\n" + "\n\n".join(parts) + "\n</prior_context>"
+    return section("prior-context", "\n\n".join(parts))
 
 
 class ReviewStage(Stage):
