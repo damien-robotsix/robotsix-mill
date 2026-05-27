@@ -997,7 +997,8 @@ def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypa
 
 def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
     """EXPAND verdict: file_map is updated in-memory, the loop continues,
-    and a comment is posted."""
+    and a comment is posted.  When at least one expand-file has *not*
+    been modified yet, the agent is re-run (no retroactive short-circuit)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
@@ -1029,18 +1030,78 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
         return ScopeTriageVerdict(
             action="EXPAND",
             justification="Minor dependency edit is a legitimate consequence",
+            # CHANGELOG.md is *not* in the diff, so there is genuinely
+            # new work to do → loop MUST continue.
+            expand_files=["README.md", "CHANGELOG.md"],
+        )
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    out = ImplementStage().run(t, ctx)
+
+    # With at least one expand-file not yet modified, the loop must continue
+    # (agent called at least twice).
+    assert call_count["n"] >= 2, "EXPAND with unmodified file should continue the loop"
+    assert out.next_state is not State.BLOCKED
+    # A scope-triage comment should be posted
+    comments = ctx.service.list_comments(t.id)
+    assert any("[scope-triage] EXPAND" in c.body for c in comments)
+
+
+def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, monkeypatch):
+    """When scope-triage EXPANDs files that are *all* already in the
+    current diff, the retroactive short-circuit fires: the agent is NOT
+    re-run, the loop falls through to the test gate, and (with tests
+    passing) the ticket finalizes without wasting an iteration."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_REVIEW_ENABLED="false",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+    )
+
+    call_count = {"n": 0}
+
+    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
+             message_history=None, memory="", epic_workspace_path=None,
+             previous_attempt_summary=None, **_kwargs):
+        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path, previous_attempt_summary
+        call_count["n"] += 1
+        (Path(repo_dir) / "wip.txt").write_text("in scope")
+        (Path(repo_dir) / "README.md").write_text("out of scope edit")
+        return ("agent summary text", [], "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+        return ScopeTriageVerdict(
+            action="EXPAND",
+            justification="README.md is a natural side-effect edit",
             expand_files=["README.md"],
         )
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
     out = ImplementStage().run(t, ctx)
 
-    # With EXPAND the loop should continue (agent called at least twice)
-    assert call_count["n"] >= 2, "EXPAND should continue the loop"
-    assert out.next_state is not State.BLOCKED
-    # A scope-triage comment should be posted
+    # Agent must be called exactly once (no wasted re-run).
+    assert call_count["n"] == 1, (
+        "retroactive short-circuit should skip agent re-run"
+    )
+    assert out.next_state is State.DOCUMENTING, (
+        f"expected DOCUMENTING, got {out.next_state}"
+    )
+    # A [scope-triage] EXPAND comment is still posted.
     comments = ctx.service.list_comments(t.id)
     assert any("[scope-triage] EXPAND" in c.body for c in comments)
+    # Outcome message is the agent's summary, not a scope-violation message.
+    assert "agent summary text" in out.note
 
 
 def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):

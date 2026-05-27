@@ -269,7 +269,19 @@ class ImplementStage(Stage):
                                 author="scope-triage",
                             )
                             feedback = None
-                            continue
+                            # Retroactive short-circuit: when every
+                            # expand-file was already modified in this
+                            # pass, fall through to the test gate
+                            # instead of re-running the agent.
+                            if set(verdict.expand_files).issubset(set(changed)):
+                                log.info(
+                                    "%s: scope-triage EXPAND retroactive — "
+                                    "all expanded files already modified; "
+                                    "skipping agent re-run",
+                                    ticket.id,
+                                )
+                            else:
+                                continue
 
                         if verdict is not None and verdict.action == "REJECT":
                             # Dedup guard: if ALL current out-of-scope files
@@ -320,33 +332,35 @@ class ImplementStage(Stage):
                             return Outcome(State.READY,
                                 f"scope-triage REJECT: {verdict.justification[:120]}")
 
-                        # ESCALATE (or agent error fall-through).
-                        reason = (
-                            f"scope-triage ESCALATE: {verdict.justification}"
-                            if verdict is not None
-                            else "scope-triage agent error — escalated for human review"
-                        )
-                        log.warning("%s: %s", ticket.id, reason)
-                        ctx.service.add_comment(
-                            ticket.id,
-                            f"[scope-triage] {reason}\n\nOut-of-scope files:\n" +
-                            "\n".join(f"- `{f}`" for f in out_of_scope),
-                            author="scope-triage",
-                        )
-                        ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False, reference_files=ref_files)
-                        return Outcome(State.BLOCKED, reason)
+                        if verdict is None or verdict.action not in ("EXPAND", "REJECT"):
+                            # ESCALATE (or agent error fall-through).
+                            reason = (
+                                f"scope-triage ESCALATE: {verdict.justification}"
+                                if verdict is not None
+                                else "scope-triage agent error — escalated for human review"
+                            )
+                            log.warning("%s: %s", ticket.id, reason)
+                            ctx.service.add_comment(
+                                ticket.id,
+                                f"[scope-triage] {reason}\n\nOut-of-scope files:\n" +
+                                "\n".join(f"- `{f}`" for f in out_of_scope),
+                                author="scope-triage",
+                            )
+                            ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False, reference_files=ref_files)
+                            return Outcome(State.BLOCKED, reason)
 
-                    # scope_triage_enabled is False — existing behaviour.
-                    ImplementStage._finalize(
-                        ctx, ticket, repo_dir, branch, summary, ok=False,
-                        reference_files=ref_files,
-                    )
-                    return Outcome(
-                        State.BLOCKED,
-                        f"scope violation: {len(out_of_scope)} file(s) "
-                        f"outside ticket scope — "
-                        f"{', '.join(out_of_scope)}",
-                    )
+                    else:
+                        # scope_triage_enabled is False — existing behaviour.
+                        ImplementStage._finalize(
+                            ctx, ticket, repo_dir, branch, summary, ok=False,
+                            reference_files=ref_files,
+                        )
+                        return Outcome(
+                            State.BLOCKED,
+                            f"scope violation: {len(out_of_scope)} file(s) "
+                            f"outside ticket scope — "
+                            f"{', '.join(out_of_scope)}",
+                        )
                 log.info(
                     "%s: scope check passed — %d file(s) changed, "
                     "all in file_map (%d allowed)",
