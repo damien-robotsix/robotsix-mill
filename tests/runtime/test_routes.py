@@ -165,6 +165,73 @@ def test_close_thread_nonexistent_returns_404(client):
     assert r.status_code == 404
 
 
+def test_close_thread_ask_user_resumes_ticket(client, service):
+    """AC1 via HTTP: Closing the last [ASK_USER] thread on a paused
+    ticket auto-resumes it to paused_from."""
+    t = service.create("HTTP resume test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nQ?", author="refine")
+    r = client.post(f"/comments/{ask.id}/close")
+    assert r.status_code == 200
+
+    # Ticket resumed.
+    assert service.get(t.id).state is State.READY
+
+
+def test_close_thread_non_ask_user_on_paused_no_resume_via_http(client, service):
+    """AC3 via HTTP: Closing a non-[ASK_USER] thread on a paused ticket
+    does NOT resume."""
+    t = service.create("HTTP non-ask")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nQ?", author="refine")
+    normal = service.add_comment(t.id, "Normal thread", author="alice")
+
+    r = client.post(f"/comments/{normal.id}/close")
+    assert r.status_code == 200
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+    # Now close the ask thread → resumes.
+    r = client.post(f"/comments/{ask.id}/close")
+    assert r.status_code == 200
+    assert service.get(t.id).state is State.READY
+
+
+def test_close_thread_stays_paused_when_other_ask_user_open_via_http(client, service):
+    """AC1 via HTTP: Two [ASK_USER] threads, close one — ticket stays
+    paused."""
+    t = service.create("HTTP multi-ask")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    c1 = service.add_comment(t.id, "[ASK_USER]\n\nQ1?", author="refine")
+    c2 = service.add_comment(t.id, "[ASK_USER]\n\nQ2?", author="implement")
+
+    r = client.post(f"/comments/{c1.id}/close")
+    assert r.status_code == 200
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+    r = client.post(f"/comments/{c2.id}/close")
+    assert r.status_code == 200
+    assert service.get(t.id).state is State.READY
+
+
+def test_close_thread_on_non_paused_ticket_no_side_effect_via_http(client, service):
+    """AC6 via HTTP: close_thread on a non-paused ticket returns 200
+    without transitioning the ticket."""
+    t = service.create("HTTP normal close")
+    service.transition(t.id, State.READY)
+
+    c = service.add_comment(t.id, "[ASK_USER]\n\nQ?", author="refine")
+    r = client.post(f"/comments/{c.id}/close")
+    assert r.status_code == 200
+    assert service.get(t.id).state is State.READY
+
+
 def test_add_comment_with_parent_id(client, service):
     """POST /tickets/{id}/comments with parent_id creates a reply."""
     t = service.create("Reply test")

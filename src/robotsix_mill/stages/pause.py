@@ -83,3 +83,54 @@ def build_resume_message_history(
         ]),
     )
     return messages
+
+
+def _collect_ask_user_replies(ctx, ticket) -> str:
+    """Collect operator replies from every closed ``[ASK_USER]`` thread
+    on *ticket*.
+
+    For each top-level comment starting with ``[ASK_USER]`` that has
+    ``closed_at IS NOT NULL``, collects all child replies (ordered by
+    ``created_at``).  Returns a single formatted string suitable for
+    feeding into ``build_resume_message_history``.
+
+    When ``list_comments`` raises, returns ``"(no operator reply found)"``
+    and logs a warning — this preserves the existing defensive fallback.
+    """
+    try:
+        comments = ctx.service.list_comments(ticket.id)
+    except Exception:
+        log.warning(
+            "%s: list_comments failed during resume, "
+            "proceeding without operator reply",
+            ticket.id,
+        )
+        return "(no operator reply found)"
+
+    # Partition comments by parent_id for O(1) child lookup.
+    children_by_parent: dict[int, list] = {}
+    ask_threads = []
+    for c in comments:
+        if c.parent_id is None and (c.body or "").startswith("[ASK_USER]"):
+            ask_threads.append(c)
+        else:
+            pid = c.parent_id
+            if pid is not None:
+                children_by_parent.setdefault(pid, []).append(c)
+
+    # Only care about answered threads (closed ASK_USER).
+    answered = [t for t in ask_threads if t.closed_at is not None]
+    if not answered:
+        return "(no operator reply found)"
+
+    parts: list[str] = []
+    for t in answered:
+        question_snippet = (t.body or "[ASK_USER]")[9:].strip()[:80]
+        replies = children_by_parent.get(t.id, [])
+        if replies:
+            reply_text = "; ".join(r.body for r in replies if r.body)
+        else:
+            reply_text = "(closed without reply)"
+        parts.append(f'[Q: "{question_snippet}"]: {reply_text}')
+
+    return "\n".join(parts)

@@ -811,3 +811,286 @@ def test_no_inheritance_when_no_priority_ancestor(service):
     epic = service.create("an epic", kind="epic")  # not priority
     child = service.create("child", parent_id=epic.id)
     assert child.priority is False
+
+
+# --- ask_user close-thread → auto-resume --------------------------------
+
+def test_close_thread_resumes_when_all_ask_user_closed(service):
+    """AC1: Closing the last open [ASK_USER] thread on a paused ticket
+    auto-resumes it to paused_from."""
+    t = service.create("Resume test")
+    service.transition(t.id, State.READY)
+
+    # Pause the ticket from READY.
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.AWAITING_USER_REPLY
+    assert reloaded.paused_from == State.READY.value
+
+    # Create an [ASK_USER] thread.
+    c = service.add_comment(t.id, "[ASK_USER]\n\nWhat should I do?", author="refine")
+    assert c.parent_id is None
+
+    # Close it → should auto-resume.
+    result = service.close_thread(c.id)
+    assert result.closed_at is not None
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.READY
+    assert reloaded.paused_from is None
+    assert reloaded.blocked_from is None
+
+    # History has the resume event.
+    events = service.history(t.id)
+    assert any("all ask_user threads closed" in (ev.note or "") for ev in events)
+
+
+def test_close_thread_stays_paused_when_ask_user_still_open(service):
+    """AC1: Closing one [ASK_USER] thread when another is still open
+    keeps the ticket in AWAITING_USER_REPLY."""
+    t = service.create("Multi-ask test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+    # Two [ASK_USER] threads.
+    c1 = service.add_comment(t.id, "[ASK_USER]\n\nFirst question?", author="refine")
+    c2 = service.add_comment(t.id, "[ASK_USER]\n\nSecond question?", author="implement")
+
+    # Close only one.
+    service.close_thread(c1.id)
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.AWAITING_USER_REPLY  # still paused
+
+    # Close the second → now resumes.
+    service.close_thread(c2.id)
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.READY
+
+
+def test_close_thread_non_ask_user_on_paused_no_resume(service):
+    """AC3: Closing a non-[ASK_USER] thread on a paused ticket does NOT
+    trigger resume."""
+    t = service.create("Non-ask close test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nQuestion?", author="refine")
+    normal = service.add_comment(t.id, "Just a normal thread", author="alice")
+
+    # Close the normal thread — should NOT resume.
+    service.close_thread(normal.id)
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+    # Close the ask thread → now resumes.
+    service.close_thread(ask.id)
+    assert service.get(t.id).state is State.READY
+
+
+def test_close_thread_on_non_paused_ticket_unchanged(service):
+    """AC6: close_thread on a non-paused ticket does not trigger any
+    resume — behaves exactly as before."""
+    t = service.create("Normal close")
+    service.transition(t.id, State.READY)
+
+    c = service.add_comment(t.id, "[ASK_USER]\n\nA question?", author="refine")
+    service.close_thread(c.id)
+
+    # Ticket state unchanged.
+    assert service.get(t.id).state is State.READY
+
+
+def test_close_thread_with_no_reply(service):
+    """AC5: Close an [ASK_USER] thread with no child replies still
+    resumes. The _collect_ask_user_replies helper handles the
+    '(closed without reply)' case."""
+    t = service.create("No reply test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nSilent question?", author="refine")
+    # Close without any reply comments.
+    service.close_thread(ask.id)
+    assert service.get(t.id).state is State.READY
+
+
+def test_reopen_after_resume_no_effect(service):
+    """AC4: Reopening an [ASK_USER] thread after the ticket has already
+    resumed does not re-pause the ticket."""
+    t = service.create("Reopen after resume")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nQuestion?", author="refine")
+    service.close_thread(ask.id)
+    assert service.get(t.id).state is State.READY  # resumed
+
+    # Reopen the thread — ticket stays READY.
+    service.reopen_thread(ask.id)
+    assert service.get(t.id).state is State.READY
+
+
+def test_pause_and_resume_full_cycle(service):
+    """Full pause→close→resume cycle across multiple questions."""
+    t = service.create("Full cycle")
+    service.transition(t.id, State.READY)
+
+    # First pause
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    assert service.get(t.id).paused_from == State.READY.value
+
+    ask1 = service.add_comment(t.id, "[ASK_USER]\n\nQ1?", author="refine")
+    service.close_thread(ask1.id)
+    assert service.get(t.id).state is State.READY  # resumed
+
+    # Second pause (agent asks again after resume)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    assert service.get(t.id).paused_from == State.READY.value
+
+    ask2 = service.add_comment(t.id, "[ASK_USER]\n\nQ2?", author="implement")
+    service.close_thread(ask2.id)
+    assert service.get(t.id).state is State.READY  # resumed again
+
+
+def test_awaiting_user_reply_without_paused_from_no_crash(service):
+    """Defensive: AWAITING_USER_REPLY with no paused_from (legacy)
+    should not crash close_thread — it just logs a warning and
+    returns without transitioning."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Ticket
+
+    t = service.create("Legacy paused")
+    # Manually corrupt to simulate legacy state.
+    with db.session(service.settings, service.board_id) as s:
+        ticket = s.get(Ticket, t.id)
+        ticket.state = State.AWAITING_USER_REPLY
+        ticket.paused_from = None
+        s.add(ticket)
+        s.commit()
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nQ?", author="refine")
+    # Should NOT raise — just log and return.
+    result = service.close_thread(ask.id)
+    assert result.closed_at is not None
+    # Ticket stays AWAITING_USER_REPLY (no paused_from to resume to).
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+
+def test_close_thread_no_ask_user_threads_on_paused_no_resume(service):
+    """If a ticket is AWAITING_USER_REPLY but has no [ASK_USER] threads
+    at all, close_thread should not crash and should not transition."""
+    t = service.create("Paused no ask")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    # Create a normal thread (not [ASK_USER]).
+    normal = service.add_comment(t.id, "Normal thread", author="alice")
+    service.close_thread(normal.id)
+
+    # Still paused — no [ASK_USER] threads were found.
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+
+# --- _collect_ask_user_replies -----------------------------------------
+
+def test_collect_ask_user_replies_single_thread(service, settings):
+    """AC2: Single [ASK_USER] thread with one reply."""
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
+    from robotsix_mill.stages.base import StageContext
+
+    t = service.create("Single ask")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nWhat is the answer?", author="refine")
+    service.add_comment(t.id, "The answer is 42.", author="operator", parent_id=ask.id)
+    service.close_thread(ask.id)
+
+    ctx = StageContext(settings=settings, service=service)
+    result = _collect_ask_user_replies(ctx, t)
+    assert "What is the answer?" in result
+    assert "The answer is 42." in result
+
+
+def test_collect_ask_user_replies_multiple_threads(service, settings):
+    """AC2: Multiple [ASK_USER] threads, each with replies."""
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
+    from robotsix_mill.stages.base import StageContext
+
+    t = service.create("Multi ask")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    ask1 = service.add_comment(t.id, "[ASK_USER]\n\nQ1?", author="refine")
+    ask2 = service.add_comment(t.id, "[ASK_USER]\n\nQ2?", author="implement")
+    service.add_comment(t.id, "R1", author="op", parent_id=ask1.id)
+    service.add_comment(t.id, "R2a", author="op", parent_id=ask2.id)
+    service.add_comment(t.id, "R2b", author="op", parent_id=ask2.id)
+    service.close_thread(ask1.id)
+    service.close_thread(ask2.id)
+
+    ctx = StageContext(settings=settings, service=service)
+    result = _collect_ask_user_replies(ctx, t)
+    assert "Q1?" in result
+    assert "R1" in result
+    assert "Q2?" in result
+    assert "R2a" in result
+    assert "R2b" in result
+
+
+def test_collect_ask_user_replies_closed_without_reply(service, settings):
+    """AC5: [ASK_USER] thread closed with no child comments."""
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
+    from robotsix_mill.stages.base import StageContext
+
+    t = service.create("No reply collect")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    ask = service.add_comment(t.id, "[ASK_USER]\n\nSilent?", author="refine")
+    service.close_thread(ask.id)
+
+    ctx = StageContext(settings=settings, service=service)
+    result = _collect_ask_user_replies(ctx, t)
+    assert "Silent?" in result
+    assert "(closed without reply)" in result
+
+
+def test_collect_ask_user_replies_skips_open_ask_threads(service, settings):
+    """Only closed [ASK_USER] threads contribute replies; open ones are
+    skipped."""
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
+    from robotsix_mill.stages.base import StageContext
+
+    t = service.create("Mixed open closed")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    ask1 = service.add_comment(t.id, "[ASK_USER]\n\nClosed Q?", author="refine")
+    ask2 = service.add_comment(t.id, "[ASK_USER]\n\nOpen Q?", author="implement")
+    service.add_comment(t.id, "Reply", author="op", parent_id=ask1.id)
+    service.close_thread(ask1.id)
+    # ask2 stays open
+
+    ctx = StageContext(settings=settings, service=service)
+    result = _collect_ask_user_replies(ctx, t)
+    # Only closed Q appears.
+    assert "Closed Q?" in result
+    assert "Reply" in result
+    assert "Open Q?" not in result
+
+
+def test_collect_ask_user_replies_no_answered_threads(service, settings):
+    """When no [ASK_USER] threads are closed, returns fallback."""
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
+    from robotsix_mill.stages.base import StageContext
+
+    t = service.create("No answered")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    service.add_comment(t.id, "[ASK_USER]\n\nStill open?", author="refine")
+    # Not closed.
+
+    ctx = StageContext(settings=settings, service=service)
+    result = _collect_ask_user_replies(ctx, t)
+    assert result == "(no operator reply found)"
