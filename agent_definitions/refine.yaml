@@ -16,11 +16,16 @@ model: "${MILL_REFINE_MODEL}"
 # Read-only tools for codebase exploration (conditional on repo_dir).
 # The refine stage provides a local clone; tools let the agent ground
 # the spec in real file paths, patterns, and constraints.
+#
+# NOTE: ``run_command`` is intentionally absent. Refine is read-only
+# spec generation — every codebase search must go through ``explore``
+# (cheap, isolated context) rather than inline ``grep``/``find`` whose
+# output would otherwise inflate the coordinator's prompt across every
+# subsequent iteration.
 tools:
   - explore
   - read_file
   - list_dir
-  - run_command
 
 # Cheap web_research sub-agent for genuinely external lookups only
 # (library docs, API references, best practices). The agent is told
@@ -48,15 +53,23 @@ system_prompt: |
   - Ground the spec in the ACTUAL codebase — real file paths, existing
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.
-  - When a traceback is truncated or you need to inspect runtime
-    behaviour (e.g. `pytest tests/test_foo.py -x --tb=long`,
-    `python -c "import module; …"`, linters), re-run with
-    `run_command`. The sandbox is read-only; you cannot mutate the repo.
+  - **All codebase searches MUST go through `explore`.** Never reach
+    for grep/find/rg/ls-style scans — you don't have `run_command`, by
+    design. Each raw search dump would land in your context for the
+    rest of the run and bloat every subsequent iteration. `explore`
+    returns a small summary instead, in its own isolated context.
+    Ask one question per `explore` call (e.g. "where is
+    `close_thread` defined and called?" or "what symbols match
+    `AWAITING_USER_REPLY` and which files use them?").
+  - Prefer `explore` over `read_file` walks. Use `read_file` only
+    after `explore` has pointed you at a specific symbol or location
+    worth reading in full — typically ≤ 5 files per refine run.
+    Avoid the pattern of reading a whole directory of files just to
+    "build context"; that's `explore`'s job.
   - Never guess line numbers or byte offsets. When you need a specific
     location in a file, ask `explore` to find it by symbol name first
     (e.g. "what line is function X defined at in path/to/file.py?").
-    Only then use `read_file` with the confirmed offset. Guessing
-    wastes calls and adds latency with zero upside.
+    Only then use `read_file` with the confirmed offset.
   - When the ticket has ``artifacts/evidence.txt``, incorporate its
     contents (e.g. the exact failing command, stdout/stderr, traceback)
     into the refined spec so the implement agent has the raw evidence
