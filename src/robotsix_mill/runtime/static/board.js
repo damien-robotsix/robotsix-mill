@@ -171,7 +171,18 @@ async function refresh(){
  });
  document.getElementById("meta").textContent=
    ts.length+" tickets · "+new Date().toLocaleTimeString();
- document.getElementById("board").innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed)).map(s=>`<div class="col">
+ const board=document.getElementById("board");
+ // Preserve scroll: every refresh rewrites #board.innerHTML, which
+ // resets the .cards scrollTop on every column and the board's own
+ // horizontal scrollLeft. Snapshot both before the rewrite (keyed by
+ // state name via data-state) and restore after the new DOM lands.
+ const prevScroll={};
+ board.querySelectorAll(".col").forEach(col=>{
+  const cards=col.querySelector(".cards");
+  if(cards) prevScroll[col.dataset.state]=cards.scrollTop;
+ });
+ const prevBoardLeft=board.scrollLeft;
+ board.innerHTML=ST.filter(s=>by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed)).map(s=>`<div class="col" data-state="${s}">
   <h2>${s}<span class="n">${by[s].length}</span></h2><div class="cards">`+
   by[s].map(t=>`<div class="card s-${t.state}" onclick="open_('${t.id}')">
    <div class="t">${esc(t.title)}</div><div class="id">${t.id}</div>
@@ -184,6 +195,14 @@ async function refresh(){
    `${activeMap[t.id] ? `<span class="live-badge"><span class="live-spinner"></span> ${s==="rebasing" ? "rebasing…" : (ACTIVE_LABEL[activeMap[t.id].stage] || activeMap[t.id].stage + "…")}</span>` : ""}`+
    `</div>`)
   .join("")+`</div></div>`).join("");
+ board.querySelectorAll(".col").forEach(col=>{
+  const y=prevScroll[col.dataset.state];
+  if(y!==undefined){
+   const cards=col.querySelector(".cards");
+   if(cards) cards.scrollTop=y;
+  }
+ });
+ board.scrollLeft=prevBoardLeft;
 }
 async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
