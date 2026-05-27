@@ -82,6 +82,15 @@ def init_db(settings: Settings, board_id: str = "") -> None:
             )
     except Exception:
         pass
+    # paused_from column: records the originating state when a ticket is
+    # paused mid-stage to await a user reply (AWAITING_USER_REPLY).
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE ticket ADD COLUMN paused_from TEXT"
+            )
+    except Exception:
+        pass
     _initialized.add(board_id)
 
 

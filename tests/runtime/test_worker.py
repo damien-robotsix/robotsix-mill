@@ -776,3 +776,76 @@ async def test_periodic_pass_root_span_survives_runner_crash(ctx, monkeypatch):
         "root span must exist even when runner_fn crashes before the old "
         "start_ticket_root_span would have been reached"
     )
+
+
+# --- AWAITING_USER_REPLY guard tests ----------------------------------
+
+
+async def test_reconcile_sweep_skips_awaiting_user_reply(ctx, service, monkeypatch):
+    """Tickets in AWAITING_USER_REPLY must NOT be enqueued by the
+    reconcile sweep — they are paused waiting for a human reply."""
+    t = service.create("ask-operator", source=SourceKind.AGENT)
+    # Transition directly via setter to the new state.
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket
+    with _db.session(ctx.settings, service.board_id) as s:
+        row = s.get(Ticket, t.id)
+        row.state = State.AWAITING_USER_REPLY
+        row.paused_from = State.READY.value
+        s.add(row)
+        s.commit()
+
+    w = Worker(ctx)
+
+    # Let the loop body run exactly once, then break out.
+    calls = [0]
+
+    async def fake_sleep(_):
+        calls[0] += 1
+        if calls[0] >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.asyncio.sleep", fake_sleep,
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await w._poll_loop()
+
+    assert t.id not in w._pending, (
+        "AWAITING_USER_REPLY ticket must NOT be enqueued by the reconcile sweep"
+    )
+
+
+async def test_process_ticket_skips_awaiting_user_reply(ctx, service, monkeypatch):
+    """_process_ticket_inner must return immediately (no stage dispatch,
+    no trace span) when the ticket is in AWAITING_USER_REPLY."""
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket
+
+    invocations = []
+
+    class ShouldNotRun(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, t, _c):
+            invocations.append(t.id)
+            return Outcome(State.DELIVERABLE)
+
+    monkeypatch.setitem(registry.STAGES, "implement", ShouldNotRun())
+
+    t = service.create("paused-ticket")
+    # Move to READY, then to AWAITING_USER_REPLY via direct setter.
+    with _db.session(ctx.settings, service.board_id) as s:
+        row = s.get(Ticket, t.id)
+        row.state = State.AWAITING_USER_REPLY
+        row.paused_from = State.READY.value
+        s.add(row)
+        s.commit()
+
+    await process_ticket(t.id, ctx)
+    assert invocations == [], (
+        "no stage must be invoked for AWAITING_USER_REPLY ticket"
+    )
+    # Ticket should still be in AWAITING_USER_REPLY (unchanged).
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY

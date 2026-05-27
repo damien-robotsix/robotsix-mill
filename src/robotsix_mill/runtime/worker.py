@@ -49,6 +49,15 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
             return
         if ticket.state in _TERMINAL:
             return
+        # Paused mid-stage awaiting operator reply — do NOT dispatch to
+        # any stage runner. The resume path (child 4) will re-enqueue
+        # with the reply context once the human replies.
+        if ticket.state == State.AWAITING_USER_REPLY:
+            log.debug(
+                "pausing %s — awaiting user reply (paused_from=%s)",
+                ticket_id, getattr(ticket, "paused_from", None),
+            )
+            return
         # Retrying ticket still in backoff — don't open a trace or
         # run any stage; the poll loop re-enqueues later.
         if ticket.next_retry_at is not None and ticket.next_retry_at.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
@@ -963,6 +972,12 @@ class Worker:
                         else TicketService(self.ctx.settings, board_id=board_id)
                     )
                     for t in svc.list():
+                        if t.state == State.AWAITING_USER_REPLY:
+                            log.debug(
+                                "%s: skipping reconcile — awaiting user reply",
+                                t.id,
+                            )
+                            continue
                         if t.state not in STAGE_FOR_STATE:
                             continue
                         # Dep-gated tickets are skipped at the source —

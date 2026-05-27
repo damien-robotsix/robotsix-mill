@@ -60,6 +60,10 @@ class Ticket(SQLModel, table=True):
     # enables the BLOCKED → <originating state> resume path so only the
     # failed stage is re-run.
     blocked_from: str | None = Field(default=None)
+    # when paused mid-stage (awaiting user reply), which state the ticket
+    # was in before the pause; enables the AWAITING_USER_REPLY →
+    # <paused_from> resume path so the stage can resume from the question.
+    paused_from: str | None = Field(default=None)
     # Langfuse session id that produced this ticket (set at creation by
     # agent emission sites; None for human/API-created tickets).
     origin_session: str | None = Field(default=None)
