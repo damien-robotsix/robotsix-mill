@@ -110,6 +110,25 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             from .config import Settings
             settings = Settings()
             result = func(settings=settings, repo_config=None, max_traces=settings.langfuse_cleanup_max_traces)
+        elif cmd == "cost-reconciliation":
+            from .runtime.tracing import make_session_id
+            session_id = make_session_id(cmd)
+            repo_id = getattr(args, "repo_id", None)
+            if repo_id:
+                from .config import get_repos_config
+                repos = get_repos_config()
+                if repo_id not in repos.repos:
+                    sorted_keys = sorted(repos.repos.keys())
+                    print(
+                        f"cost-reconciliation: unknown repo '{repo_id}'. "
+                        f"Known repos: {sorted_keys}",
+                        file=sys.stderr,
+                    )
+                    return 2
+                rc = repos.repos[repo_id]
+                result = func(session_id=session_id, repo_config=rc)
+            else:
+                result = func(session_id=session_id)
         else:
             from .runtime.tracing import make_session_id
 
@@ -350,6 +369,10 @@ def main(argv: list[str] | None = None) -> int:
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
+    )
+    p_cost_reconciliation.add_argument(
+        "--repo-id",
+        help="scope to a specific repo (default: all)",
     )
 
     # --- inquire command ---

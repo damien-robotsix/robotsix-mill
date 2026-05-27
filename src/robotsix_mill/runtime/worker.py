@@ -1621,9 +1621,10 @@ class Worker:
         ):
             from ..cost_reconciliation_runner import run_cost_reconciliation_pass
             self._cost_reconciliation_task = asyncio.create_task(
-                self._run_periodic_pass(
+                self._run_periodic_pass_per_repo(
                     "cost-reconciliation", run_cost_reconciliation_pass,
                     max(60, self.ctx.settings.cost_reconciliation_interval_seconds),
+                    per_repo_flag="cost_reconciliation_periodic",
                 )
             )
             log.info(

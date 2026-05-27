@@ -146,6 +146,7 @@ def _fetch_openrouter_daily(
 
 def _fetch_langfuse_daily(
     settings: Settings, from_ts: str, to_ts: str,
+    repo_config: RepoConfig | None = None,
 ) -> tuple[float, str]:
     """Fetch yesterday's total cost from Langfuse by paginating all
     traces in the UTC day window.
@@ -174,6 +175,7 @@ def _fetch_langfuse_daily(
                     "page": page,
                     "orderBy": "timestamp.desc",
                 },
+                repo_config=repo_config,
             )
             if body is None:
                 log.warning(
@@ -247,7 +249,7 @@ def _fetch_langfuse_daily(
 
 def run_cost_reconciliation_pass(
     session_id: str = "",
-    repo_config: "RepoConfig | None" = None,
+    repo_config: RepoConfig | None = None,
 ) -> CostReconciliationPassResult:
     """Execute one cost-reconciliation pass.
 
@@ -263,10 +265,10 @@ def run_cost_reconciliation_pass(
         ``CostReconciliationPassResult`` with created draft info.
     """
     settings = Settings()
-    service = TicketService(
-        settings,
-        board_id=(repo_config.board_id if repo_config else ""),
-    )
+    if repo_config and repo_config.board_id:
+        service = TicketService(settings, board_id=repo_config.board_id)
+    else:
+        service = TicketService(settings)
 
     from_ts, to_ts = _yesterday_utc_range()
     date_str = _yesterday_date_str()
@@ -284,7 +286,7 @@ def run_cost_reconciliation_pass(
     or_total, or_breakdown = or_result
 
     # --- Langfuse ------------------------------------------------------
-    lf_total, lf_breakdown = _fetch_langfuse_daily(settings, from_ts, to_ts)
+    lf_total, lf_breakdown = _fetch_langfuse_daily(settings, from_ts, to_ts, repo_config=repo_config)
 
     # --- Compare -------------------------------------------------------
     delta = abs(or_total - lf_total)
