@@ -24,6 +24,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runHealth()" style="--agent-color:#0d9488">Health Check</button>
     <button onclick="runTestGap()" style="--agent-color:#7c3aed">Test Gaps</button>
     <button onclick="runTraceHealth()" style="--agent-color:#0ea5e9">Trace Health</button>
+    <button onclick="runLangfuseCleanup()" style="--agent-color:#14b8a6">Langfuse Cleanup</button>
     <button onclick="runAgentCheck()" style="--agent-color:#db2777">Agent Check</button>
     <button onclick="runSurvey()" style="--agent-color:#f59e0b">Survey</button>
     <button onclick="runBcCheck()" style="--agent-color:#84cc16">BC Check</button>

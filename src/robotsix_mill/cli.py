@@ -68,6 +68,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Trace-health check",
         "format": "trace_health",
     },
+    "langfuse-cleanup": {
+        "module": "langfuse_cleanup_runner",
+        "function": "run_langfuse_cleanup_pass",
+        "label": "Langfuse cleanup pass",
+        "format": "langfuse_cleanup",
+    },
     "bc-check": {
         "module": "bc_check_runner",
         "function": "run_bc_check_pass",
@@ -100,6 +106,10 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
     try:
         if cmd == "trace-health":
             result = func()
+        elif cmd == "langfuse-cleanup":
+            from .config import Settings
+            settings = Settings()
+            result = func(settings=settings, repo_config=None, max_traces=settings.langfuse_cleanup_max_traces)
         else:
             from .runtime.tracing import make_session_id
 
@@ -119,6 +129,17 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                         "total_traces": result.total_traces,
                         "window_start": result.window_start,
                         "window_end": result.window_end,
+                    },
+                    indent=2,
+                )
+            )
+        elif entry["format"] == "langfuse_cleanup":
+            print(
+                json.dumps(
+                    {
+                        "project": result.project,
+                        "traces_before": result.traces_before,
+                        "traces_deleted": result.traces_deleted,
                     },
                     indent=2,
                 )
@@ -145,6 +166,11 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 f"{result.total_traces} traces "
                 f"({result.window_start} → {result.window_end})"
             )
+        elif entry["format"] == "langfuse_cleanup":
+            print("Langfuse cleanup complete.")
+            print(f"Project: {result.project}")
+            print(f"Traces before: {result.traces_before}")
+            print(f"Traces deleted: {result.traces_deleted}")
         else:
             print(f"{entry['label']} complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
@@ -240,6 +266,17 @@ def main(argv: list[str] | None = None) -> int:
         help="check Langfuse for unsessioned traces and alert if found",
     )
     p_trace_health.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- langfuse-cleanup command ---
+    p_langfuse_cleanup = sub.add_parser(
+        "langfuse-cleanup",
+        help="delete excess Langfuse traces to stay under the per-project cap",
+    )
+    p_langfuse_cleanup.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
