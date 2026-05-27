@@ -1099,9 +1099,10 @@ async function renderRuns(){
   return;
  }
  _runsLastSig=sig;
- d.innerHTML=rs&&rs.length?
-  rs.map(r=>_runRowHtml(r,_runElapsed(r))).join("")
-  :`<div class="muted">No runs yet. Click Run Audit or Trace Health to start one.</div>`;
+ d.innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+  (rs&&rs.length?
+   rs.map(r=>_runRowHtml(r,_runElapsed(r))).join("")
+   :`<div class="muted">No runs yet. Click Run Audit or Trace Health to start one.</div>`);
 }
 async function toggleRuns(){
  if(runsOpen){close_();return}
@@ -1129,7 +1130,7 @@ async function renderCostDashboard(){
  const repoId=getRepoId();
  const hoursLabel=costLookbackHours===1?"1 hour":costLookbackHours+" hours";
  const repoLabel=repoId==="all"?"Costs across all repos (last "+hoursLabel+")":"Costs for "+esc(repoId)+" (last "+hoursLabel+")";
- document.getElementById("d").innerHTML='<h3>💰 Cost Dashboard <span class="muted" style="font-size:11px;font-weight:normal">— '+repoLabel+'</span></h3>'+
+ document.getElementById("d").innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+'<h3>💰 Cost Dashboard <span class="muted" style="font-size:11px;font-weight:normal">— '+repoLabel+'</span></h3>'+
   '<div class="cost-lookback">'+
    '<div class="cost-mode-toggle">'+
     '<button class="cost-mode-btn'+(timeModeActive?' active':'')+'" onclick="costMode=\'time\';renderCostDashboard()">⏱️ Time window</button>'+
@@ -1364,7 +1365,7 @@ async function renderTraceList(){
  let url='/traces/recent?limit='+limit;
  if(minCost!==null)url+='&min_cost='+encodeURIComponent(minCost);
  if(maxCost!==null)url+='&max_cost='+encodeURIComponent(maxCost);
- document.getElementById("d").innerHTML='<h3>Deep Review</h3>'+
+ document.getElementById("d").innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+'<h3>Deep Review</h3>'+
   '<button onclick="renderLastReviewsList()" class="dr-btn"'+
   ' style="font-size:11px;padding:3px 10px;background:#1a2a3b;color:#60c0fa;'+
   'border:1px solid #2a3a4b;border-radius:4px;cursor:pointer;margin-bottom:10px">'+
@@ -1407,7 +1408,7 @@ async function renderLastReviewsList(){
  const arr=await jget("/deep-review");
  if(Array.isArray(arr))lastReviewsCache=arr; else lastReviewsCache=[];
  const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
- let html='<h3>Last Deep Reviews</h3><div id="last-reviews-list">';
+ let html='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div><h3>Last Deep Reviews</h3><div id="last-reviews-list">';
  if(!lastReviewsCache.length){
   html+='<div class="muted" style="padding:12px 0">No completed deep reviews yet. Run one from the trace picker.</div>';
  } else {
@@ -1507,6 +1508,7 @@ async function pollDeepReviewResult(){
  // Still running — update the UI with elapsed time and keep polling
  // unless we've hit the hard cap.
  const stillRunningHtml=
+  '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
   '<h3>Deep Review</h3>'+
   '<div class="muted" style="padding:12px 0">'+
   '⏳ Still analysing… <span style="color:#aab0bd">('+elapsed+'s elapsed)</span>'+
@@ -1520,6 +1522,7 @@ async function pollDeepReviewResult(){
   // panel — separate ticket).
   if(deepReviewPollTimer){clearTimeout(deepReviewPollTimer);deepReviewPollTimer=null}
   document.getElementById("d").innerHTML=
+   '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
    '<h3>Deep Review</h3>'+
    '<div class="muted" style="color:#eab308;padding:12px 0">'+
    '⏱ Still running after '+Math.floor(elapsed/60)+'m '+(elapsed%60)+'s — stopped polling but the analysis may still complete in the background.'+
@@ -1538,7 +1541,7 @@ function resumeDeepReviewPolling(){
 }
 function renderDeepReviewResult(res, backFn){
  const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
- let html=`<h3>Deep Review: ${escT(deepReviewTraceId)}</h3>`;
+ let html=`<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div><h3>Deep Review: ${escT(deepReviewTraceId)}</h3>`;
  if(res.status==="error"){
   html+=`<div class="muted" style="color:#f87171;padding:12px 0">${escT(res.error||'Unknown error')}</div>`;
   document.getElementById("d").innerHTML=html;
