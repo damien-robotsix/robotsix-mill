@@ -605,16 +605,18 @@ class TestFlattenChatIO:
         assert flat[0]["content"] == "real system"
 
     def test_flatten_chat_io_surfaces_validation_rejected_generations(self):
-        """A model-call span with output_tokens > 0 but no
-        gen_ai.output.messages (pydantic-ai validation rejected the
-        response) gets a status_message + WARNING level so Langfuse
-        shows the silent failure instead of an empty output."""
+        """A per-model-call span (gen_ai.operation.name == "chat")
+        with output_tokens > 0 but no gen_ai.output.messages
+        (pydantic-ai validation rejected the response) gets a
+        status_message + WARNING level so Langfuse shows the silent
+        failure instead of an empty output."""
         from robotsix_mill.runtime.tracing import _flatten_chat_io
         import json
 
         class _FakeSpan:
             def __init__(self):
                 self._attributes: dict = {
+                    "gen_ai.operation.name": "chat",
                     "gen_ai.input.messages": json.dumps([
                         {"role": "user",
                          "parts": [{"type": "text", "content": "hi"}]},
@@ -633,6 +635,35 @@ class TestFlattenChatIO:
         assert "pydantic-ai likely rejected" in span._attributes[
             "langfuse.observation.status_message"
         ]
+
+    def test_flatten_chat_io_does_not_warn_on_agent_spans(self):
+        """AGENT-orchestration spans (gen_ai.operation.name ==
+        "invoke_agent") never carry gen_ai.output.messages — child
+        generations do. Warning on those would be a false positive;
+        the gate requires the chat-operation name."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_io
+        import json
+
+        class _FakeSpan:
+            def __init__(self):
+                self._attributes: dict = {
+                    "gen_ai.operation.name": "invoke_agent",
+                    "gen_ai.system_instructions": json.dumps([
+                        {"type": "text", "content": "be helpful"},
+                    ]),
+                    "gen_ai.usage.output_tokens": 22,
+                    # no gen_ai.input.messages, no output.messages —
+                    # agent span aggregates child observations
+                }
+
+            @property
+            def attributes(self):
+                return self._attributes
+
+        span = _FakeSpan()
+        _flatten_chat_io(span)
+        assert "langfuse.observation.status_message" not in span._attributes
+        assert "langfuse.observation.level" not in span._attributes
 
     def test_flatten_chat_io_does_not_warn_when_output_present(self):
         """When the model call succeeded normally (output.messages

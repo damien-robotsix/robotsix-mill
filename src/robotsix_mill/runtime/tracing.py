@@ -267,16 +267,30 @@ def _flatten_chat_io(span) -> None:  # noqa: ANN001
     _rewrite(raw_in, "langfuse.observation.input", "gen_ai.input.messages")
     _rewrite(raw_out, "langfuse.observation.output", "gen_ai.output.messages")
 
-    # Surface validation-rejected generations: the model produced
-    # output tokens but pydantic-ai's structured-output validator
-    # threw before ``gen_ai.output.messages`` was set, so Langfuse
-    # renders an empty output. Without a status message the operator
-    # has no way to know the call actually ran. Annotate the span.
+    # Surface validation-rejected generations: the per-model-call
+    # span had output tokens but pydantic-ai's structured-output
+    # validator threw before ``gen_ai.output.messages`` was set, so
+    # Langfuse renders an empty output. Without a status message
+    # the operator has no way to know the call actually ran.
+    #
+    # Gate on BOTH input.messages and the chat operation name being
+    # present so this only fires on per-model-call (GENERATION) spans
+    # — AGENT-orchestration spans aggregate child outputs and never
+    # carry gen_ai.output.messages themselves; warning on those is
+    # a false positive.
+    is_per_call_span = (
+        attrs.get("gen_ai.operation.name") == "chat"
+        and (raw_in or attrs.get("gen_ai.input.messages"))
+    )
     try:
         out_tokens = int(attrs.get("gen_ai.usage.output_tokens") or 0)
     except (TypeError, ValueError):
         out_tokens = 0
-    if out_tokens > 0 and not (raw_out or attrs.get("gen_ai.output.messages")):
+    if (
+        is_per_call_span
+        and out_tokens > 0
+        and not (raw_out or attrs.get("gen_ai.output.messages"))
+    ):
         msg = (
             "model produced "
             f"{out_tokens} output token(s) but no "
