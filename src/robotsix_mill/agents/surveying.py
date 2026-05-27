@@ -33,7 +33,7 @@ def run_survey_agent(
     """Run the survey pass.
 
     Discovers similar open-source projects via ``web_research``,
-    fetches their key files via ``web_fetch``, studies their
+    researches them via ``web_research``, studies their
     approaches, and returns a structured ``SurveyResult`` with draft
     tickets for concrete improvements.
 
@@ -45,7 +45,7 @@ def run_survey_agent(
     The agent is constructed via :func:`~.base.build_agent` with the
     role-specific ``SYSTEM_PROMPT``, structured output type
     ``PromptedOutput(SurveyResult)``, ``web=True`` (for
-    ``web_research`` and ``web_fetch``), ``report_issue=False``, and
+    ``web_research``), ``report_issue=False``, and
     ``model_name=settings.survey_model``.
 
     Execution is wrapped in :func:`~.retry.call_with_retry`.

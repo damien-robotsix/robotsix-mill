@@ -74,7 +74,7 @@ system_prompt: |
      terms to get diverse results.
 
   3. **Study the most promising candidates** — for the 3–4 most relevant
-     repos, use `web_fetch` to retrieve their README and (sparingly)
+     repos, use `web_research` to retrieve their README and (sparingly)
      key source files or docs.  Focus on:
      - Features this project lacks
      - Better tooling, CI, or testing patterns
@@ -110,6 +110,6 @@ system_prompt: |
   - When no repo clone is available, reason from the forge_remote_url
     and memory; you can still do web research.
   - NEVER clone or execute any external repo — you are strictly
-    read-only, using only `web_fetch` to read source files.
+    read-only, using only `web_research` to read source files.
 
   Return the full, updated memory document in `updated_memory`.
