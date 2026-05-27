@@ -664,6 +664,7 @@ class Worker:
         self._env_sync_task: asyncio.Task | None = None
         self._cost_reconciliation_task: asyncio.Task | None = None
         self._langfuse_cleanup_task: asyncio.Task | None = None
+        self._timeout_escalation_task: asyncio.Task | None = None
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -1283,6 +1284,32 @@ class Worker:
                     log.exception("langfuse-cleanup poll failed for %s", label)
             await asyncio.sleep(interval)
 
+    async def _timeout_escalation_poll_loop(self) -> None:
+        """Periodic timeout-escalation: detects AWAITING_USER_REPLY tickets
+        stuck beyond the threshold and escalates them to BLOCKED.
+
+        Pure DB query + state transition — no AI agent, no Langfuse tracing.
+        Global pass (non-per-repo): AWAITING_USER_REPLY tickets are
+        board-agnostic.
+        """
+        settings = self.ctx.settings
+        interval = max(60, settings.timeout_escalation_interval_seconds)
+        initial = self._initial_delay("timeout-escalation", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                from ..timeout_escalation_runner import run_timeout_escalation
+                result = await asyncio.to_thread(
+                    run_timeout_escalation, settings,
+                )
+                log.info(
+                    "timeout-escalation: pass complete — escalated=%d skipped=%d",
+                    result.get("escaped", 0), result.get("skipped", 0),
+                )
+            except Exception:  # noqa: BLE001 — never let the poll die
+                log.exception("timeout-escalation poll failed")
+            await asyncio.sleep(interval)
+
     async def _ci_monitor_poll_loop(self) -> None:
         """Periodic CI monitor poll: watch the forge target branch for
         completed workflow-run failures and file a ``source="ci"`` draft
@@ -1571,6 +1598,19 @@ class Worker:
                 self.ctx.settings.langfuse_cleanup_interval_seconds,
                 self.ctx.settings.langfuse_cleanup_max_traces,
             )
+        # Opt-in periodic timeout escalation
+        if (
+            self.ctx.settings.timeout_escalation_periodic
+            and self._timeout_escalation_task is None
+        ):
+            self._timeout_escalation_task = asyncio.create_task(
+                self._timeout_escalation_poll_loop()
+            )
+            log.info(
+                "Periodic timeout escalation enabled: interval %ds, threshold %ds",
+                self.ctx.settings.timeout_escalation_interval_seconds,
+                self.ctx.settings.timeout_escalation_threshold_seconds,
+            )
         # CI monitor: enabled when any registered repo has ci_monitor_enabled=True.
         if self._ci_monitor_task is None:
             repos = get_repos_config()
@@ -1639,6 +1679,7 @@ class Worker:
             "_trace_health_task", "_health_task", "_ci_monitor_task",
             "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_test_gap_task", "_survey_task",
             "_env_sync_task", "_cost_reconciliation_task",
+            "_langfuse_cleanup_task", "_timeout_escalation_task",
         ):
             t = getattr(self, attr)
             if t is not None:
