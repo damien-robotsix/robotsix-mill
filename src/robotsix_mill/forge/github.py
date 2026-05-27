@@ -507,32 +507,42 @@ class GitHubForge(Forge):
             # queued — so a brand-new SHA with a workflow that's been
             # queued but not started is correctly classified "pending"
             # rather than "no CI configured" below.
+            #
+            # A 403 here means the App installation lacks ``checks: read``
+            # for this repo. That's a config gap, not a transient error
+            # — treat it as "no check_runs visible" and fall through to
+            # statuses + no-CI handling.
+            check_runs: list[dict] = []
             cr_resp = c.get(
                 f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
                 headers=headers,
                 params={"per_page": 100},
             )
-            cr_resp.raise_for_status()
-            check_runs = cr_resp.json().get("check_runs", [])
+            if cr_resp.status_code != 403:
+                cr_resp.raise_for_status()
+                check_runs = cr_resp.json().get("check_runs", [])
 
             # 2. Always probe combined statuses too. A repo without
             # any CI returns empty check_runs AND empty
             # statuses_data["statuses"] — we use that to distinguish
             # "no CI configured" (pass-through) from "CI pending"
-            # (wait).
+            # (wait). 403 on statuses follows the same logic.
+            status_runs: list[dict] = []
             st_resp = c.get(
                 f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
                 headers=headers,
             )
-            st_resp.raise_for_status()
-            statuses_data = st_resp.json()
-            status_runs = _statuses_to_check_runs(statuses_data)
+            if st_resp.status_code != 403:
+                st_resp.raise_for_status()
+                statuses_data = st_resp.json()
+                status_runs = _statuses_to_check_runs(statuses_data)
             if not check_runs:
                 check_runs = status_runs
 
-            # No checks AND no statuses → the repo has no CI for this
-            # SHA. Treat as success so the merge gate doesn't wait
-            # forever on a check that will never appear.
+            # No checks AND no statuses (either truly empty or the
+            # App lacks read permission for both endpoints) → there
+            # is nothing meaningful to gate on. Treat as success so
+            # the merge stage doesn't loop forever.
             if not check_runs and not status_runs:
                 return {"conclusion": "success", "failing": []}
 
