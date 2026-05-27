@@ -1500,8 +1500,7 @@ def test_epic_context_passed_to_refine_agent(ctx, service, monkeypatch):
     def fake_refine(
         *, settings, title, draft, repo_dir=None,
         reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None,
-        message_history=None,
+        extra_roots=None, message_history=None,
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -1528,8 +1527,7 @@ def test_epic_context_empty_for_non_epic_parent_in_refine(ctx, service, monkeypa
     def fake_refine(
         *, settings, title, draft, repo_dir=None,
         reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None,
-        message_history=None,
+        extra_roots=None, message_history=None,
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -1550,8 +1548,7 @@ def test_epic_context_empty_for_no_parent_in_refine(ctx, service, monkeypatch):
     def fake_refine(
         *, settings, title, draft, repo_dir=None,
         reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None,
-        message_history=None,
+        extra_roots=None, message_history=None,
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
