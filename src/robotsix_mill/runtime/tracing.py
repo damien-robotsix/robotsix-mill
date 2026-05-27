@@ -125,7 +125,7 @@ def _flatten_chat_io(span) -> None:  # noqa: ANN001
         return
     import json as _json
 
-    def _rewrite(raw, dest_key: str) -> None:
+    def _rewrite(raw, *dest_keys: str) -> None:
         if not raw:
             return
         try:
@@ -139,14 +139,21 @@ def _flatten_chat_io(span) -> None:  # noqa: ANN001
             for m in parsed
         ]
         try:
-            span._attributes[dest_key] = _json.dumps(
-                flat, default=str, ensure_ascii=False,
-            )
+            flat_json = _json.dumps(flat, default=str, ensure_ascii=False)
         except Exception:  # noqa: BLE001 — never break exporter on rewrite
-            pass
+            return
+        for k in dest_keys:
+            try:
+                span._attributes[k] = flat_json
+            except Exception:  # noqa: BLE001
+                pass
 
-    _rewrite(raw_in, "langfuse.observation.input")
-    _rewrite(raw_out, "langfuse.observation.output")
+    # Write the flattened shape to BOTH the Langfuse alias and the
+    # original gen_ai.* attribute. Langfuse's "Generation" subview
+    # renders from gen_ai.input.messages directly; the alias covers
+    # the "Observation" subview too.
+    _rewrite(raw_in, "langfuse.observation.input", "gen_ai.input.messages")
+    _rewrite(raw_out, "langfuse.observation.output", "gen_ai.output.messages")
 
 
 def make_session_id(kind: str) -> str:
