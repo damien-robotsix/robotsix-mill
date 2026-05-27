@@ -938,6 +938,7 @@ def list_children(
 @router.post("/tickets/{ticket_id}/generate-children", status_code=202)
 def generate_children(
     ticket_id: str,
+    request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
     registry=Depends(get_run_registry),
@@ -966,45 +967,71 @@ def generate_children(
     epic_board_id = ticket.board_id or svc.board_id
     epic_svc = _TicketService(settings, board_id=epic_board_id)
 
+    # Resolve the RepoConfig for the epic's board so the background
+    # run emits Langfuse traces under the right project — without
+    # this the agent call runs outside any ``start_ticket_root_span``
+    # context, every span lacks the ``langfuse.public_key`` attribute
+    # the filtered exporter routes on, and the trace is dropped.
+    repos = request.app.state.repos
+    epic_repo_config = _repo_config_for_ticket(ticket, repos)
+
     run_id = registry.start("epic-breakdown", repo_id=epic_board_id)
 
     def _run() -> None:
         try:
+            from ..runtime import tracing
             from ..agents.epic_breakdown import run_epic_breakdown_agent
 
-            description = epic_svc.workspace(ticket).read_description()
-            result = run_epic_breakdown_agent(
-                settings=settings,
-                epic_title=ticket.title,
-                epic_description=description,
-            )
-            created_ids: list[str] = []
-            for title, body in zip(result.child_titles, result.child_bodies):
-                child = epic_svc.create(
-                    title=title,
-                    description=body,
-                    kind="task",
-                    parent_id=ticket_id,
+            session_id = tracing.make_session_id("epic-breakdown")
+            with tracing.start_ticket_root_span(
+                session_id, "epic-breakdown",
+                repo_config=epic_repo_config,
+                extra_attributes={"ticket_id": ticket_id},
+            ) as root:
+                root.set_input({
+                    "ticket_id": ticket_id,
+                    "epic_title": ticket.title,
+                })
+                description = epic_svc.workspace(ticket).read_description()
+                result = run_epic_breakdown_agent(
+                    settings=settings,
+                    epic_title=ticket.title,
+                    epic_description=description,
                 )
-                created_ids.append(child.id)
+                created_ids: list[str] = []
+                for title, body in zip(result.child_titles, result.child_bodies):
+                    child = epic_svc.create(
+                        title=title,
+                        description=body,
+                        kind="task",
+                        parent_id=ticket_id,
+                    )
+                    created_ids.append(child.id)
 
-            # Build linear dependency chain: C0 ← C1 ← C2 ← ...
-            for i in range(1, len(created_ids)):
-                epic_svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
+                # Build linear dependency chain: C0 ← C1 ← C2 ← ...
+                for i in range(1, len(created_ids)):
+                    epic_svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
 
-            # Apply the revised epic body to the epic immediately
-            # (generate-children is a one-shot manual trigger).
-            if result.epic_body and result.epic_body.strip():
-                new_hash = epic_svc.workspace(ticket).write_description(
-                    result.epic_body.strip()
+                # Apply the revised epic body to the epic immediately
+                # (generate-children is a one-shot manual trigger).
+                if result.epic_body and result.epic_body.strip():
+                    new_hash = epic_svc.workspace(ticket).write_description(
+                        result.epic_body.strip()
+                    )
+                    epic_svc.set_content_hash(ticket_id, new_hash)
+
+                summary = (
+                    f"Created {len(created_ids)} children: "
+                    f"{', '.join(created_ids[:5])}"
+                    f"{'…' if len(created_ids) > 5 else ''}"
                 )
-                epic_svc.set_content_hash(ticket_id, new_hash)
-
-            summary = (
-                f"Created {len(created_ids)} children: "
-                f"{', '.join(created_ids[:5])}"
-                f"{'…' if len(created_ids) > 5 else ''}"
-            )
+                root.set_output({
+                    "children_created": len(created_ids),
+                    "child_ids": created_ids,
+                    "epic_body_updated": bool(
+                        result.epic_body and result.epic_body.strip()
+                    ),
+                })
             registry.finish_ok(run_id, summary)
             log.info(
                 "epic-breakdown done: %d children for %s",
