@@ -1987,32 +1987,44 @@ def env_sync_pass(
 
 @router.post("/cost-reconciliation", status_code=202)
 def cost_reconciliation_pass(
+    repo_id: str | None = None,
+    request: Request = None,
     registry=Depends(get_run_registry),
 ) -> dict:
     """Kick off a cost-reconciliation drift detection pass in the BACKGROUND."""
     from ..cost_reconciliation_runner import run_cost_reconciliation_pass
     from ..runtime.tracing import make_session_id
 
-    run_id = registry.start("cost-reconciliation")
-    session_id = make_session_id("cost-reconciliation")
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
 
     def _run() -> None:
-        try:
-            r = run_cost_reconciliation_pass(session_id=session_id)
-            draft_ids = [d["id"] for d in r.drafts_created[:5]]
-            summary = (
-                f"Created {len(r.drafts_created)} drafts: "
-                f"{', '.join(draft_ids)}"
-                f"{'…' if len(r.drafts_created) > 5 else ''}"
-            )
-            registry.finish_ok(run_id, summary)
-            log.info(
-                "cost-reconciliation pass done: %d draft(s)",
-                len(r.drafts_created),
-            )
-        except Exception as e:
-            log.exception("cost-reconciliation pass failed")
-            registry.finish_error(run_id, str(e))
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("cost-reconciliation", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("cost-reconciliation")
+                r = run_cost_reconciliation_pass(session_id=session_id, repo_config=rc)
+                # Prefer the runner's own summary (delta or "no overrun");
+                # fall back to generic drafts-list.
+                runner_summary = (getattr(r, "summary", "") or "").strip()
+                if runner_summary:
+                    summary = runner_summary
+                else:
+                    draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                    summary = (
+                        f"Created {len(r.drafts_created)} drafts: "
+                        f"{', '.join(draft_ids)}"
+                        f"{'…' if len(r.drafts_created) > 5 else ''}"
+                    )
+                registry.finish_ok(run_id, summary)
+                log.info(
+                    "cost-reconciliation pass done: %d draft(s)",
+                    len(r.drafts_created),
+                )
+            except Exception as e:
+                log.exception("cost-reconciliation pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
 
     threading.Thread(
         target=_run, name="cost-reconciliation-pass", daemon=True

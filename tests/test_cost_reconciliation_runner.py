@@ -122,7 +122,7 @@ def test_fetch_langfuse_aggregates_traces(settings, monkeypatch):
     """Traces are summed and grouped by name."""
     calls = []
 
-    def fake_api_get(s, path, params=None):
+    def fake_api_get(s, path, params=None, repo_config=None):
         calls.append(params)
         page = (params or {}).get("page", 1)
         if page == 1:
@@ -150,7 +150,7 @@ def test_fetch_langfuse_aggregates_traces(settings, monkeypatch):
 def test_fetch_langfuse_graceful_on_error(settings, monkeypatch):
     """API error → (0.0, error message)."""
 
-    def fake_api_get(s, path, params=None):
+    def fake_api_get(s, path, params=None, repo_config=None):
         return None  # API failure
 
     monkeypatch.setattr(
@@ -179,7 +179,7 @@ def test_clean_pass_no_agent_no_ticket(tmp_path, monkeypatch):
     def fake_or(settings, date_str):
         return (10.00, "gpt-4: $10.00")
 
-    def fake_lf(settings, from_ts, to_ts):
+    def fake_lf(settings, from_ts, to_ts, repo_config=None):
         return (9.50, "implement: $9.50")
 
     monkeypatch.setattr(
@@ -220,7 +220,7 @@ def test_dirty_pass_creates_draft(tmp_path, monkeypatch):
     def fake_or(settings, date_str):
         return (15.00, "gpt-4: $15.00")
 
-    def fake_lf(settings, from_ts, to_ts):
+    def fake_lf(settings, from_ts, to_ts, repo_config=None):
         return (10.00, "implement: $10.00")
 
     monkeypatch.setattr(
@@ -294,7 +294,7 @@ def test_langfuse_error_runs_comparison(tmp_path, monkeypatch):
     def fake_or(settings, date_str):
         return (5.00, "gpt-4: $5.00")
 
-    def fake_lf(settings, from_ts, to_ts):
+    def fake_lf(settings, from_ts, to_ts, repo_config=None):
         return (0.0, "Langfuse API error — unable to fetch traces")
 
     monkeypatch.setattr(
