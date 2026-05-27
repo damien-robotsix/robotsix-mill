@@ -333,6 +333,9 @@ def test_check_status_happy_path(tmp_path, monkeypatch):
         "repos/o/r/pulls/3": _make_response(200, detail_resp),
         "repos/o/r/pulls": _make_response(200, list_resp),
         "commits/abc123/check-runs": _make_response(200, check_runs_resp),
+        # check_status now always probes combined statuses to
+        # distinguish "no CI configured" from "CI pending".
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
     }
     _mock_httpx(monkeypatch, get_map=get_map)
 

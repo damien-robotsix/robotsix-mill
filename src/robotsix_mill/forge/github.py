@@ -503,24 +503,38 @@ class GitHubForge(Forge):
             return None
 
         with httpx.Client(timeout=30) as c:
-            # 1. Fetch check runs (completed).
+            # 1. Fetch check runs (any status — completed, in_progress,
+            # queued — so a brand-new SHA with a workflow that's been
+            # queued but not started is correctly classified "pending"
+            # rather than "no CI configured" below.
             cr_resp = c.get(
                 f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
                 headers=headers,
-                params={"per_page": 100, "status": "completed"},
+                params={"per_page": 100},
             )
             cr_resp.raise_for_status()
             check_runs = cr_resp.json().get("check_runs", [])
 
+            # 2. Always probe combined statuses too. A repo without
+            # any CI returns empty check_runs AND empty
+            # statuses_data["statuses"] — we use that to distinguish
+            # "no CI configured" (pass-through) from "CI pending"
+            # (wait).
+            st_resp = c.get(
+                f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
+                headers=headers,
+            )
+            st_resp.raise_for_status()
+            statuses_data = st_resp.json()
+            status_runs = _statuses_to_check_runs(statuses_data)
             if not check_runs:
-                # 2. Fallback: combined statuses API.
-                st_resp = c.get(
-                    f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
-                    headers=headers,
-                )
-                st_resp.raise_for_status()
-                statuses_data = st_resp.json()
-                check_runs = _statuses_to_check_runs(statuses_data)
+                check_runs = status_runs
+
+            # No checks AND no statuses → the repo has no CI for this
+            # SHA. Treat as success so the merge gate doesn't wait
+            # forever on a check that will never appear.
+            if not check_runs and not status_runs:
+                return {"conclusion": "success", "failing": []}
 
             return _derive_check_conclusion(
                 c, api, owner, repo, headers, check_runs
