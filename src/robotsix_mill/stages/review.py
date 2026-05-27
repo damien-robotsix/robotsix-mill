@@ -99,7 +99,11 @@ def _spawn_dependency_tickets(
     """
     ids: list[str] = []
     for ask in asks:
-        title = (ask.description.splitlines()[0] or "review follow-up")[:120]
+        title = (
+            ask.title.strip()
+            or ask.description.splitlines()[0]
+            or "review follow-up"
+        )[:120]
         body_lines = [ask.description.strip()]
         if ask.files_touched:
             body_lines.append("")

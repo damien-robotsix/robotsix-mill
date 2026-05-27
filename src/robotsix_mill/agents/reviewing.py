@@ -34,20 +34,39 @@ class ReviewAsk(BaseModel):
     that review legitimately demands.
     """
 
+    title: str = Field(
+        default="",
+        description="Short, imperative title (≤80 chars) suitable as a "
+                    "ticket title if this ask becomes a dependency. "
+                    "Should name the *action*, e.g. 'add __pycache__ to "
+                    ".gitignore' — NOT the symptom ('remove "
+                    "__pycache__/foo.pyc'). When empty the review stage "
+                    "derives one from the description."
+    )
     description: str = Field(
-        description="The concrete change the implement agent must make. "
-                    "One ask = one logical issue; split unrelated issues "
-                    "across multiple ReviewAsk entries."
+        description="A self-contained work item, framed as the proper "
+                    "fix (NOT the observed symptom). Read your text "
+                    "imagining it will be the body of a brand-new "
+                    "ticket — describe the underlying problem AND the "
+                    "right way to address it. "
+                    "Bad: 'remove __pycache__/foo.pyc'. "
+                    "Good: '__pycache__ files are tracked because the "
+                    "repo has no .gitignore — add an entry for "
+                    "__pycache__/ to .gitignore to prevent it.' "
+                    "One ask = one logical issue; split unrelated "
+                    "issues across multiple ReviewAsk entries."
     )
     files_touched: list[str] = Field(
         default_factory=list,
-        description="Repo-relative paths the implement agent would need "
-                    "to add/edit/delete to address this ask. Leave empty "
-                    "only when the ask is genuinely file-less (e.g. "
-                    "clarify a spec ambiguity). Include EVERY file the "
-                    "change would touch, even peripheral ones like "
-                    "`.gitignore` — that classification is what lets the "
-                    "review stage spawn a dep ticket for out-of-scope work."
+        description="Repo-relative paths the *proper fix* you "
+                    "described above would touch — NOT the symptom "
+                    "files visible in the current diff. For the "
+                    ".gitignore example: ``['.gitignore']``, not "
+                    "``['__pycache__/foo.pyc']``. The review stage uses "
+                    "this list to decide if the ask is in-scope for "
+                    "the current ticket or needs a dependency ticket. "
+                    "Leave empty only when the ask is genuinely "
+                    "file-less (e.g. clarify a spec ambiguity)."
     )
 
 

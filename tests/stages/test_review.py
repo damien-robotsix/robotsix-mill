@@ -546,3 +546,41 @@ def test_request_changes_no_file_map_all_in_scope(ctx_factory, monkeypatch):
 
     after = ctx.service.get(t.id)
     assert not after.depends_on
+
+
+def test_out_of_scope_ask_uses_explicit_title(ctx_factory, monkeypatch):
+    """When ReviewAsk.title is set, the spawned dependency ticket uses
+    it verbatim — not a sentence cropped from the description. This is
+    what stops the reviewer's symptom-framing ('remove
+    __pycache__/foo.pyc') from becoming the new ticket's title when
+    the proper fix is something else ('add __pycache__ to .gitignore')."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ["feature.txt"])
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="add gitignore",
+            request_changes=[ReviewAsk(
+                title="Add __pycache__ to .gitignore",
+                description=(
+                    "__pycache__ files are tracked because the repo "
+                    "has no .gitignore for compiled Python bytecode. "
+                    "Add an entry for __pycache__/ to .gitignore."
+                ),
+                files_touched=[".gitignore"],
+            )],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    ReviewStage().run(t, ctx)
+
+    after = ctx.service.get(t.id)
+    deps = json.loads(after.depends_on or "[]")
+    assert len(deps) == 1
+    child = ctx.service.get(deps[0])
+    assert child.title == "Add __pycache__ to .gitignore"
