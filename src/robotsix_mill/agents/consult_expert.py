@@ -6,6 +6,12 @@ sub-agent with its own memory ledger — it answers the question and
 returns a concise string; it does NOT drive the ticket or touch the
 filesystem. The coordinator remains the sole author of every change.
 
+The expert keeps its own per-domain, per-board memory ledger at
+``<data_dir>/<board>/expert_<domain>_memory.md``. The ledger is
+loaded into the expert's system prompt before each consultation and
+the expert may return an ``updated_memory`` field which the runner
+persists verbatim, so observations carry across consultations.
+
 ``run_consult_expert`` is the single mockable seam: tests monkeypatch it
 (no real LLM), exactly like the other agent seams.
 """
@@ -15,9 +21,33 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from pydantic import BaseModel, Field
+
 from ..config import Settings, get_secrets
 
 log = logging.getLogger(__name__)
+
+
+class ExpertConsultResult(BaseModel):
+    """Structured output from a domain-expert consultation.
+
+    ``answer`` is the concise response handed back to the coordinator.
+    ``updated_memory`` is the expert's revised memory ledger; the
+    runner persists it verbatim when non-empty so future consultations
+    of the same domain see the expert's accumulated knowledge."""
+
+    answer: str = Field(
+        description="Concise, focused answer to the coordinator's "
+        "question. The coordinator uses this to decide what code "
+        "changes to make.",
+    )
+    updated_memory: str = Field(
+        default="",
+        description="Revised memory ledger after this consultation. "
+        "Append observations, conventions, or gotchas you discovered "
+        "while answering. Return the FULL revised ledger (not a diff). "
+        "Leave empty to keep the existing memory unchanged.",
+    )
 
 
 def run_consult_expert(
@@ -33,8 +63,9 @@ def run_consult_expert(
 
     Bounded by ``consult_request_limit``. Never raises out — failure
     degrades to a short message so the coordinator can carry on.
-    Expert memory is loaded but NOT persisted (read-only consultation
-    for v1).
+    Expert memory is loaded before the run and the expert's
+    ``updated_memory`` (when non-empty) is persisted verbatim
+    afterwards, so insights accumulate across consultations.
     """
     if not get_secrets().openrouter_api_key:
         return "consult unavailable: OPENROUTER_API_KEY is not set"
@@ -42,7 +73,7 @@ def run_consult_expert(
         return "consult unavailable: workspace repo directory does not exist"
 
     # lazy: keep core import-light / the suite hermetic
-    from pydantic_ai import Agent
+    from pydantic_ai import Agent, PromptedOutput
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
@@ -88,6 +119,18 @@ def run_consult_expert(
         system_prompt = (
             f"{system_prompt}\n\n<memory>\n{expert_memory}\n</memory>"
         )
+    system_prompt += (
+        "\n\n## Memory\n"
+        "Return a structured ``ExpertConsultResult`` with two fields:\n"
+        "- ``answer``: your concise answer to the coordinator's question.\n"
+        "- ``updated_memory``: the FULL revised memory ledger after this\n"
+        "  consultation. Add observations, conventions, or gotchas you\n"
+        "  discovered while answering. Return the existing memory\n"
+        "  unchanged when nothing new was learned. Leave EMPTY only when\n"
+        "  the current memory is already complete for the question.\n"
+        "  Keep entries concise — one short paragraph per insight,\n"
+        "  ticket-scoped where useful."
+    )
 
     # Read-only tools: explore, read_file, list_dir — no mutation.
     all_fs = build_fs_tools(repo_dir, settings)
@@ -112,7 +155,7 @@ def run_consult_expert(
     agent = Agent(
         model=model,
         system_prompt=system_prompt,
-        output_type=str,
+        output_type=PromptedOutput(ExpertConsultResult),
         tools=ro_tools,
         name=f"consult:{domain}",
     )
@@ -128,7 +171,25 @@ def run_consult_expert(
         return f"consult {domain} failed: {e}"
     finally:
         _close_async_client(client)
-    return str(result.output)
+
+    output = result.output
+    if not isinstance(output, ExpertConsultResult):
+        # Belt-and-braces: a misconfigured model could return a raw
+        # string. Use what's there and skip the memory write.
+        return str(output)
+
+    if output.updated_memory and output.updated_memory.strip():
+        try:
+            from ..pass_runner import persist_memory
+
+            persist_memory(memory_path, output.updated_memory)
+        except Exception:  # noqa: BLE001 — memory persistence is best-effort
+            log.warning(
+                "could not persist memory for expert %s at %s",
+                domain, memory_path, exc_info=True,
+            )
+
+    return output.answer
 
 
 def make_consult_expert_tool(settings: Settings, repo_dir: Path, board_id: str = ""):

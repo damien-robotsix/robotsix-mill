@@ -163,7 +163,129 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
     # Only read-only tools — no mutation tools.
     for banned in ("edit_file", "write_file", "run_command", "delete_file"):
         assert banned not in cap["tools"], f"{banned} should not be in expert tools"
-    assert cap["output_type"] == str
+    # Output is structured so the expert can return both an answer and
+    # an updated memory ledger; the wrapper unwraps .answer to a string.
+    from pydantic_ai import PromptedOutput
+    from robotsix_mill.agents.consult_expert import ExpertConsultResult
+    assert isinstance(cap["output_type"], PromptedOutput)
+    # Underlying type must be ExpertConsultResult.
+    assert ExpertConsultResult in (
+        cap["output_type"].outputs
+        if isinstance(cap["output_type"].outputs, tuple)
+        else (cap["output_type"].outputs,)
+    )
+
+
+def test_expert_persists_updated_memory(tmp_path, monkeypatch):
+    """When the expert returns ``updated_memory``, ``run_consult_expert``
+    writes it to ``<data_dir>/<board>/expert_<domain>_memory.md``."""
+    from robotsix_mill.agents import expert_manager
+    from robotsix_mill.agents.consult_expert import ExpertConsultResult
+    from robotsix_mill.agents.expert_loader import (
+        ExpertMemoryConfig, ExpertDefinition,
+    )
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        def run_sync(self, prompt, **kw):
+            class R:
+                output = ExpertConsultResult(
+                    answer="here is the answer",
+                    updated_memory="## What I learned\n- ticket-42: X uses Y\n",
+                )
+            return R()
+
+    def fake_load_defs(self, definitions_dir=None):
+        return {
+            "python-backend": ExpertDefinition(
+                domain="python-backend",
+                module_paths=["src/**/*.py"],
+                system_prompt="You are a Python expert.",
+                model="",
+                memory=ExpertMemoryConfig(max_memory_chars=8000),
+                tools=["explore", "read_file", "list_dir"],
+            ),
+        }
+
+    monkeypatch.setattr(expert_manager.ExpertManager, "load_definitions", fake_load_defs)
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+    from robotsix_mill.agents import fs_tools as ft
+    from robotsix_mill.agents import base as bmod
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(ft, "build_fs_tools", lambda root, settings, **kw: [])
+    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
+
+    out = run_consult_expert(
+        settings=s, repo_dir=tmp_path, domain="python-backend",
+        question="where is X?",
+        board_id="myboard",
+    )
+    # Answer is returned to the coordinator.
+    assert out == "here is the answer"
+    # Memory was persisted to the expected per-board path.
+    memory_file = s.memory_file_for("expert_python-backend", "myboard")
+    assert memory_file.exists()
+    assert "ticket-42: X uses Y" in memory_file.read_text(encoding="utf-8")
+
+
+def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
+    """When ``updated_memory`` is empty/whitespace, the memory file is
+    NOT created — preserves any existing ledger as-is."""
+    from robotsix_mill.agents import expert_manager
+    from robotsix_mill.agents.consult_expert import ExpertConsultResult
+    from robotsix_mill.agents.expert_loader import (
+        ExpertMemoryConfig, ExpertDefinition,
+    )
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    class FakeModel:
+        def __init__(self, name, **kw): pass
+
+    class FakeAgent:
+        def __init__(self, **kw): pass
+
+        def run_sync(self, prompt, **kw):
+            class R:
+                output = ExpertConsultResult(answer="ok", updated_memory="")
+            return R()
+
+    monkeypatch.setattr(expert_manager.ExpertManager, "load_definitions", lambda self, definitions_dir=None: {
+        "python-backend": ExpertDefinition(
+            domain="python-backend", module_paths=["src/**/*.py"],
+            system_prompt="P", model="",
+            memory=ExpertMemoryConfig(max_memory_chars=8000),
+            tools=["explore", "read_file", "list_dir"],
+        ),
+    })
+    import pydantic_ai, pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc, fs_tools as ft, base as bmod
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+    monkeypatch.setattr(ft, "build_fs_tools", lambda root, settings, **kw: [])
+    monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
+
+    out = run_consult_expert(
+        settings=s, repo_dir=tmp_path, domain="python-backend",
+        question="?", board_id="b",
+    )
+    assert out == "ok"
+    memory_file = s.memory_file_for("expert_python-backend", "b")
+    assert not memory_file.exists()
 
 
 def test_tool_registry_registration(tmp_path):
