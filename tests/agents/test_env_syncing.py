@@ -17,14 +17,16 @@ def _wrap_retry(fn, **kwargs):
 
 
 def test_env_sync_system_prompt_covers_key_dimensions():
-    """The env-sync agent prompt must cover key inspection dimensions."""
+    """The config-sync agent prompt must cover key inspection dimensions."""
     p = env_syncing.SYSTEM_PROMPT.lower()
     for kw in (
-        "config.py", ".env", "docs/configuration.md",
-        "missing", "stale", "drifted",
+        "config.py", "mill.defaults.yaml",
+        "secrets.example.yaml", "repos.example.yaml",
+        "docs/configuration.md",
+        "missing-from-yaml", "stale-yaml-key", "default-mismatch",
         "memory",
     ):
-        assert kw in p, f"env-sync prompt missing dimension cue: {kw}"
+        assert kw in p, f"config-sync prompt missing dimension cue: {kw}"
     # Must use explore/read_file/list_dir tools.
     assert "explore" in p
     assert "read_file" in p
