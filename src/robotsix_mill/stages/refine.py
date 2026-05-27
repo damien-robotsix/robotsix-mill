@@ -10,10 +10,10 @@ enters ``human_issue_approval`` instead of ``ready`` — a human must approve
 before the implement stage picks it up.
 
 Before the expensive refine agent runs, a cheap **dedup / already-done
-check** inspects the draft against existing tickets and recent commits.
-If the draft is a clear duplicate or the change is already committed,
-the ticket is short-circuited to ``CLOSED`` — no refiner, no human
-approval gate, no wasted cost.
+check** inspects the draft against existing tickets. If the draft is a
+clear duplicate or the change is already covered by a recently-closed
+ticket, the ticket is short-circuited to ``CLOSED`` — no refiner, no
+human approval gate, no wasted cost.
 """
 
 from __future__ import annotations
