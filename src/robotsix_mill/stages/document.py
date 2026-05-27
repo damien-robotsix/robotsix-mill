@@ -13,6 +13,7 @@ implementation over a doc-update hiccup is the wrong trade.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from ..agents.documenting import DocClassifierResult, DocResult
@@ -23,6 +24,23 @@ from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.document")
+
+
+def _paths_from_diff(diff: str) -> list[str]:
+    """Extract modified file paths from a unified git diff.
+
+    Mirrors ``stages.review._paths_from_diff`` — kept as a local copy
+    (instead of an import) to avoid a stage-to-stage dependency for a
+    single regex; if a third stage needs it, lift to ``vcs.git_ops``.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in re.finditer(r"^\+\+\+ b/(.+)$", diff, re.MULTILINE):
+        path = m.group(1).strip()
+        if path and path != "/dev/null" and path not in seen:
+            seen.add(path)
+            out.append(path)
+    return out
 
 
 class DocumentStage(Stage):
@@ -107,6 +125,16 @@ class DocumentStage(Stage):
                 exc_info=True,
             )
 
+        # Pre-load the modified files (parsed from the diff) plus
+        # whichever top-level docs actually exist (README.md, AGENT.md)
+        # so the doc agent doesn't have to read each file via a
+        # separate round-trip. Same pattern review uses.
+        modified_paths = _paths_from_diff(diff)
+        preload_paths: list[str] = list(modified_paths)
+        for doc_name in ("README.md", "AGENT.md"):
+            if doc_name not in preload_paths and (repo_dir / doc_name).exists():
+                preload_paths.append(doc_name)
+
         # --- Phase 2: full documentation agent ---
         try:
             doc_result = self._run_doc_agent(
@@ -116,6 +144,7 @@ class DocumentStage(Stage):
                 spec=spec,
                 extra_roots=None,
                 board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                reference_files=preload_paths or None,
             )
         except Exception:
             log.warning(
@@ -161,6 +190,7 @@ class DocumentStage(Stage):
         model_name: str | None = None,
         extra_roots: list[Path] | None = None,
         board_id: str = "",
+        reference_files: list[str] | None = None,
     ) -> DocResult:
         """Run the documentation agent to classify the diff and update docs.
 
@@ -177,6 +207,7 @@ class DocumentStage(Stage):
             model_name=model_name,
             extra_roots=extra_roots,
             board_id=board_id,
+            reference_files=reference_files,
         )
 
     def _run_doc_classifier(

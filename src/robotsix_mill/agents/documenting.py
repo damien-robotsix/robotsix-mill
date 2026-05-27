@@ -123,6 +123,7 @@ def run_doc_agent(
     model_name: str | None = None,
     extra_roots: list[Path] | None = None,
     board_id: str = "",
+    reference_files: list[str] | None = None,
 ) -> DocResult:
     """Build a documentation agent, classify *diff* + *spec*, and update
     docs for user-facing changes.
@@ -130,6 +131,13 @@ def run_doc_agent(
     The agent receives the ticket spec and git diff. It surveys the
     repo's docs (README.md, docs/*, AGENT.md) and applies targeted
     edits for user-facing changes. Internal-only changes are a no-op.
+
+    When *reference_files* is provided, those repo-relative paths are
+    pre-loaded into the agent's context via the same
+    parallel-read_file preseed used by implement/review — the
+    documenter usually has to read README.md and every changed source
+    file to decide what to update, so handing those over up front
+    skips one ``read_file`` round-trip per file.
 
     A persistent memory ledger (``settings.memory_file_for("doc", board_id)``) records
     the repo's doc layout across runs so subsequent passes don't have
@@ -185,8 +193,25 @@ def run_doc_agent(
             f"<git_diff>\n{diff}\n</git_diff>"
         )
         limits = UsageLimits(request_limit=settings.doc_request_limit)
+        run_user_prompt: str | None = user_prompt
+        run_kwargs: dict = {"usage_limits": limits}
+        # Pre-load the modified files (and any docs the operator
+        # supplied) into a single parallel-read_file turn, with the
+        # user_prompt as the leading ModelRequest so the trace reads
+        # system → user → preload-call → preload-return → response.
+        if reference_files and repo_dir is not None:
+            from .fs_tools import build_preseed_history
+
+            preseed = build_preseed_history(
+                repo_dir, list(reference_files),
+                user_prompt=user_prompt,
+            )
+            if preseed:
+                run_kwargs["message_history"] = preseed
+                run_user_prompt = None
+
         result = call_with_retry(
-            lambda: agent.run_sync(user_prompt, usage_limits=limits),
+            lambda: agent.run_sync(run_user_prompt, **run_kwargs),
             settings=settings, what="document",
         )
         output: DocResult = result.output

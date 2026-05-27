@@ -88,7 +88,7 @@ def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         del self, settings, diff, spec
         # Simulate agent writing a doc file as a side effect.
         (Path(repo_dir) / "README.md").write_text("# Updated README\n")
@@ -118,7 +118,7 @@ def test_internal_skips_commit(ctx_factory, monkeypatch):
     # Count commits before the stage runs.
     commits_before = _git_log(repo_dir).count("\n") + 1
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         del self, settings, diff, spec
         return DocResult(
             user_facing=False,
@@ -148,7 +148,7 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
 
     commits_before = _git_log(repo_dir).count("\n") + 1
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         del self, settings, repo_dir, diff, spec
         # Agent claims user-facing but writes nothing.
         return DocResult(user_facing=True, summary="updated README")
@@ -176,7 +176,7 @@ def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
 
     agent_called = []
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         agent_called.append(1)
         return DocResult(user_facing=False, summary="")
 
@@ -207,7 +207,7 @@ def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         del self, settings, repo_dir, diff, spec
         raise RuntimeError("model unavailable")
 
@@ -243,7 +243,7 @@ def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
     t = _ticket(ctx)
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Changed\n")
         return DocResult(user_facing=True, summary="updated README")
@@ -268,7 +268,7 @@ def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="false")
     t = _ticket(ctx)
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         del self, settings, repo_dir, diff, spec
         return DocResult(user_facing=True, summary="updated docs")
 
@@ -328,7 +328,7 @@ def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
             classification="user-facing — new config key",
         )
 
-    def _fake_full_agent(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_full_agent(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Updated by doc agent\n")
         return DocResult(user_facing=True, summary="updated README")
@@ -359,7 +359,7 @@ def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypat
         del self, settings, diff, spec
         raise RuntimeError("model unavailable")
 
-    def _fake_full_agent(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id=""):
+    def _fake_full_agent(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
         full_agent_called.append(1)
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Full agent ran\n")
