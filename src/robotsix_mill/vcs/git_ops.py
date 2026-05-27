@@ -228,10 +228,33 @@ def changed_files(repo: Path, target_branch: str) -> list[str]:
     return seen
 
 
-def diff_base(repo: Path, target_branch: str) -> str:
+def diff_base(
+    repo: Path,
+    target_branch: str,
+    *,
+    remote_url: str | None = None,
+    token: str | None = None,
+) -> str:
     """Return the unified diff of all commits on the current branch
-    vs origin/<target_branch>. Fetches first so the diff is current."""
-    _git(repo, "fetch", "origin", target_branch)
+    vs origin/<target_branch>. Fetches first so the diff is current.
+
+    When BOTH *remote_url* and *token* are provided, the fetch goes
+    through a fresh token-authed URL — required for private repos
+    because the GitHub App installation token baked into ``origin``'s
+    URL at clone time expires ~1h later, so a stale clone's later
+    fetch would fail with exit 128. Without a token, fall back to
+    the clone's existing ``origin`` remote (correct for public
+    repos and for tests that set up a local bare repo as origin).
+    """
+    if remote_url is not None and token is not None:
+        _git(
+            repo,
+            "fetch",
+            _authed_url(remote_url, token),
+            f"+refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
+        )
+    else:
+        _git(repo, "fetch", "origin", target_branch)
     return subprocess.run(
         ["git", "-C", str(repo), "diff", f"origin/{target_branch}...HEAD"],
         check=True, capture_output=True, text=True,
