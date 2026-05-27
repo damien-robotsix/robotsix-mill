@@ -185,12 +185,57 @@ def _flatten_chat_io(span) -> None:  # noqa: ANN001
     ``span.set_attribute()`` would refuse on an already-ended span,
     but the underlying dict still accepts writes.
     """
+    import json as _json
+
     attrs = span.attributes or {}
     raw_in = attrs.get("gen_ai.input.messages")
     raw_out = attrs.get("gen_ai.output.messages")
-    if not raw_in and not raw_out:
+    raw_instructions = attrs.get("gen_ai.system_instructions")
+    if not raw_in and not raw_out and not raw_instructions:
         return
-    import json as _json
+
+    # pydantic-ai writes the system prompt to a SEPARATE
+    # ``gen_ai.system_instructions`` attribute rather than including
+    # SystemPromptPart/InstructionPart entries in
+    # ``gen_ai.input.messages``. When the messages list is empty or
+    # missing the system content, the Langfuse Formatted view shows
+    # input as null. Prepend a synthetic system message reconstructed
+    # from the instructions attribute so the prompt is visible
+    # alongside any user/tool turns that follow.
+    if raw_instructions:
+        try:
+            parsed_inst = _json.loads(raw_instructions) if isinstance(raw_instructions, str) else raw_instructions
+        except (TypeError, ValueError):
+            parsed_inst = None
+        if isinstance(parsed_inst, list):
+            text_chunks = []
+            for p in parsed_inst:
+                if isinstance(p, dict) and p.get("type") == "text":
+                    text_chunks.append(p.get("content", "") or "")
+            instructions_text = "\n".join(filter(None, text_chunks))
+        elif isinstance(parsed_inst, str):
+            instructions_text = parsed_inst
+        else:
+            instructions_text = ""
+        if instructions_text:
+            try:
+                msgs_in = _json.loads(raw_in) if isinstance(raw_in, str) and raw_in else (raw_in if isinstance(raw_in, list) else [])
+            except (TypeError, ValueError):
+                msgs_in = []
+            if not isinstance(msgs_in, list):
+                msgs_in = []
+            # Avoid duplicating a system message that's already present.
+            has_system = any(
+                isinstance(m, dict) and m.get("role") == "system"
+                for m in msgs_in
+            )
+            if not has_system:
+                synthetic = {
+                    "role": "system",
+                    "parts": [{"type": "text", "content": instructions_text}],
+                }
+                msgs_in = [synthetic, *msgs_in]
+                raw_in = _json.dumps(msgs_in, default=str, ensure_ascii=False)
 
     def _rewrite(raw, *dest_keys: str) -> None:
         if not raw:

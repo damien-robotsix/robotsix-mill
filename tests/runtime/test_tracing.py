@@ -540,3 +540,66 @@ class TestFlattenChatIO:
         _flatten_chat_io(span)
         assert "langfuse.observation.input" not in span._attributes
         assert "langfuse.observation.output" not in span._attributes
+
+    def test_flatten_chat_io_uses_system_instructions_when_input_empty(self):
+        """When pydantic-ai puts the system prompt in
+        ``gen_ai.system_instructions`` and ``gen_ai.input.messages``
+        has no system role, the flattener prepends a synthetic system
+        message so the Langfuse Formatted view shows the instructions
+        instead of a null input column."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_io
+        import json
+
+        class _FakeSpan:
+            def __init__(self):
+                self._attributes: dict = {
+                    "gen_ai.system_instructions": json.dumps([
+                        {"type": "text", "content": "Be precise."},
+                    ]),
+                    "gen_ai.input.messages": json.dumps([
+                        {"role": "user",
+                         "parts": [{"type": "text", "content": "hi"}]},
+                    ]),
+                }
+
+            @property
+            def attributes(self):
+                return self._attributes
+
+        span = _FakeSpan()
+        _flatten_chat_io(span)
+        flat = json.loads(span._attributes["gen_ai.input.messages"])
+        assert flat[0] == {"role": "system", "content": "Be precise."}
+        assert flat[1]["role"] == "user"
+        assert flat[1]["content"] == "hi"
+
+    def test_flatten_chat_io_skips_synthetic_system_when_one_exists(self):
+        """If the messages list already has a role=system entry, the
+        instructions attribute is NOT duplicated."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_io
+        import json
+
+        class _FakeSpan:
+            def __init__(self):
+                self._attributes: dict = {
+                    "gen_ai.system_instructions": json.dumps([
+                        {"type": "text", "content": "should not duplicate"},
+                    ]),
+                    "gen_ai.input.messages": json.dumps([
+                        {"role": "system",
+                         "parts": [{"type": "text", "content": "real system"}]},
+                        {"role": "user",
+                         "parts": [{"type": "text", "content": "hi"}]},
+                    ]),
+                }
+
+            @property
+            def attributes(self):
+                return self._attributes
+
+        span = _FakeSpan()
+        _flatten_chat_io(span)
+        flat = json.loads(span._attributes["gen_ai.input.messages"])
+        roles = [m["role"] for m in flat]
+        assert roles.count("system") == 1
+        assert flat[0]["content"] == "real system"
