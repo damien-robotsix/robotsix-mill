@@ -59,44 +59,14 @@ class ToolRegistry:
 
     @classmethod
     def describe_for_prompt(cls, tool_names: set[str] | None = None) -> str:
-        """Return a concise Markdown table of all registered tools,
-        grouped by category, suitable for injection into a system prompt.
+        """Deprecated. Returns an empty string.
 
-        When *tool_names* is provided, only tools whose name is in the
-        set are included.  When ``None`` (default, backward-compatible),
-        all registered tools are returned.
-
-        When the registry is empty, returns a short message instead of
-        an empty table that would confuse the model.
+        Tool descriptions are no longer injected into the system
+        prompt — pydantic-ai already forwards each tool's signature
+        and docstring to the model as a structured ``tools`` array
+        on every API call, so a prose Markdown copy was pure token
+        duplication. ``compose_prompt`` no longer calls this method;
+        the shim stays for any out-of-tree caller still wired to it.
         """
-        tools = cls.list_tools()
-        if tool_names is not None:
-            tools = [t for t in tools if t.name in tool_names]
-        if not tools:
-            return (
-                "## Available tools\n\n"
-                "(No tools have been registered yet — "
-                "the tool registry is empty.)\n"
-            )
-
-        lines: list[str] = ["## Available tools", ""]
-        current_cat: str | None = None
-
-        for t in tools:
-            if t.category != current_cat:
-                current_cat = t.category
-                lines.append(f"### {current_cat}")
-                lines.append("")
-                lines.append("| Tool | Category | Description |")
-                lines.append("|------|----------|-------------|")
-            lines.append(f"| {t.name} | {t.category} | {t.description} |")
-
-        lines.append("")
-        lines.append(
-            "> Prefer direct tools (read_file, list_dir, run_command) "
-            "for single-step lookups.\n"
-            "> Use explore only for complex multi-step questions; "
-            "batch related questions into ONE explore call."
-        )
-
-        return "\n".join(lines)
+        del tool_names
+        return ""

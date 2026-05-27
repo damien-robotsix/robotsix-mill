@@ -147,11 +147,21 @@ def _model_name(settings: Settings) -> str:
 def compose_prompt(
     settings: Settings,
     system_prompt: str,
-    tool_names: set[str] | None = None,
+    tool_names: set[str] | None = None,  # legacy, ignored
     skills: list[str] | None = None,
 ) -> str:
-    from .tool_registry import ToolRegistry
+    """Compose the final system prompt: the YAML ``system_prompt`` plus
+    any ``skills`` sections.
 
+    Tool descriptions are NOT appended here. pydantic-ai already
+    forwards each tool's signature + docstring to the model as a
+    structured ``tools`` array on every API call, so a prose copy in
+    the system prompt is pure duplication — same surface, twice the
+    tokens, on every coordinator iteration. The ``tool_names`` arg is
+    kept for backward compatibility with the YAML loader call site
+    but no longer affects the output.
+    """
+    del tool_names  # legacy parameter — no longer used
     prompt = system_prompt
 
     if skills:
@@ -180,9 +190,6 @@ def compose_prompt(
         if skill_sections:
             prompt += "\n\n## Skills\n\n" + "\n\n".join(skill_sections)
 
-    prompt += "\n\n" + ToolRegistry.describe_for_prompt(
-        tool_names=tool_names
-    )
     return prompt
 
 
@@ -268,12 +275,10 @@ def build_agent(
         # sub-agent does the searching and hands back only a conclusion.
         all_tools.append(make_web_research_tool(settings))
 
-    tool_names = {t.__name__ for t in all_tools}
-
     agent_kwargs: dict[str, Any] = dict(
         model=model,
         system_prompt=compose_prompt(
-            settings, system_prompt, tool_names=tool_names, skills=skills
+            settings, system_prompt, skills=skills,
         ),
         output_type=output_type,
         tools=all_tools,

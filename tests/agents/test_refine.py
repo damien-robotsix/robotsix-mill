@@ -519,7 +519,8 @@ def test_dedup_skipped_for_trivial_draft(ctx, service, monkeypatch):
 
 
 def test_dedup_never_flags_self(ctx, service, monkeypatch):
-    """Candidate list passed to dedup must NOT contain the current ticket's id."""
+    """The candidates block passed to dedup must NOT mention the
+    current ticket's id."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
@@ -527,27 +528,27 @@ def test_dedup_never_flags_self(ctx, service, monkeypatch):
     # Create another ticket so the candidate list isn't empty
     service.create("other ticket", "other draft")
 
-    seen_candidates = None
+    seen_block = None
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json):
-        nonlocal seen_candidates
-        import json
-        seen_candidates = json.loads(candidates_json)
+        nonlocal seen_block
+        seen_block = candidates_json
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
 
     monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
 
     RefineStage().run(t, ctx)
 
-    assert seen_candidates is not None
-    candidate_ids = [c["id"] for c in seen_candidates]
-    assert t.id not in candidate_ids
+    assert seen_block is not None
+    # The candidates block is one ``## <id>`` section per ticket; the
+    # current ticket's id must not appear as a section heading.
+    assert f"## {t.id}" not in seen_block
 
 
 def test_dedup_candidate_bodies_included(ctx, service, monkeypatch):
-    """Candidate entries passed to dedup must include a ``body`` field
-    with the full content of each candidate ticket's description.md."""
+    """Candidate entries passed to dedup must include each ticket's
+    full description body inside a ``<body>...</body>`` block."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
@@ -558,33 +559,31 @@ def test_dedup_candidate_bodies_included(ctx, service, monkeypatch):
     t_a = service.create("candidate A", "body of ticket A\nline two")
     t_b = service.create("candidate B", "body of ticket B")
 
-    seen_candidates = None
+    seen_block = None
 
     def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
                    candidates_json):
-        nonlocal seen_candidates
-        import json
-        seen_candidates = json.loads(candidates_json)
+        nonlocal seen_block
+        seen_block = candidates_json
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
 
     monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
 
     RefineStage().run(t, ctx)
 
-    assert seen_candidates is not None
-    # Build a lookup by ticket id.
-    by_id = {c["id"]: c for c in seen_candidates}
+    assert seen_block is not None
+    # Each candidate is a Markdown section with title + body.
+    assert f"## {t_a.id}" in seen_block
+    assert "- title: candidate A" in seen_block
+    assert "body of ticket A\nline two" in seen_block
 
-    assert t_a.id in by_id
-    assert by_id[t_a.id]["body"] == "body of ticket A\nline two"
+    assert f"## {t_b.id}" in seen_block
+    assert "- title: candidate B" in seen_block
+    assert "body of ticket B" in seen_block
 
-    assert t_b.id in by_id
-    assert by_id[t_b.id]["body"] == "body of ticket B"
-
-    # All candidates must have the "body" key (never missing).
-    for entry in seen_candidates:
-        assert "body" in entry
-        assert isinstance(entry["body"], str)
+    # Each section uses the <body>...</body> framing.
+    assert seen_block.count("<body>") == 2
+    assert seen_block.count("</body>") == 2
 
 
 def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):

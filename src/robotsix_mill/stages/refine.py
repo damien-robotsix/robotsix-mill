@@ -84,22 +84,37 @@ def _resolve_next_state(
     return State.HUMAN_ISSUE_APPROVAL, "auto-approve: triage failed — falling back to human approval"
 
 
-def _build_candidates_json(candidates: list[Ticket], ctx: StageContext) -> str:
-    """Serialize candidates for the dedup check, including ticket bodies."""
-    entries: list[dict] = []
+def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
+    """Render candidates for the dedup check as one Markdown section
+    per ticket.
+
+    The previous implementation emitted a single JSON blob which is
+    fine for the model but renders as an unreadable wall of escaped
+    JSON in Langfuse's prompt viewer when an operator audits the run.
+    The new format is one ``## <id>`` heading per candidate followed
+    by a short metadata list and a ``<body>...</body>`` block so each
+    ticket is a readable section both inline and in the trace UI.
+
+    Each rendered candidate carries the same fields the dedup yaml
+    asks for (``id``, ``title``, ``state``, ``source``, ``body``);
+    only the encoding changed.
+    """
+    if not candidates:
+        return "(no candidates)"
+    sections: list[str] = []
     for t in candidates:
         try:
             body = ctx.service.workspace(t).read_description()
         except Exception:
             body = ""
-        entries.append({
-            "id": t.id,
-            "title": t.title,
-            "state": t.state.value,
-            "source": t.source,
-            "body": body,
-        })
-    return json.dumps(entries, default=str)
+        sections.append(
+            f"## {t.id}\n"
+            f"- title: {t.title}\n"
+            f"- state: {t.state.value}\n"
+            f"- source: {t.source}\n"
+            f"\n<body>\n{body.strip()}\n</body>"
+        )
+    return "\n\n".join(sections)
 
 
 class RefineStage(Stage):
@@ -199,7 +214,7 @@ class RefineStage(Stage):
                     )
                 )
             ]
-            candidates_json = _build_candidates_json(candidates, ctx)
+            candidates_json = _build_candidates_block(candidates, ctx)
 
             try:
                 verdict = dedup.run_dedup_check(

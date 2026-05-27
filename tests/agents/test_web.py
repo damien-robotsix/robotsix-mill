@@ -114,20 +114,19 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
     assert captured["name"] == "web_research"
 
 
-def test_compose_prompt_injects_capability_table(tmp_path):
-    """_compose_prompt now injects ToolRegistry.describe_for_prompt()
-    into every agent's system prompt.  When tools are registered, the
-    table appears; when empty, a placeholder message is appended."""
+def test_compose_prompt_does_not_inject_tool_table(tmp_path):
+    """compose_prompt no longer appends a prose tool table — pydantic-ai
+    already forwards each tool's signature + docstring as the structured
+    ``tools`` array on every API call. The system prompt is the YAML
+    body verbatim (plus optional ``## Skills`` when skills are passed)."""
     from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
 
     s = _settings(tmp_path)
     ToolRegistry._tools.clear()
     try:
-        # With no tools registered, we still get the placeholder table.
         p = compose_prompt(s, "BASE PROMPT")
-        assert p.startswith("BASE PROMPT")
-        assert "## Available tools" in p
-        assert "No tools have been registered yet" in p
+        assert p.strip() == "BASE PROMPT"
+        assert "## Available tools" not in p
     finally:
         ToolRegistry._tools.clear()
 

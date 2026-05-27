@@ -69,39 +69,21 @@ def test_tool_registry_register_and_list():
     assert tools[3].category == "exploration"
 
 
-def test_tool_registry_describe_for_prompt():
-    """Register tools, call describe_for_prompt(), assert the returned
-    string contains a Markdown table with tool names, categories,
-    descriptions, category grouping headers, and the strategic guidance
-    footer."""
+def test_tool_registry_describe_for_prompt_is_deprecated_noop():
+    """``describe_for_prompt`` was a prose-Markdown copy of the tools
+    pydantic-ai already injects via the structured ``tools`` array.
+    After deduplication, the method is a deprecated shim that returns
+    an empty string regardless of registry contents."""
     ToolRegistry.register(ToolInfo(
         name="read_file", description="Return the text content of a file.",
         category="fs", parameters={"path": "str"},
     ))
-    ToolRegistry.register(ToolInfo(
-        name="explore", description="Ask a sub-agent a complex question.",
-        category="exploration", parameters={"question": "str"},
-    ))
 
     out = ToolRegistry.describe_for_prompt()
+    assert out == ""
 
-    # Must be a Markdown table
-    assert "## Available tools" in out
-    assert "| Tool | Category | Description |" in out
-    assert "|------|----------|-------------|" in out
-
-    # Category grouping headers
-    assert "### fs" in out
-    assert "### exploration" in out
-
-    # Tool entries
-    assert "| read_file | fs | Return the text content of a file. |" in out
-    assert "| explore | exploration | Ask a sub-agent a complex question. |" in out
-
-    # Strategic guidance footer
-    assert "Prefer direct tools" in out
-    assert "Use explore only for complex multi-step questions" in out
-    assert "batch related questions into ONE explore call" in out
+    # Filtering also produces the empty shim.
+    assert ToolRegistry.describe_for_prompt(tool_names={"read_file"}) == ""
 
 
 def test_tool_registry_deduplicates_by_name():
@@ -123,37 +105,6 @@ def test_tool_registry_deduplicates_by_name():
     assert tools[0].parameters == {"path": "str"}
 
 
-def test_tool_registry_empty_describe():
-    """Call describe_for_prompt() on an empty registry — asserts it
-    returns a sensible message, not an empty table."""
-    out = ToolRegistry.describe_for_prompt()
-    assert "No tools have been registered yet" in out
-    assert "tool registry is empty" in out
-
-
-def test_describe_for_prompt_filters_by_tool_names():
-    """AC1: Register read_file, run_command, report_issue. Call with
-    tool_names={"report_issue"}. Assert output contains report_issue
-    but NOT read_file or run_command."""
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="Read a file.",
-        category="fs", parameters={"path": "str"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="run_command", description="Run a shell command.",
-        category="shell", parameters={"command": "str"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="report_issue", description="File a draft.",
-        category="reporting", parameters={"title": "str"},
-    ))
-
-    out = ToolRegistry.describe_for_prompt(tool_names={"report_issue"})
-
-    # Table rows: report_issue appears as a tool, read_file/run_command do not
-    assert "| report_issue |" in out
-    assert "| read_file |" not in out
-    assert "| run_command |" not in out
 
 
 def test_all_tools_registered(tmp_path, monkeypatch):
@@ -217,10 +168,11 @@ def test_all_tools_registered(tmp_path, monkeypatch):
     assert registered == expected
 
 
-def test_compose_prompt_includes_capability_table(tmp_path):
-    """Call _compose_prompt after registering at least one tool, assert
-    the result starts with the original prompt and contains the
-    capability table. Also test that tool_names filters correctly."""
+def test_compose_prompt_does_not_inject_tool_table(tmp_path):
+    """``compose_prompt`` no longer appends a prose tool table —
+    pydantic-ai forwards the structured ``tools`` array on its own.
+    Registering tools must not leak any ``## Available tools`` section
+    back into the system prompt."""
     from robotsix_mill.agents.base import compose_prompt
 
     s = _settings(tmp_path)
@@ -231,18 +183,7 @@ def test_compose_prompt_includes_capability_table(tmp_path):
     ))
 
     result = compose_prompt(s, "test prompt")
-    assert result.startswith("test prompt")
-    assert "## Available tools" in result
-    assert "| read_file | fs | Read a file. |" in result
-    assert "Prefer direct tools" in result
-
-    # AC2: tool_names filter
-    ToolRegistry.register(ToolInfo(
-        name="report_issue", description="File a draft.",
-        category="reporting", parameters={"title": "str"},
-    ))
-    result2 = compose_prompt(
-        s, "test prompt", tool_names={"report_issue"}
-    )
-    assert "| report_issue |" in result2
-    assert "| read_file |" not in result2
+    assert "## Available tools" not in result
+    assert "| read_file |" not in result
+    # Body of the system prompt is preserved verbatim.
+    assert result.strip() == "test prompt"

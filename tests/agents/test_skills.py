@@ -22,9 +22,11 @@ def _clear_registry():
 
 # ── skill injection ───────────────────────────────────────────────────
 
-def test_skill_injected_between_system_prompt_and_tool_table(tmp_path):
-    """Skill content appears between the system prompt and the tool table,
-    under a ## Skills heading."""
+def test_skill_injected_after_system_prompt(tmp_path):
+    """Skill content appears after the system prompt under a ``##
+    Skills`` heading, with YAML frontmatter stripped. (Previously
+    asserted skills came BEFORE a now-removed tool table; the
+    table is gone but the skills positioning is unchanged.)"""
     s = _settings(tmp_path, MILL_SKILLS_DIR=str(tmp_path / "skills"))
 
     # Create a real skill file
@@ -41,15 +43,11 @@ def test_skill_injected_between_system_prompt_and_tool_table(tmp_path):
 
     result = compose_prompt(s, "SYSTEM PROMPT", skills=["board"])
 
-    # System prompt comes first
+    # System prompt comes first.
     assert result.startswith("SYSTEM PROMPT")
 
-    # Skills section appears before Available tools
-    skills_pos = result.index("## Skills")
-    tools_pos = result.index("## Available tools")
-    assert skills_pos < tools_pos
-
-    # Skill body appears (frontmatter stripped)
+    # Skills section appears, body included.
+    assert "## Skills" in result
     assert "Board interaction guidance here." in result
     assert "name: board" not in result
 
@@ -64,7 +62,6 @@ def test_missing_skill_logs_warning_and_continues(tmp_path, caplog):
 
     assert "Skill file not found" in caplog.text
     assert result.startswith("BASE")
-    assert "## Available tools" in result
     # No ## Skills heading when no skills loaded
     assert "## Skills" not in result
 
@@ -109,7 +106,6 @@ def test_compose_prompt_backward_compatible_no_skills(tmp_path):
 
     result = compose_prompt(s, "BASE PROMPT")
     assert result.startswith("BASE PROMPT")
-    assert "## Available tools" in result
     assert "## Skills" not in result
 
 
@@ -124,7 +120,6 @@ def test_compose_prompt_skills_none_same_as_omitted(tmp_path):
 
     result = compose_prompt(s, "BASE", skills=None)
     assert "## Skills" not in result
-    assert "## Available tools" in result
 
 
 def test_multiple_skills_injected(tmp_path):
@@ -162,4 +157,3 @@ def test_skill_with_only_frontmatter_injects_nothing(tmp_path):
 
     # ## Skills header only appears if we have non-empty content
     assert "## Skills" not in result
-    assert "## Available tools" in result

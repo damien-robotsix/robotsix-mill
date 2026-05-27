@@ -177,15 +177,20 @@ def test_build_agent_forwards_name(tmp_path, monkeypatch):
     assert cap["name"] == "test-agent"
 
 
-def test_build_agent_prompt_only_lists_owned_tools(tmp_path, monkeypatch):
-    """AC3: Register a tool in ToolRegistry that is NOT passed to
-    build_agent. The system prompt must NOT mention the un-owned tool."""
+def test_build_agent_does_not_inject_tool_prose_into_prompt(tmp_path, monkeypatch):
+    """The agent's system_prompt is the YAML body verbatim — no prose
+    tool list is appended. pydantic-ai forwards each closure's
+    signature + docstring as the model API's structured ``tools``
+    array; a Markdown copy in the prompt would be pure duplication.
+
+    Replaces the previous AC3 test that asserted owned tools appeared
+    in the prompt but unowned ones didn't — the contract changed when
+    we deduped the tool surface."""
     from robotsix_mill.agents.base import build_agent
     from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
 
     s = _settings(tmp_path)
 
-    # Register a tool that won't be given to the agent
     ToolRegistry.register(ToolInfo(
         name="write_file", description="Write a file.",
         category="fs", parameters={"path": "str", "content": "str"},
@@ -194,12 +199,6 @@ def test_build_agent_prompt_only_lists_owned_tools(tmp_path, monkeypatch):
     def dummy_tool():
         """A dummy tool."""
         pass
-
-    # Also register dummy_tool so it appears in the prompt when owned
-    ToolRegistry.register(ToolInfo(
-        name="dummy_tool", description="A dummy tool.",
-        category="fs", parameters={},
-    ))
 
     cap = {}
 
@@ -225,9 +224,10 @@ def test_build_agent_prompt_only_lists_owned_tools(tmp_path, monkeypatch):
     )
     agent.close()
 
-    # The prompt should mention dummy_tool (it's in the agent's tool set)
-    assert "dummy_tool" in cap["system_prompt"]
-    # But NOT write_file (it's registered but not given to this agent)
+    # The prompt is the YAML body verbatim — no prose tool table.
+    assert "## Available tools" not in cap["system_prompt"]
+    # No tool names leak into the prompt body.
+    assert "dummy_tool" not in cap["system_prompt"]
     assert "write_file" not in cap["system_prompt"]
 
 
