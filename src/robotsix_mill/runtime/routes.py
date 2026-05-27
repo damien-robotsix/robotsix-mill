@@ -955,13 +955,24 @@ def generate_children(
     if ticket.kind != "epic":
         raise HTTPException(400, "ticket is not an epic")
 
-    run_id = registry.start("epic-breakdown")
+    # In multi-repo mode the default svc is bound to the first repo's
+    # board. ``svc.get`` finds the epic via the cross-board fanout and
+    # resolves ``ticket.board_id``, but subsequent writes (``create``,
+    # ``set_depends_on``, ``set_content_hash``) default to the bound
+    # service's board — so an auto-mail epic would silently spawn its
+    # children on the mill board. Use a service pinned to the epic's
+    # actual board for every mutation in the background runner.
+    from ..core.service import TicketService as _TicketService
+    epic_board_id = ticket.board_id or svc.board_id
+    epic_svc = _TicketService(settings, board_id=epic_board_id)
+
+    run_id = registry.start("epic-breakdown", repo_id=epic_board_id)
 
     def _run() -> None:
         try:
             from ..agents.epic_breakdown import run_epic_breakdown_agent
 
-            description = svc.workspace(ticket).read_description()
+            description = epic_svc.workspace(ticket).read_description()
             result = run_epic_breakdown_agent(
                 settings=settings,
                 epic_title=ticket.title,
@@ -969,7 +980,7 @@ def generate_children(
             )
             created_ids: list[str] = []
             for title, body in zip(result.child_titles, result.child_bodies):
-                child = svc.create(
+                child = epic_svc.create(
                     title=title,
                     description=body,
                     kind="task",
@@ -979,15 +990,15 @@ def generate_children(
 
             # Build linear dependency chain: C0 ← C1 ← C2 ← ...
             for i in range(1, len(created_ids)):
-                svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
+                epic_svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
 
             # Apply the revised epic body to the epic immediately
             # (generate-children is a one-shot manual trigger).
             if result.epic_body and result.epic_body.strip():
-                new_hash = svc.workspace(ticket).write_description(
+                new_hash = epic_svc.workspace(ticket).write_description(
                     result.epic_body.strip()
                 )
-                svc.set_content_hash(ticket_id, new_hash)
+                epic_svc.set_content_hash(ticket_id, new_hash)
 
             summary = (
                 f"Created {len(created_ids)} children: "

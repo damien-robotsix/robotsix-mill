@@ -1184,23 +1184,26 @@ def test_generate_children_creates_children(client, service, monkeypatch):
     import threading
 
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+    from robotsix_mill.core.service import TicketService
 
     epic = service.create("Break me down", kind="epic")
 
     # Signal when the background thread has created both children.
+    # Patch at the CLASS level — the route builds a fresh per-board
+    # TicketService for multi-repo correctness, so any per-instance
+    # patching of the app's service is bypassed.
     children_created = threading.Event()
     child_count = [0]
-    app_svc = client.app.state.service
-    orig_create = app_svc.create
+    orig_create = TicketService.create
 
-    def tracking_create(title, **kwargs):
-        result = orig_create(title, **kwargs)
+    def tracking_create(self, title, *args, **kwargs):
+        result = orig_create(self, title, *args, **kwargs)
         child_count[0] += 1
         if child_count[0] >= 2:
             children_created.set()
         return result
 
-    monkeypatch.setattr(app_svc, "create", tracking_create)
+    monkeypatch.setattr(TicketService, "create", tracking_create)
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
         lambda **kw: EpicBreakdownResult(
@@ -1227,20 +1230,22 @@ def test_generate_children_applies_epic_body(client, service, monkeypatch):
     import threading
 
     from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+    from robotsix_mill.core.service import TicketService
 
     epic = service.create("Break me down", "Original epic description", kind="epic")
 
     # Signal when the background thread has written the epic body.
+    # Patch at the CLASS level for the same multi-repo reason as
+    # the sibling test_generate_children_creates_children above.
     epic_updated = threading.Event()
-    app_svc = client.app.state.service
-    orig_set_hash = app_svc.set_content_hash
+    orig_set_hash = TicketService.set_content_hash
 
-    def tracking_set_hash(ticket_id, new_hash):
-        orig_set_hash(ticket_id, new_hash)
+    def tracking_set_hash(self, ticket_id, new_hash):
+        orig_set_hash(self, ticket_id, new_hash)
         if ticket_id == epic.id:
             epic_updated.set()
 
-    monkeypatch.setattr(app_svc, "set_content_hash", tracking_set_hash)
+    monkeypatch.setattr(TicketService, "set_content_hash", tracking_set_hash)
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
         lambda **kw: EpicBreakdownResult(

@@ -425,6 +425,7 @@ class RefineStage(Stage):
                 epic_context=epic_ctx,
                 extra_roots=extra_roots,
                 message_history=resume_history,
+                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))

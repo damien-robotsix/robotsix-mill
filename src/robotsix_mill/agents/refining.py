@@ -367,6 +367,7 @@ def run_refine_agent(
     epic_context: str = "",
     extra_roots: list[Path] | None = None,
     message_history: list | None = None,
+    board_id: str = "",
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -423,6 +424,7 @@ def run_refine_agent(
 
     agent = build_agent_from_definition(
         settings, definition, tools=tools,
+        board_id=board_id,
         **overrides,
     )
 

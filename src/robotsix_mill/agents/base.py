@@ -202,6 +202,7 @@ def build_agent(
     name: str | None = None,
     retries: int = 2,
     skills: list[str] | None = None,
+    board_id: str = "",
 ):
     """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
     role passes its own ``model_name`` (see Settings per-agent models);
@@ -236,7 +237,9 @@ def build_agent(
         # Every agent can self-report a blocking/degrading issue (missing
         # tool, error, workflow gap, missing input) as a draft ticket.
         # Dedup-guarded so a looping agent can't spam identical tickets.
-        all_tools.append(make_report_issue_tool(settings, agent_name=name))
+        all_tools.append(make_report_issue_tool(
+            settings, agent_name=name, board_id=board_id,
+        ))
     if read_ticket:
         # Read-only tool so periodic agents can fetch full context of a
         # past proposal when the one-line summary in <recent_proposals>

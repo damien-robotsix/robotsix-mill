@@ -67,7 +67,7 @@ def test_dep_gated_ticket_is_not_refined(ctx, service, monkeypatch):
 
     refine_called = False
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nx\n")
@@ -97,7 +97,7 @@ def test_dep_satisfied_ticket_is_refined(ctx, service, monkeypatch):
 
     refine_called = False
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nx\n")
@@ -111,7 +111,7 @@ def test_dep_satisfied_ticket_is_refined(ctx, service, monkeypatch):
 
 
 def test_no_api_key_blocks(ctx, service, monkeypatch):
-    def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     monkeypatch.setattr(refining, "run_refine_agent", boom)
@@ -126,7 +126,7 @@ def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
     refine_called = False
 
     def fake_refine(
-        *, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None
+        *, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""
     ):
         nonlocal refine_called
         refine_called = True
@@ -274,7 +274,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
         seen["clone"] += 1
         (dest / ".git").mkdir(parents=True)
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         seen["repo_dir"] = repo_dir
         return _single("## Problem\nx\n## Scope\n- y\n")
 
@@ -309,7 +309,7 @@ def test_refine_clone_failure_blocks_with_comment(ctx, service, monkeypatch):
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         refine_called.append(True)
         return _single("## Problem\nx\n")
 
@@ -392,7 +392,7 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -428,7 +428,7 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -464,7 +464,7 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -603,7 +603,7 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
@@ -750,7 +750,7 @@ def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
@@ -782,7 +782,7 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_tools.extend(t.__name__ for t in tools)
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
@@ -814,7 +814,7 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_tools.extend(t.__name__ for t in tools)
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
@@ -1072,7 +1072,7 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     # Step 3: Now run RefineStage on child A — it should skip the agent.
     refine_called = False
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return _single(draft)
@@ -1124,7 +1124,7 @@ def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
     refine_called = False
     expected_spec = "## Problem\nrefined improvement\n## Scope\n- do it\n"
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         assert draft == raw_draft
@@ -1213,7 +1213,7 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single(raw_md)})()
         return FakeAgent()
 
@@ -1240,7 +1240,7 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 # Simulate PromptedOutput parsing — returns a RefineResult.
                 return type("R", (), {"output": _single(raw)})()
         return FakeAgent()
@@ -1267,7 +1267,7 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
@@ -1296,7 +1296,7 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
@@ -1405,7 +1405,7 @@ def test_sendback_uses_short_prompt(monkeypatch, tmp_path):
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
@@ -1432,7 +1432,7 @@ def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
         return FakeAgent()
 
@@ -1476,7 +1476,7 @@ def test_epic_context_passed_to_refine_agent(ctx, service, monkeypatch):
     def fake_refine(
         *, settings, title, draft, repo_dir=None,
         reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None, message_history=None,
+        extra_roots=None, message_history=None, board_id="",
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -1503,7 +1503,7 @@ def test_epic_context_empty_for_non_epic_parent_in_refine(ctx, service, monkeypa
     def fake_refine(
         *, settings, title, draft, repo_dir=None,
         reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None, message_history=None,
+        extra_roots=None, message_history=None, board_id="",
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -1524,7 +1524,7 @@ def test_epic_context_empty_for_no_parent_in_refine(ctx, service, monkeypatch):
     def fake_refine(
         *, settings, title, draft, repo_dir=None,
         reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None, message_history=None,
+        extra_roots=None, message_history=None, board_id="",
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -1647,7 +1647,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
             model_name=model_name, name=name,
         )
         class FakeAgent:
-            def run_sync(self, msg, message_history=None):
+            def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": TriageResult(decision="REFINE", reason="test")})()
         return FakeAgent()
 
@@ -1674,7 +1674,7 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     def fake_triage(*, settings, title, draft):
         return TriageResult(decision="SKIP", reason="doc-only change, no exploration needed")
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return _single("should not be called")
@@ -1722,7 +1722,7 @@ def test_triage_refine_calls_full_refine(ctx, service, monkeypatch):
     def fake_triage(*, settings, title, draft):
         return TriageResult(decision="REFINE", reason="ambiguous scope, needs exploration")
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nrefined\n")
@@ -1750,7 +1750,7 @@ def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch, re
         from robotsix_mill.agents.refining import TriageResult
         return TriageResult(decision="SKIP", reason="should not be reached")
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nrefined\n")
@@ -1783,7 +1783,7 @@ def test_triage_sendback_always_refines(ctx, service, monkeypatch):
         triage_called = True
         return TriageResult(decision="SKIP", reason="should not be reached")
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         # Verify reviewer comments were passed through.
@@ -1813,7 +1813,7 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
     def boom_triage(*, settings, title, draft):
         raise RuntimeError("triage model down")
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None):
+    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nrefined\n")

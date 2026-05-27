@@ -30,7 +30,12 @@ _CATEGORIES = (
 )
 
 
-def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None):
+def make_report_issue_tool(
+    settings: Settings,
+    *,
+    agent_name: str | None = None,
+    board_id: str = "",
+):
     """Return the ``report_issue`` closure bound to *settings*.
 
     Lazily constructs a ``TicketService`` per call so this stays cheap
@@ -42,6 +47,11 @@ def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None)
             originating agent is identifiable at a glance (e.g.
             ``"run_tests"``).  When ``None`` or empty, the generic
             wording is used.
+        board_id: The board the host agent is running for. Threaded
+            through to the ``TicketService`` so issues filed from
+            inside an auto-mail run land on the auto-mail board,
+            not on the default DB. Empty string preserves the
+            legacy single-repo behaviour.
     """
 
     def report_issue(
@@ -76,7 +86,7 @@ def make_report_issue_tool(settings: Settings, *, agent_name: str | None = None)
             from ..core.service import TicketService
             from ..runtime.tracing import current_session
 
-            service = TicketService(settings)
+            service = TicketService(settings, board_id=board_id)
 
             # Dedup: skip if a non-terminal ticket with this title is
             # already open (prevents loop spam).

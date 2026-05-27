@@ -367,6 +367,27 @@ class TicketService:
         # is bound to), else self.board_id.
         effective_board = board_id if board_id is not None else self.board_id
 
+        # In multi-repo mode every ticket MUST belong to a board —
+        # otherwise it ends up in the default mill.db and the UI
+        # can't find it (the per-repo list endpoints filter by
+        # board_id). Reject board-less creates so an agent tool
+        # that forgot to thread board_id raises here instead of
+        # silently producing an orphan ticket + an orphan
+        # ``.data/workspaces/<id>`` directory.
+        if not effective_board:
+            from ..config import get_repos_config
+            try:
+                repos = get_repos_config().repos
+            except Exception:
+                repos = {}
+            if repos and not self.settings.default_repo_id:
+                raise ValueError(
+                    "refusing to create board-less ticket in multi-repo "
+                    "mode: pass an explicit board_id, or configure "
+                    "MILL_DEFAULT_REPO_ID. "
+                    f"(title={title!r}, source={source!r})"
+                )
+
         # Validate parent_id against the EFFECTIVE board's DB.
         if parent_id is not None:
             with db.session(self.settings, effective_board) as s:
