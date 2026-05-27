@@ -143,7 +143,7 @@ class Settings(BaseSettings):
     # Model for the pre-refine dedup/already-done check — a cheap call
     # that short-circuits duplicate drafts before the expensive refiner.
     dedup_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_DEDUP_MODEL"
+        default="deepseek/deepseek-v4-flash", alias="MILL_DEDUP_MODEL"
     )
     # Model for the pre-refine triage pass — a single cheap call that
     # decides whether the draft needs refinement at all.  Must be a

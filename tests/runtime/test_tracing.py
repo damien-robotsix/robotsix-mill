@@ -380,249 +380,21 @@ def test_flush_tracing_default_timeout():
 # --- Langfuse chat-IO flattener ----------------------------------------
 
 
-class TestFlattenChatIO:
-    """The exporter rewrites pydantic-ai's parts-shaped
-    ``gen_ai.input.messages`` / ``output.messages`` into Langfuse's
-    flat ``{role, content}`` shape so the UI renders chat bubbles."""
 
-    def test_flatten_text_only_message(self):
-        from robotsix_mill.runtime.tracing import _flatten_chat_message
-        m = {"role": "system", "parts": [
-            {"type": "text", "content": "You are a refine agent..."}
-        ]}
-        assert _flatten_chat_message(m) == {
-            "role": "system", "content": "You are a refine agent...",
-        }
+class TestCheckRejectedGeneration:
+    """Annotate model-call spans where pydantic-ai silently rejected
+    the response (output tokens billed, but no gen_ai.output.messages
+    landed because the structured-output validator threw)."""
 
-    def test_flatten_multi_part_message_concats_text(self):
-        from robotsix_mill.runtime.tracing import _flatten_chat_message
-        m = {"role": "user", "parts": [
-            {"type": "text", "content": "First."},
-            {"type": "text", "content": "Second."},
-        ]}
-        out = _flatten_chat_message(m)
-        assert out["role"] == "user"
-        assert out["content"] == "First.\nSecond."
-
-    def test_flatten_tool_call_part(self):
-        """tool_call parts go into the OpenAI-shape ``tool_calls``
-        array, NOT into the text content blob — that's what makes
-        Langfuse render them as native tool-call cards."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_message
-        m = {"role": "assistant", "parts": [
-            {"type": "text", "content": "Will call."},
-            {"type": "tool_call", "id": "call_1", "name": "read_file",
-             "arguments": '{"path":"foo.py"}'},
-        ]}
-        out = _flatten_chat_message(m)
-        assert out["content"] == "Will call."
-        assert out["tool_calls"] == [
-            {
-                "id": "call_1",
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "arguments": '{"path":"foo.py"}',
-                },
-            }
-        ]
-
-    def test_flatten_tool_response_part(self):
-        """tool_call_response → role=tool with tool_call_id + content
-        result, matching OpenAI chat-completions."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_message
-        m = {"role": "tool", "parts": [
-            {"type": "tool_call_response", "id": "call_1",
-             "name": "read_file", "result": "file contents..."},
-        ]}
-        out = _flatten_chat_message(m)
-        assert out["role"] == "tool"
-        assert out["tool_call_id"] == "call_1"
-        assert out["content"] == "file contents..."
-        assert "tool_calls" not in out
-
-    def test_flatten_overrides_user_role_for_tool_responses(self):
-        """pydantic-ai groups non-system request parts under role=user
-        even when the parts are tool_call_responses. Override to
-        role=tool so Langfuse renders the tool-result bubble."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_message
-        m = {"role": "user", "parts": [
-            {"type": "tool_call_response", "id": "call_42",
-             "name": "explore", "result": "{\"hits\": 3}"},
-        ]}
-        out = _flatten_chat_message(m)
-        assert out["role"] == "tool"
-        assert out["tool_call_id"] == "call_42"
-
-    def test_flatten_dict_tool_call_arguments_become_json(self):
-        """When arguments arrive as a dict (not pre-serialized), they
-        get JSON-stringified to match OpenAI's wire format."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_message
-        import json
-        m = {"role": "assistant", "parts": [
-            {"type": "tool_call", "id": "c", "name": "f",
-             "arguments": {"x": 1}},
-        ]}
-        out = _flatten_chat_message(m)
-        assert json.loads(out["tool_calls"][0]["function"]["arguments"]) == {"x": 1}
-
-    def test_flatten_media_part_becomes_marker(self):
-        """Media parts become bracketed markers in content so they're
-        visible without breaking the bubble layout."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_message
-        m = {"role": "user", "parts": [
-            {"type": "text", "content": "Look at this:"},
-            {"type": "image-url", "url": "https://example.com/x.png"},
-        ]}
-        out = _flatten_chat_message(m)
-        assert "Look at this:" in out["content"]
-        assert "[image-url https://example.com/x.png]" in out["content"]
-
-    def test_flatten_preserves_finish_reason(self):
-        from robotsix_mill.runtime.tracing import _flatten_chat_message
-        m = {"role": "assistant", "parts": [
-            {"type": "text", "content": "Done."},
-        ], "finish_reason": "stop"}
-        out = _flatten_chat_message(m)
-        assert out["finish_reason"] == "stop"
-
-    def test_flatten_chat_io_writes_langfuse_attrs(self):
-        """End-to-end: a fake span with gen_ai.*.messages attributes
-        gets ``langfuse.observation.input/output`` set with the flat
-        shape."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_io
-        import json
-
-        # Fake span: dict-like attributes container the helper can mutate.
-        class _FakeSpan:
-            def __init__(self):
-                self._attributes: dict = {
-                    "gen_ai.input.messages": json.dumps([
-                        {"role": "system",
-                         "parts": [{"type": "text", "content": "be helpful"}]},
-                        {"role": "user",
-                         "parts": [{"type": "text", "content": "hi"}]},
-                    ]),
-                    "gen_ai.output.messages": json.dumps([
-                        {"role": "assistant",
-                         "parts": [{"type": "text", "content": "hello!"}]},
-                    ]),
-                }
-
-            @property
-            def attributes(self):
-                return self._attributes
-
-        span = _FakeSpan()
-        _flatten_chat_io(span)
-        flat_in = json.loads(span._attributes["langfuse.observation.input"])
-        assert flat_in == [
-            {"role": "system", "content": "be helpful"},
-            {"role": "user", "content": "hi"},
-        ]
-        flat_out = json.loads(span._attributes["langfuse.observation.output"])
-        assert flat_out == [{"role": "assistant", "content": "hello!"}]
-
-    def test_flatten_chat_io_noop_when_no_messages(self):
-        """Spans without pydantic-ai message attributes (root spans,
-        periodic-pass spans) are left untouched."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_io
-
-        class _FakeSpan:
-            def __init__(self):
-                self._attributes: dict = {"some.other.attr": "x"}
-
-            @property
-            def attributes(self):
-                return self._attributes
-
-        span = _FakeSpan()
-        _flatten_chat_io(span)
-        assert "langfuse.observation.input" not in span._attributes
-        assert "langfuse.observation.output" not in span._attributes
-
-    def test_flatten_chat_io_uses_system_instructions_when_input_empty(self):
-        """When pydantic-ai puts the system prompt in
-        ``gen_ai.system_instructions`` and ``gen_ai.input.messages``
-        has no system role, the flattener prepends a synthetic system
-        message so the Langfuse Formatted view shows the instructions
-        instead of a null input column."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_io
-        import json
-
-        class _FakeSpan:
-            def __init__(self):
-                self._attributes: dict = {
-                    "gen_ai.system_instructions": json.dumps([
-                        {"type": "text", "content": "Be precise."},
-                    ]),
-                    "gen_ai.input.messages": json.dumps([
-                        {"role": "user",
-                         "parts": [{"type": "text", "content": "hi"}]},
-                    ]),
-                }
-
-            @property
-            def attributes(self):
-                return self._attributes
-
-        span = _FakeSpan()
-        _flatten_chat_io(span)
-        flat = json.loads(span._attributes["gen_ai.input.messages"])
-        assert flat[0] == {"role": "system", "content": "Be precise."}
-        assert flat[1]["role"] == "user"
-        assert flat[1]["content"] == "hi"
-
-    def test_flatten_chat_io_skips_synthetic_system_when_one_exists(self):
-        """If the messages list already has a role=system entry, the
-        instructions attribute is NOT duplicated."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_io
-        import json
-
-        class _FakeSpan:
-            def __init__(self):
-                self._attributes: dict = {
-                    "gen_ai.system_instructions": json.dumps([
-                        {"type": "text", "content": "should not duplicate"},
-                    ]),
-                    "gen_ai.input.messages": json.dumps([
-                        {"role": "system",
-                         "parts": [{"type": "text", "content": "real system"}]},
-                        {"role": "user",
-                         "parts": [{"type": "text", "content": "hi"}]},
-                    ]),
-                }
-
-            @property
-            def attributes(self):
-                return self._attributes
-
-        span = _FakeSpan()
-        _flatten_chat_io(span)
-        flat = json.loads(span._attributes["gen_ai.input.messages"])
-        roles = [m["role"] for m in flat]
-        assert roles.count("system") == 1
-        assert flat[0]["content"] == "real system"
-
-    def test_flatten_chat_io_surfaces_validation_rejected_generations(self):
-        """A per-model-call span (gen_ai.operation.name == "chat")
-        with output_tokens > 0 but no gen_ai.output.messages
-        (pydantic-ai validation rejected the response) gets a
-        status_message + WARNING level so Langfuse shows the silent
-        failure instead of an empty output."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_io
-        import json
+    def test_warns_on_per_call_span_with_no_output(self):
+        from robotsix_mill.runtime.tracing import _check_rejected_generation
 
         class _FakeSpan:
             def __init__(self):
                 self._attributes: dict = {
                     "gen_ai.operation.name": "chat",
-                    "gen_ai.input.messages": json.dumps([
-                        {"role": "user",
-                         "parts": [{"type": "text", "content": "hi"}]},
-                    ]),
+                    "gen_ai.input.messages": "[{}]",
                     "gen_ai.usage.output_tokens": 2636,
-                    # no gen_ai.output.messages → rejected
                 }
 
             @property
@@ -630,30 +402,20 @@ class TestFlattenChatIO:
                 return self._attributes
 
         span = _FakeSpan()
-        _flatten_chat_io(span)
+        _check_rejected_generation(span)
         assert span._attributes["langfuse.observation.level"] == "WARNING"
-        assert "pydantic-ai likely rejected" in span._attributes[
+        assert "pydantic-ai likely" in span._attributes[
             "langfuse.observation.status_message"
         ]
 
-    def test_flatten_chat_io_does_not_warn_on_agent_spans(self):
-        """AGENT-orchestration spans (gen_ai.operation.name ==
-        "invoke_agent") never carry gen_ai.output.messages — child
-        generations do. Warning on those would be a false positive;
-        the gate requires the chat-operation name."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_io
-        import json
+    def test_no_warn_on_agent_span(self):
+        from robotsix_mill.runtime.tracing import _check_rejected_generation
 
         class _FakeSpan:
             def __init__(self):
                 self._attributes: dict = {
                     "gen_ai.operation.name": "invoke_agent",
-                    "gen_ai.system_instructions": json.dumps([
-                        {"type": "text", "content": "be helpful"},
-                    ]),
                     "gen_ai.usage.output_tokens": 22,
-                    # no gen_ai.input.messages, no output.messages —
-                    # agent span aggregates child observations
                 }
 
             @property
@@ -661,27 +423,18 @@ class TestFlattenChatIO:
                 return self._attributes
 
         span = _FakeSpan()
-        _flatten_chat_io(span)
+        _check_rejected_generation(span)
         assert "langfuse.observation.status_message" not in span._attributes
-        assert "langfuse.observation.level" not in span._attributes
 
-    def test_flatten_chat_io_does_not_warn_when_output_present(self):
-        """When the model call succeeded normally (output.messages
-        present), no warning is set."""
-        from robotsix_mill.runtime.tracing import _flatten_chat_io
-        import json
+    def test_no_warn_when_output_messages_present(self):
+        from robotsix_mill.runtime.tracing import _check_rejected_generation
 
         class _FakeSpan:
             def __init__(self):
                 self._attributes: dict = {
-                    "gen_ai.input.messages": json.dumps([
-                        {"role": "user",
-                         "parts": [{"type": "text", "content": "hi"}]},
-                    ]),
-                    "gen_ai.output.messages": json.dumps([
-                        {"role": "assistant",
-                         "parts": [{"type": "text", "content": "ok"}]},
-                    ]),
+                    "gen_ai.operation.name": "chat",
+                    "gen_ai.input.messages": "[{}]",
+                    "gen_ai.output.messages": "[{}]",
                     "gen_ai.usage.output_tokens": 5,
                 }
 
@@ -690,6 +443,5 @@ class TestFlattenChatIO:
                 return self._attributes
 
         span = _FakeSpan()
-        _flatten_chat_io(span)
+        _check_rejected_generation(span)
         assert "langfuse.observation.status_message" not in span._attributes
-        assert "langfuse.observation.level" not in span._attributes

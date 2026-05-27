@@ -98,253 +98,49 @@ def clear_export_failures() -> None:
         _export_failures.clear()
 
 
-def _flatten_chat_message(m: dict) -> dict:
-    """Reduce one pydantic-ai OTel ChatMessage to OpenAI chat-completions
-    shape so Langfuse renders it natively.
+def _check_rejected_generation(span) -> None:  # noqa: ANN001
+    """Annotate per-model-call spans where pydantic-ai's structured-
+    output validator threw before ``gen_ai.output.messages`` was set.
 
-    pydantic-ai's instrumentation v2 writes messages as
-    ``{"role": ..., "parts": [{"type": "text"|"tool_call"|
-    "tool_call_response"|"image-url"|"uri"|"file"|"binary"|..., ...},
-    ...]}``.
+    The model produced output tokens (paid for, visible in
+    ``gen_ai.usage.output_tokens``) but the response was rejected so
+    Langfuse renders empty output. Without this annotation the
+    operator has no signal of the silent failure.
 
-    Langfuse's Formatted view recognises the OpenAI chat-completions
-    shape:
+    Gated on ``gen_ai.operation.name == "chat"`` and the presence of
+    ``gen_ai.input.messages`` so AGENT-orchestration spans (which
+    aggregate child outputs and never carry their own output.messages)
+    don't get false-positive warnings.
 
-    - assistant message with tool calls →
-      ``{"role": "assistant", "content": "...",
-        "tool_calls": [{"id": ..., "type": "function",
-                        "function": {"name": ..., "arguments": ...}}]}``
-    - tool result message →
-      ``{"role": "tool", "tool_call_id": ..., "content": "..."}``
-
-    Map every pydantic-ai part type onto that shape; non-text media
-    parts get a compact bracketed marker appended to ``content``
-    rather than being dropped.
+    Mutates ``span._attributes`` directly — OpenTelemetry's
+    ``BoundedAttributes`` is a regular ``MutableMapping`` subclass and
+    accepts writes even on already-ended spans.
     """
-    import json as _json
-
-    role = m.get("role", "user")
-    parts = m.get("parts") or []
-    if isinstance(parts, str):
-        return {"role": role, "content": parts}
-    if not isinstance(parts, list):
-        return {"role": role, "content": str(parts)}
-
-    text_chunks: list[str] = []
-    tool_calls: list[dict] = []
-    tool_call_id: str | None = None
-
-    for p in parts:
-        if not isinstance(p, dict):
-            text_chunks.append(str(p))
-            continue
-        t = p.get("type")
-        if t == "text":
-            content = p.get("content", "") or ""
-            if content:
-                text_chunks.append(content)
-        elif t == "tool_call":
-            args = p.get("arguments", "")
-            if not isinstance(args, str):
-                try:
-                    args = _json.dumps(args, default=str, ensure_ascii=False)
-                except (TypeError, ValueError):
-                    args = str(args)
-            tool_calls.append({
-                "id": p.get("id", ""),
-                "type": "function",
-                "function": {
-                    "name": p.get("name", ""),
-                    "arguments": args,
-                },
-            })
-        elif t in ("tool_call_response", "tool_response"):
-            tool_call_id = p.get("id", "") or tool_call_id
-            res = p.get("result") if "result" in p else p.get("content", "")
-            if not isinstance(res, str):
-                try:
-                    res = _json.dumps(res, default=str, ensure_ascii=False)
-                except (TypeError, ValueError):
-                    res = str(res)
-            text_chunks.append(res)
-        elif t in ("image-url", "audio-url", "video-url", "document-url"):
-            url = p.get("url", "")
-            text_chunks.append(f"[{t} {url}]")
-        elif t == "uri":
-            modality = p.get("modality", "file")
-            uri = p.get("uri", "")
-            text_chunks.append(f"[{modality} {uri}]")
-        elif t == "file":
-            modality = p.get("modality", "file")
-            file_id = p.get("file_id", "")
-            text_chunks.append(f"[file {file_id} ({modality})]")
-        elif t == "binary":
-            text_chunks.append(f"[binary {p.get('media_type', '')}]")
-        else:
-            # Unknown part shape — JSON-dump for visibility.
-            try:
-                text_chunks.append(_json.dumps(p, default=str, ensure_ascii=False))
-            except (TypeError, ValueError):
-                text_chunks.append(str(p))
-
-    # pydantic-ai's instrumented.py groups every non-system request
-    # part under role="user" — including tool_call_response parts that
-    # OpenAI's wire format requires under role="tool". Override the
-    # role here when we detected a tool_call_id so Langfuse renders
-    # the tool-result bubble correctly (and downstream OpenAI-shape
-    # consumers parse it).
-    if tool_call_id and role != "tool":
-        role = "tool"
-    out: dict[str, object] = {"role": role}
-    content = "\n".join(text_chunks)
-    # Always set ``content``: Langfuse / OpenAI shape expects it as a
-    # string (even empty) on assistant messages that only have
-    # tool_calls. Empty string is valid; null/missing breaks the
-    # Formatted view.
-    out["content"] = content
-    if tool_calls:
-        out["tool_calls"] = tool_calls
-    if tool_call_id:
-        out["tool_call_id"] = tool_call_id
-    if "finish_reason" in m:
-        out["finish_reason"] = m["finish_reason"]
-    return out
-
-
-def _flatten_chat_io(span) -> None:  # noqa: ANN001
-    """Rewrite pydantic-ai's ``gen_ai.input.messages`` /
-    ``gen_ai.output.messages`` attributes on *span* into
-    ``langfuse.observation.input`` / ``output`` so the Langfuse UI
-    renders them as chat bubbles instead of raw JSON.
-
-    No-op when the span has no pydantic-ai message attributes (root
-    spans, periodic-pass spans, non-LLM observations) — those use
-    ``_RootIO.set_input/output`` directly.
-
-    Mutates ``span._attributes`` in place. OpenTelemetry's
-    ``BoundedAttributes`` is a regular ``MutableMapping`` subclass;
-    ``span.set_attribute()`` would refuse on an already-ended span,
-    but the underlying dict still accepts writes.
-    """
-    import json as _json
-
     attrs = span.attributes or {}
-    raw_in = attrs.get("gen_ai.input.messages")
-    raw_out = attrs.get("gen_ai.output.messages")
-    raw_instructions = attrs.get("gen_ai.system_instructions")
-    if not raw_in and not raw_out and not raw_instructions:
-        return
-
-    # pydantic-ai writes the system prompt to a SEPARATE
-    # ``gen_ai.system_instructions`` attribute rather than including
-    # SystemPromptPart/InstructionPart entries in
-    # ``gen_ai.input.messages``. When the messages list is empty or
-    # missing the system content, the Langfuse Formatted view shows
-    # input as null. Prepend a synthetic system message reconstructed
-    # from the instructions attribute so the prompt is visible
-    # alongside any user/tool turns that follow.
-    if raw_instructions:
-        try:
-            parsed_inst = _json.loads(raw_instructions) if isinstance(raw_instructions, str) else raw_instructions
-        except (TypeError, ValueError):
-            parsed_inst = None
-        if isinstance(parsed_inst, list):
-            text_chunks = []
-            for p in parsed_inst:
-                if isinstance(p, dict) and p.get("type") == "text":
-                    text_chunks.append(p.get("content", "") or "")
-            instructions_text = "\n".join(filter(None, text_chunks))
-        elif isinstance(parsed_inst, str):
-            instructions_text = parsed_inst
-        else:
-            instructions_text = ""
-        if instructions_text:
-            try:
-                msgs_in = _json.loads(raw_in) if isinstance(raw_in, str) and raw_in else (raw_in if isinstance(raw_in, list) else [])
-            except (TypeError, ValueError):
-                msgs_in = []
-            if not isinstance(msgs_in, list):
-                msgs_in = []
-            # Avoid duplicating a system message that's already present.
-            has_system = any(
-                isinstance(m, dict) and m.get("role") == "system"
-                for m in msgs_in
-            )
-            if not has_system:
-                synthetic = {
-                    "role": "system",
-                    "parts": [{"type": "text", "content": instructions_text}],
-                }
-                msgs_in = [synthetic, *msgs_in]
-                raw_in = _json.dumps(msgs_in, default=str, ensure_ascii=False)
-
-    def _rewrite(raw, *dest_keys: str) -> None:
-        if not raw:
-            return
-        try:
-            parsed = _json.loads(raw) if isinstance(raw, str) else raw
-        except (TypeError, ValueError):
-            return
-        if not isinstance(parsed, list):
-            return
-        flat = [
-            _flatten_chat_message(m) if isinstance(m, dict) else {"role": "user", "content": str(m)}
-            for m in parsed
-        ]
-        try:
-            flat_json = _json.dumps(flat, default=str, ensure_ascii=False)
-        except Exception:  # noqa: BLE001 — never break exporter on rewrite
-            return
-        for k in dest_keys:
-            try:
-                span._attributes[k] = flat_json
-            except Exception:  # noqa: BLE001
-                pass
-
-    # Write the flattened shape to BOTH the Langfuse alias and the
-    # original gen_ai.* attribute. Langfuse's "Generation" subview
-    # renders from gen_ai.input.messages directly; the alias covers
-    # the "Observation" subview too.
-    _rewrite(raw_in, "langfuse.observation.input", "gen_ai.input.messages")
-    _rewrite(raw_out, "langfuse.observation.output", "gen_ai.output.messages")
-
-    # Surface validation-rejected generations: the per-model-call
-    # span had output tokens but pydantic-ai's structured-output
-    # validator threw before ``gen_ai.output.messages`` was set, so
-    # Langfuse renders an empty output. Without a status message
-    # the operator has no way to know the call actually ran.
-    #
-    # Gate on BOTH input.messages and the chat operation name being
-    # present so this only fires on per-model-call (GENERATION) spans
-    # — AGENT-orchestration spans aggregate child outputs and never
-    # carry gen_ai.output.messages themselves; warning on those is
-    # a false positive.
     is_per_call_span = (
         attrs.get("gen_ai.operation.name") == "chat"
-        and (raw_in or attrs.get("gen_ai.input.messages"))
+        and attrs.get("gen_ai.input.messages")
     )
+    if not is_per_call_span:
+        return
     try:
         out_tokens = int(attrs.get("gen_ai.usage.output_tokens") or 0)
     except (TypeError, ValueError):
         out_tokens = 0
-    if (
-        is_per_call_span
-        and out_tokens > 0
-        and not (raw_out or attrs.get("gen_ai.output.messages"))
-    ):
-        msg = (
-            "model produced "
-            f"{out_tokens} output token(s) but no "
-            "gen_ai.output.messages was set — pydantic-ai likely "
-            "rejected the response (structured-output validation "
-            "or schema mismatch). Check the parent run for an "
-            "UnexpectedModelBehavior / output-retry failure."
-        )
-        try:
-            span._attributes["langfuse.observation.status_message"] = msg
-            span._attributes["langfuse.observation.level"] = "WARNING"
-        except Exception:  # noqa: BLE001 — never break exporter
-            pass
+    if out_tokens <= 0 or attrs.get("gen_ai.output.messages"):
+        return
+    msg = (
+        f"model produced {out_tokens} output token(s) but no "
+        "gen_ai.output.messages was set — pydantic-ai likely "
+        "rejected the response (structured-output validation "
+        "or schema mismatch). Check the parent run for an "
+        "UnexpectedModelBehavior / output-retry failure."
+    )
+    try:
+        span._attributes["langfuse.observation.status_message"] = msg
+        span._attributes["langfuse.observation.level"] = "WARNING"
+    except Exception:  # noqa: BLE001 — never break exporter
+        pass
 
 
 def make_session_id(kind: str) -> str:
@@ -543,10 +339,9 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             global TracerProvider so each repo's traces land in its own
             Langfuse project.
 
-            Also rewrites pydantic-ai's ``gen_ai.input.messages`` /
-            ``gen_ai.output.messages`` attributes into the
-            ``langfuse.observation.input`` / ``output`` shape Langfuse
-            UI renders as chat bubbles — see :func:`_flatten_chat_io`."""
+            Also annotates per-model-call spans where pydantic-ai's
+            structured-output validator silently rejected a response —
+            see :func:`_check_rejected_generation`."""
 
             def __init__(self, exp, *, target_public_key: str):
                 super().__init__(exp)
@@ -556,7 +351,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
                 attrs = span.attributes or {}
                 if attrs.get("langfuse.public_key") != self._target_pk:
                     return
-                _flatten_chat_io(span)
+                _check_rejected_generation(span)
                 super().on_end(span)
 
         provider = trace.get_tracer_provider()
