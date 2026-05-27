@@ -36,6 +36,10 @@ from ..forge.auth import _resolve_remote_url, github_token
 from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
+from .pause import (
+    check_for_pause, save_conversation_state,
+    load_conversation_state, build_resume_message_history,
+)
 
 log = logging.getLogger("robotsix_mill.stages.implement")
 
@@ -156,15 +160,63 @@ class ImplementStage(Stage):
                 )
 
         for attempt in range(1, max_iters + 1):
+            # --- resume awareness: detect if returning from a pause ---
+            resume_history: list | None = None
+            if attempt == 1:
+                saved_state = load_conversation_state(ws)
+                if saved_state is not None:
+                    own_history = ctx.service.history(ticket.id)
+                    was_paused = any(
+                        ev.state == State.AWAITING_USER_REPLY
+                        for ev in own_history
+                    )
+                    if was_paused:
+                        # Find the operator's reply: the most recent
+                        # non-closed comment that is NOT an [ASK_USER]
+                        # marker.
+                        reply_text: str | None = None
+                        try:
+                            comments = ctx.service.list_comments(ticket.id)
+                            for c in reversed(comments):
+                                if c.closed_at is not None:
+                                    continue
+                                body = (c.body or "").strip()
+                                if body.startswith("[ASK_USER]"):
+                                    continue
+                                reply_text = body
+                                break
+                        except Exception:
+                            log.warning(
+                                "%s: list_comments failed during resume, "
+                                "proceeding without operator reply",
+                                ticket.id,
+                            )
+                        if reply_text is None:
+                            reply_text = "(no operator reply found)"
+                        resume_history = build_resume_message_history(
+                            saved_state, reply_text,
+                        )
+                        log.info(
+                            "%s: resuming implement from pause — "
+                            "loaded %d-byte conversation state",
+                            ticket.id, len(saved_state),
+                        )
+                        # Skip review-feedback injection on resume —
+                        # the operator's reply is the feedback.
+                        feedback = None
+                        review_feedback = None
+
             try:
-                summary, ref_files, updated_memory = coding.run_implement_agent(
-                    settings=settings, repo_dir=repo_dir, spec=spec,
-                    feedback=feedback, memory=memory_text,
-                    reference_files=reference_files,
-                    previous_attempt_summary=previous_attempt_summary,
-                    file_map=file_map,
-                    board_id=ctx.repo_config.board_id if ctx.repo_config else "",
-                )
+                summary, ref_files, updated_memory, conv_state = \
+                    coding.run_implement_agent(
+                        settings=settings, repo_dir=repo_dir, spec=spec,
+                        feedback=feedback, memory=memory_text,
+                        reference_files=reference_files,
+                        previous_attempt_summary=previous_attempt_summary,
+                        file_map=file_map,
+                        board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                        message_history=resume_history,
+                    )
             except AgentBudgetError as e:
                 ImplementStage._finalize(
                     ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
@@ -182,6 +234,23 @@ class ImplementStage(Stage):
                 return Outcome(
                     State.BLOCKED, f"agent error — resumable: {e}"
                 )
+
+            # --- pause detection ---
+            if check_for_pause(conv_state):
+                save_conversation_state(ws, conv_state)
+                ImplementStage._finalize(
+                    ctx, ticket, repo_dir, branch, summary or "paused",
+                    ok=False, reference_files=ref_files,
+                )
+                ctx.service.transition(
+                    ticket.id, State.AWAITING_USER_REPLY,
+                    note="paused — agent asked a clarifying question",
+                )
+                log.info(
+                    "%s: paused implement — agent invoked ask_user",
+                    ticket.id,
+                )
+                return Outcome(State.AWAITING_USER_REPLY)
 
             # Persist the agent's updated memory as soon as it's produced
             # so a later-iteration failure can't lose the learning.

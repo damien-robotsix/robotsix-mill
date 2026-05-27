@@ -30,6 +30,7 @@ class ImplementResult(BaseModel):
     summary: str
     updated_memory: str = ""
     reference_files: list[str] = []
+    conversation_state: bytes | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -314,9 +315,14 @@ def run_coordinator(
             ),
             settings=settings, what="implement",
         )
+        output: ImplementResult = result.output
+        try:
+            output.conversation_state = result.all_messages_json()
+        except AttributeError:
+            output.conversation_state = None
     finally:
         _safe_close(agent)
-    return result.output
+    return output
 
 
 # ──────────────────────────────────────────────────────────────────────

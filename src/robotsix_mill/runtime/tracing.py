@@ -16,6 +16,7 @@ When the credentials are absent, every function is a cheap no-op.
 from __future__ import annotations
 
 import contextvars
+import logging
 import os
 import uuid
 from contextlib import contextmanager, nullcontext
@@ -23,6 +24,8 @@ from datetime import datetime, timezone
 from typing import Iterator
 
 from ..config import RepoConfig, get_secrets
+
+log = logging.getLogger(__name__)
 
 # Tri-state init flag for the global TracerProvider (one per process).
 # Per-repo exporters are then registered lazily under the SAME provider —

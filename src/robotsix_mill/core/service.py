@@ -441,7 +441,12 @@ class TicketService:
                 if ticket.blocked_from
                 else None
             )
-            if not can_transition(ticket.state, dst, blocked_from):
+            paused_from = (
+                State(ticket.paused_from)
+                if ticket.paused_from
+                else None
+            )
+            if not can_transition(ticket.state, dst, blocked_from, paused_from):
                 raise TransitionError(
                     f"{ticket_id}: {ticket.state} -> {dst} not allowed"
                 )
@@ -451,6 +456,12 @@ class TicketService:
                 ticket.blocked_from = ticket.state.value
             elif ticket.state is State.BLOCKED:
                 ticket.blocked_from = None
+            # Record originating state when pausing mid-stage; clear when
+            # leaving AWAITING_USER_REPLY (resume path).
+            if dst is State.AWAITING_USER_REPLY:
+                ticket.paused_from = ticket.state.value
+            elif ticket.state is State.AWAITING_USER_REPLY:
+                ticket.paused_from = None
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)

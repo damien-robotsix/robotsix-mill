@@ -81,7 +81,7 @@ def _fake_agent(write: dict | None):
         if write:
             for name, content in write.items():
                 (Path(repo_dir) / name).write_text(content)
-        return ("did the thing", list(write.keys()) if write else [], "")
+        return ("did the thing", list(write.keys()) if write else [], "", None)
 
     return _run
 
@@ -294,7 +294,7 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
         del settings, spec, reference_files, message_history, memory, epic_workspace_path  # seam signature
         calls.append(feedback)
         (Path(repo_dir) / "wip.txt").write_text("did work")
-        return ("tried", [], "")
+        return ("tried", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -363,7 +363,7 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
             (Path(repo_dir) / "first.txt").write_text("1")
             raise coding.AgentBudgetError("cap", [])
         (Path(repo_dir) / "second.txt").write_text("2")
-        return ("finished on resume", [], "")
+        return ("finished on resume", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -454,7 +454,7 @@ def test_fresh_clone_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monke
             if p.name != ".git":
                 seen_files.append(p.name)
         (Path(repo_dir) / "agent_out.txt").write_text("done")
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -496,7 +496,7 @@ def test_resume_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monkeypatc
             if p.name != ".git":
                 seen_files[1].append(p.name)
         (Path(repo_dir) / "second.txt").write_text("2")
-        return ("finished on resume", [], "")
+        return ("finished on resume", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -595,7 +595,7 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
              message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
     t = _ticket(ctx)
@@ -629,7 +629,7 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -752,7 +752,7 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
         del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -776,7 +776,7 @@ def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, mo
         del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -806,7 +806,7 @@ def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, mo
         del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -835,7 +835,7 @@ def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_p
         del settings, feedback, reference_files, message_history, memory, epic_workspace_path
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -875,7 +875,7 @@ def test_scope_violation_blocks_ticket(ctx_factory, tmp_path, monkeypatch):
         # Write wip.txt (in-scope) AND modify README.md (out-of-scope)
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
-        return ("edit done", [], "")
+        return ("edit done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -940,7 +940,7 @@ def test_scope_check_skipped_when_no_file_map(ctx_factory, tmp_path, monkeypatch
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -976,7 +976,7 @@ def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypa
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
-        return ("done", [], "")
+        return ("done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1019,7 +1019,7 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
         call_count["n"] += 1
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
-        return ("edit done", [], "")
+        return ("edit done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1073,7 +1073,7 @@ def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, mo
         call_count["n"] += 1
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
-        return ("agent summary text", [], "")
+        return ("agent summary text", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1124,7 +1124,7 @@ def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
-        return ("edit done", [], "")
+        return ("edit done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1166,7 +1166,7 @@ def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
-        return ("edit done", [], "")
+        return ("edit done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1213,7 +1213,7 @@ def test_scope_triage_disabled_falls_through(ctx_factory, tmp_path, monkeypatch)
         call_count["n"] += 1
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
-        return ("edit done", [], "")
+        return ("edit done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1244,7 +1244,7 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
-        return ("edit done", [], "")
+        return ("edit done", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1286,7 +1286,7 @@ def test_post_edit_reference_files_persisted(ctx_factory, tmp_path, monkeypatch)
         # additional file it didn't touch on disk — curated, not
         # git-derived.
         (Path(repo_dir) / "wip.txt").write_text("post-edit content here")
-        return ("agent summary text", ["wip.txt", "base_class.py"], "")
+        return ("agent summary text", ["wip.txt", "base_class.py"], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1331,7 +1331,7 @@ def test_reference_files_reloaded_on_retry(ctx_factory, tmp_path, monkeypatch):
         del settings, spec, feedback, message_history, memory, epic_workspace_path, previous_attempt_summary
         captured_refs.append(reference_files)
         (Path(repo_dir) / "wip.txt").write_text("post-edit pass content")
-        return ("agent summary", ["wip.txt"], "")
+        return ("agent summary", ["wip.txt"], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1370,7 +1370,7 @@ def test_summary_included_in_retry_feedback(ctx_factory, tmp_path, monkeypatch):
         captured_feedback.append(feedback)
         captured_prev_summaries.append(previous_attempt_summary)
         (Path(repo_dir) / "wip.txt").write_text("edited")
-        return ("pass-1-summary-abc", ["wip.txt"], "")
+        return ("pass-1-summary-abc", ["wip.txt"], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
@@ -1412,7 +1412,7 @@ def test_persistence_without_file_map_still_writes(ctx_factory, tmp_path, monkey
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
-        return ("summary", [], "")
+        return ("summary", [], "", None)
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
