@@ -652,6 +652,26 @@ class Settings(BaseSettings):
         default=86400, alias="MILL_TRACE_HEALTH_INTERVAL_SECONDS"
     )
 
+    # --- timeout escalation ---
+    # When True, the worker runs periodic timeout-escalation passes at the
+    # configured interval. Default True (opt-out). Detects tickets stuck in
+    # AWAITING_USER_REPLY longer than the threshold and escalates to BLOCKED.
+    timeout_escalation_periodic: bool = Field(
+        default=True, alias="MILL_TIMEOUT_ESCALATION_PERIODIC"
+    )
+    # Interval between timeout-escalation passes (seconds). Only used when
+    # MILL_TIMEOUT_ESCALATION_PERIODIC=true.
+    timeout_escalation_interval_seconds: int = Field(
+        default=3600, alias="MILL_TIMEOUT_ESCALATION_INTERVAL_SECONDS"
+    )
+    # Staleness threshold: tickets in AWAITING_USER_REPLY with updated_at
+    # older than this many seconds are escalated to BLOCKED.
+    # Default 259200 = 3 days.  Set to ≤ 0 to disable escalation
+    # entirely while leaving the poll loop running.
+    timeout_escalation_threshold_seconds: int = Field(
+        default=259200, alias="MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS"
+    )
+
     # --- test-gap agent (dedicated test-coverage oversight) ---
     # Model for the test-gap agent. Defaults to the same capable model
     # as audit/health. Override with MILL_TEST_GAP_MODEL.

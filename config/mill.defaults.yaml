@@ -236,6 +236,12 @@ periodic:
   ci_monitor:
     log_max_bytes: 65536            # max bytes fetched per CI job log
 
+  # -- timeout escalation — escalates AWAITING_USER_REPLY tickets stuck too long
+  timeout_escalation:
+    enabled: true                   # enable periodic timeout-escalation passes
+    interval_seconds: 3600          # seconds between scans (3600 = 1 hour)
+    threshold_seconds: 259200       # staleness threshold (259200 = 3 days); ≤0 disables
+
   # -- Langfuse cleanup — caps per-project trace count, oldest deleted first
   langfuse_cleanup:
     enabled: true                   # enable periodic Langfuse trace cleanup
