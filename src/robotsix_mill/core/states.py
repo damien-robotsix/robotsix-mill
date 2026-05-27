@@ -70,6 +70,7 @@ class State(StrEnum):
     BLOCKED = "blocked"       # escalated; needs a human
     ASKED = "asked"           # inquiry submitted; awaiting answer
     ANSWERED = "answered"     # inquiry answered (terminal)
+    AWAITING_USER_REPLY = "awaiting_user_reply"  # paused mid-stage; awaiting human reply
     EPIC_OPEN = "epic_open"   # epic actively collecting/grouping children
     EPIC_CLOSED = "epic_closed"  # epic closed (terminal)
 
@@ -77,7 +78,7 @@ class State(StrEnum):
 #: state -> the set of states it may transition to (the "happy path"
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {
-    State.DRAFT: {State.READY, State.HUMAN_ISSUE_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED, State.DONE},
+    State.DRAFT: {State.READY, State.HUMAN_ISSUE_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED, State.DONE, State.AWAITING_USER_REPLY},
     # human_issue_approval is a human-wait state; the human approves → ready,
     # rejects back to draft with comments, or escalates → blocked/failed.
     State.HUMAN_ISSUE_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},
@@ -85,13 +86,13 @@ TRANSITIONS: dict[State, set[State]] = {
     # straight to deliverable.
     # implement routes to code_review when review is enabled, otherwise
     # straight to documenting (then deliverable).
-    State.READY: {State.CODE_REVIEW, State.DOCUMENTING, State.DELIVERABLE, State.REBASING, State.ERRORED, State.BLOCKED},
+    State.READY: {State.CODE_REVIEW, State.DOCUMENTING, State.DELIVERABLE, State.REBASING, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
     # review APPROVE -> documenting; REQUEST_CHANGES -> back to ready
     # (the implement<->review loop never touches documenting).
-    State.CODE_REVIEW: {State.DOCUMENTING, State.READY, State.ERRORED, State.BLOCKED},
+    State.CODE_REVIEW: {State.DOCUMENTING, State.READY, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
     # documenting always routes to deliverable — review already happened.
-    State.DOCUMENTING: {State.DELIVERABLE, State.ERRORED, State.BLOCKED},
-    State.DELIVERABLE: {State.IMPLEMENT_COMPLETE, State.ERRORED, State.BLOCKED},
+    State.DOCUMENTING: {State.DELIVERABLE, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
+    State.DELIVERABLE: {State.IMPLEMENT_COMPLETE, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
     # implement_complete: merge stage polls gates (CI + mergeability).
     # Both gates green → human_mr_approval (notify human).  CI failing →
     # fixing_ci; conflicting → rebasing; CI pending → same-state re-poll.
@@ -103,6 +104,7 @@ TRANSITIONS: dict[State, set[State]] = {
         State.DONE,
         State.BLOCKED,
         State.ERRORED,
+        State.AWAITING_USER_REPLY,
     },
     # PR open in human review: merge stage polls → merged=done,
     # closed-unmerged=blocked, gates degrade → implement_complete
@@ -114,6 +116,7 @@ TRANSITIONS: dict[State, set[State]] = {
         State.ADDRESSING_REVIEW,
         State.ERRORED,
         State.BLOCKED,
+        State.AWAITING_USER_REPLY,
     },
     # waiting_auto_merge: merge stage polls CI; when green → done (auto-merge),
     # on CI failure or conflict → implement_complete (gate re-check),
@@ -124,20 +127,24 @@ TRANSITIONS: dict[State, set[State]] = {
         State.HUMAN_MR_APPROVAL,
         State.ERRORED,
         State.BLOCKED,
+        State.AWAITING_USER_REPLY,
     },
     # rebasing: merge stage runs rebase agent → back to implement_complete on
     # success (re-verify gates), retry on failure, block on exhaustion.
-    State.REBASING: {State.IMPLEMENT_COMPLETE, State.READY, State.ERRORED, State.BLOCKED},
+    State.REBASING: {State.IMPLEMENT_COMPLETE, State.READY, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
     # ci fix: on success → implement_complete (re-verify gates); on failure → blocked; on crash → errored.
-    State.FIXING_CI: {State.IMPLEMENT_COMPLETE, State.BLOCKED, State.ERRORED},
+    State.FIXING_CI: {State.IMPLEMENT_COMPLETE, State.BLOCKED, State.ERRORED, State.AWAITING_USER_REPLY},
     # addressing review: on success → human_mr_approval (re-verify gates); on failure → blocked; on crash → errored.
-    State.ADDRESSING_REVIEW: {State.HUMAN_MR_APPROVAL, State.BLOCKED, State.ERRORED},
+    State.ADDRESSING_REVIEW: {State.HUMAN_MR_APPROVAL, State.BLOCKED, State.ERRORED, State.AWAITING_USER_REPLY},
     # done = merged: retrospect analyses it -> reviewed
-    State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED},
+    State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
     State.CLOSED: set(),
     # inquiry states: asked -> answered (terminal), or errored/blocked
-    State.ASKED: {State.ANSWERED, State.ERRORED, State.BLOCKED},
+    State.ASKED: {State.ANSWERED, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
     State.ANSWERED: set(),
+    # paused mid-stage: operator reply resumes to originating state (paused_from);
+    # errored / blocked are the always-available escapes.
+    State.AWAITING_USER_REPLY: {State.ERRORED, State.BLOCKED},
     # epic states: open → closed or blocked; closed is terminal
     State.EPIC_OPEN: {State.EPIC_CLOSED, State.BLOCKED},
     State.EPIC_CLOSED: set(),
@@ -167,7 +174,7 @@ STAGE_FOR_STATE: dict[State, str] = {
 }
 
 
-def can_transition(src: State, dst: State, blocked_from: State | None = None) -> bool:
+def can_transition(src: State, dst: State, blocked_from: State | None = None, paused_from: State | None = None) -> bool:
     """Return True if ``src → dst`` is a legal transition.
 
     When *src* is ``BLOCKED``, *dst* is also allowed when it matches
@@ -176,10 +183,15 @@ def can_transition(src: State, dst: State, blocked_from: State | None = None) ->
     always available regardless of ``blocked_from``.
     Additionally, ``BLOCKED → ASKED`` is allowed when resuming a
     blocked inquiry.
+
+    When *src* is ``AWAITING_USER_REPLY``, *dst* is also allowed when
+    it matches the recorded ``paused_from`` state (the resume path).
     """
     allowed = TRANSITIONS.get(src, set())
     if dst in allowed:
         return True
     if src is State.BLOCKED and blocked_from is not None and dst is blocked_from:
+        return True
+    if src is State.AWAITING_USER_REPLY and paused_from is not None and dst is paused_from:
         return True
     return False

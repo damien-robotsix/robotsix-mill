@@ -15,7 +15,7 @@ from robotsix_mill.core.states import (
 VALID_STAGE_NAMES = {"refine", "implement", "document", "review", "deliver", "merge", "ci_fix", "retrospect", "answer"}
 
 # States that should NOT appear as keys in STAGE_FOR_STATE.
-NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.HUMAN_ISSUE_APPROVAL, State.ANSWERED, State.EPIC_OPEN, State.EPIC_CLOSED}
+NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.HUMAN_ISSUE_APPROVAL, State.ANSWERED, State.EPIC_OPEN, State.EPIC_CLOSED, State.AWAITING_USER_REPLY}
 
 # All states for iteration.
 ALL_STATES = list(State)
@@ -348,6 +348,63 @@ def test_code_review_not_undeclared_source():
 
 def test_blocked_resume_to_code_review():
     assert can_transition(State.BLOCKED, State.CODE_REVIEW, blocked_from=State.CODE_REVIEW) is True
+
+
+# ---------------------------------------------------------------------------
+# AWAITING_USER_REPLY
+# ---------------------------------------------------------------------------
+
+def test_awaiting_user_reply_not_in_stage_for_state():
+    """AWAITING_USER_REPLY must NOT be a key in STAGE_FOR_STATE — there
+    is no stage for it."""
+    assert State.AWAITING_USER_REPLY not in STAGE_FOR_STATE
+
+
+def test_awaiting_user_reply_to_errored():
+    assert can_transition(State.AWAITING_USER_REPLY, State.ERRORED) is True
+
+
+def test_awaiting_user_reply_to_blocked():
+    assert can_transition(State.AWAITING_USER_REPLY, State.BLOCKED) is True
+
+
+def test_awaiting_user_reply_resume_via_paused_from():
+    """Resume path: AWAITING_USER_REPLY → originating state when
+    paused_from matches."""
+    assert can_transition(
+        State.AWAITING_USER_REPLY, State.READY, paused_from=State.READY,
+    ) is True
+
+
+def test_awaiting_user_reply_no_paused_from_rejects():
+    """Without paused_from, AWAITING_USER_REPLY → arbitrary state is
+    rejected."""
+    assert can_transition(State.AWAITING_USER_REPLY, State.READY) is False
+
+
+def test_awaiting_user_reply_wrong_paused_from_rejects():
+    """paused_from must match dst EXACTLY."""
+    assert can_transition(
+        State.AWAITING_USER_REPLY, State.DELIVERABLE, paused_from=State.READY,
+    ) is False
+
+
+def test_every_stage_for_state_key_can_reach_awaiting_user_reply():
+    """Every state with an automated stage can transition to
+    AWAITING_USER_REPLY (any running stage can pause for a question)."""
+    for src in STAGE_FOR_STATE:
+        assert can_transition(src, State.AWAITING_USER_REPLY) is True, (
+            f"{src.value} → AWAITING_USER_REPLY should be valid"
+        )
+
+
+def test_awaiting_user_reply_not_reachable_from_non_stage_states():
+    """States without automated stages cannot transition to
+    AWAITING_USER_REPLY."""
+    for src in NON_STAGE_STATES:
+        assert can_transition(src, State.AWAITING_USER_REPLY) is False, (
+            f"{src.value} → AWAITING_USER_REPLY should be invalid"
+        )
 
 
 # ---------------------------------------------------------------------------
