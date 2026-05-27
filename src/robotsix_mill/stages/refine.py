@@ -33,6 +33,10 @@ from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
 from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
+from .pause import (
+    check_for_pause, save_conversation_state,
+    load_conversation_state, build_resume_message_history,
+)
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.refine")
@@ -389,14 +393,57 @@ class RefineStage(Stage):
         # --- end triage ---
 
         # --- run the refine agent ---
-        try:
-            refine_memory_path = s.memory_file_for(
-                "refine", ctx.repo_config.board_id if ctx.repo_config else ""
+        refine_memory_path = s.memory_file_for(
+            "refine", ctx.repo_config.board_id if ctx.repo_config else ""
+        )
+        memory_text = load_memory(refine_memory_path, max_chars=s.max_memory_chars)
+
+        extra_roots: list[Path] | None = None
+
+        # --- resume awareness: detect if returning from a pause ---
+        resume_history: list | None = None
+        saved_state = load_conversation_state(ws)
+        if saved_state is not None:
+            # Check whether the ticket is resuming from a pause by
+            # looking for a prior AWAITING_USER_REPLY event in the
+            # ticket history.
+            own_history = ctx.service.history(ticket.id)
+            was_paused = any(
+                ev.state == State.AWAITING_USER_REPLY
+                for ev in own_history
             )
-            memory_text = load_memory(refine_memory_path, max_chars=s.max_memory_chars)
+            if was_paused:
+                # Find the operator's reply: the most recent non-closed
+                # comment that is NOT an [ASK_USER] marker.
+                reply_text: str | None = None
+                try:
+                    comments = ctx.service.list_comments(ticket.id)
+                    for c in reversed(comments):
+                        if c.closed_at is not None:
+                            continue
+                        body = (c.body or "").strip()
+                        if body.startswith("[ASK_USER]"):
+                            continue
+                        reply_text = body
+                        break
+                except Exception:
+                    log.warning(
+                        "%s: list_comments failed during resume, "
+                        "proceeding without operator reply",
+                        ticket.id,
+                    )
+                if reply_text is None:
+                    reply_text = "(no operator reply found)"
+                resume_history = build_resume_message_history(
+                    saved_state, reply_text,
+                )
+                log.info(
+                    "%s: resuming refine from pause — "
+                    "loaded %d-byte conversation state",
+                    ticket.id, len(saved_state),
+                )
 
-            extra_roots: list[Path] | None = None
-
+        try:
             result = refining.run_refine_agent(
                 settings=s, title=ticket.title, draft=draft,
                 repo_dir=repo_dir,
@@ -404,15 +451,29 @@ class RefineStage(Stage):
                 memory=memory_text,
                 epic_context=epic_ctx,
                 extra_roots=extra_roots,
+                message_history=resume_history,
             )
-
-            if result.updated_memory:
-                persist_memory(refine_memory_path, result.updated_memory)
-
-            if result.title and result.title.strip():
-                ctx.service.set_title(ticket.id, result.title.strip())
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             return Outcome(State.BLOCKED, str(e))
+
+        # --- pause detection ---
+        if check_for_pause(result.conversation_state):
+            save_conversation_state(ws, result.conversation_state)
+            ctx.service.transition(
+                ticket.id, State.AWAITING_USER_REPLY,
+                note="paused — agent asked a clarifying question",
+            )
+            log.info(
+                "%s: paused refine — agent invoked ask_user",
+                ticket.id,
+            )
+            return Outcome(State.AWAITING_USER_REPLY)
+
+        if result.updated_memory:
+            persist_memory(refine_memory_path, result.updated_memory)
+
+        if result.title and result.title.strip():
+            ctx.service.set_title(ticket.id, result.title.strip())
 
         # --- epic body handling (non-split path) ---
         # In autonomous mode: apply immediately to the epic.

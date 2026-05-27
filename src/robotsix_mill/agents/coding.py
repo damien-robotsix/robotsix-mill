@@ -52,9 +52,9 @@ def run_implement_agent(
     previous_attempt_summary: str | None = None,
     file_map: set[str] | None = None,
     board_id: str = "",
-) -> tuple[str, list[str], str]:
+) -> tuple[str, list[str], str, bytes | None]:
     """Run ONE coordinator pass for this ticket. Returns
-    ``(summary, reference_files, updated_memory)``.
+    ``(summary, reference_files, updated_memory, conversation_state)``.
 
     ``feedback`` — set by the implement stage when it re-invokes after a
     failed test gate — is a distilled diagnosis of that failure,
@@ -140,7 +140,12 @@ def run_implement_agent(
             [],
         )
 
-    return result.summary, result.reference_files, result.updated_memory
+    return (
+        result.summary,
+        result.reference_files,
+        result.updated_memory,
+        result.conversation_state,
+    )
 
 
 

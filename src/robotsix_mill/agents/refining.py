@@ -97,6 +97,16 @@ class RefineResult(BaseModel):
             "further bearing, generated artifacts, changelogs, lockfiles."
         ),
     )
+    conversation_state: bytes | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Raw JSON bytes from all_messages_json() — set by the seam "
+            "(run_refine_agent) after the agent call completes. Used by "
+            "the stage runner to detect ask_user pauses and to persist "
+            "the conversation for cheap resume."
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -356,13 +366,24 @@ def run_refine_agent(
     memory: str = "",
     epic_context: str = "",
     extra_roots: list[Path] | None = None,
+    message_history: list | None = None,
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
     read_file/list_dir/run_command; otherwise it works draft-only.
     When ``reviewer_comments`` is given the agent incorporates the
-    feedback into the refined spec. Raises ``RuntimeError`` if no
-    OpenRouter key is configured.
+    feedback into the refined spec.
+
+    ``message_history`` — when non-``None``, passed directly to
+    ``agent.run_sync(…)`` so the agent continues from a prior paused
+    conversation (the resume path after ``ask_user``).
+
+    Raises ``RuntimeError`` if no OpenRouter key is configured.
+
+    The returned ``RefineResult.conversation_state`` is the raw JSON
+    bytes from ``all_messages_json()`` — ``None`` when the agent call
+    didn't produce a message history. The stage runner uses it to
+    detect ``ask_user`` pauses and persist the conversation for resume.
 
     Return fields:
       - ``split``: whether the draft was split into children
@@ -371,6 +392,7 @@ def run_refine_agent(
       - ``updated_memory``: updated memory ledger
       - ``epic_body``: revised epic description when ``<epic_context>``
         was provided, otherwise ``None``
+      - ``conversation_state``: raw conversation JSON for pause/resume
     """
     from pydantic_ai import PromptedOutput
 
@@ -422,9 +444,17 @@ def run_refine_agent(
 
     try:
         result = call_with_retry(
-            lambda: agent.run_sync(user_prompt),
+            lambda: agent.run_sync(
+                user_prompt,
+                message_history=message_history,
+            ),
             settings=settings, what="refine",
         )
+        output: RefineResult = result.output
+        try:
+            output.conversation_state = result.all_messages_json()
+        except AttributeError:
+            output.conversation_state = None
     finally:
         _safe_close(agent)
-    return result.output
+    return output
