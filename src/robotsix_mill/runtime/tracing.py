@@ -386,15 +386,15 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         # is dropped. Truncate attribute values aggressively so spans
         # stay shippable. Caller can override via env if they really
         # need more.
-        # 8 KB per attribute. Pydantic-ai stamps full message
-        # transcripts into ``pydantic_ai.all_messages`` and a batch of
-        # spans each carrying that easily exceeds the self-hosted
-        # Langfuse nginx body cap (~1 MB) — the whole batch drops with
-        # 413 and zero traces appear. Truncation here keeps batches
-        # shippable. AGENT-span input may render partial under this
-        # cap; the trade-off is whole-trace visibility over verbatim
-        # transcripts. Operator can override via env.
-        os.environ.setdefault("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT", "8192")
+        # No per-attribute length cap. Earlier we set
+        # OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT=8192 to keep batches under
+        # the self-hosted Langfuse nginx body cap, but 8 KB sliced
+        # pydantic-ai's gen_ai.input.messages mid-string into invalid
+        # JSON for any non-trivial conversation — Langfuse couldn't
+        # parse and rendered only the system bubble. With the server
+        # nginx cap raised, the cap is no longer needed; let
+        # pydantic-ai's full attributes flow through. Operator can
+        # still override via env if needed.
 
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
