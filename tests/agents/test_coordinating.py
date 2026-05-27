@@ -352,6 +352,47 @@ class TestRunCoordinator:
         assert tr.content == "x=1"
         assert tr.tool_call_id == "preload_foo.py"
 
+    def test_reference_files_multiple_paths_share_one_turn(
+        self, settings, tmp_path,
+    ):
+        """All preloaded reference files land in a single turn —
+        one ``ModelResponse`` carrying N parallel ``read_file``
+        ToolCallParts and one ``ModelRequest`` carrying N matching
+        ``ToolReturnPart``s — so the agent perceives one batched
+        preload instead of N sequential exchanges."""
+        (tmp_path / "a.py").write_text("A")
+        (tmp_path / "b.py").write_text("B")
+        (tmp_path / "c.py").write_text("C")
+        ref = [{"path": "a.py"}, {"path": "b.py"}, {"path": "c.py"}]
+
+        self._run(settings, tmp_path, reference_files=ref)
+
+        mh = self.captured["message_history"]
+        assert isinstance(mh, list)
+        assert len(mh) == 2  # exactly one Response + one Request
+
+        resp, req = mh[0], mh[1]
+        assert isinstance(resp, ModelResponse)
+        assert isinstance(req, ModelRequest)
+        assert len(resp.parts) == 3
+        assert len(req.parts) == 3
+
+        # Parallel ToolCallParts — one per file, in input order.
+        for part, path in zip(resp.parts, ("a.py", "b.py", "c.py")):
+            assert isinstance(part, ToolCallPart)
+            assert part.tool_name == "read_file"
+            assert part.args == {"path": path, "offset": 1, "limit": None}
+            assert part.tool_call_id == f"preload_{path}"
+
+        # Matching ToolReturnParts — same order, same ids.
+        for part, (path, content) in zip(
+            req.parts, [("a.py", "A"), ("b.py", "B"), ("c.py", "C")],
+        ):
+            assert isinstance(part, ToolReturnPart)
+            assert part.tool_name == "read_file"
+            assert part.content == content
+            assert part.tool_call_id == f"preload_{path}"
+
     def test_reference_files_with_message_history_passthrough(
         self, settings, tmp_path,
     ):

@@ -31,15 +31,15 @@ def build_preseed_history(
     max_files: int = 20,
     max_total_bytes: int = 200_000,
 ) -> list:
-    """Build a synthetic ``message_history`` of preloaded read_file
-    pairs for *paths* under *repo_dir*.
+    """Build a synthetic ``message_history`` that pre-loads *paths*
+    under *repo_dir* into the agent's context.
 
-    Each path becomes a (ModelResponse(ToolCallPart(read_file, path)),
-    ModelRequest(ToolReturnPart(read_file, content))) pair — the same
-    shape pydantic-ai would have produced had the agent itself called
-    ``read_file`` on each entry. Prepending this history to an agent
-    run makes those file contents "already in context" without paying
-    for a round-trip per file.
+    All paths share a single turn: one ``ModelResponse`` carrying N
+    ``ToolCallPart``s for ``read_file`` and one matching ``ModelRequest``
+    carrying N ``ToolReturnPart``s with the contents. This is the
+    parallel-tool-call shape every modern provider supports — the
+    agent sees "I made N read_file calls in parallel and got N
+    results in one batch" rather than N sequential one-call turns.
 
     Returns an empty list when *paths* is empty.
 
@@ -63,10 +63,11 @@ def build_preseed_history(
         ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
     )
 
-    synthetic: list = []
+    calls: list = []
+    returns: list = []
     total_bytes = 0
     for path in paths:
-        if len(synthetic) >= max_files * 2:
+        if len(calls) >= max_files:
             log.warning(
                 "build_preseed_history: max_files=%d reached, dropping "
                 "remaining paths: %s",
@@ -94,21 +95,21 @@ def build_preseed_history(
             break
         total_bytes += len(content)
         tc_id = f"preload_{path}"
-        synthetic.append(ModelResponse(parts=[
-            ToolCallPart(
-                tool_name="read_file",
-                args={"path": path, "offset": 1, "limit": None},
-                tool_call_id=tc_id,
-            )
-        ]))
-        synthetic.append(ModelRequest(parts=[
-            ToolReturnPart(
-                tool_name="read_file",
-                content=content,
-                tool_call_id=tc_id,
-            )
-        ]))
-    return synthetic
+        calls.append(ToolCallPart(
+            tool_name="read_file",
+            args={"path": path, "offset": 1, "limit": None},
+            tool_call_id=tc_id,
+        ))
+        returns.append(ToolReturnPart(
+            tool_name="read_file",
+            content=content,
+            tool_call_id=tc_id,
+        ))
+
+    if not calls:
+        return []
+
+    return [ModelResponse(parts=calls), ModelRequest(parts=returns)]
 
 
 def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Path:
