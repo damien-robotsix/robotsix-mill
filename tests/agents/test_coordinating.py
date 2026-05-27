@@ -314,8 +314,12 @@ class TestRunCoordinator:
         self, settings, tmp_path,
     ):
         """``reference_files`` with no ``message_history`` and no
-        ``feedback`` produces synthetic ``ModelResponse``/``ModelRequest``
-        pairs and seeds the fs-tools cache."""
+        ``feedback`` produces a 3-message synthetic history:
+        ``ModelRequest(UserPromptPart)`` (the real user prompt) →
+        ``ModelResponse(ToolCallPart)`` (preload calls) →
+        ``ModelRequest(ToolReturnPart)`` (preload returns). The fs-tools
+        cache is seeded for the preloaded path."""
+        from pydantic_ai.messages import UserPromptPart
         (tmp_path / "foo.py").write_text("x=1")
         ref = [{"path": "foo.py"}]
         self._run(settings, tmp_path, reference_files=ref)
@@ -327,13 +331,25 @@ class TestRunCoordinator:
         assert resolved in pre_seeded
         assert pre_seeded[resolved] == "x=1"
 
-        # Synthetic message_history passed to run_sync
+        # Synthetic message_history passed to run_sync — now 3 entries
+        # because the user_prompt is prepended into the history so the
+        # ordering reads: user → assistant tool_calls → user tool returns.
         mh = self.captured["message_history"]
         assert isinstance(mh, list)
-        assert len(mh) == 2  # one response + one request
+        assert len(mh) == 3
 
-        # First: ModelResponse with ToolCallPart for read_file
-        resp = mh[0]
+        # [0]: ModelRequest carrying the real user prompt
+        first = mh[0]
+        assert isinstance(first, ModelRequest)
+        assert len(first.parts) == 1
+        up = first.parts[0]
+        assert isinstance(up, UserPromptPart)
+        # The user_prompt isn't empty (it's the implement coordinator's
+        # built prompt — ticket_spec etc.).
+        assert isinstance(up.content, str) and up.content.strip()
+
+        # [1]: ModelResponse with the preload ToolCallParts
+        resp = mh[1]
         assert isinstance(resp, ModelResponse)
         assert len(resp.parts) == 1
         tc = resp.parts[0]
@@ -342,8 +358,8 @@ class TestRunCoordinator:
         assert tc.args == {"path": "foo.py", "offset": 1, "limit": None}
         assert tc.tool_call_id == "preload_foo.py"
 
-        # Second: ModelRequest with ToolReturnPart
-        req = mh[1]
+        # [2]: ModelRequest with matching ToolReturnPart
+        req = mh[2]
         assert isinstance(req, ModelRequest)
         assert len(req.parts) == 1
         tr = req.parts[0]
@@ -352,6 +368,9 @@ class TestRunCoordinator:
         assert tr.content == "x=1"
         assert tr.tool_call_id == "preload_foo.py"
 
+        # run_sync was called with user_prompt=None (the prompt is in mh[0]).
+        assert self.captured["user_prompt"] is None
+
     def test_reference_files_multiple_paths_share_one_turn(
         self, settings, tmp_path,
     ):
@@ -359,7 +378,8 @@ class TestRunCoordinator:
         one ``ModelResponse`` carrying N parallel ``read_file``
         ToolCallParts and one ``ModelRequest`` carrying N matching
         ``ToolReturnPart``s — so the agent perceives one batched
-        preload instead of N sequential exchanges."""
+        preload instead of N sequential exchanges. The leading user
+        prompt sits in its own ModelRequest at index 0."""
         (tmp_path / "a.py").write_text("A")
         (tmp_path / "b.py").write_text("B")
         (tmp_path / "c.py").write_text("C")
@@ -369,9 +389,10 @@ class TestRunCoordinator:
 
         mh = self.captured["message_history"]
         assert isinstance(mh, list)
-        assert len(mh) == 2  # exactly one Response + one Request
+        assert len(mh) == 3  # leading user prompt + Response + Request
 
-        resp, req = mh[0], mh[1]
+        first, resp, req = mh[0], mh[1], mh[2]
+        assert isinstance(first, ModelRequest)
         assert isinstance(resp, ModelResponse)
         assert isinstance(req, ModelRequest)
         assert len(resp.parts) == 3
@@ -427,10 +448,11 @@ class TestRunCoordinator:
             feedback="assertion failed in test_z",
         )
 
-        # Synthetic history IS built on retry now
+        # Synthetic history IS built on retry now — 3 entries
+        # (leading user prompt + preload call + preload return).
         mh = self.captured["message_history"]
         assert isinstance(mh, list)
-        assert len(mh) == 2  # one response + one request
+        assert len(mh) == 3
 
         # pre_seeded is still built
         pre_seeded = self.captured["fs_pre_seeded"]
@@ -438,8 +460,10 @@ class TestRunCoordinator:
         resolved = (tmp_path / "baz.py").resolve()
         assert pre_seeded[resolved] == "z=3"
 
-        # feedback block in prompt
-        assert "assertion failed in test_z" in self.captured["user_prompt"]
+        # feedback block in the synthesized user prompt (now living
+        # inside mh[0]'s UserPromptPart, not the captured run_sync arg).
+        up = mh[0].parts[0]
+        assert "assertion failed in test_z" in up.content
 
     # -- model_name ------------------------------------------------------
 
@@ -545,11 +569,12 @@ class TestRunCoordinator:
             for m in caplog.messages
         ), f"expected warning about gone.py, got: {caplog.messages}"
 
-        # Synthetic history built only for the existing file
+        # Synthetic history built only for the existing file (with the
+        # leading user-prompt ModelRequest prepended → 3 entries).
         mh = self.captured["message_history"]
         assert isinstance(mh, list)
-        assert len(mh) == 2  # one response + one request
-        tr = mh[1].parts[0]
+        assert len(mh) == 3
+        tr = mh[2].parts[0]
         assert isinstance(tr, ToolReturnPart)
         assert tr.content == "real content"
         assert tr.tool_call_id == "preload_exists.py"
@@ -575,7 +600,8 @@ class TestRunCoordinator:
         self._run(settings, tmp_path, reference_files=ref)
 
         mh = self.captured["message_history"]
-        tr = mh[1].parts[0]
+        # mh[0]: user prompt; mh[1]: tool_calls; mh[2]: tool returns.
+        tr = mh[2].parts[0]
         assert isinstance(tr, ToolReturnPart)
         # Content matches disk — the test writes and immediately calls
         # run_coordinator, which reads fresh. There's no stale cache path

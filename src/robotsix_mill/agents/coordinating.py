@@ -218,24 +218,6 @@ def run_coordinator(
         ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
     ]
 
-    # Build synthetic message_history when reference files are provided
-    # and the caller hasn't supplied an explicit message_history.
-    # NOTE: do NOT inject a TextPart-wrapped system prompt as the first
-    # message — TextPart is only valid in ModelResponse.parts. Placing
-    # it in a ModelRequest triggers pydantic-ai's "Expected code to be
-    # unreachable" assertion and aborts the entire implement run. The
-    # system prompt is already added by build_agent below; the synthetic
-    # history starts directly with the preloaded read_file ToolCall /
-    # ToolReturn pairs, which pydantic-ai accepts (helper shared with
-    # the review agent — see fs_tools.build_preseed_history).
-    if reference_files and message_history is None:
-        from .fs_tools import build_preseed_history
-
-        final_message_history = build_preseed_history(
-            repo_dir,
-            [rf["path"] for rf in reference_files],
-        )
-
     overrides = {}
     if model_name is not None:
         overrides["model_name"] = model_name
@@ -307,9 +289,33 @@ def run_coordinator(
                     "</test_failure>\n\n"
                     "Fix exactly this failure and stop."
                 )
+        # Build the synthetic message_history AFTER the user_prompt is
+        # finalized so the prompt can be prepended as a clean
+        # ModelRequest(UserPromptPart) BEFORE the preload tool calls.
+        # Trace ordering becomes: system → user (real prompt) →
+        # assistant (preload tool_calls) → user (tool returns) → model
+        # response. Without this, pydantic-ai bundles the new
+        # user_prompt as a trailing TextPart in the same ModelRequest
+        # as the tool returns, which the Langfuse Formatted view hides
+        # and which makes the model's own request invisible until it's
+        # already seen the tool returns.
+        run_user_prompt: str | None = user_prompt
+        if reference_files and message_history is None:
+            from .fs_tools import build_preseed_history
+
+            final_message_history = build_preseed_history(
+                repo_dir,
+                [rf["path"] for rf in reference_files],
+                user_prompt=user_prompt,
+            )
+            if final_message_history:
+                # Prompt is already in the history; pass None so
+                # pydantic-ai doesn't append a duplicate.
+                run_user_prompt = None
+
         result = call_with_retry(
             lambda: agent.run_sync(
-                user_prompt,
+                run_user_prompt,
                 message_history=final_message_history,
                 usage_limits=limits,
             ),

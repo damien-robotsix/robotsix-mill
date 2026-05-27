@@ -28,6 +28,7 @@ def build_preseed_history(
     repo_dir: Path,
     paths: list[str],
     *,
+    user_prompt: str | None = None,
     max_files: int = 20,
     max_total_bytes: int = 200_000,
 ) -> list:
@@ -41,7 +42,21 @@ def build_preseed_history(
     agent sees "I made N read_file calls in parallel and got N
     results in one batch" rather than N sequential one-call turns.
 
-    Returns an empty list when *paths* is empty.
+    When *user_prompt* is provided, a leading ``ModelRequest`` carrying
+    the prompt as a ``UserPromptPart`` is prepended to the history.
+    The caller must then invoke ``agent.run_sync(None,
+    message_history=...)`` (or with a different continuation prompt).
+    The resulting conversation reads cleanly:
+
+        system → user (real prompt) → assistant (preload tool_calls)
+        → user (tool returns) → assistant (model's actual response)
+
+    Without this restructuring pydantic-ai bundles the new user_prompt
+    as a trailing ``TextPart`` inside the same ``ModelRequest`` as the
+    tool returns, so the Langfuse "Formatted" view hides it and the
+    model sees its own request only AFTER the tool-call exchange.
+
+    Returns an empty list when *paths* is empty AND *user_prompt* is None.
 
     Defensive checks:
     - Files that don't exist on disk are skipped (with a warning) so
@@ -56,11 +71,12 @@ def build_preseed_history(
     - review (``reviewing.py``) — preloads every file the implement
       stage actually modified.
     """
-    if not paths:
+    if not paths and user_prompt is None:
         return []
 
     from pydantic_ai.messages import (
         ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
+        UserPromptPart,
     )
 
     calls: list = []
@@ -106,10 +122,15 @@ def build_preseed_history(
             tool_call_id=tc_id,
         ))
 
-    if not calls:
-        return []
-
-    return [ModelResponse(parts=calls), ModelRequest(parts=returns)]
+    history: list = []
+    if user_prompt is not None:
+        history.append(ModelRequest(parts=[
+            UserPromptPart(content=user_prompt),
+        ]))
+    if calls:
+        history.append(ModelResponse(parts=calls))
+        history.append(ModelRequest(parts=returns))
+    return history
 
 
 def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Path:

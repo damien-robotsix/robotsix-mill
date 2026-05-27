@@ -161,16 +161,6 @@ def run_review_agent(
         readonly_names = {"read_file", "list_dir"}
         tools = [t for t in all_fs_tools if t.__name__ in readonly_names]
 
-    # Build the synthetic-message_history pre-seed when paths are
-    # supplied. Same helper implement uses (fs_tools.build_preseed_history).
-    message_history = None
-    if reference_files and repo_dir is not None:
-        from .fs_tools import build_preseed_history
-
-        preseed = build_preseed_history(repo_dir, list(reference_files))
-        if preseed:
-            message_history = preseed
-
     overrides = {}
     if model_name is not None:
         overrides["model_name"] = model_name
@@ -191,10 +181,22 @@ def run_review_agent(
         )
         limits = UsageLimits(request_limit=settings.review_request_limit)
         run_kwargs: dict = {"usage_limits": limits}
-        if message_history is not None:
-            run_kwargs["message_history"] = message_history
+        run_user_prompt: str | None = user_prompt
+        # Build the synthetic message_history AFTER the user_prompt is
+        # finalized so the prompt can be prepended cleanly BEFORE the
+        # preload tool calls; see fs_tools.build_preseed_history.
+        if reference_files and repo_dir is not None:
+            from .fs_tools import build_preseed_history
+
+            preseed = build_preseed_history(
+                repo_dir, list(reference_files),
+                user_prompt=user_prompt,
+            )
+            if preseed:
+                run_kwargs["message_history"] = preseed
+                run_user_prompt = None
         result = call_with_retry(
-            lambda: agent.run_sync(user_prompt, **run_kwargs),
+            lambda: agent.run_sync(run_user_prompt, **run_kwargs),
             settings=settings, what="review",
         )
     finally:
