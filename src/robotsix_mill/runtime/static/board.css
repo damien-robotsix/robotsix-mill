@@ -303,3 +303,8 @@ text-transform:uppercase;letter-spacing:.04em}
 .sk-label{height:11px;width:35%;background:#1d212c;border-radius:3px;margin:14px 0 6px 0;animation:sk-pulse 1.5s ease-in-out infinite}
 .sk-inline{display:inline-block;background:#1d212c;border-radius:3px;animation:sk-pulse 1.5s ease-in-out infinite}
 @keyframes sk-pulse{0%,100%{opacity:.35}50%{opacity:.65}}
+
+.lf-badge{font-weight:600;color:#f3a55a}
+.lf-dismiss{margin-left:8px;background:#1a1a1a;color:#e8b08a;border:1px solid #6b3320;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px}
+.lf-dismiss:hover{background:#2a1a14}
+#lf-status code{background:#1a0e08;color:#f3a55a;padding:1px 4px;border-radius:3px}

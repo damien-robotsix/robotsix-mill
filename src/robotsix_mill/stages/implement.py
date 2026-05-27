@@ -163,6 +163,7 @@ class ImplementStage(Stage):
                     reference_files=reference_files,
                     previous_attempt_summary=previous_attempt_summary,
                     file_map=file_map,
+                    board_id=ctx.repo_config.board_id if ctx.repo_config else "",
                 )
             except AgentBudgetError as e:
                 ImplementStage._finalize(

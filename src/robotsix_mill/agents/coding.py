@@ -51,6 +51,7 @@ def run_implement_agent(
     epic_context: str = "",
     previous_attempt_summary: str | None = None,
     file_map: set[str] | None = None,
+    board_id: str = "",
 ) -> tuple[str, list[str], str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory)``.
@@ -87,6 +88,7 @@ def run_implement_agent(
                 message_history=message_history,
                 previous_attempt_summary=previous_attempt_summary,
                 file_map=file_map,
+                board_id=board_id,
             )
         return run_coordinator(
             settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
@@ -94,6 +96,7 @@ def run_implement_agent(
             reference_files=reference_files,
             message_history=message_history,
             previous_attempt_summary=previous_attempt_summary,
+            board_id=board_id,
         )
 
     try:
@@ -114,6 +117,7 @@ def run_implement_agent(
                 reference_files=reference_files,
                 message_history=message_history,
                 previous_attempt_summary=previous_attempt_summary,
+                board_id=board_id,
             )
         except Exception as fallback_e:
             raise AgentRunError(

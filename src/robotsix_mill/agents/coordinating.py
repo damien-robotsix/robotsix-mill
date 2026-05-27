@@ -159,6 +159,7 @@ def run_coordinator(
     reference_files: list[dict] | None = None,
     message_history: list | None = None,
     previous_attempt_summary: str | None = None,
+    board_id: str = "",
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -246,7 +247,7 @@ def run_coordinator(
         settings, definition,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
-            make_consult_expert_tool(settings, repo_dir),
+            make_consult_expert_tool(settings, repo_dir, board_id=board_id),
             *fs_tools,
         ],
         **overrides,
@@ -347,16 +348,22 @@ def run_coordinator(
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _resolve_expert_memory_path(settings: "Settings", definition) -> Path:
+def _resolve_expert_memory_path(
+    settings: "Settings", definition, board_id: str = "",
+) -> Path:
     """Resolve the on-disk memory ledger path for an expert.
 
     Prefers ``definition.memory.memory_path`` when explicitly set;
-    otherwise derives ``{data_dir}/expert_{domain}_memory.md``.
+    otherwise routes via ``settings.memory_file_for`` so the file
+    lives under the per-repo subtree
+    (``{data_dir}/{board_id}/expert_{domain}_memory.md``). Empty
+    ``board_id`` falls back to the legacy root path for callers
+    that don't yet carry repo context.
     """
     explicit = definition.memory.memory_path if definition.memory else None
     if explicit:
         return Path(explicit)
-    return Path(settings.data_dir) / f"expert_{definition.domain}_memory.md"
+    return settings.memory_file_for(f"expert_{definition.domain}", board_id)
 
 
 def _build_expert_prompt(
@@ -482,6 +489,7 @@ def run_coordinator_with_experts(
     message_history: list | None = None,
     previous_attempt_summary: str | None = None,
     file_map: set[str] | None = None,
+    board_id: str = "",
 ) -> ImplementResult:
     """Route the implement pass through one-or-more domain experts.
 
@@ -504,6 +512,7 @@ def run_coordinator_with_experts(
             epic_context=epic_context, reference_files=reference_files,
             message_history=message_history,
             previous_attempt_summary=previous_attempt_summary,
+            board_id=board_id,
         )
 
     # Step 1: Load definitions. Failure → fallback.
@@ -568,7 +577,7 @@ def run_coordinator_with_experts(
     try:
         for domain in active_domains:
             definition = definitions[domain]
-            memory_path = _resolve_expert_memory_path(settings, definition)
+            memory_path = _resolve_expert_memory_path(settings, definition, board_id)
             try:
                 expert_memory = load_memory(
                     memory_path,

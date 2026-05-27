@@ -57,6 +57,44 @@ _current_pk: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 )
 
 
+# Ring buffer of recent Langfuse export failures — surfaced to the UI
+# via /langfuse-status so the operator notices when traces aren't
+# making it through. (Without this, OTel's BatchSpanProcessor logs
+# at DEBUG and the worker continues silently.)
+_export_failures: list[dict] = []
+_EXPORT_FAILURE_CAP = 20
+_export_lock = __import__("threading").Lock()
+
+
+def record_export_failure(*, project: str, error: str, status: int | None = None) -> None:
+    """Append a Langfuse export-failure entry; capped at the most
+    recent ``_EXPORT_FAILURE_CAP`` items."""
+    from datetime import datetime as _dt, timezone as _tz
+
+    entry = {
+        "at": _dt.now(_tz.utc).isoformat(),
+        "project": project,
+        "error": (error or "")[:500],
+        "status": status,
+    }
+    with _export_lock:
+        _export_failures.append(entry)
+        if len(_export_failures) > _EXPORT_FAILURE_CAP:
+            del _export_failures[: len(_export_failures) - _EXPORT_FAILURE_CAP]
+
+
+def get_export_failures() -> list[dict]:
+    """Return a snapshot of recent Langfuse export failures."""
+    with _export_lock:
+        return list(_export_failures)
+
+
+def clear_export_failures() -> None:
+    """Reset the failure log (e.g. after the operator acknowledges)."""
+    with _export_lock:
+        _export_failures.clear()
+
+
 def _flatten_chat_message(m: dict) -> dict:
     """Reduce one pydantic-ai OTel ChatMessage to OpenAI chat-completions
     shape so Langfuse renders it natively.
@@ -406,9 +444,46 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
 
         from base64 import b64encode as _b64encode
 
+        from opentelemetry.sdk.trace.export import SpanExportResult
+
+        class _ReportingExporter(OTLPSpanExporter):
+            """OTLPSpanExporter wrapper that records failures so the
+            UI can surface "Langfuse export broken" without the
+            operator having to read worker logs."""
+
+            def __init__(self, *args, project_label: str = "", **kw):
+                super().__init__(*args, **kw)
+                self._project_label = project_label
+
+            def export(self, spans):  # noqa: ANN001
+                try:
+                    result = super().export(spans)
+                except Exception as e:  # noqa: BLE001
+                    record_export_failure(
+                        project=self._project_label,
+                        error=f"{type(e).__name__}: {e}",
+                    )
+                    log.warning(
+                        "Langfuse export raised for %s: %s",
+                        self._project_label, e,
+                    )
+                    return SpanExportResult.FAILURE
+                if result != SpanExportResult.SUCCESS:
+                    record_export_failure(
+                        project=self._project_label,
+                        error="OTLP export returned FAILURE — "
+                        "see worker logs for details",
+                    )
+                    log.warning(
+                        "Langfuse export FAILURE for %s",
+                        self._project_label,
+                    )
+                return result
+
         endpoint = f"{base_url}/api/public/otel/v1/traces"
-        exporter = OTLPSpanExporter(
+        exporter = _ReportingExporter(
             endpoint=endpoint,
+            project_label=project_name or public_key,
             headers={
                 "Authorization": "Basic "
                 + _b64encode(f"{public_key}:{secret_key}".encode()).decode(),

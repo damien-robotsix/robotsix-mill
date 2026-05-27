@@ -125,6 +125,27 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@router.get("/langfuse-status")
+def langfuse_status() -> dict:
+    """Return recent Langfuse export failures so the UI can surface
+    "tracing broken" without the operator having to grep worker logs.
+
+    Empty ``failures`` list means everything is shipping fine.
+    """
+    from .tracing import get_export_failures
+
+    failures = get_export_failures()
+    return {"failures": failures, "count": len(failures)}
+
+
+@router.post("/langfuse-status/clear", status_code=204)
+def langfuse_status_clear() -> None:
+    """Drop the failure log after the operator acknowledges."""
+    from .tracing import clear_export_failures
+
+    clear_export_failures()
+
+
 @router.get("/repos")
 def list_repos(
     request: Request,

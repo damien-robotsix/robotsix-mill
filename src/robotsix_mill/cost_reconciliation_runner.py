@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from .config import Settings, get_secrets
+from .config import RepoConfig, Settings, get_secrets
 from .core.models import SourceKind
 from .core.service import TicketService
 
@@ -247,6 +247,7 @@ def _fetch_langfuse_daily(
 
 def run_cost_reconciliation_pass(
     session_id: str = "",
+    repo_config: "RepoConfig | None" = None,
 ) -> CostReconciliationPassResult:
     """Execute one cost-reconciliation pass.
 
@@ -262,7 +263,10 @@ def run_cost_reconciliation_pass(
         ``CostReconciliationPassResult`` with created draft info.
     """
     settings = Settings()
-    service = TicketService(settings)
+    service = TicketService(
+        settings,
+        board_id=(repo_config.board_id if repo_config else ""),
+    )
 
     from_ts, to_ts = _yesterday_utc_range()
     date_str = _yesterday_date_str()

@@ -26,6 +26,7 @@ def run_consult_expert(
     repo_dir: Path,
     domain: str,
     question: str,
+    board_id: str = "",
 ) -> str:
     """Run a read-only domain expert sub-agent for *domain* with
     *question* and return its answer string.
@@ -68,7 +69,7 @@ def run_consult_expert(
     # 2. Load expert memory ledger.
     from ..pass_runner import load_memory
 
-    memory_path = Path(settings.data_dir) / f"expert_{domain}_memory.md"
+    memory_path = settings.memory_file_for(f"expert_{domain}", board_id)
     try:
         expert_memory = load_memory(
             memory_path,
@@ -130,7 +131,7 @@ def run_consult_expert(
     return str(result.output)
 
 
-def make_consult_expert_tool(settings: Settings, repo_dir: Path):
+def make_consult_expert_tool(settings: Settings, repo_dir: Path, board_id: str = ""):
     """Build the ``consult_expert`` tool exposed to the coordinator. It
     only ever returns the expert sub-agent's answer string."""
 
@@ -145,6 +146,7 @@ def make_consult_expert_tool(settings: Settings, repo_dir: Path):
         return run_consult_expert(
             settings=settings, repo_dir=repo_dir,
             domain=domain, question=question,
+            board_id=board_id,
         )
 
     from .tool_registry import ToolInfo, ToolRegistry

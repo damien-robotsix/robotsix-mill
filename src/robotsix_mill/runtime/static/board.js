@@ -105,6 +105,32 @@ async function fetchGates() {
   ].map(p => `<span class="gate-pill ${p.on ? "gate-on" : "gate-off"}" title="${esc(p.yaml)} — ${esc(p.tip)}">${esc(p.label)} ${p.on ? "✓" : "✗"}</span>`).join("");
 }
 
+// Poll Langfuse export status; surface a banner when recent exports
+// failed so the operator notices without watching worker logs.
+async function fetchLangfuseStatus() {
+  const s = await jget("/langfuse-status");
+  if (!s) return;
+  const banner = document.getElementById("lf-status");
+  if (!banner) return;
+  if (!s.count) {
+    banner.style.display = "none";
+    banner.innerHTML = "";
+    return;
+  }
+  const last = s.failures[s.failures.length - 1];
+  banner.style.display = "block";
+  banner.innerHTML =
+    `<span class="lf-badge">⚠ Langfuse export issues</span> ` +
+    `${s.count} recent failure(s). Latest: ${esc(last.project || "?")} — ` +
+    `<code>${esc((last.error || "").slice(0, 200))}</code> ` +
+    `<button onclick="dismissLfStatus()" class="lf-dismiss">dismiss</button>`;
+}
+
+async function dismissLfStatus() {
+  await jpost("/langfuse-status/clear", {});
+  fetchLangfuseStatus();
+}
+
 // HTTP helpers built on XMLHttpRequest, not fetch().
 // `fetch` is wrapped by SES / hardened-JS extensions (MetaMask, some
 // privacy/wallet add-ons) and can fail with "NetworkError when
@@ -152,6 +178,7 @@ async function refresh(){
  const url=wantClosed?ticketsBase:(ticketsBase+(ticketsBase.includes("?")?"&":"?")+"include_closed=false");
  const activeUrl=repoId!=="all"?"/active?repo_id="+encodeURIComponent(repoId):"/active";
  fetchGates();
+ fetchLangfuseStatus();
  const [ts, activeList]=await Promise.all([jget(url), jget(activeUrl)]);
  if(!ts)return;
  const active={};

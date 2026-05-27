@@ -43,10 +43,11 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     seen = {}
 
-    def fake(*, settings, repo_dir, domain, question):
+    def fake(*, settings, repo_dir, domain, question, board_id=""):
         seen["domain"] = domain
         seen["question"] = question
         seen["dir"] = repo_dir
+        seen["board_id"] = board_id
         return f"ANSWER: {domain} -> {question}"
 
     monkeypatch.setattr(consult_expert, "run_consult_expert", fake)
