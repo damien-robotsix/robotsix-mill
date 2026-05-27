@@ -14,6 +14,7 @@ def _clear_env():
     _reset_secrets()
     # Reset the module-level state so tests are independent.
     tracing._provider_ready = None
+    tracing._provider = None
     tracing._registered_keys.clear()
     tracing._shutdown_requested = False
     tracing._current_session.set(None)

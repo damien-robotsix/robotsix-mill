@@ -37,6 +37,14 @@ _provider_ready: bool | None = None  # None=unchecked, True=installed, False=dis
 # the whole function the way a single global flag did.
 _registered_keys: set[str] = set()
 
+# The TracerProvider we built and own. Held module-level so subsequent
+# per-repo registrations can call ``add_span_processor`` on it directly
+# rather than going through ``trace.get_tracer_provider()`` — the latter
+# can return a ``ProxyTracerProvider`` (no ``add_span_processor`` method)
+# when something else hit OTel's one-shot ``set_tracer_provider`` guard
+# before us. Set inside the one-time init block in ``_ensure_tracing``.
+_provider: object | None = None
+
 _shutdown_requested: bool = False  # set by signal handlers to prevent double-flush
 
 # The session id (ticket id / audit id) currently in scope. A
@@ -329,6 +337,8 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             from pydantic_ai.agent import Agent
 
             Agent.instrument_all()
+            global _provider
+            _provider = provider
             _provider_ready = True
 
         # --- register this repo's filtered exporter ---------------------
@@ -354,8 +364,23 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
                 _check_rejected_generation(span)
                 super().on_end(span)
 
-        provider = trace.get_tracer_provider()
-        provider.add_span_processor(
+        # Use the provider WE built (stored at init), not the OTel
+        # global lookup — the latter can return a ``ProxyTracerProvider``
+        # (no ``add_span_processor``) when something else races our
+        # ``set_tracer_provider`` call. ``_provider`` is set inside the
+        # one-time init block above.
+        target_provider = _provider if _provider is not None else trace.get_tracer_provider()
+        if not hasattr(target_provider, "add_span_processor"):
+            log.warning(
+                "tracing: TracerProvider lacks add_span_processor — "
+                "skipping exporter registration for project %s "
+                "(type=%s). Traces for this repo will not be exported.",
+                project_name or public_key, type(target_provider).__name__,
+            )
+            _registered_keys.add(public_key)  # don't retry forever
+            del project_name
+            return
+        target_provider.add_span_processor(
             _FilteredBatchSpanProcessor(exporter, target_public_key=public_key)
         )
         _registered_keys.add(public_key)
@@ -387,7 +412,7 @@ def flush_tracing(timeout: int = 10_000) -> None:
         return
     from opentelemetry import trace
 
-    provider = trace.get_tracer_provider()
+    provider = _provider if _provider is not None else trace.get_tracer_provider()
     if hasattr(provider, "force_flush"):
         provider.force_flush(timeout_millis=timeout)  # type: ignore[union-attr]
 
