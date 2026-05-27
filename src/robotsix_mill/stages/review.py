@@ -8,10 +8,11 @@ comments stored); NEEDS_DISCUSSION → BLOCKED (with comments stored).
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 
-from ..agents.reviewing import ReviewVerdict, run_review_agent
+from ..agents.reviewing import ReviewAsk, ReviewVerdict, run_review_agent
 from ..core.models import Ticket
 from ..core.states import State
 from ..vcs import git_ops
@@ -36,6 +37,87 @@ def _paths_from_diff(diff: str) -> list[str]:
             seen.add(path)
             out.append(path)
     return out
+
+
+def _load_file_map(ws) -> set[str] | None:
+    """Read ``file_map.json`` from the ticket workspace, if any.
+
+    Returns the set of in-scope paths. Returns ``None`` when the file
+    is missing, empty, or unparseable — the review stage then treats
+    every ask as in-scope (back-compat with tickets that have no
+    file map yet, e.g. legacy or scope-free flows).
+    """
+    p = ws.artifacts_dir / "file_map.json"
+    if not p.exists():
+        return None
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(raw, list) or not raw:
+        return None
+    paths = {entry["file"] for entry in raw if isinstance(entry, dict) and "file" in entry}
+    return paths or None
+
+
+def _split_asks(
+    asks: list[ReviewAsk], file_map: set[str] | None,
+) -> tuple[list[ReviewAsk], list[ReviewAsk]]:
+    """Partition ``asks`` into ``(in_scope, out_of_scope)``.
+
+    An ask is out-of-scope when it touches at least one file NOT in
+    ``file_map``. Asks with empty ``files_touched`` are treated as
+    in-scope (file-less clarifications stay with the parent). When
+    ``file_map`` is None (legacy / scope-free), every ask is in-scope.
+    """
+    if file_map is None:
+        return list(asks), []
+    in_scope: list[ReviewAsk] = []
+    out_of_scope: list[ReviewAsk] = []
+    for ask in asks:
+        if not ask.files_touched:
+            in_scope.append(ask)
+            continue
+        if any(f not in file_map for f in ask.files_touched):
+            out_of_scope.append(ask)
+        else:
+            in_scope.append(ask)
+    return in_scope, out_of_scope
+
+
+def _spawn_dependency_tickets(
+    parent: Ticket, asks: list[ReviewAsk], ctx,
+) -> list[str]:
+    """Materialise each out-of-scope ask as a fresh ticket on the same
+    board, return their IDs.
+
+    Title is a short paraphrase of the ask description; body captures
+    the full description plus the files the ask would touch so the
+    refine agent has enough context to produce a real spec. ``source``
+    is ``"review"`` so the operator can trace these back to the
+    review pass that spawned them.
+    """
+    ids: list[str] = []
+    for ask in asks:
+        title = (ask.description.splitlines()[0] or "review follow-up")[:120]
+        body_lines = [ask.description.strip()]
+        if ask.files_touched:
+            body_lines.append("")
+            body_lines.append("Files involved:")
+            body_lines.extend(f"- `{f}`" for f in ask.files_touched)
+        body_lines.append("")
+        body_lines.append(
+            f"(Spawned by review on parent ticket `{parent.id}` — its "
+            "scope did not cover these files.)"
+        )
+        child = ctx.service.create(
+            title,
+            "\n".join(body_lines),
+            source="review",
+            board_id=parent.board_id or None,
+        )
+        ids.append(child.id)
+    return ids
 
 
 def _build_prior_context(ticket, ctx, ws) -> str | None:
@@ -160,8 +242,60 @@ class ReviewStage(Stage):
                     State.DOCUMENTING,
                     f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
                 )
-            # under cap: normal REQUEST_CHANGES path
-            ctx.service.add_comment(ticket.id, verdict.comments, author="review")
+            # Split asks against the ticket's file_map. Out-of-scope
+            # asks would have made the implement agent edit files
+            # outside the declared scope, get bounced by scope-triage
+            # next pass, and loop forever. Materialise each as a
+            # dependency ticket and park this one on those deps —
+            # the unmet-dep gate keeps the parent out of the queue
+            # until the new tickets close, then implement runs again
+            # with the out-of-scope work already merged into main.
+            file_map = _load_file_map(ws)
+            in_scope, out_of_scope = _split_asks(
+                verdict.request_changes, file_map,
+            )
+            if out_of_scope:
+                new_ids = _spawn_dependency_tickets(
+                    ticket, out_of_scope, ctx,
+                )
+                existing = ticket.depends_on or ""
+                prior_ids = (
+                    json.loads(existing) if existing else []
+                )
+                merged = list(dict.fromkeys(prior_ids + new_ids))
+                ctx.service.set_depends_on(ticket.id, merged)
+                lines = [
+                    f"Review found {len(out_of_scope)} out-of-scope "
+                    f"ask(s) — spawned dependency ticket(s) and parked "
+                    f"this ticket until they close:",
+                    "",
+                ]
+                for nid, ask in zip(new_ids, out_of_scope):
+                    desc = ask.description.splitlines()[0][:120]
+                    lines.append(f"- `{nid}` — {desc}")
+                ctx.service.add_comment(
+                    ticket.id, "\n".join(lines), author="review",
+                )
+            # Normal in-scope feedback (if any) still goes to the
+            # implement agent as a single comment alongside the
+            # dep-spawn notice.
+            if in_scope or not out_of_scope:
+                body = verdict.comments
+                if in_scope and out_of_scope:
+                    # When mixed: rewrite comments to only the in-scope
+                    # subset so implement isn't asked to fix the
+                    # out-of-scope work too. The narrative ``comments``
+                    # field still covers everything for the operator.
+                    body = (
+                        verdict.comments
+                        + "\n\nIn-scope items (the rest were spawned "
+                        "as deps and will be addressed first):\n"
+                        + "\n".join(
+                            f"- {a.description.splitlines()[0][:200]}"
+                            for a in in_scope
+                        )
+                    )
+                ctx.service.add_comment(ticket.id, body, author="review")
             return Outcome(
                 State.READY,
                 verdict.comments,

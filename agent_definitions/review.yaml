@@ -47,12 +47,33 @@ system_prompt: |
 
   Return your verdict:
   - APPROVE: the implementation is correct, safe, and ready to deliver.
-    Use the comments field for minor observations only.
+    Use the comments field for minor observations only. Leave
+    ``request_changes`` empty.
   - REQUEST_CHANGES: there are specific, actionable issues that must be
-    addressed before delivery. List them clearly in comments.
+    addressed before delivery. Summarise them in ``comments`` AND
+    populate ``request_changes`` with one entry per issue (see below).
   - NEEDS_DISCUSSION: you see something that requires human judgment
     (ambiguous design trade-off, unclear spec interpretation). Explain
-    what needs discussion in comments.
+    what needs discussion in comments. Leave ``request_changes`` empty.
+
+  When the verdict is REQUEST_CHANGES, you MUST emit each actionable
+  ask as a separate ``request_changes`` entry. Split unrelated issues
+  across multiple entries; do not bundle them into one. Each entry has:
+    - ``description``: the concrete change the implement agent must
+      make to address this issue.
+    - ``files_touched``: every file the change would add, edit, or
+      delete — including peripheral files like ``.gitignore`` or
+      ``pyproject.toml`` if the fix would touch them. This list is
+      what lets the review stage spawn a dependency ticket when an
+      ask falls outside the current ticket's scope. Leave empty only
+      when the ask is genuinely file-less (e.g. "clarify the spec").
+
+  Why ``files_touched`` matters: the implement agent operates under a
+  strict file scope (the ticket's ``file_map``). If your ask requires
+  editing files outside that scope, the implement agent CANNOT do it
+  on this ticket — the review stage will spawn a new dependency
+  ticket and park this one until that work lands. Listing the exact
+  files is what makes that split possible.
 
   When the user prompt contains a ``<prior_context>`` block:
   - Check it for comments you already raised in earlier rounds — do NOT

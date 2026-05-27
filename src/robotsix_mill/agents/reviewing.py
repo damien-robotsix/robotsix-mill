@@ -21,15 +21,55 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 
 
 
+class ReviewAsk(BaseModel):
+    """One actionable change request, classified against ticket scope.
+
+    The review stage uses ``files_touched`` to split asks into
+    in-scope vs out-of-scope (against the ticket's ``file_map.json``)
+    and routes them differently: in-scope asks become a single
+    review comment and bounce the ticket to READY for another
+    implement pass; each out-of-scope ask is materialised as a fresh
+    dependency ticket and the current ticket is parked on those
+    deps. This prevents the loop where scope-triage rejects edits
+    that review legitimately demands.
+    """
+
+    description: str = Field(
+        description="The concrete change the implement agent must make. "
+                    "One ask = one logical issue; split unrelated issues "
+                    "across multiple ReviewAsk entries."
+    )
+    files_touched: list[str] = Field(
+        default_factory=list,
+        description="Repo-relative paths the implement agent would need "
+                    "to add/edit/delete to address this ask. Leave empty "
+                    "only when the ask is genuinely file-less (e.g. "
+                    "clarify a spec ambiguity). Include EVERY file the "
+                    "change would touch, even peripheral ones like "
+                    "`.gitignore` — that classification is what lets the "
+                    "review stage spawn a dep ticket for out-of-scope work."
+    )
+
+
 class ReviewVerdict(BaseModel):
     """Structured output from the blind review agent."""
 
     verdict: Literal["APPROVE", "REQUEST_CHANGES", "NEEDS_DISCUSSION"]
     comments: str = Field(
         description="Detailed review feedback. For APPROVE, note any "
-                    "minor observations. For REQUEST_CHANGES, list "
-                    "specific, actionable issues. For NEEDS_DISCUSSION, "
-                    "explain what requires human judgment."
+                    "minor observations. For REQUEST_CHANGES, summarise "
+                    "the issues here AND populate ``request_changes`` "
+                    "with one entry per actionable ask. For "
+                    "NEEDS_DISCUSSION, explain what requires human "
+                    "judgment."
+    )
+    request_changes: list[ReviewAsk] = Field(
+        default_factory=list,
+        description="Structured list of actionable change requests. "
+                    "REQUIRED on REQUEST_CHANGES verdicts (one entry per "
+                    "issue); leave empty for APPROVE / NEEDS_DISCUSSION. "
+                    "Each ask names the files it would touch so the "
+                    "stage can split in-scope vs out-of-scope work."
     )
     auto_merge_eligible: bool = Field(
         default=False,

@@ -398,3 +398,151 @@ def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
 
     t2 = ctx.service.get(t.id)
     assert t2.review_rounds == 1  # unchanged
+
+
+# --- Dependency spawning for out-of-scope asks -------------------------
+
+import json
+
+from robotsix_mill.agents.reviewing import ReviewAsk
+
+
+def _write_file_map(ctx, ticket, files: list[str]) -> None:
+    """Stamp the workspace's file_map.json — the same artifact refine
+    writes. Each entry is ``{"file": <path>}``."""
+    ws = ctx.service.workspace(ticket)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        json.dumps([{"file": f} for f in files]),
+        encoding="utf-8",
+    )
+
+
+def test_request_changes_in_scope_no_deps(ctx_factory, monkeypatch):
+    """All asks touch files inside file_map → no dep tickets, single
+    review comment, parent goes to READY (existing behaviour)."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ["feature.txt"])
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="fix line 3 in feature.txt",
+            request_changes=[ReviewAsk(
+                description="Tighten the bounds check in feature.txt",
+                files_touched=["feature.txt"],
+            )],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    after = ctx.service.get(t.id)
+    assert not after.depends_on  # no deps spawned
+    # Only the original review comment exists (no dep-spawn notice).
+    bodies = [c.body for c in ctx.service.list_comments(t.id)]
+    assert any("fix line 3" in b for b in bodies)
+    assert all("Spawned" not in b for b in bodies)
+
+
+def test_request_changes_out_of_scope_spawns_dep_ticket(ctx_factory, monkeypatch):
+    """Out-of-scope ask materialises a fresh ticket on the same board
+    and the parent's depends_on is set so the worker's dep gate parks
+    it until the new ticket closes."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ["feature.txt"])  # .gitignore is out-of-scope
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="add .gitignore for __pycache__",
+            request_changes=[ReviewAsk(
+                description="Add a .gitignore that excludes __pycache__",
+                files_touched=[".gitignore"],
+            )],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    after = ctx.service.get(t.id)
+    deps = json.loads(after.depends_on or "[]")
+    assert len(deps) == 1
+    child = ctx.service.get(deps[0])
+    assert child is not None
+    assert child.source == "review"
+    assert ".gitignore" in (child.body if hasattr(child, "body") else "") \
+        or ".gitignore" in ctx.service.workspace(child).read_description()
+
+
+def test_request_changes_mixed_scope_one_dep_one_in_scope(ctx_factory, monkeypatch):
+    """Mixed verdict: in-scope asks stay on the parent (READY +
+    comment), out-of-scope asks each spawn one dep ticket."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ["feature.txt"])
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="two issues",
+            request_changes=[
+                ReviewAsk(
+                    description="Tighten bounds in feature.txt",
+                    files_touched=["feature.txt"],
+                ),
+                ReviewAsk(
+                    description="Add a .gitignore for __pycache__",
+                    files_touched=[".gitignore"],
+                ),
+            ],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    after = ctx.service.get(t.id)
+    deps = json.loads(after.depends_on or "[]")
+    assert len(deps) == 1  # only the out-of-scope ask spawned a dep
+
+
+def test_request_changes_no_file_map_all_in_scope(ctx_factory, monkeypatch):
+    """No file_map.json → every ask is treated as in-scope (legacy /
+    scope-free flow). No deps spawned regardless of files_touched."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    t = _ticket(ctx)
+    # no file_map.json written
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="fix it",
+            request_changes=[ReviewAsk(
+                description="Add a .gitignore",
+                files_touched=[".gitignore"],
+            )],
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent", _fake_review
+    )
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.READY
+
+    after = ctx.service.get(t.id)
+    assert not after.depends_on
