@@ -258,21 +258,20 @@ def test_run_health_pass_unreadable_memory(tmp_path, monkeypatch):
 
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
 
-    # Patch the Settings call in health_runner to return a settings
-    # object whose memory_file.read_text() raises OSError.
-    class UnreadableSettings(settings.__class__):
-        @property
-        def health_memory_file(self):
-            from unittest.mock import MagicMock
-            m = MagicMock()
-            m.exists.return_value = True
-            m.read_text.side_effect = OSError("permission denied")
-            return m
-
+    # Have the health_runner pick up our tmp-scoped settings, then
+    # make memory_file_for("health", …) return a path whose
+    # read_text() raises OSError so load_memory's OSError-handling
+    # branch is exercised.
     monkeypatch.setattr(
-        "robotsix_mill.health_runner.Settings",
-        lambda: UnreadableSettings(**{k: v for k, v in settings.__dict__.items()
-                                       if not k.startswith("_")}),
+        "robotsix_mill.health_runner.Settings", lambda: settings
+    )
+    from unittest.mock import MagicMock
+    unreadable = MagicMock()
+    unreadable.exists.return_value = True
+    unreadable.read_text.side_effect = OSError("permission denied")
+    monkeypatch.setattr(
+        type(settings), "memory_file_for",
+        lambda self, name, board_id="": unreadable,
     )
 
     result = run_health_pass(session_id="test-sid")
