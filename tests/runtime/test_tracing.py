@@ -405,16 +405,78 @@ class TestFlattenChatIO:
         assert out["content"] == "First.\nSecond."
 
     def test_flatten_tool_call_part(self):
+        """tool_call parts go into the OpenAI-shape ``tool_calls``
+        array, NOT into the text content blob — that's what makes
+        Langfuse render them as native tool-call cards."""
         from robotsix_mill.runtime.tracing import _flatten_chat_message
         m = {"role": "assistant", "parts": [
             {"type": "text", "content": "Will call."},
-            {"type": "tool_call", "name": "read_file",
+            {"type": "tool_call", "id": "call_1", "name": "read_file",
              "arguments": '{"path":"foo.py"}'},
         ]}
         out = _flatten_chat_message(m)
-        assert "Will call." in out["content"]
-        assert "[tool_call read_file(" in out["content"]
-        assert "foo.py" in out["content"]
+        assert out["content"] == "Will call."
+        assert out["tool_calls"] == [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "arguments": '{"path":"foo.py"}',
+                },
+            }
+        ]
+
+    def test_flatten_tool_response_part(self):
+        """tool_call_response → role=tool with tool_call_id + content
+        result, matching OpenAI chat-completions."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_message
+        m = {"role": "tool", "parts": [
+            {"type": "tool_call_response", "id": "call_1",
+             "name": "read_file", "result": "file contents..."},
+        ]}
+        out = _flatten_chat_message(m)
+        assert out["role"] == "tool"
+        assert out["tool_call_id"] == "call_1"
+        assert out["content"] == "file contents..."
+        assert "tool_calls" not in out
+
+    def test_flatten_overrides_user_role_for_tool_responses(self):
+        """pydantic-ai groups non-system request parts under role=user
+        even when the parts are tool_call_responses. Override to
+        role=tool so Langfuse renders the tool-result bubble."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_message
+        m = {"role": "user", "parts": [
+            {"type": "tool_call_response", "id": "call_42",
+             "name": "explore", "result": "{\"hits\": 3}"},
+        ]}
+        out = _flatten_chat_message(m)
+        assert out["role"] == "tool"
+        assert out["tool_call_id"] == "call_42"
+
+    def test_flatten_dict_tool_call_arguments_become_json(self):
+        """When arguments arrive as a dict (not pre-serialized), they
+        get JSON-stringified to match OpenAI's wire format."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_message
+        import json
+        m = {"role": "assistant", "parts": [
+            {"type": "tool_call", "id": "c", "name": "f",
+             "arguments": {"x": 1}},
+        ]}
+        out = _flatten_chat_message(m)
+        assert json.loads(out["tool_calls"][0]["function"]["arguments"]) == {"x": 1}
+
+    def test_flatten_media_part_becomes_marker(self):
+        """Media parts become bracketed markers in content so they're
+        visible without breaking the bubble layout."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_message
+        m = {"role": "user", "parts": [
+            {"type": "text", "content": "Look at this:"},
+            {"type": "image-url", "url": "https://example.com/x.png"},
+        ]}
+        out = _flatten_chat_message(m)
+        assert "Look at this:" in out["content"]
+        assert "[image-url https://example.com/x.png]" in out["content"]
 
     def test_flatten_preserves_finish_reason(self):
         from robotsix_mill.runtime.tracing import _flatten_chat_message

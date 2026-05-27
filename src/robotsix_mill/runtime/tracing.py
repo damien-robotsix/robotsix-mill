@@ -58,46 +58,113 @@ _current_pk: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 
 def _flatten_chat_message(m: dict) -> dict:
-    """Reduce one pydantic-ai OTel ChatMessage to Langfuse's
-    {role, content} shape.
+    """Reduce one pydantic-ai OTel ChatMessage to OpenAI chat-completions
+    shape so Langfuse renders it natively.
 
     pydantic-ai's instrumentation v2 writes messages as
-    ``{"role": "system", "parts": [{"type": "text", "content": "..."},
-    {"type": "tool_call", "name": ..., "arguments": ...}, ...]}``.
+    ``{"role": ..., "parts": [{"type": "text"|"tool_call"|
+    "tool_call_response"|"image-url"|"uri"|"file"|"binary"|..., ...},
+    ...]}``.
 
-    Langfuse renders chat bubbles when each item has a flat
-    ``content`` field. Concatenate text parts with newlines; render
-    tool-call / tool-response parts as compact suffixes so they are
-    visible but don't break the bubble layout.
+    Langfuse's Formatted view recognises the OpenAI chat-completions
+    shape:
+
+    - assistant message with tool calls →
+      ``{"role": "assistant", "content": "...",
+        "tool_calls": [{"id": ..., "type": "function",
+                        "function": {"name": ..., "arguments": ...}}]}``
+    - tool result message →
+      ``{"role": "tool", "tool_call_id": ..., "content": "..."}``
+
+    Map every pydantic-ai part type onto that shape; non-text media
+    parts get a compact bracketed marker appended to ``content``
+    rather than being dropped.
     """
+    import json as _json
+
     role = m.get("role", "user")
     parts = m.get("parts") or []
     if isinstance(parts, str):
         return {"role": role, "content": parts}
     if not isinstance(parts, list):
         return {"role": role, "content": str(parts)}
-    chunks: list[str] = []
+
+    text_chunks: list[str] = []
+    tool_calls: list[dict] = []
+    tool_call_id: str | None = None
+
     for p in parts:
         if not isinstance(p, dict):
-            chunks.append(str(p))
+            text_chunks.append(str(p))
             continue
         t = p.get("type")
         if t == "text":
-            chunks.append(p.get("content", "") or "")
+            content = p.get("content", "") or ""
+            if content:
+                text_chunks.append(content)
         elif t == "tool_call":
-            name = p.get("name", "?")
             args = p.get("arguments", "")
-            chunks.append(f"[tool_call {name}({args})]")
+            if not isinstance(args, str):
+                try:
+                    args = _json.dumps(args, default=str, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    args = str(args)
+            tool_calls.append({
+                "id": p.get("id", ""),
+                "type": "function",
+                "function": {
+                    "name": p.get("name", ""),
+                    "arguments": args,
+                },
+            })
         elif t in ("tool_call_response", "tool_response"):
-            ident = p.get("id") or p.get("name", "?")
+            tool_call_id = p.get("id", "") or tool_call_id
             res = p.get("result") if "result" in p else p.get("content", "")
-            chunks.append(f"[tool_response {ident}: {res}]")
+            if not isinstance(res, str):
+                try:
+                    res = _json.dumps(res, default=str, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    res = str(res)
+            text_chunks.append(res)
+        elif t in ("image-url", "audio-url", "video-url", "document-url"):
+            url = p.get("url", "")
+            text_chunks.append(f"[{t} {url}]")
+        elif t == "uri":
+            modality = p.get("modality", "file")
+            uri = p.get("uri", "")
+            text_chunks.append(f"[{modality} {uri}]")
+        elif t == "file":
+            modality = p.get("modality", "file")
+            file_id = p.get("file_id", "")
+            text_chunks.append(f"[file {file_id} ({modality})]")
+        elif t == "binary":
+            text_chunks.append(f"[binary {p.get('media_type', '')}]")
         else:
-            # Unknown part shape — render as JSON for visibility but
-            # don't drop the data.
-            import json as _json
-            chunks.append(_json.dumps(p, default=str, ensure_ascii=False))
-    out: dict[str, object] = {"role": role, "content": "\n".join(chunks)}
+            # Unknown part shape — JSON-dump for visibility.
+            try:
+                text_chunks.append(_json.dumps(p, default=str, ensure_ascii=False))
+            except (TypeError, ValueError):
+                text_chunks.append(str(p))
+
+    # pydantic-ai's instrumented.py groups every non-system request
+    # part under role="user" — including tool_call_response parts that
+    # OpenAI's wire format requires under role="tool". Override the
+    # role here when we detected a tool_call_id so Langfuse renders
+    # the tool-result bubble correctly (and downstream OpenAI-shape
+    # consumers parse it).
+    if tool_call_id and role != "tool":
+        role = "tool"
+    out: dict[str, object] = {"role": role}
+    content = "\n".join(text_chunks)
+    # Always set ``content``: Langfuse / OpenAI shape expects it as a
+    # string (even empty) on assistant messages that only have
+    # tool_calls. Empty string is valid; null/missing breaks the
+    # Formatted view.
+    out["content"] = content
+    if tool_calls:
+        out["tool_calls"] = tool_calls
+    if tool_call_id:
+        out["tool_call_id"] = tool_call_id
     if "finish_reason" in m:
         out["finish_reason"] = m["finish_reason"]
     return out
