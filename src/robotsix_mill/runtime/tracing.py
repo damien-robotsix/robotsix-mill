@@ -57,6 +57,98 @@ _current_pk: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 )
 
 
+def _flatten_chat_message(m: dict) -> dict:
+    """Reduce one pydantic-ai OTel ChatMessage to Langfuse's
+    {role, content} shape.
+
+    pydantic-ai's instrumentation v2 writes messages as
+    ``{"role": "system", "parts": [{"type": "text", "content": "..."},
+    {"type": "tool_call", "name": ..., "arguments": ...}, ...]}``.
+
+    Langfuse renders chat bubbles when each item has a flat
+    ``content`` field. Concatenate text parts with newlines; render
+    tool-call / tool-response parts as compact suffixes so they are
+    visible but don't break the bubble layout.
+    """
+    role = m.get("role", "user")
+    parts = m.get("parts") or []
+    if isinstance(parts, str):
+        return {"role": role, "content": parts}
+    if not isinstance(parts, list):
+        return {"role": role, "content": str(parts)}
+    chunks: list[str] = []
+    for p in parts:
+        if not isinstance(p, dict):
+            chunks.append(str(p))
+            continue
+        t = p.get("type")
+        if t == "text":
+            chunks.append(p.get("content", "") or "")
+        elif t == "tool_call":
+            name = p.get("name", "?")
+            args = p.get("arguments", "")
+            chunks.append(f"[tool_call {name}({args})]")
+        elif t in ("tool_call_response", "tool_response"):
+            ident = p.get("id") or p.get("name", "?")
+            res = p.get("result") if "result" in p else p.get("content", "")
+            chunks.append(f"[tool_response {ident}: {res}]")
+        else:
+            # Unknown part shape — render as JSON for visibility but
+            # don't drop the data.
+            import json as _json
+            chunks.append(_json.dumps(p, default=str, ensure_ascii=False))
+    out: dict[str, object] = {"role": role, "content": "\n".join(chunks)}
+    if "finish_reason" in m:
+        out["finish_reason"] = m["finish_reason"]
+    return out
+
+
+def _flatten_chat_io(span) -> None:  # noqa: ANN001
+    """Rewrite pydantic-ai's ``gen_ai.input.messages`` /
+    ``gen_ai.output.messages`` attributes on *span* into
+    ``langfuse.observation.input`` / ``output`` so the Langfuse UI
+    renders them as chat bubbles instead of raw JSON.
+
+    No-op when the span has no pydantic-ai message attributes (root
+    spans, periodic-pass spans, non-LLM observations) — those use
+    ``_RootIO.set_input/output`` directly.
+
+    Mutates ``span._attributes`` in place. OpenTelemetry's
+    ``BoundedAttributes`` is a regular ``MutableMapping`` subclass;
+    ``span.set_attribute()`` would refuse on an already-ended span,
+    but the underlying dict still accepts writes.
+    """
+    attrs = span.attributes or {}
+    raw_in = attrs.get("gen_ai.input.messages")
+    raw_out = attrs.get("gen_ai.output.messages")
+    if not raw_in and not raw_out:
+        return
+    import json as _json
+
+    def _rewrite(raw, dest_key: str) -> None:
+        if not raw:
+            return
+        try:
+            parsed = _json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            return
+        if not isinstance(parsed, list):
+            return
+        flat = [
+            _flatten_chat_message(m) if isinstance(m, dict) else {"role": "user", "content": str(m)}
+            for m in parsed
+        ]
+        try:
+            span._attributes[dest_key] = _json.dumps(
+                flat, default=str, ensure_ascii=False,
+            )
+        except Exception:  # noqa: BLE001 — never break exporter on rewrite
+            pass
+
+    _rewrite(raw_in, "langfuse.observation.input")
+    _rewrite(raw_out, "langfuse.observation.output")
+
+
 def make_session_id(kind: str) -> str:
     """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid8>``.
 
@@ -206,7 +298,12 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             when their ``langfuse.public_key`` attribute matches —
             otherwise drop. Multiple instances coexist under the same
             global TracerProvider so each repo's traces land in its own
-            Langfuse project."""
+            Langfuse project.
+
+            Also rewrites pydantic-ai's ``gen_ai.input.messages`` /
+            ``gen_ai.output.messages`` attributes into the
+            ``langfuse.observation.input`` / ``output`` shape Langfuse
+            UI renders as chat bubbles — see :func:`_flatten_chat_io`."""
 
             def __init__(self, exp, *, target_public_key: str):
                 super().__init__(exp)
@@ -216,6 +313,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
                 attrs = span.attributes or {}
                 if attrs.get("langfuse.public_key") != self._target_pk:
                     return
+                _flatten_chat_io(span)
                 super().on_end(span)
 
         provider = trace.get_tracer_provider()

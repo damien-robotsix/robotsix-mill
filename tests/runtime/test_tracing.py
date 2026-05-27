@@ -375,3 +375,106 @@ def test_flush_tracing_default_timeout():
 
     sig = inspect.signature(tracing.flush_tracing)
     assert sig.parameters["timeout"].default == 10_000
+
+
+# --- Langfuse chat-IO flattener ----------------------------------------
+
+
+class TestFlattenChatIO:
+    """The exporter rewrites pydantic-ai's parts-shaped
+    ``gen_ai.input.messages`` / ``output.messages`` into Langfuse's
+    flat ``{role, content}`` shape so the UI renders chat bubbles."""
+
+    def test_flatten_text_only_message(self):
+        from robotsix_mill.runtime.tracing import _flatten_chat_message
+        m = {"role": "system", "parts": [
+            {"type": "text", "content": "You are a refine agent..."}
+        ]}
+        assert _flatten_chat_message(m) == {
+            "role": "system", "content": "You are a refine agent...",
+        }
+
+    def test_flatten_multi_part_message_concats_text(self):
+        from robotsix_mill.runtime.tracing import _flatten_chat_message
+        m = {"role": "user", "parts": [
+            {"type": "text", "content": "First."},
+            {"type": "text", "content": "Second."},
+        ]}
+        out = _flatten_chat_message(m)
+        assert out["role"] == "user"
+        assert out["content"] == "First.\nSecond."
+
+    def test_flatten_tool_call_part(self):
+        from robotsix_mill.runtime.tracing import _flatten_chat_message
+        m = {"role": "assistant", "parts": [
+            {"type": "text", "content": "Will call."},
+            {"type": "tool_call", "name": "read_file",
+             "arguments": '{"path":"foo.py"}'},
+        ]}
+        out = _flatten_chat_message(m)
+        assert "Will call." in out["content"]
+        assert "[tool_call read_file(" in out["content"]
+        assert "foo.py" in out["content"]
+
+    def test_flatten_preserves_finish_reason(self):
+        from robotsix_mill.runtime.tracing import _flatten_chat_message
+        m = {"role": "assistant", "parts": [
+            {"type": "text", "content": "Done."},
+        ], "finish_reason": "stop"}
+        out = _flatten_chat_message(m)
+        assert out["finish_reason"] == "stop"
+
+    def test_flatten_chat_io_writes_langfuse_attrs(self):
+        """End-to-end: a fake span with gen_ai.*.messages attributes
+        gets ``langfuse.observation.input/output`` set with the flat
+        shape."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_io
+        import json
+
+        # Fake span: dict-like attributes container the helper can mutate.
+        class _FakeSpan:
+            def __init__(self):
+                self._attributes: dict = {
+                    "gen_ai.input.messages": json.dumps([
+                        {"role": "system",
+                         "parts": [{"type": "text", "content": "be helpful"}]},
+                        {"role": "user",
+                         "parts": [{"type": "text", "content": "hi"}]},
+                    ]),
+                    "gen_ai.output.messages": json.dumps([
+                        {"role": "assistant",
+                         "parts": [{"type": "text", "content": "hello!"}]},
+                    ]),
+                }
+
+            @property
+            def attributes(self):
+                return self._attributes
+
+        span = _FakeSpan()
+        _flatten_chat_io(span)
+        flat_in = json.loads(span._attributes["langfuse.observation.input"])
+        assert flat_in == [
+            {"role": "system", "content": "be helpful"},
+            {"role": "user", "content": "hi"},
+        ]
+        flat_out = json.loads(span._attributes["langfuse.observation.output"])
+        assert flat_out == [{"role": "assistant", "content": "hello!"}]
+
+    def test_flatten_chat_io_noop_when_no_messages(self):
+        """Spans without pydantic-ai message attributes (root spans,
+        periodic-pass spans) are left untouched."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_io
+
+        class _FakeSpan:
+            def __init__(self):
+                self._attributes: dict = {"some.other.attr": "x"}
+
+            @property
+            def attributes(self):
+                return self._attributes
+
+        span = _FakeSpan()
+        _flatten_chat_io(span)
+        assert "langfuse.observation.input" not in span._attributes
+        assert "langfuse.observation.output" not in span._attributes
