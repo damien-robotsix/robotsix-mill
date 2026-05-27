@@ -171,28 +171,11 @@ class ImplementStage(Stage):
                         for ev in own_history
                     )
                     if was_paused:
-                        # Find the operator's reply: the most recent
-                        # non-closed comment that is NOT an [ASK_USER]
-                        # marker.
-                        reply_text: str | None = None
-                        try:
-                            comments = ctx.service.list_comments(ticket.id)
-                            for c in reversed(comments):
-                                if c.closed_at is not None:
-                                    continue
-                                body = (c.body or "").strip()
-                                if body.startswith("[ASK_USER]"):
-                                    continue
-                                reply_text = body
-                                break
-                        except Exception:
-                            log.warning(
-                                "%s: list_comments failed during resume, "
-                                "proceeding without operator reply",
-                                ticket.id,
-                            )
-                        if reply_text is None:
-                            reply_text = "(no operator reply found)"
+                        # Collect operator replies from every closed
+                        # [ASK_USER] thread (the agent may have asked
+                        # multiple questions across cycles).
+                        from .pause import _collect_ask_user_replies
+                        reply_text = _collect_ask_user_replies(ctx, ticket)
                         resume_history = build_resume_message_history(
                             saved_state, reply_text,
                         )

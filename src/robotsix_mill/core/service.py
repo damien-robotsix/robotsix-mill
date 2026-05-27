@@ -836,8 +836,15 @@ class TicketService:
     def close_thread(self, comment_id: int) -> Comment:
         """Close a top-level comment thread.  Raises ``KeyError`` if
         the comment does not exist, ``ValueError`` if it is a reply
-        (non-NULL parent_id) or is already closed."""
-        with db.session(self.settings, self._board_for_comment(comment_id)) as s:
+        (non-NULL parent_id) or is already closed.
+
+        When the closed thread was an ``[ASK_USER]`` question on a
+        ticket in ``AWAITING_USER_REPLY``, and every other
+        ``[ASK_USER]`` thread on that ticket is also closed, the ticket
+        is automatically resumed to its pre-pause state.
+        """
+        board = self._board_for_comment(comment_id)
+        with db.session(self.settings, board) as s:
             comment = s.get(Comment, comment_id)
             if comment is None:
                 raise KeyError(comment_id)
@@ -847,9 +854,72 @@ class TicketService:
                 raise ValueError("thread already closed")
             comment.closed_at = datetime.now(timezone.utc)
             s.add(comment)
+            ticket_id = comment.ticket_id
             s.commit()
             s.refresh(comment)
-            return comment
+
+        # Post-close: auto-resume if all [ASK_USER] threads on a paused
+        # ticket are now closed.  Use the SAME board (and a fresh
+        # session) so the commit above is visible.
+        self._maybe_resume_awaiting_user_reply(ticket_id, board)
+
+        return comment
+
+    def _maybe_resume_awaiting_user_reply(
+        self, ticket_id: str, board: str,
+    ) -> None:
+        """If *ticket_id* is in ``AWAITING_USER_REPLY`` and every
+        top-level ``[ASK_USER]`` comment thread on it is closed,
+        transition the ticket back to its ``paused_from`` state."""
+        with db.session(self.settings, board) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None or ticket.state is not State.AWAITING_USER_REPLY:
+                return
+
+            if not ticket.paused_from:
+                log.warning(
+                    "%s: AWAITING_USER_REPLY but no paused_from — "
+                    "cannot auto-resume", ticket_id,
+                )
+                return
+
+            # Count all top-level [ASK_USER] threads and check whether
+            # every one is closed.
+            stmt = select(Comment).where(
+                Comment.ticket_id == ticket_id,
+                Comment.parent_id == None,
+                Comment.body.startswith("[ASK_USER]"),
+            )
+            ask_threads = list(s.exec(stmt).all())
+
+            # No [ASK_USER] threads at all → skip (shouldn't happen on a
+            # legitimately paused ticket, but be defensive).
+            if not ask_threads:
+                return
+
+            if any(t.closed_at is None for t in ask_threads):
+                return  # at least one still open
+
+            # All [ASK_USER] threads closed → resume.
+            dst = State(ticket.paused_from)
+            ticket.blocked_from = None
+            ticket.paused_from = None
+            ticket.state = dst
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.add(
+                TicketEvent(
+                    ticket_id=ticket_id,
+                    state=dst,
+                    note="all ask_user threads closed — resuming",
+                )
+            )
+            s.commit()
+            log.info(
+                "%s: auto-resumed from AWAITING_USER_REPLY → %s "
+                "(all %d ask_user threads closed)",
+                ticket_id, dst.value, len(ask_threads),
+            )
 
     def reopen_thread(self, comment_id: int) -> Comment:
         """Reopen a closed top-level comment thread.  Raises
