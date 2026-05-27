@@ -220,17 +220,37 @@ def recent_commits(repo: Path, n: int) -> list[dict]:
 
 
 def changed_files(repo: Path, target_branch: str) -> list[str]:
-    """Return files changed between origin/<target_branch> and the
-    working tree (including unstaged modifications to tracked files).
+    """Return every file that would land in the next commit vs
+    ``origin/<target_branch>`` — including untracked new files.
 
-    Runs ``git diff --name-only origin/<target_branch>`` and returns
-    the list of changed file paths (relative to repo root).
-    An empty diff returns an empty list.
+    Union of:
+      - ``git diff --name-only origin/<target>`` — tracked-file
+        modifications (staged + unstaged).
+      - ``git ls-files --others --exclude-standard`` — untracked
+        files honouring ``.gitignore``.
+
+    Untracked files matter for scope enforcement: the agent often
+    writes new files into the working tree without staging them
+    (or runs pytest itself, leaving ``__pycache__/*.pyc`` on disk).
+    The next ``commit_all`` runs ``git add -A`` and sweeps them in,
+    so scope check must see them BEFORE the commit or it lets the
+    out-of-scope additions through.
     """
-    output = _git(repo, "diff", "--name-only", f"origin/{target_branch}")
-    if not output:
-        return []
-    return output.split("\n")
+    seen: list[str] = []
+    seen_set: set[str] = set()
+    diff_out = _git(repo, "diff", "--name-only", f"origin/{target_branch}")
+    if diff_out:
+        for f in diff_out.split("\n"):
+            if f and f not in seen_set:
+                seen_set.add(f)
+                seen.append(f)
+    untracked_out = _git(repo, "ls-files", "--others", "--exclude-standard")
+    if untracked_out:
+        for f in untracked_out.split("\n"):
+            if f and f not in seen_set:
+                seen_set.add(f)
+                seen.append(f)
+    return seen
 
 
 def diff_base(repo: Path, target_branch: str) -> str:

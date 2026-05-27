@@ -917,7 +917,7 @@ def test_scope_check_passes_when_all_in_scope(ctx_factory, tmp_path, monkeypatch
         out = ImplementStage().run(t, ctx)
     assert out.next_state is State.DOCUMENTING
     assert any(
-        "scope check passed" in m and "0 file(s) changed" in m
+        "scope check passed" in m and "1 file(s) changed" in m
         for m in caplog.messages
     ), f"expected scope-passed info log, got: {caplog.messages}"
 
