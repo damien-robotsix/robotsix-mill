@@ -31,6 +31,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runCompletenessCheck()" style="--agent-color:#84cc16">Completeness</button>
     <button onclick="runCostReconciliation()" style="--agent-color:#6366f1">Cost Recon</button>
     <button onclick="runEnvSync()" style="--agent-color:#6366f1">Env Sync</button>
+    <button onclick="runRoadmapSync()" style="--agent-color:#9333ea">Roadmap Sync</button>
   </div>
 </div>
 <button onclick="openDeepReview()" style="font-size:11px;padding:3px 10px;

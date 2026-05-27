@@ -1985,6 +1985,50 @@ def env_sync_pass(
     return {"status": "started"}
 
 
+@router.post("/roadmap-sync", status_code=202)
+def roadmap_sync_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a roadmap-sync pass in the BACKGROUND.
+
+    Reads ROADMAP.md from the configured repo and reconciles its
+    H2 sections against the board's existing epics by an embedded
+    ``<!-- epic-id: ... -->`` marker. Creates new epics for unmarked
+    sections, updates existing epics whose body/title changed, and
+    opens a PR with the marker insertions so the next run is
+    idempotent.
+    """
+    from ..roadmap_sync_runner import run_roadmap_sync_pass
+    from ..runtime.tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "roadmap-sync", repo_id=rc.repo_id if rc else "",
+                )
+                session_id = make_session_id("roadmap-sync")
+                r = run_roadmap_sync_pass(
+                    session_id=session_id, repo_config=rc,
+                )
+                registry.finish_ok(run_id, r.summary or "no changes")
+                log.info("roadmap-sync pass done: %s", r.summary)
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("roadmap-sync pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="roadmap-sync-pass", daemon=True,
+    ).start()
+    return {"status": "started"}
+
+
 @router.post("/cost-reconciliation", status_code=202)
 def cost_reconciliation_pass(
     repo_id: str | None = None,

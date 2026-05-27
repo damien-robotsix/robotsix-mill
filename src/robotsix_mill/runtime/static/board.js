@@ -911,6 +911,22 @@ async function runEnvSync(){
    btn.disabled=false; btn.textContent='Env Sync';
  }
 }
+async function runRoadmapSync(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const repoId=getRepoId();
+   const rsUrl=repoId!=="all"?"/roadmap-sync?repo_id="+encodeURIComponent(repoId):"/roadmap-sync";
+   const r=await jpost(rsUrl);
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Roadmap-sync started — it reconciles ROADMAP.md against the board's epics. New epics + a marker-PR appear when it finishes.");
+   setTimeout(refresh,3000);
+ } catch(e) {
+   alert("Roadmap-sync failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Roadmap Sync';
+ }
+}
 async function generateChildren(id){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Generating…';
