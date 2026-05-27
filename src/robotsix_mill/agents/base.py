@@ -125,6 +125,7 @@ def build_agent_from_definition(
         read_ticket=definition.read_ticket,
         reply_to_thread=definition.reply_to_thread,
         close_thread=definition.close_thread,
+        ask_user=definition.ask_user,
         retries=definition.retries,
         output_type=resolved_output_type,
         skills=definition.skills,
@@ -196,6 +197,7 @@ def build_agent(
     read_ticket: bool = False,
     reply_to_thread: bool = True,
     close_thread: bool = True,
+    ask_user: bool = True,
     model_name: str | None = None,
     name: str | None = None,
     retries: int = 2,
@@ -254,6 +256,10 @@ def build_agent(
         from .close_thread import make_close_thread_tool
 
         all_tools.append(make_close_thread_tool(settings, agent_name=name))
+    if ask_user:
+        from .ask_user import make_ask_user_tool
+
+        all_tools.append(make_ask_user_tool(settings, agent_name=name))
     if web:
         # Not ":online", not web_fetch on the main agent — a cheap
         # sub-agent does the searching and hands back only a conclusion.
