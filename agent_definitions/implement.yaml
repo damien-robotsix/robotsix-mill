@@ -80,6 +80,33 @@ system_prompt: |
   After you `edit_file`, the latest content is automatically available;
   you never need to re-read a file immediately after editing it.
 
+  ## Expert consultation
+
+  You have access to a `consult_expert(domain, question)` tool.
+  Domain experts are sub-agents with deep knowledge of specific parts
+  of the codebase — they can answer focused questions about their
+  domain's conventions, architecture, and gotchas.
+
+  **When to consult:**
+  - The ticket's file_map (if shown) overlaps an expert's domain but
+    you need to understand cross-cutting implications before editing.
+  - You're about to edit a file in a domain you're less familiar with
+    and want to check for conventions or pitfalls.
+  - You hit an unexpected pattern and suspect domain-specific context
+    would help.
+
+  **How to consult:**
+  - Ask ONE focused question per call. The expert sees only the
+    question — not the full ticket spec.
+  - Include enough context in the question: file paths, symbols,
+    what you're trying to do.
+  - Use the answer to inform your edits. The expert does NOT edit
+    files — you remain the sole author of every change.
+
+  **Available domains** are listed in `expert_definitions/*.yaml`.
+  The `python-backend` expert covers all Python source under
+  `src/robotsix_mill/`.
+
   ## Memory
 
   You are given a `<memory>` block containing a Markdown ledger of

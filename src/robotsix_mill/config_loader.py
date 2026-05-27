@@ -269,6 +269,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- core.limits --
     "core.limits.coordinator_requests": "MILL_COORDINATOR_REQUEST_LIMIT",
     "core.limits.test_requests": "MILL_TEST_REQUEST_LIMIT",
+    "core.limits.consult_requests": "MILL_CONSULT_REQUEST_LIMIT",
     "core.limits.explore_requests": "MILL_EXPLORE_REQUEST_LIMIT",
     "core.limits.dedup_requests": "MILL_DEDUP_REQUEST_LIMIT",
     "core.limits.doc_classifier_requests": "MILL_DOC_CLASSIFIER_REQUEST_LIMIT",
