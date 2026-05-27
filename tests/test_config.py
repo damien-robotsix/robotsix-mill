@@ -68,7 +68,7 @@ def test_default_paths(monkeypatch):
     monkeypatch.delenv("MILL_DATA_DIR", raising=False)
     monkeypatch.delenv("MILL_SKILLS_DIR", raising=False)
     s = Settings()
-    assert s.data_dir == Path(".mill-data")
+    assert s.data_dir == Path(".data")
     assert s.skills_dir == Path("skills")
 
 
@@ -472,7 +472,7 @@ class TestYamlLoading:
         assert "models" in config["core"]
         assert config["core"]["models"]["coordinator"] == "deepseek/deepseek-v4-pro"
         assert "service" in config
-        assert config["service"]["data_dir"] == ".mill-data"
+        assert config["service"]["data_dir"] == ".data"
 
     def test_load_yaml_config_deep_merges_local_overlay(self, tmp_path, monkeypatch):
         """``load_yaml_config()`` deep-merges a local overlay YAML over

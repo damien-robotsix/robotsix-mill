@@ -101,7 +101,7 @@ sandbox:
   data_volume: mill_data        # named Docker volume for data (fallback)
   data_mount: null              # host path for bind-mounted data (overrides data_volume)
   command_timeout: 1800          # wall-clock cap (seconds) for shell/test commands
-  test_command: pytest -q       # command run to verify implementation (empty = skip)
+  test_command: ""              # global fallback; per-repo override in repos.yaml.test_command. Empty = PASS short-circuit.
   skills_dir: skills            # directory of skill docs injected into system prompts
 
 # ---------------------------------------------------------------------------
@@ -167,61 +167,61 @@ periodic:
   # -- audit agent — meta-audit for quality/security coverage gaps ---------
   audit:
     model: *default_model           # audit agent model
-    enabled: false                  # enable periodic audit passes
+    enabled: true                   # enable periodic audit passes
     interval_seconds: 86400         # seconds between passes (86400 = 1 day)
     memory_path: null               # defaults to <data_dir>/audit_memory.md
 
   # -- trace-health — monitors Langfuse for unsessioned traces -------------
   trace_health:
-    enabled: false                  # enable periodic trace-health checks
+    enabled: true                   # enable periodic trace-health checks
     interval_seconds: 86400         # seconds between checks (min 3600 enforced in worker)
 
   # -- health agent — codebase-health across 6 dimensions ------------------
   health:
     model: *default_model           # health agent model
-    enabled: false                  # enable periodic health passes
+    enabled: true                   # enable periodic health passes
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/health_memory.md
 
   # -- test-gap agent — identifies modules with zero dedicated tests -------
   test_gap:
     model: *default_model           # test-gap agent model
-    enabled: false                  # enable periodic test-gap passes
+    enabled: true                   # enable periodic test-gap passes
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/test_gap_memory.md
 
   # -- agent-check — audits agent definitions for coherence ----------------
   agent_check:
     model: *default_model           # agent-check model
-    enabled: false                  # enable periodic agent-check passes
+    enabled: true                   # enable periodic agent-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/agent_check_memory.md
 
   # -- bc-check — detects backward-compat shims/dead code ripe for removal -
   bc_check:
     model: *default_model           # bc-check agent model
-    enabled: false                  # enable periodic bc-check passes
+    enabled: true                   # enable periodic bc-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/bc_check_memory.md
 
   # -- completeness-check — detects half-wired features --------------
   completeness_check:
     model: *default_model           # completeness-check agent model
-    enabled: false                  # enable periodic completeness-check passes
+    enabled: true                   # enable periodic completeness-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/completeness_check_memory.md
 
   # -- cost-reconciliation — detects OpenRouter ↔ Langfuse cost drift -----
   cost_reconciliation:
     model: *default_model
-    enabled: false
+    enabled: true
     interval_seconds: 86400
     memory_path: null
 
   # -- env-sync — detects config ↔ .env ↔ docs drift -----------------------
   env_sync:
     model: *cheap_model           # env-sync agent model (read-only file parsing)
-    enabled: false                # enable periodic env-sync passes
+    enabled: true                 # enable periodic env-sync passes
     interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
     memory_path: null             # defaults to <data_dir>/env_sync_memory.md
 
@@ -239,7 +239,7 @@ periodic:
 
   # -- Langfuse cleanup — caps per-project trace count, oldest deleted first
   langfuse_cleanup:
-    enabled: false                  # enable periodic Langfuse trace cleanup
+    enabled: true                   # enable periodic Langfuse trace cleanup
     interval_seconds: 86400         # seconds between sweeps
     max_traces: 1000                # per-project cap; oldest are deleted
 
@@ -248,7 +248,7 @@ periodic:
 # ---------------------------------------------------------------------------
 
 service:
-  data_dir: .mill-data                      # data directory for DB, workspaces, memory ledgers
+  data_dir: .data                           # data directory for DB, workspaces, memory ledgers
   api_host: "127.0.0.1"                     # FastAPI listen address (container: 0.0.0.0)
   api_port: 8077                            # FastAPI listen port
   api_url: http://127.0.0.1:8077            # base URL the CLI client uses

@@ -1002,6 +1002,7 @@ class Worker:
 
     async def _run_periodic_pass_per_repo(
         self, label: str, runner_fn, interval: int,
+        per_repo_flag: str | None = None,
     ) -> None:
         """Shared per-repo periodic pass loop.
 
@@ -1018,6 +1019,10 @@ class Worker:
                        keywords that returns a result with a ``drafts_created``
                        field.
             interval: Seconds between passes.
+            per_repo_flag: Name of the RepoConfig bool field that gates
+                this agent for each repo (e.g. ``"audit_periodic"``).
+                Repos whose flag is False are skipped. ``None`` means
+                no per-repo filter — every repo runs.
         """
         initial = self._initial_delay(label, interval)
         await asyncio.sleep(initial)
@@ -1028,6 +1033,11 @@ class Worker:
             if not repo_configs:
                 # Single-repo / no repos.yaml: run once without repo_config.
                 repo_configs = [None]  # type: ignore[list-item]
+            if per_repo_flag:
+                repo_configs = [
+                    rc for rc in repo_configs
+                    if rc is None or getattr(rc, per_repo_flag, True)
+                ]
             for repo_config in repo_configs:
                 run_id = None
                 repo_label = repo_config.repo_id if repo_config else label
@@ -1191,7 +1201,10 @@ class Worker:
         from ..health_runner import run_health_pass
         settings = self.ctx.settings
         interval = max(60, settings.health_interval_seconds)
-        await self._run_periodic_pass_per_repo("health", run_health_pass, interval)
+        await self._run_periodic_pass_per_repo(
+            "health", run_health_pass, interval,
+            per_repo_flag="health_periodic",
+        )
 
     async def _test_gap_poll_loop(self) -> None:
         """Periodic test-gap pass loop. Only runs when
@@ -1199,7 +1212,10 @@ class Worker:
         from ..test_gap_runner import run_test_gap_pass
         settings = self.ctx.settings
         interval = max(60, settings.test_gap_interval_seconds)
-        await self._run_periodic_pass_per_repo("test-gap", run_test_gap_pass, interval)
+        await self._run_periodic_pass_per_repo(
+            "test-gap", run_test_gap_pass, interval,
+            per_repo_flag="test_gap_periodic",
+        )
 
     async def _langfuse_cleanup_poll_loop(self) -> None:
         """Periodic Langfuse trace cleanup: keeps each repo's project at
@@ -1446,6 +1462,7 @@ class Worker:
                 self._run_periodic_pass_per_repo(
                     "audit", run_audit_pass,
                     max(60, self.ctx.settings.audit_interval_seconds),
+                    per_repo_flag="audit_periodic",
                 )
             )
             log.info(
@@ -1478,6 +1495,7 @@ class Worker:
                 self._run_periodic_pass_per_repo(
                     "agent_check", run_agent_check_pass,
                     max(60, self.ctx.settings.agent_check_interval_seconds),
+                    per_repo_flag="agent_check_periodic",
                 )
             )
             log.info(
@@ -1491,6 +1509,7 @@ class Worker:
                 self._run_periodic_pass_per_repo(
                     "bc_check", run_bc_check_pass,
                     max(60, self.ctx.settings.bc_check_interval_seconds),
+                    per_repo_flag="bc_check_periodic",
                 )
             )
             log.info(
@@ -1504,6 +1523,7 @@ class Worker:
                 self._run_periodic_pass_per_repo(
                     "completeness_check", run_completeness_check_pass,
                     max(60, self.ctx.settings.completeness_check_interval_seconds),
+                    per_repo_flag="completeness_check_periodic",
                 )
             )
             log.info(
@@ -1545,6 +1565,7 @@ class Worker:
                 self._run_periodic_pass_per_repo(
                     "survey", run_survey_pass,
                     max(60, self.ctx.settings.survey_interval_seconds),
+                    per_repo_flag="survey_periodic",
                 )
             )
             log.info(
@@ -1558,6 +1579,7 @@ class Worker:
                 self._run_periodic_pass_per_repo(
                     "env-sync", run_env_sync_pass,
                     max(60, self.ctx.settings.env_sync_interval_seconds),
+                    per_repo_flag="env_sync_periodic",
                 )
             )
             log.info(

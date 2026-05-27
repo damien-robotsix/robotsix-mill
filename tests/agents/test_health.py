@@ -334,7 +334,7 @@ def test_health_config_defaults():
     """Health config has correct defaults."""
     s = Settings()
     assert s.health_model == "deepseek/deepseek-v4-pro"
-    assert s.health_periodic is False
+    assert s.health_periodic is True
     assert s.health_interval_seconds == 86400
     assert s.health_memory_path is None
 
@@ -593,7 +593,7 @@ async def test_worker_health_task_not_created_when_periodic_false(tmp_path, monk
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
 
-    settings = _make_settings(tmp_path)
+    settings = _make_settings(tmp_path, MILL_HEALTH_PERIODIC="false")
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)

@@ -70,20 +70,10 @@ def create_lifespan(
     async def lifespan(app: FastAPI):
         # Initialize each registered repo's DB so per-board services
         # have schema available without lazy-init races. The
-        # default-board DB at <data_dir>/mill.db is no longer created
-        # eagerly — once the legacy migration has run, every ticket
-        # lives in a per-repo DB and the default one stays unused.
-        # `migrate_legacy_global_db` below initialises it on demand
-        # if a pre-split legacy file is present.
+        # default-board DB at <data_dir>/mill.db is never created
+        # eagerly — every ticket lives in a per-repo DB.
         for rc in repos.repos.values():
             db.init_db(settings, rc.board_id)
-        # One-shot migrations: split any pre-existing flat
-        # .data/mill.db across the per-repo DBs by board_id, then
-        # move the per-ticket workspaces under each repo's subtree.
-        db.migrate_legacy_global_db(settings)
-        db.migrate_legacy_workspaces(settings)
-        db.migrate_legacy_memories(settings)
-        db.migrate_legacy_ci_patterns(settings)
         # In single-repo mode use the specified repo; in multi-repo mode
         # pick the first repo as the initial repo_config for the worker.
         if single_repo_id is not None:
@@ -95,12 +85,7 @@ def create_lifespan(
         app.state.repos = repos
         app.state.single_repo_id = single_repo_id
         # Per-repo run registries — each repo's audit/health/etc. run
-        # log lands in <data_dir>/<board_id>/runs.json so the operator
-        # can inspect a single repo's history without filtering. A
-        # one-shot migration moves a pre-existing legacy global
-        # <data_dir>/runs.json into each repo by entry.repo_id and
-        # renames the source.
-        db.migrate_legacy_runs(settings)
+        # log lands in <data_dir>/<board_id>/runs.json.
         run_registries: dict[str, RunRegistry] = {
             rc.board_id: RunRegistry(
                 settings.data_dir / rc.board_id / "runs.json",

@@ -182,7 +182,7 @@ def test_env_sync_config_defaults():
     from robotsix_mill.config import Settings
     s = Settings()
     assert s.env_sync_model == "openai/gpt-4o-mini"
-    assert s.env_sync_periodic is False
+    assert s.env_sync_periodic is True
     assert s.env_sync_interval_seconds == 86400
     assert s.env_sync_memory_path is None
 

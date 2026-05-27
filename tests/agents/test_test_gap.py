@@ -291,7 +291,7 @@ def test_test_gap_config_defaults():
     """Test-gap config has correct defaults."""
     s = Settings()
     assert s.test_gap_model == "deepseek/deepseek-v4-pro"
-    assert s.test_gap_periodic is False
+    assert s.test_gap_periodic is True
     assert s.test_gap_interval_seconds == 86400
     assert s.test_gap_memory_path is None
 
@@ -549,7 +549,7 @@ async def test_worker_test_gap_task_not_created_when_periodic_false(tmp_path, mo
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
 
-    settings = _make_settings(tmp_path)
+    settings = _make_settings(tmp_path, MILL_TEST_GAP_PERIODIC="false")
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)

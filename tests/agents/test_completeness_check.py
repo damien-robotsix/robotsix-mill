@@ -299,7 +299,7 @@ def test_completeness_check_config_defaults():
     """Completeness-check config has correct defaults."""
     s = Settings()
     assert s.completeness_check_model == "deepseek/deepseek-v4-pro"
-    assert s.completeness_check_periodic is False
+    assert s.completeness_check_periodic is True
     assert s.completeness_check_interval_seconds == 86400
     assert s.completeness_check_memory_path is None
 
@@ -585,7 +585,7 @@ async def test_worker_completeness_check_task_not_created_when_periodic_false(tm
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
 
-    settings = _make_settings(tmp_path)
+    settings = _make_settings(tmp_path, MILL_COMPLETENESS_CHECK_PERIODIC="false")
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)

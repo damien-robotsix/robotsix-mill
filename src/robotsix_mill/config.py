@@ -291,9 +291,12 @@ class Settings(BaseSettings):
     dedup_lookback_commits: int = Field(
         default=10, alias="MILL_DEDUP_LOOKBACK_COMMITS"
     )
-    # Local-dev default: a repo-local, gitignored dir. The Dockerfile
-    # sets MILL_DATA_DIR=/data explicitly, so the container is unaffected.
-    data_dir: Path = Field(default=Path(".mill-data"), alias="MILL_DATA_DIR")
+    # Local-dev default: ``.data`` — the same path the docker-compose
+    # volume mounts at /data, so host CLI invocations and the container
+    # share state instead of leaking a separate sibling tree. The
+    # Dockerfile sets MILL_DATA_DIR=/data explicitly so the container
+    # always uses the absolute path. Tests override via tmp_path.
+    data_dir: Path = Field(default=Path(".data"), alias="MILL_DATA_DIR")
 
     # Default repo ID for legacy tickets that lack a board_id.
     # Set in config/mill.local.yaml.  When empty (default), accessing
@@ -614,7 +617,7 @@ class Settings(BaseSettings):
     # traces from each repo's Langfuse project, keeping at most
     # langfuse_cleanup_max_traces rows. Default False (opt-in).
     langfuse_cleanup_periodic: bool = Field(
-        default=False, alias="MILL_LANGFUSE_CLEANUP_PERIODIC"
+        default=True, alias="MILL_LANGFUSE_CLEANUP_PERIODIC"
     )
     langfuse_cleanup_interval_seconds: int = Field(
         default=86400, alias="MILL_LANGFUSE_CLEANUP_INTERVAL_SECONDS"
@@ -628,7 +631,7 @@ class Settings(BaseSettings):
     # When True, the worker runs periodic audit passes at the configured
     # interval. Default False (opt-in).
     audit_periodic: bool = Field(
-        default=False, alias="MILL_AUDIT_PERIODIC"
+        default=True, alias="MILL_AUDIT_PERIODIC"
     )
     # Interval between periodic audit passes (seconds). Only used when
     # MILL_AUDIT_PERIODIC=true.
@@ -645,7 +648,7 @@ class Settings(BaseSettings):
     # When True, the worker runs periodic trace-health checks at the
     # configured interval. Default False (opt-in).
     trace_health_periodic: bool = Field(
-        default=False, alias="MILL_TRACE_HEALTH_PERIODIC"
+        default=True, alias="MILL_TRACE_HEALTH_PERIODIC"
     )
     # Interval between automatic trace-health checks (seconds). Only
     # used when MILL_TRACE_HEALTH_PERIODIC=true. Enforced minimum 3600s
@@ -663,7 +666,7 @@ class Settings(BaseSettings):
     # When True, the worker runs periodic test-gap passes at the
     # configured interval. Default False (opt-in).
     test_gap_periodic: bool = Field(
-        default=False, alias="MILL_TEST_GAP_PERIODIC"
+        default=True, alias="MILL_TEST_GAP_PERIODIC"
     )
     # Interval between periodic test-gap passes (seconds). Only used
     # when MILL_TEST_GAP_PERIODIC=true.
@@ -694,7 +697,7 @@ class Settings(BaseSettings):
     # to true to schedule the pass every ``agent_check_interval_seconds``
     # in addition to the on-demand POST /agent-check and CLI.
     agent_check_periodic: bool = Field(
-        default=False, alias="MILL_AGENT_CHECK_PERIODIC"
+        default=True, alias="MILL_AGENT_CHECK_PERIODIC"
     )
     # Seconds between periodic agent-check passes when
     # MILL_AGENT_CHECK_PERIODIC=true. Minimum enforced at 60s in the
@@ -712,7 +715,7 @@ class Settings(BaseSettings):
     # When True, the worker runs periodic health passes at the
     # configured interval. Default False (opt-in).
     health_periodic: bool = Field(
-        default=False, alias="MILL_HEALTH_PERIODIC"
+        default=True, alias="MILL_HEALTH_PERIODIC"
     )
     # Interval between periodic health passes (seconds). Only used when
     # MILL_HEALTH_PERIODIC=true.
@@ -767,7 +770,7 @@ class Settings(BaseSettings):
     # true to schedule the pass every ``bc_check_interval_seconds`` in
     # addition to the on-demand CLI.
     bc_check_periodic: bool = Field(
-        default=False, alias="MILL_BC_CHECK_PERIODIC"
+        default=True, alias="MILL_BC_CHECK_PERIODIC"
     )
     # Seconds between periodic bc-check passes when
     # MILL_BC_CHECK_PERIODIC=true. Minimum enforced at 60s in the
@@ -793,7 +796,7 @@ class Settings(BaseSettings):
     # flip to true to schedule the pass every
     # ``cost_reconciliation_interval_seconds``.
     cost_reconciliation_periodic: bool = Field(
-        default=False, alias="MILL_COST_RECONCILIATION_PERIODIC"
+        default=True, alias="MILL_COST_RECONCILIATION_PERIODIC"
     )
     # Seconds between periodic cost-reconciliation passes when
     # MILL_COST_RECONCILIATION_PERIODIC=true. Minimum enforced at 60s
@@ -820,7 +823,7 @@ class Settings(BaseSettings):
     # ``completeness_check_interval_seconds`` in addition to the
     # on-demand CLI.
     completeness_check_periodic: bool = Field(
-        default=False, alias="MILL_COMPLETENESS_CHECK_PERIODIC"
+        default=True, alias="MILL_COMPLETENESS_CHECK_PERIODIC"
     )
     # Seconds between periodic completeness-check passes when
     # MILL_COMPLETENESS_CHECK_PERIODIC=true. Minimum enforced at 60s
@@ -842,7 +845,7 @@ class Settings(BaseSettings):
     # Opt-in periodic env-sync pass. Default false (agents default off
     # unless noted). Set true to enable automatic daily drift detection.
     env_sync_periodic: bool = Field(
-        default=False, alias="MILL_ENV_SYNC_PERIODIC"
+        default=True, alias="MILL_ENV_SYNC_PERIODIC"
     )
     # Seconds between automatic env-sync passes when
     # MILL_ENV_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
@@ -1509,6 +1512,23 @@ class RepoConfig(BaseModel):
     # have a test suite yet (e.g. a doc-only repo). Set in repos.yaml
     # per repo, e.g. ``test_command: "pytest -q"``.
     test_command: str = ""
+    # Per-repo periodic-agent enable flags. Default True for every
+    # one — a repo opts OUT by setting the flag to false in
+    # repos.yaml under ``periodic.<name>.enabled``. The global
+    # Settings.<name>_periodic acts as the master switch (off → the
+    # task isn't spawned at all). When on, the per-task fan-out
+    # filters by this flag so a repo can disable just its periodic
+    # work without affecting other repos.
+    audit_periodic: bool = True
+    trace_health_periodic: bool = True
+    health_periodic: bool = True
+    test_gap_periodic: bool = True
+    agent_check_periodic: bool = True
+    bc_check_periodic: bool = True
+    completeness_check_periodic: bool = True
+    survey_periodic: bool = True
+    cost_reconciliation_periodic: bool = True
+    env_sync_periodic: bool = True
 
     @field_validator("repo_id", "board_id")
     @classmethod
@@ -1530,6 +1550,33 @@ class RepoConfig(BaseModel):
         if v < 1:
             raise ValueError("max_concurrency must be ≥ 1")
         return v
+
+
+_PERIODIC_FLAG_NAMES = (
+    "audit", "trace_health", "health", "test_gap", "agent_check",
+    "bc_check", "completeness_check", "survey", "cost_reconciliation",
+    "env_sync",
+)
+
+
+def _periodic_flags_from_yaml(repo_data: Any) -> dict[str, bool]:
+    """Resolve per-repo periodic-enable flags from the ``periodic:``
+    sub-block of a repos.yaml repo entry.
+
+    Each agent has a ``periodic.<name>.enabled`` key; missing entries
+    keep the RepoConfig field default (True for every periodic agent).
+    """
+    if not isinstance(repo_data, dict):
+        return {}
+    block = repo_data.get("periodic", {})
+    if not isinstance(block, dict):
+        return {}
+    out: dict[str, bool] = {}
+    for name in _PERIODIC_FLAG_NAMES:
+        sub = block.get(name)
+        if isinstance(sub, dict) and "enabled" in sub:
+            out[f"{name}_periodic"] = bool(sub["enabled"])
+    return out
 
 
 class ReposRegistry(BaseModel):
@@ -1574,6 +1621,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             ci_monitor_interval_seconds=ci_monitor.get("interval_seconds", 86400) if isinstance(ci_monitor, dict) else 86400,
             max_concurrency=repo_data.get("max_concurrency", 1) if isinstance(repo_data, dict) else 1,
             test_command=repo_data.get("test_command", "") if isinstance(repo_data, dict) else "",
+            **_periodic_flags_from_yaml(repo_data),
         )
     return ReposRegistry(repos=repos)
 
