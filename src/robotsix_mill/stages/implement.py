@@ -372,6 +372,7 @@ class ImplementStage(Stage):
             # deterministic process exit code — the authoritative word.
             passed, diag = run_test_agent(
                 settings=settings, repo_dir=repo_dir,
+                repo_config=ctx.repo_config,
             )
             if not passed and diag.startswith("sandbox unavailable"):
                 # Infra failure — not the code's fault; don't burn

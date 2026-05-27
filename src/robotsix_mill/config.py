@@ -339,7 +339,12 @@ class Settings(BaseSettings):
     # --- implement stage ---
     # Command run to verify the implementation; empty string skips the
     # test gate. Failures feed back into the bounded fix loop.
-    test_command: str = Field(default="pytest -q", alias="MILL_TEST_COMMAND")
+    # Global fallback for the test gate command. Empty by default —
+    # per-repo `test_command` in repos.yaml is the authoritative source.
+    # When both are empty, the test gate short-circuits to PASS
+    # ("no test gate configured"). MILL_TEST_COMMAND can override for
+    # single-repo / legacy setups.
+    test_command: str = Field(default="", alias="MILL_TEST_COMMAND")
     branch_prefix: str = Field(default="mill/", alias="MILL_BRANCH_PREFIX")
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.
@@ -1498,6 +1503,12 @@ class RepoConfig(BaseModel):
     # pool, so a busy repo can't starve another. Default 1 keeps the
     # blast radius of any one ticket's bad behaviour contained.
     max_concurrency: int = 1
+    # The shell command the test gate runs in the sandbox for tickets
+    # in THIS repo. Default empty — the test gate short-circuits to
+    # PASS when no command is set, which matches repos that don't
+    # have a test suite yet (e.g. a doc-only repo). Set in repos.yaml
+    # per repo, e.g. ``test_command: "pytest -q"``.
+    test_command: str = ""
 
     @field_validator("repo_id", "board_id")
     @classmethod
@@ -1562,6 +1573,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             ci_monitor_enabled=ci_monitor.get("enabled", True) if isinstance(ci_monitor, dict) else True,
             ci_monitor_interval_seconds=ci_monitor.get("interval_seconds", 86400) if isinstance(ci_monitor, dict) else 86400,
             max_concurrency=repo_data.get("max_concurrency", 1) if isinstance(repo_data, dict) else 1,
+            test_command=repo_data.get("test_command", "") if isinstance(repo_data, dict) else "",
         )
     return ReposRegistry(repos=repos)
 
