@@ -267,6 +267,30 @@ def _flatten_chat_io(span) -> None:  # noqa: ANN001
     _rewrite(raw_in, "langfuse.observation.input", "gen_ai.input.messages")
     _rewrite(raw_out, "langfuse.observation.output", "gen_ai.output.messages")
 
+    # Surface validation-rejected generations: the model produced
+    # output tokens but pydantic-ai's structured-output validator
+    # threw before ``gen_ai.output.messages`` was set, so Langfuse
+    # renders an empty output. Without a status message the operator
+    # has no way to know the call actually ran. Annotate the span.
+    try:
+        out_tokens = int(attrs.get("gen_ai.usage.output_tokens") or 0)
+    except (TypeError, ValueError):
+        out_tokens = 0
+    if out_tokens > 0 and not (raw_out or attrs.get("gen_ai.output.messages")):
+        msg = (
+            "model produced "
+            f"{out_tokens} output token(s) but no "
+            "gen_ai.output.messages was set — pydantic-ai likely "
+            "rejected the response (structured-output validation "
+            "or schema mismatch). Check the parent run for an "
+            "UnexpectedModelBehavior / output-retry failure."
+        )
+        try:
+            span._attributes["langfuse.observation.status_message"] = msg
+            span._attributes["langfuse.observation.level"] = "WARNING"
+        except Exception:  # noqa: BLE001 — never break exporter
+            pass
+
 
 def make_session_id(kind: str) -> str:
     """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid8>``.
@@ -348,7 +372,13 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         # is dropped. Truncate attribute values aggressively so spans
         # stay shippable. Caller can override via env if they really
         # need more.
-        os.environ.setdefault("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT", "8192")
+        # 32 KB per attribute — fits a typical multi-turn conversation
+        # transcript (``pydantic_ai.all_messages``) without truncation
+        # so the Langfuse AGENT-span input bubble reflects the actual
+        # conversation. Langfuse self-hosted nginx caps request bodies
+        # at ~1 MB; even with multiple large attributes per span the
+        # batch stays under that. Operator can override via env.
+        os.environ.setdefault("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT", "32768")
 
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (

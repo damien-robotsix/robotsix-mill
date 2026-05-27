@@ -603,3 +603,62 @@ class TestFlattenChatIO:
         roles = [m["role"] for m in flat]
         assert roles.count("system") == 1
         assert flat[0]["content"] == "real system"
+
+    def test_flatten_chat_io_surfaces_validation_rejected_generations(self):
+        """A model-call span with output_tokens > 0 but no
+        gen_ai.output.messages (pydantic-ai validation rejected the
+        response) gets a status_message + WARNING level so Langfuse
+        shows the silent failure instead of an empty output."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_io
+        import json
+
+        class _FakeSpan:
+            def __init__(self):
+                self._attributes: dict = {
+                    "gen_ai.input.messages": json.dumps([
+                        {"role": "user",
+                         "parts": [{"type": "text", "content": "hi"}]},
+                    ]),
+                    "gen_ai.usage.output_tokens": 2636,
+                    # no gen_ai.output.messages → rejected
+                }
+
+            @property
+            def attributes(self):
+                return self._attributes
+
+        span = _FakeSpan()
+        _flatten_chat_io(span)
+        assert span._attributes["langfuse.observation.level"] == "WARNING"
+        assert "pydantic-ai likely rejected" in span._attributes[
+            "langfuse.observation.status_message"
+        ]
+
+    def test_flatten_chat_io_does_not_warn_when_output_present(self):
+        """When the model call succeeded normally (output.messages
+        present), no warning is set."""
+        from robotsix_mill.runtime.tracing import _flatten_chat_io
+        import json
+
+        class _FakeSpan:
+            def __init__(self):
+                self._attributes: dict = {
+                    "gen_ai.input.messages": json.dumps([
+                        {"role": "user",
+                         "parts": [{"type": "text", "content": "hi"}]},
+                    ]),
+                    "gen_ai.output.messages": json.dumps([
+                        {"role": "assistant",
+                         "parts": [{"type": "text", "content": "ok"}]},
+                    ]),
+                    "gen_ai.usage.output_tokens": 5,
+                }
+
+            @property
+            def attributes(self):
+                return self._attributes
+
+        span = _FakeSpan()
+        _flatten_chat_io(span)
+        assert "langfuse.observation.status_message" not in span._attributes
+        assert "langfuse.observation.level" not in span._attributes
