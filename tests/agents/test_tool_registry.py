@@ -210,7 +210,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
 
     registered = {t.name for t in ToolRegistry.list_tools()}
     expected = {
-        "read_file", "write_file", "edit_file", "delete_file",
+        "ask_user", "read_file", "write_file", "edit_file", "delete_file",
         "list_dir", "run_command", "explore", "run_tests",
         "web_research", "report_issue", "reply_to_thread", "close_thread",
     }
