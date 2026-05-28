@@ -312,6 +312,15 @@ text-transform:uppercase;letter-spacing:.04em}
 .sk-inline{display:inline-block;background:#1d212c;border-radius:3px;animation:sk-pulse 1.5s ease-in-out infinite}
 @keyframes sk-pulse{0%,100%{opacity:.35}50%{opacity:.65}}
 
+.detail-section + .detail-section {
+  border-top: 1px solid #2a2e37;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.detail-section:empty {
+  display: none;
+}
+
 .lf-badge{font-weight:600;color:#f3a55a}
 .lf-dismiss{margin-left:8px;background:#1a1a1a;color:#e8b08a;border:1px solid #6b3320;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px}
 .lf-dismiss:hover{background:#2a1a14}
