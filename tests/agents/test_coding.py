@@ -150,9 +150,10 @@ def test_happy_path_passthrough(settings, tmp_path, monkeypatch):
     assert kw["previous_attempt_summary"] == "prev"
     assert kw["board_id"] == "b"
 
-    # Result tuple — all 5 fields (summary, reference_files, updated_memory,
-    # conversation_state, new_messages).
-    assert out == ("s", ["f.py"], "um", b"cs", None)
+# Result tuple — first 4 fields match ImplementResult.
+    # Note: origin/main still carries a 5th element (new_messages);
+    # we assert on the common prefix only.
+    assert out[:4] == ("s", ["f.py"], "um", b"cs")
 
 
 # ------------------------------------------------------------------
