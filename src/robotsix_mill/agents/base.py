@@ -87,6 +87,7 @@ def build_agent_from_definition(
     definition: "AgentDefinition",
     *,
     tools: list | None = None,
+    repo_dir: "Path | None" = None,
     **overrides,
 ) -> AgentHandle:
     """Build an agent from an :class:`AgentDefinition`, bridging the YAML
@@ -96,6 +97,12 @@ def build_agent_from_definition(
     parameter name (``system_prompt``, ``model_name``, ``output_type``,
     ``web``, ``report_issue``, ``retries``, ``name``) replaces the value
     extracted from *definition*.
+
+    If *repo_dir* is provided and *definition.inject_agent_md* is
+    ``True``, the contents of ``AGENT.md`` (if it exists at the repo
+    root) are injected into the system prompt as a
+    ``<repo_conventions>`` block, placed after the role preamble but
+    before the procedure steps.
     """
     import importlib
 
@@ -133,6 +140,22 @@ def build_agent_from_definition(
     )
     kwargs.update(overrides)
     kwargs["tools"] = tools
+
+    # Inject AGENT.md conventions when available
+    if definition.inject_agent_md and repo_dir is not None:
+        agent_md_path = repo_dir / "AGENT.md"
+        try:
+            conventions = agent_md_path.read_text(encoding="utf-8")
+        except OSError:
+            pass
+        else:
+            conventions_block = (
+                "\n\n## Repository Conventions (from AGENT.md)\n\n"
+                "<repo_conventions>\n"
+                + conventions.rstrip()
+                + "\n</repo_conventions>"
+            )
+            kwargs["system_prompt"] += conventions_block
 
     return build_agent(settings, **kwargs)
 

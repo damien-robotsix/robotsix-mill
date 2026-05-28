@@ -335,6 +335,27 @@ def test_agent_definition_extra_fields_rejected():
         })
 
 
+def test_inject_agent_md_defaults_to_true():
+    """inject_agent_md defaults to True when not specified."""
+    ad = AgentDefinition.model_validate({
+        "name": "test",
+        "model": "gpt-4",
+        "system_prompt": "You are helpful.",
+    })
+    assert ad.inject_agent_md is True
+
+
+def test_inject_agent_md_can_be_false():
+    """inject_agent_md can be explicitly set to False."""
+    ad = AgentDefinition.model_validate({
+        "name": "test",
+        "model": "gpt-4",
+        "system_prompt": "You are helpful.",
+        "inject_agent_md": False,
+    })
+    assert ad.inject_agent_md is False
+
+
 # ── Structural verification: all agent_definitions/*.yaml ─────────────
 
 

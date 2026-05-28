@@ -328,3 +328,132 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
 
     # Clean up the agent's HTTP client.
     agent.close()
+
+
+# ── AGENT.md injection ────────────────────────────────────────────────
+
+
+def test_inject_agent_md_when_file_exists(tmp_path, monkeypatch):
+    """When repo_dir has AGENT.md and inject_agent_md=True, the
+    content is injected into the system prompt."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "AGENT.md").write_text("## Test conventions\n\nBe nice.\n")
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(
+        system_prompt="You are a test agent.",
+        inject_agent_md=True,
+    )
+    settings = Settings()
+
+    build_agent_from_definition(
+        settings, definition, repo_dir=repo,
+    )
+
+    kwargs = captured[0]
+    assert "## Repository Conventions (from AGENT.md)" in kwargs["system_prompt"]
+    assert "<repo_conventions>" in kwargs["system_prompt"]
+    assert "## Test conventions" in kwargs["system_prompt"]
+    assert "</repo_conventions>" in kwargs["system_prompt"]
+    # The original prompt is still there.
+    assert kwargs["system_prompt"].startswith("You are a test agent.")
+
+
+def test_inject_agent_md_when_file_missing(tmp_path, monkeypatch):
+    """When repo_dir has no AGENT.md, the system prompt is unchanged."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # No AGENT.md created.
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(
+        system_prompt="You are a test agent.",
+        inject_agent_md=True,
+    )
+    settings = Settings()
+
+    build_agent_from_definition(
+        settings, definition, repo_dir=repo,
+    )
+
+    kwargs = captured[0]
+    assert kwargs["system_prompt"] == "You are a test agent."
+
+
+def test_inject_agent_md_when_disabled(tmp_path, monkeypatch):
+    """When inject_agent_md=False, AGENT.md is NOT injected even if it exists."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "AGENT.md").write_text("## Test conventions\n\nBe nice.\n")
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(
+        system_prompt="You are a test agent.",
+        inject_agent_md=False,
+    )
+    settings = Settings()
+
+    build_agent_from_definition(
+        settings, definition, repo_dir=repo,
+    )
+
+    kwargs = captured[0]
+    assert kwargs["system_prompt"] == "You are a test agent."
+
+
+def test_inject_agent_md_when_no_repo_dir(tmp_path, monkeypatch):
+    """When repo_dir is None, no injection happens."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(
+        system_prompt="You are a test agent.",
+        inject_agent_md=True,
+    )
+    settings = Settings()
+
+    build_agent_from_definition(
+        settings, definition,
+        # No repo_dir passed.
+    )
+
+    kwargs = captured[0]
+    assert kwargs["system_prompt"] == "You are a test agent."
+
+
+def test_inject_agent_md_with_override_prompt(tmp_path, monkeypatch):
+    """When system_prompt is overridden, AGENT.md is still appended."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "AGENT.md").write_text("## Test conventions\n\nBe nice.\n")
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(
+        system_prompt="Original prompt.",
+        inject_agent_md=True,
+    )
+    settings = Settings()
+
+    build_agent_from_definition(
+        settings, definition, repo_dir=repo,
+        system_prompt="Overridden prompt.",
+    )
+
+    kwargs = captured[0]
+    assert kwargs["system_prompt"].startswith("Overridden prompt.")
+    assert "## Repository Conventions (from AGENT.md)" in kwargs["system_prompt"]
+    assert "## Test conventions" in kwargs["system_prompt"]
