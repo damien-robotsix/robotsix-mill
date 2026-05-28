@@ -667,6 +667,10 @@ class Worker:
         self._cost_reconciliation_task: asyncio.Task | None = None
         self._langfuse_cleanup_task: asyncio.Task | None = None
         self._timeout_escalation_task: asyncio.Task | None = None
+        # board_id -> per-repo bespoke supervisor task. The supervisor
+        # itself owns each repo's per-bespoke child tasks; cancelling
+        # the supervisor cancels its children.
+        self._bespoke_supervisor_tasks: dict[str, asyncio.Task] = {}
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -1328,6 +1332,205 @@ class Worker:
             # Sleep the remainder of the interval if we finished early.
             await asyncio.sleep(max(0.0, interval - cycle_secs))
 
+    async def _bespoke_supervisor(self, repo_config: RepoConfig) -> None:
+        """Per-repo bespoke-agent supervisor loop.
+
+        Owns a clone of the managed repo at
+        ``<data_dir>/<board_id>/bespoke_workspace/repo`` and reconciles
+        the set of running per-bespoke loop tasks against the YAMLs
+        present under ``<clone>/.robotsix-mill/agents/`` on each cycle:
+
+        - new YAML appears   -> spawn a periodic loop on its
+                                ``interval_seconds``
+        - YAML disappears    -> cancel the loop
+        - YAML body changed  -> cancel + respawn so the new prompt /
+                                model / interval / web flag take effect
+                                without operator intervention
+
+        Cancelling the supervisor also cancels every child loop it
+        spawned — that's the worker.stop() contract.
+        """
+        from ..agents.bespoke_loader import (
+            BespokeAgentDefinition, load_bespoke_definitions,
+        )
+        from ..audit_runner import _clone_token
+        from ..vcs import git_ops
+
+        settings = self.ctx.settings
+        interval = max(60, settings.bespoke_discovery_interval_seconds)
+        board_id = repo_config.board_id
+        forge_url = (
+            repo_config.forge_remote_url or settings.forge_remote_url
+        )
+        clone_dir = (
+            settings.data_dir / repo_config.repo_id
+            / "bespoke_workspace" / "repo"
+        )
+
+        # name -> (task, definition)
+        running: dict[str, tuple[asyncio.Task, BespokeAgentDefinition]] = {}
+
+        def _cancel_running() -> None:
+            for task, _ in running.values():
+                task.cancel()
+            running.clear()
+
+        try:
+            # Skip the random initial delay: spawning bespoke tasks
+            # immediately after worker start makes the system feel
+            # responsive when an operator commits a new YAML.
+            while True:
+                try:
+                    if forge_url and not (clone_dir / ".git").exists():
+                        try:
+                            clone_dir.parent.mkdir(
+                                parents=True, exist_ok=True,
+                            )
+                            git_ops.clone(
+                                forge_url, clone_dir,
+                                settings.forge_target_branch,
+                                _clone_token(settings, repo_config),
+                            )
+                        except Exception:  # noqa: BLE001 — supervisor must survive
+                            log.exception(
+                                "bespoke supervisor (%s): clone failed",
+                                board_id,
+                            )
+                    elif forge_url and (clone_dir / ".git").exists():
+                        try:
+                            git_ops.fetch(
+                                clone_dir,
+                                remote_url=forge_url,
+                                token=_clone_token(settings, repo_config),
+                                branch=settings.forge_target_branch,
+                            )
+                            # Hard-reset to the remote so newly committed
+                            # .robotsix-mill/ YAMLs land immediately.
+                            import subprocess
+                            subprocess.run(
+                                ["git", "-C", str(clone_dir), "reset",
+                                 "--hard",
+                                 f"origin/{settings.forge_target_branch}"],
+                                check=False, capture_output=True,
+                            )
+                        except Exception:  # noqa: BLE001
+                            log.exception(
+                                "bespoke supervisor (%s): refresh failed",
+                                board_id,
+                            )
+
+                    definitions = {
+                        d.name: d
+                        for d in load_bespoke_definitions(clone_dir)
+                    }
+
+                    # Drop tasks whose YAML disappeared.
+                    for name in list(running):
+                        if name not in definitions:
+                            task, _ = running.pop(name)
+                            task.cancel()
+                            log.info(
+                                "bespoke %s/%s: YAML removed — cancelled",
+                                board_id, name,
+                            )
+
+                    # Spawn / respawn tasks for current YAMLs.
+                    for name, defn in definitions.items():
+                        existing = running.get(name)
+                        if existing is not None and existing[1] == defn:
+                            continue  # unchanged
+                        if existing is not None:
+                            existing[0].cancel()
+                            log.info(
+                                "bespoke %s/%s: YAML changed — respawning",
+                                board_id, name,
+                            )
+                        task = asyncio.create_task(
+                            self._run_bespoke_loop(
+                                repo_config, defn, clone_dir,
+                            )
+                        )
+                        running[name] = (task, defn)
+                        log.info(
+                            "bespoke %s/%s: scheduled (interval=%ds)",
+                            board_id, name, defn.interval_seconds,
+                        )
+                except Exception:  # noqa: BLE001
+                    log.exception(
+                        "bespoke supervisor (%s) cycle failed", board_id,
+                    )
+
+                await asyncio.sleep(interval)
+        finally:
+            # Supervisor cancelled (worker.stop() or unexpected) ->
+            # tear down every child loop so nothing keeps running.
+            _cancel_running()
+
+    async def _run_bespoke_loop(
+        self,
+        repo_config: RepoConfig,
+        definition,
+        clone_dir,
+    ) -> None:
+        """Periodic loop for one bespoke definition.
+
+        Sleeps the YAML's ``interval_seconds`` between passes, then
+        invokes :func:`~..bespoke_runner.run_bespoke_pass` against the
+        supervisor's clone. Failures in one pass log + continue; the
+        loop only exits via cancellation.
+        """
+        from .. import bespoke_runner
+        from .. import tracing
+
+        interval = max(60, definition.interval_seconds)
+        label = f"bespoke:{definition.name}"
+        # Honour the persisted last-run timestamp so a restarted mill
+        # doesn't re-fire every bespoke immediately.
+        initial = self._initial_delay(label, interval)
+        await asyncio.sleep(initial)
+        while True:
+            run_id = None
+            session_id = tracing.make_session_id(label)
+            try:
+                log.info(
+                    "Starting bespoke pass %r for repo %s",
+                    definition.name, repo_config.repo_id,
+                )
+                if self.run_registry:
+                    run_id = self.run_registry.start(
+                        label, repo_id=repo_config.repo_id,
+                    )
+                with tracing.start_ticket_root_span(
+                    session_id, label, repo_config=repo_config,
+                ):
+                    result = await asyncio.to_thread(
+                        bespoke_runner.run_bespoke_pass,
+                        session_id=session_id,
+                        definition=definition,
+                        repo_config=repo_config,
+                        repo_dir=clone_dir,
+                    )
+                log.info(
+                    "Bespoke %s/%s completed, created %d draft(s)",
+                    repo_config.repo_id, definition.name,
+                    len(result.drafts_created),
+                )
+                if self.run_registry and run_id:
+                    summary = (
+                        f"Created {len(result.drafts_created)} drafts"
+                    )
+                    self.run_registry.finish_ok(run_id, summary)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 — loop must survive
+                log.exception(
+                    "bespoke %s/%s pass failed",
+                    repo_config.repo_id, definition.name,
+                )
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
+
     async def _langfuse_cleanup_poll_loop(self) -> None:
         """Periodic Langfuse trace cleanup: keeps each repo's project at
         most ``langfuse_cleanup_max_traces`` rows by deleting the oldest.
@@ -1806,6 +2009,24 @@ class Worker:
                 "Periodic cost-reconciliation enabled: interval %ds",
                 self.ctx.settings.cost_reconciliation_interval_seconds,
             )
+        # Opt-in bespoke per-repo supervisors. One supervisor per repo
+        # whose RepoConfig.bespoke_periodic is True; the supervisor
+        # owns the per-bespoke loop tasks for that repo.
+        if self.ctx.settings.bespoke_periodic:
+            for rc in get_repos_config().repos.values():
+                if not rc.bespoke_periodic:
+                    continue
+                if rc.board_id in self._bespoke_supervisor_tasks:
+                    continue
+                self._bespoke_supervisor_tasks[rc.board_id] = (
+                    asyncio.create_task(self._bespoke_supervisor(rc))
+                )
+                log.info(
+                    "Bespoke supervisor enabled for repo %s "
+                    "(discovery interval %ds)",
+                    rc.repo_id,
+                    self.ctx.settings.bespoke_discovery_interval_seconds,
+                )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
@@ -1822,6 +2043,11 @@ class Worker:
             if t is not None:
                 tasks.append(t)
                 setattr(self, attr, None)
+        # Bespoke supervisors: cancelling each one cancels its child
+        # per-bespoke loop tasks via the supervisor's ``finally``.
+        for t in self._bespoke_supervisor_tasks.values():
+            tasks.append(t)
+        self._bespoke_supervisor_tasks.clear()
         for t in tasks:
             t.cancel()
         for t in tasks:

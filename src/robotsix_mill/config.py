@@ -701,6 +701,23 @@ class Settings(BaseSettings):
     )
 
 
+    # --- bespoke per-repo periodic agents ---
+    # When True, the worker spawns a supervisor per repo that clones the
+    # repo, scans ``.robotsix-mill/agents/<name>.yaml``, and runs each
+    # bespoke agent on its own declared interval. Master switch — set
+    # False to disable bespoke-agent discovery for the entire process
+    # (per-repo opt-out is controlled by RepoConfig.bespoke_periodic).
+    bespoke_periodic: bool = Field(
+        default=True, alias="MILL_BESPOKE_PERIODIC",
+    )
+    # How often (seconds) the bespoke supervisor refreshes its clone
+    # and reconciles which YAMLs are scheduled. A new YAML committed
+    # to the managed repo lands within this window; one removed gets
+    # its loop cancelled in the same cycle.
+    bespoke_discovery_interval_seconds: int = Field(
+        default=600, alias="MILL_BESPOKE_DISCOVERY_INTERVAL_SECONDS",
+    )
+
     # --- audit agent (meta-audit for quality/security coverage) ---
     # When True, the worker runs periodic audit passes at the configured
     # interval. Default False (opt-in).
@@ -1674,6 +1691,11 @@ class RepoConfig(BaseModel):
     trace_review_periodic: bool = True
     langfuse_cleanup_periodic: bool = True
     cost_warmer_periodic: bool = True
+    # When True, bespoke agents discovered under
+    # ``<clone>/.robotsix-mill/agents/`` are scheduled for THIS repo.
+    # Set False in repos.yaml to opt a repo out of bespoke discovery
+    # without disabling the feature globally.
+    bespoke_periodic: bool = True
     language: str | None = None
 
     @field_validator("repo_id", "board_id")
@@ -1702,6 +1724,7 @@ _PERIODIC_FLAG_NAMES = (
     "audit", "trace_health", "health", "test_gap", "agent_check",
     "bc_check", "completeness_check", "survey", "cost_reconciliation",
     "env_sync", "trace_review", "langfuse_cleanup", "cost_warmer",
+    "bespoke",
 )
 
 
