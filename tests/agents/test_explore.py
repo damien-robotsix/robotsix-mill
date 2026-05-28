@@ -66,6 +66,7 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
         tmp_path, OPENROUTER_API_KEY="k",
         MILL_MODEL="coordinator/big", MILL_EXPLORE_MODEL="explore/cheap",
         MILL_EXPLORE_REQUEST_LIMIT="7",
+        MILL_EXPLORE_MAX_TOKENS="600",
     )
     cap = {}
 
@@ -77,6 +78,7 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
         def __init__(self, **kw):
             cap["tools"] = sorted(t.__name__ for t in kw.get("tools", []))
             cap["name"] = kw.get("name")
+            cap["model_settings"] = kw.get("model_settings")
 
         def run_sync(self, q, *, usage_limits=None):
             cap["limit"] = usage_limits.request_limit
@@ -96,6 +98,10 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
     assert cap["tools"] == ["list_dir", "read_file", "run_command"]  # NO write/edit/delete
     assert cap["limit"] == 7
     assert cap["name"] == "explore"
+    # model_settings with max_tokens is wired
+    ms = cap["model_settings"]
+    assert ms is not None
+    assert ms["max_tokens"] == 600
 
 
 # --- bounded retry + sentinel tests -------------------------------------
@@ -213,3 +219,19 @@ def test_explore_sentinel_reset_clears_state(tmp_path, monkeypatch):
     assert explore.is_explore_budget_exhausted() is True
     explore.reset_explore_budget_exhausted()
     assert explore.is_explore_budget_exhausted() is False
+
+
+def test_explore_max_tokens_validator_rejects_zero_or_negative():
+    """The config validator rejects explore_max_tokens < 1."""
+    from pathlib import Path
+
+    from pydantic import ValidationError
+    import pytest
+
+    with pytest.raises(ValidationError) as exc_info:
+        _settings(Path("."), MILL_EXPLORE_MAX_TOKENS="0")
+    assert "explore_max_tokens must be ≥ 1" in str(exc_info.value)
+
+    with pytest.raises(ValidationError) as exc_info:
+        _settings(Path("."), MILL_EXPLORE_MAX_TOKENS="-1")
+    assert "explore_max_tokens must be ≥ 1" in str(exc_info.value)

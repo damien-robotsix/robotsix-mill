@@ -91,6 +91,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
     from pydantic_ai.providers.openrouter import OpenRouterProvider
+    from pydantic_ai.settings import ModelSettings
     from pydantic_ai.usage import UsageLimits
 
     from .fs_tools import build_fs_tools
@@ -116,6 +117,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
         output_type=str,
         tools=ro_tools,
         name="explore",
+        model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
     )
     limits = UsageLimits(request_limit=settings.explore_request_limit)
 
@@ -142,6 +144,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
                 output_type=str,
                 tools=ro_tools,
                 name="explore-fallback",
+                model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
             )
             fallback_fn = lambda: fallback_agent.run_sync(  # noqa: E731
                 question, usage_limits=limits
@@ -166,6 +169,7 @@ def run_explore(*, settings: Settings, repo_dir: Path, question: str,
                 output_type=str,
                 tools=[],
                 name="explore-retry",
+                model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
             )
             retry_limits = UsageLimits(request_limit=2)
             try:

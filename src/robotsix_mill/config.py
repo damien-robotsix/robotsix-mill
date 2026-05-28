@@ -276,6 +276,9 @@ class Settings(BaseSettings):
     explore_request_limit: int = Field(
         default=100, alias="MILL_EXPLORE_REQUEST_LIMIT"
     )
+    explore_max_tokens: int = Field(
+        default=600, alias="MILL_EXPLORE_MAX_TOKENS"
+    )
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(
         default=4, alias="MILL_DEDUP_REQUEST_LIMIT"
@@ -1400,6 +1403,13 @@ class Settings(BaseSettings):
     def _validate_explore_request_limit(cls, v: int) -> int:
         if v < 1:
             raise ValueError("explore_request_limit must be ≥ 1")
+        return v
+
+    @field_validator("explore_max_tokens")
+    @classmethod
+    def _validate_explore_max_tokens(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("explore_max_tokens must be ≥ 1")
         return v
 
     @field_validator("dedup_request_limit")
