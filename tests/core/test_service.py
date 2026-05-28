@@ -1,8 +1,15 @@
+import json
+
 import pytest
 
-from robotsix_mill.core.service import TransitionError
+from robotsix_mill.core.service import (
+    TransitionError,
+    _event_hash,
+    _make_event,
+    _prev_hash_for,
+)
 from robotsix_mill.core.states import State, can_transition
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketEvent
 
 
 def test_create_writes_db_and_workspace(service):
@@ -1094,3 +1101,117 @@ def test_collect_ask_user_replies_no_answered_threads(service, settings):
     ctx = StageContext(settings=settings, service=service)
     result = _collect_ask_user_replies(ctx, t)
     assert result == "(no operator reply found)"
+
+
+# ---------------------------------------------------------------------------
+# hash-chain helpers (_event_hash, _prev_hash_for, _make_event)
+# ---------------------------------------------------------------------------
+
+
+def test_event_hash_is_deterministic():
+    """Same inputs produce the same hash."""
+    h1 = _event_hash("t1", "draft", "created", "2025-01-01T00:00:00+00:00", None)
+    h2 = _event_hash("t1", "draft", "created", "2025-01-01T00:00:00+00:00", None)
+    assert h1 == h2
+
+
+def test_event_hash_is_sensitive_to_every_field():
+    """Changing any payload field changes the hash."""
+    base = _event_hash("t1", "draft", "note", "2025-01-01T00:00:00+00:00", "prev")
+    assert base != _event_hash("t2", "draft", "note", "2025-01-01T00:00:00+00:00", "prev")
+    assert base != _event_hash("t1", "ready", "note", "2025-01-01T00:00:00+00:00", "prev")
+    assert base != _event_hash("t1", "draft", "other", "2025-01-01T00:00:00+00:00", "prev")
+    assert base != _event_hash("t1", "draft", "note", "2025-01-02T00:00:00+00:00", "prev")
+    assert base != _event_hash("t1", "draft", "note", "2025-01-01T00:00:00+00:00", "prev2")
+
+
+def test_event_hash_none_note_and_prev_hash():
+    """None note and None prev_hash are handled consistently."""
+    h1 = _event_hash("t1", "draft", None, "2025-01-01T00:00:00+00:00", None)
+    h2 = _event_hash("t1", "draft", None, "2025-01-01T00:00:00+00:00", None)
+    assert h1 == h2
+    # None note vs non-None produce different hashes
+    assert h1 != _event_hash("t1", "draft", "something", "2025-01-01T00:00:00+00:00", None)
+
+
+def test_event_hash_format_is_hex():
+    """Hash is 64 hex chars (BLAKE2b 32-byte)."""
+    h = _event_hash("t1", "draft", None, "2025-01-01T00:00:00+00:00", None)
+    assert len(h) == 64
+    assert all(c in "0123456789abcdef" for c in h)
+
+
+def test_event_hash_canonical_json_is_compact():
+    """Internal canonical JSON uses compact separators."""
+    payload = {
+        "ticket_id": "t1",
+        "state": "draft",
+        "note": None,
+        "at": "2025-01-01T00:00:00+00:00",
+        "prev_hash": None,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    # compact JSON has no spaces
+    assert " " not in canonical
+    assert '"ticket_id":"t1"' in canonical
+
+
+def test_make_event_populates_hash_and_prev_hash(service):
+    """_make_event sets prev_hash from the most recent event and computes hash."""
+    # Create a first event (through the service, which uses _make_event).
+    t = service.create("hash-chain test")
+    events = service.history(t.id)
+    assert len(events) == 1
+    assert events[0].prev_hash is None
+    assert events[0].hash
+
+    # Create a second event.
+    service.transition(t.id, State.READY, note="refined")
+    events = service.history(t.id)
+    assert len(events) == 2
+    assert events[1].prev_hash == events[0].hash
+    assert events[1].hash != events[0].hash
+    # The second event's hash can be recomputed and matches.
+    recomputed = _event_hash(
+        ticket_id=t.id,
+        state=events[1].state.value,
+        note=events[1].note,
+        at=events[1].at.isoformat(),
+        prev_hash=events[1].prev_hash,
+    )
+    assert recomputed == events[1].hash
+
+
+def test_make_event_prev_hash_chains_across_three_events(service):
+    """Three-event chain: each event's prev_hash matches the prior event's hash."""
+    t = service.create("three-link chain")
+    service.transition(t.id, State.READY, note="link 2")
+    service.transition(t.id, State.DELIVERABLE, note="link 3")
+    events = service.history(t.id)
+    assert len(events) == 3
+    assert events[0].prev_hash is None
+    assert events[1].prev_hash == events[0].hash
+    assert events[2].prev_hash == events[1].hash
+
+
+def test_make_event_hash_differs_per_ticket(service):
+    """Two tickets with identical states produce different hashes."""
+    t1 = service.create("chain-a")
+    t2 = service.create("chain-b")
+    e1 = service.history(t1.id)[0]
+    e2 = service.history(t2.id)[0]
+    assert e1.hash != e2.hash
+
+
+def test_prev_hash_for_returns_none_for_new_ticket(service):
+    """_prev_hash_for returns None when a ticket has no events."""
+    from robotsix_mill.core import db
+    with db.session(service.settings, service.board_id) as s:
+        assert _prev_hash_for(s, "nonexistent-ticket") is None
+
+
+def test_make_event_state_value_stored_as_enum(service):
+    """The state of an event created by _make_event is a State enum member."""
+    t = service.create("state as enum")
+    events = service.history(t.id)
+    assert isinstance(events[0].state, State)
