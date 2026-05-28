@@ -835,3 +835,226 @@ def test_is_noop_draft():
     assert _is_noop_draft("Clean run — nothing to report") is True
     assert _is_noop_draft(None) is True
     assert _is_noop_draft("") is True
+
+
+# ---------------------------------------------------------------------------
+# 20. Draft routing: draft_target="mill" lands on the configured mill board
+# ---------------------------------------------------------------------------
+
+
+def _multirepo_ctx(tmp_path):
+    """Build a StageContext with TWO registered repos: the current
+    ticket's board ("test-board") and a separate "mill-board" used as
+    the trace-review target. Mirrors the multi-repo deployment
+    topology where retrospect must choose between two real
+    destinations."""
+    from robotsix_mill.config import (
+        RepoConfig, ReposRegistry, Settings,
+    )
+    from robotsix_mill.core import db
+    from robotsix_mill.core.service import TicketService
+    import robotsix_mill.config as _cfg
+
+    _cfg._repos_config = ReposRegistry(repos={
+        "test-repo": RepoConfig(
+            repo_id="test-repo", board_id="test-board",
+            langfuse_project_name="t", langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+        ),
+        "robotsix-mill": RepoConfig(
+            repo_id="robotsix-mill", board_id="mill-board",
+            langfuse_project_name="mill", langfuse_public_key="pk2",
+            langfuse_secret_key="sk2",
+        ),
+    })
+    db.reset_engine()
+    s = Settings(
+        MILL_DATA_DIR=str(tmp_path),
+        MILL_TRACE_REVIEW_TARGET_REPO_ID="robotsix-mill",
+    )
+    db.init_db(s, board_id="test-board")
+    db.init_db(s, board_id="mill-board")
+    svc = TicketService(s, board_id="test-board")
+    return StageContext(
+        settings=s, service=svc,
+        repo_config=_cfg._repos_config.repos["test-repo"],
+    )
+
+
+def test_draft_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypatch):
+    """When the retrospect agent returns ``draft_target="mill"`` and
+    ``trace_review_target_repo_id`` resolves to a known repo, the
+    draft is created on THAT repo's board — not on the originating
+    ticket's board. This is the 6934-style "mill-internal pipeline
+    issue surfaced during retrospect of an auto-mail ticket" path:
+    the fix lives in mill source, so the ticket needs to be on the
+    mill board to flow through mill's refine/implement cycle."""
+    from robotsix_mill import langfuse_client, pass_runner
+    import robotsix_mill.config as _cfg
+
+    ctx = _multirepo_ctx(tmp_path)
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _result(
+            propose_draft=True,
+            draft_title="Doc agent silent failures",
+            draft_body="Fix lives in stages/document.py",
+            draft_target="mill",
+        ),
+    )
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client, "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-mill",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner, "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    try:
+        t = _ticket(ctx)
+        out = RetrospectStage().run(t, ctx)
+
+        assert out.next_state is State.CLOSED
+
+        # Originating board still has only the original ticket — the
+        # draft did NOT land here.
+        on_current = ctx.service.list()
+        assert len(on_current) == 1
+        assert on_current[0].id == t.id
+
+        # Draft lives on the mill maintenance board.
+        from robotsix_mill.core.service import TicketService
+        mill_svc = TicketService(ctx.settings, board_id="mill-board")
+        on_mill = mill_svc.list()
+        assert len(on_mill) == 1
+        assert on_mill[0].title == "Doc agent silent failures"
+        # The cross-board parent link is dropped (a parent on the
+        # originating board would dangle from the mill DB's view).
+        assert on_mill[0].parent_id is None
+    finally:
+        _cfg._reset_repos_config()
+
+
+# ---------------------------------------------------------------------------
+# 21. Routing fallback: misconfigured "mill" target falls back to current
+# ---------------------------------------------------------------------------
+
+
+def test_draft_target_mill_falls_back_when_unset(ctx_factory, monkeypatch):
+    """When ``draft_target="mill"`` but ``trace_review_target_repo_id``
+    is unset, the helper MUST fall back to the current repo with a
+    warning. A misconfigured target must never lose a draft — silent
+    "draft vanished into a non-existent board" was exactly the
+    failure-mode-of-the-week we're trying to prevent."""
+    from robotsix_mill import langfuse_client, pass_runner
+
+    ctx = ctx_factory()  # no MILL_TRACE_REVIEW_TARGET_REPO_ID
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _result(
+            propose_draft=True,
+            draft_title="Mill fix",
+            draft_body="Fix lives in mill code",
+            draft_target="mill",
+        ),
+    )
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client, "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner, "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+    RetrospectStage().run(t, ctx)
+
+    # Fell back to the current repo: the draft IS on the originating
+    # board (better than losing it).
+    on_current = ctx.service.list()
+    assert any(tk.title == "Mill fix" for tk in on_current)
+
+
+# ---------------------------------------------------------------------------
+# 22. Follow-up routing: follow_up_target="mill"
+# ---------------------------------------------------------------------------
+
+
+def test_follow_up_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypatch):
+    """``follow_up_target`` follows the same routing as ``draft_target``
+    — a concrete incomplete-work item on a mill-internal feature
+    belongs on the mill board, not on the audited repo."""
+    from robotsix_mill import langfuse_client, pass_runner
+    import robotsix_mill.config as _cfg
+
+    ctx = _multirepo_ctx(tmp_path)
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _result(
+            propose_draft=False,
+            follow_up_title="Wire real X in mill",
+            follow_up_body="See mill source",
+            follow_up_target="mill",
+        ),
+    )
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client, "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner, "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    try:
+        t = _ticket(ctx)
+        RetrospectStage().run(t, ctx)
+
+        from robotsix_mill.core.service import TicketService
+        mill_svc = TicketService(ctx.settings, board_id="mill-board")
+        on_mill = mill_svc.list()
+        assert any(tk.title == "Wire real X in mill" for tk in on_mill)
+
+        on_current = ctx.service.list()
+        # Original ticket only; follow-up not duplicated here.
+        assert [tk.id for tk in on_current] == [t.id]
+    finally:
+        _cfg._reset_repos_config()

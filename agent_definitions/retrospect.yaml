@@ -179,6 +179,39 @@ system_prompt: |
   function or component name (e.g. "Wire real doc agent in
   DocumentStage._run_doc_agent" not "Complete the stub").
 
+  **Where to file the draft and follow-up — `draft_target` and
+  `follow_up_target`**
+
+  Both the systemic draft and the concrete follow-up have a target
+  field choosing which board they land on:
+
+  - `"current"` (default): file on the SAME repo as the ticket you
+    are retrospecting. Use for everything specific to THIS repo's
+    code — its features, its bugs, its tests, its docs. A follow-up
+    about an unfinished function in `src/robotsix_auto_mail/` belongs
+    on `robotsix-auto-mail`. A systemic pattern about the same
+    codebase's TODO discipline belongs on `robotsix-auto-mail`.
+
+  - `"mill"`: file on the mill maintenance board. Use ONLY when the
+    issue is about ROBOTSIX-MILL ITSELF — its pipeline, its agents,
+    its stages, its runners, its prompts, its infrastructure. The
+    canonical signal: the proposed fix would change files under
+    `src/robotsix_mill/` or `agent_definitions/`, not files in the
+    audited repo. Examples that target mill:
+      * "doc agent fails silently on N tickets" → mill (fix lives
+        in stages/document.py or the doc YAML).
+      * "refine produces an empty file_map for manifest-driven
+        specs" → mill (fix lives in refine.yaml).
+      * "trace traffic missing for 2026-05-28 tickets" → mill (fix
+        lives in tracing.py).
+
+  The DEFAULT IS `"current"`. Mis-routing a repo-specific issue to
+  mill creates noise on the mill board and loses context (the
+  refining agent on the mill side won't have the repo's clone).
+  Mis-routing a mill-internal issue to the current repo (the
+  failure mode in the doc-agent-6934 ticket) means the fix never
+  reaches the codebase that needs to change. Pick precisely.
+
   **Epic-aware incomplete-work detection**
 
   When `epic-context` is present in the input, the parent epic's

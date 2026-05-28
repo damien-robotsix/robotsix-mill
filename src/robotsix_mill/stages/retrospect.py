@@ -16,7 +16,9 @@ import re
 
 from .. import langfuse_client
 from ..agents import retrospecting
+from ..config import Settings
 from ..core.models import SourceKind, Ticket
+from ..core.service import TicketService
 from ..core.states import State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
@@ -25,6 +27,52 @@ from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
+
+
+def _service_for_target(
+    target: str, default_service: TicketService, settings: Settings,
+) -> TicketService:
+    """Return the :class:`TicketService` to file a retrospect draft on.
+
+    ``"current"`` (default) → use ``default_service`` (the ticket's own
+    repo's service), so most drafts stay scoped to the codebase the
+    ticket lives on.
+
+    ``"mill"`` → resolve ``settings.trace_review_target_repo_id`` to
+    a repo config and return a service bound to its board. Reuses the
+    same setting trace-review already uses for routing meta-pipeline
+    tickets to the mill maintenance board; one knob, two consumers.
+
+    Any failure (unset setting, unknown repo_id, lookup error) falls
+    back to ``default_service`` with a warning, so a misconfigured
+    target can't lose a draft.
+    """
+    if target != "mill":
+        return default_service
+    target_repo_id = settings.trace_review_target_repo_id
+    if not target_repo_id:
+        log.warning(
+            "retrospect draft requested mill routing but "
+            "trace_review_target_repo_id is unset — filing on the "
+            "current repo instead",
+        )
+        return default_service
+    try:
+        from ..config import get_repos_config
+        rc = get_repos_config().repos.get(target_repo_id)
+    except Exception:  # noqa: BLE001 — fallback must always work
+        log.exception(
+            "retrospect: target-repo lookup failed; using current repo",
+        )
+        return default_service
+    if rc is None:
+        log.warning(
+            "retrospect: configured mill target %r not in repos.yaml — "
+            "filing on the current repo instead",
+            target_repo_id,
+        )
+        return default_service
+    return TicketService(settings, board_id=rc.board_id)
 
 # States that count as "done with" for dedup purposes — ticket titles
 # that match an existing ticket in one of these states are considered
@@ -198,12 +246,25 @@ class RetrospectStage(Stage):
                 body = res.draft_body
                 if res.draft_gap_id:
                     body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
-                draft = ctx.service.create(res.draft_title, body,
-                                           source=SourceKind.RETROSPECT,
-                                           origin_session=current_session())
-                ctx.service.set_parent(draft.id, ticket.id)
+                target_service = _service_for_target(
+                    res.draft_target, ctx.service, settings,
+                )
+                draft = target_service.create(
+                    res.draft_title, body,
+                    source=SourceKind.RETROSPECT,
+                    origin_session=current_session(),
+                )
+                # Only set the parent link when the draft lives on the
+                # same board as the originating ticket — cross-board
+                # parents would dangle (the parent lookup is per-board).
+                if target_service.board_id == ctx.service.board_id:
+                    ctx.service.set_parent(draft.id, ticket.id)
                 spawned = draft.id
-                log.info("%s: retrospect spawned draft %s", ticket.id, spawned)
+                log.info(
+                    "%s: retrospect spawned draft %s on %s",
+                    ticket.id, spawned,
+                    target_service.board_id or "<default>",
+                )
         return spawned
 
     def _maybe_spawn_follow_up(
@@ -223,10 +284,18 @@ class RetrospectStage(Stage):
         follow_up_title = res.follow_up_title.strip()
         follow_up_body = res.follow_up_body
 
+        target_service = _service_for_target(
+            res.follow_up_target, ctx.service, settings,
+        )
+
         # Dedup: skip if an open (non-closed, non-done) ticket with the
-        # same case-insensitive title already exists.
+        # same case-insensitive title already exists ON THE TARGET
+        # BOARD. Dedup is per-board because two ticket-databases can
+        # legitimately carry identically-titled follow-ups for
+        # different concerns; routing to "mill" should still dedupe
+        # against mill's own backlog.
         norm = follow_up_title.casefold()
-        for t in ctx.service.list():
+        for t in target_service.list():
             if (
                 t.title.strip().casefold() == norm
                 and t.state.value not in _DONE_WITH
@@ -237,13 +306,18 @@ class RetrospectStage(Stage):
                 )
                 return None
 
-        draft = ctx.service.create(
+        draft = target_service.create(
             follow_up_title, follow_up_body,
             source=SourceKind.RETROSPECT,
             origin_session=current_session(),
         )
-        ctx.service.set_parent(draft.id, ticket.id)
-        log.info("%s: retrospect spawned follow-up %s", ticket.id, draft.id)
+        if target_service.board_id == ctx.service.board_id:
+            ctx.service.set_parent(draft.id, ticket.id)
+        log.info(
+            "%s: retrospect spawned follow-up %s on %s",
+            ticket.id, draft.id,
+            target_service.board_id or "<default>",
+        )
         return draft.id
 
     # ------------------------------------------------------------------

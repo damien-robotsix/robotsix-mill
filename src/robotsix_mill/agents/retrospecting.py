@@ -8,6 +8,7 @@ the stage has a clear spawn decision.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -31,6 +32,20 @@ class RetrospectResult(BaseModel):
     draft_gap_id: str | None = None
     follow_up_title: str | None = None
     follow_up_body: str | None = None
+    # Target board for the proposed draft. ``"current"`` (default)
+    # files on the same repo as the ticket being retrospected — right
+    # for issues specific to that codebase. ``"mill"`` files on the
+    # mill maintenance board (resolved via
+    # ``settings.trace_review_target_repo_id``) — right for issues
+    # about mill's pipeline itself: agent prompts, stage handlers,
+    # silent failure modes, retry logic. The retrospect prompt
+    # describes when to pick each.
+    draft_target: Literal["current", "mill"] = "current"
+    # Same routing for the follow-up draft. Most follow-ups are
+    # incomplete-work continuations on the same ticket's repo
+    # (default "current"); reserve "mill" for follow-ups that
+    # describe a mill-internal gap the retrospect surfaced.
+    follow_up_target: Literal["current", "mill"] = "current"
 
     @model_validator(mode="before")
     @classmethod
