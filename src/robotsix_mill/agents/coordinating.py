@@ -237,12 +237,14 @@ def run_coordinator(
     overrides["system_prompt"] = prompt
 
     from .consult_expert import make_consult_expert_tool
+    from .spawn_subtask import make_spawn_subtask_tool
 
     agent = build_agent_from_definition(
         settings, definition,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
             make_consult_expert_tool(settings, repo_dir, board_id=board_id),
+            make_spawn_subtask_tool(settings, repo_dir),
             *fs_tools,
         ],
         **overrides,

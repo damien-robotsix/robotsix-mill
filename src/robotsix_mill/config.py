@@ -191,6 +191,13 @@ class Settings(BaseSettings):
     coordinator_request_limit: int = Field(
         default=200, alias="MILL_COORDINATOR_REQUEST_LIMIT"
     )
+    # Per-subtask request budget when the coordinator delegates via
+    # ``spawn_subtask``. The parent's ``coordinator_request_limit``
+    # still bounds the outer loop; this cap bounds each individual
+    # sub-agent so one stuck subtask can't drain the parent's budget.
+    subtask_request_limit: int = Field(
+        default=30, alias="MILL_SUBTASK_REQUEST_LIMIT"
+    )
     # The test agent inspects failing output, reads the relevant
     # sources, and distills the cause — exploration-heavy work that
     # easily exceeds 8 calls on a non-trivial failure. 50 leaves ample
