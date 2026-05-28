@@ -92,6 +92,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Cost-reconciliation pass",
         "format": "memory_drafts",
     },
+    "verify": {
+        "module": "verify_runner",
+        "function": "run_verify_pass",
+        "label": "Verify",
+        "format": "verify",
+    },
 }
 
 
@@ -106,6 +112,11 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
     try:
         if cmd == "trace-health":
             result = func()
+        elif cmd == "verify":
+            from .runtime.tracing import make_session_id
+            session_id = make_session_id(cmd)
+            ticket_id = getattr(args, "ticket_id", None)
+            result = func(session_id=session_id, ticket_id=ticket_id)
         elif cmd == "langfuse-cleanup":
             from .config import Settings
             settings = Settings()
@@ -163,6 +174,17 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     indent=2,
                 )
             )
+        elif entry["format"] == "verify":
+            print(
+                json.dumps(
+                    {
+                        "total_events": result.total_events,
+                        "tickets_verified": result.tickets_verified,
+                        "breaks": result.breaks,
+                    },
+                    indent=2,
+                )
+            )
         else:
             print(
                 json.dumps(
@@ -190,6 +212,19 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             print(f"Project: {result.project}")
             print(f"Traces before: {result.traces_before}")
             print(f"Traces deleted: {result.traces_deleted}")
+        elif entry["format"] == "verify":
+            print("Verify complete.")
+            print(f"Total events scanned: {result.total_events}")
+            print(f"Tickets verified: {result.tickets_verified}")
+            if result.breaks:
+                print(f"Integrity breaks found: {len(result.breaks)}")
+                for b in result.breaks:
+                    print(
+                        f"  - event {b['event_id']} (ticket {b['ticket_id']}): "
+                        f"{b['field']} mismatch"
+                    )
+            else:
+                print("No integrity breaks found.")
         else:
             print(f"{entry['label']} complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
@@ -319,6 +354,16 @@ def main(argv: list[str] | None = None) -> int:
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
+    )
+
+    # --- verify command ---
+    p_verify = sub.add_parser(
+        "verify", help="verify TicketEvent hash-chain integrity"
+    )
+    p_verify.add_argument(
+        "--ticket-id",
+        default=None,
+        help="verify a single ticket's chain (default: all tickets)",
     )
 
     # --- test-gap command ---

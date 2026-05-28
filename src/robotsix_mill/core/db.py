@@ -113,6 +113,21 @@ def init_db(settings: Settings, board_id: str = "") -> None:
             )
     except Exception:
         pass
+    # Hash-chain integrity columns for TicketEvent.
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE ticketevent ADD COLUMN prev_hash TEXT"
+            )
+    except Exception:
+        pass
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE ticketevent ADD COLUMN hash TEXT NOT NULL DEFAULT ''"
+            )
+    except Exception:
+        pass
     _initialized.add(board_id)
 
 

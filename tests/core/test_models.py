@@ -204,10 +204,12 @@ def test_ticket_all_fields_in_roundtrip():
 
 
 def test_ticket_event_defaults():
-    """TicketEvent id defaults to None; note defaults to None."""
+    """TicketEvent id defaults to None; note defaults to None; hash defaults to ''; prev_hash defaults to None."""
     event = TicketEvent(ticket_id="t-1", state=State.READY)
     assert event.id is None
     assert event.note is None
+    assert event.hash == ""
+    assert event.prev_hash is None
     assert event.ticket_id == "t-1"
     assert event.state == State.READY
 
@@ -226,13 +228,21 @@ def test_ticket_event_with_note():
 
 def test_ticket_event_model_dump_and_validate_roundtrip():
     """TicketEvent model_dump() → model_validate() round-trip."""
-    event = TicketEvent(ticket_id="t-1", state=State.DONE, note="all good")
+    event = TicketEvent(
+        ticket_id="t-1",
+        state=State.DONE,
+        note="all good",
+        prev_hash="abc123",
+        hash="def456",
+    )
     dumped = event.model_dump()
     restored = TicketEvent.model_validate(dumped)
     assert restored.ticket_id == event.ticket_id
     assert restored.state == event.state
     assert restored.note == event.note
     assert restored.at == event.at
+    assert restored.prev_hash == "abc123"
+    assert restored.hash == "def456"
 
 
 # ---------------------------------------------------------------------------
