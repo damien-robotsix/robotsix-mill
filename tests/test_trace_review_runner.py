@@ -470,3 +470,80 @@ class TestRunTraceReviewPass:
         result = run_trace_review_pass(session_id="sess-6")
         assert result.traces_flagged == 1
         assert result.drafts_created == []
+
+
+class TestTargetRepoRouting:
+    """``trace_review_target_repo_id`` overrides the destination board
+    so findings from every repo's traces land on one place — typically
+    the mill maintenance repo — instead of scattered across each
+    application repo's board."""
+
+    def test_target_repo_routes_drafts_to_configured_board(
+        self, tmp_path, monkeypatch,
+    ):
+        # Two repos: source (where the trace came from) and target
+        # (where the draft should land).
+        monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("OPENROUTER_API_KEY", "")
+        monkeypatch.setenv("MILL_TRACE_REVIEW_TARGET_REPO_ID", "mill-repo")
+        _reset_secrets()
+        from robotsix_mill.core import db
+        from robotsix_mill.config import (
+            _reset_repos_config, get_repos_config, RepoConfig, ReposRegistry,
+        )
+        import robotsix_mill.config as _cfg
+        db.reset_engine()
+        _reset_repos_config()
+
+        # Manually pin a repos registry so get_repos_config returns it.
+        _cfg._repos_config = ReposRegistry(repos={
+            "source-repo": RepoConfig(
+                repo_id="source-repo", board_id="source-board",
+                langfuse_project_name="src", langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+            ),
+            "mill-repo": RepoConfig(
+                repo_id="mill-repo", board_id="mill-board",
+                langfuse_project_name="mill", langfuse_public_key="pk2",
+                langfuse_secret_key="sk2",
+            ),
+        })
+
+        s = Settings()
+        source_rc = get_repos_config().repos["source-repo"]
+
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse_client.list_all_traces_since",
+            lambda *a, **kw: [_trace(id="t1", totalCost=0.10)],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            lambda *a, **kw: {"observations": [
+                _obs("run_command", output="error: failed"),
+            ]},
+        )
+        finding = TraceFinding(
+            category="tool_error", symptom="x", root_cause="y",
+            proposed_solution="z", confidence="medium",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(findings=[finding]),
+        )
+
+        result = run_trace_review_pass(
+            session_id="sess", repo_config=source_rc,
+        )
+        assert len(result.drafts_created) == 1
+
+        # Draft lives on the TARGET board, not the source board.
+        target_svc = TicketService(s, board_id="mill-board")
+        target_tickets = target_svc.list()
+        assert len(target_tickets) == 1
+        assert target_tickets[0].source == SourceKind.TRACE_REVIEW
+
+        source_svc = TicketService(s, board_id="source-board")
+        assert source_svc.list() == []
+
+        # Clean up the pinned registry so other tests don't see it.
+        _reset_repos_config()

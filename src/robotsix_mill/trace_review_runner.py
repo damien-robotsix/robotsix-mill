@@ -335,13 +335,40 @@ def run_trace_review_pass(
     filed. Never raises — best-effort throughout.
     """
     settings = Settings()
-    board_id = repo_config.board_id if repo_config else ""
-    service = TicketService(settings, board_id=board_id)
+    source_board_id = repo_config.board_id if repo_config else ""
+    # Findings are agent-side improvements (mill code, mill prompts),
+    # not application-repo work. Route every draft to the configured
+    # target board when set; fall back to the source repo's board only
+    # in legacy deployments that haven't picked a target yet.
+    target_board_id = source_board_id
+    if settings.trace_review_target_repo_id:
+        try:
+            from .config import get_repos_config
+            registry = get_repos_config().repos
+            target_rc = registry.get(settings.trace_review_target_repo_id)
+            if target_rc is not None:
+                target_board_id = target_rc.board_id
+            else:
+                log.warning(
+                    "trace-review: configured target repo %r not "
+                    "found — falling back to source board %r",
+                    settings.trace_review_target_repo_id,
+                    source_board_id,
+                )
+        except Exception:  # noqa: BLE001
+            log.exception(
+                "trace-review: target-repo lookup failed; "
+                "using source board",
+            )
+    service = TicketService(settings, board_id=target_board_id)
     from .langfuse_client import list_all_traces_since, fetch_trace_detail
     from .agents.trace_inspector import run_trace_inspector
 
     now = datetime.now(timezone.utc)
-    watermark = _load_watermark(settings, board_id)
+    # Watermark is per SOURCE board — each repo's Langfuse traces have
+    # their own scan window. Dedup uses the TARGET board where the
+    # tickets actually live.
+    watermark = _load_watermark(settings, source_board_id)
     if watermark is None:
         watermark = now - timedelta(
             hours=settings.trace_review_initial_lookback_hours,
@@ -362,7 +389,7 @@ def run_trace_review_pass(
     flagged_count = 0
     # Snapshot open trace-review titles ONCE up front; we'll grow the
     # set as we file new drafts to avoid intra-run duplicates too.
-    seen_titles = _existing_open_titles(service, board_id)
+    seen_titles = _existing_open_titles(service, target_board_id)
 
     # Pre-fetch every trace's full detail in one pass so we can compute
     # batch-relative baselines (median cost, median observation count)
@@ -476,7 +503,7 @@ def run_trace_review_pass(
     # Use ``now`` (not the latest trace's createdAt) so we don't re-scan
     # if no traces arrived since.
     try:
-        _save_watermark(settings, board_id, now)
+        _save_watermark(settings, source_board_id, now)
     except Exception:  # noqa: BLE001
         log.exception("trace-review: failed to persist watermark")
 

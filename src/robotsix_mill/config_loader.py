@@ -341,6 +341,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.max_archived_tickets": "MILL_MAX_ARCHIVED_TICKETS",
     "pipeline.retrospect_memory_path": "MILL_RETROSPECT_MEMORY_PATH",
     "pipeline.trace_inspector_memory_path": "MILL_TRACE_INSPECTOR_MEMORY_PATH",
+    "pipeline.trace_review_target_repo_id": "MILL_TRACE_REVIEW_TARGET_REPO_ID",
     "pipeline.implement_memory_path": "MILL_IMPLEMENT_MEMORY_PATH",
     "pipeline.refine_memory_path": "MILL_REFINE_MEMORY_PATH",
     "pipeline.doc_memory_path": "MILL_DOC_MEMORY_PATH",

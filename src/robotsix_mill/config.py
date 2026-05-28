@@ -588,6 +588,15 @@ class Settings(BaseSettings):
     trace_review_initial_lookback_hours: int = Field(
         default=24, alias="MILL_TRACE_REVIEW_INITIAL_LOOKBACK_HOURS",
     )
+    # When set, every trace-review draft lands on THIS repo's board,
+    # regardless of which repo the source trace lived on. Trace-review
+    # findings are agent-side improvements (mill code, mill prompts);
+    # filing them on each application repo's board scatters work that
+    # belongs in one place. Leave empty to preserve the legacy
+    # source-repo routing.
+    trace_review_target_repo_id: str = Field(
+        default="", alias="MILL_TRACE_REVIEW_TARGET_REPO_ID",
+    )
     # Memory ledger for the trace inspector. Used only by the manual
     # Deep Review surface (the route path) — retrospect's deep-analysis
     # `trace_inspect` tool calls run_trace_inspector without a memory
