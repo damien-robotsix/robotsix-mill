@@ -332,6 +332,11 @@ class RetrospectStage(Stage):
 
         Only writes when the setting is enabled and proposals are non-empty.
         Appends only — never overwrites existing proposals.
+
+        Written outside the ephemeral clone to a persistent per-board
+        location that survives ``prune_clone``, following the same
+        pattern as the memory ledger
+        (``<data_dir>/<board_id>/retrospect_memory.md``).
         """
         if not settings.retrospect_spawn_agented_proposals:
             return
@@ -341,8 +346,12 @@ class RetrospectStage(Stage):
 
         from datetime import datetime, timezone
 
-        ws = ctx.service.workspace(ticket)
-        candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+        board_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        candidates_path = (
+            settings.data_dir / board_id / "AGENT_CANDIDATES.md"
+            if board_id
+            else settings.data_dir / "AGENT_CANDIDATES.md"
+        )
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
         blocks: list[str] = []

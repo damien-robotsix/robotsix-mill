@@ -844,7 +844,8 @@ def test_is_noop_draft():
 
 def test_agented_proposals_written_to_candidates_file(ctx_factory, monkeypatch):
     """When agent returns agented_md_proposals, they are appended to
-    AGENT_CANDIDATES.md in the repo root."""
+    AGENT_CANDIDATES.md in the persistent per-board data directory
+    (outside the ephemeral clone)."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
@@ -887,9 +888,10 @@ def test_agented_proposals_written_to_candidates_file(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
 
-    # AGENT_CANDIDATES.md exists in the repo checkout
-    ws = ctx.service.workspace(t)
-    candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+    # AGENT_CANDIDATES.md in persistent per-board data dir, NOT in the
+    # ephemeral clone that prune_clone would wipe.
+    s = ctx.settings
+    candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
     assert candidates_path.exists()
     content = candidates_path.read_text()
     assert "### Proposed addition to ## Board UI" in content
@@ -934,8 +936,8 @@ def test_agented_proposals_none_no_file_created(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
 
-    ws = ctx.service.workspace(t)
-    candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+    s = ctx.settings
+    candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
     assert not candidates_path.exists()
 
 
@@ -975,43 +977,29 @@ def test_agented_proposals_empty_list_no_file_created(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
 
-    ws = ctx.service.workspace(t)
-    candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+    s = ctx.settings
+    candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
     assert not candidates_path.exists()
 
 
 def test_agented_proposals_append_only(ctx_factory, monkeypatch):
-    """When AGENT_CANDIDATES.md already exists, new proposals are
-    appended without overwriting."""
+    """When AGENT_CANDIDATES.md already exists in the persistent data dir,
+    new proposals are appended without overwriting."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
-    # Create two tickets that will run retrospect sequentially.
-    t1 = _ticket(ctx)
-
-    # Pre-populate the candidates file for t1's workspace.
-    ws1 = ctx.service.workspace(t1)
-    candidates_path1 = ws1.dir / "repo" / "AGENT_CANDIDATES.md"
-    candidates_path1.parent.mkdir(parents=True, exist_ok=True)
-    candidates_path1.write_text("### Proposed addition to ## Prior Section\n\n> **Rule:** Old rule.\n\n---\n", encoding="utf-8")
-
-    # NB: Since each ticket gets its own workspace directory with a checkout,
-    # we need to write to the same repo path. Let's create t2 with the same
-    # branch so they share the checkout — but actually each ticket has its
-    # own workspace. Instead, just use the same workspace by re-using t1's
-    # checkout path in t2.
-
-    t2 = _ticket(ctx)
-
-    # For t2, manually set up the workspace to share the same repo dir.
-    ws2 = ctx.service.workspace(t2)
-    candidates_path2 = ws2.dir / "repo" / "AGENT_CANDIDATES.md"
-    candidates_path2.parent.mkdir(parents=True, exist_ok=True)
-    candidates_path2.write_text(
-        candidates_path1.read_text(), encoding="utf-8"
+    # Pre-populate the persistent candidates file for this board.
+    s = ctx.settings
+    candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
+    candidates_path.parent.mkdir(parents=True, exist_ok=True)
+    candidates_path.write_text(
+        "### Proposed addition to ## Prior Section\n\n"
+        "> **Rule:** Old rule.\n\n"
+        "---\n",
+        encoding="utf-8",
     )
 
     monkeypatch.setattr(
@@ -1045,11 +1033,12 @@ def test_agented_proposals_append_only(ctx_factory, monkeypatch):
         lambda service, settings, source_label: {},
     )
 
-    out = RetrospectStage().run(t2, ctx)
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
 
     assert out.next_state is State.CLOSED
 
-    content = candidates_path2.read_text()
+    content = candidates_path.read_text()
     # Old content is preserved
     assert "### Proposed addition to ## Prior Section" in content
     assert "Old rule" in content
@@ -1103,8 +1092,8 @@ def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
 
     assert out.next_state is State.CLOSED
 
-    ws = ctx.service.workspace(t)
-    candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+    s = ctx.settings
+    candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
     assert not candidates_path.exists()
 
 
