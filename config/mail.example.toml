@@ -37,3 +37,7 @@ username = "user@example.com"
 
 # Login password (plaintext – will be masked in logs / repr).
 password = "s3cret"
+
+[store]
+# Path to the local SQLite database file (default: "mail.db").
+# path = "mail.db"

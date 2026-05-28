@@ -85,6 +85,8 @@ class MailConfig:
     smtp_port: int = 587
     smtp_tls_mode: str = "starttls"
 
+    db_path: str = "mail.db"
+
     # -- masking -----------------------------------------------------------
 
     def __repr__(self) -> str:
@@ -174,6 +176,8 @@ class MailConfig:
             "MAIL_SMTP_TLS_MODE", "smtp_tls_mode", "starttls"
         )
 
+        db_path = os.environ.get("MAIL_DB_PATH", "mail.db")
+
         # -- final validation ----------------------------------------------
 
         msgs: list[str] = []
@@ -202,6 +206,7 @@ class MailConfig:
             smtp_tls_mode=smtp_tls_mode,
             username=username,
             password=password,
+            db_path=db_path,
         )
 
     @classmethod
@@ -275,6 +280,9 @@ class MailConfig:
         username = _get_str(auth_section, "username", "")
         password = _get_str(auth_section, "password", "")
 
+        store_section = _get_table(data, "store") or {}
+        db_path = _get_str(store_section, "path", "mail.db")
+
         # -- validate TLS modes --------------------------------------------
 
         errors: list[str] = []
@@ -318,6 +326,7 @@ class MailConfig:
             smtp_tls_mode=smtp_tls_mode,
             username=username,
             password=password,
+            db_path=db_path,
         )
 
 
@@ -381,6 +390,7 @@ def _merge_env_onto_toml(base: MailConfig) -> MailConfig:
         "smtp_tls_mode": "MAIL_SMTP_TLS_MODE",
         "username": "MAIL_USERNAME",
         "password": "MAIL_PASSWORD",
+        "db_path": "MAIL_DB_PATH",
     }
 
     kwargs: dict[str, str | int] = {}
