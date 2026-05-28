@@ -382,6 +382,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.completeness_check.enabled": "MILL_COMPLETENESS_CHECK_PERIODIC",
     "periodic.completeness_check.interval_seconds": "MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS",
     "periodic.completeness_check.memory_path": "MILL_COMPLETENESS_CHECK_MEMORY_PATH",
+    # -- periodic.copy_paste --
+    "periodic.copy_paste.model": "MILL_COPY_PASTE_MODEL",
+    "periodic.copy_paste.enabled": "MILL_COPY_PASTE_PERIODIC",
+    "periodic.copy_paste.interval_seconds": "MILL_COPY_PASTE_INTERVAL_SECONDS",
+    "periodic.copy_paste.memory_path": "MILL_COPY_PASTE_MEMORY_PATH",
     # -- periodic.survey --
     "periodic.survey.model": "MILL_SURVEY_MODEL",
     "periodic.survey.enabled": "MILL_SURVEY_PERIODIC",

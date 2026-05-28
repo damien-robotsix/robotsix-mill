@@ -26,7 +26,7 @@ log = logging.getLogger("robotsix_mill.pass_runner")
 # The label alternation group is kept here for regex performance; the canonical
 # list of periodic-pass labels lives in ``periodic_runner.PERIODIC_PASS_CONFIGS``.
 _GAP_ID_RE = re.compile(
-    r'<!--\s*(audit|health|agent_check|retrospect|survey|test_gap|bc_check|config_sync|completeness_check)-gap-id:\s*(\S+)\s*-->'
+    r'<!--\s*(audit|health|agent_check|retrospect|survey|test_gap|bc_check|config_sync|completeness_check|copy_paste)-gap-id:\s*(\S+)\s*-->'
 )
 
 

@@ -993,6 +993,31 @@ class Settings(BaseSettings):
     completeness_check_interval_seconds: int = Field(
         default=86400, alias="MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS"
     )
+
+    # --- copy-paste agent (deterministic clone detection and triage) ---
+    # Model for the copy-paste agent. Defaults to the same capable model
+    # as audit/health. Override with MILL_COPY_PASTE_MODEL.
+    copy_paste_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_COPY_PASTE_MODEL"
+    )
+    # Path to the copy-paste agent's Markdown memory ledger. Override to
+    # pin a specific path; unset (default) derives
+    # <data_dir>/copy_paste_memory.md.
+    copy_paste_memory_path: Path | None = Field(
+        default=None, alias="MILL_COPY_PASTE_MEMORY_PATH"
+    )
+    # Opt-in periodic copy-paste pass. Defaults to True (opt-out);
+    # set false to disable the weekly clone-detection sweep.
+    copy_paste_periodic: bool = Field(
+        default=True, alias="MILL_COPY_PASTE_PERIODIC"
+    )
+    # Seconds between periodic copy-paste passes when
+    # MILL_COPY_PASTE_PERIODIC=true. Default 604800 (1 week). Minimum
+    # enforced at 60s in the worker loop.
+    copy_paste_interval_seconds: int = Field(
+        default=604800, alias="MILL_COPY_PASTE_INTERVAL_SECONDS"
+    )
+
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
     # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).
@@ -1702,6 +1727,7 @@ class RepoConfig(BaseModel):
     agent_check_periodic: bool = True
     bc_check_periodic: bool = True
     completeness_check_periodic: bool = True
+    copy_paste_periodic: bool = True
     survey_periodic: bool = True
     cost_reconciliation_periodic: bool = True
     config_sync_periodic: bool = True
@@ -1739,7 +1765,7 @@ class RepoConfig(BaseModel):
 
 _PERIODIC_FLAG_NAMES = (
     "audit", "trace_health", "health", "test_gap", "agent_check",
-    "bc_check", "completeness_check", "survey", "cost_reconciliation",
+    "bc_check", "completeness_check", "copy_paste", "survey", "cost_reconciliation",
     "config_sync", "trace_review", "langfuse_cleanup", "cost_warmer",
     "bespoke",
 )

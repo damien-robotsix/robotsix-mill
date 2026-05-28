@@ -660,6 +660,7 @@ class Worker:
         self._agent_check_task: asyncio.Task | None = None
         self._bc_check_task: asyncio.Task | None = None
         self._completeness_check_task: asyncio.Task | None = None
+        self._copy_paste_task: asyncio.Task | None = None
         self._ci_monitor_task: asyncio.Task | None = None
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
@@ -1916,6 +1917,20 @@ class Worker:
                 "Periodic completeness-check enabled: interval %ds",
                 self.ctx.settings.completeness_check_interval_seconds,
             )
+        # Opt-in periodic copy-paste
+        if self.ctx.settings.copy_paste_periodic and self._copy_paste_task is None:
+            from ..copy_paste_runner import run_copy_paste_pass
+            self._copy_paste_task = asyncio.create_task(
+                self._run_periodic_pass_per_repo(
+                    "copy-paste", run_copy_paste_pass,
+                    max(60, self.ctx.settings.copy_paste_interval_seconds),
+                    per_repo_flag="copy_paste_periodic",
+                )
+            )
+            log.info(
+                "Periodic copy-paste enabled: interval %ds",
+                max(60, self.ctx.settings.copy_paste_interval_seconds),
+            )
         # Opt-in periodic Langfuse trace cleanup
         if (
             self.ctx.settings.langfuse_cleanup_periodic
@@ -2035,7 +2050,7 @@ class Worker:
             "_trace_health_task", "_trace_review_task",
             "_cost_warmer_task",
             "_health_task", "_ci_monitor_task",
-            "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_test_gap_task", "_survey_task",
+            "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_copy_paste_task", "_test_gap_task", "_survey_task",
             "_config_sync_task", "_cost_reconciliation_task",
             "_langfuse_cleanup_task", "_timeout_escalation_task",
         ):
