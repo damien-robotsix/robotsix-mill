@@ -140,6 +140,15 @@ class Settings(BaseSettings):
     audit_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_AUDIT_MODEL"
     )
+    # Default model for bespoke per-repo periodic agents loaded from
+    # ``<clone>/.robotsix-mill/agents/<name>.yaml``. Each bespoke YAML
+    # may override via its own ``model:`` field. Flash-class is the
+    # default — bespoke agents are typically narrow standing checkers,
+    # not deep reasoners.
+    bespoke_default_model: str = Field(
+        default="deepseek/deepseek-v4-flash",
+        alias="MILL_BESPOKE_DEFAULT_MODEL",
+    )
     # Model for the library-knowledge curator sub-agent — a cheap call
     # that answers from a cached per-library knowledge file and only
     # falls back to web_research when the file is stale or doesn't
