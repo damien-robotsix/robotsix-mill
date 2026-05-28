@@ -24,7 +24,7 @@ const ACTIVE_LABEL={
 };
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const renderMD = s => { if (!s) return ""; return marked.parse(s); };
-const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="test_gap"?"test-gap":s==="agent"?"agent":s==="deep-review"?"deep-review":s==="survey"?"survey":"user");
+const srcClass=s=>(s==="retrospect"?"retrospect":s==="audit"?"audit":s==="trace-health"?"trace-health":s==="health"?"health":s==="test_gap"?"test-gap":s==="agent"?"agent":s==="deep-review"?"deep-review":s==="survey"?"survey":s==="config_sync"?"config-sync":"user");
 function fmtRelative(iso){
  const d=(new Date(iso)).getTime()-Date.now();
  if(d<=0)return"now";
@@ -913,20 +913,20 @@ async function runCostReconciliation(){
  }
 }
 
-async function runEnvSync(){
+async function runConfigSync(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';
  try {
    const repoId=getRepoId();
-   const esUrl=repoId!=="all"?"/env-sync?repo_id="+encodeURIComponent(repoId):"/env-sync";
-   const r=await jpost(esUrl);
+   const csUrl=repoId!=="all"?"/config-sync?repo_id="+encodeURIComponent(repoId):"/config-sync";
+   const r=await jpost(csUrl);
    if(!r.ok){throw new Error(await r.text())}
-   alert("Env-sync started — it scans for config ↔ .env ↔ docs drift. New draft tickets appear on the board when it finishes.");
+   alert("Config-sync started — it scans for config ↔ .env ↔ docs drift. New draft tickets appear on the board when it finishes.");
    setTimeout(refresh,4000);
  } catch(e) {
-   alert("Env-sync failed to start: "+e);
+   alert("Config-sync failed to start: "+e);
  } finally {
-   btn.disabled=false; btn.textContent='Env Sync';
+   btn.disabled=false; btn.textContent='Config Sync';
  }
 }
 async function runTraceReview(){

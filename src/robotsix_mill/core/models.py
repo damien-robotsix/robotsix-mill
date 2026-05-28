@@ -28,7 +28,7 @@ class SourceKind(StrEnum):
     AGENT = "agent"
     CI = "ci"
     HEALTH = "health"
-    ENV_SYNC = "env_sync"
+    CONFIG_SYNC = "config_sync"
     TEST_GAP = "test_gap"
     AGENT_CHECK = "agent_check"
     BC_CHECK = "bc_check"

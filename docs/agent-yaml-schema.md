@@ -222,7 +222,7 @@ of any ticket by ID. This is the safe, read-only counterpart to
 `report_issue` — same wiring, opposite direction.
 
 Periodic agents (`audit`, `health`, `survey`, `test_gap`, `bc_check`,
-`agent_check`, `retrospect`, `env_sync`, `completeness_check`) set this to `true` so they
+`agent_check`, `retrospect`, `config_sync`, `completeness_check`) set this to `true` so they
 can look up the full context of past proposals when the one-line
 summary in `<recent_proposals>` isn't enough. Pipeline agents and
 other on-demand agents typically leave this `false`.

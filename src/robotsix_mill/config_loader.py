@@ -392,11 +392,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.cost_reconciliation.enabled": "MILL_COST_RECONCILIATION_PERIODIC",
     "periodic.cost_reconciliation.interval_seconds": "MILL_COST_RECONCILIATION_INTERVAL_SECONDS",
     "periodic.cost_reconciliation.memory_path": "MILL_COST_RECONCILIATION_MEMORY_PATH",
-    # -- periodic.env_sync --
-    "periodic.env_sync.model": "MILL_ENV_SYNC_MODEL",
-    "periodic.env_sync.enabled": "MILL_ENV_SYNC_PERIODIC",
-    "periodic.env_sync.interval_seconds": "MILL_ENV_SYNC_INTERVAL_SECONDS",
-    "periodic.env_sync.memory_path": "MILL_ENV_SYNC_MEMORY_PATH",
+    # -- periodic.config_sync --
+    "periodic.config_sync.model": "MILL_CONFIG_SYNC_MODEL",
+    "periodic.config_sync.enabled": "MILL_CONFIG_SYNC_PERIODIC",
+    "periodic.config_sync.interval_seconds": "MILL_CONFIG_SYNC_INTERVAL_SECONDS",
+    "periodic.config_sync.memory_path": "MILL_CONFIG_SYNC_MEMORY_PATH",
     # -- periodic.ci_monitor (global cap only — enabled/interval are per-repo) --
     "periodic.ci_monitor.log_max_bytes": "MILL_CI_LOG_MAX_BYTES",
     # -- periodic.timeout_escalation --

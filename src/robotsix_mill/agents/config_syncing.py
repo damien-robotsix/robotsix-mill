@@ -1,4 +1,4 @@
-"""The env-sync agent: config-drift detection across the YAML layers.
+"""The config-sync agent: config-drift detection across the YAML layers.
 
 The authoritative config source is no longer .env / docs — it's
 ``config/mill.defaults.yaml`` (canonical defaults), layered with the
@@ -13,7 +13,7 @@ disagree with the model defaults, etc.
 Despite the historical name, this is a "config-sync" pass — `.env`
 is a legacy fallback and only secrets that bypass YAML live there.
 
-Seam: tests monkeypatch ``run_env_sync_agent``.  Structured output so
+Seam: tests monkeypatch ``run_config_sync_agent``.  Structured output so
 the runner has a clear result to work with.
 """
 
@@ -87,7 +87,7 @@ DRAFT FORMAT:
 
 MEMORY LEDGER:
 
-You are given the current env-sync memory ledger — a Markdown document
+You are given the current config-sync memory ledger — a Markdown document
 that tracks gaps that have been proposed (as draft tickets), declined,
 or already addressed (done). The memory is *yours* — you own its
 structure and content.
@@ -123,25 +123,25 @@ For each gap you decide to propose as a draft ticket, provide:
 MAX_GAPS = 5
 
 
-class EnvSyncResult(BaseModel):
+class ConfigSyncResult(BaseModel):
     updated_memory: str = ""
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
 
 
-def run_env_sync_agent(
+def run_config_sync_agent(
     *,
     settings: Settings,
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
-) -> EnvSyncResult:
-    """Run the env-sync configuration drift inspection pass.
+) -> ConfigSyncResult:
+    """Run the config-sync configuration drift inspection pass.
 
     Inspects ``config.py``, ``.env``, and ``docs/configuration.md``
     for missing, stale, and drifted settings and returns a structured
-    ``EnvSyncResult`` with draft tickets for newly-discovered gaps.
+    ``ConfigSyncResult`` with draft tickets for newly-discovered gaps.
 
     When ``repo_dir`` is provided, the agent gets filesystem tools
     (``read_file``, ``list_dir``) and the ``explore`` scout tool so
@@ -150,7 +150,7 @@ def run_env_sync_agent(
 
     The agent is constructed via :func:`~.base.build_agent` with
     ``web=False`` (only reads local files), and
-    ``model_name=settings.env_sync_model``.
+    ``model_name=settings.config_sync_model``.
 
     Execution is wrapped in :func:`~.retry.call_with_retry`, which
     handles transient network/model failures (exponential backoff:
@@ -160,7 +160,7 @@ def run_env_sync_agent(
 
     Args:
         settings: Application configuration — model names
-            (``env_sync_model``), retry parameters, forge URL, and
+            (``config_sync_model``), retry parameters, forge URL, and
             tool paths.
         memory: The agent's memory ledger as a Markdown string.
             Defaults to ``""`` (the agent starts a fresh ledger).
@@ -169,7 +169,7 @@ def run_env_sync_agent(
             ``read_file``, and ``list_dir`` tools.
 
     Returns:
-        An ``EnvSyncResult`` with draft titles, bodies, and gap IDs
+        A ``ConfigSyncResult`` with draft titles, bodies, and gap IDs
         clipped to ``MAX_GAPS`` (5) entries, plus the updated memory
         ledger.
     """
@@ -191,26 +191,26 @@ def run_env_sync_agent(
     agent = build_agent(
         settings,
         system_prompt=SYSTEM_PROMPT,
-        output_type=PromptedOutput(EnvSyncResult),
+        output_type=PromptedOutput(ConfigSyncResult),
         tools=tools,
         web=False,
         report_issue=False,
         read_ticket=True,
-        model_name=settings.env_sync_model,
-        name="env-sync",
+        model_name=settings.config_sync_model,
+        name="config-sync",
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
         f"{recent_proposals}"
         + section("forge-remote-url", forge_url) + "\n\n"
         + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
-        + "Perform the env-sync drift inspection and return your result."
+        + "Perform the config-sync drift inspection and return your result."
     )
     from .retry import call_with_retry
 
     try:
         result = call_with_retry(
-            lambda: agent.run_sync(prompt), settings=settings, what="env-sync"
+            lambda: agent.run_sync(prompt), settings=settings, what="config-sync"
         )
     finally:
         _safe_close(agent)

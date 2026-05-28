@@ -1,7 +1,7 @@
 """A ``read_ticket`` tool injected into periodic agents via ``build_agent``.
 
 Periodic agents (audit, health, survey, test-gap, bc-check, agent-check,
-env-sync, retrospect) receive a ``<recent_proposals>`` block listing their
+config-sync, retrospect) receive a ``<recent_proposals>`` block listing their
 past proposals with one-line summaries.  When an agent needs the full
 context of a past proposal — its description, history, and comments — this
 tool provides it.  It is the read-only counterpart to ``report_issue``.
