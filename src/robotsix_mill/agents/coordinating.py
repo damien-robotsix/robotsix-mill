@@ -161,6 +161,7 @@ def run_coordinator(
     message_history: list | None = None,
     previous_attempt_summary: str | None = None,
     board_id: str = "",
+    language_instructions: str = "",
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -223,6 +224,11 @@ def run_coordinator(
         overrides["model_name"] = model_name
     elif not definition.model:
         overrides["model_name"] = settings.model
+
+    prompt = definition.system_prompt
+    if language_instructions:
+        prompt += "\n\n## Language conventions\n\n" + language_instructions
+    overrides["system_prompt"] = prompt
 
     from .consult_expert import make_consult_expert_tool
 

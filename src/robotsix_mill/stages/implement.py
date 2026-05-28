@@ -189,6 +189,20 @@ class ImplementStage(Stage):
                         feedback = None
                         review_feedback = None
 
+            # Resolve per-repo language instructions for the implement agent.
+            language_instructions = ""
+            if ctx.repo_config and ctx.repo_config.language:
+                lang = ctx.repo_config.language
+                snippet_path = settings.language_instructions_dir / f"{lang}.md"
+                try:
+                    language_instructions = snippet_path.read_text(encoding="utf-8")
+                except OSError:
+                    log.info(
+                        "%s: language '%s' configured but no snippet at %s — "
+                        "skipping language instructions",
+                        ticket.id, lang, snippet_path,
+                    )
+
             try:
                 summary, ref_files, updated_memory, conv_state = \
                     coding.run_implement_agent(
@@ -199,6 +213,7 @@ class ImplementStage(Stage):
                         file_map=file_map,
                         board_id=ctx.repo_config.board_id if ctx.repo_config else "",
                         message_history=resume_history,
+                        language_instructions=language_instructions,
                     )
             except AgentBudgetError as e:
                 ImplementStage._finalize(

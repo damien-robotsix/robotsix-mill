@@ -429,6 +429,14 @@ class Settings(BaseSettings):
     # refine + implement agents' system prompt. Relative to CWD (/app in
     # the container, repo root locally).
     skills_dir: Path = Field(default=Path("skills"), alias="MILL_SKILLS_DIR")
+    # Directory of per-language instruction Markdown snippets
+    # (agent_definitions/language_instructions/<language>.md) injected
+    # into the implement agent's system prompt. Relative to CWD (/app
+    # in the container, repo root locally).
+    language_instructions_dir: Path = Field(
+        default=Path("agent_definitions/language_instructions"),
+        alias="MILL_LANGUAGE_INSTRUCTIONS_DIR",
+    )
 
     # --- human approval gate (refine -> implement) ---
     # When true (default), the refine stage transitions to
@@ -1604,6 +1612,7 @@ class RepoConfig(BaseModel):
     cost_reconciliation_periodic: bool = True
     env_sync_periodic: bool = True
     trace_review_periodic: bool = True
+    language: str | None = None
 
     @field_validator("repo_id", "board_id")
     @classmethod
@@ -1696,6 +1705,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             ci_monitor_interval_seconds=ci_monitor.get("interval_seconds", 86400) if isinstance(ci_monitor, dict) else 86400,
             max_concurrency=repo_data.get("max_concurrency", 1) if isinstance(repo_data, dict) else 1,
             test_command=repo_data.get("test_command", "") if isinstance(repo_data, dict) else "",
+            language=repo_data.get("language") if isinstance(repo_data, dict) else None,
             **_periodic_flags_from_yaml(repo_data),
         )
     return ReposRegistry(repos=repos)
