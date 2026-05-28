@@ -25,11 +25,15 @@ def _make_settings(tmp_path, **overrides):
 # --- Agent tests ---
 
 
-def test_audit_prompt_covers_codebase_health_and_agent_generation():
-    """The audit must weigh intrinsic codebase-health (big files, root
-    clutter, readability, docs) equally with external tooling, and be
-    allowed to propose new targeted quality-checking AGENTS — not just
-    CI checks. Guard against silently reverting to tooling-only."""
+def test_audit_prompt_covers_codebase_health_and_tooling():
+    """The audit YAML must weigh intrinsic codebase-health equally with
+    external tooling. Per-repo specialisation (e.g. mill's DEFAULT
+    MECHANISM RULE about proposing dedicated checker agents) lives in
+    overlay files under <data_dir>/<board_id>/agent_overlays/audit.md
+    so the core YAML stays repo-agnostic.
+
+    Guard against silently reverting to tooling-only OR bleeding
+    mill-specific assumptions back into the shipped YAML."""
     p = auditing.SYSTEM_PROMPT.lower()
     # Lens A: maintainability dimensions the user called out.
     for kw in (
@@ -38,20 +42,61 @@ def test_audit_prompt_covers_codebase_health_and_agent_generation():
         "synchronization",
     ):
         assert kw in p, f"audit prompt missing maintainability cue: {kw}"
-    # Must explicitly allow proposing a new dedicated checking agent.
-    assert "agent" in p
-    assert "new dedicated quality-checking agent" in p or (
-        "quality-checking agent" in p
-    )
     # Equal-weight framing, not tooling-only.
     assert "two complementary lenses" in p
-    # Default mechanism: recurring dimensions -> a dedicated standing
-    # agent that OWNS the dimension; the audit must NOT enumerate
-    # per-instance remediation tickets itself. Guard that intent.
-    assert "default mechanism rule" in p
-    assert "per-instance" in p
-    assert "recurring" in p
-    assert "one-off" in p  # direct tickets reserved for one-time fixes
+    # Mill-isms must NOT appear in the shipped YAML — they belong in
+    # the per-repo overlay for mill, not in the generic core.
+    assert "default mechanism rule" not in p, (
+        "DEFAULT MECHANISM RULE leaked back into shipped YAML; it should "
+        "live in <data_dir>/robotsix-mill/agent_overlays/audit.md instead."
+    )
+    for mill_only in ("trace-health", "rebase/ci-fix", "ci-fix"):
+        assert mill_only not in p, (
+            f"mill-specific reference {mill_only!r} leaked into the "
+            "shipped audit YAML — move it to mill's overlay file."
+        )
+
+
+def test_load_overlay_returns_empty_when_missing(tmp_path, monkeypatch):
+    """A repo with no overlay file applies no overlay. The shipped
+    YAML stays the entire system prompt."""
+    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
+    from robotsix_mill.config import Settings, _reset_secrets
+    _reset_secrets()
+    assert auditing._load_overlay(Settings(), "no-such-repo") == ""
+
+
+def test_load_overlay_returns_file_contents_when_present(
+    tmp_path, monkeypatch,
+):
+    """An overlay file under <data_dir>/<board_id>/agent_overlays/audit.md
+    is returned verbatim (stripped). The board_id is the key, so each
+    repo can carry its own guidance without touching the shipped YAML."""
+    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
+    from robotsix_mill.config import Settings, _reset_secrets
+    _reset_secrets()
+    overlay_dir = tmp_path / "my-repo" / "agent_overlays"
+    overlay_dir.mkdir(parents=True)
+    (overlay_dir / "audit.md").write_text(
+        "\n\n## repo-specific\n\nFocus on FastAPI route hygiene.\n\n"
+    )
+    out = auditing._load_overlay(Settings(), "my-repo")
+    assert out == "## repo-specific\n\nFocus on FastAPI route hygiene."
+
+
+def test_load_overlay_empty_board_id_is_no_op(tmp_path, monkeypatch):
+    """The default (board-less) audit pass has no per-repo identity,
+    so no overlay is loaded. Guards against an accidental fall-through
+    that would look in <data_dir>/agent_overlays/ and surprise an
+    operator."""
+    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
+    from robotsix_mill.config import Settings, _reset_secrets
+    _reset_secrets()
+    # Even with an overlays dir at the data-dir root, an empty
+    # board_id MUST short-circuit to "".
+    (tmp_path / "agent_overlays").mkdir()
+    (tmp_path / "agent_overlays" / "audit.md").write_text("ignored")
+    assert auditing._load_overlay(Settings(), "") == ""
 
 
 def test_audit_agent_result_model():

@@ -103,7 +103,11 @@ def run_audit_pass(session_id: str, repo_config: RepoConfig | None = None) -> Au
                 )
 
     log.info("audit pass starting (session %s)", session_id)
-    agent_fn = partial(auditing.run_audit_agent, repo_dir=repo_dir)
+    agent_fn = partial(
+        auditing.run_audit_agent,
+        repo_dir=repo_dir,
+        board_id=repo_config.board_id if repo_config else "",
+    )
     result = run_agent_pass(
         agent_fn=agent_fn,
         memory_file=memory_file,
