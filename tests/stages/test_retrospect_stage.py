@@ -837,8 +837,279 @@ def test_is_noop_draft():
     assert _is_noop_draft("") is True
 
 
+# ------------------------------------------------------------------
+# 17. AGENT.md proposal writing
+# ------------------------------------------------------------------
+
+
+def test_agented_proposals_written_to_candidates_file(ctx_factory, monkeypatch):
+    """When agent returns agented_md_proposals, they are appended to
+    AGENT_CANDIDATES.md in the repo root."""
+    from robotsix_mill import langfuse_client
+    from robotsix_mill.stages import retrospect as retrospect_module
+    from robotsix_mill import pass_runner
+
+    ctx = ctx_factory()
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js when adding new UI elements.",
+                    "rationale": "Observed on T-abc, T-def, T-ghi.",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client, "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner, "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+
+    # AGENT_CANDIDATES.md exists in the repo checkout
+    ws = ctx.service.workspace(t)
+    candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+    assert candidates_path.exists()
+    content = candidates_path.read_text()
+    assert "### Proposed addition to ## Board UI" in content
+    assert "Always update board.js when adding new UI elements" in content
+    assert "Observed on T-abc, T-def, T-ghi" in content
+
+
+def test_agented_proposals_none_no_file_created(ctx_factory, monkeypatch):
+    """When agented_md_proposals is None, AGENT_CANDIDATES.md is NOT created
+    (or left unchanged if it existed)."""
+    from robotsix_mill import langfuse_client
+    from robotsix_mill.stages import retrospect as retrospect_module
+    from robotsix_mill import pass_runner
+
+    ctx = ctx_factory()
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _result(agented_md_proposals=None),
+    )
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client, "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner, "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+
+    ws = ctx.service.workspace(t)
+    candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+    assert not candidates_path.exists()
+
+
+def test_agented_proposals_empty_list_no_file_created(ctx_factory, monkeypatch):
+    """An empty list is treated the same as None — no file created."""
+    from robotsix_mill import langfuse_client
+    from robotsix_mill.stages import retrospect as retrospect_module
+    from robotsix_mill import pass_runner
+
+    ctx = ctx_factory()
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _result(agented_md_proposals=[]),
+    )
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client, "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner, "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+
+    ws = ctx.service.workspace(t)
+    candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+    assert not candidates_path.exists()
+
+
+def test_agented_proposals_append_only(ctx_factory, monkeypatch):
+    """When AGENT_CANDIDATES.md already exists, new proposals are
+    appended without overwriting."""
+    from robotsix_mill import langfuse_client
+    from robotsix_mill.stages import retrospect as retrospect_module
+    from robotsix_mill import pass_runner
+
+    ctx = ctx_factory()
+
+    # Create two tickets that will run retrospect sequentially.
+    t1 = _ticket(ctx)
+
+    # Pre-populate the candidates file for t1's workspace.
+    ws1 = ctx.service.workspace(t1)
+    candidates_path1 = ws1.dir / "repo" / "AGENT_CANDIDATES.md"
+    candidates_path1.parent.mkdir(parents=True, exist_ok=True)
+    candidates_path1.write_text("### Proposed addition to ## Prior Section\n\n> **Rule:** Old rule.\n\n---\n", encoding="utf-8")
+
+    # NB: Since each ticket gets its own workspace directory with a checkout,
+    # we need to write to the same repo path. Let's create t2 with the same
+    # branch so they share the checkout — but actually each ticket has its
+    # own workspace. Instead, just use the same workspace by re-using t1's
+    # checkout path in t2.
+
+    t2 = _ticket(ctx)
+
+    # For t2, manually set up the workspace to share the same repo dir.
+    ws2 = ctx.service.workspace(t2)
+    candidates_path2 = ws2.dir / "repo" / "AGENT_CANDIDATES.md"
+    candidates_path2.parent.mkdir(parents=True, exist_ok=True)
+    candidates_path2.write_text(
+        candidates_path1.read_text(), encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js when adding new UI elements.",
+                    "rationale": "Observed on T-abc.",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client, "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner, "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    out = RetrospectStage().run(t2, ctx)
+
+    assert out.next_state is State.CLOSED
+
+    content = candidates_path2.read_text()
+    # Old content is preserved
+    assert "### Proposed addition to ## Prior Section" in content
+    assert "Old rule" in content
+    # New content is appended after
+    assert "### Proposed addition to ## Board UI" in content
+    assert "Always update board.js" in content
+
+
+def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
+    """When MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS=false, proposals
+    are not written even if present."""
+    from robotsix_mill import langfuse_client
+    from robotsix_mill.stages import retrospect as retrospect_module
+    from robotsix_mill import pass_runner
+
+    ctx = ctx_factory(MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS="false")
+
+    monkeypatch.setattr(
+        retrospecting, "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js.",
+                    "rationale": "T-abc.",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        langfuse_client, "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client, "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner, "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+
+    ws = ctx.service.workspace(t)
+    candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+    assert not candidates_path.exists()
+
+
 # ---------------------------------------------------------------------------
-# 20. Draft routing: draft_target="mill" lands on the configured mill board
+# 22. Draft routing: draft_target="mill" lands on the configured mill board
 # ---------------------------------------------------------------------------
 
 
@@ -949,7 +1220,7 @@ def test_draft_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypa
 
 
 # ---------------------------------------------------------------------------
-# 21. Routing fallback: misconfigured "mill" target falls back to current
+# 23. Routing fallback: misconfigured "mill" target falls back to current
 # ---------------------------------------------------------------------------
 
 
@@ -1002,7 +1273,7 @@ def test_draft_target_mill_falls_back_when_unset(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 22. Follow-up routing: follow_up_target="mill"
+# 24. Follow-up routing: follow_up_target="mill"
 # ---------------------------------------------------------------------------
 
 

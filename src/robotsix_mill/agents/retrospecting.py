@@ -46,6 +46,7 @@ class RetrospectResult(BaseModel):
     # (default "current"); reserve "mill" for follow-ups that
     # describe a mill-internal gap the retrospect surfaced.
     follow_up_target: Literal["current", "mill"] = "current"
+    agented_md_proposals: list[dict] | None = None
 
     @model_validator(mode="before")
     @classmethod

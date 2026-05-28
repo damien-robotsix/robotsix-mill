@@ -610,6 +610,11 @@ class Settings(BaseSettings):
     retrospect_spawn_drafts: bool = Field(
         default=True
     )
+    # When True, retrospect may append AGENT.md proposals to
+    # AGENT_CANDIDATES.md for human review.
+    retrospect_spawn_agented_proposals: bool = Field(
+        default=True, alias="MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS"
+    )
     # (Removed) retrospect_deep_analysis_frequency: deep-analysis mode
     # was retired — per-trace inspection is now owned by the periodical
     # cost-evaluation pipeline (cost_reconciliation_runner +

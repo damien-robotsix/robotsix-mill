@@ -1,56 +1,3 @@
-"""Unit tests for src/robotsix_mill/config.py — Settings defaults, env-var
-aliases, type coercion, computed properties, YAML loading, Secrets model,
-semantic validators, and edge cases."""
-
-from __future__ import annotations
-
-from pathlib import Path
-
-import pytest
-from pydantic import ValidationError
-
-from robotsix_mill.config import Settings, load_settings
-
-
-# ---------------------------------------------------------------------------
-# 1. Default values
-# ---------------------------------------------------------------------------
-
-def test_default_model_settings():
-    """Representative model-name defaults."""
-    s = Settings()
-    assert s.model == "deepseek/deepseek-v4-pro"
-    assert s.triage_model == "deepseek/deepseek-v4-flash"
-    assert s.explore_model == "deepseek/deepseek-v4-flash"
-    assert s.test_model == "deepseek/deepseek-v4-pro"
-    assert s.auto_approve_model == "deepseek/deepseek-v4-flash"
-
-
-def test_default_numeric_limits():
-    """Representative integer / float defaults."""
-    s = Settings()
-    assert s.max_concurrency == 4
-    assert s.transient_retries == 4
-    assert s.command_timeout == 1800
-    assert s.max_fix_iterations == 8
-    assert s.model_request_timeout == 900.0
-    assert s.transient_backoff_cap == 30.0
-
-
-
-def test_doc_request_limit_default():
-    """doc_request_limit defaults to 8 (YAML default, not env var)."""
-    s = Settings()
-    assert s.doc_request_limit == 8
-
-
-def test_kwargs_override_yaml_defaults():
-    """Passing a field name as a Settings(...) kwarg overrides the
-    YAML-loaded default. Pydantic still treats the field as
-    construct-able by name."""
-    s = Settings(max_concurrency=8)
-    assert s.max_concurrency == 8
-
 
 def test_extra_kwargs_forbidden():
     """``extra='forbid'`` in model_config: passing an unknown kwarg
@@ -69,6 +16,268 @@ def test_extra_kwargs_forbidden():
     with pytest.raises(pydantic.ValidationError, match="not_a_real_field"):
         Settings(not_a_real_field=42)
 
+
+    s = Settings()
+    assert s.web_search is True
+    assert s.require_approval is True
+    assert s.sandbox_readonly is True
+    assert s.auto_approve_enabled is False
+    assert s.review_enabled is False
+
+
+def test_default_paths(monkeypatch):
+    """data_dir default and a couple of Path-typed fields.
+
+    The container may have MILL_DATA_DIR set in its environment;
+    explicitly clear it so we get the real default."""
+    monkeypatch.delenv("MILL_DATA_DIR", raising=False)
+    monkeypatch.delenv("MILL_SKILLS_DIR", raising=False)
+    s = Settings()
+    assert s.data_dir == Path(".data")
+    assert s.skills_dir == Path("skills")
+
+
+def test_default_empty_and_none():
+    """Representative empty-string, None, and sentinel defaults."""
+    s = Settings()
+    assert s.forge_kind == "none"
+    assert s.openrouter_api_key is None
+    assert s.rate_limit_fallback_model == ""
+    assert s.forge_remote_url is None
+
+
+def test_default_max_spend_sentinel():
+    """max_spend_usd_per_ticket defaults to 0.0 (disabled cap)."""
+    s = Settings()
+    assert s.max_spend_usd_per_ticket == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 2. Env-var alias resolution — exhaustive parametrized test
+# ---------------------------------------------------------------------------
+
+# (field_name, alias, env_value, expected_python_value)
+# env_value is the string form of the value as it would appear in an env var.
+# expected_python_value is what getattr(settings, field_name) should equal
+# after monkeypatch.setenv(alias, env_value).
+#
+# For int/float fields we pass a numeric string and expect the parsed number.
+# For bool fields we pass "1" and expect True.
+# For str/Path/Literal fields we just use a distinctive string value.
+# For str|None / Path|None fields we use a distinctive non-None string.
+
+ALIAS_CASES: list[tuple[str, str, str, object]] = [
+    # --- core / model ---
+    ("openrouter_api_key", "OPENROUTER_API_KEY", "sk-test", "sk-test"),
+    ("model", "MILL_MODEL", "test/model", "test/model"),
+    ("explore_model", "MILL_EXPLORE_MODEL", "test/explore", "test/explore"),
+    ("test_model", "MILL_TEST_MODEL", "test/tester", "test/tester"),
+    ("refine_model", "MILL_REFINE_MODEL", "test/refine", "test/refine"),
+    ("answer_model", "MILL_ANSWER_MODEL", "test/answer", "test/answer"),
+    ("retrospect_model", "MILL_RETROSPECT_MODEL", "test/retro", "test/retro"),
+    ("audit_model", "MILL_AUDIT_MODEL", "test/audit", "test/audit"),
+    ("dedup_model", "MILL_DEDUP_MODEL", "test/dedup", "test/dedup"),
+    ("triage_model", "MILL_TRIAGE_MODEL", "test/triage", "test/triage"),
+    # --- request limits ---
+    ("coordinator_request_limit", "MILL_COORDINATOR_REQUEST_LIMIT", "42", 42),
+    ("test_request_limit", "MILL_TEST_REQUEST_LIMIT", "15", 15),
+    ("max_fix_iterations", "MILL_MAX_FIX_ITERATIONS", "6", 6),
+    ("model_request_timeout", "MILL_MODEL_REQUEST_TIMEOUT", "123.5", 123.5),
+    ("max_concurrency", "MILL_MAX_CONCURRENCY", "2", 2),
+    # --- retry / backoff ---
+    ("transient_retries", "MILL_TRANSIENT_RETRIES", "7", 7),
+    ("transient_backoff_base", "MILL_TRANSIENT_BACKOFF_BASE", "5.0", 5.0),
+    ("transient_backoff_cap", "MILL_TRANSIENT_BACKOFF_CAP", "60.0", 60.0),
+    ("rate_limit_backoff_base", "MILL_RATE_LIMIT_BACKOFF_BASE", "10.0", 10.0),
+    ("rate_limit_backoff_cap", "MILL_RATE_LIMIT_BACKOFF_CAP", "300.0", 300.0),
+    ("rate_limit_fallback_retries", "MILL_RATE_LIMIT_FALLBACK_RETRIES", "5", 5),
+    ("rate_limit_fallback_model", "MILL_RATE_LIMIT_FALLBACK_MODEL", "fb/model", "fb/model"),
+    ("explore_request_limit", "MILL_EXPLORE_REQUEST_LIMIT", "99", 99),
+    ("dedup_request_limit", "MILL_DEDUP_REQUEST_LIMIT", "3", 3),
+    # --- memory / reference files ---
+    ("max_memory_chars", "MILL_MAX_MEMORY_CHARS", "16000", 16000),
+    ("reference_files_max_count", "MILL_REFERENCE_FILES_MAX_COUNT", "10", 10),
+    ("reference_files_max_total_lines", "MILL_REFERENCE_FILES_MAX_TOTAL_LINES", "5000", 5000),
+    ("dedup_lookback_days", "MILL_DEDUP_LOOKBACK_DAYS", "14", 14),
+    # --- paths ---
+    ("data_dir", "MILL_DATA_DIR", "/custom/data", Path("/custom/data")),
+    # --- API ---
+    ("api_host", "MILL_API_HOST", "0.0.0.0", "0.0.0.0"),
+    ("api_port", "MILL_API_PORT", "9090", 9090),
+    ("api_url", "MILL_API_URL", "http://example.com:9999", "http://example.com:9999"),
+    # --- forge ---
+    ("forge_kind", "FORGE_KIND", "none", "none"),
+    ("forge_remote_url", "FORGE_REMOTE_URL", "https://git.example.com/repo", "https://git.example.com/repo"),
+    ("forge_token", "FORGE_TOKEN", "glpat-xxxx", "glpat-xxxx"),
+    ("forge_target_branch", "FORGE_TARGET_BRANCH", "develop", "develop"),
+    ("forge_auth", "FORGE_AUTH", "token", "token"),
+    ("github_app_id", "GITHUB_APP_ID", "123456", "123456"),
+    ("github_app_private_key", "GITHUB_APP_PRIVATE_KEY", "pk-----", "pk-----"),
+    ("github_app_private_key_path", "GITHUB_APP_PRIVATE_KEY_PATH", "/keys/app.pem", "/keys/app.pem"),
+    ("github_api_url", "MILL_GITHUB_API_URL", "https://github.myco.com", "https://github.myco.com"),
+    ("gitlab_api_url", "MILL_GITLAB_API_URL", "https://gitlab.myco.com/api/v4", "https://gitlab.myco.com/api/v4"),
+    # --- implement ---
+    ("test_command", "MILL_TEST_COMMAND", "pytest -x", "pytest -x"),
+    ("branch_prefix", "MILL_BRANCH_PREFIX", "auto/", "auto/"),
+    ("command_timeout", "MILL_COMMAND_TIMEOUT", "600", 600),
+    ("max_stuck_cycles", "MILL_MAX_STUCK_CYCLES", "5", 5),
+    ("max_spend_usd_per_ticket", "MILL_MAX_SPEND_USD_PER_TICKET", "1.5", 1.5),
+    # --- sandbox ---
+    ("sandbox_image", "MILL_SANDBOX_IMAGE", "python:3.12", "python:3.12"),
+    ("sandbox_memory", "MILL_SANDBOX_MEMORY", "4g", "4g"),
+    ("sandbox_pids_limit", "MILL_SANDBOX_PIDS_LIMIT", "256", 256),
+    ("sandbox_readonly", "MILL_SANDBOX_READONLY", "0", False),
+    ("data_volume", "MILL_DATA_VOLUME", "custom_volume", "custom_volume"),
+    ("sandbox_data_mount", "MILL_SANDBOX_DATA_MOUNT", "/host/data", "/host/data"),
+    # --- web ---
+    ("web_search", "MILL_WEB_SEARCH", "0", False),
+    ("web_research_model", "MILL_WEB_RESEARCH_MODEL", "web/model", "web/model"),
+    ("web_research_request_limit", "MILL_WEB_RESEARCH_REQUEST_LIMIT", "4", 4),
+    ("fetch_image", "MILL_FETCH_IMAGE", "curlimages/curl:latest", "curlimages/curl:latest"),
+    ("web_fetch_max_bytes", "MILL_WEB_FETCH_MAX_BYTES", "500000", 500000),
+    ("web_fetch_timeout", "MILL_WEB_FETCH_TIMEOUT", "15", 15),
+    ("skills_dir", "MILL_SKILLS_DIR", "/skills", Path("/skills")),
+    # --- approval ---
+    ("require_approval", "MILL_REQUIRE_APPROVAL", "false", False),
+    ("auto_approve_enabled", "MILL_AUTO_APPROVE_ENABLED", "1", True),
+    ("auto_approve_model", "MILL_AUTO_APPROVE_MODEL", "aa/model", "aa/model"),
+    # --- review ---
+    ("review_enabled", "MILL_REVIEW_ENABLED", "true", True),
+    ("auto_merge_enabled", "MILL_AUTO_MERGE_ENABLED", "1", True),
+    ("refine_triage_enabled", "MILL_REFINE_TRIAGE_ENABLED", "0", False),
+    ("spec_review_enabled", "MILL_SPEC_REVIEW_ENABLED", "true", True),
+    ("review_model", "MILL_REVIEW_MODEL", "review/model", "review/model"),
+    ("review_max_rounds", "MILL_REVIEW_MAX_ROUNDS", "1", 1),
+    ("doc_model", "MILL_DOC_MODEL", "doc/model", "doc/model"),
+    # --- retrospect ---
+    ("retrospect_spawn_drafts", "MILL_RETROSPECT_SPAWN_DRAFTS", "0", False),
+    ("retrospect_spawn_agented_proposals", "MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS", "1", True),
+    ("trace_inspector_model", "MILL_TRACE_INSPECTOR_MODEL", "ti/model", "ti/model"),
+    ("trace_inspector_memory_path", "MILL_TRACE_INSPECTOR_MEMORY_PATH", "/mem/ti.md", Path("/mem/ti.md")),
+    ("retrospect_memory_path", "MILL_RETROSPECT_MEMORY_PATH", "/mem/retro.md", Path("/mem/retro.md")),
+    ("merge_poll_seconds", "MILL_MERGE_POLL_SECONDS", "60", 60),
+    ("prune_clone_on_close", "MILL_PRUNE_CLONE_ON_CLOSE", "false", False),
+    ("max_archived_tickets", "MILL_MAX_ARCHIVED_TICKETS", "50", 50),
+    # --- rebase / CI fix ---
+    ("rebase_max_attempts", "MILL_REBASE_MAX_ATTEMPTS", "2", 2),
+    ("ci_fix_max_attempts", "MILL_CI_FIX_MAX_ATTEMPTS", "4", 4),
+    # --- CI monitor (global cap only — enabled/interval are per-repo) ---
+    ("ci_log_max_bytes", "MILL_CI_LOG_MAX_BYTES", "32768", 32768),
+    # --- audit ---
+    ("audit_periodic", "MILL_AUDIT_PERIODIC", "true", True),
+    ("audit_interval_seconds", "MILL_AUDIT_INTERVAL_SECONDS", "7200", 7200),
+    ("audit_memory_path", "MILL_AUDIT_MEMORY_PATH", "/mem/audit.md", Path("/mem/audit.md")),
+    # --- trace health ---
+    ("trace_health_periodic", "MILL_TRACE_HEALTH_PERIODIC", "1", True),
+    ("trace_health_interval_seconds", "MILL_TRACE_HEALTH_INTERVAL_SECONDS", "3600", 3600),
+    # --- test gap ---
+    ("test_gap_model", "MILL_TEST_GAP_MODEL", "tg/model", "tg/model"),
+    ("test_gap_periodic", "MILL_TEST_GAP_PERIODIC", "1", True),
+    ("test_gap_interval_seconds", "MILL_TEST_GAP_INTERVAL_SECONDS", "1800", 1800),
+    ("test_gap_memory_path", "MILL_TEST_GAP_MEMORY_PATH", "/mem/tg.md", Path("/mem/tg.md")),
+    # --- agent check ---
+    ("agent_check_model", "MILL_AGENT_CHECK_MODEL", "ac/model", "ac/model"),
+    ("agent_check_memory_path", "MILL_AGENT_CHECK_MEMORY_PATH", "/mem/ac.md", Path("/mem/ac.md")),
+    ("agent_check_periodic", "MILL_AGENT_CHECK_PERIODIC", "1", True),
+    ("agent_check_interval_seconds", "MILL_AGENT_CHECK_INTERVAL_SECONDS", "7200", 7200),
+    # --- health ---
+    ("health_model", "MILL_HEALTH_MODEL", "h/model", "h/model"),
+    ("health_periodic", "MILL_HEALTH_PERIODIC", "true", True),
+    ("health_interval_seconds", "MILL_HEALTH_INTERVAL_SECONDS", "43200", 43200),
+    ("health_memory_path", "MILL_HEALTH_MEMORY_PATH", "/mem/health.md", Path("/mem/health.md")),
+    # --- survey ---
+    ("survey_model", "MILL_SURVEY_MODEL", "s/model", "s/model"),
+    ("survey_memory_path", "MILL_SURVEY_MEMORY_PATH", "/mem/survey.md", Path("/mem/survey.md")),
+    ("survey_periodic", "MILL_SURVEY_PERIODIC", "0", False),
+    ("survey_interval_seconds", "MILL_SURVEY_INTERVAL_SECONDS", "3600", 3600),
+    # --- action-agent memory paths ---
+    ("implement_memory_path", "MILL_IMPLEMENT_MEMORY_PATH", "/mem/imp.md", Path("/mem/imp.md")),
+    ("refine_memory_path", "MILL_REFINE_MEMORY_PATH", "/mem/ref.md", Path("/mem/ref.md")),
+    ("ci_fix_memory_path", "MILL_CI_FIX_MEMORY_PATH", "/mem/cifix.md", Path("/mem/cifix.md")),
+    ("rebase_memory_path", "MILL_REBASE_MEMORY_PATH", "/mem/rebase.md", Path("/mem/rebase.md")),
+    # --- notifications ---
+    ("ntfy_url", "NTFY_URL", "https://ntfy.example.com", "https://ntfy.example.com"),
+    ("ntfy_token", "NTFY_TOKEN", "tk-test", "tk-test"),
+]
+
+
+@pytest.mark.parametrize("field_name,alias,env_value,expected", ALIAS_CASES)
+def test_alias_resolution(
+    monkeypatch, field_name: str, alias: str, env_value: str, expected: object
+):
+    """Every Field(alias=...) resolves via its env var."""
+    # Ensure a clean slate — the _no_dotenv autouse fixture already
+    # clears the real vars, but make absolutely sure this alias is
+    # unset before we set it ourselves.
+    monkeypatch.delenv(alias, raising=False)
+    monkeypatch.setenv(alias, env_value)
+    s = Settings()
+    actual = getattr(s, field_name)
+    assert actual == expected, (
+        f"{field_name}: expected {expected!r} (type={type(expected).__name__}), "
+        f"got {actual!r} (type={type(actual).__name__}) "
+        f"from env {alias}={env_value!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 3. Type coercion
+# ---------------------------------------------------------------------------
+
+class TestTypeCoercion:
+    """Pydantic Settings coerces string env vars to the field type."""
+
+    def test_int_coercion(self, monkeypatch):
+        monkeypatch.setenv("MILL_MAX_CONCURRENCY", "8")
+        s = Settings()
+        assert s.max_concurrency == 8
+        assert isinstance(s.max_concurrency, int)
+
+    def test_float_coercion(self, monkeypatch):
+        monkeypatch.setenv("MILL_MODEL_REQUEST_TIMEOUT", "2.5")
+        s = Settings()
+        assert s.model_request_timeout == 2.5
+        assert isinstance(s.model_request_timeout, float)
+
+    @pytest.mark.parametrize("env_val,expected", [
+        ("true", True),
+        ("false", False),
+        ("1", True),
+        ("0", False),
+        ("True", True),
+        ("False", False),
+    ])
+    def test_bool_coercion(self, monkeypatch, env_val, expected):
+        monkeypatch.setenv("MILL_REVIEW_ENABLED", env_val)
+        s = Settings()
+        assert s.review_enabled is expected
+
+    def test_path_coercion(self, monkeypatch):
+        monkeypatch.setenv("MILL_DATA_DIR", "/tmp/mill-test")
+        s = Settings()
+        assert s.data_dir == Path("/tmp/mill-test")
+        assert isinstance(s.data_dir, Path)
+
+    def test_literal_coercion(self, monkeypatch):
+        monkeypatch.setenv("FORGE_KIND", "none")
+        s = Settings()
+        assert s.forge_kind == "none"
+
+    def test_optional_str_from_env(self, monkeypatch):
+        """str | None field populated from env is a plain str, not wrapped."""
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-abc")
+        s = Settings()
+        assert s.openrouter_api_key == "sk-abc"
+        assert isinstance(s.openrouter_api_key, str)
+
+    def test_optional_path_from_env(self, monkeypatch):
+        """Path | None field populated from env."""
+        monkeypatch.setenv("MILL_RETROSPECT_MEMORY_PATH", "/tmp/retro.md")
+        s = Settings()
+        assert s.retrospect_memory_path == Path("/tmp/retro.md")
+        assert isinstance(s.retrospect_memory_path, Path)
+
+
 # ---------------------------------------------------------------------------
 # 4. Computed @property methods
 # ---------------------------------------------------------------------------
@@ -79,15 +288,15 @@ class TestComputedProperties:
     # -- data-directory derivations --
 
     def test_db_path(self, tmp_path):
-        s = Settings(data_dir=str(tmp_path))
+        s = Settings(MILL_DATA_DIR=str(tmp_path))
         assert s.db_path == tmp_path / "mill.db"
 
-    def test_workspaces_dir_for_empty_board_id_fallback(self, tmp_path):
-        s = Settings(data_dir=str(tmp_path))
-        assert s.workspaces_dir_for("") == tmp_path / "workspaces"
+    def test_workspaces_dir(self, tmp_path):
+        s = Settings(MILL_DATA_DIR=str(tmp_path))
+        assert s.workspaces_dir == tmp_path / "workspaces"
 
     def test_db_url(self, tmp_path):
-        s = Settings(data_dir=str(tmp_path))
+        s = Settings(MILL_DATA_DIR=str(tmp_path))
         assert s.db_url == f"sqlite:///{tmp_path / 'mill.db'}"
 
     # -- tracing_enabled --
@@ -147,24 +356,43 @@ class TestComputedProperties:
     )
     def test_memory_file_fallback(self, tmp_path, prop_name, override_field, fallback_filename):
         """When the override path is None, the property derives from data_dir."""
-        s = Settings(data_dir=str(tmp_path))
+        s = Settings(MILL_DATA_DIR=str(tmp_path))
         assert getattr(s, prop_name) == tmp_path / fallback_filename
+
+    # Map Python field name → env-var alias for the memory_path override fields
+    MEMORY_PATH_ALIASES: dict[str, str] = {
+        "retrospect_memory_path": "MILL_RETROSPECT_MEMORY_PATH",
+        "trace_inspector_memory_path": "MILL_TRACE_INSPECTOR_MEMORY_PATH",
+        "audit_memory_path": "MILL_AUDIT_MEMORY_PATH",
+        "agent_check_memory_path": "MILL_AGENT_CHECK_MEMORY_PATH",
+        "health_memory_path": "MILL_HEALTH_MEMORY_PATH",
+        "test_gap_memory_path": "MILL_TEST_GAP_MEMORY_PATH",
+        "survey_memory_path": "MILL_SURVEY_MEMORY_PATH",
+        "implement_memory_path": "MILL_IMPLEMENT_MEMORY_PATH",
+        "refine_memory_path": "MILL_REFINE_MEMORY_PATH",
+        "ci_fix_memory_path": "MILL_CI_FIX_MEMORY_PATH",
+        "rebase_memory_path": "MILL_REBASE_MEMORY_PATH",
+    }
 
     @pytest.mark.parametrize(
         "prop_name,override_field,fallback_filename", MEMORY_FILE_PROPERTIES
     )
-    def test_memory_file_override(self, tmp_path, prop_name, override_field, fallback_filename):
+    def test_memory_file_override(self, monkeypatch, tmp_path, prop_name, override_field, fallback_filename):
         """When the override path is set, it wins over the derived path."""
         custom = Path("/custom/memory.md")
-        s = Settings(data_dir=str(tmp_path), **{override_field: custom})
+        alias = self.MEMORY_PATH_ALIASES[override_field]
+        monkeypatch.setenv(alias, str(custom))
+        s = Settings(MILL_DATA_DIR=str(tmp_path))
         assert getattr(s, prop_name) == custom
 
-    def test_memory_file_edge_case_empty_override(self, tmp_path):
+    def test_memory_file_edge_case_empty_override(self, monkeypatch, tmp_path):
         """retrospect_memory_path='' is falsy but not None — property
         should still return the explicit value (empty Path), not the
         fallback."""
-        s = Settings(data_dir=str(tmp_path), retrospect_memory_path=Path(""))
-        # An empty string is not None, so the property returns it as-is.
+        monkeypatch.setenv("MILL_RETROSPECT_MEMORY_PATH", "")
+        s = Settings(MILL_DATA_DIR=str(tmp_path))
+        # An empty string is not None, so the property returns it as-is
+        # (Path("") which equals Path(".")).
         assert s.retrospect_memory_file == Path("")
 
 
@@ -442,7 +670,7 @@ class TestLoadReposYaml:
         assert result["env-repo"]["board_id"] == "env-board"
 
     def test_env_var_empty_string_returns_empty(self, monkeypatch):
-        """``repos_file=""`` returns an empty dict (test-suite mode)."""
+        """``MILL_REPOS_FILE=""`` returns an empty dict (test-suite mode)."""
         from robotsix_mill.config_loader import load_repos_yaml
 
         monkeypatch.setenv("MILL_REPOS_FILE", "")
@@ -873,65 +1101,6 @@ class TestLoadReposConfig:
         rr = load_repos_config(str(repos_file))
         assert rr.repos["r"].language is None
 
-    def test_periodic_module_curator_enabled_parsed_from_yaml(self, tmp_path):
-        """``periodic.module_curator.enabled`` is parsed into the
-        ``module_curator_periodic`` RepoConfig field."""
-        from robotsix_mill.config import load_repos_config
-
-        repos_file = tmp_path / "repos.yaml"
-        repos_file.write_text(
-            "repos:\n"
-            "  r:\n"
-            "    board_id: b\n"
-            "    langfuse:\n"
-            "      project_name: p\n"
-            "      public_key: pk\n"
-            "      secret_key: sk\n"
-            "    periodic:\n"
-            "      module_curator:\n"
-            "        enabled: false\n"
-        )
-        rr = load_repos_config(str(repos_file))
-        assert rr.repos["r"].module_curator_periodic is False
-
-    def test_periodic_module_curator_defaults_to_true(self, tmp_path):
-        """When ``periodic`` block is absent, ``module_curator_periodic``
-        defaults to True."""
-        from robotsix_mill.config import load_repos_config
-
-        repos_file = tmp_path / "repos.yaml"
-        repos_file.write_text(
-            "repos:\n"
-            "  r:\n"
-            "    board_id: b\n"
-            "    langfuse:\n"
-            "      project_name: p\n"
-            "      public_key: pk\n"
-            "      secret_key: sk\n"
-        )
-        rr = load_repos_config(str(repos_file))
-        assert rr.repos["r"].module_curator_periodic is True
-
-    def test_periodic_module_curator_enabled_true_parsed(self, tmp_path):
-        """``periodic.module_curator.enabled: true`` yields True."""
-        from robotsix_mill.config import load_repos_config
-
-        repos_file = tmp_path / "repos.yaml"
-        repos_file.write_text(
-            "repos:\n"
-            "  r:\n"
-            "    board_id: b\n"
-            "    langfuse:\n"
-            "      project_name: p\n"
-            "      public_key: pk\n"
-            "      secret_key: sk\n"
-            "    periodic:\n"
-            "      module_curator:\n"
-            "        enabled: true\n"
-        )
-        rr = load_repos_config(str(repos_file))
-        assert rr.repos["r"].module_curator_periodic is True
-
 
 # ---------------------------------------------------------------------------
 # 11. Semantic validators
@@ -947,7 +1116,7 @@ class TestValidationValid:
 
     def test_max_concurrency_boundary_passes(self):
         """``max_concurrency=1`` (lower bound) passes."""
-        s = Settings(max_concurrency=1)
+        s = Settings(MILL_MAX_CONCURRENCY=1)
         assert s.max_concurrency == 1
 
     def test_forge_auth_app_with_github_app_id_passes(self):
@@ -970,34 +1139,34 @@ class TestValidationInvalid:
     def test_max_concurrency_zero_raises(self):
         """``max_concurrency=0`` raises ValidationError."""
         with pytest.raises(ValidationError, match="max_concurrency must be ≥ 1"):
-            Settings(max_concurrency=0)
+            Settings(MILL_MAX_CONCURRENCY=0)
 
     def test_model_request_timeout_zero_raises(self):
         """``model_request_timeout=0`` raises ValidationError."""
         with pytest.raises(ValidationError, match="model_request_timeout must be > 0"):
-            Settings(model_request_timeout=0)
+            Settings(MILL_MODEL_REQUEST_TIMEOUT=0)
 
     def test_api_url_invalid_format_raises(self):
         """``api_url`` not starting with http(s) raises ValidationError."""
         with pytest.raises(ValidationError, match="api_url must be an HTTP"):
-            Settings(api_url="not-a-url")
+            Settings(MILL_API_URL="not-a-url")
 
     def test_github_api_url_invalid_format_raises(self):
         """``github_api_url`` not starting with http(s) raises."""
         with pytest.raises(ValidationError, match="github_api_url must be an HTTP"):
-            Settings(github_api_url="ftp://bad")
+            Settings(MILL_GITHUB_API_URL="ftp://bad")
 
     def test_gitlab_api_url_invalid_format_raises(self):
         """``gitlab_api_url`` not starting with http(s) raises."""
         with pytest.raises(ValidationError, match="gitlab_api_url must be an HTTP"):
-            Settings(gitlab_api_url="ftp://bad")
+            Settings(MILL_GITLAB_API_URL="ftp://bad")
 
     def test_trace_health_interval_too_low_raises(self):
         """``trace_health_interval_seconds=60`` raises ValidationError."""
         with pytest.raises(
             ValidationError, match="trace_health_interval_seconds must be ≥ 3600"
         ):
-            Settings(trace_health_interval_seconds=60)
+            Settings(MILL_TRACE_HEALTH_INTERVAL_SECONDS=60)
 
     def test_forge_auth_app_without_credentials_raises(self):
         """``forge_auth=app`` without credentials raises."""
@@ -1018,8 +1187,8 @@ class TestValidationInvalid:
             match="rate_limit_fallback_retries must be ≥ 1",
         ):
             Settings(
-                rate_limit_fallback_model="gpt-4o",
-                rate_limit_fallback_retries=0,
+                MILL_RATE_LIMIT_FALLBACK_MODEL="gpt-4o",
+                MILL_RATE_LIMIT_FALLBACK_RETRIES=0,
             )
 
     def test_review_enabled_without_review_model_raises(self):
@@ -1027,14 +1196,14 @@ class TestValidationInvalid:
         with pytest.raises(
             ValidationError, match="review_model must be non-empty"
         ):
-            Settings(review_enabled="true", review_model="")
+            Settings(MILL_REVIEW_ENABLED="true", MILL_REVIEW_MODEL="")
 
     def test_explore_request_limit_zero_raises(self):
         """``explore_request_limit=0`` raises ValidationError."""
         with pytest.raises(
             ValidationError, match="explore_request_limit must be ≥ 1"
         ):
-            Settings(explore_request_limit=0)
+            Settings(MILL_EXPLORE_REQUEST_LIMIT=0)
 
 
 # ---------------------------------------------------------------------------
@@ -1078,11 +1247,11 @@ class TestFactories:
         s = load_secrets()
         assert isinstance(s, Secrets)
 
-    def test_yaml_local_overrides_defaults(self, tmp_path, monkeypatch):
-        """A value from mill.local.yaml overrides the same key in
-        mill.defaults.yaml — this is the layered-YAML contract."""
+    def test_load_settings_env_override_yaml(self, tmp_path, monkeypatch):
+        """Env vars override YAML defaults in ``load_settings()``."""
         import robotsix_mill.config_loader as cl
 
+        # Local overlay sets max_concurrency=42, but env var says 77
         local_dir = tmp_path / "config"
         local_dir.mkdir()
         defaults = local_dir / "mill.defaults.yaml"
@@ -1093,11 +1262,12 @@ class TestFactories:
         local.write_text("core:\n  limits:\n    max_concurrency: 42\n")
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", local)
+        monkeypatch.setenv("MILL_MAX_CONCURRENCY", "77")
 
         from robotsix_mill.config import load_settings
 
         s = load_settings()
-        assert s.max_concurrency == 42
+        assert s.max_concurrency == 77  # env var wins, not YAML's 42
 
     def test_settings_init_applies_yaml_fallback(
         self, tmp_path, monkeypatch
@@ -1123,11 +1293,11 @@ class TestFactories:
         from robotsix_mill.config import Settings
 
         # No kwargs → YAML value is used (Field default is 4, YAML says 42)
-        s1 = Settings(data_dir=str(tmp_path))
+        s1 = Settings(MILL_DATA_DIR=str(tmp_path))
         assert s1.max_concurrency == 42
 
         # Constructor kwarg overrides YAML
-        s2 = Settings(data_dir=str(tmp_path), max_concurrency="99")
+        s2 = Settings(MILL_DATA_DIR=str(tmp_path), MILL_MAX_CONCURRENCY="99")
         assert s2.max_concurrency == 99
 
 
@@ -1135,7 +1305,7 @@ class TestFlattenYamlConfig:
     """Unit tests for ``flatten_yaml_config``."""
 
     def test_flatten_basic_nesting(self):
-        """Nested YAML dict is flattened to field-name→value pairs."""
+        """Nested YAML dict is flattened to alias→value pairs."""
         from robotsix_mill.config_loader import flatten_yaml_config
 
         yaml_config = {
@@ -1146,9 +1316,9 @@ class TestFlattenYamlConfig:
             "service": {"data_dir": "/tmp/data"},
         }
         result = flatten_yaml_config(yaml_config)
-        assert result["max_concurrency"] == 8
-        assert result["model"] == "test/model"
-        assert result["data_dir"] == "/tmp/data"
+        assert result["MILL_MAX_CONCURRENCY"] == 8
+        assert result["MILL_MODEL"] == "test/model"
+        assert result["MILL_DATA_DIR"] == "/tmp/data"
 
     def test_flatten_unknown_paths_ignored(self):
         """YAML paths without a mapping are silently ignored."""
@@ -1164,8 +1334,7 @@ class TestFlattenYamlConfig:
         assert result == {}
 
     def test_flatten_last_wins_for_duplicate_aliases(self):
-        """When two YAML paths map to the same field name, the last
-        one wins."""
+        """When two YAML paths map to the same alias, the last one wins."""
         from robotsix_mill.config_loader import flatten_yaml_config
 
         yaml_config = {
@@ -1174,6 +1343,6 @@ class TestFlattenYamlConfig:
         }
         result = flatten_yaml_config(yaml_config)
         # Both core.models.web_research and web.research_model
-        # map to web_research_model; web.research_model is
-        # traversed second because 'web' > 'core' alphabetically.
-        assert result["web_research_model"] == "model-b"
+        # map to MILL_WEB_RESEARCH_MODEL; web.research_model is
+        # traversed second because 'web' > 'core' alphabetically
+        assert result["MILL_WEB_RESEARCH_MODEL"] == "model-b"

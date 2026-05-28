@@ -321,6 +321,60 @@ class RetrospectStage(Stage):
         )
         return draft.id
 
+    def _maybe_write_agented_proposals(
+        self,
+        res: RetrospectResult,
+        ticket: Ticket,
+        settings: Settings,
+        ctx: StageContext,
+    ) -> None:
+        """Conditionally append AGENT.md proposals to AGENT_CANDIDATES.md.
+
+        Only writes when the setting is enabled and proposals are non-empty.
+        Appends only — never overwrites existing proposals.
+        """
+        if not settings.retrospect_spawn_agented_proposals:
+            return
+        proposals = res.agented_md_proposals
+        if not proposals:
+            return
+
+        from datetime import datetime, timezone
+
+        ws = ctx.service.workspace(ticket)
+        candidates_path = ws.dir / "repo" / "AGENT_CANDIDATES.md"
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+        blocks: list[str] = []
+        # If the file exists, prepend a blank newline before the first new block.
+        if candidates_path.exists():
+            blocks.append("")
+        else:
+            candidates_path.parent.mkdir(parents=True, exist_ok=True)
+
+        for prop in proposals:
+            section = prop.get("section", "")
+            rule = prop.get("rule", "")
+            rationale = prop.get("rationale", "")
+            block = (
+                f"### Proposed addition to {section}\n\n"
+                f"> **Rule:** {rule}\n\n"
+                f"**Rationale:** {rationale}\n\n"
+                f"**Proposed:** {timestamp} (from {ticket.id})\n\n"
+                f"---\n"
+            )
+            blocks.append(block)
+
+        content = "\n".join(blocks) + "\n"
+        mode = "a" if candidates_path.exists() else "w"
+        with open(candidates_path, mode, encoding="utf-8") as fh:
+            fh.write(content)
+
+        log.info(
+            "%s: wrote %d AGENT.md proposal(s) to %s",
+            ticket.id, len(proposals), candidates_path,
+        )
+
     # ------------------------------------------------------------------
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
@@ -430,6 +484,7 @@ class RetrospectStage(Stage):
 
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)
+        self._maybe_write_agented_proposals(res, ticket, s, ctx)
 
         (ws.artifacts_dir / "retrospect.md").write_text(
             f"# Retrospect\nlangfuse: "
