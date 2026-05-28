@@ -17,7 +17,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..config import RepoConfig, get_repos_config
 from ..langfuse_client import session_cost
@@ -655,6 +655,7 @@ class Worker:
         self._audit_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
         self._trace_review_task: asyncio.Task | None = None
+        self._cost_warmer_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
         self._bc_check_task: asyncio.Task | None = None
@@ -1247,6 +1248,97 @@ class Worker:
             per_repo_flag="test_gap_periodic",
         )
 
+    async def _cost_warmer_loop(self) -> None:
+        """Background cost-warmer.
+
+        Walks every non-archived ticket on each repo and calls
+        ``session_cost`` to refresh its cached Langfuse value. The
+        board's /tickets list endpoint reads from the SAME process-
+        local cache via ``session_cost_cached`` (cache-only, never
+        blocks), so once the warmer has visited a ticket its cost
+        column on the board is populated even when the operator
+        hasn't opened the ticket drawer.
+
+        Throttling: ``cost_warmer_pace_ms`` between ticket lookups
+        bounds the Langfuse API hit-rate; ``cost_warmer_interval_
+        seconds`` is the wall-time between full cycles. Defaults
+        (60s cycle, 200ms pace) give a comfortable ~100 tickets per
+        20s, well under the 60s cache TTL so the column never shows
+        a stale-looking dip.
+
+        Each cycle handles per-repo failure independently so a single
+        Langfuse outage on one repo doesn't stall the others. Closed
+        tickets older than 24h are skipped — their cost is final and
+        already cached from a prior cycle (if it was warmed) or
+        irrelevant (board doesn't list them by default).
+        """
+        from ..core.models import Ticket
+        from ..core.service import TicketService
+        from ..core.states import State
+        from ..langfuse_client import session_cost
+
+        settings = self.ctx.settings
+        interval = max(30, settings.cost_warmer_interval_seconds)
+        pace = max(0.05, settings.cost_warmer_pace_ms / 1000.0)
+        terminal = {State.CLOSED, State.EPIC_CLOSED}
+
+        await asyncio.sleep(self._initial_delay("cost-warmer", interval))
+        while True:
+            cycle_start = time.monotonic()
+            repos = get_repos_config()
+            repo_configs = list(repos.repos.values())
+            if not repo_configs:
+                repo_configs = [None]  # type: ignore[list-item]
+            warmed_count = 0
+            for repo_config in repo_configs:
+                try:
+                    svc = TicketService(
+                        settings,
+                        board_id=(
+                            repo_config.board_id if repo_config else ""
+                        ),
+                    )
+                    tickets: list[Ticket] = svc.list()
+                except Exception:  # noqa: BLE001 — survive per-repo errors
+                    log.exception(
+                        "cost-warmer: listing tickets failed for %s",
+                        repo_config.repo_id if repo_config else "default",
+                    )
+                    continue
+
+                now = datetime.now(timezone.utc)
+                cutoff = now - timedelta(hours=24)
+                for ticket in tickets:
+                    if ticket.state in terminal:
+                        try:
+                            updated = ticket.updated_at
+                            if updated and updated.tzinfo is None:
+                                updated = updated.replace(tzinfo=timezone.utc)
+                            if updated and updated < cutoff:
+                                continue
+                        except Exception:  # noqa: BLE001
+                            pass
+                    try:
+                        await asyncio.to_thread(
+                            session_cost,
+                            settings, ticket.id, repo_config=repo_config,
+                        )
+                        warmed_count += 1
+                    except Exception:  # noqa: BLE001 — never break the loop
+                        log.debug(
+                            "cost-warmer: lookup failed for %s",
+                            ticket.id, exc_info=True,
+                        )
+                    await asyncio.sleep(pace)
+
+            cycle_secs = time.monotonic() - cycle_start
+            log.debug(
+                "cost-warmer cycle: %d tickets warmed in %.1fs",
+                warmed_count, cycle_secs,
+            )
+            # Sleep the remainder of the interval if we finished early.
+            await asyncio.sleep(max(0.0, interval - cycle_secs))
+
     async def _langfuse_cleanup_poll_loop(self) -> None:
         """Periodic Langfuse trace cleanup: keeps each repo's project at
         most ``langfuse_cleanup_max_traces`` rows by deleting the oldest.
@@ -1590,6 +1682,21 @@ class Worker:
                 "Periodic trace-review enabled: interval %ds",
                 self.ctx.settings.trace_review_interval_seconds,
             )
+        # Background cost warmer (pre-fills the Langfuse cost cache so
+        # the board's per-ticket price column doesn't show $0 until the
+        # operator opens the drawer).
+        if (
+            self.ctx.settings.cost_warmer_periodic
+            and self._cost_warmer_task is None
+        ):
+            self._cost_warmer_task = asyncio.create_task(
+                self._cost_warmer_loop()
+            )
+            log.info(
+                "Cost warmer enabled: cycle %ds, pace %dms",
+                self.ctx.settings.cost_warmer_interval_seconds,
+                self.ctx.settings.cost_warmer_pace_ms,
+            )
         # Opt-in periodic completeness-check
         if self.ctx.settings.completeness_check_periodic and self._completeness_check_task is None:
             from ..completeness_check_runner import run_completeness_check_pass
@@ -1696,6 +1803,7 @@ class Worker:
         for attr in (
             "_poll_task", "_audit_task",
             "_trace_health_task", "_trace_review_task",
+            "_cost_warmer_task",
             "_health_task", "_ci_monitor_task",
             "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_test_gap_task", "_survey_task",
             "_env_sync_task", "_cost_reconciliation_task",

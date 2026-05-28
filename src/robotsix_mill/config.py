@@ -712,6 +712,30 @@ class Settings(BaseSettings):
         default=86400, alias="MILL_TRACE_REVIEW_INTERVAL_SECONDS"
     )
 
+    # --- cost warmer ---
+    # When True, the worker runs a slow background task that walks every
+    # non-archived ticket on each repo and refreshes its cached Langfuse
+    # cost. Without this the board's /tickets list (which polls every
+    # 1s with blocking_cost=False to stay fast) shows $0 for any ticket
+    # whose detail drawer has never been opened — operators only see the
+    # actual cost when they click the ticket. The warmer pre-fills the
+    # cache so the cost column is always populated.
+    cost_warmer_periodic: bool = Field(
+        default=True, alias="MILL_COST_WARMER_PERIODIC"
+    )
+    # Seconds between full cycles. Defaults to 60s so the cache stays
+    # comfortably within ``_COST_TTL_SECONDS`` (60s) and the column
+    # never shows stale-looking gaps.
+    cost_warmer_interval_seconds: int = Field(
+        default=60, alias="MILL_COST_WARMER_INTERVAL_SECONDS"
+    )
+    # Milliseconds between individual ticket cost refreshes within a
+    # cycle. Throttles the Langfuse API hit-rate. With 100 tickets and
+    # 200ms pace, a cycle takes ~20s; well within the 60s budget.
+    cost_warmer_pace_ms: int = Field(
+        default=200, alias="MILL_COST_WARMER_PACE_MS"
+    )
+
     # --- timeout escalation ---
     # When True, the worker runs periodic timeout-escalation passes at the
     # configured interval. Default True (opt-out). Detects tickets stuck in
