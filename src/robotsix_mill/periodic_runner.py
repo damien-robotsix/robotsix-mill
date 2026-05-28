@@ -72,6 +72,14 @@ class CompletenessCheckPassResult:
 
 
 @dataclass
+class CopyPastePassResult:
+    """Result of running a copy-paste pass."""
+    updated_memory: str
+    drafts_created: list[dict]
+    session_id: str = ""
+
+
+@dataclass
 class ConfigSyncPassResult:
     """Result of running a config-sync pass."""
     updated_memory: str
@@ -356,6 +364,16 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         result_dataclass=CompletenessCheckPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
         max_drafts_fn=lambda _settings: _completeness_max_gaps(),
+    ),
+    "copy_paste": PeriodicPassConfig(
+        label="copy_paste",
+        source_kind=SourceKind.COPY_PASTE,
+        agent_module_attr="copy_pasting",
+        agent_fn_name="run_copy_paste_agent",
+        memory_filename="copy_paste_memory.md",
+        workspace_subdir="copy_paste_workspace",
+        result_dataclass=CopyPastePassResult,
+        clone_token_fn=_clone_token,
     ),
     "config_sync": PeriodicPassConfig(
         label="config_sync",

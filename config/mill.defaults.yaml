@@ -211,6 +211,13 @@ periodic:
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/completeness_check_memory.md
 
+  # -- copy-paste agent — deterministic clone detection and triage --------
+  copy_paste:
+    model: *default_model           # copy-paste agent model
+    enabled: true                   # enable periodic copy-paste passes
+    interval_seconds: 604800        # seconds between passes (604800 = 1 week)
+    memory_path: null               # defaults to <data_dir>/copy_paste_memory.md
+
   # -- cost-reconciliation — detects OpenRouter ↔ Langfuse cost drift -----
   cost_reconciliation:
     model: *default_model

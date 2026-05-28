@@ -45,8 +45,8 @@ def test_now_returns_aware_utc_datetime():
 
 
 def test_sourcekind_member_count():
-    """SourceKind must have exactly 16 members."""
-    assert len(SourceKind) == 16
+    """SourceKind must have exactly 17 members."""
+    assert len(SourceKind) == 17
 
 
 def test_sourcekind_all_values_are_lowercase_strings():

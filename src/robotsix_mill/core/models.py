@@ -34,6 +34,7 @@ class SourceKind(StrEnum):
     BC_CHECK = "bc_check"
     COST_RECONCILIATION = "cost_reconciliation"
     COMPLETENESS_CHECK = "completeness_check"
+    COPY_PASTE = "copy_paste"
     TRACE_HEALTH = "trace-health"
     TRACE_REVIEW = "trace-review"
     ROADMAP_SYNC = "roadmap_sync"
