@@ -1101,13 +1101,13 @@ async function open_(id){
    `<div id="ticket-action-buttons">${_actionButtonsHtml(t)}</div>`+
    `</div>`+
    `</div>`+
-   `<div id="ticket-children"><div class="sk-label"></div>${skW('60%','12px')}</div>`+
-   `<div id="ticket-history"><div class="sk-label"></div>${skW('90%','10px')}${skW('70%','10px')}</div>`+
+   `<div id="ticket-children" class="detail-section"><div class="sk-label"></div>${skW('60%','12px')}</div>`+
+   `<div id="ticket-history" class="detail-section"><div class="sk-label"></div>${skW('90%','10px')}${skW('70%','10px')}</div>`+
    (afterBody?
-    `<div id="ticket-body-area">${skW('100%','40px')}${skW('80%','12px')}</div><div id="ticket-retrospect"></div><div id="ticket-comments"><div class="sk-label"></div>${skW('100%','24px')}${skW('80%','24px')}</div>`:
-    `<div id="ticket-comments"><div class="sk-label"></div>${skW('100%','24px')}${skW('80%','24px')}</div><div id="ticket-retrospect"></div><div id="ticket-body-area">${skW('100%','40px')}${skW('80%','12px')}</div>`
+    `<div id="ticket-body-area" class="detail-section">${skW('100%','40px')}${skW('80%','12px')}</div><div id="ticket-retrospect" class="detail-section"></div><div id="ticket-comments" class="detail-section"><div class="sk-label"></div>${skW('100%','24px')}${skW('80%','24px')}</div>`:
+    `<div id="ticket-comments" class="detail-section"><div class="sk-label"></div>${skW('100%','24px')}${skW('80%','24px')}</div><div id="ticket-retrospect" class="detail-section"></div><div id="ticket-body-area" class="detail-section">${skW('100%','40px')}${skW('80%','12px')}</div>`
    )+
-   `<div id="ticket-merge"></div>`;
+   `<div id="ticket-merge" class="detail-section"></div>`;
   // Flush any data that arrived before the header DOM was ready
   flushAllSections();
  });
