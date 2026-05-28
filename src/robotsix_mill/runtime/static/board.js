@@ -24,7 +24,7 @@ const ACTIVE_LABEL={
 };
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const renderMD = s => { if (!s) return ""; return marked.parse(s); };
-const SOURCE_CLASS={retrospect:"retrospect",audit:"audit",config_sync:"config-sync","trace-health":"trace-health",health:"health",test_gap:"test-gap",agent:"agent","deep-review":"deep-review",survey:"survey",ci:"ci",env_sync:"env-sync",agent_check:"agent-check",bc_check:"bc-check",cost_reconciliation:"cost-reconciliation",completeness_check:"completeness-check","trace-review":"trace-review",roadmap_sync:"roadmap-sync"};const srcClass=s=>SOURCE_CLASS[s]||"user";
+const SOURCE_CLASS={retrospect:"retrospect",audit:"audit",config_sync:"config-sync","trace-health":"trace-health",health:"health",test_gap:"test-gap",agent:"agent","deep-review":"deep-review",survey:"survey",ci:"ci",agent_check:"agent-check",bc_check:"bc-check",cost_reconciliation:"cost-reconciliation",completeness_check:"completeness-check","trace-review":"trace-review",roadmap_sync:"roadmap-sync"};const srcClass=s=>SOURCE_CLASS[s]||"user";
 function fmtRelative(iso){
  const d=(new Date(iso)).getTime()-Date.now();
  if(d<=0)return"now";
