@@ -35,8 +35,8 @@ def _build_prompt(
     direction = "more" if openrouter_total > langfuse_total else "less"
     return f"""## Cost reconciliation: OpenRouter vs Langfuse
 
-**OpenRouter total:** ${openrouter_total:.4f}  
-**Langfuse total:** ${langfuse_total:.4f}  
+**OpenRouter total:** ${openrouter_total:.4f}
+**Langfuse total:** ${langfuse_total:.4f}
 **Delta:** ${delta:.4f} (OpenRouter reports ${abs(openrouter_total - langfuse_total):.4f} {direction} than Langfuse)
 
 ### OpenRouter daily breakdown (by model)

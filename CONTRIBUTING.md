@@ -213,6 +213,8 @@ All enforced by [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
 | mypy | v1.15.0 | `--strict --ignore-missing-imports`; stubs for `pydantic-ai-slim`, `sqlmodel`, `fastapi` |
 | Bandit | 1.8.3 | Config from `pyproject.toml`; targets `src/`, skips `B101` (assert) |
 | hadolint | v2.14.0 | `--failure-threshold warning`; config from `.hadolint.yaml` |
+| pre-commit-hooks | v5.0.0 | trailing-whitespace, end-of-file-fixer, check-yaml, check-json, check-toml, check-merge-conflict, detect-private-key, check-added-large-files (500 KB max) |
+| detect-secrets | v1.5.0 | `--baseline .secrets.baseline`; blocks new secrets not in the allowlist |
 
 Install with `.venv/bin/pre-commit install`. Run manually:
 `pre-commit run --all-files`.
