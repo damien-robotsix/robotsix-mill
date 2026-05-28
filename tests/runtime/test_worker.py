@@ -693,7 +693,7 @@ async def test_periodic_pass_opens_root_span_before_runner(ctx, monkeypatch):
     captured = {}
 
     @contextlib.contextmanager
-    def fake_root(sid, name=None):
+    def fake_root(sid, name=None, repo_config=None):
         seen["root_opened"] = True
         seen["session_id"] = sid
         seen["stage"] = name
@@ -746,7 +746,7 @@ async def test_periodic_pass_root_span_survives_runner_crash(ctx, monkeypatch):
     seen = {}
 
     @contextlib.contextmanager
-    def fake_root(sid, name=None):
+    def fake_root(sid, name=None, repo_config=None):
         seen["root_opened"] = True
         seen["session_id"] = sid
         yield
@@ -849,3 +849,74 @@ async def test_process_ticket_skips_awaiting_user_reply(ctx, service, monkeypatc
     )
     # Ticket should still be in AWAITING_USER_REPLY (unchanged).
     assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+
+# --- periodic pass per-repo forwards repo_config to start_ticket_root_span ---
+
+
+async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypatch):
+    """_run_periodic_pass_per_repo must forward repo_config to
+    start_ticket_root_span so per-repo Langfuse credentials in
+    repos.yaml are used for periodic agent traces."""
+    import contextlib
+
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime import tracing as tr
+
+    seen: dict = {}
+
+    @contextlib.contextmanager
+    def fake_root(sid, name=None, repo_config=None):
+        seen["root_opened"] = True
+        seen["session_id"] = sid
+        seen["stage"] = name
+        seen["repo_config"] = repo_config
+        yield
+
+    monkeypatch.setattr(tr, "start_ticket_root_span", fake_root)
+
+    fake_repo = RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="p",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.get_repos_config",
+        lambda: ReposRegistry(repos={"test-repo": fake_repo}),
+    )
+
+    captured_repo_config = {}
+
+    def fake_runner(session_id=None, repo_config=None):
+        captured_repo_config["value"] = repo_config
+        from robotsix_mill.audit_runner import AuditPassResult
+        return AuditPassResult(
+            updated_memory="", drafts_created=[],
+            session_id=session_id or "",
+        )
+
+    sleep_calls = 0
+    _real_sleep = asyncio.sleep
+
+    async def counting_sleep(delay):
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls >= 2:  # after initial delay + one loop iteration
+            raise asyncio.CancelledError
+        await _real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", counting_sleep)
+
+    w = Worker(ctx)
+    with pytest.raises(asyncio.CancelledError):
+        await w._run_periodic_pass_per_repo("audit", fake_runner, 60)
+
+    assert seen.get("root_opened") is True
+    assert seen.get("repo_config") is not None, (
+        "repo_config must be forwarded to start_ticket_root_span "
+        "so per-repo Langfuse credentials are used"
+    )
+    assert seen["repo_config"] is fake_repo
+    assert captured_repo_config.get("value") is fake_repo

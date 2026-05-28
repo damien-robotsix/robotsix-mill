@@ -1073,7 +1073,7 @@ class Worker:
                             label,
                             repo_id=repo_config.repo_id if repo_config else "",
                         )
-                    with tracing.start_ticket_root_span(session_id, label):
+                    with tracing.start_ticket_root_span(session_id, label, repo_config=repo_config):
                         result = await asyncio.to_thread(
                             runner_fn,
                             session_id=session_id,
@@ -1136,7 +1136,7 @@ class Worker:
                 # ("this event loop is already running") when invoked
                 # from inside an async task. Offload to a worker thread
                 # — same pattern stage handlers use.
-                with tracing.start_ticket_root_span(session_id, label):
+                with tracing.start_ticket_root_span(session_id, label, repo_config=None):
                     result = await asyncio.to_thread(
                         runner_fn, session_id=session_id,
                     )

@@ -197,11 +197,20 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
     When *repo_config* is ``None``, the global :class:`Secrets`
     singleton's langfuse keys are used (single-repo / legacy mode).
     """
-    global _provider_ready
-    if _provider_ready is False:
-        return  # tracing disabled (no creds) — nothing to do
+    global _provider, _provider_ready
+    # Only short-circuit on the global-disable flag when the caller has
+    # no per-repo credentials to offer (repo_config is None).  When a
+    # RepoConfig IS provided, always re-evaluate _tracing_enabled even
+    # if a previous call with a different (or absent) repo config
+    # disabled tracing — per-repo credentials may be valid.
+    if _provider_ready is False and repo_config is None:
+        return
     if not _tracing_enabled(repo_config):
-        if _provider_ready is None:
+        # Only poison the global flag when the caller genuinely has no
+        # repo-level creds to offer AND global Secrets are absent.
+        # Per-repo calls with missing creds skip silently without
+        # disabling other repos.
+        if _provider_ready is None and repo_config is None:
             _provider_ready = False
         return
 
@@ -298,7 +307,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         )
 
         # --- one-time global provider setup -----------------------------
-        if _provider_ready is None:
+        if _provider is None:
             class _SessionStampProcessor(SpanProcessor):
                 """Stamp ``session.id`` (+ Langfuse alias) and the
                 in-scope ``langfuse.public_key`` onto every span at
@@ -337,7 +346,6 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             from pydantic_ai.agent import Agent
 
             Agent.instrument_all()
-            global _provider
             _provider = provider
             _provider_ready = True
 
