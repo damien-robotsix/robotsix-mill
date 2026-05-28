@@ -116,6 +116,8 @@ modules:
       - tests/runtime/test_ci_monitor.py
       - tests/runtime/test_cost_warmer.py
       - tests/runtime/test_recent_traces.py
+      - tests/runtime/test_bespoke_supervisor.py
+      - tests/runtime/test_transient_errors.py
     dependencies: [config, core, forge, stages]
 
   # -------------------------------------------------------------------
@@ -144,11 +146,13 @@ modules:
       - src/robotsix_mill/trace_health_runner.py
       - src/robotsix_mill/trace_review_runner.py
       - src/robotsix_mill/langfuse_cleanup_runner.py
+      - src/robotsix_mill/bespoke_runner.py
       - tests/core/test_pass_runner.py
       - tests/test_cost_reconciliation_runner.py
       - tests/test_env_sync_runner.py
       - tests/test_roadmap_sync_runner.py
       - tests/test_trace_review_runner.py
+      - tests/test_bespoke_runner.py
     dependencies: [config, core, forge, agents, langfuse, sandbox, notify]
 
   # -------------------------------------------------------------------
@@ -208,6 +212,7 @@ modules:
       - src/robotsix_mill/agents/prompt_blocks.py
       - src/robotsix_mill/agents/retry.py
       - src/robotsix_mill/agents/openrouter_cost.py
+      - src/robotsix_mill/agents/overlays.py
       - tests/agents/test_build_agent_from_definition.py
       - tests/agents/test_yaml_loader.py
       - tests/agents/test_expert_loader.py
@@ -218,6 +223,7 @@ modules:
       - tests/agents/test_skills.py
       - tests/agents/test_agent_double_emit.py
       - tests/agents/test_agents_rework.py
+      - tests/agents/test_overlays.py
     dependencies: [config, core, sandbox]
 
   - id: agent-tools
@@ -241,6 +247,7 @@ modules:
       - src/robotsix_mill/agents/reply_thread.py
       - src/robotsix_mill/agents/close_thread.py
       - src/robotsix_mill/agents/ask_user.py
+      - src/robotsix_mill/agents/spawn_subtask.py
       - tests/agents/test_fs_tools.py
       - tests/agents/test_web.py
       - tests/agents/test_explore.py
@@ -249,6 +256,8 @@ modules:
       - tests/agents/test_ask_user.py
       - tests/agents/test_consult_expert.py
       - tests/agents/test_ci_patterns.py
+      - tests/agents/test_jscpd_tool.py
+      - tests/agents/test_spawn_subtask.py
     dependencies: [config, core, agent-infra, sandbox, langfuse]
 
   - id: agents
@@ -287,6 +296,8 @@ modules:
       - src/robotsix_mill/agents/trace_inspector.py
       - src/robotsix_mill/agents/cross_trace_analyzer.py
       - src/robotsix_mill/agents/test_gap.py
+      - src/robotsix_mill/agents/bespoke.py
+      - src/robotsix_mill/agents/bespoke_loader.py
       - tests/agents/test_coordinating.py
       - tests/agents/test_coding.py
       - tests/agents/test_reviewing.py
@@ -310,6 +321,7 @@ modules:
       - tests/agents/test_test_gap.py
       - tests/agents/test_timeout_escalation.py
       - tests/agents/test_cost.py
+      - tests/agents/test_bespoke_loader.py
       - tests/test_epic_status.py
     dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, langfuse, sandbox]
 
@@ -367,6 +379,7 @@ modules:
       every agent and domain expert.
     paths:
       - agent_definitions/*.yaml
+      - agent_definitions/periodic/*.yaml
       - expert_definitions/*.yaml
       - agent_definitions/language_instructions/*.md
     dependencies: []
