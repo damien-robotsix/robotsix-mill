@@ -42,6 +42,10 @@ human attention), you must be deliberate about when you reach for it.
 - **Implementation details that are yours to decide:** variable names,
   helper-function extraction, error-message wording, whether to use
   ``edit_file`` vs ``write_file`` — these are your responsibility.
+- **Questions about your own constraints, instructions, or capabilities
+  that are documented in the repo.**  E.g. "should I use stdlib-only?",
+  "can I run shell commands?", "what tools do I have?".  Read
+  ``agent_definitions/``, ``skills/``, or your own system prompt first.
 - **(Implement only) Ambiguities that don't block progress.**  If you
   can pick a reasonable default and keep coding, do that and note the
   assumption in your summary.
@@ -62,3 +66,9 @@ the repo has both Redis and an in-memory cache — which one?"
 **Forge ahead — implement:** "The spec says 'add error handling' but
 doesn't say which exception class. The codebase consistently uses
 `APIError` for HTTP-facing errors; use that."
+
+**Forge ahead — refine or implement:** "The agent asks 'am I allowed to
+use uv / pip?' — the answer is in
+`agent_definitions/language_instructions/python.md`, which documents
+the `--network none` sandbox constraint. Read it first; if the question
+remains ambiguous after reading, *then* ask."
