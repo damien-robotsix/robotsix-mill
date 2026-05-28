@@ -941,6 +941,32 @@ class Settings(BaseSettings):
         default=86400, alias="MILL_BC_CHECK_INTERVAL_SECONDS"
     )
 
+    # --- module_curator agent (module-taxonomy drift detection) ---
+    # Model for the module-curator agent. Defaults to the same capable
+    # model as other read-only periodic agents. Override with
+    # MILL_MODULE_CURATOR_MODEL.
+    module_curator_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="MILL_MODULE_CURATOR_MODEL"
+    )
+    # Path to the module-curator agent's Markdown memory ledger.
+    # Override to pin a specific path; unset (default) derives
+    # <data_dir>/module_curator_memory.md.
+    module_curator_memory_path: Path | None = Field(
+        default=None, alias="MILL_MODULE_CURATOR_MEMORY_PATH"
+    )
+    # Opt-in periodic module-curator pass. Defaults to True (opt-out);
+    # set false to disable the daily module-taxonomy drift check on
+    # this repo.
+    module_curator_periodic: bool = Field(
+        default=True, alias="MILL_MODULE_CURATOR_PERIODIC"
+    )
+    # Seconds between periodic module-curator passes when
+    # MILL_MODULE_CURATOR_PERIODIC=true. Minimum enforced at 60s in
+    # the worker loop.
+    module_curator_interval_seconds: int = Field(
+        default=86400, alias="MILL_MODULE_CURATOR_INTERVAL_SECONDS"
+    )
+
     # --- cost-reconciliation agent (OpenRouter ↔ Langfuse cost drift) ---
     # Model for the cost-reconciliation agent. Defaults to the same
     # capable model as other periodic agents. Override with
@@ -1734,6 +1760,7 @@ class RepoConfig(BaseModel):
     trace_review_periodic: bool = True
     langfuse_cleanup_periodic: bool = True
     cost_warmer_periodic: bool = True
+    module_curator_periodic: bool = True
     # When True, bespoke agents discovered under
     # ``<clone>/.robotsix-mill/agents/`` are scheduled for THIS repo.
     # Set False in repos.yaml to opt a repo out of bespoke discovery
@@ -1767,7 +1794,7 @@ _PERIODIC_FLAG_NAMES = (
     "audit", "trace_health", "health", "test_gap", "agent_check",
     "bc_check", "completeness_check", "copy_paste", "survey", "cost_reconciliation",
     "config_sync", "trace_review", "langfuse_cleanup", "cost_warmer",
-    "bespoke",
+    "module_curator", "bespoke",
 )
 
 

@@ -412,6 +412,11 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.langfuse_cleanup.enabled": "MILL_LANGFUSE_CLEANUP_PERIODIC",
     "periodic.langfuse_cleanup.interval_seconds": "MILL_LANGFUSE_CLEANUP_INTERVAL_SECONDS",
     "periodic.langfuse_cleanup.max_traces": "MILL_LANGFUSE_CLEANUP_MAX_TRACES",
+    # -- periodic.module_curator --
+    "periodic.module_curator.model": "MILL_MODULE_CURATOR_MODEL",
+    "periodic.module_curator.enabled": "MILL_MODULE_CURATOR_PERIODIC",
+    "periodic.module_curator.interval_seconds": "MILL_MODULE_CURATOR_INTERVAL_SECONDS",
+    "periodic.module_curator.memory_path": "MILL_MODULE_CURATOR_MEMORY_PATH",
     # -- service --
     "service.data_dir": "MILL_DATA_DIR",
     "service.api_host": "MILL_API_HOST",
