@@ -7,3 +7,10 @@ dist/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+
+# Environment files (may contain credentials)
+.env
+.env.*
+
+# Real mail configuration (may contain credentials)
+config/mail.toml
