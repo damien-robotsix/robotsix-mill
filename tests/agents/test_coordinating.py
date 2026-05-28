@@ -501,6 +501,41 @@ class TestRunCoordinator:
         )
         assert self.captured["system_prompt"] == definition.system_prompt
 
+    # -- language_instructions -------------------------------------------
+
+    def test_language_instructions_injected_into_system_prompt(
+        self, settings, tmp_path,
+    ):
+        """When ``language_instructions`` is non-empty it is prepended
+        after ``## Language conventions`` heading."""
+        from robotsix_mill.agents.yaml_loader import load_agent_definition
+
+        definition = load_agent_definition(
+            Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
+        )
+        snippet = "Use pytest. Never run uv sync."
+        self._run(settings, tmp_path, language_instructions=snippet)
+        prompt: str = self.captured["system_prompt"]
+        assert prompt.startswith(definition.system_prompt)
+        assert "\n\n## Language conventions\n\n" + snippet in prompt
+        # The language conventions appear after the YAML preamble.
+        conventions_pos = prompt.index("## Language conventions")
+        # The snippet text itself appears after the heading.
+        assert prompt.index(snippet) == conventions_pos + len("## Language conventions\n\n")
+
+    def test_language_instructions_empty_unchanged(
+        self, settings, tmp_path,
+    ):
+        """When ``language_instructions`` is empty (default), the system
+        prompt is unchanged."""
+        from robotsix_mill.agents.yaml_loader import load_agent_definition
+
+        definition = load_agent_definition(
+            Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
+        )
+        self._run(settings, tmp_path, language_instructions="")
+        assert self.captured["system_prompt"] == definition.system_prompt
+
     # -- usage_limits ----------------------------------------------------
 
     def test_usage_limits_uses_coordinator_request_limit(

@@ -25,3 +25,4 @@ repos:
     #                             #   Per-repo isolation: each repo
     #                             #   gets its own consumer pool, so a
     #                             #   busy repo can't block another.
+    # language: python             # optional — auto-injects language conventions into implement agent

@@ -52,6 +52,7 @@ def run_implement_agent(
     previous_attempt_summary: str | None = None,
     file_map: set[str] | None = None,
     board_id: str = "",
+    language_instructions: str = "",
 ) -> tuple[str, list[str], str, bytes | None]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory, conversation_state)``.
@@ -86,6 +87,7 @@ def run_implement_agent(
             message_history=message_history,
             previous_attempt_summary=previous_attempt_summary,
             board_id=board_id,
+            language_instructions=language_instructions,
         )
 
     try:
@@ -107,6 +109,7 @@ def run_implement_agent(
                 message_history=message_history,
                 previous_attempt_summary=previous_attempt_summary,
                 board_id=board_id,
+                language_instructions=language_instructions,
             )
         except Exception as fallback_e:
             raise AgentRunError(
