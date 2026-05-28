@@ -19,6 +19,7 @@ from ..core import db
 from ..core.service import TicketService
 from ..stages import StageContext
 from . import tracing
+from .broadcaster import BoardBroadcaster
 from .deep_review_store import DeepReviewStore
 from .run_registry import RunRegistry
 from .worker import Worker
@@ -118,9 +119,12 @@ def create_lifespan(
         else:
             repo_config = next(iter(repos.repos.values()))
         service = TicketService(settings, board_id=repo_config.board_id)
+        broadcaster = BoardBroadcaster()
+        service._on_transition = broadcaster.broadcast_sync
         ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
         app.state.repos = repos
         app.state.single_repo_id = single_repo_id
+        app.state.broadcaster = broadcaster
         # Per-repo run registries — each repo's audit/health/etc. run
         # log lands in <data_dir>/<board_id>/runs.json.
         run_registries: dict[str, RunRegistry] = {
