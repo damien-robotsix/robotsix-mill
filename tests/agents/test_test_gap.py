@@ -524,15 +524,15 @@ async def test_worker_test_gap_task_created_when_periodic(tmp_path, monkeypatch,
     service = TicketService(settings)
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
-    # Patch _test_gap_poll_loop to be a no-op (avoid running immediately)
-    async def noop_poll(self):
-        await asyncio_sleep_forever()
-
-    monkeypatch.setattr(Worker, "_test_gap_poll_loop", noop_poll)
-
+    # Patch _run_periodic_pass_per_repo to a no-op so the task hangs
+    # without actually invoking the test-gap runner.
     import asyncio as asyncio_mod
-    async def asyncio_sleep_forever():
+    async def noop_periodic(self, *a, **kw):
         await asyncio_mod.sleep(3600)
+
+    monkeypatch.setattr(
+        Worker, "_run_periodic_pass_per_repo", noop_periodic,
+    )
 
     worker = Worker(ctx)
     worker.start()

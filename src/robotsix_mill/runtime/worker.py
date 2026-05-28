@@ -1164,7 +1164,8 @@ class Worker:
         """Periodic trace-health check loop. Only runs when
         ``MILL_TRACE_HEALTH_PERIODIC=true``.
 
-        Multi-repo: fans out across all registered repos. When no repos
+        Multi-repo: fans out across all registered repos whose
+        ``RepoConfig.trace_health_periodic`` flag is True. When no repos
         are registered, runs once with ``repo_config=None``.
         """
         settings = self.ctx.settings
@@ -1176,6 +1177,11 @@ class Worker:
             repo_configs = list(repos.repos.values())
             if not repo_configs:
                 repo_configs = [None]  # type: ignore[list-item]
+            else:
+                repo_configs = [
+                    rc for rc in repo_configs
+                    if getattr(rc, "trace_health_periodic", True)
+                ]
             for repo_config in repo_configs:
                 repo_label = repo_config.repo_id if repo_config else "default"
                 try:
@@ -1226,28 +1232,6 @@ class Worker:
                         self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
 
-    async def _health_poll_loop(self) -> None:
-        """Periodic health pass loop. Only runs when
-        ``MILL_HEALTH_PERIODIC=true``."""
-        from ..health_runner import run_health_pass
-        settings = self.ctx.settings
-        interval = max(60, settings.health_interval_seconds)
-        await self._run_periodic_pass_per_repo(
-            "health", run_health_pass, interval,
-            per_repo_flag="health_periodic",
-        )
-
-    async def _test_gap_poll_loop(self) -> None:
-        """Periodic test-gap pass loop. Only runs when
-        ``MILL_TEST_GAP_PERIODIC=true``."""
-        from ..test_gap_runner import run_test_gap_pass
-        settings = self.ctx.settings
-        interval = max(60, settings.test_gap_interval_seconds)
-        await self._run_periodic_pass_per_repo(
-            "test-gap", run_test_gap_pass, interval,
-            per_repo_flag="test_gap_periodic",
-        )
-
     async def _cost_warmer_loop(self) -> None:
         """Background cost-warmer.
 
@@ -1289,6 +1273,11 @@ class Worker:
             repo_configs = list(repos.repos.values())
             if not repo_configs:
                 repo_configs = [None]  # type: ignore[list-item]
+            else:
+                repo_configs = [
+                    rc for rc in repo_configs
+                    if getattr(rc, "cost_warmer_periodic", True)
+                ]
             warmed_count = 0
             for repo_config in repo_configs:
                 try:
@@ -1343,7 +1332,8 @@ class Worker:
         """Periodic Langfuse trace cleanup: keeps each repo's project at
         most ``langfuse_cleanup_max_traces`` rows by deleting the oldest.
 
-        Multi-repo: iterates all registered repos sequentially. Pure
+        Multi-repo: iterates all registered repos whose
+        ``RepoConfig.langfuse_cleanup_periodic`` flag is True. Pure
         HTTP, no LLM — the cap exists because the self-hosted Langfuse
         instance degrades on large trace tables.
         """
@@ -1356,6 +1346,11 @@ class Worker:
             repo_configs = list(repos.repos.values())
             if not repo_configs:
                 repo_configs = [None]  # type: ignore[list-item]
+            else:
+                repo_configs = [
+                    rc for rc in repo_configs
+                    if getattr(rc, "langfuse_cleanup_periodic", True)
+                ]
             for repo_config in repo_configs:
                 label = repo_config.repo_id if repo_config else "default"
                 try:
@@ -1628,7 +1623,14 @@ class Worker:
             )
         # Opt-in periodic health
         if self.ctx.settings.health_periodic and self._health_task is None:
-            self._health_task = asyncio.create_task(self._health_poll_loop())
+            from ..health_runner import run_health_pass
+            self._health_task = asyncio.create_task(
+                self._run_periodic_pass_per_repo(
+                    "health", run_health_pass,
+                    max(60, self.ctx.settings.health_interval_seconds),
+                    per_repo_flag="health_periodic",
+                )
+            )
             log.info(
                 "Periodic health enabled: interval %ds",
                 self.ctx.settings.health_interval_seconds,
@@ -1747,7 +1749,14 @@ class Worker:
                 log.info("CI monitor enabled (per-repo config)")
         # Opt-in periodic test-gap
         if self.ctx.settings.test_gap_periodic and self._test_gap_task is None:
-            self._test_gap_task = asyncio.create_task(self._test_gap_poll_loop())
+            from ..test_gap_runner import run_test_gap_pass
+            self._test_gap_task = asyncio.create_task(
+                self._run_periodic_pass_per_repo(
+                    "test-gap", run_test_gap_pass,
+                    max(60, self.ctx.settings.test_gap_interval_seconds),
+                    per_repo_flag="test_gap_periodic",
+                )
+            )
             log.info(
                 "Periodic test-gap enabled: interval %ds",
                 self.ctx.settings.test_gap_interval_seconds,

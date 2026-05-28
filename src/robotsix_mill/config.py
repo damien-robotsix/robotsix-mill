@@ -1663,6 +1663,8 @@ class RepoConfig(BaseModel):
     cost_reconciliation_periodic: bool = True
     env_sync_periodic: bool = True
     trace_review_periodic: bool = True
+    langfuse_cleanup_periodic: bool = True
+    cost_warmer_periodic: bool = True
     language: str | None = None
 
     @field_validator("repo_id", "board_id")
@@ -1690,7 +1692,7 @@ class RepoConfig(BaseModel):
 _PERIODIC_FLAG_NAMES = (
     "audit", "trace_health", "health", "test_gap", "agent_check",
     "bc_check", "completeness_check", "survey", "cost_reconciliation",
-    "env_sync", "trace_review",
+    "env_sync", "trace_review", "langfuse_cleanup", "cost_warmer",
 )
 
 

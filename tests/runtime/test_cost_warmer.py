@@ -164,3 +164,50 @@ def test_cost_warmer_survives_listing_failure(
     )
     asyncio.run(_run_one_cycle(worker, monkeypatch))
     assert seen == []  # listing failed, no tickets to warm
+
+
+def test_cost_warmer_skips_repo_with_flag_off(
+    settings, worker, monkeypatch,
+):
+    """A repo whose ``RepoConfig.cost_warmer_periodic`` is False is
+    skipped, while peers continue to be warmed. Without the per-repo
+    flag, an operator who opts out of cost warming in repos.yaml would
+    still pay the Langfuse hit on every cycle."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    # Two repos: one opted in (default True), one opted out.
+    _cfg._repos_config = ReposRegistry(repos={
+        "kept": RepoConfig(
+            repo_id="kept", board_id="kept-board",
+            langfuse_project_name="kept", langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+        ),
+        "skipped": RepoConfig(
+            repo_id="skipped", board_id="skipped-board",
+            langfuse_project_name="skipped", langfuse_public_key="pk2",
+            langfuse_secret_key="sk2",
+            cost_warmer_periodic=False,
+        ),
+    })
+
+    # Seed one ticket in each board so a *warming* cycle would visit it.
+    kept_svc = TicketService(settings, board_id="kept-board")
+    skipped_svc = TicketService(settings, board_id="skipped-board")
+    k = kept_svc.create("k", "body")
+    skipped_svc.create("s", "body")
+
+    visited: list[str] = []
+    monkeypatch.setattr(
+        "robotsix_mill.langfuse_client.session_cost",
+        lambda settings, ticket_id, repo_config=None: visited.append(ticket_id) or 0.0,
+    )
+
+    try:
+        asyncio.run(_run_one_cycle(worker, monkeypatch))
+    finally:
+        _cfg._reset_repos_config()
+
+    # Only the kept repo's ticket was visited; the skipped repo was
+    # filtered out before TicketService.list() even ran.
+    assert visited == [k.id]
