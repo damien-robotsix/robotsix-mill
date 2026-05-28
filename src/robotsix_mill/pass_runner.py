@@ -22,7 +22,9 @@ from .core.workspace import Workspace
 
 log = logging.getLogger("robotsix_mill.pass_runner")
 
-# Matches <!-- audit-gap-id: foo_bar --> style markers in ticket descriptions.
+# Matches <!-- {label}-gap-id: foo_bar --> style markers in ticket descriptions.
+# The label alternation group is kept here for regex performance; the canonical
+# list of periodic-pass labels lives in ``periodic_runner.PERIODIC_PASS_CONFIGS``.
 _GAP_ID_RE = re.compile(
     r'<!--\s*(audit|health|agent_check|retrospect|survey|test_gap|bc_check|config_sync|completeness_check)-gap-id:\s*(\S+)\s*-->'
 )
