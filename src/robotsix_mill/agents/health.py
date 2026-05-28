@@ -106,9 +106,14 @@ def run_health_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
+    from .overlays import apply_overlay, load_overlay
+    system_prompt = apply_overlay(
+        definition.system_prompt, load_overlay(repo_dir, "health"),
+    )
     agent = build_agent_from_definition(
         settings, definition, tools=tools,
         model_name=definition.model or settings.health_model,
+        system_prompt=system_prompt,
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (

@@ -57,46 +57,31 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
         )
 
 
-def test_load_overlay_returns_empty_when_missing(tmp_path, monkeypatch):
-    """A repo with no overlay file applies no overlay. The shipped
-    YAML stays the entire system prompt."""
-    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
-    from robotsix_mill.config import Settings, _reset_secrets
-    _reset_secrets()
-    assert auditing._load_overlay(Settings(), "no-such-repo") == ""
+def test_mill_ships_an_audit_overlay():
+    """Mill's own audit overlay is git-tracked at
+    .robotsix-mill/agent_overlays/audit.md so a fresh mill deploy keeps
+    the DEFAULT MECHANISM RULE behaviour (propose dedicated standing
+    checker agents for recurring quality dimensions) without operator
+    bootstrap.
 
-
-def test_load_overlay_returns_file_contents_when_present(
-    tmp_path, monkeypatch,
-):
-    """An overlay file under <data_dir>/<board_id>/agent_overlays/audit.md
-    is returned verbatim (stripped). The board_id is the key, so each
-    repo can carry its own guidance without touching the shipped YAML."""
-    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
-    from robotsix_mill.config import Settings, _reset_secrets
-    _reset_secrets()
-    overlay_dir = tmp_path / "my-repo" / "agent_overlays"
-    overlay_dir.mkdir(parents=True)
-    (overlay_dir / "audit.md").write_text(
-        "\n\n## repo-specific\n\nFocus on FastAPI route hygiene.\n\n"
+    Guards against a future hand-edit that removes mill's own file
+    and silently drops the mill-only meta-agent guidance."""
+    from pathlib import Path
+    overlay_path = (
+        Path(__file__).parent.parent.parent
+        / ".robotsix-mill" / "agent_overlays" / "audit.md"
     )
-    out = auditing._load_overlay(Settings(), "my-repo")
-    assert out == "## repo-specific\n\nFocus on FastAPI route hygiene."
-
-
-def test_load_overlay_empty_board_id_is_no_op(tmp_path, monkeypatch):
-    """The default (board-less) audit pass has no per-repo identity,
-    so no overlay is loaded. Guards against an accidental fall-through
-    that would look in <data_dir>/agent_overlays/ and surprise an
-    operator."""
-    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
-    from robotsix_mill.config import Settings, _reset_secrets
-    _reset_secrets()
-    # Even with an overlays dir at the data-dir root, an empty
-    # board_id MUST short-circuit to "".
-    (tmp_path / "agent_overlays").mkdir()
-    (tmp_path / "agent_overlays" / "audit.md").write_text("ignored")
-    assert auditing._load_overlay(Settings(), "") == ""
+    assert overlay_path.exists(), (
+        f"Expected mill's audit overlay at {overlay_path} — phase-2 of the "
+        "periodic-agent reorg moved overlays from <data_dir>/<board_id>/ to "
+        "<clone>/.robotsix-mill/agent_overlays/."
+    )
+    body = overlay_path.read_text()
+    # The DEFAULT MECHANISM RULE is the load-bearing content.
+    assert "DEFAULT MECHANISM RULE" in body
+    assert "dedicated quality-checking agent" in body.lower() or (
+        "dedicated standing" in body.lower()
+    )
 
 
 def test_audit_agent_result_model():

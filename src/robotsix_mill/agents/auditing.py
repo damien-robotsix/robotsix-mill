@@ -29,28 +29,12 @@ class AuditResult(BaseModel):
     gap_ids: list[str] = Field(default_factory=list)
 
 
-def _load_overlay(settings: Settings, board_id: str) -> str:
-    """Return the per-repo audit overlay Markdown, or ``""`` when none.
-
-    Overlays live at ``<data_dir>/<board_id>/agent_overlays/audit.md``
-    and let an operator inject repo-specific guidance into the audit
-    prompt without touching the shipped YAML or the repo's own code.
-    """
-    if not board_id:
-        return ""
-    path = settings.data_dir / board_id / "agent_overlays" / "audit.md"
-    if not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8").strip()
-
-
 def run_audit_agent(
     *,
     settings: Settings,
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
-    board_id: str = "",
 ) -> AuditResult:
     """Run the meta-audit pass.
 
@@ -127,10 +111,10 @@ def run_audit_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), make_jscpd_tool(repo_dir), *ro]
 
-    overlay = _load_overlay(settings, board_id)
-    system_prompt = definition.system_prompt
-    if overlay:
-        system_prompt = f"{system_prompt}\n\n{overlay}\n"
+    from .overlays import apply_overlay, load_overlay
+    system_prompt = apply_overlay(
+        definition.system_prompt, load_overlay(repo_dir, "audit"),
+    )
 
     agent = build_agent_from_definition(
         settings, definition, tools=tools,
