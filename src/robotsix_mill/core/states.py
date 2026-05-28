@@ -78,7 +78,11 @@ class State(StrEnum):
 #: state -> the set of states it may transition to (the "happy path"
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {
-    State.DRAFT: {State.READY, State.HUMAN_ISSUE_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED, State.DONE, State.AWAITING_USER_REPLY},
+    # DRAFT → EPIC_OPEN is the refine-stage promote_to_epic outcome:
+    # refine decided the work is too varied to spec in one pass, flips
+    # ``kind=epic`` via ``service.promote_to_epic`` and emits this
+    # transition so the worker writes the canonical state event.
+    State.DRAFT: {State.READY, State.HUMAN_ISSUE_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED, State.DONE, State.AWAITING_USER_REPLY, State.EPIC_OPEN},
     # human_issue_approval is a human-wait state; the human approves → ready,
     # rejects back to draft with comments, or escalates → blocked/failed.
     State.HUMAN_ISSUE_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},

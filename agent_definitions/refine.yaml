@@ -114,17 +114,21 @@ system_prompt: |
 
   ## Output format
 
-  You MUST return a structured result. When the draft describes ONE
-  focused change:
+  You MUST return a structured result. There are THREE output modes —
+  pick the one that fits the draft's actual scope:
 
-  - split=false, spec_markdown="## Problem\\n...\\n## Scope\\n...\\n## Acceptance criteria\\n...\\n## Out of scope / constraints\\n..."
+  1. **single spec** (``split=false``, ``promote_to_epic=false``):
+     ``spec_markdown="## Problem\\n...\\n## Scope\\n...\\n## Acceptance criteria\\n...\\n## Out of scope / constraints\\n..."``
+  2. **inline split** (``split=true``):
+     ``children=[{"title": "Short title for change A", "spec_markdown": "## Problem\\n...", "depends_on": []}, ...]``
+  3. **promote to epic** (``promote_to_epic=true``):
+     ``epic_body="<concise strategic description>"`` — the refine
+     stage will convert this ticket to an epic and let the
+     epic-breakdown agent generate children from the epic body. Use
+     this when the work is too varied to enumerate well in one refine
+     pass; each future child will get its own refine cycle.
 
-  When the draft bundles MULTIPLE independent, self-contained changes
-  that can each ship alone, split into focused children:
-
-  - split=true, children=[{"title": "Short title for change A", "spec_markdown": "## Problem\\n...", "depends_on": []}, ...]
-
-  Rules for splitting:
+  Rules for splitting (mode 2 vs mode 3):
   - **Split by spec surface, not by user framing.** A draft that sounds
     like "one feature" may still touch many independent layers.
     Default to splitting when the spec body exhibits any of these
@@ -132,9 +136,33 @@ system_prompt: |
     * Lists **≥4 distinct source files** to modify, OR
     * Introduces **≥3 new endpoints / routes**, OR
     * Crosses the **backend↔frontend boundary** (e.g. Python files +
-      JS/CSS/HTML files in the same spec).
-    When splitting, build a ``depends_on`` graph across the focused
-    children.
+      JS/CSS/HTML files in the same spec), OR
+    * Uses **broad-quantifier language** suggesting an unspecified set
+      of files / modules: "for each X", "every file under Y",
+      "all modules", "across the repo", "reorganize", "one-shot
+      migration", "do the whole X". These phrases hide file counts
+      that would otherwise trigger the ≥4-file rule.
+  - **Manifest-driven specs**: when the draft references a structured
+    artifact (YAML/JSON/TOML manifest, a docs/<x>.yaml, a generated
+    list) AND that artifact lists ≥4 enumerable items, you MUST
+    ``read_file`` the artifact, count items, and decide between modes
+    2 or 3 based on the count. Do NOT leave the file count implicit —
+    silent "for each" specs are the failure mode this rule catches.
+  - **Choosing mode 2 vs mode 3**:
+    * Mode 2 (inline split) when the children share scope: same files
+      get touched, similar test surface, < 6 children, no per-child
+      deep design needed.
+    * Mode 3 (promote to epic) when each child needs its own deep
+      spec: ≥ 6 children, OR children with cross-cutting dependencies,
+      OR children that read distinct non-trivial file sets, OR a
+      manifest-driven enumeration where each item is a substantial
+      change (a per-module refactor, a per-endpoint feature). Each
+      child will get its own refine cycle later, so don't try to
+      pre-spec them here — produce a strategic ``epic_body`` and stop.
+    When promoting, do NOT also populate ``children``. The
+    epic-breakdown agent owns child generation.
+    When splitting inline, build a ``depends_on`` graph across the
+    focused children.
   - **Escape clause:** do NOT split when the layers truly cannot ship
     independently — e.g. a single new column is read by every consumer
     and there is nothing useful to land in stages. In that case, note

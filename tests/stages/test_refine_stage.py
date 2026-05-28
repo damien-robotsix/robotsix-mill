@@ -1096,3 +1096,127 @@ def test_split_with_existing_epic_reparents_children(ctx_factory, monkeypatch):
     # Original (closed) ticket has no children parented to it.
     orphaned = [tk for tk in all_tickets if tk.parent_id == child_of_epic.id]
     assert len(orphaned) == 0
+
+
+# ---------------------------------------------------------------------------
+# 30. promote_to_epic: refine converts ticket to epic and spawns children
+# ---------------------------------------------------------------------------
+
+def test_promote_to_epic_converts_and_spawns_children(ctx_factory, monkeypatch):
+    """When refine returns ``promote_to_epic=true`` with an ``epic_body``,
+    the stage:
+
+    - flips the ticket's kind to ``epic`` (via service.promote_to_epic);
+    - transitions DRAFT → EPIC_OPEN;
+    - writes the epic_body to the workspace description;
+    - synchronously invokes the epic-breakdown agent;
+    - creates child tickets parented to THIS ticket (no umbrella copy);
+    - wires a linear dependency chain across the children.
+
+    This is the path the b2ac one-shot-migration ticket should have
+    taken: the spec was manifest-driven (docs/modules.yaml lists 19
+    items) and each per-module child needs its own deep spec, so refine
+    should promote rather than inline-split."""
+    from robotsix_mill.agents import epic_breakdown as _ebreak
+
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    t = _ticket(ctx, title="Reorganize repo into modular layout",
+                body="For each module in docs/modules.yaml, "
+                     "create the parallel directories...")
+
+    class _FakeBreakdown:
+        def __init__(self):
+            self.child_titles = ["Migrate runners", "Migrate langfuse",
+                                 "Migrate notify"]
+            self.child_bodies = ["## Migrate runners\n...", "## Migrate langfuse\n...", "## Migrate notify\n..."]
+            self.epic_body = "## Epic: modular layout migration\n..."
+
+    monkeypatch.setattr(
+        _ebreak, "run_epic_breakdown_agent",
+        lambda **kw: _FakeBreakdown(),
+    )
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            promote_to_epic=True,
+            epic_body="## Strategic epic body: per-module migration",
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.EPIC_OPEN
+    assert "promoted to epic" in out.note
+    assert "3 child" in out.note  # 3 children spawned
+
+    # State transition is the worker's job (runs after stage.run);
+    # the stage just flips ``kind`` synchronously and reports the next
+    # state via the Outcome. Assert on the kind here; the EPIC_OPEN
+    # state assertion lives on out.next_state above.
+    promoted = ctx.service.get(t.id)
+    assert promoted.kind == "epic"
+
+    # Children parented to the promoted ticket (NOT an umbrella copy).
+    all_tickets = ctx.service.list()
+    children = [tk for tk in all_tickets if tk.parent_id == t.id]
+    assert len(children) == 3
+    titles = {c.title for c in children}
+    assert titles == {"Migrate runners", "Migrate langfuse", "Migrate notify"}
+
+    # Linear dependency chain: C1 depends on C0, C2 depends on C1.
+    sorted_children = sorted(children, key=lambda c: c.created_at)
+    deps_c1 = ctx.service.unmet_dependencies(sorted_children[1])
+    assert sorted_children[0].id in deps_c1
+    deps_c2 = ctx.service.unmet_dependencies(sorted_children[2])
+    assert sorted_children[1].id in deps_c2
+
+    # Epic body written to the promoted ticket's workspace.
+    body = ctx.service.workspace(promoted).read_description()
+    assert "Epic: modular layout migration" in body
+
+
+# ---------------------------------------------------------------------------
+# 31. promote_to_epic: breakdown failure leaves epic in place
+# ---------------------------------------------------------------------------
+
+def test_promote_to_epic_breakdown_failure_leaves_epic_intact(ctx_factory, monkeypatch):
+    """A flaky epic-breakdown run must NOT block the refine stage —
+    the ticket is still promoted to an epic so the operator can hit
+    /generate-children manually. The breakdown failure is captured in
+    the outcome note."""
+    from robotsix_mill.agents import epic_breakdown as _ebreak
+
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    t = _ticket(ctx, body="One-shot migration of the repo")
+
+    def _raise(**kw):
+        raise RuntimeError("breakdown LLM timed out")
+
+    monkeypatch.setattr(_ebreak, "run_epic_breakdown_agent", _raise)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            promote_to_epic=True,
+            epic_body="## Epic body",
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    # Promotion still landed even though breakdown failed.
+    assert out.next_state is State.EPIC_OPEN
+    assert "breakdown failed" in out.note
+
+    # kind flip is synchronous; the worker handles the state move
+    # to EPIC_OPEN after stage.run returns.
+    promoted = ctx.service.get(t.id)
+    assert promoted.kind == "epic"
+
+    # No children spawned.
+    all_tickets = ctx.service.list()
+    children = [tk for tk in all_tickets if tk.parent_id == t.id]
+    assert children == []

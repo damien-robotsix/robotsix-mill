@@ -714,6 +714,28 @@ class TicketService:
             s.add(ticket)
             s.commit()
 
+    def promote_to_epic(self, ticket_id: str) -> None:
+        """Flip a task ticket's kind to ``epic`` without changing state.
+
+        Used by the refine stage's ``promote_to_epic`` path: refine flips
+        the kind here, then the stage returns ``Outcome(EPIC_OPEN, …)``
+        and the worker performs the actual state transition through the
+        standard ``transition()`` path (which writes the state event).
+
+        No-op for tickets already kind=epic. Raises ``KeyError`` for
+        unknown ids.
+        """
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            if ticket.kind == "epic":
+                return
+            ticket.kind = "epic"
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def set_review_rounds(self, ticket_id: str, value: int) -> None:
         """Set the ``review_rounds`` counter on *ticket_id*."""
         with db.session(self.settings, self._board_for(ticket_id)) as s:

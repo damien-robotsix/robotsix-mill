@@ -514,6 +514,75 @@ class RefineStage(Stage):
                 encoding="utf-8",
             )
 
+        # --- promote-to-epic path ---
+        # When refine decides the spec is too varied for one pass
+        # (manifest-driven, ≥6 children, per-item deep specs needed),
+        # it returns promote_to_epic=True. The stage converts the
+        # ticket to an epic, writes the strategic epic_body to the
+        # workspace description, and synchronously invokes
+        # epic-breakdown to spawn the children. After that the epic
+        # sits in EPIC_OPEN — its children flow through refine
+        # individually on their own cycles.
+        if result.promote_to_epic and not result.split:
+            from ..agents.epic_breakdown import run_epic_breakdown_agent
+
+            epic_body = (
+                (result.epic_body or result.spec_markdown or "").strip()
+            )
+            if not epic_body:
+                log.warning(
+                    "%s: promote_to_epic but no epic_body — "
+                    "falling back to original draft",
+                    ticket.id,
+                )
+                epic_body = draft or ticket.title
+            new_hash = ws.write_description(epic_body)
+            ctx.service.set_content_hash(ticket.id, new_hash)
+            ctx.service.promote_to_epic(ticket.id)
+            try:
+                breakdown = run_epic_breakdown_agent(
+                    settings=s,
+                    epic_title=ticket.title,
+                    epic_description=epic_body,
+                )
+                created_ids: list[str] = []
+                for child_title, child_body in zip(
+                    breakdown.child_titles, breakdown.child_bodies,
+                ):
+                    child = ctx.service.create(
+                        title=child_title,
+                        description=child_body,
+                        kind="task",
+                        parent_id=ticket.id,
+                    )
+                    created_ids.append(child.id)
+                # Linear dependency chain (C0 → C1 → C2 → …) — matches
+                # the /generate-children route's default behaviour.
+                for i in range(1, len(created_ids)):
+                    ctx.service.set_depends_on(
+                        created_ids[i], [created_ids[i - 1]],
+                    )
+                # Apply the breakdown's revised epic body if any.
+                if breakdown.epic_body and breakdown.epic_body.strip():
+                    revised_hash = ws.write_description(
+                        breakdown.epic_body.strip(),
+                    )
+                    ctx.service.set_content_hash(ticket.id, revised_hash)
+                note = (
+                    f"promoted to epic; spawned {len(created_ids)} child(ren)"
+                )
+            except Exception:
+                log.exception(
+                    "%s: epic-breakdown after promote_to_epic failed — "
+                    "epic body is in place, children left for "
+                    "/generate-children", ticket.id,
+                )
+                note = (
+                    "promoted to epic; breakdown failed — "
+                    "use /generate-children to retry"
+                )
+            return Outcome(State.EPIC_OPEN, note)
+
         # --- normal single-scope path ---
         if not result.split:
             spec = result.spec_markdown or ""

@@ -84,6 +84,15 @@ class RefineResult(BaseModel):
     updated_memory: str = ""
     title: str | None = None
     epic_body: str | None = None
+    # When True, the refine stage converts THIS ticket to kind="epic"
+    # in state EPIC_OPEN and triggers the epic-breakdown agent. The
+    # refined spec ships as the epic body via ``epic_body``. Mutually
+    # exclusive with ``split=true``; refine MUST NOT populate
+    # ``children`` when promoting — epic-breakdown owns child
+    # generation. Use for ≥ 6-child enumerations, manifest-driven
+    # specs where each item is a substantial change, or anything
+    # where children need their own deep refine cycles.
+    promote_to_epic: bool = False
     file_map: list[FileMapEntry] | None = None
     reference_files: list[str] = Field(
         default_factory=list,
