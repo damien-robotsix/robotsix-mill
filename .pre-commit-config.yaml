@@ -26,3 +26,11 @@ repos:
     hooks:
       - id: hadolint-docker
         args: [--failure-threshold, warning]
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.2
+    hooks:
+      - id: check-jsonschema
+        name: Validate module taxonomy
+        args: ["--schemafile", "docs/modules.schema.yaml"]
+        files: ^docs/modules\.ya?ml$
+        types_or: [yaml, json]
