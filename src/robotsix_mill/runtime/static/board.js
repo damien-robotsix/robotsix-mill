@@ -204,7 +204,7 @@ async function refresh(){
  // naturally; replace only the inner content of cards whose visible
  // signature changed. Avoids the scroll-snap and flicker that the
  // previous wholesale innerHTML rebuild caused.
- const visibleStates=ST.filter(s=>(by[s]&&by[s].length>0||s==="awaiting_user_reply")&&(s!=="closed"&&s!=="epic_closed"||wantClosed));
+ const visibleStates=ST.filter(s=>by[s]&&by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed));
  const visibleSet=new Set(visibleStates);
  // Drop columns whose state has no tickets (or is hidden when
  // wantClosed=false). Their .cards' scroll state is gone, but the
@@ -282,10 +282,6 @@ function syncCards(col,tickets,repoId,colState){
   if(card!==expectedNext) cards.insertBefore(card,expectedNext);
   prevCard=card;
  });
- // Always-visible "Awaiting Reply" column — show empty state when no tickets are paused.
- if(col.dataset.state==="awaiting_user_reply" && tickets.length===0){
-  cards.innerHTML=`<div class="muted" style="padding:12px;font-size:11px;text-align:center">No tickets waiting on you</div>`;
- }
 }
 async function approve(id){
  const r=await jpost("/tickets/"+id+"/approve");
