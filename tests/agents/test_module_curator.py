@@ -1,9 +1,12 @@
 """Tests for the module-curator agent and runner."""
 
+import re
+
 import pytest
 
 from robotsix_mill.agents import module_curator as mc_agent
 from robotsix_mill.module_curator_runner import run_module_curator_pass, ModuleCuratorPassResult
+from robotsix_mill.pass_runner import _GAP_ID_RE
 
 
 # --- Agent tests ---
@@ -71,3 +74,13 @@ def test_runner_stub_exists():
     """The runner stub should be callable with correct types."""
     assert callable(run_module_curator_pass)
     assert issubclass(ModuleCuratorPassResult, object)
+
+
+def test_gap_id_re_matches_module_curator():
+    """The _GAP_ID_RE must match module_curator markers so de-duplication works."""
+    marker = "<!-- module_curator-gap-id: unclassified_src_foo -->"
+    matches = _GAP_ID_RE.findall(marker)
+    assert len(matches) == 1
+    label, gap_id = matches[0]
+    assert label == "module_curator"
+    assert gap_id == "unclassified_src_foo"

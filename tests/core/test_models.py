@@ -45,8 +45,28 @@ def test_now_returns_aware_utc_datetime():
 
 
 def test_sourcekind_member_count():
-    """SourceKind must have exactly 17 members."""
-    assert len(SourceKind) == 17
+    """SourceKind must contain the expected set of members."""
+    expected = {
+        "USER",
+        "RETROSPECT",
+        "AUDIT",
+        "SURVEY",
+        "AGENT",
+        "CI",
+        "HEALTH",
+        "CONFIG_SYNC",
+        "TEST_GAP",
+        "AGENT_CHECK",
+        "BC_CHECK",
+        "COST_RECONCILIATION",
+        "COMPLETENESS_CHECK",
+        "COPY_PASTE",
+        "TRACE_HEALTH",
+        "TRACE_REVIEW",
+        "MODULE_CURATOR",
+        "ROADMAP_SYNC",
+    }
+    assert set(SourceKind.__members__) == expected
 
 
 def test_sourcekind_all_values_are_lowercase_strings():

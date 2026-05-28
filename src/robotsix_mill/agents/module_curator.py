@@ -68,7 +68,7 @@ def run_module_curator_agent(
 
         ro = [
             t for t in build_fs_tools(repo_dir, settings)
-            if t.__name__ in ("read_file", "list_dir")
+            if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
