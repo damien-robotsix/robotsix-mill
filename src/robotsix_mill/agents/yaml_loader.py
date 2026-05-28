@@ -35,6 +35,7 @@ class AgentDefinition(BaseModel):
     system_prompt: str
     tools: list[str] = []
     web: bool = False
+    library_knowledge: bool = False
     report_issue: bool = True
     read_ticket: bool = False
     reply_to_thread: bool = True

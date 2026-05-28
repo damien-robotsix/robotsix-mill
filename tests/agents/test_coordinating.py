@@ -167,7 +167,8 @@ class TestRunCoordinator:
 
         def _fake_build_agent(
             settings, *, system_prompt, output_type=None,
-            tools=None, web=False, report_issue=True,
+            tools=None, web=False, library_knowledge=False,
+            report_issue=True,
             read_ticket=False, reply_to_thread=True,
             close_thread=True, ask_user=True,
             model_name=None, name=None, retries=2,

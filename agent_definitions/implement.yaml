@@ -19,6 +19,9 @@ tools:
   - run_command
 
 web: true
+# Cached library knowledge sub-agent. Prefer over raw web_research
+# for library API questions; the cache amortises across tickets.
+library_knowledge: true
 report_issue: true
 output_type: ImplementResult
 retries: 2

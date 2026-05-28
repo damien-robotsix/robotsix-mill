@@ -140,6 +140,24 @@ class Settings(BaseSettings):
     audit_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="MILL_AUDIT_MODEL"
     )
+    # Model for the library-knowledge curator sub-agent — a cheap call
+    # that answers from a cached per-library knowledge file and only
+    # falls back to web_research when the file is stale or doesn't
+    # cover the question.
+    library_knowledge_model: str = Field(
+        default="deepseek/deepseek-v4-flash",
+        alias="MILL_LIBRARY_KNOWLEDGE_MODEL",
+    )
+    # How long the cached library knowledge file is considered fresh
+    # (days). A consult on an older file triggers a web_research
+    # refresh before answering.
+    library_knowledge_stale_days: int = Field(
+        default=30, alias="MILL_LIBRARY_KNOWLEDGE_STALE_DAYS",
+    )
+    # Bound on the curator sub-agent's tool requests per consultation.
+    consult_library_request_limit: int = Field(
+        default=5, alias="MILL_CONSULT_LIBRARY_REQUEST_LIMIT",
+    )
     # Model for the pre-refine dedup/already-done check — a cheap call
     # that short-circuits duplicate drafts before the expensive refiner.
     dedup_model: str = Field(
