@@ -188,6 +188,7 @@ def run_trace_inspector(
     trace_data: str,
     repo_dir: Path | None = None,
     memory: str = "",
+    model_name: str | None = None,
 ) -> TraceInspectResult:
     """Analyse a single trace's full observation tree and return
     structured findings with proposed solutions.
@@ -253,7 +254,7 @@ def run_trace_inspector(
 
     client = timeout_http_client(settings)
     model = CostInstrumentedOpenRouterModel(
-        settings.trace_inspector_model,
+        model_name or settings.trace_inspector_model,
         provider=OpenRouterProvider(
             api_key=get_secrets().openrouter_api_key,
             http_client=client,

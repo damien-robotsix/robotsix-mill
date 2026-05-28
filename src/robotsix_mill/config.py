@@ -545,6 +545,29 @@ class Settings(BaseSettings):
         default="deepseek/deepseek-v4-pro",
         alias="MILL_TRACE_INSPECTOR_MODEL",
     )
+    # Model used by the periodic trace-review runner — a cheap-by-design
+    # flash model so a 50-trace sweep doesn't burn the audit budget.
+    # The deeper Deep Review surface keeps the expensive
+    # trace_inspector_model for one-shot operator-driven inspection.
+    trace_review_model: str = Field(
+        default="deepseek/deepseek-v4-flash",
+        alias="MILL_TRACE_REVIEW_MODEL",
+    )
+    # Outlier thresholds for the deterministic trace-review classifier.
+    # A trace is flagged for LLM inspection when ANY hit.
+    trace_review_cost_threshold_usd: float = Field(
+        default=1.00, alias="MILL_TRACE_REVIEW_COST_USD",
+    )
+    trace_review_max_observations: int = Field(
+        default=200, alias="MILL_TRACE_REVIEW_MAX_OBS",
+    )
+    trace_review_max_repeated_tool: int = Field(
+        default=50, alias="MILL_TRACE_REVIEW_MAX_REPEATED_TOOL",
+    )
+    # First-run lookback window when no watermark exists yet (hours).
+    trace_review_initial_lookback_hours: int = Field(
+        default=24, alias="MILL_TRACE_REVIEW_INITIAL_LOOKBACK_HOURS",
+    )
     # Memory ledger for the trace inspector. Used only by the manual
     # Deep Review surface (the route path) — retrospect's deep-analysis
     # `trace_inspect` tool calls run_trace_inspector without a memory

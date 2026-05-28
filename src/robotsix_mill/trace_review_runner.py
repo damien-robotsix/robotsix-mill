@@ -1,0 +1,385 @@
+"""Trace-review runner — periodic sweep over recent Langfuse traces.
+
+Two-phase pipeline, designed to spend almost zero LLM tokens on healthy
+traces and to bound the deep-inspection cost to the clearly-suspicious
+ones:
+
+    Phase 1 (deterministic):
+        Walk every trace produced since the last run. Compute a set of
+        boolean flags from the trace's own observations / cost / usage
+        — no model calls. A trace with any flag set is forwarded to
+        phase 2; everything else is dropped.
+
+    Phase 2 (LLM):
+        For each flagged trace, fetch the full observation tree and
+        run the existing ``trace_inspector`` agent on a CHEAP (flash)
+        model. Each returned ``TraceFinding`` becomes a draft ticket
+        (deduplicated against still-open ``source=trace-review``
+        tickets so a recurring symptom doesn't spawn a thousand drafts).
+
+A monotonic ``last_run_at`` watermark is persisted per repo at
+``<data_dir>/<board>/trace_review_state.json``. Subsequent runs only
+scan traces created at or after that watermark; the first run uses
+``trace_review_initial_lookback_hours``.
+
+Seam: tests monkeypatch ``run_trace_inspector`` from
+``robotsix_mill.agents.trace_inspector`` AND
+``list_all_traces_since`` / ``fetch_trace_detail`` from
+``robotsix_mill.langfuse_client``.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from sqlmodel import select
+
+from .config import RepoConfig, Settings
+from .core.db import session as db_session
+from .core.models import SourceKind, Ticket
+from .core.service import TicketService
+from .core.states import State
+
+log = logging.getLogger("robotsix_mill.trace_review")
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 — deterministic classifier
+# ---------------------------------------------------------------------------
+
+_TOOL_ERR_PATTERNS = re.compile(
+    r"(error:|refused:|Traceback \(most recent call last\)|"
+    r"UsageLimitExceeded|UnexpectedModelBehavior|"
+    r"non-zero exit status)",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class _TraceFlags:
+    """Boolean flags + counts a single trace produced in phase 1."""
+
+    trace_id: str
+    trace_name: str
+    session_id: str
+    total_cost: float
+    flags: list[str] = field(default_factory=list)
+
+    @property
+    def flagged(self) -> bool:
+        return bool(self.flags)
+
+
+def _classify_trace(
+    trace: dict, settings: Settings, observations: list[dict] | None = None,
+) -> _TraceFlags:
+    """Compute phase-1 flags from *trace* + its *observations*.
+
+    *trace* is the summary dict from ``/api/public/traces`` (no
+    observations). *observations* is the optional full observation tree
+    from ``/api/public/traces/<id>``; when ``None`` only summary-level
+    flags fire (cost outlier). Observation-level flags require the
+    second fetch — the orchestrator pulls detail only for traces that
+    summary-level flags already marked, OR for ones it wants to scan
+    proactively (here: all of them; the trace-list endpoint doesn't
+    return observations).
+    """
+    flags: list[str] = []
+    total_cost = float(trace.get("totalCost") or 0.0)
+    if total_cost > settings.trace_review_cost_threshold_usd:
+        flags.append(f"cost_outlier (${total_cost:.2f})")
+
+    if observations is None:
+        return _TraceFlags(
+            trace_id=trace.get("id", ""),
+            trace_name=trace.get("name") or "(unnamed)",
+            session_id=trace.get("sessionId") or "",
+            total_cost=total_cost,
+            flags=flags,
+        )
+
+    # Observation-level flags
+    if len(observations) > settings.trace_review_max_observations:
+        flags.append(f"observation_storm ({len(observations)} obs)")
+
+    # Per-tool call count + tool-error scan in a single pass.
+    tool_calls: dict[str, int] = {}
+    tool_errors = 0
+    rejected_generations = 0
+    ask_user_calls = 0
+    explore_runs = 0
+    for o in observations:
+        name = o.get("name") or ""
+
+        # Count tool invocations.
+        if name and not name.startswith("chat ") and name != "":
+            tool_calls[name] = tool_calls.get(name, 0) + 1
+
+        if name == "explore run":
+            explore_runs += 1
+        if name == "ask_user":
+            ask_user_calls += 1
+
+        # Tool errors — check the tool's output / status for a marker.
+        out = o.get("output")
+        out_s = out if isinstance(out, str) else (
+            json.dumps(out, default=str) if out is not None else ""
+        )
+        status_msg = (o.get("statusMessage") or "")
+        if name and not name.startswith("chat "):
+            if (
+                _TOOL_ERR_PATTERNS.search(out_s)
+                or _TOOL_ERR_PATTERNS.search(status_msg)
+            ):
+                tool_errors += 1
+
+        # Rejected-generation marker from tracing._check_rejected_generation.
+        level = (o.get("level") or "").upper()
+        if level == "WARNING" and "pydantic-ai likely" in status_msg:
+            rejected_generations += 1
+
+    if tool_errors:
+        flags.append(f"tool_errors ({tool_errors})")
+    if rejected_generations:
+        flags.append(f"rejected_generations ({rejected_generations})")
+    if explore_runs > 5:
+        flags.append(f"explore_storm ({explore_runs} explore runs)")
+    if ask_user_calls > 1:
+        # Multiple pauses on the same trace is almost always a bug
+        # (the agent didn't actually solve the original ambiguity).
+        flags.append(f"ask_user_loop ({ask_user_calls} pauses)")
+    for tool_name, count in tool_calls.items():
+        if count > settings.trace_review_max_repeated_tool:
+            flags.append(f"repeated_tool {tool_name} ({count})")
+            break  # one is enough to trigger
+
+    return _TraceFlags(
+        trace_id=trace.get("id", ""),
+        trace_name=trace.get("name") or "(unnamed)",
+        session_id=trace.get("sessionId") or "",
+        total_cost=total_cost,
+        flags=flags,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Watermark persistence
+# ---------------------------------------------------------------------------
+
+
+def _state_path(settings: Settings, board_id: str) -> Path:
+    if board_id:
+        return settings.data_dir / board_id / "trace_review_state.json"
+    return settings.data_dir / "trace_review_state.json"
+
+
+def _load_watermark(settings: Settings, board_id: str) -> datetime | None:
+    p = _state_path(settings, board_id)
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        ts = data.get("last_run_at")
+        if not ts:
+            return None
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:  # noqa: BLE001 — corrupted state file = behave as no watermark
+        log.warning("trace_review_state.json unreadable at %s — ignoring", p)
+        return None
+
+
+def _save_watermark(settings: Settings, board_id: str, when: datetime) -> None:
+    p = _state_path(settings, board_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        json.dumps({"last_run_at": when.isoformat()}, indent=2),
+        encoding="utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ticket dedup
+# ---------------------------------------------------------------------------
+
+
+def _normalize(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", s.casefold()).strip()
+
+
+def _existing_open_titles(service: TicketService, board_id: str) -> set[str]:
+    """Return the set of normalized titles of still-open
+    ``source=trace-review`` tickets on *service*'s board, so we don't
+    re-file the same finding from a second flagged trace."""
+    out: set[str] = set()
+    settings = service.settings
+    with db_session(settings, board_id) as s:
+        stmt = (
+            select(Ticket)
+            .where(Ticket.source == SourceKind.TRACE_REVIEW)
+            .where(Ticket.state != State.CLOSED)
+        )
+        if board_id:
+            stmt = stmt.where(Ticket.board_id == board_id)
+        for t in s.exec(stmt).all():
+            out.add(_normalize(t.title))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Runner
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TraceReviewPassResult:
+    """Summary of one trace-review pass."""
+
+    drafts_created: list[dict] = field(default_factory=list)
+    traces_scanned: int = 0
+    traces_flagged: int = 0
+    window_start: str = ""
+    window_end: str = ""
+    summary: str = ""
+    session_id: str = ""
+
+
+def run_trace_review_pass(
+    session_id: str = "",
+    repo_config: RepoConfig | None = None,
+) -> TraceReviewPassResult:
+    """Execute one trace-review pass for *repo_config*'s board.
+
+    Returns a :class:`TraceReviewPassResult` describing the window
+    scanned, the number of traces scanned / flagged, and any drafts
+    filed. Never raises — best-effort throughout.
+    """
+    settings = Settings()
+    board_id = repo_config.board_id if repo_config else ""
+    service = TicketService(settings, board_id=board_id)
+    from .langfuse_client import list_all_traces_since, fetch_trace_detail
+    from .agents.trace_inspector import run_trace_inspector
+
+    now = datetime.now(timezone.utc)
+    watermark = _load_watermark(settings, board_id)
+    if watermark is None:
+        watermark = now - timedelta(
+            hours=settings.trace_review_initial_lookback_hours,
+        )
+    window_start = watermark.isoformat()
+    window_end = now.isoformat()
+
+    traces = list_all_traces_since(
+        settings, watermark.isoformat(), repo_config=repo_config,
+    )
+    log.info(
+        "trace-review: %d traces in window %s → %s for %s",
+        len(traces), window_start, window_end,
+        repo_config.repo_id if repo_config else "(default)",
+    )
+
+    drafts: list[dict] = []
+    flagged_count = 0
+    # Snapshot open trace-review titles ONCE up front; we'll grow the
+    # set as we file new drafts to avoid intra-run duplicates too.
+    seen_titles = _existing_open_titles(service, board_id)
+
+    for trace in traces:
+        trace_id = trace.get("id")
+        if not trace_id:
+            continue
+        # Phase 1: deterministic flags. We need the observation tree
+        # for most flags, so fetch detail eagerly. Skip very recent
+        # (potentially still-streaming) traces.
+        detail = fetch_trace_detail(settings, trace_id, repo_config=repo_config)
+        observations = (detail or {}).get("observations") if detail else None
+        flags = _classify_trace(trace, settings, observations=observations)
+        if not flags.flagged:
+            continue
+        flagged_count += 1
+        log.info(
+            "trace-review: trace %s flagged (%s) — sending to inspector",
+            trace_id[:8], ", ".join(flags.flags),
+        )
+
+        # Phase 2: LLM inspection on the cheap model.
+        result = run_trace_inspector(
+            settings=settings,
+            trace_data=json.dumps(detail or trace, default=str),
+            repo_dir=None,
+            memory="",
+            model_name=settings.trace_review_model,
+        )
+        if result.error:
+            log.warning(
+                "trace-review: inspector errored on %s: %s",
+                trace_id[:8], result.error,
+            )
+            continue
+
+        # Each finding -> one draft. Dedup against already-open titles.
+        for finding in result.findings:
+            title = (
+                f"trace-review: {finding.category} — {finding.symptom[:90]}"
+            )
+            norm = _normalize(title)
+            if norm in seen_titles:
+                log.debug(
+                    "trace-review: skipping duplicate finding %r", title,
+                )
+                continue
+            seen_titles.add(norm)
+            body = (
+                f"_Filed by the periodic trace-review pass.  "
+                f"Source trace: `{trace_id}` "
+                f"(session `{flags.session_id or '(no session)'}`, "
+                f"name `{flags.trace_name}`, total cost "
+                f"${flags.total_cost:.4f})._\n\n"
+                f"_Deterministic flags that surfaced this trace: "
+                f"{', '.join(flags.flags)}._\n\n"
+                "## Symptom\n\n"
+                f"{finding.symptom}\n\n"
+                "## Root cause (inspector hypothesis)\n\n"
+                f"{finding.root_cause}\n\n"
+                "## Proposed solution\n\n"
+                f"{finding.proposed_solution}\n\n"
+                f"_Inspector confidence: **{finding.confidence}**._\n"
+            )
+            try:
+                ticket = service.create(
+                    title=title, description=body,
+                    source=SourceKind.TRACE_REVIEW,
+                    origin_session=session_id or None,
+                )
+                drafts.append({"id": ticket.id, "title": ticket.title})
+            except Exception:  # noqa: BLE001
+                log.exception(
+                    "trace-review: failed to create draft for %r", title,
+                )
+
+    # Persist watermark so the next run picks up where this one left off.
+    # Use ``now`` (not the latest trace's createdAt) so we don't re-scan
+    # if no traces arrived since.
+    try:
+        _save_watermark(settings, board_id, now)
+    except Exception:  # noqa: BLE001
+        log.exception("trace-review: failed to persist watermark")
+
+    summary = (
+        f"scanned={len(traces)} flagged={flagged_count} "
+        f"drafts={len(drafts)}"
+    )
+    log.info("trace-review pass done: %s", summary)
+    return TraceReviewPassResult(
+        drafts_created=drafts,
+        traces_scanned=len(traces),
+        traces_flagged=flagged_count,
+        window_start=window_start,
+        window_end=window_end,
+        summary=summary,
+        session_id=session_id,
+    )

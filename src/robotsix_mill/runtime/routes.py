@@ -2034,6 +2034,52 @@ def env_sync_pass(
     return {"status": "started"}
 
 
+@router.post("/trace-review", status_code=202)
+def trace_review_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a trace-review pass in the BACKGROUND.
+
+    Scans every Langfuse trace since the last run, deterministically
+    flags outliers (cost, observation count, tool errors, repeated
+    pauses, rejected generations, explore storms), runs a cheap
+    flash-model inspector over the flagged subset, and files draft
+    tickets with proposed solutions.
+    """
+    from ..trace_review_runner import run_trace_review_pass
+    from ..runtime.tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "trace-review", repo_id=rc.repo_id if rc else "",
+                )
+                session_id = make_session_id("trace-review")
+                r = run_trace_review_pass(
+                    session_id=session_id, repo_config=rc,
+                )
+                summary = (
+                    r.summary or f"created {len(r.drafts_created)} drafts"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("trace-review pass done: %s", summary)
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("trace-review pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run, name="trace-review-pass", daemon=True,
+    ).start()
+    return {"status": "started"}
+
+
 @router.post("/roadmap-sync", status_code=202)
 def roadmap_sync_pass(
     repo_id: str | None = None,

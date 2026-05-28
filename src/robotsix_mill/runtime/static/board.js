@@ -933,6 +933,22 @@ async function runEnvSync(){
    btn.disabled=false; btn.textContent='Env Sync';
  }
 }
+async function runTraceReview(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const repoId=getRepoId();
+   const trUrl=repoId!=="all"?"/trace-review?repo_id="+encodeURIComponent(repoId):"/trace-review";
+   const r=await jpost(trUrl);
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Trace review started — scans Langfuse traces since the last run, flags outliers, runs the cheap flash inspector on flagged ones, files draft tickets per finding.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Trace review failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Trace Review';
+ }
+}
 async function runRoadmapSync(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';

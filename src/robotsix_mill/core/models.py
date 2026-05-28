@@ -35,6 +35,7 @@ class SourceKind(StrEnum):
     COST_RECONCILIATION = "cost_reconciliation"
     COMPLETENESS_CHECK = "completeness_check"
     TRACE_HEALTH = "trace-health"
+    TRACE_REVIEW = "trace-review"
     ROADMAP_SYNC = "roadmap_sync"
 
 
