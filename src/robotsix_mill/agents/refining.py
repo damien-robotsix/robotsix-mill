@@ -102,10 +102,21 @@ class RefineResult(BaseModel):
         default=None,
         exclude=True,
         description=(
-            "Raw JSON bytes from all_messages_json() — set by the seam "
-            "(run_refine_agent) after the agent call completes. Used by "
-            "the stage runner to detect ask_user pauses and to persist "
-            "the conversation for cheap resume."
+            "Raw JSON bytes from all_messages_json() — the FULL "
+            "transcript, persisted by the stage runner to "
+            "conversation_state.json so a subsequent resume can pass "
+            "it back as message_history."
+        ),
+    )
+    new_messages: bytes | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Raw JSON bytes from new_messages_json() — only messages "
+            "added during THIS run. Used by ``check_for_pause`` so the "
+            "ask_user sentinel from a PRIOR turn (still present in the "
+            "saved conversation_state after resume) doesn't re-trigger "
+            "the pause guard."
         ),
     )
 
@@ -464,6 +475,10 @@ def run_refine_agent(
             output.conversation_state = result.all_messages_json()
         except AttributeError:
             output.conversation_state = None
+        try:
+            output.new_messages = result.new_messages_json()
+        except AttributeError:
+            output.new_messages = None
     finally:
         _safe_close(agent)
     return output

@@ -447,7 +447,12 @@ class RefineStage(Stage):
             return Outcome(State.BLOCKED, str(e))
 
         # --- pause detection ---
-        if check_for_pause(result.conversation_state):
+        # check_for_pause looks at THIS run's new messages so an old
+        # ask_user sentinel from a prior turn (still in the saved
+        # transcript on resume) doesn't re-trigger. The full transcript
+        # (``conversation_state``) is still what gets persisted for
+        # resume.
+        if check_for_pause(result.new_messages):
             save_conversation_state(ws, result.conversation_state)
             ctx.service.transition(
                 ticket.id, State.AWAITING_USER_REPLY,

@@ -204,7 +204,7 @@ class ImplementStage(Stage):
                     )
 
             try:
-                summary, ref_files, updated_memory, conv_state = \
+                summary, ref_files, updated_memory, conv_state, new_msgs = \
                     coding.run_implement_agent(
                         settings=settings, repo_dir=repo_dir, spec=spec,
                         feedback=feedback, memory=memory_text,
@@ -234,7 +234,11 @@ class ImplementStage(Stage):
                 )
 
             # --- pause detection ---
-            if check_for_pause(conv_state):
+            # Inspect THIS run's new messages so the prior turn's
+            # ask_user sentinel (still present in the saved transcript
+            # after resume) doesn't re-trigger. Full transcript still
+            # goes to the resume artifact.
+            if check_for_pause(new_msgs):
                 save_conversation_state(ws, conv_state)
                 ImplementStage._finalize(
                     ctx, ticket, repo_dir, branch, summary or "paused",

@@ -19,39 +19,43 @@ log = logging.getLogger(__name__)
 _SENTINEL = "__ASK_USER_PAUSE__"
 
 
-def check_for_pause(conversation_state: bytes | None) -> bool:
-    """Return ``True`` when the run ended with an ``ask_user`` call.
+def check_for_pause(new_messages: bytes | None) -> bool:
+    """Return ``True`` when *new_messages* contains an ``ask_user``
+    tool-return carrying the pause sentinel.
 
-    Only the LAST message is inspected — the run halts immediately
-    after ``ask_user`` returns the sentinel, so the sentinel must be
-    in the most recent ``ToolReturn`` part. Scanning earlier messages
-    (the previous behaviour) re-triggered on the prior turn's
-    ``ask_user`` after a resume: the saved ``all_messages_json``
-    still contained the old sentinel, ``check_for_pause`` returned
-    ``True``, and the ticket was put right back into
-    ``AWAITING_USER_REPLY`` without the agent actually asking
-    anything new.
+    *new_messages* MUST be ``result.new_messages_json()`` — the bytes
+    pydantic-ai produces for messages added during the current run
+    only. Passing the full ``all_messages_json()`` re-triggers on the
+    prior turn's ``ask_user`` after a resume (the saved transcript
+    keeps the old sentinel forever) and was the source of the
+    "ticket re-pauses without a new question" bug fixed in 61a9709.
+
+    Scanning *every* tool-return in the new messages — not just the
+    last — is necessary because ``ask_user`` does NOT actually halt
+    the agent: pydantic-ai treats the sentinel as a normal tool
+    return and the model keeps running, often producing a structured
+    output before stopping. The final message is the model's
+    response, not the sentinel; only an earlier tool-return carries
+    the marker we look for.
 
     Args:
-        conversation_state: Raw JSON bytes from
-            :meth:`pydantic_ai.agent.Agent.all_messages_json`, or
-            ``None``.
+        new_messages: Raw JSON bytes from
+            :meth:`pydantic_ai.agent.AgentRunResult.new_messages_json`,
+            or ``None``.
     """
-    if conversation_state is None:
+    if new_messages is None:
         return False
     try:
-        messages = json.loads(conversation_state)
+        messages = json.loads(new_messages)
     except (json.JSONDecodeError, TypeError):
         log.warning("check_for_pause: invalid JSON, treating as no-pause")
         return False
-    if not messages:
-        return False
-    last = messages[-1]
-    for part in last.get("parts", []):
-        if part.get("part_kind") == "tool-return":
-            content = part.get("content", "")
-            if isinstance(content, str) and content == _SENTINEL:
-                return True
+    for msg in messages:
+        for part in msg.get("parts", []):
+            if part.get("part_kind") == "tool-return":
+                content = part.get("content", "")
+                if isinstance(content, str) and content == _SENTINEL:
+                    return True
     return False
 
 

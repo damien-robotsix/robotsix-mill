@@ -30,7 +30,13 @@ class ImplementResult(BaseModel):
     summary: str
     updated_memory: str = ""
     reference_files: list[str] = []
+    # Full transcript (``all_messages_json``) — saved by the stage
+    # runner for resume.
     conversation_state: bytes | None = None
+    # Only messages added during THIS run (``new_messages_json``) —
+    # used by ``check_for_pause`` so an old ask_user sentinel from a
+    # prior turn doesn't re-trigger after resume.
+    new_messages: bytes | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -339,6 +345,10 @@ def run_coordinator(
             output.conversation_state = result.all_messages_json()
         except AttributeError:
             output.conversation_state = None
+        try:
+            output.new_messages = result.new_messages_json()
+        except AttributeError:
+            output.new_messages = None
     finally:
         _safe_close(agent)
     return output

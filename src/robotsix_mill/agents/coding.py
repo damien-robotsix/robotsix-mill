@@ -53,9 +53,12 @@ def run_implement_agent(
     file_map: set[str] | None = None,
     board_id: str = "",
     language_instructions: str = "",
-) -> tuple[str, list[str], str, bytes | None]:
+) -> tuple[str, list[str], str, bytes | None, bytes | None]:
     """Run ONE coordinator pass for this ticket. Returns
-    ``(summary, reference_files, updated_memory, conversation_state)``.
+    ``(summary, reference_files, updated_memory, conversation_state,
+    new_messages)``. ``conversation_state`` is the full transcript
+    (for resume); ``new_messages`` is only what this run added (for
+    pause detection).
 
     ``feedback`` — set by the implement stage when it re-invokes after a
     failed test gate — is a distilled diagnosis of that failure,
@@ -137,6 +140,7 @@ def run_implement_agent(
         result.reference_files,
         result.updated_memory,
         result.conversation_state,
+        result.new_messages,
     )
 
 
