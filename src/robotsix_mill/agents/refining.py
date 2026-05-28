@@ -20,6 +20,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from ..config import Settings
+from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
@@ -173,7 +174,6 @@ def triage_refine(
         model_name=definition.model or settings.triage_model,
     )
 
-    from .prompt_blocks import section
     user_prompt = (
         section("title", title) + "\n"
         + section("draft", draft)
@@ -433,7 +433,6 @@ def run_refine_agent(
     )
 
     # Build user prompt: title, draft, memory, and optionally reviewer feedback.
-    from .prompt_blocks import section
     user_prompt = ""
     if epic_context:
         user_prompt += f"{epic_context}\n\n"
