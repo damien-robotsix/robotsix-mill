@@ -446,3 +446,90 @@ class TestCheckRejectedGeneration:
         span = _FakeSpan()
         _check_rejected_generation(span)
         assert "langfuse.observation.status_message" not in span._attributes
+
+
+# --- _ensure_tracing per-repo resilience tests -------------------------
+
+
+def test_ensure_tracing_recovers_after_no_global_creds(monkeypatch):
+    """A prior failed global check (_provider_ready=False, repo_config=None
+    with no global Secrets creds) must NOT block a subsequent per-repo
+    call with a valid RepoConfig."""
+    from robotsix_mill.config import RepoConfig
+
+    # Simulate a prior failed global check.
+    tracing._provider_ready = False
+
+    valid_config = RepoConfig(
+        repo_id="r", board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="pk-valid", langfuse_secret_key="sk-valid",
+    )
+
+    # Should NOT short-circuit — the per-repo config has valid creds.
+    tracing._ensure_tracing(repo_config=valid_config)
+    # If we got here without the short-circuit returning, that's the pass.
+    # _provider_ready should now be True (the heavy init succeeded… or
+    # at minimum not stay False, since we imported OTel). The test's
+    # _clear_env fixture ensures no real OTel modules are loaded before
+    # us, so the heavy import block runs and sets _provider_ready to True.
+    assert tracing._provider_ready is True, (
+        "per-repo call with valid creds must proceed past the gate "
+        "even after a prior global disable"
+    )
+
+
+def test_ensure_tracing_no_global_creds_does_not_poison_per_repo(monkeypatch):
+    """_ensure_tracing() with no repo_config and no global Langfuse creds
+    must NOT permanently set _provider_ready=False in a way that blocks
+    subsequent per-repo calls."""
+    from robotsix_mill.config import RepoConfig
+
+    # First call: no repo_config, global Secrets has no creds.
+    tracing._ensure_tracing()
+
+    # The global-disable flag must be set (since we have no per-repo config).
+    assert tracing._provider_ready is False
+
+    # Now a per-repo call with valid creds must NOT be blocked.
+    valid_config = RepoConfig(
+        repo_id="r", board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="pk-valid", langfuse_secret_key="sk-valid",
+    )
+    tracing._ensure_tracing(repo_config=valid_config)
+    assert tracing._provider_ready is True, (
+        "per-repo call with valid creds must proceed after a global "
+        "disable — the gate must not short-circuit when repo_config "
+        "is provided"
+    )
+
+
+def test_ensure_tracing_skips_repo_without_creds_without_poisoning(monkeypatch):
+    """_ensure_tracing(repo_config=no_creds_config) for a repo without
+    per-repo creds must skip silently WITHOUT setting _provider_ready
+    to False globally."""
+    from robotsix_mill.config import RepoConfig
+
+    no_creds_config = RepoConfig(
+        repo_id="r", board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="", langfuse_secret_key="",
+    )
+
+    tracing._ensure_tracing(repo_config=no_creds_config)
+
+    # _provider_ready must still be None (not poisoned to False) because
+    # the caller had a repo_config — it just had no creds.
+    assert tracing._provider_ready is None, (
+        "per-repo call with no creds must NOT poison the global flag"
+    )
+
+    # A subsequent call with valid creds must proceed.
+    valid_config = RepoConfig(
+        repo_id="r", board_id="b",
+        langfuse_project_name="p",
+        langfuse_public_key="pk-valid", langfuse_secret_key="sk-valid",
+    )
+    tracing._ensure_tracing(repo_config=valid_config)
+    assert tracing._provider_ready is True
