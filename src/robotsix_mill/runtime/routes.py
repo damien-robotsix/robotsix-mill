@@ -1994,14 +1994,14 @@ def survey_pass(
     return {"status": "started"}
 
 
-@router.post("/env-sync", status_code=202)
-def env_sync_pass(
+@router.post("/config-sync", status_code=202)
+def config_sync_pass(
     repo_id: str | None = None,
     request: Request = None,
     registry=Depends(get_run_registry),
 ) -> dict:
-    """Kick off an env-sync drift detection pass in the BACKGROUND."""
-    from ..env_sync_runner import run_env_sync_pass
+    """Kick off a config-sync drift detection pass in the BACKGROUND."""
+    from ..config_sync_runner import run_config_sync_pass
     from ..runtime.tracing import make_session_id
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
@@ -2010,9 +2010,9 @@ def env_sync_pass(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("env-sync", repo_id=rc.repo_id if rc else "")
-                session_id = make_session_id("env-sync")
-                r = run_env_sync_pass(session_id=session_id, repo_config=rc)
+                run_id = registry.start("config-sync", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("config-sync")
+                r = run_config_sync_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -2021,15 +2021,15 @@ def env_sync_pass(
                 )
                 registry.finish_ok(run_id, summary)
                 log.info(
-                    "env-sync pass done: %d draft(s)", len(r.drafts_created)
+                    "config-sync pass done: %d draft(s)", len(r.drafts_created)
                 )
             except Exception as e:
-                log.exception("env-sync pass failed")
+                log.exception("config-sync pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
     threading.Thread(
-        target=_run, name="env-sync-pass", daemon=True
+        target=_run, name="config-sync-pass", daemon=True
     ).start()
     return {"status": "started"}
 

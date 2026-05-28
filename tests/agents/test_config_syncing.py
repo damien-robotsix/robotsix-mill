@@ -1,11 +1,11 @@
-"""Tests for the env-sync agent."""
+"""Tests for the config-sync agent."""
 
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from robotsix_mill.agents import env_syncing
+from robotsix_mill.agents import config_syncing
 
 
 def _wrap_retry(fn, **kwargs):
@@ -16,9 +16,9 @@ def _wrap_retry(fn, **kwargs):
 # --- Agent tests ---
 
 
-def test_env_sync_system_prompt_covers_key_dimensions():
+def test_config_sync_system_prompt_covers_key_dimensions():
     """The config-sync agent prompt must cover key inspection dimensions."""
-    p = env_syncing.SYSTEM_PROMPT.lower()
+    p = config_syncing.SYSTEM_PROMPT.lower()
     for kw in (
         "config.py", "mill.defaults.yaml",
         "secrets.example.yaml", "repos.example.yaml",
@@ -35,9 +35,9 @@ def test_env_sync_system_prompt_covers_key_dimensions():
     assert "web" not in p or "no web" in p
 
 
-def test_env_sync_result_model():
-    """EnvSyncResult has the expected fields and defaults."""
-    result = env_syncing.EnvSyncResult(
+def test_config_sync_result_model():
+    """ConfigSyncResult has the expected fields and defaults."""
+    result = config_syncing.ConfigSyncResult(
         updated_memory="memory",
         draft_titles=["title1"],
         draft_bodies=["body1"],
@@ -49,18 +49,18 @@ def test_env_sync_result_model():
     assert len(result.gap_ids) == 1
 
     # Defaults
-    default_result = env_syncing.EnvSyncResult()
+    default_result = config_syncing.ConfigSyncResult()
     assert default_result.updated_memory == ""
     assert default_result.draft_titles == []
     assert default_result.draft_bodies == []
     assert default_result.gap_ids == []
 
 
-def test_env_sync_result_field_types():
-    """EnvSyncResult fields have correct types."""
-    result = env_syncing.EnvSyncResult(
-        updated_memory="# Env-Sync Memory\n",
-        draft_titles=["env drift: FOO missing from .env"],
+def test_config_sync_result_field_types():
+    """ConfigSyncResult fields have correct types."""
+    result = config_syncing.ConfigSyncResult(
+        updated_memory="# Config-Sync Memory\n",
+        draft_titles=["config drift: FOO missing from .env"],
         draft_bodies=["Alias FOO is in config.py..."],
         gap_ids=["foo_missing_env"],
     )
@@ -73,8 +73,8 @@ def test_env_sync_result_field_types():
     assert all(isinstance(g, str) for g in result.gap_ids)
 
 
-def test_run_env_sync_agent_web_false(monkeypatch):
-    """env-sync agent is constructed with web=False."""
+def test_run_config_sync_agent_web_false(monkeypatch):
+    """config-sync agent is constructed with web=False."""
     from robotsix_mill.config import Settings
 
     build_calls = []
@@ -83,28 +83,28 @@ def test_run_env_sync_agent_web_false(monkeypatch):
         build_calls.append(kwargs)
         from unittest.mock import MagicMock
         mock_agent = MagicMock()
-        mock_agent.run_sync.return_value = env_syncing.EnvSyncResult()
+        mock_agent.run_sync.return_value = config_syncing.ConfigSyncResult()
         return mock_agent
 
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
     monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
 
-    s = Settings(MILL_DATA_DIR="/tmp/test_env_sync")
-    env_syncing.run_env_sync_agent(settings=s, memory="")
+    s = Settings(MILL_DATA_DIR="/tmp/test_config_sync")
+    config_syncing.run_config_sync_agent(settings=s, memory="")
 
     assert len(build_calls) == 1
     assert build_calls[0]["web"] is False
-    assert build_calls[0]["name"] == "env-sync"
-    assert build_calls[0]["model_name"] == s.env_sync_model
+    assert build_calls[0]["name"] == "config-sync"
+    assert build_calls[0]["model_name"] == s.config_sync_model
 
 
-def test_run_env_sync_agent_max_gaps_clipping(monkeypatch):
+def test_run_config_sync_agent_max_gaps_clipping(monkeypatch):
     """Draft titles/bodies/gap_ids are clipped to MAX_GAPS."""
     from robotsix_mill.config import Settings
 
     def fake_build_agent(settings, **kwargs):
         from unittest.mock import MagicMock
-        result = env_syncing.EnvSyncResult(
+        result = config_syncing.ConfigSyncResult(
             draft_titles=[f"title{i}" for i in range(10)],
             draft_bodies=[f"body{i}" for i in range(10)],
             gap_ids=[f"gap{i}" for i in range(10)],
@@ -116,15 +116,15 @@ def test_run_env_sync_agent_max_gaps_clipping(monkeypatch):
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
     monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
 
-    s = Settings(MILL_DATA_DIR="/tmp/test_env_sync")
-    result = env_syncing.run_env_sync_agent(settings=s, memory="")
+    s = Settings(MILL_DATA_DIR="/tmp/test_config_sync")
+    result = config_syncing.run_config_sync_agent(settings=s, memory="")
 
-    assert len(result.draft_titles) == env_syncing.MAX_GAPS
-    assert len(result.draft_bodies) == env_syncing.MAX_GAPS
-    assert len(result.gap_ids) == env_syncing.MAX_GAPS
+    assert len(result.draft_titles) == config_syncing.MAX_GAPS
+    assert len(result.draft_bodies) == config_syncing.MAX_GAPS
+    assert len(result.gap_ids) == config_syncing.MAX_GAPS
 
 
-def test_run_env_sync_agent_no_repo_dir_no_tools(monkeypatch):
+def test_run_config_sync_agent_no_repo_dir_no_tools(monkeypatch):
     """Without repo_dir, agent is called with empty tools list."""
     from robotsix_mill.config import Settings
 
@@ -134,20 +134,20 @@ def test_run_env_sync_agent_no_repo_dir_no_tools(monkeypatch):
         build_calls.append(kwargs)
         from unittest.mock import MagicMock
         mock_agent = MagicMock()
-        mock_agent.run_sync.return_value = env_syncing.EnvSyncResult()
+        mock_agent.run_sync.return_value = config_syncing.ConfigSyncResult()
         return mock_agent
 
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
     monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
 
-    s = Settings(MILL_DATA_DIR="/tmp/test_env_sync")
-    env_syncing.run_env_sync_agent(settings=s, memory="")
+    s = Settings(MILL_DATA_DIR="/tmp/test_config_sync")
+    config_syncing.run_config_sync_agent(settings=s, memory="")
 
     assert len(build_calls) == 1
     assert build_calls[0]["tools"] == []
 
 
-def test_run_env_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
+def test_run_config_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
     """With repo_dir, agent gets read_file, list_dir, and explore tools."""
     from robotsix_mill.config import Settings
 
@@ -157,7 +157,7 @@ def test_run_env_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
         build_calls.append(kwargs)
         from unittest.mock import MagicMock
         mock_agent = MagicMock()
-        mock_agent.run_sync.return_value = env_syncing.EnvSyncResult()
+        mock_agent.run_sync.return_value = config_syncing.ConfigSyncResult()
         return mock_agent
 
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
@@ -169,7 +169,7 @@ def test_run_env_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
     (repo / "config.py").write_text("")
 
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    env_syncing.run_env_sync_agent(settings=s, memory="", repo_dir=repo)
+    config_syncing.run_config_sync_agent(settings=s, memory="", repo_dir=repo)
 
     assert len(build_calls) == 1
     tools = build_calls[0]["tools"]
@@ -179,43 +179,43 @@ def test_run_env_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
 # --- Config tests ---
 
 
-def test_env_sync_config_defaults():
-    """Env-sync config has correct defaults."""
+def test_config_sync_config_defaults():
+    """Config-sync config has correct defaults."""
     from robotsix_mill.config import Settings
     s = Settings()
-    assert s.env_sync_model == "openai/gpt-4o-mini"
-    assert s.env_sync_periodic is True
-    assert s.env_sync_interval_seconds == 86400
-    assert s.env_sync_memory_path is None
+    assert s.config_sync_model == "openai/gpt-4o-mini"
+    assert s.config_sync_periodic is True
+    assert s.config_sync_interval_seconds == 86400
+    assert s.config_sync_memory_path is None
 
 
-def test_env_sync_config_custom_model():
-    """Env-sync model can be overridden via env."""
+def test_config_sync_config_custom_model():
+    """Config-sync model can be overridden via env."""
     from robotsix_mill.config import Settings
-    s = Settings(MILL_ENV_SYNC_MODEL="anthropic/claude-sonnet-4")
-    assert s.env_sync_model == "anthropic/claude-sonnet-4"
+    s = Settings(MILL_CONFIG_SYNC_MODEL="anthropic/claude-sonnet-4")
+    assert s.config_sync_model == "anthropic/claude-sonnet-4"
 
 
-def test_env_sync_memory_file_default(tmp_path):
-    """When env_sync_memory_path is None, falls back to
-    data_dir/env_sync_memory.md."""
+def test_config_sync_memory_file_default(tmp_path):
+    """When config_sync_memory_path is None, falls back to
+    data_dir/config_sync_memory.md."""
     from robotsix_mill.config import Settings
     s = Settings(MILL_DATA_DIR=str(tmp_path))
-    expected = s.data_dir / "env_sync_memory.md"
-    assert s.env_sync_memory_file == expected
+    expected = s.data_dir / "config_sync_memory.md"
+    assert s.config_sync_memory_file == expected
 
 
-def test_env_sync_memory_file_override(tmp_path):
-    """When env_sync_memory_path is set, uses that path."""
+def test_config_sync_memory_file_override(tmp_path):
+    """When config_sync_memory_path is set, uses that path."""
     from robotsix_mill.config import Settings
-    custom_path = tmp_path / "custom_env_sync.md"
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_ENV_SYNC_MEMORY_PATH=str(custom_path))
-    assert s.env_sync_memory_file == custom_path
+    custom_path = tmp_path / "custom_config_sync.md"
+    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_CONFIG_SYNC_MEMORY_PATH=str(custom_path))
+    assert s.config_sync_memory_file == custom_path
 
 
-def test_env_sync_periodic_config():
-    """Env-sync periodic can be enabled."""
+def test_config_sync_periodic_config():
+    """Config-sync periodic can be enabled."""
     from robotsix_mill.config import Settings
-    s = Settings(MILL_ENV_SYNC_PERIODIC="true", MILL_ENV_SYNC_INTERVAL_SECONDS="43200")
-    assert s.env_sync_periodic is True
-    assert s.env_sync_interval_seconds == 43200
+    s = Settings(MILL_CONFIG_SYNC_PERIODIC="true", MILL_CONFIG_SYNC_INTERVAL_SECONDS="43200")
+    assert s.config_sync_periodic is True
+    assert s.config_sync_interval_seconds == 43200

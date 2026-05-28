@@ -30,7 +30,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runBcCheck()" style="--agent-color:#84cc16">BC Check</button>
     <button onclick="runCompletenessCheck()" style="--agent-color:#84cc16">Completeness</button>
     <button onclick="runCostReconciliation()" style="--agent-color:#6366f1">Cost Recon</button>
-    <button onclick="runEnvSync()" style="--agent-color:#6366f1">Env Sync</button>
+    <button onclick="runConfigSync()" style="--agent-color:#6366f1">Config Sync</button>
     <button onclick="runRoadmapSync()" style="--agent-color:#9333ea">Roadmap Sync</button>
     <button onclick="runTraceReview()" style="--agent-color:#0ea5e9">Trace Review</button>
   </div>

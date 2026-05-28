@@ -135,7 +135,7 @@ modules:
       - src/robotsix_mill/bc_check_runner.py
       - src/robotsix_mill/completeness_check_runner.py
       - src/robotsix_mill/cost_reconciliation_runner.py
-      - src/robotsix_mill/env_sync_runner.py
+      - src/robotsix_mill/config_sync_runner.py
       - src/robotsix_mill/health_runner.py
       - src/robotsix_mill/roadmap_sync_runner.py
       - src/robotsix_mill/survey_runner.py
@@ -146,7 +146,7 @@ modules:
       - src/robotsix_mill/langfuse_cleanup_runner.py
       - tests/core/test_pass_runner.py
       - tests/test_cost_reconciliation_runner.py
-      - tests/test_env_sync_runner.py
+      - tests/test_config_sync_runner.py
       - tests/test_roadmap_sync_runner.py
       - tests/test_trace_review_runner.py
     dependencies: [config, core, forge, agents, langfuse, sandbox, notify]
@@ -282,7 +282,7 @@ modules:
       - src/robotsix_mill/agents/epic_breakdown.py
       - src/robotsix_mill/agents/epic_status.py
       - src/robotsix_mill/agents/cost_reconciling.py
-      - src/robotsix_mill/agents/env_syncing.py
+      - src/robotsix_mill/agents/config_syncing.py
       - src/robotsix_mill/agents/retrospecting.py
       - src/robotsix_mill/agents/trace_inspector.py
       - src/robotsix_mill/agents/cross_trace_analyzer.py
@@ -303,7 +303,7 @@ modules:
       - tests/agents/test_scope_triage.py
       - tests/agents/test_epic_breakdown.py
       - tests/agents/test_cost_reconciling.py
-      - tests/agents/test_env_syncing.py
+      - tests/agents/test_config_syncing.py
       - tests/agents/test_retrospect.py
       - tests/agents/test_trace_inspector.py
       - tests/agents/test_cross_trace_analyzer.py

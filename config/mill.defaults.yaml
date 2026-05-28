@@ -217,12 +217,12 @@ periodic:
     interval_seconds: 86400
     memory_path: null
 
-  # -- env-sync — detects config ↔ .env ↔ docs drift -----------------------
-  env_sync:
-    model: *cheap_model           # env-sync agent model (read-only file parsing)
-    enabled: true                 # enable periodic env-sync passes
+  # -- config-sync — detects config ↔ .env ↔ docs drift -----------------------
+  config_sync:
+    model: *cheap_model           # config-sync agent model (read-only file parsing)
+    enabled: true                 # enable periodic config-sync passes
     interval_seconds: 86400       # seconds between passes (min 60 enforced in worker)
-    memory_path: null             # defaults to <data_dir>/env_sync_memory.md
+    memory_path: null             # defaults to <data_dir>/config_sync_memory.md
 
   # -- survey agent — discovers OSS projects; proposes improvements --------
   survey:

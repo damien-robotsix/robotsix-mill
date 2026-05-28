@@ -990,27 +990,27 @@ class Settings(BaseSettings):
     completeness_check_interval_seconds: int = Field(
         default=86400, alias="MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS"
     )
-    # --- env-sync agent (config ↔ .env ↔ docs drift detection) ---
-    # Model for the env-sync agent. Defaults to a cheap model (read-only
+    # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
+    # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).
-    env_sync_model: str = Field(
-        default="openai/gpt-4o-mini", alias="MILL_ENV_SYNC_MODEL"
+    config_sync_model: str = Field(
+        default="openai/gpt-4o-mini", alias="MILL_CONFIG_SYNC_MODEL"
     )
-    # Path to the env-sync agent's Markdown memory ledger. Override to pin
-    # a specific path; unset (default) derives <data_dir>/env_sync_memory.md.
-    env_sync_memory_path: Path | None = Field(
-        default=None, alias="MILL_ENV_SYNC_MEMORY_PATH"
+    # Path to the config-sync agent's Markdown memory ledger. Override to pin
+    # a specific path; unset (default) derives <data_dir>/config_sync_memory.md.
+    config_sync_memory_path: Path | None = Field(
+        default=None, alias="MILL_CONFIG_SYNC_MEMORY_PATH"
     )
-    # Opt-in periodic env-sync pass. Default false (agents default off
+    # Opt-in periodic config-sync pass. Default false (agents default off
     # unless noted). Set true to enable automatic daily drift detection.
-    env_sync_periodic: bool = Field(
-        default=True, alias="MILL_ENV_SYNC_PERIODIC"
+    config_sync_periodic: bool = Field(
+        default=True, alias="MILL_CONFIG_SYNC_PERIODIC"
     )
-    # Seconds between automatic env-sync passes when
-    # MILL_ENV_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
+    # Seconds between automatic config-sync passes when
+    # MILL_CONFIG_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
-    env_sync_interval_seconds: int = Field(
-        default=86400, alias="MILL_ENV_SYNC_INTERVAL_SECONDS"
+    config_sync_interval_seconds: int = Field(
+        default=86400, alias="MILL_CONFIG_SYNC_INTERVAL_SECONDS"
     )
 
     # --- action-agent memory paths ---
@@ -1174,11 +1174,11 @@ class Settings(BaseSettings):
         return self.data_dir / "survey_memory.md"
 
     @property
-    def env_sync_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained env-sync memory ledger."""
-        if self.env_sync_memory_path is not None:
-            return self.env_sync_memory_path
-        return self.data_dir / "env_sync_memory.md"
+    def config_sync_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained config-sync memory ledger."""
+        if self.config_sync_memory_path is not None:
+            return self.config_sync_memory_path
+        return self.data_dir / "config_sync_memory.md"
 
     @property
     def bc_check_memory_file(self) -> Path:
@@ -1694,7 +1694,7 @@ class RepoConfig(BaseModel):
     completeness_check_periodic: bool = True
     survey_periodic: bool = True
     cost_reconciliation_periodic: bool = True
-    env_sync_periodic: bool = True
+    config_sync_periodic: bool = True
     trace_review_periodic: bool = True
     langfuse_cleanup_periodic: bool = True
     cost_warmer_periodic: bool = True
@@ -1730,7 +1730,7 @@ class RepoConfig(BaseModel):
 _PERIODIC_FLAG_NAMES = (
     "audit", "trace_health", "health", "test_gap", "agent_check",
     "bc_check", "completeness_check", "survey", "cost_reconciliation",
-    "env_sync", "trace_review", "langfuse_cleanup", "cost_warmer",
+    "config_sync", "trace_review", "langfuse_cleanup", "cost_warmer",
     "bespoke",
 )
 

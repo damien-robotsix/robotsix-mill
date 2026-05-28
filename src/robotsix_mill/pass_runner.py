@@ -24,7 +24,7 @@ log = logging.getLogger("robotsix_mill.pass_runner")
 
 # Matches <!-- audit-gap-id: foo_bar --> style markers in ticket descriptions.
 _GAP_ID_RE = re.compile(
-    r'<!--\s*(audit|health|agent_check|retrospect|survey|test_gap|bc_check|env_sync|completeness_check)-gap-id:\s*(\S+)\s*-->'
+    r'<!--\s*(audit|health|agent_check|retrospect|survey|test_gap|bc_check|config_sync|completeness_check)-gap-id:\s*(\S+)\s*-->'
 )
 
 
