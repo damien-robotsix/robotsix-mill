@@ -30,6 +30,14 @@ margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .src-agent{background:#3b1a1a;color:#f87171}
 .src-deep-review{background:#1a2a3b;color:#60c0fa}
 .src-survey{background:#134e4a;color:#2dd4bf}
+.src-ci{background:#1e293b;color:#94a3b8}
+.src-env-sync{background:#312e81;color:#a5b4fc}
+.src-agent-check{background:#4a1942;color:#e879f9}
+.src-bc-check{background:#422006;color:#fdba74}
+.src-cost-reconciliation{background:#064e3b;color:#6ee7b7}
+.src-completeness-check{background:#1a2e05;color:#bef264}
+.src-trace-review{background:#3b1f1f;color:#fca5a5}
+.src-roadmap-sync{background:#4c1d95;color:#c4b5fd}
 .origin-link{color:var(--c);text-decoration:underline}
 .approve-btn{font-size:11px;margin-top:5px;padding:3px 8px;background:#3b82f6;
 color:#fff;border:none;border-radius:4px;cursor:pointer}

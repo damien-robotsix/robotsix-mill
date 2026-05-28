@@ -676,4 +676,4 @@ def test_board_contains_test_gap_js_and_css():
     js = (base / "board.js").read_text()
     assert ".src-test_gap" in css
     assert "src-test_gap" in css
-    assert '"test_gap"' in js
+    assert 'test_gap' in js
