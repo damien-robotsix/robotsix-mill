@@ -45,6 +45,7 @@ class AgentDefinition(BaseModel):
     retries: int = 2
     module: str | None = None
     skills: list[str] = []
+    inject_agent_md: bool = True
 
 
 # Only bare ``${VAR}`` — the existing YAML does not use defaults or nesting.
