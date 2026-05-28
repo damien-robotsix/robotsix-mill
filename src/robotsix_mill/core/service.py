@@ -8,6 +8,7 @@ from its coroutine (never from the stage threadpool).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -23,6 +24,61 @@ from . import db
 from ..config import Settings
 from .models import SourceKind, Ticket, TicketEvent, Comment
 from .states import State, can_transition
+
+
+def _event_hash(
+    ticket_id: str,
+    state: str,
+    note: str | None,
+    at: str,
+    prev_hash: str | None,
+) -> str:
+    """Compute BLAKE2b hash over the canonical JSON payload of an event."""
+    payload = {
+        "ticket_id": ticket_id,
+        "state": state,
+        "note": note,
+        "at": at,
+        "prev_hash": prev_hash,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.blake2b(canonical.encode("utf-8"), digest_size=32).hexdigest()
+
+
+def _prev_hash_for(db_session, ticket_id: str) -> str | None:
+    """Return the hash of the most recent event for *ticket_id*, or None."""
+    prev = db_session.exec(
+        select(TicketEvent.hash)
+        .where(TicketEvent.ticket_id == ticket_id)
+        .order_by(TicketEvent.id.desc())
+    ).first()
+    return prev if prev else None
+
+
+def _make_event(
+    db_session,
+    ticket_id: str,
+    state: State,
+    note: str | None = None,
+) -> TicketEvent:
+    """Build a TicketEvent with hash-chain fields populated."""
+    at = datetime.now(timezone.utc)
+    prev_hash = _prev_hash_for(db_session, ticket_id)
+    h = _event_hash(
+        ticket_id=ticket_id,
+        state=state.value,
+        note=note,
+        at=at.isoformat(),
+        prev_hash=prev_hash,
+    )
+    return TicketEvent(
+        ticket_id=ticket_id,
+        state=state,
+        note=note,
+        at=at,
+        prev_hash=prev_hash,
+        hash=h,
+    )
 from .workspace import Workspace
 
 log = logging.getLogger("robotsix_mill.service")
@@ -432,11 +488,8 @@ class TicketService:
                 priority=inherited_priority,
             )
             s.add(ticket)
-            s.add(
-                TicketEvent(
-                    ticket_id=ticket_id, state=initial_state, note="created"
-                )
-            )
+            s.flush()
+            s.add(_make_event(s, ticket_id=ticket_id, state=initial_state, note="created"))
             s.commit()
             s.refresh(ticket)
             return ticket
@@ -486,7 +539,8 @@ class TicketService:
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
-            s.add(TicketEvent(ticket_id=ticket_id, state=dst, note=note))
+            s.flush()
+            s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=note))
             s.commit()
             s.refresh(ticket)
             # Purge oldest terminal tickets if we just crossed the cap.
@@ -525,8 +579,10 @@ class TicketService:
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
+            s.flush()
             s.add(
-                TicketEvent(
+                _make_event(
+                    s,
                     ticket_id=ticket_id,
                     state=dst,
                     note=f"resumed from blocked (was blocked from {dst.value})",
@@ -980,8 +1036,10 @@ class TicketService:
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
+            s.flush()
             s.add(
-                TicketEvent(
+                _make_event(
+                    s,
                     ticket_id=ticket_id,
                     state=dst,
                     note="all ask_user threads closed — resuming",
@@ -1046,10 +1104,9 @@ class TicketService:
             ticket.state = State.DRAFT
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
+            s.flush()
             s.add(
-                TicketEvent(
-                    ticket_id=ticket_id, state=State.DRAFT, note=note
-                )
+                _make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note)
             )
             s.commit()
             if comment is not None:
@@ -1085,10 +1142,9 @@ class TicketService:
             ticket.state = State.DRAFT
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
+            s.flush()
             s.add(
-                TicketEvent(
-                    ticket_id=ticket_id, state=State.DRAFT, note=note
-                )
+                _make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note)
             )
             s.commit()
             if comment is not None:
@@ -1131,10 +1187,9 @@ class TicketService:
             ticket.state = State.DONE
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
+            s.flush()
             s.add(
-                TicketEvent(
-                    ticket_id=ticket_id, state=State.DONE, note=event_note
-                )
+                _make_event(s, ticket_id=ticket_id, state=State.DONE, note=event_note)
             )
             s.commit()
             if comment is not None:

@@ -102,7 +102,7 @@ class Ticket(SQLModel, table=True):
 
 
 class TicketEvent(SQLModel, table=True):
-    """Append-only state-transition history."""
+    """Append-only state-transition history with hash-chain integrity."""
 
     id: int | None = Field(default=None, primary_key=True)
     ticket_id: str = Field(foreign_key="ticket.id", index=True)
@@ -112,6 +112,8 @@ class TicketEvent(SQLModel, table=True):
         default_factory=_now,
         sa_column=Column(TZDateTime()),
     )
+    prev_hash: str | None = Field(default=None)
+    hash: str = Field(default="")
 
 
 class Comment(SQLModel, table=True):
