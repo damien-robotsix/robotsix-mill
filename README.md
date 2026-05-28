@@ -22,6 +22,10 @@ This project is currently a stub — there is no source code, no build pipeline,
 | `docs/` | Project documentation, including architecture decision records. |
 | Root | Top-level project configuration, build scripts, and this README. |
 
+## Connecting
+
+Configuration keys, precedence rules, and a walkthrough of the `probe` diagnostics command are documented in [docs/connecting.md](docs/connecting.md).
+
 ## License
 
 This project is licensed under the MIT License (SPDX: `MIT`). See [LICENSE](LICENSE) for the full text.
