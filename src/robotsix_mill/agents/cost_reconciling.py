@@ -93,7 +93,7 @@ def run_cost_reconciliation_agent(
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
-        / "agent_definitions" / "cost_reconciliation.yaml"
+        / "agent_definitions" / "periodic" / "cost_reconciliation.yaml"
     )
 
     agent = build_agent_from_definition(

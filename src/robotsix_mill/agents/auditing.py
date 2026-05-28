@@ -15,7 +15,7 @@ from ..config import Settings
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "audit.yaml"
+_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "audit.yaml"
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -112,7 +112,7 @@ def run_audit_agent(
     from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "audit.yaml"
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "audit.yaml"
     )
 
     tools: list = []

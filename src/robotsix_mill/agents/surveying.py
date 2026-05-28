@@ -68,7 +68,7 @@ def run_survey_agent(
     from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "survey.yaml"
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "survey.yaml"
     )
 
     tools: list = []

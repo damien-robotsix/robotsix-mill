@@ -174,11 +174,11 @@ def _has_negation_context(text: str, match_start: int) -> bool:
 @pytest.mark.parametrize(
     "agent_name,yaml_path",
     [
-        ("audit", "audit.yaml"),
-        ("health", "health.yaml"),
-        ("test_gap", "test_gap.yaml"),
-        ("agent_check", "agent_check.yaml"),
-        ("survey", "survey.yaml"),
+        ("audit", "periodic/audit.yaml"),
+        ("health", "periodic/health.yaml"),
+        ("test_gap", "periodic/test_gap.yaml"),
+        ("agent_check", "periodic/agent_check.yaml"),
+        ("survey", "periodic/survey.yaml"),
         ("retrospect", "retrospect.yaml"),
     ],
 )

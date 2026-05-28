@@ -18,7 +18,7 @@ from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "completeness_check.yaml"
+_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "completeness_check.yaml"
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -72,7 +72,7 @@ def run_completeness_check_agent(
     from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "completeness_check.yaml"
+        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "completeness_check.yaml"
     )
 
     tools: list = []
