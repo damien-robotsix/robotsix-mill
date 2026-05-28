@@ -18,8 +18,11 @@ from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.trace_review_runner import (
+    _Baselines,
     _classify_trace,
+    _compute_baselines,
     _load_watermark,
+    _median,
     _normalize,
     _save_watermark,
     run_trace_review_pass,
@@ -66,32 +69,118 @@ def _obs(name: str, **overrides):
     return base
 
 
+class TestMedian:
+    def test_median_empty(self):
+        assert _median([]) == 0.0
+
+    def test_median_odd_count(self):
+        assert _median([1.0, 2.0, 3.0]) == 2.0
+
+    def test_median_even_count(self):
+        assert _median([1.0, 2.0, 3.0, 4.0]) == 2.5
+
+    def test_median_robust_to_outliers(self):
+        # Median is unaffected by a single huge outlier; mean would be.
+        assert _median([1, 1, 1, 1, 100]) == 1.0
+
+
+class TestComputeBaselines:
+    def test_small_batch_returns_none(self, settings):
+        traces = [_trace(id="t1", totalCost=0.5)]
+        baselines = _compute_baselines(traces, {"t1": []}, settings)
+        assert baselines.cost_threshold is None
+        assert baselines.obs_threshold is None
+
+    def test_baseline_is_median_times_multiplier(self, settings):
+        traces = [
+            _trace(id="t1", totalCost=0.10),
+            _trace(id="t2", totalCost=0.20),
+            _trace(id="t3", totalCost=0.30),
+            _trace(id="t4", totalCost=0.40),
+            _trace(id="t5", totalCost=0.50),
+        ]
+        # Each trace has a different observation count.
+        obs_by_id = {
+            "t1": [_obs("read_file") for _ in range(5)],
+            "t2": [_obs("read_file") for _ in range(10)],
+            "t3": [_obs("read_file") for _ in range(15)],
+            "t4": [_obs("read_file") for _ in range(20)],
+            "t5": [_obs("read_file") for _ in range(25)],
+        }
+        baselines = _compute_baselines(traces, obs_by_id, settings)
+        # Median cost is 0.30, multiplier 3.0 → threshold 0.90.
+        assert baselines.cost_median == pytest.approx(0.30)
+        assert baselines.cost_threshold == pytest.approx(0.90)
+        # Median observations is 15, multiplier 3.0 → threshold 45.
+        assert baselines.obs_median == 15
+        assert baselines.obs_threshold == 45
+
+    def test_zero_median_suppresses_threshold(self, settings):
+        # If every trace cost $0 the relative flag has no baseline.
+        traces = [_trace(id=f"t{i}", totalCost=0.0) for i in range(5)]
+        baselines = _compute_baselines(traces, {}, settings)
+        assert baselines.cost_threshold is None
+
+
 class TestClassifier:
     """``_classify_trace`` flags traces by deterministic criteria."""
+
+    def _baselines(self, cost_threshold=None, obs_threshold=None,
+                   cost_median=None, obs_median=None):
+        return _Baselines(
+            cost_threshold=cost_threshold,
+            obs_threshold=obs_threshold,
+            cost_median=cost_median,
+            obs_median=obs_median,
+        )
 
     def test_clean_trace_no_flags(self, settings):
         flags = _classify_trace(_trace(), settings, observations=[])
         assert flags.flags == []
         assert flags.flagged is False
 
-    def test_cost_outlier_above_threshold(self, settings):
+    def test_cost_outlier_above_relative_threshold(self, settings):
+        baselines = self._baselines(
+            cost_threshold=1.00, cost_median=0.30,
+            obs_threshold=45, obs_median=15,
+        )
         flags = _classify_trace(
-            _trace(totalCost=2.50), settings, observations=[],
+            _trace(totalCost=2.50), settings,
+            observations=[], baselines=baselines,
         )
         assert any("cost_outlier" in f for f in flags.flags)
+        # The flag string carries the median + multiplier for context.
+        assert any("median" in f for f in flags.flags if "cost_outlier" in f)
 
-    def test_cost_outlier_at_threshold_is_not_flagged(self, settings):
-        # Strictly > threshold; equal is below.
+    def test_cost_at_threshold_is_not_flagged(self, settings):
+        baselines = self._baselines(
+            cost_threshold=1.00, cost_median=0.30,
+        )
         flags = _classify_trace(
-            _trace(totalCost=settings.trace_review_cost_threshold_usd),
-            settings, observations=[],
+            _trace(totalCost=1.00), settings,
+            observations=[], baselines=baselines,
         )
         assert not any("cost_outlier" in f for f in flags.flags)
 
-    def test_observation_storm(self, settings):
-        n = settings.trace_review_max_observations + 1
-        obs = [_obs("read_file") for _ in range(n)]
-        flags = _classify_trace(_trace(), settings, observations=obs)
+    def test_cost_threshold_none_suppresses_flag(self, settings):
+        """Small-batch baselines have ``None`` thresholds; even a huge
+        cost shouldn't flag as a relative outlier."""
+        baselines = self._baselines(cost_threshold=None)
+        flags = _classify_trace(
+            _trace(totalCost=100.0), settings,
+            observations=[], baselines=baselines,
+        )
+        assert not any("cost_outlier" in f for f in flags.flags)
+
+    def test_observation_storm_relative(self, settings):
+        baselines = self._baselines(
+            obs_threshold=45, obs_median=15,
+            cost_threshold=1.0, cost_median=0.3,
+        )
+        obs = [_obs("read_file") for _ in range(50)]
+        flags = _classify_trace(
+            _trace(), settings, observations=obs, baselines=baselines,
+        )
         assert any("observation_storm" in f for f in flags.flags)
 
     def test_tool_error_in_output(self, settings):
@@ -138,9 +227,15 @@ class TestClassifier:
 
     def test_observations_none_only_runs_summary_flags(self, settings):
         """When observations are unavailable (Langfuse fetch failed),
-        only cost-level flags fire — no observation-level scan."""
+        observation-level flags don't fire; the cost flag still fires
+        if the baseline thresholds are present."""
+        baselines = self._baselines(
+            cost_threshold=1.00, cost_median=0.30,
+            obs_threshold=45, obs_median=15,
+        )
         flags = _classify_trace(
-            _trace(totalCost=2.0), settings, observations=None,
+            _trace(totalCost=2.0), settings,
+            observations=None, baselines=baselines,
         )
         assert any("cost_outlier" in f for f in flags.flags)
         assert not any("tool_errors" in f for f in flags.flags)
@@ -225,13 +320,18 @@ class TestRunTraceReviewPass:
     def test_flagged_trace_inspector_findings_become_drafts(
         self, settings, monkeypatch,
     ):
+        # Use a binary flag (tool_errors) so the test doesn't depend on
+        # the batch-relative baseline machinery — a single tool error in
+        # a 1-trace batch is enough to flag.
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.list_all_traces_since",
-            lambda *a, **kw: [_trace(totalCost=2.50)],  # cost outlier
+            lambda *a, **kw: [_trace(totalCost=0.10)],
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
-            lambda *a, **kw: {"observations": []},
+            lambda *a, **kw: {"observations": [
+                _obs("run_command", output="error: command failed"),
+            ]},
         )
         finding = TraceFinding(
             category="tool_error",
@@ -273,11 +373,13 @@ class TestRunTraceReviewPass:
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.list_all_traces_since",
-            lambda *a, **kw: [_trace(totalCost=2.50)],
+            lambda *a, **kw: [_trace(totalCost=0.10)],
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
-            lambda *a, **kw: {"observations": []},
+            lambda *a, **kw: {"observations": [
+                _obs("run_command", output="error: command failed"),
+            ]},
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.trace_inspector.run_trace_inspector",
@@ -305,16 +407,59 @@ class TestRunTraceReviewPass:
         assert after is not None
         assert after.tzinfo is not None  # UTC
 
+    def test_relative_cost_outlier_in_a_batch(
+        self, settings, monkeypatch,
+    ):
+        """In a batch where the median cost is $0.10, a $1.00 trace
+        is 10× the median and gets flagged via the relative criterion
+        even though the absolute number isn't astronomical."""
+        traces = [
+            _trace(id=f"t{i}", totalCost=0.10) for i in range(4)
+        ] + [_trace(id="t5", totalCost=1.00)]  # 10× median = outlier
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse_client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            lambda *a, **kw: {"observations": []},
+        )
+        inspector_calls: list = []
+        finding = TraceFinding(
+            category="optimization", symptom="trace is expensive",
+            root_cause="excessive sub-agent calls",
+            proposed_solution="batch them", confidence="medium",
+        )
+
+        def fake_inspect(**kw):
+            inspector_calls.append(kw)
+            return TraceInspectResult(findings=[finding])
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            fake_inspect,
+        )
+
+        result = run_trace_review_pass(session_id="sess-rel")
+        assert result.traces_scanned == 5
+        # Only t5 (the $1 trace) is the outlier — the other four are
+        # near the median.
+        assert result.traces_flagged == 1
+        assert len(inspector_calls) == 1
+        assert len(result.drafts_created) == 1
+
     def test_inspector_error_logged_but_does_not_crash(
         self, settings, monkeypatch,
     ):
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.list_all_traces_since",
-            lambda *a, **kw: [_trace(totalCost=2.50)],
+            lambda *a, **kw: [_trace(totalCost=0.10)],
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
-            lambda *a, **kw: {"observations": []},
+            lambda *a, **kw: {"observations": [
+                _obs("run_command", output="error: command failed"),
+            ]},
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.trace_inspector.run_trace_inspector",

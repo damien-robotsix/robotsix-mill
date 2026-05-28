@@ -654,6 +654,7 @@ class Worker:
         self._poll_task: asyncio.Task | None = None
         self._audit_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
+        self._trace_review_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
         self._bc_check_task: asyncio.Task | None = None
@@ -1571,6 +1572,24 @@ class Worker:
                 "Periodic bc-check enabled: interval %ds",
                 self.ctx.settings.bc_check_interval_seconds,
             )
+        # Opt-in periodic trace-review (deterministic outlier classifier
+        # + cheap flash inspector on flagged subset → draft tickets).
+        if (
+            self.ctx.settings.trace_review_periodic
+            and self._trace_review_task is None
+        ):
+            from ..trace_review_runner import run_trace_review_pass
+            self._trace_review_task = asyncio.create_task(
+                self._run_periodic_pass_per_repo(
+                    "trace_review", run_trace_review_pass,
+                    max(3600, self.ctx.settings.trace_review_interval_seconds),
+                    per_repo_flag="trace_review_periodic",
+                )
+            )
+            log.info(
+                "Periodic trace-review enabled: interval %ds",
+                self.ctx.settings.trace_review_interval_seconds,
+            )
         # Opt-in periodic completeness-check
         if self.ctx.settings.completeness_check_periodic and self._completeness_check_task is None:
             from ..completeness_check_runner import run_completeness_check_pass
@@ -1676,7 +1695,8 @@ class Worker:
         tasks = list(self._tasks)
         for attr in (
             "_poll_task", "_audit_task",
-            "_trace_health_task", "_health_task", "_ci_monitor_task",
+            "_trace_health_task", "_trace_review_task",
+            "_health_task", "_ci_monitor_task",
             "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_test_gap_task", "_survey_task",
             "_env_sync_task", "_cost_reconciliation_task",
             "_langfuse_cleanup_task", "_timeout_escalation_task",

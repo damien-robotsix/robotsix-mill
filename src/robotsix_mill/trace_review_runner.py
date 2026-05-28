@@ -61,6 +61,64 @@ _TOOL_ERR_PATTERNS = re.compile(
 
 
 @dataclass
+class _Baselines:
+    """Per-batch median thresholds against which a single trace is
+    compared. ``None`` for either field means the batch was too small
+    (< 3 traces) to compute a meaningful baseline — the relative flag
+    is suppressed in that case."""
+
+    cost_threshold: float | None
+    obs_threshold: float | None
+    cost_median: float | None
+    obs_median: float | None
+
+
+def _median(values: list[float]) -> float:
+    sorted_v = sorted(values)
+    n = len(sorted_v)
+    if n == 0:
+        return 0.0
+    mid = n // 2
+    if n % 2 == 1:
+        return float(sorted_v[mid])
+    return (sorted_v[mid - 1] + sorted_v[mid]) / 2.0
+
+
+def _compute_baselines(
+    traces: list[dict],
+    observations_per_trace: dict[str, list[dict]],
+    settings: Settings,
+) -> _Baselines:
+    """Compute median × multiplier thresholds for cost and observation
+    count across the entire *traces* batch. Returns ``None`` thresholds
+    when the batch is too small to baseline (< 3 traces)."""
+    if len(traces) < 3:
+        return _Baselines(None, None, None, None)
+    costs = [float(t.get("totalCost") or 0.0) for t in traces]
+    obs_counts = [
+        len(observations_per_trace.get(t.get("id") or "", []))
+        for t in traces
+    ]
+    cost_med = _median(costs)
+    obs_med = _median(obs_counts)
+    # Guard against zero medians (every trace cost $0): without a
+    # positive baseline the multiplier doesn't produce a meaningful
+    # threshold; suppress the relative flag.
+    return _Baselines(
+        cost_threshold=(
+            cost_med * settings.trace_review_cost_multiplier
+            if cost_med > 0 else None
+        ),
+        obs_threshold=(
+            obs_med * settings.trace_review_obs_multiplier
+            if obs_med > 0 else None
+        ),
+        cost_median=cost_med,
+        obs_median=obs_med,
+    )
+
+
+@dataclass
 class _TraceFlags:
     """Boolean flags + counts a single trace produced in phase 1."""
 
@@ -76,23 +134,32 @@ class _TraceFlags:
 
 
 def _classify_trace(
-    trace: dict, settings: Settings, observations: list[dict] | None = None,
+    trace: dict,
+    settings: Settings,
+    observations: list[dict] | None = None,
+    baselines: _Baselines | None = None,
 ) -> _TraceFlags:
     """Compute phase-1 flags from *trace* + its *observations*.
 
     *trace* is the summary dict from ``/api/public/traces`` (no
-    observations). *observations* is the optional full observation tree
-    from ``/api/public/traces/<id>``; when ``None`` only summary-level
-    flags fire (cost outlier). Observation-level flags require the
-    second fetch — the orchestrator pulls detail only for traces that
-    summary-level flags already marked, OR for ones it wants to scan
-    proactively (here: all of them; the trace-list endpoint doesn't
-    return observations).
+    observations). *observations* is the optional full observation
+    tree from ``/api/public/traces/<id>``. *baselines* is the
+    per-batch median thresholds — when omitted, relative flags are
+    suppressed (used by unit tests that don't construct a baseline).
     """
     flags: list[str] = []
     total_cost = float(trace.get("totalCost") or 0.0)
-    if total_cost > settings.trace_review_cost_threshold_usd:
-        flags.append(f"cost_outlier (${total_cost:.2f})")
+    if (
+        baselines is not None
+        and baselines.cost_threshold is not None
+        and total_cost > baselines.cost_threshold
+    ):
+        flags.append(
+            f"cost_outlier (${total_cost:.2f} vs "
+            f"${baselines.cost_threshold:.2f} = "
+            f"{settings.trace_review_cost_multiplier:.1f}× "
+            f"median ${baselines.cost_median:.2f})"
+        )
 
     if observations is None:
         return _TraceFlags(
@@ -104,8 +171,17 @@ def _classify_trace(
         )
 
     # Observation-level flags
-    if len(observations) > settings.trace_review_max_observations:
-        flags.append(f"observation_storm ({len(observations)} obs)")
+    if (
+        baselines is not None
+        and baselines.obs_threshold is not None
+        and len(observations) > baselines.obs_threshold
+    ):
+        flags.append(
+            f"observation_storm ({len(observations)} obs vs "
+            f"threshold {baselines.obs_threshold:.0f} = "
+            f"{settings.trace_review_obs_multiplier:.1f}× "
+            f"median {baselines.obs_median:.0f})"
+        )
 
     # Per-tool call count + tool-error scan in a single pass.
     tool_calls: dict[str, int] = {}
@@ -288,16 +364,51 @@ def run_trace_review_pass(
     # set as we file new drafts to avoid intra-run duplicates too.
     seen_titles = _existing_open_titles(service, board_id)
 
+    # Pre-fetch every trace's full detail in one pass so we can compute
+    # batch-relative baselines (median cost, median observation count)
+    # before classifying any individual trace. Detail fetches are the
+    # main cost of the deterministic phase — they're already paid for
+    # by the classifier below, so caching them here is essentially
+    # free.
+    details_by_id: dict[str, dict] = {}
+    observations_by_id: dict[str, list[dict]] = {}
     for trace in traces:
         trace_id = trace.get("id")
         if not trace_id:
             continue
-        # Phase 1: deterministic flags. We need the observation tree
-        # for most flags, so fetch detail eagerly. Skip very recent
-        # (potentially still-streaming) traces.
-        detail = fetch_trace_detail(settings, trace_id, repo_config=repo_config)
-        observations = (detail or {}).get("observations") if detail else None
-        flags = _classify_trace(trace, settings, observations=observations)
+        detail = fetch_trace_detail(
+            settings, trace_id, repo_config=repo_config,
+        )
+        if detail is None:
+            continue
+        details_by_id[trace_id] = detail
+        observations_by_id[trace_id] = detail.get("observations") or []
+
+    baselines = _compute_baselines(traces, observations_by_id, settings)
+    if baselines.cost_threshold is not None:
+        log.info(
+            "trace-review: cost baseline = $%.4f (median $%.4f × %.1f)",
+            baselines.cost_threshold, baselines.cost_median,
+            settings.trace_review_cost_multiplier,
+        )
+    else:
+        log.info(
+            "trace-review: batch too small (%d traces) — relative "
+            "outlier flags suppressed; binary flags still active",
+            len(traces),
+        )
+
+    for trace in traces:
+        trace_id = trace.get("id")
+        if not trace_id:
+            continue
+        detail = details_by_id.get(trace_id)
+        observations = observations_by_id.get(trace_id)
+        flags = _classify_trace(
+            trace, settings,
+            observations=observations,
+            baselines=baselines,
+        )
         if not flags.flagged:
             continue
         flagged_count += 1

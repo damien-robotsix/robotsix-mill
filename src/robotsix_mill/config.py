@@ -555,12 +555,24 @@ class Settings(BaseSettings):
     )
     # Outlier thresholds for the deterministic trace-review classifier.
     # A trace is flagged for LLM inspection when ANY hit.
-    trace_review_cost_threshold_usd: float = Field(
-        default=1.00, alias="MILL_TRACE_REVIEW_COST_USD",
+    #
+    # Cost and observation count are flagged RELATIVELY: the runner
+    # computes the median across the current batch and flags traces
+    # whose value exceeds ``median × multiplier``. A multiplier of 3.0
+    # means "3x the typical trace in this window." Batches with fewer
+    # than 3 traces fall back to no relative flag (insufficient
+    # baseline) — binary flags (tool errors, rejected generations,
+    # ask_user loops, explore storms) still fire normally.
+    trace_review_cost_multiplier: float = Field(
+        default=3.0, alias="MILL_TRACE_REVIEW_COST_MULTIPLIER",
     )
-    trace_review_max_observations: int = Field(
-        default=200, alias="MILL_TRACE_REVIEW_MAX_OBS",
+    trace_review_obs_multiplier: float = Field(
+        default=3.0, alias="MILL_TRACE_REVIEW_OBS_MULTIPLIER",
     )
+    # ``repeated_tool`` stays an absolute threshold because each tool
+    # has its own "normal" usage profile — making it relative would
+    # require a per-tool batch median, which is too noisy with small
+    # samples.
     trace_review_max_repeated_tool: int = Field(
         default=50, alias="MILL_TRACE_REVIEW_MAX_REPEATED_TOOL",
     )
@@ -673,6 +685,23 @@ class Settings(BaseSettings):
     # (1h) in the worker to avoid hammering Langfuse.
     trace_health_interval_seconds: int = Field(
         default=86400, alias="MILL_TRACE_HEALTH_INTERVAL_SECONDS"
+    )
+
+    # --- trace-review ---
+    # When True, the worker runs periodic trace-review passes at the
+    # configured interval. Scans recent Langfuse traces, flags outliers
+    # statistically (cost / observation count vs. batch median ×
+    # multiplier) and absolutely (tool errors, rejected generations,
+    # ask_user loops, explore storms, repeated-tool ceilings), runs
+    # the cheap flash inspector over the flagged subset, and files
+    # draft tickets with proposed solutions. Default True (opt-out).
+    trace_review_periodic: bool = Field(
+        default=True, alias="MILL_TRACE_REVIEW_PERIODIC"
+    )
+    # Interval between automatic trace-review passes (seconds). Default
+    # daily. Enforced minimum 3600s (1h) in the worker.
+    trace_review_interval_seconds: int = Field(
+        default=86400, alias="MILL_TRACE_REVIEW_INTERVAL_SECONDS"
     )
 
     # --- timeout escalation ---
@@ -1362,6 +1391,13 @@ class Settings(BaseSettings):
             raise ValueError("trace_health_interval_seconds must be ≥ 3600")
         return v
 
+    @field_validator("trace_review_interval_seconds")
+    @classmethod
+    def _validate_trace_review_interval(cls, v: int) -> int:
+        if v < 3600:
+            raise ValueError("trace_review_interval_seconds must be ≥ 3600")
+        return v
+
     # -- cross-field checks --------------------------------------------
 
     @model_validator(mode="after")
@@ -1567,6 +1603,7 @@ class RepoConfig(BaseModel):
     survey_periodic: bool = True
     cost_reconciliation_periodic: bool = True
     env_sync_periodic: bool = True
+    trace_review_periodic: bool = True
 
     @field_validator("repo_id", "board_id")
     @classmethod
@@ -1593,7 +1630,7 @@ class RepoConfig(BaseModel):
 _PERIODIC_FLAG_NAMES = (
     "audit", "trace_health", "health", "test_gap", "agent_check",
     "bc_check", "completeness_check", "survey", "cost_reconciliation",
-    "env_sync",
+    "env_sync", "trace_review",
 )
 
 
