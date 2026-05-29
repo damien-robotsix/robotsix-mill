@@ -2082,7 +2082,10 @@ class Worker:
 
         if settings_enabled_attr is None:
             settings_enabled_attr = per_repo_flag
-        if getattr(self.ctx.settings, settings_enabled_attr) and getattr(self, task_attr) is None:
+        if (
+            getattr(self.ctx.settings, settings_enabled_attr)
+            and getattr(self, task_attr) is None
+        ):
             mod_path, attr_name = import_path.rsplit(":", 1)
             mod = importlib.import_module(mod_path)
             runner_fn = getattr(mod, attr_name)
@@ -2128,78 +2131,170 @@ class Worker:
     def start(self) -> None:
         if not self._tasks:
             repos = get_repos_config()
-            pool_sizes = [(rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()]
+            pool_sizes = [
+                (rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()
+            ]
             pool_sizes.append((self._DEFAULT_BOARD, 1))
             for board_id, n in pool_sizes:
                 for _ in range(n):
                     self._tasks.append(asyncio.create_task(self._run(board_id)))
-            log.info("worker pool started: %s",
-                     ", ".join(f"{bid or '<default>'}={n}" for bid, n in pool_sizes))
+            log.info(
+                "worker pool started: %s",
+                ", ".join(f"{bid or '<default>'}={n}" for bid, n in pool_sizes),
+            )
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
 
         # --- Pattern A: per-repo periodic passes ---
-        self._start_periodic_pass("audit", "robotsix_mill.audit_runner:run_audit_pass",
-                                  "audit_interval_seconds", "audit_periodic", "_audit_task")
-        self._start_periodic_pass("health", "robotsix_mill.health_runner:run_health_pass",
-                                  "health_interval_seconds", "health_periodic", "_health_task")
-        self._start_periodic_pass("agent_check", "robotsix_mill.agent_check_runner:run_agent_check_pass",
-                                  "agent_check_interval_seconds", "agent_check_periodic", "_agent_check_task")
-        self._start_periodic_pass("bc_check", "robotsix_mill.bc_check_runner:run_bc_check_pass",
-                                  "bc_check_interval_seconds", "bc_check_periodic", "_bc_check_task")
-        self._start_periodic_pass("trace_review", "robotsix_mill.trace_review_runner:run_trace_review_pass",
-                                  "trace_review_interval_seconds", "trace_review_periodic", "_trace_review_task")
-        self._start_periodic_pass("completeness_check", "robotsix_mill.completeness_check_runner:run_completeness_check_pass",
-                                  "completeness_check_interval_seconds",
-                                  "completeness_check_periodic", "_completeness_check_task")
-        self._start_periodic_pass("copy-paste", "robotsix_mill.copy_paste_runner:run_copy_paste_pass",
-                                  "copy_paste_interval_seconds", "copy_paste_periodic", "_copy_paste_task")
-        self._start_periodic_pass("module_curator", "robotsix_mill.module_curator_runner:run_module_curator_pass",
-                                  "module_curator_interval_seconds", "module_curator_periodic", "_module_curator_task")
-        self._start_periodic_pass("test-gap", "robotsix_mill.test_gap_runner:run_test_gap_pass",
-                                  "test_gap_interval_seconds", "test_gap_periodic", "_test_gap_task")
-        self._start_periodic_pass("survey", "robotsix_mill.survey_runner:run_survey_pass",
-                                  "survey_interval_seconds", "survey_periodic", "_survey_task")
-        self._start_periodic_pass("config-sync", "robotsix_mill.config_sync_runner:run_config_sync_pass",
-                                  "config_sync_interval_seconds", "config_sync_periodic", "_config_sync_task")
-        self._start_periodic_pass("cost-reconciliation", "robotsix_mill.cost_reconciliation_runner:run_cost_reconciliation_pass",
-                                  "cost_reconciliation_interval_seconds",
-                                  "cost_reconciliation_periodic", "_cost_reconciliation_task")
+        self._start_periodic_pass(
+            "audit",
+            "robotsix_mill.audit_runner:run_audit_pass",
+            "audit_interval_seconds",
+            "audit_periodic",
+            "_audit_task",
+        )
+        self._start_periodic_pass(
+            "health",
+            "robotsix_mill.health_runner:run_health_pass",
+            "health_interval_seconds",
+            "health_periodic",
+            "_health_task",
+        )
+        self._start_periodic_pass(
+            "agent_check",
+            "robotsix_mill.agent_check_runner:run_agent_check_pass",
+            "agent_check_interval_seconds",
+            "agent_check_periodic",
+            "_agent_check_task",
+        )
+        self._start_periodic_pass(
+            "bc_check",
+            "robotsix_mill.bc_check_runner:run_bc_check_pass",
+            "bc_check_interval_seconds",
+            "bc_check_periodic",
+            "_bc_check_task",
+        )
+        self._start_periodic_pass(
+            "trace_review",
+            "robotsix_mill.trace_review_runner:run_trace_review_pass",
+            "trace_review_interval_seconds",
+            "trace_review_periodic",
+            "_trace_review_task",
+        )
+        self._start_periodic_pass(
+            "completeness_check",
+            "robotsix_mill.completeness_check_runner:run_completeness_check_pass",
+            "completeness_check_interval_seconds",
+            "completeness_check_periodic",
+            "_completeness_check_task",
+        )
+        self._start_periodic_pass(
+            "copy-paste",
+            "robotsix_mill.copy_paste_runner:run_copy_paste_pass",
+            "copy_paste_interval_seconds",
+            "copy_paste_periodic",
+            "_copy_paste_task",
+        )
+        self._start_periodic_pass(
+            "module_curator",
+            "robotsix_mill.module_curator_runner:run_module_curator_pass",
+            "module_curator_interval_seconds",
+            "module_curator_periodic",
+            "_module_curator_task",
+        )
+        self._start_periodic_pass(
+            "test-gap",
+            "robotsix_mill.test_gap_runner:run_test_gap_pass",
+            "test_gap_interval_seconds",
+            "test_gap_periodic",
+            "_test_gap_task",
+        )
+        self._start_periodic_pass(
+            "survey",
+            "robotsix_mill.survey_runner:run_survey_pass",
+            "survey_interval_seconds",
+            "survey_periodic",
+            "_survey_task",
+        )
+        self._start_periodic_pass(
+            "config-sync",
+            "robotsix_mill.config_sync_runner:run_config_sync_pass",
+            "config_sync_interval_seconds",
+            "config_sync_periodic",
+            "_config_sync_task",
+        )
+        self._start_periodic_pass(
+            "cost-reconciliation",
+            "robotsix_mill.cost_reconciliation_runner:run_cost_reconciliation_pass",
+            "cost_reconciliation_interval_seconds",
+            "cost_reconciliation_periodic",
+            "_cost_reconciliation_task",
+        )
 
         # --- Pattern B: dedicated poll-loop tasks ---
-        self._start_poll_loop_pass("trace-health", self._trace_health_poll_loop, "_trace_health_task",
-                                   log_msg="Periodic trace-health enabled: interval %ds",
-                                   log_args=(self.ctx.settings.trace_health_interval_seconds,))
-        self._start_poll_loop_pass("cost-warmer", self._cost_warmer_loop, "_cost_warmer_task",
-                                   log_msg="Cost warmer enabled: cycle %ds, pace %dms",
-                                   log_args=(self.ctx.settings.cost_warmer_interval_seconds,
-                                             self.ctx.settings.cost_warmer_pace_ms))
-        self._start_poll_loop_pass("langfuse-cleanup", self._langfuse_cleanup_poll_loop, "_langfuse_cleanup_task",
-                                   log_msg="Periodic Langfuse cleanup enabled: interval %ds, cap %d traces/project",
-                                   log_args=(self.ctx.settings.langfuse_cleanup_interval_seconds,
-                                             self.ctx.settings.langfuse_cleanup_max_traces))
-        self._start_poll_loop_pass("timeout-escalation", self._timeout_escalation_poll_loop,
-                                   "_timeout_escalation_task",
-                                   log_msg="Periodic timeout escalation enabled: interval %ds, threshold %ds",
-                                   log_args=(self.ctx.settings.timeout_escalation_interval_seconds,
-                                             self.ctx.settings.timeout_escalation_threshold_seconds))
+        self._start_poll_loop_pass(
+            "trace-health",
+            self._trace_health_poll_loop,
+            "_trace_health_task",
+            log_msg="Periodic trace-health enabled: interval %ds",
+            log_args=(self.ctx.settings.trace_health_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
+            "cost-warmer",
+            self._cost_warmer_loop,
+            "_cost_warmer_task",
+            log_msg="Cost warmer enabled: cycle %ds, pace %dms",
+            log_args=(
+                self.ctx.settings.cost_warmer_interval_seconds,
+                self.ctx.settings.cost_warmer_pace_ms,
+            ),
+        )
+        self._start_poll_loop_pass(
+            "langfuse-cleanup",
+            self._langfuse_cleanup_poll_loop,
+            "_langfuse_cleanup_task",
+            log_msg="Periodic Langfuse cleanup enabled: interval %ds, cap %d traces/project",
+            log_args=(
+                self.ctx.settings.langfuse_cleanup_interval_seconds,
+                self.ctx.settings.langfuse_cleanup_max_traces,
+            ),
+        )
+        self._start_poll_loop_pass(
+            "timeout-escalation",
+            self._timeout_escalation_poll_loop,
+            "_timeout_escalation_task",
+            log_msg="Periodic timeout escalation enabled: interval %ds, threshold %ds",
+            log_args=(
+                self.ctx.settings.timeout_escalation_interval_seconds,
+                self.ctx.settings.timeout_escalation_threshold_seconds,
+            ),
+        )
 
         # --- CI monitor (unique: checks repo config, not just settings) ---
         if self._ci_monitor_task is None:
             repos = get_repos_config()
             if any(rc.ci_monitor_enabled for rc in repos.repos.values()):
-                self._ci_monitor_task = asyncio.create_task(self._ci_monitor_poll_loop())
+                self._ci_monitor_task = asyncio.create_task(
+                    self._ci_monitor_poll_loop()
+                )
                 log.info("CI monitor enabled (per-repo config)")
 
         # --- Bespoke supervisors (unique: iterates repos + guards board_id) ---
         if self.ctx.settings.bespoke_periodic:
             for rc in get_repos_config().repos.values():
-                if not rc.bespoke_periodic or rc.board_id in self._bespoke_supervisor_tasks:
+                if (
+                    not rc.bespoke_periodic
+                    or rc.board_id in self._bespoke_supervisor_tasks
+                ):
                     continue
                 self._bespoke_supervisor_tasks[rc.board_id] = asyncio.create_task(
-                    self._bespoke_supervisor(rc))
-                log.info("Bespoke supervisor enabled for repo %s (discovery interval %ds)",
-                         rc.repo_id, self.ctx.settings.bespoke_discovery_interval_seconds)
+                    self._bespoke_supervisor(rc)
+                )
+                log.info(
+                    "Bespoke supervisor enabled for repo %s (discovery interval %ds)",
+                    rc.repo_id,
+                    self.ctx.settings.bespoke_discovery_interval_seconds,
+                )
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
