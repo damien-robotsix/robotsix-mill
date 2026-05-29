@@ -147,12 +147,17 @@ modules:
       - src/robotsix_mill/trace_review_runner.py
       - src/robotsix_mill/langfuse_cleanup_runner.py
       - src/robotsix_mill/bespoke_runner.py
+      - src/robotsix_mill/copy_paste_runner.py
+      - src/robotsix_mill/module_curator_runner.py
+      - src/robotsix_mill/periodic_runner.py
+      - src/robotsix_mill/verify_runner.py
       - tests/core/test_pass_runner.py
       - tests/test_cost_reconciliation_runner.py
       - tests/test_config_sync_runner.py
       - tests/test_roadmap_sync_runner.py
       - tests/test_trace_review_runner.py
       - tests/test_bespoke_runner.py
+      - tests/test_verify_runner.py
     dependencies: [config, core, forge, agents, langfuse, sandbox, notify]
 
   # -------------------------------------------------------------------
@@ -188,6 +193,7 @@ modules:
       - tests/stages/test_ci_fix.py
       - tests/stages/test_pause.py
       - tests/stages/test_retrospect_stage.py
+      - tests/stages/test_answer.py
       - tests/test_spec_review.py
       - tests/test_multi_repo.py
     dependencies: [config, core, forge, vcs, agents, runners, langfuse, runtime]
@@ -248,6 +254,8 @@ modules:
       - src/robotsix_mill/agents/close_thread.py
       - src/robotsix_mill/agents/ask_user.py
       - src/robotsix_mill/agents/spawn_subtask.py
+      - src/robotsix_mill/agents/post_comment.py
+      - src/robotsix_mill/agents/copy_pasting.py
       - tests/agents/test_fs_tools.py
       - tests/agents/test_web.py
       - tests/agents/test_explore.py
@@ -258,6 +266,9 @@ modules:
       - tests/agents/test_ci_patterns.py
       - tests/agents/test_jscpd_tool.py
       - tests/agents/test_spawn_subtask.py
+      - tests/agents/test_post_comment.py
+      - tests/agents/test_close_thread.py
+      - tests/agents/test_reply_thread.py
     dependencies: [config, core, agent-infra, sandbox, langfuse]
 
   - id: agents
@@ -298,7 +309,11 @@ modules:
       - src/robotsix_mill/agents/test_gap.py
       - src/robotsix_mill/agents/bespoke.py
       - src/robotsix_mill/agents/bespoke_loader.py
+      - src/robotsix_mill/agents/module_curator.py
       - tests/agents/test_coordinating.py
+      - tests/agents/test_module_curator.py
+      - tests/agents/test_answering.py
+      - tests/agents/test_review_revision.py
       - tests/agents/test_coding.py
       - tests/agents/test_reviewing.py
       - tests/agents/test_audit.py
@@ -423,6 +438,7 @@ modules:
       - .jscpd.json
       - .python-version
       - .trivyignore
+      - .secrets.baseline
       - scripts/**/*
       - dev/**/*
       - tests/__init__.py

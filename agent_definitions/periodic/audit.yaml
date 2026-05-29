@@ -15,6 +15,12 @@ tools:
   - read_file
   - list_dir
   - run_command
+  # detect_duplication is NOT declared here — it's injected at
+  # runtime by src/robotsix_mill/agents/auditing.py via
+  # make_jscpd_tool. Listing it would imply a YAML-loader-managed
+  # tool, which it isn't. The prompt's reference to
+  # `detect_duplication` is intentional and matched by the runtime
+  # injection.
 
 web: true
 report_issue: false

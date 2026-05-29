@@ -530,12 +530,14 @@ def main(argv: list[str] | None = None) -> int:
         elif args.description_file:
             with open(args.description_file, encoding="utf-8") as f:
                 body = f.read()
-        r = c.post(
-            "/tickets",
-            json={"title": args.title, "description": body, "kind": "inquiry"},
-        )
-        r.raise_for_status()
-        print(r.json()["id"])
+        with _client(settings) as c:
+            r = c.post(
+                "/tickets",
+                json={"title": args.title, "description": body,
+                      "kind": "inquiry"},
+            )
+            r.raise_for_status()
+            print(r.json()["id"])
         return 0
 
     with _client(settings) as c:
