@@ -466,6 +466,30 @@ class TestBranchIsAheadOfMain:
         result = git_ops.branch_is_ahead_of_main(dest)
         assert result is True
 
+    def test_branch_behind_main_returns_false(self, tmp_path):
+        """Regression: a branch that is BEHIND origin/main (zero
+        commits ahead, many behind because main moved on after the
+        branch was made) must return False. The previous content-diff
+        implementation reported "ahead" here because the diff between
+        a stale branch and a moved-on main is non-empty — which then
+        sent the empty branch to the forge and produced a 422
+        "No commits between main and branch"."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        # Capture the base-commit branch (before main moves on).
+        git_ops.create_branch(dest, "feature")
+        # Switch back to main and add a NEW commit, then push so
+        # origin/main is ahead of the feature branch.
+        _git(dest, "checkout", "main")
+        (dest / "main_added.txt").write_text("landed on main after branch was cut")
+        git_ops.commit_all(dest, "main moves on")
+        _git(dest, "push", "origin", "main")
+        # Switch back to the feature branch — it now has 0 commits
+        # ahead of origin/main (and N commits behind).
+        _git(dest, "checkout", "feature")
+        assert git_ops.branch_is_ahead_of_main(dest) is False
+
     def test_fetch_failure_assumes_ahead(self, tmp_path, monkeypatch):
         """When fetch fails, branch_is_ahead_of_main returns True
         (the 'assume ahead' fallback)."""

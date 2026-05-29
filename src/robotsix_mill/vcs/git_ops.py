@@ -218,10 +218,23 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
 def branch_is_ahead_of_main(repo: Path) -> bool:
     """Return True when HEAD has commits not in origin/main.
 
-    Fetches ``origin main`` first to avoid a stale local ref causing a
-    false negative.  A fetch or diff failure other than "no diff" (exit
-    1) is treated as "ahead" so delivery proceeds — we would rather hit
-    the forge API than block a real change.
+    Counts commits on HEAD that are NOT on ``origin/main`` (the
+    ``rev-list origin/main..HEAD`` semantic). A branch that is
+    *behind* main but not ahead — typical when the workspace clone's
+    local refs are stale and the branch was never updated with new
+    commits — returns False, which routes the empty branch to DONE
+    in the deliver stage instead of producing a GitHub 422 "No
+    commits between main and branch".
+
+    A content-diff check (the previous implementation) doesn't
+    distinguish ahead from behind: a stale branch that is BEHIND
+    main shows a non-empty diff (all the work landed on main after
+    the branch was created) and the old code reported "ahead",
+    pushing the branch to the forge which then rejected it.
+
+    Fetches ``origin main`` first so the local ref is current. A
+    fetch failure is treated as "ahead" so delivery proceeds — we
+    would rather hit the forge API than block a real change.
     """
     try:
         _git(repo, "fetch", "origin", "main")
@@ -230,15 +243,17 @@ def branch_is_ahead_of_main(repo: Path) -> bool:
         return True
 
     result = subprocess.run(
-        ["git", "-C", str(repo), "diff", "--quiet", "origin/main..HEAD"],
+        ["git", "-C", str(repo), "rev-list", "--count", "origin/main..HEAD"],
         capture_output=True,
         text=True,
     )
-    # --quiet exits 0 when there is *no* difference, 1 when there is.
-    if result.returncode == 0:
-        return False  # no diff → not ahead
-    # exit 1 = diff exists (ahead); anything else is an error → assume ahead
-    return True
+    if result.returncode != 0:
+        # rev-list failed — assume ahead so we don't block a real change
+        return True
+    try:
+        return int(result.stdout.strip()) > 0
+    except ValueError:
+        return True
 
 
 def changed_files(repo: Path, target_branch: str) -> list[str]:
