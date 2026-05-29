@@ -92,13 +92,16 @@ that tracks gaps that have been proposed (as draft tickets), declined,
 or already addressed (done). The memory is *yours* — you own its
 structure and content.
 
-0. **If the ledger is empty or missing canonical sections**, initialize
-   it with the three required headings before doing anything else:
-   ``## Proposals``, ``## Done``, ``## Declined``. The reconciliation
-   steps below assume these sections exist; without seeding, the
-   first-run ledger fails the agent-check format-consistency gate
-   (which flags ledgers missing the canonical sections) and the
-   gap-loop becomes self-perpetuating.
+0. **If the memory ledger is empty or new**, initialize it with three
+   canonical sections before proceeding:
+
+   .. code-block:: markdown
+
+      ## Proposals
+
+      ## Done
+
+      ## Declined
 1. **BEFORE proposing new gaps**, reconcile your memory ledger against
    the ``## Prior proposals — verified state`` table in your input:
    - Items whose ticket reached CLOSED with resolution
