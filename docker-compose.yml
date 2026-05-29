@@ -12,8 +12,11 @@
 # `--network none` sibling container (there is no local mode). That
 # needs the host Docker socket below — which grants the mill container
 # root-equivalent control of the host daemon. Only ./.data is bound in;
-# the project source is NOT, so the agent has no path to it. Run compose
-# from the repo root (MILL_SANDBOX_DATA_MOUNT uses $PWD).
+# the project source is NOT, so the agent has no path to it. The host
+# path of `./.data` is set via `sandbox.data_mount` in
+# config/mill.local.yaml (the bind-mount target on the host docker
+# daemon's filesystem — needed because the sibling sandbox runs
+# outside the mill container).
 
 services:
   mill:
@@ -30,10 +33,6 @@ services:
         hard: 65536
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    environment:
-      # sibling sandbox containers must bind the host path of ./.data
-      # (the docker daemon resolves -v on the host, not in this container)
-      - MILL_SANDBOX_DATA_MOUNT=${PWD}/.data
     # No group_add: entrypoint.sh inspects /var/run/docker.sock at
     # start-up and joins the matching group automatically (any host
     # docker GID — 959, 999, 1000 — Just Works).
