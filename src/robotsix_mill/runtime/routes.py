@@ -1103,7 +1103,14 @@ def generate_children(
             from ..runtime import tracing
             from ..agents.epic_breakdown import run_epic_breakdown_agent
 
-            session_id = tracing.make_session_id("epic-breakdown")
+            # Use the epic ticket id as the Langfuse sessionId so the
+            # breakdown's cost rolls up to the epic's session view +
+            # the drawer's /cost-breakdown endpoint picks it up. The
+            # old `make_session_id("epic-breakdown")` synthetic id
+            # made the trace invisible to the epic's per-ticket cost
+            # surface — the operator saw $0 on an epic that just
+            # spent money breaking itself down.
+            session_id = ticket_id
             with tracing.start_ticket_root_span(
                 session_id, "epic-breakdown",
                 repo_config=epic_repo_config,
@@ -1153,6 +1160,25 @@ def generate_children(
                         result.epic_body and result.epic_body.strip()
                     ),
                 })
+                # Record the breakdown in the epic's own history so the
+                # drawer shows what happened (and how much it cost).
+                # add_step_event uses the current state, so this stays
+                # in EPIC_OPEN — no state machine churn.
+                try:
+                    body_changed = bool(
+                        result.epic_body and result.epic_body.strip()
+                    )
+                    epic_svc.add_step_event(
+                        ticket_id,
+                        "epic-breakdown: spawned "
+                        f"{len(created_ids)} child(ren)"
+                        + (" + revised epic body" if body_changed else ""),
+                    )
+                except Exception:
+                    log.exception(
+                        "epic-breakdown: add_step_event failed for %s",
+                        ticket_id,
+                    )
             registry.finish_ok(run_id, summary)
             log.info(
                 "epic-breakdown done: %d children for %s",

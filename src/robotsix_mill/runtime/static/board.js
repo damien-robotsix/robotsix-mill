@@ -59,6 +59,10 @@ const STEP_LABEL=[
  ["doc_classifier:",     "doc_classifier",     ""],
  ["merge:",              "merge",              "merge.md"],
  ["review:",             "review",             "review.md"],
+ // The breakdown step event is emitted from the /generate-children
+ // route + the refine→promote_to_epic path. Trace name is
+ // "epic-breakdown".
+ ["epic-breakdown",      "epic-breakdown",     ""],
 ];
 function matchStep(note){
  if(!note)return null;
