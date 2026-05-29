@@ -443,8 +443,15 @@ class Settings(BaseSettings):
     # conclusion. This kills the per-request web-search surcharge on the
     # pricey model and keeps its context lean (conclusions, not pages).
     web_search: bool = Field(default=True, alias="MILL_WEB_SEARCH")
+    # web_research is a focused single-question summariser — it reads
+    # a URL or two and returns one concise factual conclusion. Flash
+    # is plenty for that distillation, and a v4-pro context bloated
+    # by a 314KB raw web_fetch costs $0.25 per call (seen in trace
+    # d40e3c9d4fa5add80b2fe313c1d821f2 — pipeline ticket f6e2 refine).
+    # Flip the default to flash. Operators who want v4-pro back set
+    # MILL_WEB_RESEARCH_MODEL.
     web_research_model: str = Field(
-        default="deepseek/deepseek-v4-pro",
+        default="deepseek/deepseek-v4-flash",
         alias="MILL_WEB_RESEARCH_MODEL",
     )
     web_research_request_limit: int = Field(
