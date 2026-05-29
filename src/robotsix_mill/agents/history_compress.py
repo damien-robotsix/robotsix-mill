@@ -1,52 +1,49 @@
-"""Token-aware history compression.
+"""Elide older ToolReturnPart content when estimated token count
+exceeds a configurable threshold.
 
-Only elides ``ToolReturnPart.content`` strings — never touches user
-messages, system prompts, or model responses. When the estimated token
-count exceeds *max_tokens*, the oldest tool-return content strings are
-truncated (their text replaced with a short placeholder) until the
-budget is satisfied, while always preserving the last *keep_last*
-messages unconditionally.
+Only tool outputs are touched — user messages, system prompts, and
+model responses are never modified.  Token estimation uses the
+chars/4 heuristic to avoid a tiktoken dependency.
 """
 
 from __future__ import annotations
 
-import logging
-
-log = logging.getLogger(__name__)
-
 
 def compress_history(
-    message_history: list,
+    messages: list,
     *,
-    max_tokens: int,
-    keep_last: int,
+    max_tokens: int = 100_000,
+    keep_last: int = 5,
 ) -> list:
-    """Elide ``ToolReturnPart.content`` strings from the front when the
-    estimated token count exceeds *max_tokens*, preserving the last
-    *keep_last* messages unconditionally.
+    """Elide older ToolReturnPart content when estimated tokens exceed
+    ``max_tokens``.
 
-    Token estimation uses a coarse char/4 heuristic (≈ English prose).
-    Returns the original list when *max_tokens* ≤ 0 or the budget is
-    already satisfied.
+    Returns the same list (mutated in place) — callers that need the
+    original should pass a copy.  Under-budget lists are returned
+    unchanged.
     """
-    if not message_history or max_tokens <= 0:
-        return message_history
+    total_chars = 0
+    for m in messages:
+        for part in getattr(m, "parts", []):
+            content = getattr(part, "content", None)
+            if content is not None and isinstance(content, str):
+                total_chars += len(content)
+            elif hasattr(part, "args") and isinstance(part.args, str):
+                total_chars += len(part.args)
+    if total_chars / 4 < max_tokens:
+        return messages  # under budget, no compression needed
 
-    # Estimate total tokens: sum of JSON-serialised message length / 4.
-    total_est = sum(len(m.json()) // 4 for m in message_history)
+    from pydantic_ai.messages import ToolReturnPart
 
-    if total_est <= max_tokens:
-        return message_history
-
-    keep_last_val = max(keep_last, 0)
-    # Walk from the front, dropping messages until we're within budget
-    # or only *keep_last* remain.
-    for i in range(len(message_history) - keep_last_val):
-        dropped_est = len(message_history[i].json()) // 4
-        total_est -= dropped_est
-        if total_est <= max_tokens:
-            return message_history[i + 1 :]
-
-    # Budget still exceeded even after dropping all but keep_last;
-    # return only the tail.
-    return message_history[-keep_last_val:] if keep_last_val else message_history[-1:]
+    tool_return_count = 0
+    for i in range(len(messages) - 1, -1, -1):
+        msg = messages[i]
+        for part in getattr(msg, "parts", []):
+            if isinstance(part, ToolReturnPart):
+                tool_return_count += 1
+                if tool_return_count > keep_last:
+                    part.content = (
+                        f"[earlier output elided — "
+                        f"{len(part.content)} chars]"
+                    )
+    return messages
