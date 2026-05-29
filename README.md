@@ -24,7 +24,9 @@ The mail ingestion pipeline is implemented: `robotsix-auto-mail` can fetch messa
 
 ## Connecting
 
-Configuration keys, precedence rules, and walkthroughs of the `probe` diagnostics command and the `ingest` mail-fetching command are documented in [docs/connecting.md](docs/connecting.md).
+Configuration keys, precedence rules, and walkthroughs of the `probe`
+diagnostics command, the `ingest` mail-fetching command, and the `board`
+read-only view are documented in [docs/connecting.md](docs/connecting.md).
 
 ## License
 

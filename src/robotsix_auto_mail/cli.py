@@ -11,7 +11,7 @@ from typing import TextIO
 
 from robotsix_auto_mail import __version__
 from robotsix_auto_mail.config import MailConfig, load
-from robotsix_auto_mail.db import init_db
+from robotsix_auto_mail.db import init_db, list_records
 from robotsix_auto_mail.imap import ImapClient, ImapError
 from robotsix_auto_mail.pipeline import IngestResult, ingest_mail
 from robotsix_auto_mail.smtp_client import SmtpClient, SmtpError
@@ -42,6 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Fetch and parse messages without storing or advancing watermark",
     )
+
+    sub.add_parser("board", help="Display ingested mail in a read-only board view")
 
     return parser
 
@@ -160,6 +162,28 @@ def _cmd_ingest(config: MailConfig, *, dry_run: bool = False) -> int:
     return 0
 
 
+def _cmd_board(config: MailConfig) -> int:
+    """Run the board subcommand: display ingested mail in a read-only view.
+
+    Returns 0 on success, 1 on failure to load configuration.
+    """
+    conn = init_db(config.db_path)
+    try:
+        records = list_records(conn)
+    finally:
+        conn.close()
+
+    _print_header(sys.stdout, "Inbox")
+
+    if not records:
+        sys.stdout.write("(no mail)\n")
+    else:
+        count = len(records)
+        sys.stdout.write(f"{count} message(s)\n")
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse args and dispatch to the appropriate subcommand handler.
 
@@ -183,6 +207,14 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(f"Error loading configuration: {exc}\n")
             return 1
         return _cmd_ingest(config, dry_run=args.dry_run)
+
+    if args.command == "board":
+        try:
+            config = load()
+        except Exception as exc:
+            sys.stderr.write(f"Error loading configuration: {exc}\n")
+            return 1
+        return _cmd_board(config)
 
     # No command given — print help and exit 1.
     parser.print_help(sys.stderr)

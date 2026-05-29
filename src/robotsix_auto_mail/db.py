@@ -146,6 +146,36 @@ def get_watermark(conn: sqlite3.Connection, key: str) -> str | None:
     return row[0] if row is not None else None
 
 
+def list_records(conn: sqlite3.Connection) -> list[MailRecord]:
+    """Return every ``MailRecord`` in the ``mail_records`` table.
+
+    Rows are returned in the order the database provides (typically
+    insertion order given the auto-increment primary key).  The caller
+    owns the connection and must close it.
+    """
+    cur = conn.execute("SELECT * FROM mail_records ORDER BY id ASC")
+    rows = cur.fetchall()
+    col_names = [desc[0] for desc in cur.description]
+    results: list[MailRecord] = []
+    for row in rows:
+        data = dict(zip(col_names, row))
+        results.append(
+            MailRecord(
+                message_id=data["message_id"],
+                sender=data["sender"],
+                subject=data["subject"],
+                date=data["date"],
+                imap_uid=data["imap_uid"],
+                recipients_json=data["recipients_json"],
+                body_plain=data["body_plain"],
+                body_html=data["body_html"],
+                attachments_json=data["attachments_json"],
+                id=data["id"],
+            )
+        )
+    return results
+
+
 def set_watermark(
     conn: sqlite3.Connection, key: str, value: str
 ) -> None:

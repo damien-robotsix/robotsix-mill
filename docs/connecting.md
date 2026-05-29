@@ -183,3 +183,29 @@ Exit code is `0` when both probes succeed, `1` when either fails.
 The ingestion pipeline is documented separately — see
 [docs/ingestion.md](ingestion.md) for the full ingestion model, datastore
 schema, idempotency guarantees, configuration, and CLI usage.
+
+## The `board` command
+
+Once mail has been ingested, view it with the read-only board:
+
+```sh
+$ robotsix-auto-mail board
+```
+
+`board` opens the local SQLite datastore and prints an "Inbox" header with a
+count of stored messages.  When the inbox is empty it prints `(no mail)`.
+
+The command is read-only — it never modifies the database or contacts a mail
+server.  Mail-card rendering (subject lines, sender info, body previews)
+arrives in a follow-up release.
+
+### Representative output
+
+```text
+
+Inbox
+------------------------------------------------------------
+7 message(s)
+```
+
+Exit code is `0` on success, `1` when configuration cannot be loaded.
