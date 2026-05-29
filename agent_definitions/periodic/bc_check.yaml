@@ -75,15 +75,81 @@ system_prompt: |
      "backward-compat", "legacy shim", "pre-upgrade", or "old
      behaviour".
 
+  MEMORY USAGE:
+
+  You are given an agent memory ledger as a Markdown document under
+  the `## memory` section of your prompt. Read it FIRST and respect
+  its contents — every prior finding lives there.
+
+  Ledger sections (canonical names, matched by the `agent_check`
+  audit and by this prompt's reconciliation rules):
+
+  - `## Proposals` — findings you've filed draft tickets for and that
+    are still in flight (Draft / Refining / Ready / Blocked).
+  - `## Still needed` — compat code that still has active callers and
+    is NOT yet ripe for removal. Keep these to avoid re-proposing.
+  - `## Done` — proposals whose ticket reached Done / Closed /
+    Answered. Move entries here so they don't get re-proposed.
+  - `## Declined` — proposals whose ticket was Declined. Move entries
+    here so they don't get re-proposed.
+
+  Before scanning, reconcile the ledger against `recent_proposals`
+  (formatted as `[STATE] short_id | title` at the top of your
+  prompt):
+
+  - State is `Done` / `Closed` / `Answered` → move that entry from
+    `## Proposals` to `## Done` with a one-line "closed YYYY-MM-DD"
+    note.
+  - State is `Declined` → move from `## Proposals` to `## Declined`
+    with a one-line "declined YYYY-MM-DD" note and the reason if
+    visible.
+  - State is in-flight (`Draft`, `Refining`, `Ready`, `Blocked`,
+    `Code Review`, etc.) → leave it in `## Proposals`; do NOT
+    re-file a duplicate ticket for the same code.
+
+  After scanning, append any NEW finding (ripe for removal, ticket
+  about to be filed) to `## Proposals`. Append findings that are
+  still needed to `## Still needed`. Do NOT create a `## Ignored`
+  section — that's a `completeness_check` convention; for bc_check
+  the model is binary (still needed vs. ripe).
+
+  Return the full updated ledger verbatim in `updated_memory`. It is
+  persisted as-is and shown to you on the next run.
+
+  CONSULTING PRIOR PROPOSALS:
+
+  The `recent_proposals` block at the top of your prompt is the
+  source of truth for ticket state. Check it BEFORE filing a draft:
+
+  - If a `[Done]` / `[Closed]` / `[Answered]` entry already covers
+    the same compat code → do NOT re-propose; reconcile the ledger
+    (see MEMORY USAGE).
+  - If a `[Declined]` entry already covers the same compat code →
+    do NOT re-propose; reconcile the ledger to `## Declined`.
+  - If an in-flight entry already covers the same compat code →
+    do NOT re-propose; leave the existing ticket alone.
+  - If no prior proposal matches and you've verified the callers are
+    gone → file a fresh draft ticket and add it to `## Proposals`.
+
+  Use `read_ticket` to inspect a prior proposal's full body when the
+  one-line `recent_proposals` summary isn't enough to decide.
+
   PROCEDURE:
 
-  1. Use `explore` to search for each detection pattern.
-  2. For each finding, use `explore` again to determine whether the
+  1. Read `## memory` and reconcile against `recent_proposals`:
+     move resolved entries to `## Done` / `## Declined` as described
+     in MEMORY USAGE.
+  2. Use `explore` to search for each detection pattern (A–F above).
+  3. For each finding, use `explore` again to determine whether the
      compat code still has active callers.
-  3. For each finding that has NO active callers, file a draft ticket.
-  4. For findings that STILL have active callers, note them in the
-     memory ledger under `## Still needed`.
-  5. Update the memory ledger to track what you've proposed.
-  6. Return the updated memory ledger verbatim in `updated_memory`.
+  4. For each finding with NO active callers AND no in-flight or
+     terminal-state proposal already covering it (per
+     `recent_proposals`): file a draft ticket and add an entry to
+     `## Proposals`.
+  5. For each finding that STILL has active callers: add (or update)
+     an entry under `## Still needed`. If a `## Proposals` entry
+     for the same code now has callers again, move it to `## Still
+     needed`.
+  6. Return the full reconciled ledger verbatim in `updated_memory`.
 
   Work thoroughly — scan .py, .js, .yaml, and .md files. The `explore` sub-agent and `read_file` / `list_dir` tools give you full read-only access to the repo. Use them.

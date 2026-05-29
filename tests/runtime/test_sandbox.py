@@ -132,6 +132,44 @@ def test_sandbox_data_mount_overrides_volume(tmp_path, monkeypatch):
     assert "mill_data:/data" not in a
 
 
+def test_sandbox_resolves_relative_repo_dir_to_absolute(tmp_path, monkeypatch):
+    """Regression: a relative repo_dir + relative data_dir used to flow
+    through to docker run as ``-w .data/.../repo``, which Docker rejects
+    with "needs to be an absolute path" (the BLOCKED bc-check ticket on
+    2026-05-29 08:00 hit exactly this). The sandbox must call resolve()
+    on both before emitting argv."""
+    abs_data = tmp_path / "fake_data"
+    abs_repo = abs_data / "board/work/repo"
+    abs_repo.mkdir(parents=True)
+
+    # Build settings with relative-style paths via attribute mutation so
+    # we bypass Settings() YAML loading (which would need cwd=repo-root).
+    s = _settings(tmp_path)
+    s.data_dir = abs_data  # absolute, but we'll feed run() a relative path
+    s.data_volume = "mill_data"
+
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.chdir(abs_data.parent)  # safe: no YAML load happens here
+    # Feed a RELATIVE repo_dir; the new code must resolve it to abs_repo.
+    sandbox.run(
+        "true",
+        repo_dir=Path("fake_data/board/work/repo"),
+        settings=s,
+    )
+    a = seen["argv"]
+    workdir = a[a.index("-w") + 1]
+    assert Path(workdir).is_absolute(), (
+        f"workdir must be absolute, got {workdir!r}"
+    )
+    assert workdir == str(abs_repo)
+
+
 def test_docker_missing_raises_sandbox_error(tmp_path, monkeypatch):
     s = _settings(tmp_path)
 

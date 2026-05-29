@@ -46,13 +46,20 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
     the data-dir root (which holds ``mill.db``, the memory ledgers and
     every other ticket's workspace). Target = the repo's real path so
     ``-w`` and any absolute path in the repo still resolve."""
-    repo_dir = Path(repo_dir)
+    # Resolve both to absolute up-front. Docker's `-w` and the volume
+    # target both REQUIRE absolute paths; the default settings.data_dir
+    # is the relative Path(".data"), so without resolution the
+    # downstream `-w str(repo_dir)` emits "Path .data/... is invalid,
+    # it needs to be an absolute path" (seen as ticket-blocking error
+    # on bc-check-agent-add-done-... 2026-05-29 08:00).
+    repo_dir = Path(repo_dir).resolve()
+    data_dir = Path(settings.data_dir).resolve()
     try:
-        rel = repo_dir.relative_to(settings.data_dir)
+        rel = repo_dir.relative_to(data_dir)
     except ValueError as e:
         raise SandboxError(
             f"repo_dir {repo_dir} is not under data_dir "
-            f"{settings.data_dir}; refusing to mount"
+            f"{data_dir}; refusing to mount"
         ) from e
     if rel == Path("."):
         raise SandboxError("refusing to mount the data-dir root as repo")
@@ -93,7 +100,10 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
     """Execute ``command`` against ``repo_dir`` in a disposable
     container. Returns ``(exit_code, combined_output)``. Raises
     :class:`SandboxError` on isolation-infrastructure failure."""
-    repo_dir = Path(repo_dir)  # callers (e.g. the merge stage) may pass a str
+    # Callers (e.g. the merge stage) may pass a str. We also resolve to
+    # an absolute path because Docker's `-w` rejects relative arguments
+    # (see _repo_mount for the same reason).
+    repo_dir = Path(repo_dir).resolve()
     name = f"mill-sbx-{uuid.uuid4().hex[:12]}"
     argv = [
         "docker", "run", "--rm", "--name", name,
