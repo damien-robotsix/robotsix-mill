@@ -320,6 +320,38 @@ def test_attachment_no_filename() -> None:
     assert atts[0]["mime_type"] == "application/octet-stream"
 
 
+def test_multiple_attachments() -> None:
+    """multipart/mixed with a plain-text body and two attachments."""
+    msg = email.mime.multipart.MIMEMultipart("mixed")
+    msg.attach(email.mime.text.MIMEText("body text here", "plain"))
+
+    att1 = email.mime.application.MIMEApplication(b"a" * 200, "pdf")
+    att1.add_header("Content-Disposition", "attachment", filename="report.pdf")
+    msg.attach(att1)
+
+    att2 = email.mime.application.MIMEApplication(b"b" * 300, "png")
+    att2.add_header("Content-Disposition", "attachment", filename="image.png")
+    msg.attach(att2)
+
+    msg["Subject"] = "MultiAtt"
+    msg["From"] = "a@x.com"
+    msg["Date"] = "Wed, 15 Jan 2025 10:30:00 +0000"
+
+    record = parse_message(msg.as_bytes())
+    atts = json.loads(record.attachments_json)
+
+    assert len(atts) == 2
+    assert record.body_plain == "body text here"
+
+    assert atts[0]["filename"] == "report.pdf"
+    assert atts[0]["mime_type"] == "application/pdf"
+    assert atts[0]["size"] == 200
+
+    assert atts[1]["filename"] == "image.png"
+    assert atts[1]["mime_type"] == "application/png"
+    assert atts[1]["size"] == 300
+
+
 # ---------------------------------------------------------------------------
 # imap_uid
 # ---------------------------------------------------------------------------
