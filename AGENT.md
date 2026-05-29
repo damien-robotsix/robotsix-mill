@@ -69,3 +69,88 @@ When you discover a new stack-level trap that another agent will hit:
 add a new `agent_references/<topic>.md` describing it in the same
 shape as the existing entry (limitation → consequence → canonical
 workaround). Keep entries narrow and verifiable in the repo.
+
+## Module taxonomy
+
+The repo has a formal module taxonomy so that navigation-heavy agents
+can understand the codebase structure without crawling it from scratch.
+
+**`docs/modules.yaml`** is the single source of truth for what modules
+exist and where their files live. It's a YAML list under a `modules:`
+key, where each entry has:
+
+- `id` — stable kebab-case identifier (e.g. `config`, `agent-infra`).
+  Must match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`.
+- `description` — one-paragraph summary of the module's responsibility.
+- `paths` — repo-relative glob patterns covering every file belonging
+  to that module.
+- `dependencies` — array of other module `id` values this module
+  structurally depends on (not import-level).
+
+Every tracked file in `src/`, `tests/`, `docs/`, etc. should be claimed
+by exactly one module. There are currently 19 modules; the canonical
+list is `docs/modules.yaml` itself. The file is validated on every push
+by `docs/modules.schema.yaml` (JSON Schema, draft 2020-12) via a
+pre-commit hook and CI step, both running
+`check-jsonschema --schemafile docs/modules.schema.yaml docs/modules.yaml`.
+
+### `module_curator` periodic agent
+
+A read-only agent runs daily (configurable via
+`module_curator_interval_seconds` in `config/mill.defaults.yaml`,
+default 86400 s). It **never** moves files, deletes files, or edits
+`docs/modules.yaml`. Its tools are `explore`, `read_file`, `list_dir`,
+and `run_command`.
+
+It detects three classes of drift:
+
+1. **Unclassified files** — files in covered directories not matched by
+   any module's `paths` globs. Files a draft ticket titled
+   "Classify `<file>`: assign to existing module or propose a new one."
+2. **Stale paths** — module globs that resolve to zero existing files.
+   Files a draft ticket titled "Cleanup module `<id>`: path `<glob>`
+   references no files."
+3. **New module proposals** — spots a `## New module` section in a
+   recently merged PR description and files a draft ticket titled
+   "Ratify new module: `<id>`."
+
+The curator de-duplicates against existing open tickets before filing.
+Its memory ledger lives at `<data_dir>/module_curator_memory.md` and
+persists state across passes.
+
+### `modules: true` opt-in for agents
+
+Agent definition YAMLs (in `agent_definitions/` and
+`agent_definitions/periodic/`) have an optional `modules` boolean
+field, defaulting to `false`. When an agent definition sets
+`modules: true`, `compose_prompt()` in `src/robotsix_mill/agents/base.py`
+loads `docs/modules.yaml`, renders a compact **Module Map** block via
+`_render_module_map()`, and appends it to the agent's system prompt.
+The Module Map lists each module's `id`, `description`, `paths`, and
+`dependencies`. When there are more than 20 modules, only top-level
+modules (those with no `dependencies`) are shown, with a pointer to
+`docs/modules.yaml` for the rest.
+
+**Currently no agents have opted in** — the `modules` field is absent
+from all agent YAML files. Navigation-heavy agents (e.g. `refine`,
+`implement`, `explore`) are the intended consumers; opt-in happens in a
+separate ticket.
+
+### Adding a new module
+
+1. Add a new entry to `docs/modules.yaml` under `modules:` with `id`,
+   `description`, at least one `paths` glob, and `dependencies` (can
+   be `[]`).
+2. Validate locally: `check-jsonschema --schemafile docs/modules.schema.yaml docs/modules.yaml`
+   (available via pre-commit or the `check-jsonschema` pip package).
+3. The pre-commit hook and CI will catch schema violations. The
+   `module_curator` will flag any files that still fall outside the
+   taxonomy.
+
+### Deprecating a module
+
+Remove the module entry from `docs/modules.yaml` and reassign its
+`paths` to the module(s) that absorbed the responsibility. Run the
+schema validator to confirm the file is still valid. The curator may
+file "stale paths" and "Classify" tickets as reminders — these aren't
+errors, just prompts to clean up.
