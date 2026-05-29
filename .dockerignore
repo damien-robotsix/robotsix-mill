@@ -1,0 +1,40 @@
+# Version control
+.git/
+.github/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Virtual environment
+.venv/
+
+# Project tooling
+.python-version
+
+# Environment / secrets (credentials)
+.env
+.env.*
+!.env.example
+
+# Real mail configuration (credentials)
+config/mail.toml
+
+# Documentation
+README.md
+ROADMAP.md
+LICENSE
+docs/
+
+# Tests (not needed at runtime)
+tests/
+
+# Self-referential — the Docker build doesn't need these in context
+Dockerfile
+.dockerignore
