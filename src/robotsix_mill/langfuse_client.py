@@ -97,6 +97,45 @@ def session_total_cost(settings: Settings, session_id: str, repo_config: RepoCon
     return total
 
 
+def session_traces(
+    settings: Settings,
+    session_id: str,
+    repo_config: RepoConfig | None = None,
+) -> list[dict] | None:
+    """Return Langfuse traces for *session_id* as a list of
+    ``{name, cost, at, trace_id}`` dicts ordered by timestamp ascending.
+
+    ``None`` is returned when Langfuse is unconfigured / unreachable so
+    the caller can degrade rather than show ``$0`` and pretend that's
+    real. The drawer uses this to overlay per-step cost on history rows.
+    """
+    data = _langfuse_api_get(
+        settings,
+        "/api/public/traces",
+        params={"sessionId": session_id, "limit": 100},
+        repo_config=repo_config,
+    )
+    if data is None:
+        return None
+
+    def _num(x):
+        try:
+            return float(x or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    out: list[dict] = []
+    for t in data.get("data") or []:
+        out.append({
+            "name": t.get("name") or "?",
+            "cost": _num(t.get("totalCost")),
+            "at": t.get("timestamp") or "",
+            "trace_id": t.get("id") or "",
+        })
+    out.sort(key=lambda r: r["at"])
+    return out
+
+
 def session_cost(settings: Settings, session_id: str, repo_config: RepoConfig | None = None) -> float:
     """Read-time per-ticket cost: the Langfuse session total, cached for
     ``_COST_TTL_SECONDS``. Always returns a number (0.0 when Langfuse is

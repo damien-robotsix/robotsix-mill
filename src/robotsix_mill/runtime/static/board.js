@@ -32,8 +32,11 @@ const SOURCE_CLASS={retrospect:"retrospect",audit:"audit",config_sync:"config-sy
 const STATE_ARTIFACT={
  human_issue_approval:"draft-original.md",
  ready:"file_map.json",
- code_review:"implement.md",
- documenting:"review.md",
+ // implement.md now lives on the `implement` step row above this
+ // transition (see STEP_LABEL); the code_review row exposes the
+ // review's feedback so the operator can see what review concluded.
+ code_review:"review.md",
+ documenting:"",
  implement_complete:"deliver.md",
  human_mr_approval:"merge.md",
  waiting_auto_merge:"merge.md",
@@ -101,7 +104,42 @@ async function toggleEvent(summaryEl){
 // open_()'s initial paint and the 1s refreshDetail() poll.  Without
 // this shared helper the poll re-emitted the legacy single-line
 // format and erased per-event expansion state.
-function renderHistoryHtml(history, ticketId){
+// History event → Langfuse trace name. Used by renderHistoryHtml to
+// look up which Langfuse trace's cost should appear on each row.
+// State chips return the trace that PRODUCED that state; step events
+// already carry the trace name in the chip label.
+const STATE_TRACE={
+ ready:"refine",
+ human_issue_approval:"refine",
+ code_review:"review",
+ documenting:"document",
+ deliverable:"deliver",
+ implement_complete:"deliver",
+ human_mr_approval:"merge",
+ waiting_auto_merge:"merge",
+ fixing_ci:"ci_fix",
+ rebasing:"rebase",
+ done:"merge",
+ closed:"retrospect",
+ answered:"answer",
+};
+// Match a history event to its trace cost. Pick the trace whose name
+// matches AND whose timestamp is the latest one ≤ the event time
+// (so iterative loops — implement → review → implement again —
+// each map to the right trace pass).
+function findTraceCost(event, agentName, traces){
+ if(!traces||!traces.length||!agentName)return null;
+ const evTs=new Date(event.at).getTime();
+ let best=null;
+ for(const t of traces){
+  if(t.name!==agentName)continue;
+  const tt=new Date(t.at).getTime();
+  if(tt>evTs+5000)continue; // 5s grace for clock skew
+  if(!best||tt>new Date(best.at).getTime())best=t;
+ }
+ return best;
+}
+function renderHistoryHtml(history, ticketId, traces){
  const events=history||[];
  // Detect step events: a same-state event whose previous event had
  // the same state too (i.e. no transition between them). Those rows
@@ -116,11 +154,15 @@ function renderHistoryHtml(history, ticketId){
   const chipClass=step?"ev-step":"s-"+e.state;
   const art=(step&&step.art)?step.art:(STATE_ARTIFACT[e.state]||"");
   const hasDetail=!!(e.note||art);
+  const agentName=step?step.label:STATE_TRACE[e.state];
+  const trace=findTraceCost(e, agentName, traces||[]);
+  const cost=trace?`<span class="ev-cost" title="Langfuse trace ${esc(trace.trace_id)}">$${trace.cost.toFixed(4)}</span>`:"";
   return `<div class="ev${isStep?" ev-is-step":""}" data-tid="${esc(ticketId)}" data-art="${esc(art)}" data-open="0">`+
    `<div class="ev-summary" onclick="toggleEvent(this)">`+
     `<span class="ev-arrow">${hasDetail?"▶":"·"}</span>`+
     `<span class="ev-at muted">${e.at}</span>`+
     `<b class="ev-state ${chipClass}">${esc(chipLabel)}</b>`+
+    cost+
    `</div>`+
    `<div class="ev-detail" style="display:none">`+
     (e.note?`<div class="ev-note">${renderMD(e.note)}</div>`:"")+
@@ -1116,18 +1158,19 @@ async function open_(id){
   '<div class="sk-label"></div>'+skW('100%','14px')+skW('80%','14px')+
   '<div class="sk-label"></div>'+skW('90%','10px')+skW('70%','10px')+
   '</div>';
- // 3. Fire all 9 requests in parallel — same endpoints, no extra latency
+ // 3. Fire all requests in parallel — same endpoints, no extra latency
  const tP=jget("/tickets/"+id);
  const hP=jget("/tickets/"+id+"/history");
  const dP=jget("/tickets/"+id+"/description");
  const csP=jget("/tickets/"+id+"/comments");
  const rtP=jget("/tickets/"+id+"/retrospect");
  const chP=jget("/tickets/"+id+"/children");
+ const cbP=jget("/tickets/"+id+"/cost-breakdown");
  const miP=jget("/tickets/"+id+"/merge-info");
  const mrP=jget("/tickets/"+id+"/merge-reason");
  const msP=jget("/tickets/"+id+"/merge-status");
  // Accumulators for sections that may arrive before the header DOM exists
- let tData=null,_ch,_h,_d,_cs,_rt,_mi,_mr,_ms;
+ let tData=null,_ch,_h,_d,_cs,_rt,_mi,_mr,_ms,_cb;
  function updateMergeButton(){
   if(!tData||tData.state!=="human_mr_approval"||_ms===undefined)return;
   const ba=document.getElementById("ticket-merge-btn-area");
@@ -1148,7 +1191,8 @@ async function open_(id){
  }
  function flushHistory(){
   if(_h===undefined)return;const el=document.getElementById("ticket-history");if(!el)return;
-  el.innerHTML=renderHistoryHtml(_h,id);
+  const traces=(_cb&&_cb.traces)||[];
+  el.innerHTML=renderHistoryHtml(_h,id,traces);
  }
  function flushDescription(){
   if(_d===undefined)return;const el=document.getElementById("ticket-body-area");if(!el)return;
@@ -1218,6 +1262,7 @@ async function open_(id){
  // 5. Fire all section handlers — each stores data and tries to flush
  chP.then(ch=>{if(sel!==id)return;_ch=ch;flushChildren();});
  hP.then(h=>{if(sel!==id)return;_h=h;flushHistory();});
+ cbP.then(cb=>{if(sel!==id)return;_cb=cb;flushHistory();});
  dP.then(d=>{if(sel!==id)return;_d=d;flushDescription();});
  rtP.then(rt=>{if(sel!==id)return;_rt=rt;flushRetrospect();});
  csP.then(cs=>{if(sel!==id)return;_cs=cs;flushComments();});
@@ -1870,12 +1915,13 @@ function createTicketFromFinding(idx,event){
 const _detailLast={};
 async function refreshDetail(id){
  if(!document.getElementById("ticket-header"))return; // header not yet rendered → let open_() handle
- const [t,ch,h,d,rt,cs,mi,mr,ms]=await Promise.all([
+ const [t,ch,h,d,rt,cs,mi,mr,ms,cb]=await Promise.all([
   jget("/tickets/"+id), jget("/tickets/"+id+"/children"),
   jget("/tickets/"+id+"/history"), jget("/tickets/"+id+"/description"),
   jget("/tickets/"+id+"/retrospect"), jget("/tickets/"+id+"/comments"),
   jget("/tickets/"+id+"/merge-info"), jget("/tickets/"+id+"/merge-reason"),
   jget("/tickets/"+id+"/merge-status"),
+  jget("/tickets/"+id+"/cost-breakdown"),
  ]);
  if(sel!==id||!t)return;
  const swap=(elId,html)=>{
@@ -1916,7 +1962,7 @@ async function refreshDetail(id){
    if(at&&st)wasOpen.add(at.textContent+"|"+st.textContent);
   });
  }
- const newHistHtml=renderHistoryHtml(h,id);
+ const newHistHtml=renderHistoryHtml(h,id,(cb&&cb.traces)||[]);
  swap("ticket-history", newHistHtml);
  if(wasOpen.size>0){
   const el2=document.getElementById("ticket-history");
