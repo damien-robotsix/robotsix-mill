@@ -32,11 +32,23 @@ class AgentBudgetError(RuntimeError):
 
 
 class AgentRunError(RuntimeError):
-    """Agent raised / could not converge — block-as-resumable."""
+    """Agent raised / could not converge — block-as-resumable.
 
-    def __init__(self, message: str, messages: list) -> None:
+    ``cause`` carries the original exception so the implement stage
+    can classify it (e.g. via ``transient_errors.classify_stage_exc``)
+    and route transient infra failures — OpenRouter timeouts, 5xx,
+    429 — to a retry-with-backoff instead of hard-BLOCK. Without the
+    typed cause, the str-coerced wrap loses the exception's identity
+    and every failure looks the same.
+    """
+
+    def __init__(
+        self, message: str, messages: list,
+        cause: BaseException | None = None,
+    ) -> None:
         super().__init__(message)
         self.messages = messages
+        self.cause = cause
 
 
 def run_implement_agent(
@@ -123,7 +135,7 @@ def run_implement_agent(
     except (AgentBudgetError, AgentRunError):
         raise
     except Exception as e:  # noqa: BLE001 — block-as-resumable
-        raise AgentRunError(str(e), []) from e
+        raise AgentRunError(str(e), [], cause=e) from e
 
     from .explore import is_explore_budget_exhausted, reset_explore_budget_exhausted
     if is_explore_budget_exhausted():

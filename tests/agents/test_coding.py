@@ -325,6 +325,9 @@ def test_generic_exception_wraps_to_agent_run_error(
     assert e.messages == []
     assert isinstance(e.__cause__, ValueError)
     assert e.__cause__.args[0] == "something broke"
+    # cause is the typed original — used downstream by the implement
+    # stage to classify transient infra failures and route to retry.
+    assert e.cause is e.__cause__
 
 
 # ------------------------------------------------------------------

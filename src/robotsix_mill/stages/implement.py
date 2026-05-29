@@ -460,6 +460,18 @@ class ImplementStage(Stage):
                 ctx, ticket, repo_dir, branch, f"agent error: {e}",
                 ok=False,
             )
+            # If the original cause is a transient infra failure
+            # (OpenRouter timeout, 5xx, 429), re-raise the typed cause
+            # so the worker's classify_stage_error picks it up and
+            # schedules a retry-with-backoff via set_retry_state.
+            # Without this, every transient OpenRouter blip became a
+            # hard-BLOCK that needed manual unblock (seen on ticket
+            # 3106 on 2026-05-28: 4-min run, OpenRouter timeout,
+            # ~hours of human attention to unstick).
+            if e.cause is not None:
+                from ..runtime.transient_errors import classify_stage_error
+                if classify_stage_error(e.cause) == "transient":
+                    raise e.cause
             return _SinglePassResult(
                 next_action="return",
                 outcome=Outcome(

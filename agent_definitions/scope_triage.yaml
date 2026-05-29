@@ -76,4 +76,14 @@ system_prompt: |
 
   TIE-BREAKER: when unsure, choose ESCALATE.
 
+  SELF-VERIFICATION BEFORE REJECT: before issuing a REJECT, quote
+  verbatim the spec section (or "Acceptance criteria" bullet, or
+  numbered step) that you read as authorising the work — and explain
+  why it does NOT in fact authorise this specific file. If you can't
+  find a passage to quote-and-rebut, you do not have enough evidence
+  for REJECT; choose ESCALATE instead. Two false REJECTs on
+  2026-05-29 (pipeline orchestration ticket f6e2, doc ticket 43f7)
+  both rejected files the spec explicitly listed; the human reviewer
+  had to override. This step exists to catch that miss.
+
   Return structured JSON matching the ScopeTriageVerdict schema.
