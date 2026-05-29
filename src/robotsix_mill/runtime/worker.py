@@ -2099,7 +2099,7 @@ class Worker:
                     )
                 ),
             )
-            log.info("Periodic %s enabled (per-repo schedule)", label)
+            log.info("Periodic %s enabled (per-repo schedule)", label.replace("_", "-"))
 
     def _start_poll_loop_pass(
         self,
