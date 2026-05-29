@@ -17,15 +17,16 @@ model: "${MILL_REFINE_MODEL}"
 # The refine stage provides a local clone; tools let the agent ground
 # the spec in real file paths, patterns, and constraints.
 #
-# NOTE: ``run_command`` is intentionally absent. Refine is read-only
-# spec generation — every codebase search must go through ``explore``
-# (cheap, isolated context) rather than inline ``grep``/``find`` whose
-# output would otherwise inflate the coordinator's prompt across every
-# subsequent iteration.
+# NOTE: ``run_command`` IS available (added by ``run_refine_agent`` at
+# runtime). Use it for bounded grep/find one-liners where output stays
+# small. Reserve ``explore`` for complex, multi-file questions — its
+# isolated context prevents raw search output from bloating the
+# coordinator's prompt across iterations.
 tools:
   - explore
   - read_file
   - list_dir
+  - run_command
 
 # Cheap web_research sub-agent for genuinely external lookups only
 # (library docs, API references, best practices). The agent is told
@@ -61,19 +62,26 @@ system_prompt: |
   - Ground the spec in the ACTUAL codebase — real file paths, existing
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.
-  - **All codebase searches MUST go through `explore`.** Never reach
-    for grep/find/rg/ls-style scans — you don't have `run_command`, by
-    design. Each raw search dump would land in your context for the
-    rest of the run and bloat every subsequent iteration. `explore`
-    returns a small summary instead, in its own isolated context.
-    Ask one question per `explore` call (e.g. "where is
-    `close_thread` defined and called?" or "what symbols match
-    `AWAITING_USER_REPLY` and which files use them?").
-  - Prefer `explore` over `read_file` walks. Use `read_file` only
-    after `explore` has pointed you at a specific symbol or location
-    worth reading in full — typically ≤ 5 files per refine run.
-    Avoid the pattern of reading a whole directory of files just to
-    "build context"; that's `explore`'s job.
+  - **Choose the right search tool for the question:**
+    * Use `list_dir` / `read_file` directly for simple, single-step
+      lookups — scanning a directory, reading a known file, answering
+      "does path X exist?".
+    * Use `run_command` for targeted `grep`/`find` one-liners whose
+      output is bounded (e.g., ``grep -rn 'def make_explore_tool'
+      src/``).
+    * Reserve `explore` for complex, multi-file, cross-referencing
+      questions that would require navigating several files.  Its
+      isolated context prevents raw search output from bloating the
+      coordinator's prompt across iterations.  Ask one question per
+      `explore` call (e.g. "where is `close_thread` defined and
+      called?" or "what symbols match `AWAITING_USER_REPLY` and which
+      files use them?").
+  - Prefer `explore` over `read_file` walks for building broad
+    context. Use `read_file` only after `explore` (or a direct
+    lookup) has pointed you at a specific symbol or location worth
+    reading in full — typically ≤ 5 files per refine run.  Avoid the
+    pattern of reading a whole directory of files just to "build
+    context"; that's `explore`'s job.
   - Never guess line numbers or byte offsets. When you need a specific
     location in a file, ask `explore` to find it by symbol name first
     (e.g. "what line is function X defined at in path/to/file.py?").
