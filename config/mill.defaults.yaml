@@ -239,6 +239,13 @@ periodic:
     interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/survey_memory.md
 
+  # -- module_curator agent — detects drift in the module taxonomy ---------
+  module_curator:
+    model: *default_model           # module-curator agent model
+    enabled: true                   # enable periodic module-curator passes
+    interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
+    memory_path: null               # defaults to <data_dir>/module_curator_memory.md
+
   # -- CI monitor — enabled/interval are now per-repo fields in repos.yaml --
   #    ci_log_max_bytes stays here as a global operational cap.
   ci_monitor:

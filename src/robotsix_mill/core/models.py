@@ -37,6 +37,7 @@ class SourceKind(StrEnum):
     COPY_PASTE = "copy_paste"
     TRACE_HEALTH = "trace-health"
     TRACE_REVIEW = "trace-review"
+    MODULE_CURATOR = "module_curator"
     ROADMAP_SYNC = "roadmap_sync"
 
 

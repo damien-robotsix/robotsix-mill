@@ -96,6 +96,14 @@ class HealthPassResult:
 
 
 @dataclass
+class ModuleCuratorPassResult:
+    """Result of running a module-curator pass."""
+    updated_memory: str
+    drafts_created: list[dict]
+    session_id: str = ""
+
+
+@dataclass
 class TestGapPassResult:
     """Result of running a test-gap pass."""
     updated_memory: str
@@ -394,6 +402,16 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         workspace_subdir="health_workspace",
         result_dataclass=HealthPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
+    ),
+    "module_curator": PeriodicPassConfig(
+        label="module_curator",
+        source_kind=SourceKind.MODULE_CURATOR,
+        agent_module_attr="module_curator",
+        agent_fn_name="run_module_curator_agent",
+        memory_filename="module_curator_memory.md",
+        workspace_subdir="module_curator_workspace",
+        result_dataclass=ModuleCuratorPassResult,
+        clone_token_fn=_clone_token,
     ),
     "test_gap": PeriodicPassConfig(
         label="test_gap",

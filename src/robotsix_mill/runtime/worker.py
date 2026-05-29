@@ -661,6 +661,7 @@ class Worker:
         self._bc_check_task: asyncio.Task | None = None
         self._completeness_check_task: asyncio.Task | None = None
         self._copy_paste_task: asyncio.Task | None = None
+        self._module_curator_task: asyncio.Task | None = None
         self._ci_monitor_task: asyncio.Task | None = None
         self._test_gap_task: asyncio.Task | None = None
         self._survey_task: asyncio.Task | None = None
@@ -1931,6 +1932,20 @@ class Worker:
                 "Periodic copy-paste enabled: interval %ds",
                 max(60, self.ctx.settings.copy_paste_interval_seconds),
             )
+        # Opt-in periodic module-curator
+        if self.ctx.settings.module_curator_periodic and self._module_curator_task is None:
+            from ..module_curator_runner import run_module_curator_pass
+            self._module_curator_task = asyncio.create_task(
+                self._run_periodic_pass_per_repo(
+                    "module_curator", run_module_curator_pass,
+                    max(60, self.ctx.settings.module_curator_interval_seconds),
+                    per_repo_flag="module_curator_periodic",
+                )
+            )
+            log.info(
+                "Periodic module-curator enabled: interval %ds",
+                max(60, self.ctx.settings.module_curator_interval_seconds),
+            )
         # Opt-in periodic Langfuse trace cleanup
         if (
             self.ctx.settings.langfuse_cleanup_periodic
@@ -2050,7 +2065,7 @@ class Worker:
             "_trace_health_task", "_trace_review_task",
             "_cost_warmer_task",
             "_health_task", "_ci_monitor_task",
-            "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_copy_paste_task", "_test_gap_task", "_survey_task",
+            "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_copy_paste_task", "_module_curator_task", "_test_gap_task", "_survey_task",
             "_config_sync_task", "_cost_reconciliation_task",
             "_langfuse_cleanup_task", "_timeout_escalation_task",
         ):
