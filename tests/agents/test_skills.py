@@ -9,7 +9,7 @@ from robotsix_mill.config import Settings
 
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     return Settings(**env)
 
 
@@ -27,7 +27,7 @@ def test_skill_injected_after_system_prompt(tmp_path):
     Skills`` heading, with YAML frontmatter stripped. (Previously
     asserted skills came BEFORE a now-removed tool table; the
     table is gone but the skills positioning is unchanged.)"""
-    s = _settings(tmp_path, MILL_SKILLS_DIR=str(tmp_path / "skills"))
+    s = _settings(tmp_path, skills_dir=str(tmp_path / "skills"))
 
     # Create a real skill file
     skill_dir = tmp_path / "skills" / "board"
@@ -55,7 +55,7 @@ def test_skill_injected_after_system_prompt(tmp_path):
 def test_missing_skill_logs_warning_and_continues(tmp_path, caplog):
     """When a skill file doesn't exist, compose_prompt logs a warning
     and returns the prompt without crashing."""
-    s = _settings(tmp_path, MILL_SKILLS_DIR=str(tmp_path / "skills"))
+    s = _settings(tmp_path, skills_dir=str(tmp_path / "skills"))
 
     with caplog.at_level(logging.WARNING):
         result = compose_prompt(s, "BASE", skills=["nonexistent"])
@@ -68,7 +68,7 @@ def test_missing_skill_logs_warning_and_continues(tmp_path, caplog):
 
 def test_frontmatter_stripped_from_skill_content(tmp_path):
     """The YAML frontmatter (--- ... ---) is removed from injected content."""
-    s = _settings(tmp_path, MILL_SKILLS_DIR=str(tmp_path / "skills"))
+    s = _settings(tmp_path, skills_dir=str(tmp_path / "skills"))
 
     skill_dir = tmp_path / "skills" / "board"
     skill_dir.mkdir(parents=True)
@@ -124,7 +124,7 @@ def test_compose_prompt_skills_none_same_as_omitted(tmp_path):
 
 def test_multiple_skills_injected(tmp_path):
     """Multiple skills are all injected, separated by double newlines."""
-    s = _settings(tmp_path, MILL_SKILLS_DIR=str(tmp_path / "skills"))
+    s = _settings(tmp_path, skills_dir=str(tmp_path / "skills"))
 
     for name in ("board", "vcs"):
         skill_dir = tmp_path / "skills" / name
@@ -147,7 +147,7 @@ def test_multiple_skills_injected(tmp_path):
 def test_skill_with_only_frontmatter_injects_nothing(tmp_path):
     """A skill file with only frontmatter and no body still doesn't
     crash, but adds no content."""
-    s = _settings(tmp_path, MILL_SKILLS_DIR=str(tmp_path / "skills"))
+    s = _settings(tmp_path, skills_dir=str(tmp_path / "skills"))
 
     skill_dir = tmp_path / "skills" / "empty"
     skill_dir.mkdir(parents=True)

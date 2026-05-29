@@ -13,7 +13,7 @@ from robotsix_mill.config import Settings
 
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     env.setdefault("OPENROUTER_API_KEY", "k")
     # Populate Secrets so get_secrets() returns matching values
     from robotsix_mill.config import Secrets, _reset_secrets
@@ -54,8 +54,8 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     web_research. There is NO run_tests tool — the implement stage owns
     the test→retry→escalate loop and runs the suite itself."""
     s = _settings(
-        tmp_path, MILL_MODEL="main/cap",
-        MILL_COORDINATOR_REQUEST_LIMIT="9",
+        tmp_path, model="main/cap",
+        coordinator_request_limit="9",
     )
     out = coordinating.run_coordinator(
         settings=s, repo_dir=tmp_path, spec="build a thing"
@@ -87,7 +87,7 @@ def test_explore_scout_prompt_forbids_whole_files():
 def test_test_agent_pass(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
 
-    s = _settings(tmp_path, MILL_TEST_COMMAND="pytest")
+    s = _settings(tmp_path, test_command="pytest")
     monkeypatch.setattr(
         sandbox, "run", lambda cmd, *, repo_dir, settings,
         epic_workspace_path=None: (0, "ok")
@@ -100,7 +100,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
 
     s = _settings(
-        tmp_path, MILL_TEST_COMMAND="pytest", MILL_TEST_MODEL="test/cheap",
+        tmp_path, test_command="pytest", test_model="test/cheap",
     )
     monkeypatch.setattr(
         sandbox, "run",
@@ -146,7 +146,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
 
 
 def test_test_agent_no_command_is_pass(tmp_path):
-    s = _settings(tmp_path, MILL_TEST_COMMAND="")
+    s = _settings(tmp_path, test_command="")
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is True
 

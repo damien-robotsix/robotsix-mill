@@ -11,7 +11,7 @@ from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
         import robotsix_mill.config as _cfg
@@ -106,7 +106,7 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
 
     s = _settings(
         tmp_path, OPENROUTER_API_KEY="k",
-        MILL_MODEL="coordinator/big", MILL_CONSULT_REQUEST_LIMIT="5",
+        model="coordinator/big", consult_request_limit="5",
     )
     cap = {}
 

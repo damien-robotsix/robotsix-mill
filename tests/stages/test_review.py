@@ -44,7 +44,7 @@ def ctx_factory(tmp_path, fake_sandbox):
 
     def make(**env):
         db.reset_engine()
-        s = Settings(MILL_DATA_DIR=str(tmp_path / f"data{len(created)}"), **env)
+        s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
@@ -77,7 +77,7 @@ def _ticket(ctx, body="Add feature.txt"):
 # --- APPROVE -----------------------------------------------------------
 
 def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
@@ -96,7 +96,7 @@ def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
 # --- REQUEST_CHANGES ---------------------------------------------------
 
 def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
@@ -119,7 +119,7 @@ def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
 # --- NEEDS_DISCUSSION --------------------------------------------------
 
 def test_needs_discussion_transitions_to_blocked(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
@@ -141,7 +141,7 @@ def test_needs_discussion_transitions_to_blocked(ctx_factory, monkeypatch):
 # --- Blind review: diff + spec only, no implementation context --------
 
 def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     captured: dict = {}
@@ -170,7 +170,7 @@ def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
 # --- Agent error → BLOCKED ---------------------------------------------
 
 def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
@@ -189,7 +189,7 @@ def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
 # --- Empty diff → APPROVE without agent -------------------------------
 
 def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     # Remove the commit so diff is empty.
@@ -214,7 +214,7 @@ def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
 # --- Missing repo guard → BLOCKED -------------------------------------
 
 def test_missing_repo_blocks(ctx_factory):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = ctx.service.create("No clone")
     ctx.service.transition(t.id, State.READY)
     # Pipeline flip: READY -> CODE_REVIEW directly.
@@ -230,7 +230,7 @@ def test_missing_repo_blocks(ctx_factory):
 
 def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
     """APPROVE with auto_merge_eligible=True → review.md exists."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
@@ -253,7 +253,7 @@ def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
 
 def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
     """REQUEST_CHANGES → review.md exists with auto_merge_eligible: false."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(*, settings, diff, spec, model_name=None, prior_context=None, repo_dir=None, reference_files=None):
@@ -277,7 +277,7 @@ def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
 
 def test_auto_merge_eligible_defaults_false(ctx_factory, monkeypatch):
     """When the model omits auto_merge_eligible, it defaults to False."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     # Simulate an agent response that only includes verdict + comments
@@ -295,7 +295,7 @@ def test_auto_merge_eligible_defaults_false(ctx_factory, monkeypatch):
 
 def test_request_changes_under_cap(ctx_factory, monkeypatch):
     """REQUEST_CHANGES with review_rounds < max → READY, counter incremented."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     ctx.service.set_review_rounds(t.id, 1)  # 1 round already used
     t = ctx.service.get(t.id)  # refresh in-memory object
@@ -325,8 +325,8 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
     """When review_rounds hits the cap, REQUEST_CHANGES → DELIVERABLE."""
     ctx = ctx_factory(
         FORGE_REMOTE_URL="file:///dummy",
-        MILL_REVIEW_ENABLED="true",
-        MILL_REVIEW_MAX_ROUNDS="3",
+        review_enabled="true",
+        review_max_rounds="3",
     )
     t = _ticket(ctx)
     ctx.service.set_review_rounds(t.id, 2)  # round 3 is the cap
@@ -357,7 +357,7 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
 
 def test_approve_resets_counter(ctx_factory, monkeypatch):
     """APPROVE resets review_rounds to 0."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     ctx.service.set_review_rounds(t.id, 2)
     t = ctx.service.get(t.id)  # refresh in-memory object
@@ -380,7 +380,7 @@ def test_approve_resets_counter(ctx_factory, monkeypatch):
 
 def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
     """NEEDS_DISCUSSION does NOT reset the review_rounds counter."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     ctx.service.set_review_rounds(t.id, 1)
     t = ctx.service.get(t.id)  # refresh in-memory object
@@ -421,7 +421,7 @@ def _write_file_map(ctx, ticket, files: list[str]) -> None:
 def test_request_changes_in_scope_no_deps(ctx_factory, monkeypatch):
     """All asks touch files inside file_map → no dep tickets, single
     review comment, parent goes to READY (existing behaviour)."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])
 
@@ -454,7 +454,7 @@ def test_request_changes_out_of_scope_spawns_dep_ticket(ctx_factory, monkeypatch
     """Out-of-scope ask materialises a fresh ticket on the same board
     and the parent's depends_on is set so the worker's dep gate parks
     it until the new ticket closes."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])  # .gitignore is out-of-scope
 
@@ -488,7 +488,7 @@ def test_request_changes_out_of_scope_spawns_dep_ticket(ctx_factory, monkeypatch
 def test_request_changes_mixed_scope_one_dep_one_in_scope(ctx_factory, monkeypatch):
     """Mixed verdict: in-scope asks stay on the parent (READY +
     comment), out-of-scope asks each spawn one dep ticket."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])
 
@@ -523,7 +523,7 @@ def test_request_changes_mixed_scope_one_dep_one_in_scope(ctx_factory, monkeypat
 def test_request_changes_no_file_map_all_in_scope(ctx_factory, monkeypatch):
     """No file_map.json → every ask is treated as in-scope (legacy /
     scope-free flow). No deps spawned regardless of files_touched."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     # no file_map.json written
 
@@ -554,7 +554,7 @@ def test_out_of_scope_ask_uses_explicit_title(ctx_factory, monkeypatch):
     what stops the reviewer's symptom-framing ('remove
     __pycache__/foo.pyc') from becoming the new ticket's title when
     the proper fix is something else ('add __pycache__ to .gitignore')."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])
 

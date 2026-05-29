@@ -30,7 +30,7 @@ def _settings(tmp_path, secrets_set):
         langfuse_secret_key="sk",
     )
     return Settings(
-        MILL_DATA_DIR=str(tmp_path),
+        data_dir=str(tmp_path),
     )
 
 

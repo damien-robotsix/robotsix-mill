@@ -12,7 +12,7 @@ from robotsix_mill.stages.merge import MergeStage, _read_counter, _write_counter
 
 def _ctx(tmp_path, **env):
     db.reset_engine()
-    env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    env.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**env)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
@@ -510,7 +510,7 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
     """A no-op rebase that never resolves the conflict is bounded: once
     the attempt budget is spent the ticket goes BLOCKED (once), instead
     of ping-ponging forever."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="2")
+    ctx = _gh(tmp_path, rebase_max_attempts="2")
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
         lambda **k: RebaseResult(status="DONE", summary="ok"),
@@ -548,7 +548,7 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
 
 def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
     """REBASING, rebase fails, attempt < max → Outcome(REBASING)."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="3")
+    ctx = _gh(tmp_path, rebase_max_attempts="3")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -586,7 +586,7 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
 
 def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
     """REBASING, rebase fails, attempt == max → Outcome(BLOCKED)."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
+    ctx = _gh(tmp_path, rebase_max_attempts="1")
 
     def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
         return RebaseResult(status="FAILED", summary="nope")
@@ -698,7 +698,7 @@ def test_rebasing_no_workspace_clone_blocks(tmp_path, monkeypatch):
 
 def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
     """Agent returns False for every attempt → BLOCKED after max (through REBASING)."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="2")
+    ctx = _gh(tmp_path, rebase_max_attempts="2")
 
     agent_calls = []
 
@@ -733,7 +733,7 @@ def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
 
 def test_rebase_agent_crash_is_treated_as_failure(tmp_path, monkeypatch):
     """If the agent raises, treat as False — failure path (through REBASING)."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
+    ctx = _gh(tmp_path, rebase_max_attempts="1")
 
     def boom(*, settings, repo_dir, branch, target):
         raise RuntimeError("LLM timeout")
@@ -758,7 +758,7 @@ def test_rebase_agent_crash_is_treated_as_failure(tmp_path, monkeypatch):
 
 def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
     """When agent returns False, no force-push is made (through REBASING)."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="1")
+    ctx = _gh(tmp_path, rebase_max_attempts="1")
 
     def fake_rebase(*, settings, repo_dir, branch, target, memory=""):
         return RebaseResult(status="FAILED", summary="nope")
@@ -828,7 +828,7 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
     SHAs every run). The attempt counter must persist across rebase+push
     cycles and only reset to 0 when the IMPLEMENT_COMPLETE poll sees a
     mergeable PR — otherwise the loop is unbounded."""
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="3")
+    ctx = _gh(tmp_path, rebase_max_attempts="3")
 
     call_count = [0]
 
@@ -1219,7 +1219,7 @@ def test_root_span_only_on_first_rebase_attempt(tmp_path, monkeypatch):
 
     from robotsix_mill.runtime import tracing as tr
 
-    ctx = _gh(tmp_path, MILL_REBASE_MAX_ATTEMPTS="3")
+    ctx = _gh(tmp_path, rebase_max_attempts="3")
 
     root_calls = []
     stage_calls = []
@@ -1291,7 +1291,7 @@ def _write_review_artifact(ctx, ticket, *, verdict="APPROVE", eligible=True):
 def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
     """Mergeable + CI success + auto_merge_enabled + review_enabled +
     artifact auto_merge_eligible: true + merge_pr returns merged → DONE."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1318,7 +1318,7 @@ def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
 
 def test_auto_merge_skipped_when_flag_disabled(tmp_path, monkeypatch):
     """auto_merge_enabled=False → HUMAN_MR_APPROVAL (standard no-op)."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="false", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1348,7 +1348,7 @@ def test_auto_merge_skipped_when_flag_disabled(tmp_path, monkeypatch):
 def test_auto_merge_skipped_when_review_disabled(tmp_path, monkeypatch):
     """review_enabled=False → HUMAN_MR_APPROVAL even when auto_merge_enabled=True
     and artifact says eligible."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="false")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="false")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1377,7 +1377,7 @@ def test_auto_merge_skipped_when_review_disabled(tmp_path, monkeypatch):
 
 def test_auto_merge_skipped_when_no_review_artifact(tmp_path, monkeypatch):
     """Artifact file doesn't exist → HUMAN_MR_APPROVAL."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1406,7 +1406,7 @@ def test_auto_merge_skipped_when_no_review_artifact(tmp_path, monkeypatch):
 
 def test_auto_merge_skipped_when_not_eligible(tmp_path, monkeypatch):
     """Artifact says auto_merge_eligible: false → HUMAN_MR_APPROVAL."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1436,7 +1436,7 @@ def test_auto_merge_skipped_when_not_eligible(tmp_path, monkeypatch):
 def test_auto_merge_skipped_when_ci_pending(tmp_path, monkeypatch):
     """CI conclusion is 'pending', not 'success' → WAITING_AUTO_MERGE
     (auto-merge gate entered, waiting for CI to go green)."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1465,7 +1465,7 @@ def test_auto_merge_skipped_when_ci_pending(tmp_path, monkeypatch):
 
 def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
     """CI conclusion is 'failure' → IMPLEMENT_COMPLETE (silent fallback)."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1494,7 +1494,7 @@ def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
 
 def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
     """mergeable=False → IMPLEMENT_COMPLETE (silent fallback)."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1519,7 +1519,7 @@ def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
 
 def test_merge_pr_failure_stays_human_mr_approval(tmp_path, monkeypatch):
     """merge_pr returns {'merged': False} → HUMAN_MR_APPROVAL (not BLOCKED)."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1547,7 +1547,7 @@ def test_merge_pr_failure_stays_human_mr_approval(tmp_path, monkeypatch):
 
 def test_auto_merge_writes_merge_artifact(tmp_path, monkeypatch):
     """On success, merge.md is written with the PR URL."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1583,7 +1583,7 @@ def test_eligible_pending_ci_goes_to_waiting_auto_merge(
     tmp_path, monkeypatch
 ):
     """Eligible + CI pending → WAITING_AUTO_MERGE."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1611,7 +1611,7 @@ def test_eligible_pending_ci_goes_to_waiting_auto_merge(
 
 def test_eligible_success_auto_merges_to_done(tmp_path, monkeypatch):
     """Eligible + CI success → DONE (already covered, ensure it still passes)."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1639,7 +1639,7 @@ def test_eligible_forge_merge_failed_stays_human_mr_approval_with_comment(
     tmp_path, monkeypatch
 ):
     """Eligible + CI success + forge rejects → HUMAN_MR_APPROVAL + comment."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1674,7 +1674,7 @@ def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
     tmp_path, monkeypatch
 ):
     """auto_merge_enabled=false → HUMAN_MR_APPROVAL + comment."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="false", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1703,7 +1703,7 @@ def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
     tmp_path, monkeypatch
 ):
     """review_enabled=false → HUMAN_MR_APPROVAL + comment."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="false")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="false")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1732,7 +1732,7 @@ def test_not_eligible_artifact_missing_stays_human_mr_approval_with_comment(
     tmp_path, monkeypatch
 ):
     """No review artifact → HUMAN_MR_APPROVAL + comment."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1761,7 +1761,7 @@ def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
     tmp_path, monkeypatch
 ):
     """auto_merge_eligible: false → HUMAN_MR_APPROVAL + comment."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1788,7 +1788,7 @@ def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
 
 def test_comment_dedup_same_reason_no_duplicate(tmp_path, monkeypatch):
     """Two polls with the same reason → exactly 1 comment."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="false", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1817,7 +1817,7 @@ def test_comment_dedup_different_reason_new_comment(
     tmp_path, monkeypatch
 ):
     """Reason changes → new comment fires."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="false", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1853,7 +1853,7 @@ def test_waiting_auto_merge_becomes_implement_complete_on_ci_failure(
     tmp_path, monkeypatch
 ):
     """WAITING_AUTO_MERGE poll where CI now fails → IMPLEMENT_COMPLETE."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1881,7 +1881,7 @@ def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
 ):
     """WAITING_AUTO_MERGE poll where artifact now says not eligible
     → HUMAN_MR_APPROVAL."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1914,7 +1914,7 @@ def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
 
 def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
     """WAITING_AUTO_MERGE poll where CI is now green → DONE."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {
@@ -1948,7 +1948,7 @@ def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     tmp_path, monkeypatch
 ):
     """WAITING_AUTO_MERGE + mergeable=False → IMPLEMENT_COMPLETE."""
-    ctx = _gh(tmp_path, MILL_AUTO_MERGE_ENABLED="true", MILL_REVIEW_ENABLED="true")
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge, "pr_status",
         lambda self, *, source_branch: {

@@ -11,7 +11,7 @@ from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     # Mirror openrouter_api_key into Secrets so get_secrets() works
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
@@ -40,11 +40,11 @@ def test_main_model_never_online(tmp_path):
     # The expensive main agent must never carry ":online" — web search
     # is delegated to the cheap sub-agent. (No "openrouter:" prefix: the
     # provider is set explicitly for the cost-instrumented model.)
-    s = _settings(tmp_path, MILL_MODEL="x/y")
+    s = _settings(tmp_path, model="x/y")
     assert _model_name(s) == "x/y"
     assert ":online" not in _model_name(s)
     # even with web search enabled (the default) the main model is plain
-    s2 = _settings(tmp_path, MILL_MODEL="x/y", MILL_WEB_SEARCH="true")
+    s2 = _settings(tmp_path, model="x/y", web_search="true")
     assert _model_name(s2) == "x/y"
 
 
@@ -81,8 +81,8 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        MILL_WEB_RESEARCH_MODEL="cheap/mini",
-        MILL_WEB_RESEARCH_REQUEST_LIMIT="5",
+        web_research_model="cheap/mini",
+        web_research_request_limit="5",
     )
     captured = {}
 
@@ -243,12 +243,12 @@ def test_web_fetch_passes_non_html_unchanged(tmp_path, monkeypatch):
 
 
 def test_web_fetch_raw_mode_disables_extraction(tmp_path, monkeypatch):
-    """``MILL_WEB_FETCH_RAW=true`` returns the verbatim curl body —
+    """``web.fetch_raw: true`` returns the verbatim curl body —
     operators who really need markup or are debugging the extractor
     bypass it cleanly."""
     from robotsix_mill.agents.web_tools import _cache
     _cache.clear()
-    s = _settings(tmp_path, MILL_WEB_FETCH_RAW="true")
+    s = _settings(tmp_path, web_fetch_raw=True)
     body = "<html><body><p>raw</p></body></html>"
     monkeypatch.setattr(
         sandbox, "fetch", lambda url, *, settings: (0, body)
@@ -263,7 +263,7 @@ def test_web_fetch_applies_text_cap(tmp_path, monkeypatch):
     file is large but the agent only needs a snippet."""
     from robotsix_mill.agents.web_tools import _cache
     _cache.clear()
-    s = _settings(tmp_path, MILL_WEB_FETCH_MAX_TEXT_BYTES="100")
+    s = _settings(tmp_path, web_fetch_max_text_bytes=100)
     body = "x" * 500
     monkeypatch.setattr(
         sandbox, "fetch", lambda url, *, settings: (0, body)
@@ -328,7 +328,7 @@ def test_web_fetch_raw_mode_bypasses_cache(tmp_path, monkeypatch):
     Operator opted in to verbatim bytes; that's what they get."""
     from robotsix_mill.agents.web_tools import _cache
     _cache.clear()
-    s = _settings(tmp_path, MILL_WEB_FETCH_RAW="true")
+    s = _settings(tmp_path, web_fetch_raw=True)
     calls = []
     monkeypatch.setattr(
         sandbox, "fetch",

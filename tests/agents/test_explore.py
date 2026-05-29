@@ -6,7 +6,7 @@ from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     # Mirror openrouter_api_key into Secrets so get_secrets() works
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
@@ -64,9 +64,9 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
         tmp_path, OPENROUTER_API_KEY="k",
-        MILL_MODEL="coordinator/big", MILL_EXPLORE_MODEL="explore/cheap",
-        MILL_EXPLORE_REQUEST_LIMIT="7",
-        MILL_EXPLORE_MAX_TOKENS="600",
+        model="coordinator/big", explore_model="explore/cheap",
+        explore_request_limit="7",
+        explore_max_tokens="600",
     )
     cap = {}
 
@@ -120,8 +120,8 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
         tmp_path, OPENROUTER_API_KEY="k",
-        MILL_EXPLORE_MODEL="explore/cheap",
-        MILL_EXPLORE_REQUEST_LIMIT="20",
+        explore_model="explore/cheap",
+        explore_request_limit="20",
     )
 
     primary_agent_calls = []
@@ -178,8 +178,8 @@ def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
         tmp_path, OPENROUTER_API_KEY="k",
-        MILL_EXPLORE_MODEL="explore/cheap",
-        MILL_EXPLORE_REQUEST_LIMIT="20",
+        explore_model="explore/cheap",
+        explore_request_limit="20",
     )
 
     class FakeModel:
@@ -229,9 +229,9 @@ def test_explore_max_tokens_validator_rejects_zero_or_negative():
     import pytest
 
     with pytest.raises(ValidationError) as exc_info:
-        _settings(Path("."), MILL_EXPLORE_MAX_TOKENS="0")
+        _settings(Path("."), explore_max_tokens="0")
     assert "explore_max_tokens must be ≥ 1" in str(exc_info.value)
 
     with pytest.raises(ValidationError) as exc_info:
-        _settings(Path("."), MILL_EXPLORE_MAX_TOKENS="-1")
+        _settings(Path("."), explore_max_tokens="-1")
     assert "explore_max_tokens must be ≥ 1" in str(exc_info.value)

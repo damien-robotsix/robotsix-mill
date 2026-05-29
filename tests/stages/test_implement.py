@@ -49,7 +49,7 @@ def ctx_factory(tmp_path, fake_sandbox):
         db.reset_engine()
         # fake_sandbox replaces the (always-containerized) seam; no
         # Docker, no host execution.
-        s = Settings(MILL_DATA_DIR=str(tmp_path / f"data{len(created)}"), **env)
+        s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
@@ -91,7 +91,7 @@ def _fake_agent(write: dict | None):
 def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     read_file, write_file, edit_file, delete_file, list_dir, run_command = build_fs_tools(
         tmp_path, s
     )
@@ -110,7 +110,7 @@ def test_write_file_unchanged(tmp_path, fake_sandbox):
     """Existing write_file roundtrip still works identically."""
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     read_file, write_file, *_ = build_fs_tools(tmp_path, s)
     assert "wrote" in write_file("x.txt", "hello world")
     assert read_file(path="x.txt") == "hello world"
@@ -119,7 +119,7 @@ def test_write_file_unchanged(tmp_path, fake_sandbox):
 def test_edit_file_replaces_unique_substring_preserves_rest(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     _, _, edit_file, _, _, _ = build_fs_tools(tmp_path, s)
     original = "line1\nline2\nline3\nline4\n"
     (tmp_path / "f.txt").write_text(original)
@@ -135,7 +135,7 @@ def test_edit_file_replaces_unique_substring_preserves_rest(tmp_path, fake_sandb
 def test_edit_file_old_string_absent_returns_error_file_unchanged(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     _, _, edit_file, _, _, _ = build_fs_tools(tmp_path, s)
     original = "line1\nline2\n"
     (tmp_path / "f.txt").write_text(original)
@@ -149,7 +149,7 @@ def test_edit_file_old_string_appears_multiple_returns_error_file_unchanged(
 ):
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     _, _, edit_file, _, _, _ = build_fs_tools(tmp_path, s)
     original = "dup\nmiddle\ndup\n"
     (tmp_path / "f.txt").write_text(original)
@@ -161,7 +161,7 @@ def test_edit_file_old_string_appears_multiple_returns_error_file_unchanged(
 def test_edit_file_path_escape_rejected(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     _, _, edit_file, _, _, _ = build_fs_tools(tmp_path, s)
     result = edit_file("../outside.txt", "x", "y")
     assert "escapes" in result
@@ -171,7 +171,7 @@ def test_delete_file_removes_existing_file(tmp_path, fake_sandbox):
     """delete_file returns success and the file no longer exists."""
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     _, _, _, delete_file, _, _ = build_fs_tools(tmp_path, s)
     (tmp_path / "foo.txt").write_text("hello")
     result = delete_file("foo.txt")
@@ -183,7 +183,7 @@ def test_delete_file_missing_returns_error(tmp_path, fake_sandbox):
     """delete_file on a missing file returns an error string, not a crash."""
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     _, _, _, delete_file, _, _ = build_fs_tools(tmp_path, s)
     result = delete_file("nope.txt")
     assert result.startswith("error:")
@@ -193,7 +193,7 @@ def test_delete_file_on_directory_returns_error(tmp_path, fake_sandbox):
     """delete_file on a directory returns an error string, no deletion."""
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     _, _, _, delete_file, _, _ = build_fs_tools(tmp_path, s)
     d = tmp_path / "subdir"
     d.mkdir()
@@ -206,7 +206,7 @@ def test_delete_file_path_escape_rejected(tmp_path, fake_sandbox):
     """Path traversal is rejected by _safe."""
     from robotsix_mill.config import Settings
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     _, _, _, delete_file, _, _ = build_fs_tools(tmp_path, s)
     result = delete_file("../outside.txt")
     assert "escapes" in result
@@ -218,7 +218,7 @@ def test_fs_tools_non_existent_root_returns_clear_error(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
     fake_root = tmp_path / "does-not-exist"
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     read_file, write_file, edit_file, delete_file, list_dir, run_command = build_fs_tools(
         fake_root, s
     )
@@ -237,7 +237,7 @@ def test_fs_tools_non_existent_root_returns_clear_error(tmp_path, fake_sandbox):
 # --- implement stage ----------------------------------------------------
 
 def test_blocked_without_remote(ctx_factory):
-    ctx = ctx_factory(MILL_TEST_COMMAND="true")
+    ctx = ctx_factory(test_command="true")
     out = ImplementStage().run(_ticket(ctx), ctx)
     assert out.next_state is State.BLOCKED
     assert "FORGE_REMOTE_URL" in out.note
@@ -245,7 +245,7 @@ def test_blocked_without_remote(ctx_factory):
 
 def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
     monkeypatch.setattr(
         coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
     )
@@ -268,7 +268,7 @@ def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
 
 def test_no_changes_blocks(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
     monkeypatch.setattr(coding, "run_implement_agent", _fake_agent(None))
     t = _ticket(ctx)
     _write_file_map(ctx, t, "dummy.txt")
@@ -285,8 +285,8 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote,
-        MILL_TEST_COMMAND="false",        # gate always fails
-        MILL_MAX_FIX_ITERATIONS="2",      # keep the loop short
+        test_command="false",        # gate always fails
+        max_fix_iterations="2",      # keep the loop short
     )
     calls = []
 
@@ -325,7 +325,7 @@ def _commits(repo):
 
 def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
         del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
@@ -353,7 +353,7 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     """Resume = run the coordinator FRESH (no transcript replay), and
     crucially do NOT re-clone — the prior WIP branch is reused."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
     n = {"i": 0}
 
     def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
@@ -440,8 +440,8 @@ def test_fresh_clone_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monke
     fname = _add_commit_to_bare_remote(remote, tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
 
     seen_files: list[str] = []
@@ -476,8 +476,8 @@ def test_resume_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monkeypatc
     sees the new file."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
     n = {"i": 0}
 
@@ -525,8 +525,8 @@ def test_rebase_conflict_blocks_on_resume(ctx_factory, tmp_path, monkeypatch):
     rebase failure. The workspace is left intact for operator inspection."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
     n = {"i": 0}
 
@@ -573,8 +573,8 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
     the stage returns REBASING with a note about rebase failure."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
 
     # Force try_rebase_onto to fail on the very first call (fresh clone path).
@@ -612,7 +612,7 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
 def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
     """Implement stage returns READY (no-op) when deps are unmet."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
 
     # Create the dependency ticket (in DRAFT — not terminal)
     dep = ctx.service.create("Dep ticket")
@@ -643,7 +643,7 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
 def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     """Implement stage proceeds to DELIVERABLE when dep is CLOSED."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
 
     # Create and close the dependency
     dep = ctx.service.create("Dep ticket")
@@ -672,7 +672,7 @@ def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
 def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     """Implement stage proceeds when a dep ID doesn't exist (treated satisfied)."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
 
     t = ctx.service.create("Depender", depends_on='["nonexistent-12345"]')
     ctx.service.transition(t.id, State.READY)
@@ -691,7 +691,7 @@ def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
 def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch):
     """Tickets without depends_on have zero behavioral change."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
 
     t = _ticket(ctx)  # creates ticket without depends_on
     _write_file_map(ctx, t, "feature.txt")
@@ -710,8 +710,8 @@ def test_success_to_code_review_when_review_enabled(ctx_factory, tmp_path, monke
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote,
-        MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="true",
+        test_command="true",
+        review_enabled="true",
     )
     monkeypatch.setattr(
         coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
@@ -731,8 +731,8 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     run_implement_agent starts with the epic context wrapper."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",  # this test asserts the no-review path
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",  # this test asserts the no-review path
     )
 
     # Create an epic with rich global context
@@ -766,7 +766,7 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
 def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, monkeypatch):
     """Ticket without a parent: no epic context in spec."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
 
     t = _ticket(ctx, title="Standalone", body="Just a task")
     _write_file_map(ctx, t, "feature.txt")
@@ -788,7 +788,7 @@ def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, mo
 def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, monkeypatch):
     """Ticket with a parent that is NOT an epic: no epic context."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
 
     # Create a regular task parent (kind="task")
     parent = ctx.service.create("Parent task", "Ordinary task", kind="task")
@@ -818,7 +818,7 @@ def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, mo
 def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_path, monkeypatch):
     """Epic with empty description: no injection."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
 
     epic = ctx.service.create("Empty Epic", "", kind="epic")
     child = ctx.service.create(
@@ -852,9 +852,9 @@ def test_scope_violation_blocks_ticket(ctx_factory, tmp_path, monkeypatch):
     The test gate is never reached on the violating iteration."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
-        MILL_SCOPE_TRIAGE_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false", max_fix_iterations="3",
+        scope_triage_enabled="false",
     )
     t = _ticket(ctx)
 
@@ -894,8 +894,8 @@ def test_scope_check_passes_when_all_in_scope(ctx_factory, tmp_path, monkeypatch
     logs an info message, and the loop proceeds to the test gate."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
     t = _ticket(ctx)
 
@@ -927,8 +927,8 @@ def test_scope_check_skipped_when_no_file_map(ctx_factory, tmp_path, monkeypatch
     proceeds — scope enforcement is skipped, not blocked."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
     t = _ticket(ctx)
     # No file_map.json written → stage should warn and proceed.
@@ -961,8 +961,8 @@ def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypa
     a warning and proceeds — same as a missing file_map."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
     t = _ticket(ctx)
 
@@ -1001,8 +1001,8 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
     been modified yet, the agent is re-run (no retroactive short-circuit)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false", max_fix_iterations="3",
     )
     t = _ticket(ctx)
 
@@ -1054,8 +1054,8 @@ def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, mo
     passing) the ticket finalizes without wasting an iteration."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
     t = _ticket(ctx)
 
@@ -1109,8 +1109,8 @@ def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):
     the rogue files."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false", max_fix_iterations="3",
     )
     t = _ticket(ctx)
 
@@ -1151,8 +1151,8 @@ def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
     """ESCALATE verdict: ticket goes to BLOCKED with triage reasoning."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false", max_fix_iterations="3",
     )
     t = _ticket(ctx)
 
@@ -1194,9 +1194,9 @@ def test_scope_triage_disabled_falls_through(ctx_factory, tmp_path, monkeypatch)
     preserved exactly — no triage agent is called."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
-        MILL_SCOPE_TRIAGE_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false", max_fix_iterations="3",
+        scope_triage_enabled="false",
     )
     t = _ticket(ctx)
 
@@ -1229,8 +1229,8 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
     to BLOCKED with an agent-error note."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="3",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false", max_fix_iterations="3",
     )
     t = _ticket(ctx)
 
@@ -1271,8 +1271,8 @@ def test_post_edit_reference_files_persisted(ctx_factory, tmp_path, monkeypatch)
     to artifacts_dir."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
 
     agent_called = []
@@ -1319,8 +1319,8 @@ def test_reference_files_reloaded_on_retry(ctx_factory, tmp_path, monkeypatch):
     (paths-only, reloaded from disk)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="false",
-        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="2",
+        FORGE_REMOTE_URL=remote, test_command="false",
+        review_enabled="false", max_fix_iterations="2",
     )
 
     captured_refs: list[list[dict] | None] = []
@@ -1356,8 +1356,8 @@ def test_summary_included_in_retry_feedback(ctx_factory, tmp_path, monkeypatch):
     the agent alongside the test failure diagnosis as feedback."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="false",
-        MILL_REVIEW_ENABLED="false", MILL_MAX_FIX_ITERATIONS="2",
+        FORGE_REMOTE_URL=remote, test_command="false",
+        review_enabled="false", max_fix_iterations="2",
     )
 
     captured_feedback: list[str | None] = []
@@ -1401,8 +1401,8 @@ def test_persistence_without_file_map_still_writes(ctx_factory, tmp_path, monkey
     summary are still persisted — no crash."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_REVIEW_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        review_enabled="false",
     )
 
     agent_called = []

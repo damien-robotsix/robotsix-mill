@@ -488,7 +488,7 @@ def test_model_fallback_empty_string(monkeypatch):
     state = _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
-    settings = Settings(MILL_MODEL="test/coordinator-model")
+    settings = Settings(model="test/coordinator-model")
     mgr = ExpertManager(settings, Path("/tmp/test-repo"))
 
     definition = _make_definition(model="")
@@ -504,7 +504,7 @@ def test_model_explicit_overrides_settings(monkeypatch):
     state = _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
-    settings = Settings(MILL_MODEL="test/coordinator-model")
+    settings = Settings(model="test/coordinator-model")
     mgr = ExpertManager(settings, Path("/tmp/test-repo"))
 
     definition = _make_definition(model="anthropic/claude-opus")
@@ -521,7 +521,7 @@ def test_model_fallback_default_field(monkeypatch):
     state = _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
-    settings = Settings(MILL_MODEL="fallback/model")
+    settings = Settings(model="fallback/model")
     mgr = ExpertManager(settings, Path("/tmp/test-repo"))
 
     # Don't pass model at all — rely on ExpertDefinition default ("").

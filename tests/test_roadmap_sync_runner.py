@@ -151,7 +151,6 @@ class TestInsertMarkers:
 
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     _reset_secrets()
     # Reset cached DB engines + repos registry so each test sees a
@@ -161,7 +160,7 @@ def settings(tmp_path, monkeypatch):
     from robotsix_mill.config import _reset_repos_config
     db.reset_engine()
     _reset_repos_config()
-    return Settings()
+    return Settings(data_dir=str(tmp_path))
 
 
 @pytest.fixture

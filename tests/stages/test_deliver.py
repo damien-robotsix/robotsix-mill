@@ -37,7 +37,7 @@ def _bare(tmp_path) -> str:
 
 def _ctx(tmp_path, **env):
     db.reset_engine()
-    env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    env.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**env)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
@@ -111,7 +111,7 @@ def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
     _reset_secrets()
     _cfg._secrets = Secrets(forge_token="tok")
     s = Settings(
-        MILL_DATA_DIR=str(tmp_path), FORGE_KIND="github",
+        data_dir=str(tmp_path), FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git", FORGE_TOKEN="tok",
     )
     url = github.GitHubForge(s).open_merge_request(
@@ -128,7 +128,7 @@ def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
 # --- deliver guards (no external calls) --------------------------------
 
 def test_blocked_without_forge_kind(tmp_path):
-    ctx = _ctx(tmp_path, MILL_DATA_DIR=str(tmp_path / "d0"))
+    ctx = _ctx(tmp_path, data_dir=str(tmp_path / "d0"))
     t = ctx.service.create("x", "y")
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DELIVERABLE)

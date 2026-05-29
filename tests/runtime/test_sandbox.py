@@ -8,7 +8,7 @@ from robotsix_mill.config import Settings
 
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     return Settings(**env)
 
 
@@ -19,9 +19,9 @@ def _settings(tmp_path, **env):
 def test_argv_is_isolated(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
-        MILL_DATA_DIR="/data",
-        MILL_DATA_VOLUME="mill_data",
-        MILL_SANDBOX_IMAGE="python:3.14-slim",
+        data_dir="/data",
+        data_volume="mill_data",
+        sandbox_image="python:3.14-slim",
     )
     seen = {}
 
@@ -63,8 +63,8 @@ def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
     expose the data-dir root, mill.db, the memory ledgers, or other
     tickets' workspaces — only THIS ticket's repo."""
     s = _settings(
-        tmp_path, MILL_DATA_DIR="/data",
-        MILL_SANDBOX_DATA_MOUNT="/host/.data",
+        tmp_path, data_dir="/data",
+        sandbox_data_mount="/host/.data",
     )
     seen = {}
 
@@ -94,7 +94,7 @@ def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
 
 
 def test_sandbox_refuses_repo_outside_data_dir(tmp_path):
-    s = _settings(tmp_path, MILL_DATA_DIR="/data")
+    s = _settings(tmp_path, data_dir="/data")
     with pytest.raises(sandbox.SandboxError):
         sandbox.run("true", repo_dir="/etc", settings=s)
     with pytest.raises(sandbox.SandboxError):  # the data-dir root itself
@@ -104,9 +104,9 @@ def test_sandbox_refuses_repo_outside_data_dir(tmp_path):
 def test_sandbox_data_mount_overrides_volume(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
-        MILL_DATA_DIR="/data",
-        MILL_DATA_VOLUME="mill_data",
-        MILL_SANDBOX_DATA_MOUNT="/host/abs/.data",
+        data_dir="/data",
+        data_volume="mill_data",
+        sandbox_data_mount="/host/abs/.data",
     )
     seen = {}
 
@@ -159,8 +159,8 @@ def test_repo_mount_rejects_non_existent_source(tmp_path):
     raises SandboxError before Docker ever sees the mount spec."""
     s = _settings(
         tmp_path,
-        MILL_DATA_DIR="/data",
-        MILL_SANDBOX_DATA_MOUNT="/host/.data",
+        data_dir="/data",
+        sandbox_data_mount="/host/.data",
     )
     # bind case: the (container-visible) repo dir doesn't exist.
     # We deliberately check repo_dir, NOT the host path string — the
@@ -172,8 +172,8 @@ def test_repo_mount_rejects_non_existent_source(tmp_path):
     # named-volume case: the repo dir doesn't exist
     s2 = _settings(
         tmp_path,
-        MILL_DATA_DIR="/data",
-        MILL_DATA_VOLUME="mill_data",
+        data_dir="/data",
+        data_volume="mill_data",
     )
     with pytest.raises(sandbox.SandboxError, match="repo directory does not exist"):
         sandbox._repo_mount(Path("/data/work/repo"), s2)
@@ -188,8 +188,8 @@ def test_sandbox_injects_pythonpath_for_src_layout(tmp_path, monkeypatch):
     (repo / "src").mkdir()
 
     s = _settings(
-        tmp_path, MILL_DATA_DIR=str(tmp_path),
-        MILL_SANDBOX_DATA_MOUNT=str(tmp_path),
+        tmp_path, data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
     )
     seen = {}
 
@@ -214,8 +214,8 @@ def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
     repo.mkdir()
 
     s = _settings(
-        tmp_path, MILL_DATA_DIR=str(tmp_path),
-        MILL_SANDBOX_DATA_MOUNT=str(tmp_path),
+        tmp_path, data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
     )
     seen = {}
 

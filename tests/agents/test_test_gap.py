@@ -17,7 +17,7 @@ from robotsix_mill.core.states import State
 
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
-    overrides.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
     db.init_db(s)
@@ -298,7 +298,7 @@ def test_test_gap_config_defaults():
 
 def test_test_gap_config_custom_model():
     """Test-gap model can be overridden via env."""
-    s = Settings(MILL_TEST_GAP_MODEL="anthropic/claude-sonnet-4")
+    s = Settings(test_gap_model="anthropic/claude-sonnet-4")
     assert s.test_gap_model == "anthropic/claude-sonnet-4"
 
 
@@ -313,13 +313,13 @@ def test_test_gap_memory_file_default(tmp_path):
 def test_test_gap_memory_file_override(tmp_path):
     """When test_gap_memory_path is set, uses that path."""
     custom_path = tmp_path / "custom_test_gap.md"
-    s = _make_settings(tmp_path, MILL_TEST_GAP_MEMORY_PATH=str(custom_path))
+    s = _make_settings(tmp_path, test_gap_memory_path=str(custom_path))
     assert s.test_gap_memory_file == custom_path
 
 
 def test_test_gap_periodic_config():
     """Test-gap periodic can be enabled."""
-    s = Settings(MILL_TEST_GAP_PERIODIC="true", MILL_TEST_GAP_INTERVAL_SECONDS="43200")
+    s = Settings(test_gap_periodic="true", test_gap_interval_seconds="43200")
     assert s.test_gap_periodic is True
     assert s.test_gap_interval_seconds == 43200
 
@@ -510,14 +510,14 @@ def test_run_test_gap_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_worker_test_gap_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
-    """Worker._test_gap_task is created when MILL_TEST_GAP_PERIODIC=true."""
+    """Worker._test_gap_task is created when test_gap_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
 
     settings = _make_settings(
         tmp_path,
-        MILL_TEST_GAP_PERIODIC="true",
-        MILL_TEST_GAP_INTERVAL_SECONDS="1",
+        test_gap_periodic="true",
+        test_gap_interval_seconds="1",
     )
     db.reset_engine()
     db.init_db(settings)
@@ -545,11 +545,11 @@ async def test_worker_test_gap_task_created_when_periodic(tmp_path, monkeypatch,
 
 @pytest.mark.asyncio
 async def test_worker_test_gap_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
-    """Worker._test_gap_task is NOT created when MILL_TEST_GAP_PERIODIC=false."""
+    """Worker._test_gap_task is NOT created when test_gap_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
 
-    settings = _make_settings(tmp_path, MILL_TEST_GAP_PERIODIC="false")
+    settings = _make_settings(tmp_path, test_gap_periodic="false")
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)

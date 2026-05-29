@@ -19,7 +19,7 @@ from robotsix_mill.agents.ci_fixing import CiFixResult
 
 def _ctx(tmp_path, **env):
     db.reset_engine()
-    env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    env.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**env)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
@@ -131,7 +131,7 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
 # --- Fix failure, attempts remaining → IMPLEMENT_COMPLETE ---
 
 def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
-    ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="3")
+    ctx = _gh(tmp_path, ci_fix_max_attempts="3")
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
         lambda self, *, source_branch: {
@@ -169,7 +169,7 @@ def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
 # --- Fix failure, attempts exhausted → BLOCKED ---
 
 def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
-    ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="2")
+    ctx = _gh(tmp_path, ci_fix_max_attempts="2")
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
         lambda self, *, source_branch: {
@@ -210,7 +210,7 @@ def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
 # --- Agent crash → treated as failure ---
 
 def test_agent_crash_treated_as_failure(tmp_path, monkeypatch):
-    ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="1")
+    ctx = _gh(tmp_path, ci_fix_max_attempts="1")
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
         lambda self, *, source_branch: {
@@ -355,7 +355,7 @@ def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
 
 def test_counter_location_is_artifacts_dir(tmp_path, monkeypatch):
     """Counter is at artifacts_dir / ci_fix_attempts.txt."""
-    ctx = _gh(tmp_path, MILL_CI_FIX_MAX_ATTEMPTS="3")
+    ctx = _gh(tmp_path, ci_fix_max_attempts="3")
     monkeypatch.setattr(
         github.GitHubForge, "check_status",
         lambda self, *, source_branch: {

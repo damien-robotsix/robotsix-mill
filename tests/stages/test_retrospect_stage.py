@@ -75,7 +75,7 @@ def ctx_factory(tmp_path, fake_sandbox):
 
     def make(**env):
         db.reset_engine()
-        s = Settings(MILL_DATA_DIR=str(tmp_path / f"data{len(created)}"), **env)
+        s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
@@ -229,13 +229,13 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
 
 
 def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
-    """When MILL_RETROSPECT_SPAWN_DRAFTS=false, a proposed draft is
+    """When retrospect_spawn_drafts=false, a proposed draft is
     noted but NOT created."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
-    ctx = ctx_factory(MILL_RETROSPECT_SPAWN_DRAFTS="false")
+    ctx = ctx_factory(retrospect_spawn_drafts="false")
 
     monkeypatch.setattr(
         retrospecting, "run_retrospect_agent",
@@ -695,12 +695,12 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
 
 
 def test_prune_clone_on_close_false_no_prune(ctx_factory, monkeypatch):
-    """When MILL_PRUNE_CLONE_ON_CLOSE=false, prune_clone is NOT called."""
+    """When prune_clone_on_close=false, prune_clone is NOT called."""
     from robotsix_mill import langfuse_client
     from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
-    ctx = ctx_factory(MILL_PRUNE_CLONE_ON_CLOSE="false")
+    ctx = ctx_factory(prune_clone_on_close="false")
 
     prune_calls = []
 
@@ -869,8 +869,8 @@ def _multirepo_ctx(tmp_path):
     })
     db.reset_engine()
     s = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_TRACE_REVIEW_TARGET_REPO_ID="robotsix-mill",
+        data_dir=str(tmp_path),
+        trace_review_target_repo_id="robotsix-mill",
     )
     db.init_db(s, board_id="test-board")
     db.init_db(s, board_id="mill-board")

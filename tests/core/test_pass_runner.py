@@ -27,7 +27,7 @@ class _FakeAgentResult:
 
 def _make_settings(tmp_path, **overrides):
     """Create Settings with MILL_DATA_DIR pointed at tmp_path."""
-    overrides.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    overrides.setdefault("data_dir", str(tmp_path / "data"))
     return Settings(**overrides)
 
 

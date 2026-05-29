@@ -81,10 +81,10 @@ def review_settings(tmp_path) -> Settings:
 
     dbmod.reset_engine()
     s = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_REQUIRE_APPROVAL="false",
-        MILL_REFINE_TRIAGE_ENABLED="false",
-        MILL_SPEC_REVIEW_ENABLED="true",
+        data_dir=str(tmp_path),
+        require_approval="false",
+        refine_triage_enabled="false",
+        spec_review_enabled="true",
     )
     dbmod.init_db(s)
     yield s

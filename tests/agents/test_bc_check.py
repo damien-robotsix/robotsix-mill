@@ -17,7 +17,7 @@ from robotsix_mill.core.states import State
 
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
-    overrides.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
     db.init_db(s)
@@ -302,7 +302,7 @@ def test_bc_check_config_defaults():
 
 def test_bc_check_config_custom_model():
     """BC-check model can be overridden via env."""
-    s = Settings(MILL_BC_CHECK_MODEL="anthropic/claude-sonnet-4")
+    s = Settings(bc_check_model="anthropic/claude-sonnet-4")
     assert s.bc_check_model == "anthropic/claude-sonnet-4"
 
 
@@ -317,13 +317,13 @@ def test_bc_check_memory_file_default(tmp_path):
 def test_bc_check_memory_file_override(tmp_path):
     """When bc_check_memory_path is set, uses that path."""
     custom_path = tmp_path / "custom_bc_check.md"
-    s = _make_settings(tmp_path, MILL_BC_CHECK_MEMORY_PATH=str(custom_path))
+    s = _make_settings(tmp_path, bc_check_memory_path=str(custom_path))
     assert s.bc_check_memory_file == custom_path
 
 
 def test_bc_check_periodic_config():
     """BC-check periodic can be enabled."""
-    s = Settings(MILL_BC_CHECK_PERIODIC="true", MILL_BC_CHECK_INTERVAL_SECONDS="43200")
+    s = Settings(bc_check_periodic="true", bc_check_interval_seconds="43200")
     assert s.bc_check_periodic is True
     assert s.bc_check_interval_seconds == 43200
 
@@ -514,14 +514,14 @@ def test_run_bc_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_worker_bc_check_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
-    """Worker._bc_check_task is created when MILL_BC_CHECK_PERIODIC=true."""
+    """Worker._bc_check_task is created when bc_check_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
 
     settings = _make_settings(
         tmp_path,
-        MILL_BC_CHECK_PERIODIC="true",
-        MILL_BC_CHECK_INTERVAL_SECONDS="1",
+        bc_check_periodic="true",
+        bc_check_interval_seconds="1",
     )
     db.reset_engine()
     db.init_db(settings)
@@ -546,11 +546,11 @@ async def test_worker_bc_check_task_created_when_periodic(tmp_path, monkeypatch,
 
 @pytest.mark.asyncio
 async def test_worker_bc_check_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
-    """Worker._bc_check_task is NOT created when MILL_BC_CHECK_PERIODIC=false."""
+    """Worker._bc_check_task is NOT created when bc_check_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
 
-    settings = _make_settings(tmp_path, MILL_BC_CHECK_PERIODIC="false")
+    settings = _make_settings(tmp_path, bc_check_periodic="false")
     db.reset_engine()
     db.init_db(settings)
     service = TicketService(settings)

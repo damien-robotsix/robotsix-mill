@@ -53,7 +53,7 @@ def test_verify_no_events(monkeypatch, tmp_path):
     """Empty DB → zero events, zero tickets, zero breaks."""
     from robotsix_mill.config import Settings
     db.reset_engine()
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="false")
+    s = Settings(data_dir=str(tmp_path), require_approval="false")
     db.init_db(s)
 
     # Monkeypatch Settings() inside the runner to return our settings.
@@ -75,7 +75,7 @@ def test_verify_clean_chain(monkeypatch, tmp_path):
     from robotsix_mill.core.service import TicketService
 
     db.reset_engine()
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="false")
+    s = Settings(data_dir=str(tmp_path), require_approval="false")
     db.init_db(s)
     # Use default board "" so the verify runner finds the events.
     svc = TicketService(s, board_id="")
@@ -99,7 +99,7 @@ def test_verify_corrupted_hash(monkeypatch, tmp_path):
     from robotsix_mill.core.service import TicketService
 
     db.reset_engine()
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="false")
+    s = Settings(data_dir=str(tmp_path), require_approval="false")
     db.init_db(s)
     svc = TicketService(s, board_id="")
 
@@ -140,7 +140,7 @@ def test_verify_corrupted_prev_hash(monkeypatch, tmp_path):
     from robotsix_mill.core.service import TicketService
 
     db.reset_engine()
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="false")
+    s = Settings(data_dir=str(tmp_path), require_approval="false")
     db.init_db(s)
     svc = TicketService(s, board_id="")
 
@@ -173,7 +173,7 @@ def test_verify_skips_empty_hash_events(monkeypatch, tmp_path):
     from robotsix_mill.config import Settings
 
     db.reset_engine()
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="false")
+    s = Settings(data_dir=str(tmp_path), require_approval="false")
     db.init_db(s)
 
     # Insert a bare event with empty hash (simulating pre-migration).
@@ -205,7 +205,7 @@ def test_verify_single_ticket_filter(monkeypatch, tmp_path):
     from robotsix_mill.core.service import TicketService
 
     db.reset_engine()
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="false")
+    s = Settings(data_dir=str(tmp_path), require_approval="false")
     db.init_db(s)
     svc = TicketService(s, board_id="")
 

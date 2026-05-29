@@ -109,7 +109,7 @@ def settings(tmp_path) -> Settings:
     db.reset_engine()  # don't reuse a cached engine across tests
     # Default to autonomous mode so existing tests that depend on
     # refine→ready chaining stay green without per-test overrides.
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="false")
+    s = Settings(data_dir=str(tmp_path), require_approval="false")
     db.init_db(s)
     yield s
     db.reset_engine()

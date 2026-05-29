@@ -11,10 +11,10 @@ from robotsix_mill.config import Settings
 
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
-    env.setdefault("MILL_TRANSIENT_RETRIES", "3")
-    env.setdefault("MILL_TRANSIENT_BACKOFF_BASE", "1.0")
-    env.setdefault("MILL_TRANSIENT_BACKOFF_CAP", "4.0")
+    env.setdefault("data_dir", str(tmp_path))
+    env.setdefault("transient_retries", "3")
+    env.setdefault("transient_backoff_base", "1.0")
+    env.setdefault("transient_backoff_cap", "4.0")
     return Settings(**env)
 
 
@@ -80,7 +80,7 @@ def test_is_transient_walks_wrapped_timeout():
 def test_timeout_http_client_uses_configured_timeout(tmp_path):
     from robotsix_mill.agents.base import timeout_http_client
 
-    s = _settings(tmp_path, MILL_MODEL_REQUEST_TIMEOUT="42")
+    s = _settings(tmp_path, model_request_timeout="42")
     c = timeout_http_client(s)
     assert c.timeout.read == 42.0  # hard per-request read timeout kills hangs
     assert c.timeout.connect == 15.0
@@ -104,7 +104,7 @@ def test_transient_then_success(tmp_path):
 
 
 def test_persistent_transient_exhausts_then_raises(tmp_path):
-    s = _settings(tmp_path, MILL_TRANSIENT_RETRIES="3")
+    s = _settings(tmp_path, transient_retries="3")
     slept, calls = [], {"n": 0}
 
     def fn():
@@ -135,7 +135,7 @@ def test_non_transient_not_retried(tmp_path, exc):
 
 
 def test_zero_retries_means_single_attempt(tmp_path):
-    s = _settings(tmp_path, MILL_TRANSIENT_RETRIES="0")
+    s = _settings(tmp_path, transient_retries="0")
     calls = {"n": 0}
 
     def fn():
@@ -194,7 +194,7 @@ def test_rate_limit_raises_immediately_without_fallback(tmp_path):
 def test_rate_limit_exhausts_then_raises(tmp_path):
     """Persistent UsageLimitExceeded with no fallback — must raise
     immediately without retrying (UsageLimitExceeded is never retried)."""
-    s = _settings(tmp_path, MILL_TRANSIENT_RETRIES="2")
+    s = _settings(tmp_path, transient_retries="2")
     slept, calls = [], {"n": 0}
 
     def fn():
@@ -212,8 +212,8 @@ def test_rate_limit_fallback_activates(tmp_path):
     immediately (not after rate_limit_fallback_retries)."""
     s = _settings(
         tmp_path,
-        MILL_TRANSIENT_RETRIES="4",
-        MILL_RATE_LIMIT_FALLBACK_RETRIES="3",
+        transient_retries="4",
+        rate_limit_fallback_retries="3",
     )
     primary_calls = {"n": 0}
     fallback_calls = {"n": 0}
@@ -239,8 +239,8 @@ def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
     immediately (no retries)."""
     s = _settings(
         tmp_path,
-        MILL_TRANSIENT_RETRIES="4",
-        MILL_RATE_LIMIT_FALLBACK_RETRIES="3",
+        transient_retries="4",
+        rate_limit_fallback_retries="3",
     )
     primary_calls = {"n": 0}
     fallback_calls = {"n": 0}
@@ -266,8 +266,8 @@ def test_rate_limit_fallback_not_called_for_transient(tmp_path):
     UsageLimitExceeded does."""
     s = _settings(
         tmp_path,
-        MILL_TRANSIENT_RETRIES="2",
-        MILL_RATE_LIMIT_FALLBACK_RETRIES="1",
+        transient_retries="2",
+        rate_limit_fallback_retries="1",
     )
     calls = {"n": 0}
     fallback_calls = {"n": 0}
@@ -320,7 +320,7 @@ def test_persistent_transient_flushes_per_attempt(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.tracing.flush_tracing", fake_flush,
     )
-    s = _settings(tmp_path, MILL_TRANSIENT_RETRIES="3")
+    s = _settings(tmp_path, transient_retries="3")
     calls = {"n": 0}
 
     def fn():

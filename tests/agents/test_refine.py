@@ -179,7 +179,7 @@ def test_empty_spec_proceeds_to_human_issue_approval_when_gated(ctx, service, mo
     """Whitespace-only spec + gated → HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
     gated_settings = Settings(
-        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+        data_dir=str(tmp_path), require_approval="true"
     )
     gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
     t = service.create("x", "draft")
@@ -214,7 +214,7 @@ def test_refine_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatc
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     gated_settings = Settings(
-        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+        data_dir=str(tmp_path), require_approval="true"
     )
     gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
     t = service.create("Add X", "make x happen")
@@ -245,7 +245,7 @@ async def test_human_issue_approval_pauses_chain(ctx, service, monkeypatch, repo
     t = service.create("Add X", "rough idea")
     # apply refine outcome with gated settings
     from robotsix_mill.config import Settings as S
-    gated = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REQUIRE_APPROVAL="true")
+    gated = S(data_dir=str(ctx.settings.data_dir), require_approval="true")
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
     outcome = RefineStage().run(t, gated_ctx)
     service.transition(t.id, outcome.next_state, outcome.note)
@@ -755,7 +755,7 @@ def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     refining.run_refine_agent(settings=s, title="Test", draft="draft")
 
     assert len(seen_system_prompt) == 1
@@ -787,7 +787,7 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     result = refining.run_refine_agent(
         settings=s, title="Test", draft="draft", repo_dir=repo,
     )
@@ -819,7 +819,7 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     result = refining.run_refine_agent(
         settings=s, title="Test", draft="draft", repo_dir=None,
     )
@@ -971,7 +971,7 @@ def test_split_empty_children_proceeds_to_human_issue_approval_when_gated(
     )
 
     gated_settings = Settings(
-        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+        data_dir=str(tmp_path), require_approval="true"
     )
     gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
@@ -1017,7 +1017,7 @@ def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tm
     )
 
     gated_settings = Settings(
-        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+        data_dir=str(tmp_path), require_approval="true"
     )
     gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
@@ -1218,7 +1218,7 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     result = refining.run_refine_agent(
         settings=s, title="Test", draft="draft",
     )
@@ -1246,7 +1246,7 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     result = refining.run_refine_agent(
         settings=s, title="Test", draft="draft",
     )
@@ -1272,7 +1272,7 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     refining.run_refine_agent(settings=s, title="Test", draft="draft")
 
     assert len(seen_system_prompt) == 1
@@ -1301,7 +1301,7 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     refining.run_refine_agent(settings=s, title="Test", draft="draft")
 
     assert len(seen_system_prompt) == 1
@@ -1410,7 +1410,7 @@ def test_sendback_uses_short_prompt(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     refining.run_refine_agent(
         settings=s, title="Test", draft="draft",
         reviewer_comments="fix this",
@@ -1437,7 +1437,7 @@ def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     refining.run_refine_agent(settings=s, title="Test", draft="draft")
 
     assert len(seen_system_prompt) == 1
@@ -1652,7 +1652,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_TRIAGE_MODEL="test/triage-model")
+    s = Settings(data_dir=str(tmp_path), triage_model="test/triage-model")
     result = triage_refine(settings=s, title="Test", draft="do x in foo.py")
 
     assert result.decision == "REFINE"
@@ -1704,7 +1704,7 @@ def test_triage_skip_goes_to_human_issue_approval_when_gated(ctx, service, monke
     t = service.create("Add env var", "Add FOO=bar to `src/config.py` line 42.")
 
     from robotsix_mill.config import Settings as S
-    gated = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REQUIRE_APPROVAL="true")
+    gated = S(data_dir=str(ctx.settings.data_dir), require_approval="true")
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
     out = RefineStage().run(t, gated_ctx)
 
@@ -1760,7 +1760,7 @@ def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch, re
     t = service.create("Update README", "Change the version badge in README.md line 5.")
 
     from robotsix_mill.config import Settings as S
-    disabled = S(MILL_DATA_DIR=str(ctx.settings.data_dir), MILL_REFINE_TRIAGE_ENABLED="false", MILL_REQUIRE_APPROVAL="false")
+    disabled = S(data_dir=str(ctx.settings.data_dir), refine_triage_enabled="false", require_approval="false")
     disabled_ctx = StageContext(settings=disabled, service=service, repo_config=repo_config)
     out = RefineStage().run(t, disabled_ctx)
 
@@ -1857,9 +1857,9 @@ def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_pa
     )
 
     gated = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_REQUIRE_APPROVAL="true",
-        MILL_AUTO_APPROVE_ENABLED="true",
+        data_dir=str(tmp_path),
+        require_approval="true",
+        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -1889,9 +1889,9 @@ def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tm
     )
 
     gated = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_REQUIRE_APPROVAL="true",
-        MILL_AUTO_APPROVE_ENABLED="true",
+        data_dir=str(tmp_path),
+        require_approval="true",
+        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -1914,9 +1914,9 @@ def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp
     )
 
     gated = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_REQUIRE_APPROVAL="true",
-        MILL_AUTO_APPROVE_ENABLED="true",
+        data_dir=str(tmp_path),
+        require_approval="true",
+        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -1943,9 +1943,9 @@ def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path,
     monkeypatch.setattr(refining, "triage_auto_approve", fake_auto_approve)
 
     gated = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_REQUIRE_APPROVAL="true",
-        MILL_AUTO_APPROVE_ENABLED="false",
+        data_dir=str(tmp_path),
+        require_approval="true",
+        auto_approve_enabled="false",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -1980,9 +1980,9 @@ def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypat
     )
 
     gated = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_REQUIRE_APPROVAL="true",
-        MILL_AUTO_APPROVE_ENABLED="true",
+        data_dir=str(tmp_path),
+        require_approval="true",
+        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -2010,9 +2010,9 @@ def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, t
     )
 
     gated = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_REQUIRE_APPROVAL="true",
-        MILL_AUTO_APPROVE_ENABLED="true",
+        data_dir=str(tmp_path),
+        require_approval="true",
+        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -2047,9 +2047,9 @@ def test_auto_approve_architecture_decision_needs_approval(ctx, service, monkeyp
     )
 
     gated = Settings(
-        MILL_DATA_DIR=str(tmp_path),
-        MILL_REQUIRE_APPROVAL="true",
-        MILL_AUTO_APPROVE_ENABLED="true",
+        data_dir=str(tmp_path),
+        require_approval="true",
+        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -2102,7 +2102,7 @@ def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, t
     )
 
     gated_settings = Settings(
-        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+        data_dir=str(tmp_path), require_approval="true"
     )
     gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
@@ -2136,7 +2136,7 @@ def test_epic_body_applied_on_approval_in_gated_mode(ctx, service, monkeypatch, 
     )
 
     gated_settings = Settings(
-        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+        data_dir=str(tmp_path), require_approval="true"
     )
     gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
@@ -2210,7 +2210,7 @@ def test_epic_body_applied_immediately_in_split_path(ctx, service, monkeypatch, 
     )
 
     gated_settings = Settings(
-        MILL_DATA_DIR=str(tmp_path), MILL_REQUIRE_APPROVAL="true"
+        data_dir=str(tmp_path), require_approval="true"
     )
     gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 

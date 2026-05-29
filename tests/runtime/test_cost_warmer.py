@@ -25,15 +25,15 @@ from robotsix_mill.stages import StageContext
 
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     db.reset_engine()
     from robotsix_mill.config import _reset_repos_config, _reset_secrets
     _reset_secrets()
     _reset_repos_config()
     return Settings(
-        MILL_COST_WARMER_INTERVAL_SECONDS=30,
-        MILL_COST_WARMER_PACE_MS=0,
+        data_dir=str(tmp_path),
+        cost_warmer_interval_seconds=30,
+        cost_warmer_pace_ms=0,
     )
 
 

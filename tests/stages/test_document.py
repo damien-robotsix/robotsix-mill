@@ -52,7 +52,7 @@ def ctx_factory(tmp_path):
 
     def make(**env):
         db.reset_engine()
-        s = Settings(MILL_DATA_DIR=str(tmp_path / f"data{len(created)}"), **env)
+        s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
@@ -84,7 +84,7 @@ def _ticket(ctx, body="Add feature.txt"):
 # --- user-facing diff → doc edits + commit ----------------------------
 
 def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -111,7 +111,7 @@ def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
 # --- internal-only diff → no-op ---------------------------------------
 
 def test_internal_skips_commit(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -142,7 +142,7 @@ def test_internal_skips_commit(ctx_factory, monkeypatch):
 # --- user-facing=True but no changes → no commit ----------------------
 
 def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -167,7 +167,7 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
 # --- empty diff → pass-through without agent --------------------------
 
 def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     # Remove the commit so diff is empty.
@@ -190,7 +190,7 @@ def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
 # --- missing clone → BLOCKED ------------------------------------------
 
 def test_missing_clone_blocks(ctx_factory):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = ctx.service.create("No clone")
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DOCUMENTING)
@@ -204,7 +204,7 @@ def test_missing_clone_blocks(ctx_factory):
 # --- agent exception → warn-and-pass ----------------------------------
 
 def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
@@ -221,7 +221,7 @@ def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
 # --- diff_base failure → BLOCKED --------------------------------------
 
 def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _failing_diff_base(repo, target_branch, **kw):
@@ -240,7 +240,7 @@ def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
 # --- commit_all failure → warn-and-pass --------------------------------
 
 def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
@@ -265,7 +265,7 @@ def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
 # --- review disabled → transitions to DELIVERABLE ---------------------
 
 def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="false")
     t = _ticket(ctx)
 
     def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
@@ -282,7 +282,7 @@ def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
 # --- classifier internal-only → skips full agent ----------------------
 
 def test_classifier_internal_skips_full_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -317,7 +317,7 @@ def test_classifier_internal_skips_full_agent(ctx_factory, monkeypatch):
 # --- classifier user-facing → runs full agent -------------------------
 
 def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -349,7 +349,7 @@ def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
 # --- classifier exception → fall through to full agent ----------------
 
 def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -378,7 +378,7 @@ def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypat
 # --- classifier verdict recorded in history ---------------------------
 
 def test_classifier_verdict_recorded_in_history(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", MILL_REVIEW_ENABLED="true")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     add_comment_calls = []

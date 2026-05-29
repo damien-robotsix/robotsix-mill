@@ -89,7 +89,7 @@ def test_run_config_sync_agent_web_false(monkeypatch):
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
     monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
 
-    s = Settings(MILL_DATA_DIR="/tmp/test_config_sync")
+    s = Settings(data_dir="/tmp/test_config_sync")
     config_syncing.run_config_sync_agent(settings=s, memory="")
 
     assert len(build_calls) == 1
@@ -116,7 +116,7 @@ def test_run_config_sync_agent_max_gaps_clipping(monkeypatch):
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
     monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
 
-    s = Settings(MILL_DATA_DIR="/tmp/test_config_sync")
+    s = Settings(data_dir="/tmp/test_config_sync")
     result = config_syncing.run_config_sync_agent(settings=s, memory="")
 
     assert len(result.draft_titles) == config_syncing.MAX_GAPS
@@ -140,7 +140,7 @@ def test_run_config_sync_agent_no_repo_dir_no_tools(monkeypatch):
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
     monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
 
-    s = Settings(MILL_DATA_DIR="/tmp/test_config_sync")
+    s = Settings(data_dir="/tmp/test_config_sync")
     config_syncing.run_config_sync_agent(settings=s, memory="")
 
     assert len(build_calls) == 1
@@ -168,7 +168,7 @@ def test_run_config_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
     repo.mkdir()
     (repo / "config.py").write_text("")
 
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     config_syncing.run_config_sync_agent(settings=s, memory="", repo_dir=repo)
 
     assert len(build_calls) == 1
@@ -192,7 +192,7 @@ def test_config_sync_config_defaults():
 def test_config_sync_config_custom_model():
     """Config-sync model can be overridden via env."""
     from robotsix_mill.config import Settings
-    s = Settings(MILL_CONFIG_SYNC_MODEL="anthropic/claude-sonnet-4")
+    s = Settings(config_sync_model="anthropic/claude-sonnet-4")
     assert s.config_sync_model == "anthropic/claude-sonnet-4"
 
 
@@ -200,7 +200,7 @@ def test_config_sync_memory_file_default(tmp_path):
     """When config_sync_memory_path is None, falls back to
     data_dir/config_sync_memory.md."""
     from robotsix_mill.config import Settings
-    s = Settings(MILL_DATA_DIR=str(tmp_path))
+    s = Settings(data_dir=str(tmp_path))
     expected = s.data_dir / "config_sync_memory.md"
     assert s.config_sync_memory_file == expected
 
@@ -209,13 +209,13 @@ def test_config_sync_memory_file_override(tmp_path):
     """When config_sync_memory_path is set, uses that path."""
     from robotsix_mill.config import Settings
     custom_path = tmp_path / "custom_config_sync.md"
-    s = Settings(MILL_DATA_DIR=str(tmp_path), MILL_CONFIG_SYNC_MEMORY_PATH=str(custom_path))
+    s = Settings(data_dir=str(tmp_path), config_sync_memory_path=str(custom_path))
     assert s.config_sync_memory_file == custom_path
 
 
 def test_config_sync_periodic_config():
     """Config-sync periodic can be enabled."""
     from robotsix_mill.config import Settings
-    s = Settings(MILL_CONFIG_SYNC_PERIODIC="true", MILL_CONFIG_SYNC_INTERVAL_SECONDS="43200")
+    s = Settings(config_sync_periodic="true", config_sync_interval_seconds="43200")
     assert s.config_sync_periodic is True
     assert s.config_sync_interval_seconds == 43200

@@ -14,7 +14,7 @@ def _set_secrets(**kw):
 
 
 def S(tmp_path, **e):
-    e.setdefault("MILL_DATA_DIR", str(tmp_path))
+    e.setdefault("data_dir", str(tmp_path))
     s = Settings(**e)
     # Mirror secret fields into Secrets so get_secrets() works
     secrets_kw = {}

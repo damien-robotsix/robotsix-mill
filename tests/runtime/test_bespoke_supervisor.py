@@ -43,9 +43,8 @@ def _write_yaml(path, data):
 
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    s = Settings()
+    s = Settings(data_dir=str(tmp_path / "data"))
     db.reset_engine()
     db.init_db(s)
     _reset_secrets()

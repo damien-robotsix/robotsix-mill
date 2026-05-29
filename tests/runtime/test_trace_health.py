@@ -39,7 +39,7 @@ def client(settings, repos_registry):
 def _settings(tmp_path, **overrides):
     """Create a Settings pointed at tmp_path, with tracing enabled
     (Langfuse keys configured) so the runner doesn't short-circuit."""
-    overrides.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    overrides.setdefault("data_dir", str(tmp_path / "data"))
     # Populate Secrets so get_secrets() returns matching values
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
@@ -298,7 +298,7 @@ def test_tracing_disabled_noop(tmp_path, monkeypatch):
     """When tracing_enabled is False, short-circuit before any network call."""
     from robotsix_mill.config import Settings
 
-    settings = Settings(MILL_DATA_DIR=str(tmp_path / "data"))
+    settings = Settings(data_dir=str(tmp_path / "data"))
     _init_db_for_test(settings)
 
     # tracing_enabled is False when langfuse keys are unset (default)

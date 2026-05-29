@@ -32,8 +32,8 @@ def _ctx(tmp_path, repo_config=None, **env):
     the test repo.
     """
     db.reset_engine()
-    env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
-    env.setdefault("MILL_REQUIRE_APPROVAL", "false")
+    env.setdefault("data_dir", str(tmp_path / "data"))
+    env.setdefault("require_approval", "false")
     s = Settings(**env)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")

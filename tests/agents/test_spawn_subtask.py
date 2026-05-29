@@ -27,11 +27,9 @@ from robotsix_mill.config import Settings, _reset_secrets
 
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("OPENROUTER_API_KEY", "k")
-    monkeypatch.setenv("MILL_SUBTASK_REQUEST_LIMIT", "7")
     _reset_secrets()
-    return Settings()
+    return Settings(data_dir=str(tmp_path), subtask_request_limit=7)
 
 
 @pytest.fixture

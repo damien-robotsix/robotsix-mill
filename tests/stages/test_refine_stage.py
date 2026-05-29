@@ -45,7 +45,7 @@ def ctx_factory(tmp_path, fake_sandbox):
 
     def make(**env):
         db.reset_engine()
-        s = Settings(MILL_DATA_DIR=str(tmp_path / f"data{len(created)}"), **env)
+        s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
@@ -236,7 +236,7 @@ def test_dedup_already_done_short_circuits_to_done(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_dedup_check_exception_proceeds_to_refine(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false")
+    ctx = ctx_factory(require_approval="false")
     t = _ticket(ctx, body="Fix the bug")
 
     refine_called = []
@@ -271,7 +271,7 @@ def test_dedup_check_exception_proceeds_to_refine(ctx_factory, monkeypatch):
 def test_clone_failure_escalates_to_blocked_with_comment(ctx_factory, monkeypatch):
     """A clone failure escalates to BLOCKED with an operator-visible
     comment rather than silently degrading into a tool-less refine."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", MILL_REQUIRE_APPROVAL="false")
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
     t = _ticket(ctx, body="Add endpoint")
 
     _apply_default_mocks(
@@ -297,7 +297,7 @@ def test_clone_failure_escalates_to_blocked_with_comment(ctx_factory, monkeypatc
 # ---------------------------------------------------------------------------
 
 def test_successful_refine_to_ready_autonomous(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, title="Fix logout", body="The logout button does nothing")
 
     _apply_default_mocks(monkeypatch,
@@ -318,7 +318,7 @@ def test_successful_refine_to_ready_autonomous(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_successful_refine_with_title_override(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, title="Fix thing", body="The logout button does nothing")
 
     _apply_default_mocks(monkeypatch,
@@ -336,8 +336,8 @@ def test_successful_refine_with_title_override(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_successful_refine_to_human_issue_approval_gated(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="true", MILL_AUTO_APPROVE_ENABLED="false",
-                      MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="true", auto_approve_enabled="false",
+                      refine_triage_enabled="false")
     t = _ticket(ctx, body="Implement the thing")
 
     _apply_default_mocks(monkeypatch,
@@ -353,8 +353,8 @@ def test_successful_refine_to_human_issue_approval_gated(ctx_factory, monkeypatc
 # ---------------------------------------------------------------------------
 
 def test_auto_approve_approve_routes_to_ready(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="true", MILL_AUTO_APPROVE_ENABLED="true",
-                      MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
+                      refine_triage_enabled="false")
     t = _ticket(ctx, body="Add a docstring to utils.py")
 
     _apply_default_mocks(
@@ -374,8 +374,8 @@ def test_auto_approve_approve_routes_to_ready(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_auto_approve_needs_approval_routes_to_human(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="true", MILL_AUTO_APPROVE_ENABLED="true",
-                      MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
+                      refine_triage_enabled="false")
     t = _ticket(ctx, body="Redesign the auth module")
 
     _apply_default_mocks(
@@ -395,8 +395,8 @@ def test_auto_approve_needs_approval_routes_to_human(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_auto_approve_triage_failure_falls_back_to_human(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="true", MILL_AUTO_APPROVE_ENABLED="true",
-                      MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
+                      refine_triage_enabled="false")
     t = _ticket(ctx, body="Update config defaults")
 
     _apply_default_mocks(
@@ -419,7 +419,7 @@ def test_refine_triage_skip_bypasses_agent(ctx_factory, monkeypatch):
     """When triage returns SKIP and the draft contains backtick-quoted
     file paths, the refine agent is bypassed and those paths are written
     to file_map.json (fast path preserved)."""
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="true")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="true")
     t = _ticket(ctx, body="Add docstring to foo() in `src/bar.py`")
 
     agent_called = []
@@ -456,7 +456,7 @@ def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkey
     """When triage returns SKIP but the draft has no backtick-quoted
     file paths, do NOT write an empty file_map — fall through to the
     refine agent instead so it can produce a proper file_map."""
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="true")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="true")
     # Draft with no backtick-quoted paths (bare filename with no
     # directory separator won't match the regex).
     t = _ticket(ctx, body="Add docstring to foo() in bar.py")
@@ -498,7 +498,7 @@ def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkey
 # ---------------------------------------------------------------------------
 
 def test_refine_triage_exception_falls_through_to_full_refine(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="true")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="true")
     t = _ticket(ctx, body="Fix the thing")
 
     refine_called = []
@@ -525,7 +525,7 @@ def test_refine_triage_exception_falls_through_to_full_refine(ctx_factory, monke
 # ---------------------------------------------------------------------------
 
 def test_refine_agent_runtime_error_blocks(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(refine_triage_enabled="false")
     t = _ticket(ctx, body="Fix the thing")
 
     monkeypatch.setattr(dedup, "run_dedup_check",
@@ -546,7 +546,7 @@ def test_refine_agent_runtime_error_blocks(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_refiner_empty_spec_falls_back_to_draft(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Original draft body")
 
     _apply_default_mocks(monkeypatch,
@@ -563,7 +563,7 @@ def test_refiner_empty_spec_falls_back_to_draft(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_refiner_none_spec_falls_back(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Original draft body")
 
     def _refine_none(*, settings, title, draft, repo_dir=None, reviewer_comments=None,
@@ -584,7 +584,7 @@ def test_refiner_none_spec_falls_back(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false")
+    ctx = ctx_factory(require_approval="false")
     parent = ctx.service.create("Epic parent", "Split me", kind="epic")
 
     # Directly set parent to CLOSED with a "split into" history event.
@@ -654,7 +654,7 @@ def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_successful_split_creates_children_and_closes_parent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Big feature: rewrite auth AND add dashboard")
 
     _apply_default_mocks(
@@ -700,7 +700,7 @@ def test_successful_split_creates_children_and_closes_parent(ctx_factory, monkey
 # ---------------------------------------------------------------------------
 
 def test_split_with_depends_on_resolves_indices(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Big feature")
 
     _apply_default_mocks(
@@ -739,7 +739,7 @@ def test_split_with_depends_on_resolves_indices(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_split_no_valid_children_blocks(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(refine_triage_enabled="false")
     t = _ticket(ctx, body="Big feature")
 
     _apply_default_mocks(
@@ -765,7 +765,7 @@ def test_split_no_valid_children_blocks(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_split_single_valid_child_falls_back_to_single_spec(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="One thing")
 
     _apply_default_mocks(
@@ -793,8 +793,8 @@ def test_split_single_valid_child_falls_back_to_single_spec(ctx_factory, monkeyp
 # ---------------------------------------------------------------------------
 
 def test_spec_review_conciseness_pass(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false",
-                      MILL_SPEC_REVIEW_ENABLED="true")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false",
+                      spec_review_enabled="true")
     t = _ticket(ctx, body="Do the change")
 
     verbose = "## Problem\nVerbose spec with exploration narrative\n\nI found that..."
@@ -819,8 +819,8 @@ def test_spec_review_conciseness_pass(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_spec_review_failure_uses_verbose_spec(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false",
-                      MILL_SPEC_REVIEW_ENABLED="true")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false",
+                      spec_review_enabled="true")
     t = _ticket(ctx, body="Do the change")
 
     verbose = "## Problem\nOriginal verbose spec"
@@ -841,7 +841,7 @@ def test_spec_review_failure_uses_verbose_spec(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_epic_body_applied_in_autonomous_mode(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     epic = ctx.service.create("Epic", "Original epic goal", kind="epic")
     child = ctx.service.create("Child", "Do part of epic", parent_id=epic.id)
 
@@ -863,8 +863,8 @@ def test_epic_body_applied_in_autonomous_mode(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_epic_body_stored_as_artifact_in_gated_mode(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="true", MILL_AUTO_APPROVE_ENABLED="false",
-                      MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="true", auto_approve_enabled="false",
+                      refine_triage_enabled="false")
     epic = ctx.service.create("Epic", "Original epic goal", kind="epic")
     child = ctx.service.create("Child", "Do part of epic", parent_id=epic.id)
 
@@ -892,7 +892,7 @@ def test_epic_body_stored_as_artifact_in_gated_mode(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_memory_load_and_persist_cycle(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Fix the widget")
 
     persisted: list[str] = []
@@ -918,7 +918,7 @@ def test_memory_load_and_persist_cycle(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_no_forge_remote_url_skips_clone(ctx_factory, monkeypatch):
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Fix the widget")
 
     clone_calls = []
@@ -941,7 +941,7 @@ def test_no_forge_remote_url_skips_clone(ctx_factory, monkeypatch):
 def test_split_creates_umbrella_epic_with_result_title(ctx_factory, monkeypatch):
     """When no epic parent exists, a new umbrella epic is created and
     children are reparented to it."""
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, title="Big refactor", body="Rewrite auth and add dashboard")
 
     _apply_default_mocks(
@@ -982,7 +982,7 @@ def test_split_creates_umbrella_epic_with_result_title(ctx_factory, monkeypatch)
 
 def test_split_epic_title_fallback_to_ticket_title(ctx_factory, monkeypatch):
     """When result.title is None or empty, the epic title = original ticket title."""
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, title="Refactor core modules", body="Break this up")
 
     _apply_default_mocks(
@@ -1014,7 +1014,7 @@ def test_split_epic_title_fallback_to_ticket_title(ctx_factory, monkeypatch):
 
 def test_split_epic_description_fallback_to_draft(ctx_factory, monkeypatch):
     """When result.spec_markdown is empty/None, epic description = original draft."""
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     draft_body = "Original draft: big feature request"
     t = _ticket(ctx, title="Big feature", body=draft_body)
 
@@ -1050,7 +1050,7 @@ def test_split_epic_description_fallback_to_draft(ctx_factory, monkeypatch):
 def test_split_with_existing_epic_reparents_children(ctx_factory, monkeypatch):
     """When the ticket already belongs to an epic, children are reparented
     to the existing epic — no new epic is created."""
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     existing_epic = ctx.service.create("Existing Epic", "Epic description", kind="epic")
     child_of_epic = ctx.service.create(
         "Split me", "Break into parts", parent_id=existing_epic.id,
@@ -1119,7 +1119,7 @@ def test_promote_to_epic_converts_and_spawns_children(ctx_factory, monkeypatch):
     should promote rather than inline-split."""
     from robotsix_mill.agents import epic_breakdown as _ebreak
 
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, title="Reorganize repo into modular layout",
                 body="For each module in docs/modules.yaml, "
                      "create the parallel directories...")
@@ -1188,7 +1188,7 @@ def test_promote_to_epic_breakdown_failure_leaves_epic_intact(ctx_factory, monke
     the outcome note."""
     from robotsix_mill.agents import epic_breakdown as _ebreak
 
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="One-shot migration of the repo")
 
     def _raise(**kw):

@@ -17,7 +17,8 @@ Per-tool layering on top of the raw sandbox fetch:
 3. Post-extraction cap — separate from the curl ``--max-filesize``
    network cap, this bounds what the agent's context actually sees.
 
-Operator can disable layers 1-2 with ``MILL_WEB_FETCH_RAW=true``.
+Operator can disable layers 1-2 by setting ``web.fetch_raw: true``
+in the mill YAML config.
 """
 
 from __future__ import annotations
@@ -173,11 +174,12 @@ def make_web_fetch(settings: Settings):
         - HTML pages are stripped to whitespace-collapsed text;
         - fragment-only URL variants reuse a prior fetch's result
           within the same agent run (~30 s window);
-        - the returned text is capped at
-          ``MILL_WEB_FETCH_MAX_TEXT_BYTES`` (default 200 KB).
+        - the returned text is capped at the YAML config
+          ``web.fetch_max_text_bytes`` (default 200 KB).
 
-        Set ``MILL_WEB_FETCH_RAW=true`` to disable extraction +
-        deduplication and get the verbatim curl body back.
+        Set ``web.fetch_raw: true`` in the YAML config to disable
+        extraction + deduplication and get the verbatim curl body
+        back.
         """
         from .. import sandbox
 

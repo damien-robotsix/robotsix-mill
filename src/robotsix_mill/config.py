@@ -120,25 +120,25 @@ class Settings(BaseSettings):
     # Transient 429/5xx/timeouts on any of these are absorbed by the
     # bounded retry+backoff (see transient_* below).
     model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     explore_model: str = Field(
-        default="deepseek/deepseek-v4-flash", alias="MILL_EXPLORE_MODEL"
+        default="deepseek/deepseek-v4-flash"
     )
     test_model: str = Field(
-        default="deepseek/deepseek-v4-flash", alias="MILL_TEST_MODEL"
+        default="deepseek/deepseek-v4-flash"
     )
     refine_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_REFINE_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     answer_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_ANSWER_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     retrospect_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_RETROSPECT_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     audit_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_AUDIT_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Default model for bespoke per-repo periodic agents loaded from
     # ``<clone>/.robotsix-mill/agents/<name>.yaml``. Each bespoke YAML
@@ -147,7 +147,6 @@ class Settings(BaseSettings):
     # not deep reasoners.
     bespoke_default_model: str = Field(
         default="deepseek/deepseek-v4-flash",
-        alias="MILL_BESPOKE_DEFAULT_MODEL",
     )
     # Model for the library-knowledge curator sub-agent — a cheap call
     # that answers from a cached per-library knowledge file and only
@@ -155,60 +154,59 @@ class Settings(BaseSettings):
     # cover the question.
     library_knowledge_model: str = Field(
         default="deepseek/deepseek-v4-flash",
-        alias="MILL_LIBRARY_KNOWLEDGE_MODEL",
     )
     # How long the cached library knowledge file is considered fresh
     # (days). A consult on an older file triggers a web_research
     # refresh before answering.
     library_knowledge_stale_days: int = Field(
-        default=30, alias="MILL_LIBRARY_KNOWLEDGE_STALE_DAYS",
+        default=30,
     )
     # Bound on the curator sub-agent's tool requests per consultation.
     consult_library_request_limit: int = Field(
-        default=5, alias="MILL_CONSULT_LIBRARY_REQUEST_LIMIT",
+        default=5,
     )
     # Model for the pre-refine dedup/already-done check — a cheap call
     # that short-circuits duplicate drafts before the expensive refiner.
     dedup_model: str = Field(
-        default="deepseek/deepseek-v4-flash", alias="MILL_DEDUP_MODEL"
+        default="deepseek/deepseek-v4-flash"
     )
     # Model for the pre-refine triage pass — a single cheap call that
     # decides whether the draft needs refinement at all.  Must be a
     # fast, inexpensive model; classification is the only task.
     triage_model: str = Field(
-        default="openai/gpt-4o-mini", alias="MILL_TRIAGE_MODEL"
+        default="openai/gpt-4o-mini"
     )
     # Model for the scope-violation triage agent — a cheap call that
     # decides whether changed-out-of-scope files are legitimate
     # expansions or scope creep. Must be fast and inexpensive.
     scope_triage_model: str = Field(
-        default="openai/gpt-4o-mini", alias="MILL_SCOPE_TRIAGE_MODEL"
+        default="openai/gpt-4o-mini"
     )
     # Per-call request caps (bound each role's loop). Sized for slow
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
     # ~49 implement calls, so 200 leaves generous headroom; raising it
     # only matters if a ticket genuinely needs more steps.
     coordinator_request_limit: int = Field(
-        default=200, alias="MILL_COORDINATOR_REQUEST_LIMIT"
+        default=200
     )
     # Per-subtask request budget when the coordinator delegates via
     # ``spawn_subtask``. The parent's ``coordinator_request_limit``
     # still bounds the outer loop; this cap bounds each individual
     # sub-agent so one stuck subtask can't drain the parent's budget.
     subtask_request_limit: int = Field(
-        default=30, alias="MILL_SUBTASK_REQUEST_LIMIT"
+        default=30
     )
     # The test agent inspects failing output, reads the relevant
     # sources, and distills the cause — exploration-heavy work that
     # easily exceeds 8 calls on a non-trivial failure. 50 leaves ample
     # headroom (flash is cheap; cost-bounded by ticket-level cap).
     test_request_limit: int = Field(
-        default=50, alias="MILL_TEST_REQUEST_LIMIT"
+        default=50
     )
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
     max_fix_iterations: int = Field(
-        default=8, alias="MILL_MAX_FIX_ITERATIONS"
+        default=8
     )
     # Bounded retry for TRANSIENT model/network failures (HTTP 429,
     # HTTP 5xx, connection/read timeouts) — used by every model call
@@ -223,23 +221,23 @@ class Settings(BaseSettings):
     # bounding a real hang. On timeout the call raises -> transient ->
     # retry/backoff rides it out (or it BLOCKs visibly).
     model_request_timeout: float = Field(
-        default=900.0, alias="MILL_MODEL_REQUEST_TIMEOUT"
+        default=900.0
     )
     # How many tickets the worker pool processes in parallel. One
     # ticket's stages still run sequentially within its consumer; this
     # is cross-ticket concurrency. Each in-flight implement may spawn a
     # sandbox container and hit the model API, so keep it modest.
     max_concurrency: int = Field(
-        default=4, alias="MILL_MAX_CONCURRENCY"
+        default=4
     )
     transient_retries: int = Field(
-        default=4, alias="MILL_TRANSIENT_RETRIES"
+        default=4
     )
     transient_backoff_base: float = Field(
-        default=2.0, alias="MILL_TRANSIENT_BACKOFF_BASE"
+        default=2.0
     )
     transient_backoff_cap: float = Field(
-        default=30.0, alias="MILL_TRANSIENT_BACKOFF_CAP"
+        default=30.0
     )
     # Retry policy for stage-level transient errors (httpx.ConnectError,
     # etc.).  These control how many times a stage is re-attempted and
@@ -247,13 +245,13 @@ class Settings(BaseSettings):
     # loop.  Test-friendly: keep the defaults small enough for tests to
     # override without needing long sleeps.
     stage_retry_max_attempts: int = Field(
-        default=3, alias="MILL_STAGE_RETRY_MAX_ATTEMPTS"
+        default=3
     )
     stage_retry_base_delay: float = Field(
-        default=2.0, alias="MILL_STAGE_RETRY_BASE_DELAY"
+        default=2.0
     )
     stage_retry_max_delay: float = Field(
-        default=30.0, alias="MILL_STAGE_RETRY_MAX_DELAY"
+        default=30.0
     )
     # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
     # are longer than transient backoff because OpenRouter/provider
@@ -262,85 +260,85 @@ class Settings(BaseSettings):
     # that model after rate_limit_fallback_retries consecutive
     # UsageLimitExceeded failures.
     rate_limit_backoff_base: float = Field(
-        default=30.0, alias="MILL_RATE_LIMIT_BACKOFF_BASE"
+        default=30.0
     )
     rate_limit_backoff_cap: float = Field(
-        default=120.0, alias="MILL_RATE_LIMIT_BACKOFF_CAP"
+        default=120.0
     )
     rate_limit_fallback_retries: int = Field(
-        default=3, alias="MILL_RATE_LIMIT_FALLBACK_RETRIES"
+        default=3
     )
     rate_limit_fallback_model: str = Field(
-        default="", alias="MILL_RATE_LIMIT_FALLBACK_MODEL"
+        default=""
     )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the
     # coordinator uses when it needs domain-specific advice.
     consult_request_limit: int = Field(
-        default=15, alias="MILL_CONSULT_REQUEST_LIMIT"
+        default=15
     )
     explore_request_limit: int = Field(
-        default=100, alias="MILL_EXPLORE_REQUEST_LIMIT"
+        default=100
     )
     explore_max_tokens: int = Field(
-        default=600, alias="MILL_EXPLORE_MAX_TOKENS"
+        default=600
     )
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(
-        default=4, alias="MILL_DEDUP_REQUEST_LIMIT"
+        default=4
     )
     doc_request_limit: int = Field(
-        default=8, alias="MILL_DOC_REQUEST_LIMIT"
+        default=8
     )
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(
-        default="openai/gpt-4o-mini", alias="MILL_DOC_CLASSIFIER_MODEL"
+        default="openai/gpt-4o-mini"
     )
     doc_classifier_request_limit: int = Field(
-        default=3, alias="MILL_DOC_CLASSIFIER_REQUEST_LIMIT"
+        default=3
     )
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped (read-side
     # only — persist_memory is unchanged).  Applies to all memory ledgers
     # (refine, audit, health, agent-check, etc.).
     max_memory_chars: int = Field(
-        default=8000, alias="MILL_MAX_MEMORY_CHARS"
+        default=8000
     )
     # Maximum number of files whose full content the refine stage stores
     # as reference_files.json for the implement coordinator to pre-load.
     reference_files_max_count: int = Field(
-        default=5, alias="MILL_REFERENCE_FILES_MAX_COUNT"
+        default=5
     )
     # Maximum total lines across all selected reference files. When the
     # cumulative line count would exceed this, files beyond the limit are
     # dropped (top-N priority order preserved).
     reference_files_max_total_lines: int = Field(
-        default=3000, alias="MILL_REFERENCE_FILES_MAX_TOTAL_LINES"
+        default=3000
     )
     # How many days back closed tickets are considered as duplicate
     # candidates by the pre-refine dedup check.
     dedup_lookback_days: int = Field(
-        default=7, alias="MILL_DEDUP_LOOKBACK_DAYS"
+        default=7
     )
     # Local-dev default: ``.data`` — the same path the docker-compose
     # volume mounts at /data, so host CLI invocations and the container
     # share state instead of leaking a separate sibling tree. The
     # Dockerfile sets MILL_DATA_DIR=/data explicitly so the container
     # always uses the absolute path. Tests override via tmp_path.
-    data_dir: Path = Field(default=Path(".data"), alias="MILL_DATA_DIR")
+    data_dir: Path = Field(default=Path(".data"))
 
     # Default repo ID for legacy tickets that lack a board_id.
     # Set in config/mill.local.yaml.  When empty (default), accessing
     # a legacy ticket without a board_id raises an error telling the
     # operator to configure this.
-    default_repo_id: str = Field(default="", alias="MILL_DEFAULT_REPO_ID")
+    default_repo_id: str = Field(default="")
 
     # --- management-plane service ---
-    api_host: str = Field(default="127.0.0.1", alias="MILL_API_HOST")
-    api_port: int = Field(default=8077, alias="MILL_API_PORT")
+    api_host: str = Field(default="127.0.0.1")
+    api_port: int = Field(default=8077)
     # Base URL the CLI client talks to.
-    api_url: str = Field(default="http://127.0.0.1:8077", alias="MILL_API_URL")
+    api_url: str = Field(default="http://127.0.0.1:8077")
 
     # --- forge delivery (only used by the deliver stage) ---
     forge_kind: Literal["github", "gitlab", "none"] = Field(
@@ -364,11 +362,11 @@ class Settings(BaseSettings):
     )
     # GitHub API base (override for GitHub Enterprise).
     github_api_url: str = Field(
-        default="https://api.github.com", alias="MILL_GITHUB_API_URL"
+        default="https://api.github.com"
     )
     # GitLab API base (override for self-hosted GitLab instances).
     gitlab_api_url: str = Field(
-        default="https://gitlab.com/api/v4", alias="MILL_GITLAB_API_URL"
+        default="https://gitlab.com/api/v4"
     )
 
     # --- implement stage ---
@@ -379,22 +377,22 @@ class Settings(BaseSettings):
     # When both are empty, the test gate short-circuits to PASS
     # ("no test gate configured"). MILL_TEST_COMMAND can override for
     # single-repo / legacy setups.
-    test_command: str = Field(default="", alias="MILL_TEST_COMMAND")
-    branch_prefix: str = Field(default="mill/", alias="MILL_BRANCH_PREFIX")
+    test_command: str = Field(default="")
+    branch_prefix: str = Field(default="mill/")
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.
-    command_timeout: int = Field(default=1800, alias="MILL_COMMAND_TIMEOUT")
+    command_timeout: int = Field(default=1800)
     # Safety net: if a ticket re-enters the *same* model-driven stage
     # this many times without ever progressing (e.g. its run keeps being
     # interrupted, or a stage churns), the worker escalates it to BLOCKED
     # + notifies instead of silently re-billing the LLM forever. Poll
     # stages (merge/deliver) are exempt — human_mr_approval legitimately waits.
-    max_stuck_cycles: int = Field(default=3, alias="MILL_MAX_STUCK_CYCLES")
+    max_stuck_cycles: int = Field(default=3)
     # Dollar-cap safety net: if a ticket's cumulative Langfuse-traced
     # LLM spend exceeds this value (across all stages), the worker
     # escalates it to BLOCKED. 0.0 disables the cap entirely.
     max_spend_usd_per_ticket: float = Field(
-        default=0.0, alias="MILL_MAX_SPEND_USD_PER_TICKET"
+        default=0.0
     )
     # Per-stage wall-clock timeout (seconds).  A stage that exceeds this
     # limit is escalated to BLOCKED, freeing the worker slot.  ≤ 0
@@ -402,7 +400,7 @@ class Settings(BaseSettings):
     # exceeds worst-case LLM latency (~190 s per call) and multiple
     # shell-command runs while still catching a true hang.
     stage_timeout_seconds: int = Field(
-        default=2400, alias="MILL_STAGE_TIMEOUT_SECONDS"
+        default=2400
     )
     # Per-stage timeout overrides (JSON dict via env var, e.g.
     # MILL_STAGE_TIMEOUT_OVERRIDES='{"merge":0,"deliver":0}').
@@ -410,29 +408,29 @@ class Settings(BaseSettings):
     # stage_timeout_seconds when a stage isn't listed.  A value of 0
     # disables the timeout for that stage.
     stage_timeout_overrides: dict[str, int] = Field(
-        default_factory=dict, alias="MILL_STAGE_TIMEOUT_OVERRIDES"
+        default_factory=dict
     )
 
     # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain
     # MILL_TEST_COMMAND needs.
     sandbox_image: str = Field(
-        default="python:3.14-slim", alias="MILL_SANDBOX_IMAGE"
+        default="python:3.14-slim"
     )
-    sandbox_memory: str = Field(default="2g", alias="MILL_SANDBOX_MEMORY")
+    sandbox_memory: str = Field(default="2g")
     sandbox_pids_limit: int = Field(
-        default=512, alias="MILL_SANDBOX_PIDS_LIMIT"
+        default=512
     )
     sandbox_readonly: bool = Field(
-        default=True, alias="MILL_SANDBOX_READONLY"
+        default=True
     )
     # What the sandbox sibling containers mount at MILL_DATA_DIR. The
     # daemon resolves -v on the host, so this must be a named volume OR
     # the host path of a bind mount. data_volume is the fallback name;
     # sandbox_data_mount (host path) overrides it for bind-mounted ./.data.
-    data_volume: str = Field(default="mill_data", alias="MILL_DATA_VOLUME")
+    data_volume: str = Field(default="mill_data")
     sandbox_data_mount: str | None = Field(
-        default=None, alias="MILL_SANDBOX_DATA_MOUNT"
+        default=None
     )
 
     # --- agent web access (refine + implement) ---
@@ -442,7 +440,7 @@ class Settings(BaseSettings):
     # model — with ":online" + web_fetch — and returns just a concise
     # conclusion. This kills the per-request web-search surcharge on the
     # pricey model and keeps its context lean (conclusions, not pages).
-    web_search: bool = Field(default=True, alias="MILL_WEB_SEARCH")
+    web_search: bool = Field(default=True)
     # web_research is a focused single-question summariser — it reads
     # a URL or two and returns one concise factual conclusion. Flash
     # is plenty for that distillation, and a v4-pro context bloated
@@ -452,50 +450,46 @@ class Settings(BaseSettings):
     # MILL_WEB_RESEARCH_MODEL.
     web_research_model: str = Field(
         default="deepseek/deepseek-v4-flash",
-        alias="MILL_WEB_RESEARCH_MODEL",
     )
     web_research_request_limit: int = Field(
-        default=8, alias="MILL_WEB_RESEARCH_REQUEST_LIMIT"
+        default=8
     )
     # web_fetch runs in its OWN container: network ON, but NO repo/data
     # mount, non-root, read-only, fixed curl. Trade-off accepted: an
     # agent could encode data into a fetched URL. http(s) only.
     fetch_image: str = Field(
-        default="curlimages/curl:8.17.0", alias="MILL_FETCH_IMAGE"
+        default="curlimages/curl:8.17.0"
     )
     web_fetch_max_bytes: int = Field(
-        default=2_000_000, alias="MILL_WEB_FETCH_MAX_BYTES"
+        default=2_000_000
     )
     web_fetch_timeout: int = Field(
-        default=30, alias="MILL_WEB_FETCH_TIMEOUT"
+        default=30
     )
     # Post-extraction cap, applied AFTER HTML→text stripping. The
     # network-level ``web_fetch_max_bytes`` bounds raw bytes; this
     # bounds what the agent ACTUALLY sees in its context. Default
     # 200 KB ≈ 50K tokens — enough for one doc page worth of prose,
     # not enough to nuke a refine context with a 315 KB markup dump.
-    web_fetch_max_text_bytes: int = Field(
-        default=200_000, alias="MILL_WEB_FETCH_MAX_TEXT_BYTES",
-    )
+    # Configured via ``web.fetch_max_text_bytes`` in the YAML config.
+    web_fetch_max_text_bytes: int = 200_000
     # When True, web_fetch returns the raw response body verbatim
     # (no HTML→text stripping, no per-run URL dedupe). Operator
     # escape hatch for the rare case the agent needs the markup
     # itself (parsing structure, inspecting attributes). Default
     # False — every agent we ship is a prose consumer.
-    web_fetch_raw: bool = Field(
-        default=False, alias="MILL_WEB_FETCH_RAW",
-    )
+    # Configured via ``web.fetch_raw`` in the YAML config.
+    web_fetch_raw: bool = False
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
     # refine + implement agents' system prompt. Relative to CWD (/app in
     # the container, repo root locally).
-    skills_dir: Path = Field(default=Path("skills"), alias="MILL_SKILLS_DIR")
+    skills_dir: Path = Field(default=Path("skills"))
     # Directory of per-language instruction Markdown snippets
     # (agent_definitions/language_instructions/<language>.md) injected
     # into the implement agent's system prompt. Relative to CWD (/app
     # in the container, repo root locally).
     language_instructions_dir: Path = Field(
         default=Path("agent_definitions/language_instructions"),
-        alias="MILL_LANGUAGE_INSTRUCTIONS_DIR",
     )
 
     # --- human approval gate (refine -> implement) ---
@@ -503,7 +497,7 @@ class Settings(BaseSettings):
     # human_issue_approval instead of ready — a human must approve before
     # the implement stage kicks in. Set false for fully-autonomous mode.
     require_approval: bool = Field(
-        default=True, alias="MILL_REQUIRE_APPROVAL"
+        default=True
     )
 
     # When true, a cheap conservative LLM call inspects the refined spec
@@ -512,11 +506,11 @@ class Settings(BaseSettings):
     # human approval gate and goes straight to READY.  When false
     # (default), every gated ticket waits for a human click.
     auto_approve_enabled: bool = Field(
-        default=False, alias="MILL_AUTO_APPROVE_ENABLED"
+        default=False
     )
     # Model for the auto-approve triage call — must be fast and cheap.
     auto_approve_model: str = Field(
-        default="deepseek/deepseek-v4-flash", alias="MILL_AUTO_APPROVE_MODEL"
+        default="deepseek/deepseek-v4-flash"
     )
 
     # --- dual-model review gate (implement → deliver) ---
@@ -524,76 +518,76 @@ class Settings(BaseSettings):
     # deliverable. A dedicated review agent audits the diff blind before the
     # deliver stage pushes + opens the PR. Default False (opt-in).
     review_enabled: bool = Field(
-        default=False, alias="MILL_REVIEW_ENABLED"
+        default=False
     )
     # When true (and review is enabled + the review agent marks the
     # change as auto-merge-eligible), the merge stage will attempt to
     # merge its own green PR via the forge API without waiting for a
     # human. Default False (opt-in).
     auto_merge_enabled: bool = Field(
-        default=False, alias="MILL_AUTO_MERGE_ENABLED"
+        default=False
     )
     # When True (and a human reviewer requests changes on the PR),
     # the merge stage will invoke the review-revision agent to
     # implement the requested changes automatically. Default False
     # (opt-in — this is a powerful autonomous capability).
     review_feedback_enabled: bool = Field(
-        default=False, alias="MILL_REVIEW_FEEDBACK_ENABLED"
+        default=False
     )
     # When True (default), a cheap triage LLM call runs before the full
     # refine agent.  Drafts that are already precise, single-scoped, and
     # implementation-ready skip the full refine — saving cost & latency.
     # Set False to force full refine for all tickets without a deploy.
     refine_triage_enabled: bool = Field(
-        default=True, alias="MILL_REFINE_TRIAGE_ENABLED"
+        default=True
     )
     # When True, the refine stage runs a post-refinement review pass that
     # strips verbose exploratory narrative from the spec, producing a
     # concise version while saving the verbose original as an artifact.
     # Defaults to False (opt-in) to avoid surprising behaviour changes.
     spec_review_enabled: bool = Field(
-        default=False, alias="MILL_SPEC_REVIEW_ENABLED"
+        default=False
     )
     # When True (default), a cheap scope-triage LLM call inspects
     # out-of-scope file changes before blocking the ticket. The agent
     # decides EXPAND (legitimate), REJECT (scope creep), or ESCALATE
     # (uncertain). Set False to restore immediate BLOCKED behaviour.
     scope_triage_enabled: bool = Field(
-        default=True, alias="MILL_SCOPE_TRIAGE_ENABLED"
+        default=True
     )
     # Model for the review agent. Defaults to the capable coordinator model.
     # Override to use a *different* model for a genuinely independent review
     # perspective (the dual-model benefit).
     review_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_REVIEW_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Model for the review-revision agent. Defaults to the capable
     # coordinator model. Override to use a different model.
     review_revision_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_REVIEW_REVISION_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
     # A value ≤ 0 means escalate on the first REQUEST_CHANGES (the loop is
     # effectively disabled). Default 3.
     review_max_rounds: int = Field(
-        default=3, alias="MILL_REVIEW_MAX_ROUNDS"
+        default=3
     )
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
     review_request_limit: int = Field(
-        default=20, alias="MILL_REVIEW_REQUEST_LIMIT"
+        default=20
     )
     # How many model requests the scope-triage agent may make per
     # invocation (main call + any tool calls). Default 4.
     scope_triage_request_limit: int = Field(
-        default=4, alias="MILL_SCOPE_TRIAGE_REQUEST_LIMIT"
+        default=4
     )
 
     # Model for the documentation agent. Defaults to the capable
     # coordinator model.
     doc_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_DOC_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
 
     # --- retrospect stage (done -> reviewed) ---
@@ -601,7 +595,7 @@ class Settings(BaseSettings):
     # human-gate-after-refine exists, that draft auto-flows to done and
     # is retrospected again — set False to analyse without spawning.
     retrospect_spawn_drafts: bool = Field(
-        default=True, alias="MILL_RETROSPECT_SPAWN_DRAFTS"
+        default=True
     )
     # (Removed) retrospect_deep_analysis_frequency: deep-analysis mode
     # was retired — per-trace inspection is now owned by the periodical
@@ -611,7 +605,6 @@ class Settings(BaseSettings):
     # that inspects a single trace's full observation tree.
     trace_inspector_model: str = Field(
         default="deepseek/deepseek-v4-pro",
-        alias="MILL_TRACE_INSPECTOR_MODEL",
     )
     # Model used by the periodic trace-review runner — a cheap-by-design
     # flash model so a 50-trace sweep doesn't burn the audit budget.
@@ -619,7 +612,6 @@ class Settings(BaseSettings):
     # trace_inspector_model for one-shot operator-driven inspection.
     trace_review_model: str = Field(
         default="deepseek/deepseek-v4-flash",
-        alias="MILL_TRACE_REVIEW_MODEL",
     )
     # Outlier thresholds for the deterministic trace-review classifier.
     # A trace is flagged for LLM inspection when ANY hit.
@@ -632,21 +624,21 @@ class Settings(BaseSettings):
     # baseline) — binary flags (tool errors, rejected generations,
     # ask_user loops, explore storms) still fire normally.
     trace_review_cost_multiplier: float = Field(
-        default=3.0, alias="MILL_TRACE_REVIEW_COST_MULTIPLIER",
+        default=3.0,
     )
     trace_review_obs_multiplier: float = Field(
-        default=3.0, alias="MILL_TRACE_REVIEW_OBS_MULTIPLIER",
+        default=3.0,
     )
     # ``repeated_tool`` stays an absolute threshold because each tool
     # has its own "normal" usage profile — making it relative would
     # require a per-tool batch median, which is too noisy with small
     # samples.
     trace_review_max_repeated_tool: int = Field(
-        default=50, alias="MILL_TRACE_REVIEW_MAX_REPEATED_TOOL",
+        default=50,
     )
     # First-run lookback window when no watermark exists yet (hours).
     trace_review_initial_lookback_hours: int = Field(
-        default=24, alias="MILL_TRACE_REVIEW_INITIAL_LOOKBACK_HOURS",
+        default=24,
     )
     # When set, every trace-review draft lands on THIS repo's board,
     # regardless of which repo the source trace lived on. Trace-review
@@ -655,29 +647,29 @@ class Settings(BaseSettings):
     # belongs in one place. Leave empty to preserve the legacy
     # source-repo routing.
     trace_review_target_repo_id: str = Field(
-        default="", alias="MILL_TRACE_REVIEW_TARGET_REPO_ID",
+        default="",
     )
     # Memory ledger for the trace inspector. Used only by the manual
     # Deep Review surface (the route path) — retrospect's deep-analysis
     # `trace_inspect` tool calls run_trace_inspector without a memory
     # arg. Unset (default) derives <data_dir>/trace_inspector_memory.md.
     trace_inspector_memory_path: Path | None = Field(
-        default=None, alias="MILL_TRACE_INSPECTOR_MEMORY_PATH"
+        default=None
     )
     # Path to the agent-maintained Markdown memory ledger.  Override to
     # pin a specific path; unset (default) derives <data_dir>/retrospect_memory.md.
     retrospect_memory_path: Path | None = Field(
-        default=None, alias="MILL_RETROSPECT_MEMORY_PATH"
+        default=None
     )
     # human_mr_approval (PR open) re-check cadence. mill has no scheduler; this
     # timer exists only to observe the external merge event.
     merge_poll_seconds: int = Field(
-        default=120, alias="MILL_MERGE_POLL_SECONDS"
+        default=120
     )
     # When true (default), the workspace's clone (repo/) is removed on
     # close to save disk space.
     prune_clone_on_close: bool = Field(
-        default=True, alias="MILL_PRUNE_CLONE_ON_CLOSE"
+        default=True
     )
     # Maximum number of terminal-state tickets (CLOSED, ANSWERED,
     # EPIC_CLOSED) to retain.  When a ticket transitions to a terminal
@@ -685,7 +677,7 @@ class Settings(BaseSettings):
     # (by created_at) are purged — unless they are the parent of an
     # active (non-terminal) child.  Set to 0 to disable purging.
     max_archived_tickets: int = Field(
-        default=100, alias="MILL_MAX_ARCHIVED_TICKETS"
+        default=100
     )
 
     # --- merge stage: auto-rebase of stale PRs ---
@@ -694,7 +686,7 @@ class Settings(BaseSettings):
     # resolve conflicts automatically.  This is the max number of
     # rebase attempts per ticket before escalating to BLOCKED.
     rebase_max_attempts: int = Field(
-        default=5, alias="MILL_REBASE_MAX_ATTEMPTS"
+        default=5
     )
 
     # --- merge stage: auto-fix of failing remote CI ---
@@ -703,12 +695,12 @@ class Settings(BaseSettings):
     # the failures automatically.  This is the max number of ci-fix
     # attempts per ticket before escalating to BLOCKED.
     ci_fix_max_attempts: int = Field(
-        default=2, alias="MILL_CI_FIX_MAX_ATTEMPTS"
+        default=2
     )
 
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(
-        default=2, alias="MILL_REVIEW_REVISION_MAX_ATTEMPTS"
+        default=2
     )
 
     # --- target-branch CI monitor ---
@@ -716,7 +708,7 @@ class Settings(BaseSettings):
     # (see config/repos.yaml).  ci_log_max_bytes stays global — it is an
     # operational cap, not a per-repo policy decision.
     ci_log_max_bytes: int = Field(
-        default=65536, alias="MILL_CI_LOG_MAX_BYTES"
+        default=65536
     )
 
     # --- langfuse cleanup (caps trace count per project) ---
@@ -724,13 +716,13 @@ class Settings(BaseSettings):
     # traces from each repo's Langfuse project, keeping at most
     # langfuse_cleanup_max_traces rows. Default False (opt-in).
     langfuse_cleanup_periodic: bool = Field(
-        default=True, alias="MILL_LANGFUSE_CLEANUP_PERIODIC"
+        default=True
     )
     langfuse_cleanup_interval_seconds: int = Field(
-        default=86400, alias="MILL_LANGFUSE_CLEANUP_INTERVAL_SECONDS"
+        default=86400
     )
     langfuse_cleanup_max_traces: int = Field(
-        default=1000, alias="MILL_LANGFUSE_CLEANUP_MAX_TRACES"
+        default=1000
     )
 
 
@@ -741,44 +733,44 @@ class Settings(BaseSettings):
     # False to disable bespoke-agent discovery for the entire process
     # (per-repo opt-out is controlled by RepoConfig.bespoke_periodic).
     bespoke_periodic: bool = Field(
-        default=True, alias="MILL_BESPOKE_PERIODIC",
+        default=True,
     )
     # How often (seconds) the bespoke supervisor refreshes its clone
     # and reconciles which YAMLs are scheduled. A new YAML committed
     # to the managed repo lands within this window; one removed gets
     # its loop cancelled in the same cycle.
     bespoke_discovery_interval_seconds: int = Field(
-        default=600, alias="MILL_BESPOKE_DISCOVERY_INTERVAL_SECONDS",
+        default=600,
     )
 
     # --- audit agent (meta-audit for quality/security coverage) ---
     # When True, the worker runs periodic audit passes at the configured
     # interval. Default False (opt-in).
     audit_periodic: bool = Field(
-        default=True, alias="MILL_AUDIT_PERIODIC"
+        default=True
     )
     # Interval between periodic audit passes (seconds). Only used when
     # MILL_AUDIT_PERIODIC=true.
     audit_interval_seconds: int = Field(
-        default=86400, alias="MILL_AUDIT_INTERVAL_SECONDS"
+        default=86400
     )
     # Path to the audit agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/audit_memory.md.
     audit_memory_path: Path | None = Field(
-        default=None, alias="MILL_AUDIT_MEMORY_PATH"
+        default=None
     )
 
     # --- trace-health check ---
     # When True, the worker runs periodic trace-health checks at the
     # configured interval. Default False (opt-in).
     trace_health_periodic: bool = Field(
-        default=True, alias="MILL_TRACE_HEALTH_PERIODIC"
+        default=True
     )
     # Interval between automatic trace-health checks (seconds). Only
     # used when MILL_TRACE_HEALTH_PERIODIC=true. Enforced minimum 3600s
     # (1h) in the worker to avoid hammering Langfuse.
     trace_health_interval_seconds: int = Field(
-        default=86400, alias="MILL_TRACE_HEALTH_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- trace-review ---
@@ -790,12 +782,12 @@ class Settings(BaseSettings):
     # the cheap flash inspector over the flagged subset, and files
     # draft tickets with proposed solutions. Default True (opt-out).
     trace_review_periodic: bool = Field(
-        default=True, alias="MILL_TRACE_REVIEW_PERIODIC"
+        default=True
     )
     # Interval between automatic trace-review passes (seconds). Default
     # daily. Enforced minimum 3600s (1h) in the worker.
     trace_review_interval_seconds: int = Field(
-        default=86400, alias="MILL_TRACE_REVIEW_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- cost warmer ---
@@ -807,19 +799,19 @@ class Settings(BaseSettings):
     # actual cost when they click the ticket. The warmer pre-fills the
     # cache so the cost column is always populated.
     cost_warmer_periodic: bool = Field(
-        default=True, alias="MILL_COST_WARMER_PERIODIC"
+        default=True
     )
     # Seconds between full cycles. Defaults to 60s so the cache stays
     # comfortably within ``_COST_TTL_SECONDS`` (60s) and the column
     # never shows stale-looking gaps.
     cost_warmer_interval_seconds: int = Field(
-        default=60, alias="MILL_COST_WARMER_INTERVAL_SECONDS"
+        default=60
     )
     # Milliseconds between individual ticket cost refreshes within a
     # cycle. Throttles the Langfuse API hit-rate. With 100 tickets and
     # 200ms pace, a cycle takes ~20s; well within the 60s budget.
     cost_warmer_pace_ms: int = Field(
-        default=200, alias="MILL_COST_WARMER_PACE_MS"
+        default=200
     )
 
     # --- timeout escalation ---
@@ -827,42 +819,42 @@ class Settings(BaseSettings):
     # configured interval. Default True (opt-out). Detects tickets stuck in
     # AWAITING_USER_REPLY longer than the threshold and escalates to BLOCKED.
     timeout_escalation_periodic: bool = Field(
-        default=True, alias="MILL_TIMEOUT_ESCALATION_PERIODIC"
+        default=True
     )
     # Interval between timeout-escalation passes (seconds). Only used when
     # MILL_TIMEOUT_ESCALATION_PERIODIC=true.
     timeout_escalation_interval_seconds: int = Field(
-        default=3600, alias="MILL_TIMEOUT_ESCALATION_INTERVAL_SECONDS"
+        default=3600
     )
     # Staleness threshold: tickets in AWAITING_USER_REPLY with updated_at
     # older than this many seconds are escalated to BLOCKED.
     # Default 259200 = 3 days.  Set to ≤ 0 to disable escalation
     # entirely while leaving the poll loop running.
     timeout_escalation_threshold_seconds: int = Field(
-        default=259200, alias="MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS"
+        default=259200
     )
 
     # --- test-gap agent (dedicated test-coverage oversight) ---
     # Model for the test-gap agent. Defaults to the same capable model
     # as audit/health. Override with MILL_TEST_GAP_MODEL.
     test_gap_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_TEST_GAP_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # When True, the worker runs periodic test-gap passes at the
     # configured interval. Default False (opt-in).
     test_gap_periodic: bool = Field(
-        default=True, alias="MILL_TEST_GAP_PERIODIC"
+        default=True
     )
     # Interval between periodic test-gap passes (seconds). Only used
     # when MILL_TEST_GAP_PERIODIC=true.
     test_gap_interval_seconds: int = Field(
-        default=86400, alias="MILL_TEST_GAP_INTERVAL_SECONDS"
+        default=86400
     )
     # Path to the test-gap agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives
     # <data_dir>/test_gap_memory.md.
     test_gap_memory_path: Path | None = Field(
-        default=None, alias="MILL_TEST_GAP_MEMORY_PATH"
+        default=None
     )
 
     # --- agent-check agent (agent-definition coherence) ---
@@ -870,72 +862,72 @@ class Settings(BaseSettings):
     # model as other read-only periodic agents. Override with
     # MILL_AGENT_CHECK_MODEL.
     agent_check_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_AGENT_CHECK_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Path to the agent-check agent's Markdown memory ledger. Override
     # to pin a specific path; unset (default) derives
     # <data_dir>/agent_check_memory.md.
     agent_check_memory_path: Path | None = Field(
-        default=None, alias="MILL_AGENT_CHECK_MEMORY_PATH"
+        default=None
     )
     # Opt-in periodic agent-check pass. Defaults to False (off); flip
     # to true to schedule the pass every ``agent_check_interval_seconds``
     # in addition to the on-demand POST /agent-check and CLI.
     agent_check_periodic: bool = Field(
-        default=True, alias="MILL_AGENT_CHECK_PERIODIC"
+        default=True
     )
     # Seconds between periodic agent-check passes when
     # MILL_AGENT_CHECK_PERIODIC=true. Minimum enforced at 60s in the
     # worker loop.
     agent_check_interval_seconds: int = Field(
-        default=86400, alias="MILL_AGENT_CHECK_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- health agent (codebase-health inspection) ---
     # Model for the health agent. Defaults to the same capable model as
     # audit. Override with MILL_HEALTH_MODEL.
     health_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_HEALTH_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # When True, the worker runs periodic health passes at the
     # configured interval. Default False (opt-in).
     health_periodic: bool = Field(
-        default=True, alias="MILL_HEALTH_PERIODIC"
+        default=True
     )
     # Interval between periodic health passes (seconds). Only used when
     # MILL_HEALTH_PERIODIC=true.
     health_interval_seconds: int = Field(
-        default=86400, alias="MILL_HEALTH_INTERVAL_SECONDS"
+        default=86400
     )
     # Path to the health agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/health_memory.md.
     health_memory_path: Path | None = Field(
-        default=None, alias="MILL_HEALTH_MEMORY_PATH"
+        default=None
     )
 
     # --- survey agent (OSS project discovery) ---
     # Model for the survey agent. Defaults to the same capable model as
     # audit. Override with MILL_SURVEY_MODEL.
     survey_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_SURVEY_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Path to the survey agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/survey_memory.md.
     survey_memory_path: Path | None = Field(
-        default=None, alias="MILL_SURVEY_MEMORY_PATH"
+        default=None
     )
     # Opt-in periodic survey pass. Defaults to True (on by default —
     # "default yes"). Flip to false to disable the automatic daily
     # cadence while still allowing on-demand POST /survey and
     # board-button triggers.
     survey_periodic: bool = Field(
-        default=True, alias="MILL_SURVEY_PERIODIC"
+        default=True
     )
     # Seconds between automatic survey passes when
     # MILL_SURVEY_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     survey_interval_seconds: int = Field(
-        default=86400, alias="MILL_SURVEY_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- bc_check agent (backward-compatibility inspection) ---
@@ -943,25 +935,25 @@ class Settings(BaseSettings):
     # as other read-only periodic agents. Override with
     # MILL_BC_CHECK_MODEL.
     bc_check_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_BC_CHECK_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Path to the bc-check agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives
     # <data_dir>/bc_check_memory.md.
     bc_check_memory_path: Path | None = Field(
-        default=None, alias="MILL_BC_CHECK_MEMORY_PATH"
+        default=None
     )
     # Opt-in periodic bc-check pass. Defaults to False (off); flip to
     # true to schedule the pass every ``bc_check_interval_seconds`` in
     # addition to the on-demand CLI.
     bc_check_periodic: bool = Field(
-        default=True, alias="MILL_BC_CHECK_PERIODIC"
+        default=True
     )
     # Seconds between periodic bc-check passes when
     # MILL_BC_CHECK_PERIODIC=true. Minimum enforced at 60s in the
     # worker loop.
     bc_check_interval_seconds: int = Field(
-        default=86400, alias="MILL_BC_CHECK_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- module_curator agent (module-taxonomy drift detection) ---
@@ -969,25 +961,25 @@ class Settings(BaseSettings):
     # model as other read-only periodic agents. Override with
     # MILL_MODULE_CURATOR_MODEL.
     module_curator_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_MODULE_CURATOR_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Path to the module-curator agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/module_curator_memory.md.
     module_curator_memory_path: Path | None = Field(
-        default=None, alias="MILL_MODULE_CURATOR_MEMORY_PATH"
+        default=None
     )
     # Opt-in periodic module-curator pass. Defaults to True (opt-out);
     # set false to disable the daily module-taxonomy drift check on
     # this repo.
     module_curator_periodic: bool = Field(
-        default=True, alias="MILL_MODULE_CURATOR_PERIODIC"
+        default=True
     )
     # Seconds between periodic module-curator passes when
     # MILL_MODULE_CURATOR_PERIODIC=true. Minimum enforced at 60s in
     # the worker loop.
     module_curator_interval_seconds: int = Field(
-        default=86400, alias="MILL_MODULE_CURATOR_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- cost-reconciliation agent (OpenRouter ↔ Langfuse cost drift) ---
@@ -995,25 +987,25 @@ class Settings(BaseSettings):
     # capable model as other periodic agents. Override with
     # MILL_COST_RECONCILIATION_MODEL.
     cost_reconciliation_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_COST_RECONCILIATION_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Path to the cost-reconciliation agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/cost_reconciliation_memory.md.
     cost_reconciliation_memory_path: Path | None = Field(
-        default=None, alias="MILL_COST_RECONCILIATION_MEMORY_PATH"
+        default=None
     )
     # Opt-in periodic cost-reconciliation pass. Defaults to False (off);
     # flip to true to schedule the pass every
     # ``cost_reconciliation_interval_seconds``.
     cost_reconciliation_periodic: bool = Field(
-        default=True, alias="MILL_COST_RECONCILIATION_PERIODIC"
+        default=True
     )
     # Seconds between periodic cost-reconciliation passes when
     # MILL_COST_RECONCILIATION_PERIODIC=true. Minimum enforced at 60s
     # in the worker loop.
     cost_reconciliation_interval_seconds: int = Field(
-        default=86400, alias="MILL_COST_RECONCILIATION_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- completeness_check agent (feature-wiring completeness) ---
@@ -1021,112 +1013,112 @@ class Settings(BaseSettings):
     # capable model as other read-only periodic agents. Override with
     # MILL_COMPLETENESS_CHECK_MODEL.
     completeness_check_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_COMPLETENESS_CHECK_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Path to the completeness-check agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/completeness_check_memory.md.
     completeness_check_memory_path: Path | None = Field(
-        default=None, alias="MILL_COMPLETENESS_CHECK_MEMORY_PATH"
+        default=None
     )
     # Opt-in periodic completeness-check pass. Defaults to False (off);
     # flip to true to schedule the pass every
     # ``completeness_check_interval_seconds`` in addition to the
     # on-demand CLI.
     completeness_check_periodic: bool = Field(
-        default=True, alias="MILL_COMPLETENESS_CHECK_PERIODIC"
+        default=True
     )
     # Seconds between periodic completeness-check passes when
     # MILL_COMPLETENESS_CHECK_PERIODIC=true. Minimum enforced at 60s
     # in the worker loop.
     completeness_check_interval_seconds: int = Field(
-        default=86400, alias="MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- copy-paste agent (deterministic clone detection and triage) ---
     # Model for the copy-paste agent. Defaults to the same capable model
     # as audit/health. Override with MILL_COPY_PASTE_MODEL.
     copy_paste_model: str = Field(
-        default="deepseek/deepseek-v4-pro", alias="MILL_COPY_PASTE_MODEL"
+        default="deepseek/deepseek-v4-pro"
     )
     # Path to the copy-paste agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives
     # <data_dir>/copy_paste_memory.md.
     copy_paste_memory_path: Path | None = Field(
-        default=None, alias="MILL_COPY_PASTE_MEMORY_PATH"
+        default=None
     )
     # Opt-in periodic copy-paste pass. Defaults to True (opt-out);
     # set false to disable the weekly clone-detection sweep.
     copy_paste_periodic: bool = Field(
-        default=True, alias="MILL_COPY_PASTE_PERIODIC"
+        default=True
     )
     # Seconds between periodic copy-paste passes when
     # MILL_COPY_PASTE_PERIODIC=true. Default 604800 (1 week). Minimum
     # enforced at 60s in the worker loop.
     copy_paste_interval_seconds: int = Field(
-        default=604800, alias="MILL_COPY_PASTE_INTERVAL_SECONDS"
+        default=604800
     )
 
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
     # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).
     config_sync_model: str = Field(
-        default="openai/gpt-4o-mini", alias="MILL_CONFIG_SYNC_MODEL"
+        default="openai/gpt-4o-mini"
     )
     # Path to the config-sync agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/config_sync_memory.md.
     config_sync_memory_path: Path | None = Field(
-        default=None, alias="MILL_CONFIG_SYNC_MEMORY_PATH"
+        default=None
     )
     # Opt-in periodic config-sync pass. Default false (agents default off
     # unless noted). Set true to enable automatic daily drift detection.
     config_sync_periodic: bool = Field(
-        default=True, alias="MILL_CONFIG_SYNC_PERIODIC"
+        default=True
     )
     # Seconds between automatic config-sync passes when
     # MILL_CONFIG_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     config_sync_interval_seconds: int = Field(
-        default=86400, alias="MILL_CONFIG_SYNC_INTERVAL_SECONDS"
+        default=86400
     )
 
     # --- action-agent memory paths ---
     # Path to the implement agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/implement_memory.md.
     implement_memory_path: Path | None = Field(
-        default=None, alias="MILL_IMPLEMENT_MEMORY_PATH"
+        default=None
     )
     # Path to the refine agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/refine_memory.md.
     refine_memory_path: Path | None = Field(
-        default=None, alias="MILL_REFINE_MEMORY_PATH"
+        default=None
     )
     # Path to the document agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/doc_memory.md.
     doc_memory_path: Path | None = Field(
-        default=None, alias="MILL_DOC_MEMORY_PATH"
+        default=None
     )
     # Path to the ci-fix agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/ci_fix_memory.md.
     ci_fix_memory_path: Path | None = Field(
-        default=None, alias="MILL_CI_FIX_MEMORY_PATH"
+        default=None
     )
     # Path to the review-revision agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
     # <data_dir>/review_revision_memory.md.
     review_revision_memory_path: Path | None = Field(
-        default=None, alias="MILL_REVIEW_REVISION_MEMORY_PATH"
+        default=None
     )
     # Path to the rebase agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/rebase_memory.md.
     rebase_memory_path: Path | None = Field(
-        default=None, alias="MILL_REBASE_MEMORY_PATH"
+        default=None
     )
     # Path to the ci-fix agent's structured pattern memory.  Override
     # to pin a specific path; unset (default) derives
     # <data_dir>/ci_patterns.json.
     ci_patterns_path: Path | None = Field(
-        default=None, alias="MILL_CI_PATTERNS_PATH"
+        default=None
     )
 
     # --- tracing (optional) ---
@@ -1140,7 +1132,7 @@ class Settings(BaseSettings):
     ntfy_token: str | None = Field(default=None, alias="NTFY_TOKEN")
 
     # --- board ---
-    board_id: str = Field(default="", alias="MILL_BOARD_ID")
+    board_id: str = Field(default="")
 
     @property
     def db_path(self) -> Path:

@@ -8,10 +8,9 @@ from robotsix_mill.core import db
 
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
-    overrides.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    overrides.setdefault("data_dir", str(tmp_path / "data"))
     # Default survey_periodic to false so the negative test is clean
-    if "MILL_SURVEY_PERIODIC" not in overrides:
-        overrides["MILL_SURVEY_PERIODIC"] = "false"
+    overrides.setdefault("survey_periodic", False)
     s = Settings(**overrides)
     db.reset_engine()
     db.init_db(s)
@@ -20,7 +19,7 @@ def _make_settings(tmp_path, **overrides):
 
 @pytest.mark.asyncio
 async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
-    """Worker._survey_task is created when MILL_SURVEY_PERIODIC=true."""
+    """Worker._survey_task is created when survey_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
     from robotsix_mill.core import db
@@ -28,8 +27,8 @@ async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch, r
 
     settings = _make_settings(
         tmp_path,
-        MILL_SURVEY_PERIODIC="true",
-        MILL_SURVEY_INTERVAL_SECONDS="1",
+        survey_periodic="true",
+        survey_interval_seconds="1",
     )
     db.reset_engine()
     db.init_db(settings)
@@ -54,7 +53,7 @@ async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch, r
 
 @pytest.mark.asyncio
 async def test_worker_survey_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
-    """Worker._survey_task is NOT created when MILL_SURVEY_PERIODIC=false."""
+    """Worker._survey_task is NOT created when survey_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
     from robotsix_mill.core import db

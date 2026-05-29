@@ -15,7 +15,7 @@ from robotsix_mill.stages.retrospect import RetrospectStage
 
 def _ctx(tmp_path, **env):
     db.reset_engine()
-    env.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    env.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**env)
     db.init_db(s)
     from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=TicketService(s), repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
@@ -116,7 +116,7 @@ def test_spawned_draft_has_source_retrospect(tmp_path, monkeypatch):
 
 
 def test_spawning_disabled(tmp_path, monkeypatch):
-    ctx = _ctx(tmp_path, MILL_RETROSPECT_SPAWN_DRAFTS="false")
+    ctx = _ctx(tmp_path, retrospect_spawn_drafts="false")
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
         retrospecting, "run_retrospect_agent",
@@ -677,7 +677,7 @@ def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path
     from robotsix_mill.pass_runner import _verify_prior_proposals
 
     db.reset_engine()
-    s = Settings(MILL_DATA_DIR=str(tmp_path / "data"))
+    s = Settings(data_dir=str(tmp_path / "data"))
     db.init_db(s)
     svc = TicketService(s)
 

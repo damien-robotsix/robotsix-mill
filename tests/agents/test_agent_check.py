@@ -17,7 +17,7 @@ from robotsix_mill.core.states import State
 
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
-    overrides.setdefault("MILL_DATA_DIR", str(tmp_path / "data"))
+    overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
     db.init_db(s)
@@ -329,7 +329,7 @@ def test_agent_check_config_defaults():
 
 def test_agent_check_config_custom_model():
     """Agent-check model can be overridden via env."""
-    s = Settings(MILL_AGENT_CHECK_MODEL="anthropic/claude-sonnet-4")
+    s = Settings(agent_check_model="anthropic/claude-sonnet-4")
     assert s.agent_check_model == "anthropic/claude-sonnet-4"
 
 
@@ -345,7 +345,7 @@ def test_agent_check_memory_file_override(tmp_path):
     """When agent_check_memory_path is set, uses that path."""
     custom_path = tmp_path / "custom_agent_check.md"
     s = _make_settings(
-        tmp_path, MILL_AGENT_CHECK_MEMORY_PATH=str(custom_path)
+        tmp_path, agent_check_memory_path=str(custom_path)
     )
     assert s.agent_check_memory_file == custom_path
 

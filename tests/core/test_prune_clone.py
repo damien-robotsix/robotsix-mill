@@ -133,7 +133,7 @@ class TestPruneCloneIntegration:
         assert (ws.artifacts_dir / "retrospect.md").exists()
 
     def test_setting_false_preserves_repo(self, tmp_path, monkeypatch):
-        ctx = _ctx(tmp_path, MILL_PRUNE_CLONE_ON_CLOSE="false")
+        ctx = _ctx(tmp_path, prune_clone_on_close="false")
         ticket = _done(ctx)
         ws = ctx.service.workspace(ticket)
         _make_repo(ws)

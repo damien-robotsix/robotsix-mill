@@ -67,7 +67,7 @@ def test_expand_for_new_test_file(monkeypatch):
     scope_triage.call_with_retry = lambda fn, **kw: fn()
 
     result = run_scope_triage_agent(
-        settings=Settings(MILL_DATA_DIR="/tmp", MILL_SCOPE_TRIAGE_MODEL="test/model"),
+        settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
         ticket_spec="Add feature X to foo.py",
         file_map=["src/foo.py"],
         out_of_scope_files=["tests/test_feature.py"],
@@ -100,7 +100,7 @@ def test_reject_for_unrelated_module(monkeypatch):
     scope_triage.call_with_retry = lambda fn, **kw: fn()
 
     result = run_scope_triage_agent(
-        settings=Settings(MILL_DATA_DIR="/tmp", MILL_SCOPE_TRIAGE_MODEL="test/model"),
+        settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
         ticket_spec="Add feature X to foo.py",
         file_map=["src/foo.py"],
         out_of_scope_files=["src/retry_ui.py"],
@@ -132,7 +132,7 @@ def test_escalate_for_ambiguous(monkeypatch):
     scope_triage.call_with_retry = lambda fn, **kw: fn()
 
     result = run_scope_triage_agent(
-        settings=Settings(MILL_DATA_DIR="/tmp", MILL_SCOPE_TRIAGE_MODEL="test/model"),
+        settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
         ticket_spec="Improve error handling",
         file_map=["src/errors.py"],
         out_of_scope_files=["src/logging.py"],
@@ -167,7 +167,7 @@ def test_prompt_includes_all_sections(monkeypatch):
     scope_triage.call_with_retry = lambda fn, **kw: fn()
 
     run_scope_triage_agent(
-        settings=Settings(MILL_DATA_DIR="/tmp", MILL_SCOPE_TRIAGE_MODEL="test/model"),
+        settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
         ticket_spec="Add feature X",
         file_map=["src/foo.py"],
         out_of_scope_files=["tests/test_foo.py"],

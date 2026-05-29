@@ -29,7 +29,7 @@ from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 def _settings(tmp_path, **env):
     """Minimal settings helper — mirrors test_agents_rework.py."""
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     env.setdefault("OPENROUTER_API_KEY", "k")
     # Mirror openrouter_api_key into Secrets so get_secrets() works
     key = env.get("OPENROUTER_API_KEY")
@@ -544,7 +544,7 @@ class TestRunCoordinator:
     ):
         """The ``request_limit`` on the ``UsageLimits`` passed to
         ``run_sync`` comes from ``settings.coordinator_request_limit``."""
-        s = _settings(tmp_path, MILL_COORDINATOR_REQUEST_LIMIT="12")
+        s = _settings(tmp_path, coordinator_request_limit="12")
         self._run(s, tmp_path)
         ul = self.captured["usage_limits"]
         assert isinstance(ul, UsageLimits)

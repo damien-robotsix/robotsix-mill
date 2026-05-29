@@ -31,14 +31,20 @@ from robotsix_mill.trace_review_runner import (
 
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     _reset_secrets()
     from robotsix_mill.core import db
     from robotsix_mill.config import _reset_repos_config
     db.reset_engine()
     _reset_repos_config()
-    return Settings()
+    s = Settings(data_dir=str(tmp_path))
+    # The runner reconstructs Settings() internally — patch its module-
+    # level reference so it picks up the test's data_dir instead of the
+    # YAML-defaulted one.
+    monkeypatch.setattr(
+        "robotsix_mill.trace_review_runner.Settings", lambda: s,
+    )
+    return s
 
 
 # ---------------------------------------------------------------------------
@@ -483,9 +489,7 @@ class TestTargetRepoRouting:
     ):
         # Two repos: source (where the trace came from) and target
         # (where the draft should land).
-        monkeypatch.setenv("MILL_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("OPENROUTER_API_KEY", "")
-        monkeypatch.setenv("MILL_TRACE_REVIEW_TARGET_REPO_ID", "mill-repo")
         _reset_secrets()
         from robotsix_mill.core import db
         from robotsix_mill.config import (
@@ -509,7 +513,15 @@ class TestTargetRepoRouting:
             ),
         })
 
-        s = Settings()
+        s = Settings(
+            data_dir=str(tmp_path),
+            trace_review_target_repo_id="mill-repo",
+        )
+        # The runner reconstructs Settings() internally — patch it so
+        # the test's data_dir + target_repo_id propagate.
+        monkeypatch.setattr(
+            "robotsix_mill.trace_review_runner.Settings", lambda: s,
+        )
         source_rc = get_repos_config().repos["source-repo"]
 
         monkeypatch.setattr(

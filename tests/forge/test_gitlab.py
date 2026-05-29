@@ -27,7 +27,7 @@ def _set_secrets(**kw):
 
 
 def _settings(tmp_path, **kw):
-    kw.setdefault("MILL_DATA_DIR", str(tmp_path))
+    kw.setdefault("data_dir", str(tmp_path))
     kw.setdefault("FORGE_KIND", "gitlab")
     kw.setdefault("FORGE_REMOTE_URL", "https://gitlab.com/ns/project.git")
     kw.setdefault("FORGE_TOKEN", "glpat-token")

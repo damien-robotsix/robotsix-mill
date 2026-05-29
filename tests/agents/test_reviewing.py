@@ -114,7 +114,7 @@ def test_auto_merge_eligible_default_is_false():
 # ------------------------------------------------------------------
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     # Mirror openrouter_api_key into Secrets so get_secrets() works
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
@@ -160,7 +160,7 @@ def test_request_limit_from_settings_not_hardcoded(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
         OPENROUTER_API_KEY="k",
-        MILL_REVIEW_REQUEST_LIMIT="42",
+        review_request_limit="42",
     )
 
     result = run_review_agent(

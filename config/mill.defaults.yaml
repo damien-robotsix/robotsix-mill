@@ -113,8 +113,10 @@ web:
   research_model: *default_model              # web-research sub-agent model
   research_request_limit: 8                   # per-call request cap for web research
   fetch_image: curlimages/curl:8.17.0         # Docker image for isolated web_fetch container
-  fetch_max_bytes: 2000000                    # max bytes fetched per URL
+  fetch_max_bytes: 2000000                    # max bytes fetched per URL (network-level cap)
+  fetch_max_text_bytes: 200000                # max bytes returned to the agent AFTER HTML→text extraction
   fetch_timeout: 30                           # timeout (seconds) per web fetch
+  fetch_raw: false                            # when true, skip HTML→text + per-run URL dedupe (operator opt-in)
 
 # ---------------------------------------------------------------------------
 #  gates — human approval, auto-approve, code review, triage, auto-merge

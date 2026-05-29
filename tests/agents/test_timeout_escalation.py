@@ -257,15 +257,15 @@ def test_no_ask_thread_still_escalates(settings, service, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_worker_timeout_escalation_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
-    """Worker._timeout_escalation_task is created when MILL_TIMEOUT_ESCALATION_PERIODIC=true."""
+    """Worker._timeout_escalation_task is created when timeout_escalation_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
     from robotsix_mill.core.service import TicketService
 
     s = Settings(
-        MILL_DATA_DIR=str(tmp_path / "data"),
-        MILL_TIMEOUT_ESCALATION_PERIODIC="true",
-        MILL_TIMEOUT_ESCALATION_INTERVAL_SECONDS="1",
+        data_dir=str(tmp_path / "data"),
+        timeout_escalation_periodic="true",
+        timeout_escalation_interval_seconds="1",
     )
     db.reset_engine()
     db.init_db(s)
@@ -290,14 +290,14 @@ async def test_worker_timeout_escalation_task_created_when_periodic(tmp_path, mo
 
 @pytest.mark.asyncio
 async def test_worker_timeout_escalation_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
-    """Worker._timeout_escalation_task is NOT created when MILL_TIMEOUT_ESCALATION_PERIODIC=false."""
+    """Worker._timeout_escalation_task is NOT created when timeout_escalation_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
     from robotsix_mill.core.service import TicketService
 
     s = Settings(
-        MILL_DATA_DIR=str(tmp_path / "data"),
-        MILL_TIMEOUT_ESCALATION_PERIODIC="false",
+        data_dir=str(tmp_path / "data"),
+        timeout_escalation_periodic="false",
     )
     db.reset_engine()
     db.init_db(s)

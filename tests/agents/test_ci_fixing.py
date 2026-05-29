@@ -17,7 +17,7 @@ def _s(tmp_path):
     import robotsix_mill.config as _cfg
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="k")
-    return Settings(MILL_DATA_DIR=str(tmp_path), OPENROUTER_API_KEY="k")
+    return Settings(data_dir=str(tmp_path), OPENROUTER_API_KEY="k")
 
 
 @pytest.fixture
@@ -59,7 +59,7 @@ def test_run_ci_fix_agent_reads_output(tmp_path, fake_ai, status, expected):
 
 def test_missing_api_key_raises(tmp_path):
     """B.11: Raises RuntimeError when OPENROUTER_API_KEY is missing."""
-    s = Settings(MILL_DATA_DIR=str(tmp_path))  # no key
+    s = Settings(data_dir=str(tmp_path))  # no key
     with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
         run_ci_fix_agent(
             settings=s, repo_dir=tmp_path,

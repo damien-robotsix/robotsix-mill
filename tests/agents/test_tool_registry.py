@@ -13,7 +13,7 @@ from robotsix_mill.config import Settings, Secrets, _reset_secrets
 # ── helpers ──────────────────────────────────────────────────────────
 
 def _settings(tmp_path, **env):
-    env.setdefault("MILL_DATA_DIR", str(tmp_path))
+    env.setdefault("data_dir", str(tmp_path))
     env.setdefault("OPENROUTER_API_KEY", "k")
     # Mirror openrouter_api_key into Secrets so get_secrets() works
     key = env.get("OPENROUTER_API_KEY")
