@@ -12,6 +12,7 @@ from robotsix_mill.agents.yaml_loader import (
     AgentDefinition,
     _resolve_env_vars,
     load_agent_definition,
+    load_periodic_agent_definition,
 )
 
 
@@ -541,6 +542,63 @@ def test_report_issue_consistency(monkeypatch):
                 f"typically set report_issue: false to avoid double-drafting. "
                 f"If this is intentional, add '{ad.name}' to KNOWN_EXCEPTIONS."
             )
+
+
+def test_interval_seconds_round_trips(tmp_path):
+    """The new ``interval_seconds`` field on AgentDefinition parses
+    from YAML and is exposed on the model."""
+    yaml_body = (
+        "name: demo\n"
+        "model: deepseek/v\n"
+        "system_prompt: \"x\"\n"
+        "interval_seconds: 3600\n"
+        "enabled: false\n"
+    )
+    p = _write_yaml(tmp_path, yaml_body)
+    ad = load_agent_definition(p)
+    assert ad.interval_seconds == 3600
+    assert ad.enabled is False
+
+
+def test_interval_seconds_defaults_to_none(tmp_path):
+    """Omitted ``interval_seconds`` / ``enabled`` keep ``None`` so the
+    worker falls back to the corresponding Settings field."""
+    p = _write_yaml(
+        tmp_path,
+        "name: demo\nmodel: deepseek/v\nsystem_prompt: \"x\"\n",
+    )
+    ad = load_agent_definition(p)
+    assert ad.interval_seconds is None
+    assert ad.enabled is None
+
+
+def test_load_periodic_agent_definition_falls_back_to_builtin():
+    """Without a repo_dir override, the loader returns the built-in
+    periodic YAML — sanity check that audit.yaml is discoverable."""
+    ad = load_periodic_agent_definition("audit")
+    assert ad.name == "audit"
+    assert ad.category == "periodic"
+    # Audit shipped with the schedule fields filled in.
+    assert ad.interval_seconds == 86400
+    assert ad.enabled is True
+
+
+def test_load_periodic_agent_definition_repo_override_wins(tmp_path):
+    """A clone-side ``<repo_dir>/.robotsix-mill/agents/audit.yaml``
+    fully replaces the built-in definition."""
+    agents_dir = tmp_path / ".robotsix-mill" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "audit.yaml").write_text(
+        "name: audit\n"
+        "model: deepseek/v\n"
+        "system_prompt: \"per-repo audit\"\n"
+        "interval_seconds: 43200\n"
+        "enabled: true\n",
+        encoding="utf-8",
+    )
+    ad = load_periodic_agent_definition("audit", repo_dir=tmp_path)
+    assert ad.interval_seconds == 43200
+    assert ad.system_prompt == "per-repo audit"
 
 
 def test_env_vars_in_model_match_settings():

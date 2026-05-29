@@ -47,6 +47,11 @@ class AgentDefinition(BaseModel):
     skills: list[str] = []
     modules: bool = False
     inject_agent_md: bool = True
+    # Periodic-only scheduling fields. None means "fall back to the
+    # corresponding Settings field" — keeps existing YAMLs and the
+    # global mill.defaults.yaml schedule section working unchanged.
+    interval_seconds: int | None = None
+    enabled: bool | None = None
 
 
 # Only bare ``${VAR}`` — the existing YAML does not use defaults or nesting.
@@ -99,3 +104,31 @@ def load_agent_definition(path: Path) -> AgentDefinition:
         data["model"] = _resolve_env_vars(data["model"])
 
     return AgentDefinition.model_validate(data)
+
+
+def load_periodic_agent_definition(
+    name: str, repo_dir: Path | None = None,
+) -> AgentDefinition:
+    """Load a periodic agent's definition with per-repo override support.
+
+    Lookup order:
+      1. ``<repo_dir>/.robotsix-mill/agents/<name>.yaml`` — if present,
+         it fully replaces the built-in definition (same schema). This
+         is the per-repo override path; a repo can ship a different
+         prompt, model, interval, or enabled flag without touching the
+         mill image.
+      2. ``agent_definitions/periodic/<name>.yaml`` — the built-in.
+
+    Raises ``FileNotFoundError`` when neither file exists.
+    """
+    if repo_dir is not None:
+        override = (
+            Path(repo_dir) / ".robotsix-mill" / "agents" / f"{name}.yaml"
+        )
+        if override.is_file():
+            return load_agent_definition(override)
+    builtin = (
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions" / "periodic" / f"{name}.yaml"
+    )
+    return load_agent_definition(builtin)
