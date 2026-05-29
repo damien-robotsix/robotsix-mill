@@ -596,8 +596,12 @@ class Settings(BaseSettings):
     )
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
+    # 40 is the empirical floor for a medium PR (4-6 files): read_file
+    # per modified file + diff walk + verdict + a few post_comment
+    # round-trips. 20 was the original default and routinely BLOCKED
+    # medium PRs with "review agent error — resumable" mid-review.
     review_request_limit: int = Field(
-        default=20
+        default=40
     )
     # How many model requests the scope-triage agent may make per
     # invocation (main call + any tool calls). Default 4.
