@@ -86,6 +86,7 @@ modules:
     paths:
       - docs/connecting.md
       - docs/ingestion.md
+      - docs/modules.yaml
       - docs/decisions/0001-programming-language.md
 
   - name: ci
