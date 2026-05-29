@@ -42,6 +42,7 @@ from .base import Outcome, Stage, StageContext
 from .pause import (
     check_for_pause, save_conversation_state,
     load_conversation_state, build_resume_message_history,
+    acknowledge_unanswered_threads,
 )
 
 log = logging.getLogger("robotsix_mill.stages.implement")
@@ -60,6 +61,7 @@ class _ImplementContext:
     file_map: set[str] | None
     feedback: str | None
     previous_attempt_summary: str | None
+    open_thread_ids: set[int] | None = None
 
 
 @dataclass
@@ -160,9 +162,16 @@ class ImplementStage(Stage):
             )
 
         feedback: str | None = None
+        open_thread_ids: set[int] | None = None
         if ticket.blocked_from is None:  # not a BLOCKED resume
             comments = ctx.service.list_comments(ticket.id)
             if comments:
+                open_threads = [
+                    c for c in comments
+                    if c.parent_id is None and c.closed_at is None
+                ]
+                if open_threads:
+                    open_thread_ids = {c.id for c in open_threads}
                 review_feedback = "\n".join(
                     f"[REVIEW id={c.id} @ {c.created_at.isoformat()}] {c.body}"
                     for c in comments
@@ -189,6 +198,7 @@ class ImplementStage(Stage):
             file_map=file_map,
             feedback=feedback,
             previous_attempt_summary=previous_attempt_summary,
+            open_thread_ids=open_thread_ids,
         )
 
     @staticmethod
@@ -545,6 +555,7 @@ class ImplementStage(Stage):
             file_map=new_file_map,
             feedback=new_feedback,
             previous_attempt_summary=updated_prev_summary,
+            open_thread_ids=ic.open_thread_ids,
         )
 
         if guardrail.action == "continue":
@@ -580,6 +591,9 @@ class ImplementStage(Stage):
                     next_action="return",
                     outcome=Outcome(State.BLOCKED, "no changes produced"),
                 )
+            # --- post-agent thread acknowledgment ---
+            if ic.open_thread_ids and ic.feedback:
+                acknowledge_unanswered_threads(ctx, ticket, ic.open_thread_ids)
             ImplementStage._finalize(
                 ctx, ticket, repo_dir, branch, summary, ok=True,
                 reference_files=ref_files,

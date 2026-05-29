@@ -36,7 +36,7 @@ from ..vcs import git_ops
 from .pause import (
     check_for_pause, save_conversation_state,
     load_conversation_state, build_resume_message_history,
-    _collect_ask_user_replies,
+    _collect_ask_user_replies, acknowledge_unanswered_threads,
 )
 from .base import Outcome, Stage, StageContext
 
@@ -354,6 +354,7 @@ class RefineStage(Stage):
 
         # --- gather reviewer comments (sendback guard) ---
         reviewer_comments: str | None = None
+        open_thread_ids: set[int] = set()
         try:
             comments = ctx.service.list_comments(ticket.id)
             if comments:
@@ -363,6 +364,7 @@ class RefineStage(Stage):
                     if c.parent_id is None and c.closed_at is None
                 ]
                 if open_threads:
+                    open_thread_ids = {c.id for c in open_threads}
                     closed_ids = {c.id for c in comments if c.closed_at is not None}
                     reviewer_comments = "\n".join(
                         f"[id={c.id} @ {c.created_at.isoformat()}] {c.body}"
@@ -668,6 +670,10 @@ class RefineStage(Stage):
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
 
+            # --- post-agent thread acknowledgment ---
+            if reviewer_comments and open_thread_ids:
+                acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
+
             next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id)
             note = "refined"
             if auto_note:
@@ -687,12 +693,20 @@ class RefineStage(Stage):
                     ticket.id,
                 )
                 next_state, _auto_reason = _resolve_next_state(ctx, "", ticket.id)
+                # --- post-agent thread acknowledgment ---
+                if reviewer_comments and open_thread_ids:
+                    acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
                 return Outcome(
                     next_state,
                     "refined (empty spec, split degraded — kept original draft)",
                 )
             new_hash = ws.write_description(spec)
             ctx.service.set_content_hash(ticket.id, new_hash)
+
+            # --- post-agent thread acknowledgment ---
+            if reviewer_comments and open_thread_ids:
+                acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
+
             next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id)
             note = "refined (split degraded — no valid children)"
             if auto_note:
@@ -718,6 +732,9 @@ class RefineStage(Stage):
             })
 
         if len(valid_children) == 0:
+            # --- post-agent thread acknowledgment ---
+            if reviewer_comments and open_thread_ids:
+                acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
             return Outcome(State.BLOCKED, "refiner produced no valid split children")
 
         # --- spec review for split children (conciseness pass) ---
@@ -758,6 +775,11 @@ class RefineStage(Stage):
             # the child's title (which is a fallback).
             if not (result.title and result.title.strip()):
                 ctx.service.set_title(ticket.id, child["title"])
+
+            # --- post-agent thread acknowledgment ---
+            if reviewer_comments and open_thread_ids:
+                acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
+
             next_state, auto_note = _resolve_next_state(ctx, child["spec_markdown"], ticket.id)
             note = "refined (single child, no split)"
             if auto_note:
@@ -837,6 +859,11 @@ class RefineStage(Stage):
 
         # Close the original ticket.
         ids_note = ", ".join(child_ids)
+
+        # --- post-agent thread acknowledgment ---
+        if reviewer_comments and open_thread_ids:
+            acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
+
         return Outcome(
             State.CLOSED,
             f"split into {ids_note}",

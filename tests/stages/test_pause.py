@@ -15,9 +15,12 @@ earlier tool-return).
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock, call, patch
+
+import pytest
 
 from robotsix_mill.stages.pause import (
-    _SENTINEL, check_for_pause,
+    _SENTINEL, acknowledge_unanswered_threads, check_for_pause,
 )
 
 
@@ -122,3 +125,131 @@ def test_sentinel_in_both_old_and_new_returns_true():
         _msg("request", [_tool_return_part(_SENTINEL, "ask-2")]),
     ]
     assert check_for_pause(json.dumps(msgs).encode()) is True
+
+
+# ---------------------------------------------------------------------------
+# acknowledge_unanswered_threads
+# ---------------------------------------------------------------------------
+
+def _make_comment(
+    id: int,
+    closed_at=None,
+    parent_id=None,
+    body="review comment",
+) -> MagicMock:
+    c = MagicMock()
+    c.id = id
+    c.closed_at = closed_at
+    c.parent_id = parent_id
+    c.body = body
+    return c
+
+
+def test_acknowledge_empty_thread_ids_is_noop():
+    ctx = MagicMock()
+    ticket = MagicMock()
+    acknowledge_unanswered_threads(ctx, ticket, set())
+    ctx.service.list_comments.assert_not_called()
+
+
+def test_acknowledge_already_closed_thread_is_noop():
+    ctx = MagicMock()
+    ticket = MagicMock()
+    closed_thread = _make_comment(1, closed_at="2025-01-01")
+    ctx.service.list_comments.return_value = [closed_thread]
+
+    acknowledge_unanswered_threads(ctx, ticket, {1})
+
+    ctx.service.close_thread.assert_not_called()
+    ctx.service.add_comment.assert_not_called()
+
+
+def test_acknowledge_open_thread_with_child_reply_closes_it():
+    ctx = MagicMock()
+    ticket = MagicMock()
+    top = _make_comment(1, closed_at=None, parent_id=None)
+    child = _make_comment(2, parent_id=1)
+    ctx.service.list_comments.return_value = [top, child]
+
+    acknowledge_unanswered_threads(ctx, ticket, {1})
+
+    ctx.service.close_thread.assert_called_once_with(1)
+    ctx.service.add_comment.assert_not_called()
+
+
+def test_acknowledge_open_thread_no_child_reply_adds_ack_and_closes():
+    ctx = MagicMock()
+    ticket = MagicMock()
+    top = _make_comment(1, closed_at=None, parent_id=None)
+    ctx.service.list_comments.return_value = [top]
+
+    acknowledge_unanswered_threads(ctx, ticket, {1})
+
+    ctx.service.add_comment.assert_called_once_with(
+        ticket.id, "Addressed.", parent_id=1,
+    )
+    ctx.service.close_thread.assert_called_once_with(1)
+
+
+def test_acknowledge_list_comments_raises_logs_warning():
+    ctx = MagicMock()
+    ticket = MagicMock()
+    ctx.service.list_comments.side_effect = RuntimeError("boom")
+
+    with patch("logging.Logger.warning") as mock_warn:
+        acknowledge_unanswered_threads(ctx, ticket, {1})
+
+    mock_warn.assert_called_once()
+    ctx.service.close_thread.assert_not_called()
+    ctx.service.add_comment.assert_not_called()
+
+
+def test_acknowledge_mixed_threads():
+    """Thread 1: already closed. Thread 2: open with reply. Thread 3: open no reply."""
+    ctx = MagicMock()
+    ticket = MagicMock()
+    t1 = _make_comment(1, closed_at="2025-01-01", parent_id=None)
+    t2 = _make_comment(2, closed_at=None, parent_id=None)
+    t3 = _make_comment(3, closed_at=None, parent_id=None)
+    child2 = _make_comment(10, parent_id=2)
+    ctx.service.list_comments.return_value = [t1, t2, t3, child2]
+
+    acknowledge_unanswered_threads(ctx, ticket, {1, 2, 3})
+
+    # Thread 1: already closed — no touch.
+    # Thread 2: open with reply → close only.
+    ctx.service.close_thread.assert_has_calls([call(2), call(3)], any_order=True)
+    # Thread 3: open no reply → add_comment + close.
+    ctx.service.add_comment.assert_called_once_with(
+        ticket.id, "Addressed.", parent_id=3,
+    )
+
+
+def test_acknowledge_thread_not_in_list_comments_skipped():
+    """thread_ids references an id that list_comments doesn't return."""
+    ctx = MagicMock()
+    ticket = MagicMock()
+    ctx.service.list_comments.return_value = []
+
+    acknowledge_unanswered_threads(ctx, ticket, {999})
+
+    ctx.service.close_thread.assert_not_called()
+    ctx.service.add_comment.assert_not_called()
+
+
+def test_acknowledge_thread_ids_subset_only_touches_specified():
+    """Only threads in thread_ids are touched, not others that happen to be open."""
+    ctx = MagicMock()
+    ticket = MagicMock()
+    t1 = _make_comment(1, closed_at=None, parent_id=None)
+    t2 = _make_comment(2, closed_at=None, parent_id=None)  # not in thread_ids
+    ctx.service.list_comments.return_value = [t1, t2]
+
+    acknowledge_unanswered_threads(ctx, ticket, {1})
+
+    ctx.service.close_thread.assert_called_once_with(1)
+    ctx.service.add_comment.assert_called_once_with(
+        ticket.id, "Addressed.", parent_id=1,
+    )
+    # t2 was NOT touched.
+    assert call(2) not in ctx.service.close_thread.call_args_list
