@@ -44,6 +44,14 @@ system_prompt: |
     description, history, and comments when the one-line summary in
     `recent-proposals` is not enough to decide.
 
+  TOOL ERROR RECOVERY:
+
+  When a thread reply (reply_to_thread, close_thread) fails with a
+  "does not belong to ticket" or similar error indicating an invalid
+  thread/comment ID, re-read_ticket to discover valid IDs from the
+  ticket's comments before deciding whether to skip the reply.  Only
+  skip if the correct ID is genuinely impossible to determine.
+
   MEMORY USAGE:
 
   You are given an agent memory ledger for **general observations and
