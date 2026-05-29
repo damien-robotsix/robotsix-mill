@@ -559,6 +559,48 @@ class RefineStage(Stage):
                 encoding="utf-8",
             )
 
+        # --- no-change-needed path ---
+        # When refine concludes the spec is informational — full
+        # investigation already in the body, acceptance criteria are
+        # "post a comment explaining why no change is needed", or a
+        # parallel ticket already shipped the fix — it returns
+        # no_change_needed=true. The stage files the rationale as a
+        # top-level comment on the ticket and transitions
+        # DRAFT → DONE, skipping implement / review / document /
+        # deliver / merge. This is the bypass that catches the
+        # d129-style "implement gets stuck because there's nothing
+        # to write" failure mode.
+        if result.no_change_needed and not result.split and not result.promote_to_epic:
+            rationale = (result.no_change_rationale or "").strip()
+            if not rationale:
+                # Degrade to single-spec; the operator can see the
+                # spec and decide. Don't transition to DONE on an
+                # empty rationale — that would close the ticket with
+                # no explanation, which is worse than a normal
+                # approval.
+                log.warning(
+                    "%s: no_change_needed but no rationale — "
+                    "degrading to normal single-spec path",
+                    ticket.id,
+                )
+            else:
+                try:
+                    comment = ctx.service.add_comment(
+                        ticket.id, rationale, author="refine",
+                    )
+                    note = (
+                        f"no change needed — see comment #{comment.id} "
+                        "for rationale"
+                    )
+                except Exception:
+                    log.exception(
+                        "%s: posting no-change rationale failed; "
+                        "still closing to DONE",
+                        ticket.id,
+                    )
+                    note = "no change needed (rationale post failed)"
+                return Outcome(State.DONE, note)
+
         # --- promote-to-epic path ---
         # When refine decides the spec is too varied for one pass
         # (manifest-driven, ≥6 children, per-item deep specs needed),

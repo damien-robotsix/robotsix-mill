@@ -1220,3 +1220,97 @@ def test_promote_to_epic_breakdown_failure_leaves_epic_intact(ctx_factory, monke
     all_tickets = ctx.service.list()
     children = [tk for tk in all_tickets if tk.parent_id == t.id]
     assert children == []
+
+
+# ---------------------------------------------------------------------------
+# 32. no_change_needed: refine closes ticket directly to DONE with rationale comment
+# ---------------------------------------------------------------------------
+
+def test_no_change_needed_closes_to_done_with_rationale_comment(
+    ctx_factory, monkeypatch,
+):
+    """When refine returns ``no_change_needed=True`` with a rationale,
+    the stage:
+
+    - posts the rationale as a top-level comment authored by 'refine';
+    - transitions DRAFT → DONE directly (skipping implement, review,
+      etc.);
+    - includes the comment id in the outcome note so the operator can
+      jump straight to the rationale.
+
+    This is the bypass that catches the d129-style failure mode: a
+    config-drift ticket whose deliverable was 'post a comment with
+    findings' got stuck because implement had no way to post a top-
+    level comment. Now refine handles it directly."""
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    t = _ticket(ctx, body=(
+        "## Problem\n\nThe env_sync detector flagged X as drift, but "
+        "investigation shows it's a false positive — see Evidence "
+        "below.\n\n## Acceptance criteria\n\nPost a comment explaining "
+        "the false positive and close."
+    ))
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale=(
+                "## Findings\n\nThe chain is wired correctly. "
+                "Detector misread the YAML anchor."
+            ),
+            spec_markdown=None,
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "no change needed" in out.note
+    # The note carries the comment id for the operator's reference.
+    assert "comment #" in out.note
+
+    # Ticket itself was NOT modified (we don't transition it here —
+    # the worker handles that — but the rationale comment IS present).
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].author == "refine"
+    assert "false positive" in comments[0].body.lower() or (
+        "wired correctly" in comments[0].body
+    )
+
+    # No epic / no split children spawned by this path.
+    all_tickets = ctx.service.list()
+    children = [tk for tk in all_tickets if tk.parent_id == t.id]
+    assert children == []
+
+
+# ---------------------------------------------------------------------------
+# 33. no_change_needed without rationale falls back to normal spec path
+# ---------------------------------------------------------------------------
+
+def test_no_change_needed_empty_rationale_falls_back_to_spec(
+    ctx_factory, monkeypatch,
+):
+    """Refine returning no_change_needed=true with an EMPTY rationale
+    must NOT close the ticket — closing without explanation is worse
+    than asking the operator to review. Falls through to the normal
+    single-spec path so the spec body is the source of truth."""
+    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    t = _ticket(ctx)
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(
+            no_change_needed=True,
+            no_change_rationale="   ",  # whitespace-only
+            spec_markdown="## Problem\nReal spec body.",
+        ),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    # We did NOT close to DONE — we fell through to the normal path
+    # (READY when require_approval=false).
+    assert out.next_state is not State.DONE
+    # No rationale comment was filed.
+    assert ctx.service.list_comments(t.id) == []

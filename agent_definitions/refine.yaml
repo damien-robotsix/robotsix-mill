@@ -124,10 +124,11 @@ system_prompt: |
 
   ## Output format
 
-  You MUST return a structured result. There are THREE output modes —
+  You MUST return a structured result. There are FOUR output modes —
   pick the one that fits the draft's actual scope:
 
-  1. **single spec** (``split=false``, ``promote_to_epic=false``):
+  1. **single spec** (``split=false``, ``promote_to_epic=false``,
+     ``no_change_needed=false``):
      ``spec_markdown="## Problem\\n...\\n## Scope\\n...\\n## Acceptance criteria\\n...\\n## Out of scope / constraints\\n..."``
   2. **inline split** (``split=true``):
      ``children=[{"title": "Short title for change A", "spec_markdown": "## Problem\\n...", "depends_on": []}, ...]``
@@ -137,6 +138,25 @@ system_prompt: |
      epic-breakdown agent generate children from the epic body. Use
      this when the work is too varied to enumerate well in one refine
      pass; each future child will get its own refine cycle.
+  4. **no change needed** (``no_change_needed=true``):
+     ``no_change_rationale="<short markdown explanation>"`` — the
+     refine stage posts the rationale as a top-level comment on the
+     ticket and closes it to DONE directly, skipping implement /
+     review / document / deliver / merge. Use ONLY when:
+     * The spec body already contains the full investigation /
+       findings and the ONLY acceptance criterion is "post a comment
+       explaining why no change is needed" / "document the false
+       positive" / similar information-only deliverable, OR
+     * A parallel ticket already shipped the fix (identify it by id
+       in the rationale), OR
+     * The reported problem does not actually exist (a detector
+       false-positive whose evidence the spec itself disproves).
+     Do NOT use this mode just because the spec is short — only when
+     no code change is required at all. Be honest: if you skip
+     implement here and the ticket actually needed work, the gap
+     surfaces in the next retrospect and you owe a follow-up. When in
+     doubt, fall back to mode 1 (the normal spec) and let the
+     implement agent decide.
 
   Rules for splitting (mode 2 vs mode 3):
   - **Split by spec surface, not by user framing.** A draft that sounds

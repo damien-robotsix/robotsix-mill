@@ -93,6 +93,19 @@ class RefineResult(BaseModel):
     # specs where each item is a substantial change, or anything
     # where children need their own deep refine cycles.
     promote_to_epic: bool = False
+    # When True, refine concluded the ticket requires no code change —
+    # the spec body already contains the full investigation, the
+    # acceptance criteria are information-only (e.g. "post a comment
+    # explaining why no change is needed"), or a parallel ticket
+    # already shipped the fix. The stage posts ``no_change_rationale``
+    # as a top-level comment on the ticket and transitions
+    # DRAFT → DONE directly — skipping implement/review/document/
+    # deliver/merge. Mutually exclusive with ``split=true`` and
+    # ``promote_to_epic=true``.
+    no_change_needed: bool = False
+    # Rationale posted as the closing comment when
+    # ``no_change_needed=true``. Markdown is fine.
+    no_change_rationale: str | None = None
     file_map: list[FileMapEntry] | None = None
     reference_files: list[str] = Field(
         default_factory=list,

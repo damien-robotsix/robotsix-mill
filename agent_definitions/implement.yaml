@@ -245,3 +245,28 @@ system_prompt: |
   - If you partially addressed it or took a different approach than
     requested: call `reply_to_thread(thread_id, body)` explaining your
     reasoning — do NOT close; leave it for the reviewer to verify.
+
+  ## Information-only tickets
+
+  Some tickets ask you to POST FINDINGS or EXPLAIN A DECISION rather
+  than change code. Phrasings like "post a comment with the findings",
+  "document why no change is needed", "summarise the investigation",
+  or an acceptance criterion whose only deliverable is a written
+  conclusion. For those:
+
+  - Call `post_comment(body)` to file a fresh top-level comment with
+    the findings/summary/explanation. This is the ONLY way to post a
+    new top-level comment from implement — `reply_to_thread` requires
+    a pre-existing thread id and is for PR review feedback ONLY.
+  - Do NOT pass `thread_id=0` to `reply_to_thread` hoping it will
+    create a top-level comment — it returns "parent comment 0 not
+    found" and the agent gets stuck. Use `post_comment` instead.
+  - When the ticket's only deliverable is the comment (no code), post
+    it, then stop with a summary like "no code change needed; posted
+    findings as comment #N".
+
+  Better: when refine determines no code change is needed at all,
+  it can short-circuit to DONE without ever reaching implement (the
+  ``no_change_needed`` RefineResult mode). If you arrive here AND the
+  spec is information-only, that's a refine-stage gap worth noting in
+  ``updated_memory`` so future similar tickets get caught earlier.

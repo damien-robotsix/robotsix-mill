@@ -66,7 +66,8 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["tools"] == [
         "ask_user", "close_thread", "consult_expert", "consult_library",
         "delete_file", "edit_file", "explore",
-        "list_dir", "read_file", "reply_to_thread", "report_issue",
+        "list_dir", "post_comment",
+        "read_file", "reply_to_thread", "report_issue",
         "run_command", "spawn_subtask",
         "web_research", "write_file",
     ]
