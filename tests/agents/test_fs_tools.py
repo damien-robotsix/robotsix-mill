@@ -628,6 +628,27 @@ class TestRunCommand:
         assert cap["repo_dir"] == root
         assert cap["settings"] is settings
 
+    def test_empty_output_success(self, tmp_path, settings, fake_sandbox):
+        """Successful command with no output returns a friendly message."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["run_command"]("true")
+        assert result == "Your command ran successfully and did not produce any output."
+
+    def test_empty_output_failure(self, tmp_path, settings, monkeypatch):
+        """Failed command with no output returns an informative message."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        def _empty_fail(*a, **kw):
+            return (2, "")
+
+        monkeypatch.setattr(sandbox, "run", _empty_fail)
+        result = tools["run_command"]("failing-command")
+        assert result == "The command failed with exit code 2 and produced no output."
+
 
 # ===================================================================
 # Error-return semantics (the defining invariant)
