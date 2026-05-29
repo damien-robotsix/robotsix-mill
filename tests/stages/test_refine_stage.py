@@ -1242,7 +1242,7 @@ def test_no_change_needed_closes_to_done_with_rationale_comment(
     config-drift ticket whose deliverable was 'post a comment with
     findings' got stuck because implement had no way to post a top-
     level comment. Now refine handles it directly."""
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body=(
         "## Problem\n\nThe env_sync detector flagged X as drift, but "
         "investigation shows it's a false positive — see Evidence "
@@ -1295,7 +1295,7 @@ def test_no_change_needed_empty_rationale_falls_back_to_spec(
     must NOT close the ticket — closing without explanation is worse
     than asking the operator to review. Falls through to the normal
     single-spec path so the spec body is the source of truth."""
-    ctx = ctx_factory(MILL_REQUIRE_APPROVAL="false", MILL_REFINE_TRIAGE_ENABLED="false")
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx)
 
     _apply_default_mocks(

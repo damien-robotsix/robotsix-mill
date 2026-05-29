@@ -52,12 +52,22 @@ def test_kwargs_override_yaml_defaults():
     assert s.max_concurrency == 8
 
 
-def test_extra_kwargs_silently_ignored():
-    """``extra='ignore'`` in model_config means unknown kwargs are
-    dropped silently (used to be a defence against legacy MILL_* env
-    vars surviving in a developer's shell)."""
-    s = Settings(not_a_real_field=42)
-    assert not hasattr(s, "not_a_real_field")
+def test_extra_kwargs_forbidden():
+    """``extra='forbid'`` in model_config: passing an unknown kwarg
+    raises ``ValidationError`` instead of silently dropping it.
+
+    Reason this is REQUIRED, not just nice-to-have: a feature branch
+    written before the YAML-only refactor may still pass legacy
+    ``MILL_X=...`` style kwargs. With ``extra='ignore'`` those drop
+    silently — the test passes because Settings constructs cleanly,
+    the bug only surfaces when the value the test EXPECTED to set is
+    actually read from somewhere else (real YAML default, real
+    filesystem). That's exactly the failure mode that BLOCKED ticket
+    ad2f's PR. ``extra='forbid'`` makes the typo a test-collection
+    error so the implement agent can see it and fix it in-pass."""
+    import pydantic
+    with pytest.raises(pydantic.ValidationError, match="not_a_real_field"):
+        Settings(not_a_real_field=42)
 
 # ---------------------------------------------------------------------------
 # 4. Computed @property methods

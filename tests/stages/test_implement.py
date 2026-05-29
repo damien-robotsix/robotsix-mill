@@ -1443,8 +1443,8 @@ def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monke
     """scope_triage_enabled=False: any out-of-scope file → BLOCKED outcome."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
-        MILL_SCOPE_TRIAGE_ENABLED="false",
+        FORGE_REMOTE_URL=remote, test_command="true",
+        scope_triage_enabled="false",
     )
     t = _ticket(ctx)
     # file_map only allows "a.txt"
@@ -1489,7 +1489,7 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     the dedup guard fires → skip_iteration (implicit EXPAND)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        FORGE_REMOTE_URL=remote, test_command="true",
     )
     t = _ticket(ctx)
     _write_file_map(ctx, t, "a.txt")

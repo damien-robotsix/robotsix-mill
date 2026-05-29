@@ -24,12 +24,12 @@ def _ctx(tmp_path: Path, **env_overrides):
     environment variable overrides."""
     db.reset_engine()
     env = {
-        "MILL_DATA_DIR": str(tmp_path / "data"),
-        "MILL_REQUIRE_APPROVAL": "false",
-        "MILL_RETROSPECT_SPAWN_DRAFTS": "false",
+        "data_dir": str(tmp_path / "data"),
+        "require_approval": False,
+        "retrospect_spawn_drafts": False,
         "FORGE_KIND": "none",
     }
-    env.update({k: str(v) for k, v in env_overrides.items()})
+    env.update(env_overrides)
     s = Settings(**env)
     db.init_db(s)
     from robotsix_mill.core.service import TicketService

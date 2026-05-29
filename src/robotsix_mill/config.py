@@ -69,7 +69,14 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file_encoding="utf-8", extra="ignore", populate_by_name=True
+        # ``extra="forbid"``: an unknown kwarg is a typo or a stale
+        # MILL_*-style legacy alias from a feature branch written
+        # before the YAML-only refactor. Silent drops let those
+        # branches "pass" locally and explode in CI after rebase —
+        # exactly the failure mode that BLOCKED ticket ad2f's PR.
+        # Forbidding the unknown kwarg surfaces the typo at the call
+        # site, where the implement agent can see and fix it.
+        env_file_encoding="utf-8", extra="forbid", populate_by_name=True,
     )
 
     @classmethod
