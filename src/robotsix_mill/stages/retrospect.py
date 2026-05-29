@@ -229,44 +229,45 @@ class RetrospectStage(Stage):
 
         Returns the spawned draft ID, or None if no draft was created.
         """
-        spawned = None
-        if (
+        # First guard — spawn conditions not met.
+        if not (
             settings.retrospect_spawn_drafts
             and res.propose_draft
             and res.draft_title
             and res.draft_body
         ):
-            if _is_noop_draft(res.draft_title, res.draft_body):
-                # Model set propose_draft=true on a clean/no-issue run.
-                # Don't pollute the board with "no notable issues"
-                # tickets — drop it (the analysis is still in findings
-                # and the memory ledger).
-                log.info("%s: retrospect proposed a no-op draft %r — skipped",
-                         ticket.id, res.draft_title)
-            else:
-                body = res.draft_body
-                if res.draft_gap_id:
-                    body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
-                target_service = _service_for_target(
-                    res.draft_target, ctx.service, settings,
-                )
-                draft = target_service.create(
-                    res.draft_title, body,
-                    source=SourceKind.RETROSPECT,
-                    origin_session=current_session(),
-                )
-                # Only set the parent link when the draft lives on the
-                # same board as the originating ticket — cross-board
-                # parents would dangle (the parent lookup is per-board).
-                if target_service.board_id == ctx.service.board_id:
-                    ctx.service.set_parent(draft.id, ticket.id)
-                spawned = draft.id
-                log.info(
-                    "%s: retrospect spawned draft %s on %s",
-                    ticket.id, spawned,
-                    target_service.board_id or "<default>",
-                )
-        return spawned
+            return None
+
+        # Second guard — model proposed a no-op / clean-run draft.
+        if _is_noop_draft(res.draft_title, res.draft_body):
+            log.info("%s: retrospect proposed a no-op draft %r — skipped",
+                     ticket.id, res.draft_title)
+            return None
+
+        # Happy path: build body, create ticket on the target board,
+        # set parent if on the same board, log, and return the ID.
+        body = res.draft_body
+        if res.draft_gap_id:
+            body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
+        target_service = _service_for_target(
+            res.draft_target, ctx.service, settings,
+        )
+        draft = target_service.create(
+            res.draft_title, body,
+            source=SourceKind.RETROSPECT,
+            origin_session=current_session(),
+        )
+        # Only set the parent link when the draft lives on the same
+        # board as the originating ticket — cross-board parents would
+        # dangle (the parent lookup is per-board).
+        if target_service.board_id == ctx.service.board_id:
+            ctx.service.set_parent(draft.id, ticket.id)
+        log.info(
+            "%s: retrospect spawned draft %s on %s",
+            ticket.id, draft.id,
+            target_service.board_id or "<default>",
+        )
+        return draft.id
 
     def _maybe_spawn_follow_up(
         self,
