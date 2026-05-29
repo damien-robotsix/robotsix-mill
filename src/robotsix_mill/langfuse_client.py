@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from .config import RepoConfig, Settings, get_secrets
@@ -487,6 +488,93 @@ def _fetch_traces_for_tickets(
     return all_traces
 
 
+def _fetch_traces_time_window(
+    settings: Settings,
+    lookback_hours: float,
+    max_pages: int,
+    caller_name: str,
+    repo_config: RepoConfig | None = None,
+) -> list[dict] | None:
+    """Paginate traces within a time window.
+
+    Returns all traces whose ``timestamp`` >= now - *lookback_hours*,
+    paginating at most *max_pages* pages (100 traces/page).
+
+    ``caller_name`` is used in log messages so the source of a failure
+    is clear.
+
+    Returns ``None`` on API / HTTP failure, ``[]`` when the window
+    contains no traces.
+    """
+    from_timestamp = (
+        datetime.utcnow() - timedelta(hours=lookback_hours)
+    ).isoformat() + "Z"
+
+    PAGE_SIZE = 100
+    all_traces: list[dict] = []
+
+    try:
+        page = 1
+        while page <= max_pages:
+            body = _langfuse_api_get(
+                settings,
+                "/api/public/traces",
+                params={
+                    "fromTimestamp": from_timestamp,
+                    "limit": PAGE_SIZE,
+                    "page": page,
+                    "orderBy": "timestamp.desc",
+                },
+                repo_config=repo_config,
+            )
+            if body is None:
+                log.warning(
+                    "%s: Langfuse request failed on page %d",
+                    caller_name,
+                    page,
+                )
+                return None
+
+            data = body.get("data", [])
+            all_traces.extend(data)
+
+            meta = body.get("meta", {})
+            total_pages = meta.get("totalPages", 1)
+            if page >= total_pages:
+                break
+            page += 1
+
+    except Exception:
+        log.exception("%s failed", caller_name)
+        return None
+
+    return all_traces
+
+
+def _accumulate_cost_by_key(
+    traces: list[dict],
+    key_fn: Callable[[dict], str | None],
+) -> dict[str, dict]:
+    """Group *traces* by a key and sum ``totalCost`` per group.
+
+    *key_fn* receives a trace dict and must return a non-empty string
+    key, or ``None`` to skip the trace.
+
+    Returns ``{key: {"total_cost": float, "trace_count": int}}``.
+    """
+    agg: dict[str, dict] = {}
+    for t in traces:
+        key = key_fn(t)
+        if key is None:
+            continue
+        cost = float(t.get("totalCost") or 0)
+        if key not in agg:
+            agg[key] = {"total_cost": 0.0, "trace_count": 0}
+        agg[key]["total_cost"] += cost
+        agg[key]["trace_count"] += 1
+    return agg
+
+
 def aggregate_cost_trend(
     settings: Settings,
     lookback_hours: float = 24,
@@ -615,53 +703,16 @@ def aggregate_cost_trend(
         return [buckets[k] for k in bucket_keys]
 
     # --- time-window mode (original behaviour) ---
-    from_timestamp = (
-        datetime.utcnow() - timedelta(hours=lookback_hours)
-    ).isoformat() + "Z"
+    all_traces = _fetch_traces_time_window(
+        settings,
+        lookback_hours,
+        max_pages=100,
+        caller_name="aggregate_cost_trend",
+        repo_config=repo_config,
+    )
 
-    PAGE_SIZE = 100
-    MAX_PAGES = 100
-    all_traces: list[dict] = []
-    api_ok = False  # distinguish "API error" from "no traces in window"
-
-    try:
-        page = 1
-        while page <= MAX_PAGES:
-            body = _langfuse_api_get(
-                settings,
-                "/api/public/traces",
-                params={
-                    "fromTimestamp": from_timestamp,
-                    "limit": PAGE_SIZE,
-                    "page": page,
-                    "orderBy": "timestamp.desc",
-                },
-                repo_config=repo_config,
-            )
-            if body is None:
-                log.warning(
-                    "aggregate_cost_trend: Langfuse request failed on page %d",
-                    page,
-                )
-                break
-
-            api_ok = True
-            data = body.get("data", [])
-            all_traces.extend(data)
-
-            meta = body.get("meta", {})
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages:
-                break
-            page += 1
-
-    except Exception:
-        log.exception("aggregate_cost_trend failed")
-        return []
-
-    # API error → return [] so the frontend shows the empty state.
-    if not api_ok:
-        return []
+    if all_traces is None:
+        return []  # API error
 
     # Determine bucket width
     if lookback_hours <= 24:
@@ -774,59 +825,21 @@ def aggregate_cost_by_name(
         all_traces = _fetch_traces_for_tickets(settings, max_tickets, repo_config)
     else:
         # --- time-window mode ---
-        from_timestamp = (
-            datetime.utcnow() - timedelta(hours=lookback_hours)
-        ).isoformat() + "Z"
-
-        PAGE_SIZE = 100
-        MAX_PAGES = 100
-        all_traces = []
-
-        try:
-            page = 1
-            while page <= MAX_PAGES:
-                body = _langfuse_api_get(
-                    settings,
-                    "/api/public/traces",
-                    params={
-                        "fromTimestamp": from_timestamp,
-                        "limit": PAGE_SIZE,
-                        "page": page,
-                        "orderBy": "timestamp.desc",
-                    },
-                    repo_config=repo_config,
-                )
-                if body is None:
-                    log.warning(
-                        "aggregate_cost_by_name: Langfuse request failed on page %d",
-                        page,
-                    )
-                    break
-
-                data = body.get("data", [])
-                all_traces.extend(data)
-
-                meta = body.get("meta", {})
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
-
-        except Exception:
-            log.exception("aggregate_cost_by_name failed")
-            return []
+        all_traces = _fetch_traces_time_window(
+            settings,
+            lookback_hours,
+            max_pages=100,
+            caller_name="aggregate_cost_by_name",
+            repo_config=repo_config,
+        )
 
     # Aggregate by name
-    agg: dict[str, dict] = {}
-    for t in all_traces:
-        name = (t.get("name") or "").strip()
-        if not name:
-            continue
-        cost = float(t.get("totalCost") or 0)
-        if name not in agg:
-            agg[name] = {"total_cost": 0.0, "trace_count": 0}
-        agg[name]["total_cost"] += cost
-        agg[name]["trace_count"] += 1
+    if all_traces is None:
+        return []  # API error
+    agg = _accumulate_cost_by_key(
+        all_traces,
+        key_fn=lambda t: (t.get("name") or "").strip() or None,
+    )
 
     result = [
         {
@@ -881,61 +894,22 @@ def most_expensive_ticket(
         all_traces = _fetch_traces_for_tickets(settings, max_tickets, repo_config)
     else:
         # --- time-window mode ---
-        from_timestamp = (
-            datetime.utcnow() - timedelta(hours=lookback_hours)
-        ).isoformat() + "Z"
-
-        PAGE_SIZE = 100
-        EXAMINE_CAP = 500
-        all_traces = []
-
-        try:
-            page = 1
-            while len(all_traces) < EXAMINE_CAP:
-                body = _langfuse_api_get(
-                    settings,
-                    "/api/public/traces",
-                    params={
-                        "fromTimestamp": from_timestamp,
-                        "limit": PAGE_SIZE,
-                        "page": page,
-                        "orderBy": "timestamp.desc",
-                    },
-                    repo_config=repo_config,
-                )
-                if body is None:
-                    log.warning(
-                        "most_expensive_ticket: Langfuse request failed on page %d",
-                        page,
-                    )
-                    break
-
-                data = body.get("data", [])
-                all_traces.extend(data)
-
-                meta = body.get("meta", {})
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
-
-        except Exception:
-            log.exception("most_expensive_ticket failed")
-            return None
-
-        all_traces = all_traces[:EXAMINE_CAP]
+        all_traces = _fetch_traces_time_window(
+            settings,
+            lookback_hours,
+            max_pages=5,
+            caller_name="most_expensive_ticket",
+            repo_config=repo_config,
+        )
+        all_traces = all_traces[:500] if all_traces is not None else None
 
     # Aggregate by session_id
-    agg: dict[str, dict] = {}
-    for t in all_traces:
-        sid = (t.get("sessionId") or "").strip()
-        if not sid:
-            continue
-        cost = float(t.get("totalCost") or 0)
-        if sid not in agg:
-            agg[sid] = {"total_cost": 0.0, "trace_count": 0}
-        agg[sid]["total_cost"] += cost
-        agg[sid]["trace_count"] += 1
+    if all_traces is None:
+        return None  # API error
+    agg = _accumulate_cost_by_key(
+        all_traces,
+        key_fn=lambda t: (t.get("sessionId") or "").strip() or None,
+    )
 
     if not agg:
         return None
@@ -990,49 +964,17 @@ def most_expensive_trace(
         all_traces = _fetch_traces_for_tickets(settings, max_tickets, repo_config)
     else:
         # --- time-window mode ---
-        from_timestamp = (
-            datetime.utcnow() - timedelta(hours=lookback_hours)
-        ).isoformat() + "Z"
+        all_traces = _fetch_traces_time_window(
+            settings,
+            lookback_hours,
+            max_pages=5,
+            caller_name="most_expensive_trace",
+            repo_config=repo_config,
+        )
+        all_traces = all_traces[:500] if all_traces is not None else None
 
-        PAGE_SIZE = 100
-        EXAMINE_CAP = 500
-        all_traces = []
-
-        try:
-            page = 1
-            while len(all_traces) < EXAMINE_CAP:
-                body = _langfuse_api_get(
-                    settings,
-                    "/api/public/traces",
-                    params={
-                        "fromTimestamp": from_timestamp,
-                        "limit": PAGE_SIZE,
-                        "page": page,
-                        "orderBy": "timestamp.desc",
-                    },
-                    repo_config=repo_config,
-                )
-                if body is None:
-                    log.warning(
-                        "most_expensive_trace: Langfuse request failed on page %d",
-                        page,
-                    )
-                    break
-
-                data = body.get("data", [])
-                all_traces.extend(data)
-
-                meta = body.get("meta", {})
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
-
-        except Exception:
-            log.exception("most_expensive_trace failed")
-            return None
-
-        all_traces = all_traces[:EXAMINE_CAP]
+    if all_traces is None:
+        return None  # API error
 
     # Find the single named trace with highest cost
     best_trace: dict | None = None
