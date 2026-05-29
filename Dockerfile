@@ -1,11 +1,11 @@
 ARG BASE_DIGEST=sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
 # ---------------------------------------------------------------------------
 # Builder stage — builds the wheel and installs the package
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim@${BASE_DIGEST} AS builder
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /build
 
