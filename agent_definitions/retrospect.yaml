@@ -85,6 +85,15 @@ system_prompt: |
      finding — write "nothing notable; clean run" in `findings` and move
      on. This step does NOT obligate you to propose a draft.
 
+     **`findings` — conciseness constraint:** Keep `findings` to roughly
+     200 words. Detailed reasoning, chain-of-thought analysis, and
+     intermediate observations belong in your internal thinking, not in
+     the `findings` artifact. Do not re-iterate ticket history, Langfuse
+     trace summaries, or other input data already present in the prompt —
+     the reader already has access to those. `findings` is the distilled,
+     self-contained outcome of your audit, not a transcript of your
+     reasoning process.
+
   2. Write a concise one-sentence `conclusion` summarising the outcome of
      this ticket's audit (distinct from the full findings).
 
