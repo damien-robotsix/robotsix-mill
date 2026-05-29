@@ -26,7 +26,7 @@ _DONE_WITH = {"closed", "done"}
 
 _CATEGORIES = (
     "missing-tool", "error", "workflow-improvement",
-    "missing-input", "other",
+    "missing-input", "code-quality", "other",
 )
 
 
