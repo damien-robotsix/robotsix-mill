@@ -815,7 +815,24 @@ class ImplementStage(Stage):
         # Refresh against current origin/<target> so the agent never
         # edits stale source — a branch based on even slightly outdated
         # origin/<target> can silently revert newer commits.
-        if not git_ops.try_rebase_onto(repo_dir, settings.forge_target_branch):
+        # Pass a freshly minted token so try_rebase_onto's fetch
+        # doesn't fall back to origin's stored (and likely expired)
+        # GitHub App token — see git_ops.try_rebase_onto for the full
+        # rationale. Token resolution can raise when the forge is
+        # unconfigured (tests, file:// remotes); fall back to no token
+        # and let try_rebase_onto use origin as-is.
+        try:
+            _rebase_token = github_token(
+                settings, repo_config=ctx.repo_config,
+            )
+        except Exception:
+            _rebase_token = None
+        if not git_ops.try_rebase_onto(
+            repo_dir,
+            settings.forge_target_branch,
+            remote_url=_resolve_remote_url(settings, ctx.repo_config),
+            token=_rebase_token,
+        ):
             return Outcome(
                 State.REBASING,
                 f"rebase onto origin/{settings.forge_target_branch} "

@@ -69,8 +69,14 @@ def checkout(repo: Path, name: str) -> None:
     _git(repo, "checkout", "-q", name)
 
 
-def try_rebase_onto(repo: Path, target: str) -> bool:
-    """Fetch ``origin/<target>`` and rebase the current branch onto it.
+def try_rebase_onto(
+    repo: Path,
+    target: str,
+    *,
+    remote_url: str | None = None,
+    token: str | None = None,
+) -> bool:
+    """Fetch ``<target>`` and rebase the current branch onto it.
 
     Deterministic (no agent). Returns ``True`` on a clean rebase;
     on any fetch/rebase failure it aborts a half-applied rebase and
@@ -78,6 +84,18 @@ def try_rebase_onto(repo: Path, target: str) -> bool:
     Used by the implement resume path so a WIP branch pinned to an old
     base picks up current ``main`` (e.g. a fixed test-gate conftest)
     instead of failing the gate forever.
+
+    ``remote_url`` + ``token`` are the GitHub App installation token
+    flow used by ``push``/``fetch``: they are token-authed at call time
+    via :func:`_authed_url`. Without them the function falls back to
+    the clone's stored ``origin`` URL — fine for unauthenticated remotes
+    but a footgun for GitHub App tokens (1-hour TTL): a clone made
+    hours ago carries an expired token in ``origin``, so ``git fetch
+    origin`` returns 401, this function returns False, and the
+    implement→rebase loop in implement.py:818 fires every poll because
+    the rebase stage's own push/fetch use a freshly minted token and
+    never rewrite ``origin``. Passing the fresh token here breaks the
+    loop. ff45 hit exactly this on 2026-05-29.
 
     Any uncommitted edits in the working tree are discarded before the
     rebase. These come exclusively from a server interrupt mid-stage —
@@ -87,10 +105,29 @@ def try_rebase_onto(repo: Path, target: str) -> bool:
     interrupted edits forward into the next cycle and re-broke things.
     Start from a clean checkout instead.
     """
+    # Always-fresh authed URL when the caller has a remote_url;
+    # otherwise fall back to the clone's stored origin (no remote_url
+    # at all → legacy callers / tests that don't thread auth). When
+    # remote_url is set but token is None (e.g. file:// remote in
+    # tests), _authed_url passes the URL through unchanged.
+    fetch_remote = _authed_url(remote_url, token) if remote_url else "origin"
     try:
-        _git(repo, "fetch", "origin", target)
+        _git(repo, "fetch", fetch_remote, target)
     except subprocess.CalledProcessError:
         return False
+    # `git fetch <explicit-url> <target>` writes to FETCH_HEAD but does
+    # NOT update `refs/remotes/origin/<target>`, so the subsequent
+    # `git rebase origin/<target>` would rebase onto a STALE
+    # remote-tracking ref. Update the ref explicitly so the rebase
+    # picks up what we just fetched.
+    if fetch_remote != "origin":
+        try:
+            _git(repo, "update-ref", f"refs/remotes/origin/{target}",
+                 "FETCH_HEAD")
+        except subprocess.CalledProcessError:
+            # If the update fails the rebase target will be stale —
+            # bail rather than rebase onto an old SHA.
+            return False
     # Discard any leftover uncommitted state from a prior interrupted
     # stage. Best-effort — a failure here just falls through to the
     # rebase, where the original error will surface.

@@ -581,11 +581,11 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
     orig_rebase = git_ops.try_rebase_onto
     call_count = [0]
 
-    def _failing_rebase(repo, target):
+    def _failing_rebase(repo, target, **kwargs):
         call_count[0] += 1
         if call_count[0] == 1:
             return False
-        return orig_rebase(repo, target)
+        return orig_rebase(repo, target, **kwargs)
 
     monkeypatch.setattr(git_ops, "try_rebase_onto", _failing_rebase)
 

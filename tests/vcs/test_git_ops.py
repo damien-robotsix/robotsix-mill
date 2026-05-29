@@ -216,3 +216,80 @@ def test_changed_files_includes_untracked_and_modified(tmp_path):
     files = git_ops.changed_files(dest, "main")
     assert "README.md" in files
     assert "newfile.txt" in files
+
+
+# ---------------------------------------------------------------------------
+# try_rebase_onto — token-aware fetch
+# ---------------------------------------------------------------------------
+
+
+def test_try_rebase_onto_no_args_uses_origin(tmp_path):
+    """Backward compat: when called without remote_url/token, the
+    function still uses the clone's stored origin (the legacy path)."""
+    upstream = _init_repo(tmp_path / "upstream")
+    dest = tmp_path / "clone"
+    git_ops.clone(f"file://{upstream}", dest, "main")
+    # Upstream advances → rebase becomes meaningful but still no-op
+    # if the dest is already up to date.
+    assert git_ops.try_rebase_onto(dest, "main") is True
+
+
+def test_try_rebase_onto_uses_explicit_remote_when_given(tmp_path):
+    """When remote_url + token are passed, fetch goes to the explicit
+    URL (via _authed_url) rather than relying on origin's stored URL.
+    Critical for the GitHub App token path: a clone made hours ago
+    carries an expired token in origin; without this knob the fetch
+    401s, try_rebase_onto returns False, and implement→rebase loops
+    every poll (ff45 on 2026-05-29)."""
+    upstream = _init_repo(tmp_path / "upstream")
+    dest = tmp_path / "clone"
+    git_ops.clone(f"file://{upstream}", dest, "main")
+    # Break the clone's stored origin so a stored-origin fetch would
+    # fail. The explicit remote_url is the only working route.
+    subprocess.run(
+        ["git", "-C", str(dest), "remote", "set-url", "origin",
+         "file:///does/not/exist"],
+        check=True,
+    )
+    # No token (file:// remote), but explicit remote_url should still
+    # be honoured.
+    assert git_ops.try_rebase_onto(
+        dest, "main",
+        remote_url=f"file://{upstream}",
+        token=None,
+    ) is True
+    # ... and the stored origin URL stays broken — proving the
+    # function didn't fall back to it.
+    out = subprocess.run(
+        ["git", "-C", str(dest), "remote", "get-url", "origin"],
+        capture_output=True, text=True,
+    ).stdout.strip()
+    assert out == "file:///does/not/exist"
+
+
+def test_try_rebase_onto_token_is_passed_to_authed_url(tmp_path, monkeypatch):
+    """When BOTH remote_url and token are given, _authed_url builds
+    the credential-bearing URL once at call time — even if origin's
+    stored token is expired, this run uses the fresh one."""
+    captured: dict = {}
+    real_run = subprocess.run
+
+    def spy(argv, *a, **kw):
+        if isinstance(argv, list) and len(argv) > 3 and argv[3] == "fetch":
+            captured["fetch_args"] = list(argv)
+        return real_run(argv, *a, **kw)
+
+    monkeypatch.setattr(git_ops.subprocess, "run", spy)
+
+    upstream = _init_repo(tmp_path / "upstream")
+    dest = tmp_path / "clone"
+    git_ops.clone(f"file://{upstream}", dest, "main")
+    git_ops.try_rebase_onto(
+        dest, "main",
+        remote_url="https://github.com/o/r",
+        token="tok-fresh",
+    )
+    # The fetch should target the token-authed URL — NOT "origin".
+    fetch_args = captured.get("fetch_args") or []
+    assert "origin" not in fetch_args
+    assert any("oauth2:tok-fresh@github.com/o/r" in a for a in fetch_args)
