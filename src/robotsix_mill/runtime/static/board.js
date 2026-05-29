@@ -47,8 +47,12 @@ async function toggleEvent(summaryEl){
  const wrap=summaryEl.parentElement;
  const detail=wrap.querySelector(".ev-detail");
  const arrow=summaryEl.querySelector(".ev-arrow");
- if(detail.style.display==="none"){
+ // Compare against "block" rather than "none" — the inline default
+ // is empty-string after we toggle once, and that === "" not "none".
+ const open=wrap.dataset.open==="1";
+ if(!open){
   detail.style.display="block";
+  wrap.dataset.open="1";
   if(arrow&&arrow.textContent==="▶")arrow.textContent="▼";
   const art=wrap.dataset.art;
   const tid=wrap.dataset.tid;
@@ -68,8 +72,30 @@ async function toggleEvent(summaryEl){
   }
  } else {
   detail.style.display="none";
+  wrap.dataset.open="0";
   if(arrow&&arrow.textContent==="▼")arrow.textContent="▶";
  }
+}
+// Single source of truth for collapsed-history rendering — used by
+// open_()'s initial paint and the 1s refreshDetail() poll.  Without
+// this shared helper the poll re-emitted the legacy single-line
+// format and erased per-event expansion state.
+function renderHistoryHtml(history, ticketId){
+ return `<h3>History</h3>`+(history||[]).map(e=>{
+  const art=STATE_ARTIFACT[e.state]||"";
+  const hasDetail=!!(e.note||art);
+  return `<div class="ev" data-tid="${esc(ticketId)}" data-art="${esc(art)}" data-open="0">`+
+   `<div class="ev-summary" onclick="toggleEvent(this)">`+
+    `<span class="ev-arrow">${hasDetail?"▶":"·"}</span>`+
+    `<span class="ev-at muted">${e.at}</span>`+
+    `<b class="ev-state s-${e.state}">${e.state}</b>`+
+   `</div>`+
+   `<div class="ev-detail" style="display:none">`+
+    (e.note?`<div class="ev-note">${renderMD(e.note)}</div>`:"")+
+    (art?`<div class="ev-artifact" data-loaded="0"><span class="muted">Click expand for ${esc(art)}…</span></div>`:"")+
+   `</div>`+
+  `</div>`;
+ }).join("");
 }
 function fmtRelative(iso){
  const d=(new Date(iso)).getTime()-Date.now();
@@ -1090,26 +1116,7 @@ async function open_(id){
  }
  function flushHistory(){
   if(_h===undefined)return;const el=document.getElementById("ticket-history");if(!el)return;
-  // First view: timestamp + state name only. Click to expand the
-  // note and, when available, fetch+render the artifact that the
-  // stage producing this state wrote (implement.md, review.md, etc.).
-  // The artifact name comes from STATE_ARTIFACT; if missing, only
-  // the note is shown.
-  el.innerHTML=`<h3>History</h3>`+(_h||[]).map((e,i)=>{
-   const art=STATE_ARTIFACT[e.state]||"";
-   const hasDetail=!!(e.note||art);
-   return `<div class="ev" data-tid="${id}" data-art="${esc(art)}">`+
-    `<div class="ev-summary" onclick="toggleEvent(this)">`+
-     `<span class="ev-arrow">${hasDetail?"▶":"·"}</span>`+
-     `<span class="ev-at muted">${e.at}</span>`+
-     `<b class="ev-state s-${e.state}">${e.state}</b>`+
-    `</div>`+
-    `<div class="ev-detail" style="display:none">`+
-     (e.note?`<div class="ev-note">${renderMD(e.note)}</div>`:"")+
-     (art?`<div class="ev-artifact" data-loaded="0"><span class="muted">Click expand for ${esc(art)}…</span></div>`:"")+
-    `</div>`+
-   `</div>`;
-  }).join("");
+  el.innerHTML=renderHistoryHtml(_h,id);
  }
  function flushDescription(){
   if(_d===undefined)return;const el=document.getElementById("ticket-body-area");if(!el)return;
@@ -1858,8 +1865,33 @@ async function refreshDetail(id){
  // Children
  swap("ticket-children", ch&&ch.length?`<h3>Children (${ch.length})</h3><div class="children-list">`+
   ch.map(c=>`<div class="child-ticket" onclick="open_('${c.id}')"><span class="child-state s-${c.state}">${c.state}</span> <span class="child-title">${esc(c.title)}</span> <span class="child-id muted">${c.id}</span></div>`).join("")+`</div>`:"");
- // History
- swap("ticket-history", `<h3>History</h3>`+(h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}${e.note?"<br>"+renderMD(e.note):""}</div>`).join(""));
+ // History — render via the shared collapsible helper. Preserve
+ // expansion state across the 1s poll: any row the user had open
+ // before stays open + still shows its loaded artifact.
+ const histEl=document.getElementById("ticket-history");
+ const wasOpen=new Set();
+ if(histEl){
+  histEl.querySelectorAll(".ev[data-open='1']").forEach(w=>{
+   const at=w.querySelector(".ev-at");
+   const st=w.querySelector(".ev-state");
+   if(at&&st)wasOpen.add(at.textContent+"|"+st.textContent);
+  });
+ }
+ const newHistHtml=renderHistoryHtml(h,id);
+ swap("ticket-history", newHistHtml);
+ if(wasOpen.size>0){
+  const el2=document.getElementById("ticket-history");
+  if(el2){
+   el2.querySelectorAll(".ev").forEach(w=>{
+    const at=w.querySelector(".ev-at");
+    const st=w.querySelector(".ev-state");
+    if(at&&st&&wasOpen.has(at.textContent+"|"+st.textContent)){
+     const sum=w.querySelector(".ev-summary");
+     if(sum)toggleEvent(sum);
+    }
+   });
+  }
+ }
  // Description (only swap if content changed; respects the after-body layout)
  const afterBody=gatesCache.comments_after_body;
  swap("ticket-body-area", afterBody?
