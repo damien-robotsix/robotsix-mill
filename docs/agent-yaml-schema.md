@@ -334,6 +334,35 @@ If a skill file is missing, the factory logs a warning and continues
 
 ---
 
+### `modules` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `false` |
+
+Whether the agent receives a `## Module Map` section in its composed
+system prompt, derived from `docs/modules.yaml` (the canonical module
+taxonomy). When `true`, `compose_prompt` reads `docs/modules.yaml` and
+renders a scannable block with one sub-heading per module, its
+description, file paths, and dependency hints.
+
+If the taxonomy exceeds 20 modules, only top-level (foundational)
+modules are rendered with a pointer to `docs/modules.yaml` for the
+complete list.
+
+Agents that do not set `modules: true` (or omit the field) receive an
+unchanged prompt — no `## Module Map` section is injected.
+
+Example:
+
+```yaml
+modules: true
+```
+
+---
+
 ### `module` (optional)
 
 | Attribute | Value |

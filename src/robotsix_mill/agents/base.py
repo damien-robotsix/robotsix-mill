@@ -137,6 +137,7 @@ def build_agent_from_definition(
         retries=definition.retries,
         output_type=resolved_output_type,
         skills=definition.skills,
+        modules=definition.modules,
     )
     kwargs.update(overrides)
     kwargs["tools"] = tools
@@ -168,11 +169,47 @@ def _model_name(settings: Settings) -> str:
     return settings.model
 
 
+def _render_module_map(module_list: list[dict]) -> str:
+    """Render a scannable ``## Module Map`` section from the taxonomy.
+
+    If *module_list* has more than 20 entries, only modules without
+    ``dependencies`` (top-level / foundational) are rendered with a
+    pointer to ``docs/modules.yaml`` for the rest.  Otherwise every
+    module gets a ``### <id>`` sub-heading with its description, paths,
+    and dependency hints.
+    """
+    lines: list[str] = ["## Module Map"]
+
+    if len(module_list) > 20:
+        top_level = [m for m in module_list if not m.get("dependencies")]
+        for m in top_level:
+            lines.append(f"### {m['id']}")
+            lines.append(m.get("description", ""))
+            for p in m.get("paths", []):
+                lines.append(f"- `{p}`")
+        lines.append(
+            "\nSee `docs/modules.yaml` for additional sub-divisions and "
+            "the complete module taxonomy."
+        )
+    else:
+        for m in module_list:
+            lines.append(f"### {m['id']}")
+            lines.append(m.get("description", ""))
+            for p in m.get("paths", []):
+                lines.append(f"- `{p}`")
+            deps = m.get("dependencies", [])
+            if deps:
+                lines.append(f"Depends on: {', '.join(deps)}")
+
+    return "\n".join(lines)
+
+
 def compose_prompt(
     settings: Settings,
     system_prompt: str,
     tool_names: set[str] | None = None,  # legacy, ignored
     skills: list[str] | None = None,
+    modules: bool = False,
 ) -> str:
     """Compose the final system prompt: the YAML ``system_prompt`` plus
     any ``skills`` sections.
@@ -214,6 +251,27 @@ def compose_prompt(
         if skill_sections:
             prompt += "\n\n## Skills\n\n" + "\n\n".join(skill_sections)
 
+    if modules:
+        import logging
+        from pathlib import Path
+
+        import yaml
+
+        logger = logging.getLogger(__name__)
+        modules_path = Path("docs/modules.yaml")
+        try:
+            with modules_path.open(encoding="utf-8") as fh:
+                taxonomy = yaml.safe_load(fh)
+        except (FileNotFoundError, yaml.YAMLError) as exc:
+            logger.warning("Cannot load module taxonomy: %s", exc)
+        else:
+            module_list: list[dict] = (
+                taxonomy.get("modules", []) if isinstance(taxonomy, dict) else []
+            )
+            if module_list:
+                block = _render_module_map(module_list)
+                prompt += "\n\n" + block
+
     return prompt
 
 
@@ -234,6 +292,7 @@ def build_agent(
     name: str | None = None,
     retries: int = 2,
     skills: list[str] | None = None,
+    modules: bool = False,
     board_id: str = "",
 ):
     """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
@@ -312,7 +371,7 @@ def build_agent(
     agent_kwargs: dict[str, Any] = dict(
         model=model,
         system_prompt=compose_prompt(
-            settings, system_prompt, skills=skills,
+            settings, system_prompt, skills=skills, modules=modules,
         ),
         output_type=output_type,
         tools=all_tools,

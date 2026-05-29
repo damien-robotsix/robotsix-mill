@@ -457,3 +457,73 @@ def test_inject_agent_md_with_override_prompt(tmp_path, monkeypatch):
     assert kwargs["system_prompt"].startswith("Overridden prompt.")
     assert "## Repository Conventions (from AGENT.md)" in kwargs["system_prompt"]
     assert "## Test conventions" in kwargs["system_prompt"]
+
+
+# ── modules field integration ──────────────────────────────────────────
+
+
+def test_modules_true_passes_to_build_agent(monkeypatch):
+    """When modules=True in the definition, modules=True is passed to build_agent."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(modules=True)
+    settings = Settings()
+
+    build_agent_from_definition(settings, definition)
+
+    kwargs = captured[0]
+    assert kwargs["modules"] is True
+
+
+def test_modules_false_is_default(monkeypatch):
+    """When modules is not set (default), modules=False is passed to build_agent."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition()  # no modules field
+    settings = Settings()
+
+    build_agent_from_definition(settings, definition)
+
+    kwargs = captured[0]
+    assert kwargs["modules"] is False
+
+
+def test_modules_explicit_false_passes_to_build_agent(monkeypatch):
+    """When modules=False in the definition, modules=False is passed to build_agent."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(modules=False)
+    settings = Settings()
+
+    build_agent_from_definition(settings, definition)
+
+    kwargs = captured[0]
+    assert kwargs["modules"] is False
+
+
+def test_modules_field_present_in_all_real_yamls(tmp_path):
+    """Every real agent YAML definition either omits modules (getting
+    the default False) or sets it explicitly.  No YAML has an unknown
+    modules value."""
+    from pathlib import Path
+
+    from robotsix_mill.agents.yaml_loader import load_agent_definition
+
+    for yaml_path in Path("agent_definitions").glob("*.yaml"):
+        definition = load_agent_definition(yaml_path)
+        # modules is always a bool (either default False or explicit)
+        assert isinstance(definition.modules, bool), (
+            f"{yaml_path.name}: modules must be bool, got "
+            f"{type(definition.modules).__name__}"
+        )
+        # Currently no agent has opted in — that's a separate ticket
+        assert definition.modules is False, (
+            f"{yaml_path.name}: modules must be False (opt-in happens "
+            f"in a separate child ticket)"
+        )
