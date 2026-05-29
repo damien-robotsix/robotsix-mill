@@ -76,6 +76,14 @@ class Settings(BaseSettings):
         # exactly the failure mode that BLOCKED ticket ad2f's PR.
         # Forbidding the unknown kwarg surfaces the typo at the call
         # site, where the implement agent can see and fix it.
+        #
+        # ``env_prefix="MILL_"``: fields without an explicit
+        # ``Field(alias=...)`` derive their env-var name as
+        # ``MILL_<field_name>`` (e.g. ``model`` → ``MILL_MODEL``).
+        # Fields WITH an explicit alias (e.g. ``FORGE_KIND``,
+        # ``OPENROUTER_API_KEY``) use that alias verbatim — the
+        # prefix is NOT applied.
+        env_prefix="MILL_",
         env_file_encoding="utf-8", extra="forbid", populate_by_name=True,
     )
 
@@ -609,6 +617,11 @@ class Settings(BaseSettings):
     # is retrospected again — set False to analyse without spawning.
     retrospect_spawn_drafts: bool = Field(
         default=True
+    )
+    # When True, retrospect may append AGENT.md proposals to
+    # AGENT_CANDIDATES.md for human review.
+    retrospect_spawn_agented_proposals: bool = Field(
+        default=True, alias="MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS"
     )
     # (Removed) retrospect_deep_analysis_frequency: deep-analysis mode
     # was retired — per-trace inspection is now owned by the periodical
