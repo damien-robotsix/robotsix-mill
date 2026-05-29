@@ -1868,6 +1868,13 @@ async function refreshDetail(id){
  // History — render via the shared collapsible helper. Preserve
  // expansion state across the 1s poll: any row the user had open
  // before stays open + still shows its loaded artifact.
+ //
+ // CRUCIAL: only re-fire toggleEvent on rows whose data-open got
+ // CLEARED by the swap (meaning new HTML actually replaced the DOM).
+ // When the cached-HTML guard makes swap() a no-op, the DOM still
+ // carries data-open="1" — re-toggling there would CLOSE the row
+ // every tick, which is exactly the "history keeps collapsing every
+ // second" symptom this block exists to prevent.
  const histEl=document.getElementById("ticket-history");
  const wasOpen=new Set();
  if(histEl){
@@ -1883,6 +1890,7 @@ async function refreshDetail(id){
   const el2=document.getElementById("ticket-history");
   if(el2){
    el2.querySelectorAll(".ev").forEach(w=>{
+    if(w.dataset.open==="1")return; // swap was a no-op — leave alone
     const at=w.querySelector(".ev-at");
     const st=w.querySelector(".ev-state");
     if(at&&st&&wasOpen.has(at.textContent+"|"+st.textContent)){
