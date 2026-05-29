@@ -11,7 +11,7 @@ from typing import TextIO
 
 from robotsix_auto_mail import __version__
 from robotsix_auto_mail.config import MailConfig, load
-from robotsix_auto_mail.db import init_db, list_records
+from robotsix_auto_mail.db import init_db, list_records, MailRecord
 from robotsix_auto_mail.imap import ImapClient, ImapError
 from robotsix_auto_mail.pipeline import IngestResult, ingest_mail
 from robotsix_auto_mail.smtp_client import SmtpClient, SmtpError
@@ -162,6 +162,26 @@ def _cmd_ingest(config: MailConfig, *, dry_run: bool = False) -> int:
     return 0
 
 
+def _render_card(record: MailRecord, file: TextIO) -> None:
+    """Render a single mail record to *file*.
+
+    Placeholder — card rendering is the next ticket.
+    """
+    # placeholder — card rendering is the next ticket
+
+
+def _render_board(records: list[MailRecord], file: TextIO) -> None:
+    """Render every *record* in the inbox board view to *file*."""
+    for record in records:
+        _render_card(record, file)
+
+    if not records:
+        file.write("(no mail)\n")
+    else:
+        count = len(records)
+        file.write(f"{count} message(s)\n")
+
+
 def _cmd_board(config: MailConfig) -> int:
     """Run the board subcommand: display ingested mail in a read-only view.
 
@@ -174,12 +194,7 @@ def _cmd_board(config: MailConfig) -> int:
         conn.close()
 
     _print_header(sys.stdout, "Inbox")
-
-    if not records:
-        sys.stdout.write("(no mail)\n")
-    else:
-        count = len(records)
-        sys.stdout.write(f"{count} message(s)\n")
+    _render_board(records, sys.stdout)
 
     return 0
 
