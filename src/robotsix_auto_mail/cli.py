@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from typing import TextIO
 
 from robotsix_auto_mail import __version__
@@ -162,24 +163,58 @@ def _cmd_ingest(config: MailConfig, *, dry_run: bool = False) -> int:
     return 0
 
 
-def _render_card(record: MailRecord, file: TextIO) -> None:
-    """Render a single mail record to *file*.
+_BODY_PREVIEW_LIMIT = 150
+_SEPARATOR = "-" * 60 + "\n"
 
-    Placeholder — card rendering is the next ticket.
+
+def _format_date(raw: str) -> str:
+    """Parse an ISO-8601 *raw* date and return a human-friendly string.
+
+    Returns *raw* unchanged when parsing fails.
     """
-    # placeholder — card rendering is the next ticket
+    try:
+        dt = datetime.fromisoformat(raw)
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return raw
+
+
+def _render_card(record: MailRecord, file: TextIO) -> None:
+    """Render a single mail record to *file*."""
+    # Sender
+    file.write(f"From:    {record.sender}\n")
+
+    # Subject
+    subject = record.subject if record.subject.strip() else "(no subject)"
+    file.write(f"Subject: {subject}\n")
+
+    # Date
+    file.write(f"Date:    {_format_date(record.date)}\n")
+
+    # Body preview
+    body = record.body_plain
+    if not body or not body.strip():
+        preview = "(no body)"
+    elif len(body) > _BODY_PREVIEW_LIMIT:
+        preview = body[:_BODY_PREVIEW_LIMIT] + "\u2026"
+    else:
+        preview = body
+    file.write(f"\n{preview}\n")
 
 
 def _render_board(records: list[MailRecord], file: TextIO) -> None:
     """Render every *record* in the inbox board view to *file*."""
-    for record in records:
+    if not records:
+        file.write("Your inbox is empty.\n")
+        return
+
+    for i, record in enumerate(records):
+        if i > 0:
+            file.write(_SEPARATOR)
         _render_card(record, file)
 
-    if not records:
-        file.write("(no mail)\n")
-    else:
-        count = len(records)
-        file.write(f"{count} message(s)\n")
+    count = len(records)
+    file.write(f"{count} message(s)\n")
 
 
 def _cmd_board(config: MailConfig) -> int:

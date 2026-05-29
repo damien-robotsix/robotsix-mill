@@ -536,7 +536,7 @@ def test_board_takes_no_extra_args() -> None:
 def test_board_empty_inbox(
     env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """board prints '(no mail)' when the database is empty."""
+    """board prints a friendly message when the database is empty."""
     from robotsix_auto_mail.db import init_db as real_init_db
 
     conn = real_init_db(":memory:")  # schema lives in db.py — no DDL duplication
@@ -552,13 +552,16 @@ def test_board_empty_inbox(
     assert rc == 0
     captured = capsys.readouterr()
     assert "Inbox" in captured.out
-    assert "(no mail)" in captured.out
+    assert "Your inbox is empty." in captured.out
+    # No card-like content should appear
+    assert "From:" not in captured.out
+    assert "-" * 60 + "\n" not in captured.out
 
 
 def test_board_with_records(
     env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """board prints a message count when records exist."""
+    """board prints cards with sender, subject, date, body preview and count."""
     from robotsix_auto_mail.db import init_db as real_init_db
 
     conn = real_init_db(":memory:")  # schema lives in db.py — no DDL duplication
@@ -572,7 +575,8 @@ VALUES
 """,
         (
             1, "<a@x.com>", "alice@example.com", "Hello",
-            "2025-06-01", '{"to":[],"cc":[]}', "", "", "[]",
+            "2025-06-01T14:30:00", '{"to":[],"cc":[]}',
+            "Just checking in!", "", "[]",
         ),
     )
     conn.execute(
@@ -585,7 +589,8 @@ VALUES
 """,
         (
             2, "<b@x.com>", "bob@example.com", "Hi",
-            "2025-06-02", '{"to":[],"cc":[]}', "", "", "[]",
+            "2025-06-02T09:15:00", '{"to":[],"cc":[]}',
+            "See you at 10.\n\n--Bob", "", "[]",
         ),
     )
     conn.commit()
@@ -600,8 +605,28 @@ VALUES
 
     assert rc == 0
     captured = capsys.readouterr()
-    assert "Inbox" in captured.out
-    assert "2 message(s)" in captured.out
+    out = captured.out
+
+    assert "Inbox" in out
+    assert "2 message(s)" in out
+
+    # Card 1 content
+    assert "alice@example.com" in out
+    assert "Subject: Hello" in out
+    assert "Date:    2025-06-01 14:30" in out
+    assert "Just checking in!" in out
+
+    # Card 2 content
+    assert "bob@example.com" in out
+    assert "Subject: Hi" in out
+    assert "Date:    2025-06-02 09:15" in out
+    assert "See you at 10." in out
+
+    # Separator between cards (dashed line)
+    assert out.count("-" * 60) == 1  # one separator between the two cards
+
+    # No empty-inbox message
+    assert "Your inbox is empty." not in out
 
 
 def test_board_config_load_failure(
