@@ -37,6 +37,16 @@ class ImplementResult(BaseModel):
     # used by ``check_for_pause`` so an old ask_user sentinel from a
     # prior turn doesn't re-trigger after resume.
     new_messages: bytes | None = None
+    # When True the agent concluded the ticket's intent is already
+    # satisfied by the codebase (e.g. a "remove dead ``hasattr``
+    # guard" cleanup that has already been removed by a sibling
+    # ticket). The stage routes such tickets to DONE with
+    # ``no_change_rationale`` as the closing note — same shape as
+    # refine's ``no_change_needed`` mode — instead of BLOCKING with a
+    # generic "no changes produced" error. Default False keeps the
+    # existing BLOCK-on-silent-no-changes behaviour.
+    no_change_needed: bool = False
+    no_change_rationale: str = ""
     # When True the agent concluded that the ticket's intent is
     # already satisfied by the codebase (e.g. a "remove dead
     # ``hasattr`` guard" cleanup that has already been removed by a

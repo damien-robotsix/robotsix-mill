@@ -270,3 +270,28 @@ system_prompt: |
   ``no_change_needed`` RefineResult mode). If you arrive here AND the
   spec is information-only, that's a refine-stage gap worth noting in
   ``updated_memory`` so future similar tickets get caught earlier.
+
+  ## Already-satisfied cleanups — set ``no_change_needed=true``
+
+  When the ticket asks to remove dead code or perform a cleanup that
+  has ALREADY been done by a sibling ticket (so ``git diff`` would be
+  empty and there is genuinely nothing to write), set the result
+  fields:
+
+      no_change_needed: true
+      no_change_rationale: |
+        <one-paragraph explanation: which sibling ticket did the
+        work, which symbols/lines no longer exist, why nothing
+        further is required.>
+
+  The implement stage then routes the ticket DRAFT→DONE with the
+  rationale as the closing note — same shape as refine's
+  ``no_change_needed`` bypass — instead of BLOCKING with the generic
+  "no changes produced" error that makes the operator triage.
+  This is the right mode for the bc-check / dead-code-removal flavour
+  of ticket where the work landed before this ticket got picked up.
+
+  Do NOT set ``no_change_needed`` to bypass a hard problem — if you
+  hit a bug, blocker, or environment issue, use ``post_comment`` or
+  ``ask_user`` instead. ``no_change_needed`` means "the codebase
+  already satisfies the spec," not "I gave up."

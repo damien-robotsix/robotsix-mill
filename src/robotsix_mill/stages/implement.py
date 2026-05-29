@@ -481,20 +481,26 @@ class ImplementStage(Stage):
 
         # --- agent invocation ---
         try:
-            summary, ref_files, updated_memory, conv_state, new_msgs = (
-                coding.run_implement_agent(
-                    settings=settings,
-                    repo_dir=repo_dir,
-                    spec=ic.spec,
-                    feedback=ic.feedback,
-                    memory=ic.memory_text,
-                    reference_files=ic.reference_files,
-                    previous_attempt_summary=ic.previous_attempt_summary,
-                    file_map=ic.file_map,
-                    board_id=ctx.repo_config.board_id if ctx.repo_config else "",
-                    message_history=resume_history,
-                    language_instructions=language_instructions,
-                )
+            (
+                summary,
+                ref_files,
+                updated_memory,
+                conv_state,
+                new_msgs,
+                no_change_needed,
+                no_change_rationale,
+            ) = coding.run_implement_agent(
+                settings=settings,
+                repo_dir=repo_dir,
+                spec=ic.spec,
+                feedback=ic.feedback,
+                memory=ic.memory_text,
+                reference_files=ic.reference_files,
+                previous_attempt_summary=ic.previous_attempt_summary,
+                file_map=ic.file_map,
+                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                message_history=resume_history,
+                language_instructions=language_instructions,
             )
         except AgentBudgetError as e:
             ImplementStage._finalize(
@@ -690,11 +696,37 @@ class ImplementStage(Stage):
 
         if decision.next_action == "proceed":
             if not git_ops.has_changes(repo_dir) and not resuming:
-                # Capture the agent's own narrative so the operator has
-                # something to inspect — otherwise the ticket lands in
-                # BLOCKED with only a one-line reason and the previous
-                # iteration's artifacts (which may not exist on a
-                # fresh implement run).
+                # Legitimate no-change: the agent explicitly signaled
+                # the ticket's intent was already satisfied (e.g. the
+                # dead code the spec asks us to remove was already
+                # removed by a sibling ticket). Route to DONE with the
+                # rationale as the closing note — same shape as
+                # refine's ``no_change_needed`` bypass — so the ticket
+                # leaves the queue cleanly instead of sitting in
+                # BLOCKED waiting for operator attention.
+                if no_change_needed and no_change_rationale.strip():
+                    rationale = no_change_rationale.strip()
+                    short = rationale[:400] + ("…" if len(rationale) > 400 else "")
+                    ImplementStage._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        f"no change needed — {rationale}",
+                        ok=True,
+                        reference_files=ref_files,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(State.DONE, f"no change needed — {short}"),
+                    )
+                # Silent no-change (agent didn't signal): still
+                # BLOCK so the operator can investigate. Capture the
+                # agent's own narrative so they have something to
+                # inspect — otherwise the ticket lands in BLOCKED with
+                # only a one-line reason and the previous iteration's
+                # artifacts (which may not exist on a fresh implement
+                # run).
                 no_change_summary = summary or (
                     "Agent finished without producing any file edits and "
                     "without explanation. Check artifacts/implement_messages.json "
@@ -707,11 +739,13 @@ class ImplementStage(Stage):
                     branch,
                     f"{no_change_summary}\n\n"
                     "[Diagnostic] implement returned BLOCKED because "
-                    "`git diff` was empty after the agent run. Common "
-                    "causes: (1) agent decided no edits were necessary "
-                    "but didn't escalate via post_comment; (2) the agent "
-                    "loaded a stale conversation_state from a sibling "
-                    "stage and treated it as already-completed work.",
+                    "`git diff` was empty after the agent run AND the "
+                    "agent did NOT set ``no_change_needed=True``. "
+                    "Common causes: (1) agent decided no edits were "
+                    "necessary but didn't escalate via the result "
+                    "schema; (2) the agent loaded a stale "
+                    "conversation_state from a sibling stage and "
+                    "treated it as already-completed work.",
                     ok=False,
                     reference_files=ref_files,
                 )

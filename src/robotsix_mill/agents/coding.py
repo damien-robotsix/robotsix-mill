@@ -67,12 +67,15 @@ def run_implement_agent(
     file_map: set[str] | None = None,
     board_id: str = "",
     language_instructions: str = "",
-) -> tuple[str, list[str], str, bytes | None, bytes | None]:
+) -> tuple[str, list[str], str, bytes | None, bytes | None, bool, str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory, conversation_state,
-    new_messages)``. ``conversation_state`` is the full transcript
-    (for resume); ``new_messages`` is only what this run added (for
-    pause detection).
+    new_messages, no_change_needed, no_change_rationale)``.
+    ``conversation_state`` is the full transcript (for resume);
+    ``new_messages`` is only what this run added (for pause detection).
+    The last two fields let implement signal "no edits needed, ticket
+    is already satisfied" — see :class:`ImplementResult` for the
+    routing contract.
 
     ``feedback`` — set by the implement stage when it re-invokes after a
     failed test gate — is a distilled diagnosis of that failure,
@@ -164,4 +167,6 @@ def run_implement_agent(
         result.updated_memory,
         result.conversation_state,
         result.new_messages,
+        result.no_change_needed,
+        result.no_change_rationale,
     )
