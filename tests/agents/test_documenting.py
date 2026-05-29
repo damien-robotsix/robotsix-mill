@@ -15,8 +15,6 @@ Does NOT test:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
@@ -875,12 +873,6 @@ class TestRunDocAgent:
         self, settings, repo_dir, monkeypatch,
     ):
         """When output.updated_memory is empty, persist_memory is NOT called."""
-        mem_calls: list = []
-        monkeypatch.setattr(
-            "robotsix_mill.pass_runner.persist_memory",
-            lambda path, text: mem_calls.append((path, text)),
-        )
-
         fake_agent = _FakeAgent(
             DocResult(
                 user_facing=False,
@@ -889,6 +881,13 @@ class TestRunDocAgent:
             )
         )
         self._patch_dependencies(monkeypatch, fake_agent)
+        # Patch persist_memory AFTER _patch_dependencies so the
+        # recording lambda is not overwritten by the common no-op.
+        mem_calls: list = []
+        monkeypatch.setattr(
+            "robotsix_mill.pass_runner.persist_memory",
+            lambda path, text: mem_calls.append((path, text)),
+        )
 
         run_doc_agent(
             settings=settings,
