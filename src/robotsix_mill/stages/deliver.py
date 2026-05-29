@@ -152,14 +152,24 @@ class DeliverStage(Stage):
             )
 
         # Guard: skip PR creation when the branch has no new commits
-        # relative to origin/main.  This avoids a 422 "No commits
+        # relative to origin/main. This avoids a 422 "No commits
         # between main and branch" from GitHub when the implement agent
         # produced no net diff.
+        #
+        # Route to DONE rather than BLOCKED: the implement stage's
+        # own ``no_change_needed`` gate (and its silent-no-change
+        # BLOCK on fresh runs) has already filtered out the cases
+        # where there *should* have been a diff. By the time we
+        # reach deliver with an empty branch, the conclusion is
+        # "the spec is already satisfied; there is nothing to ship."
+        # Mirrors refine's ``no_change_needed`` bypass — same shape,
+        # just one stage later.
         if not git_ops.branch_is_ahead_of_main(repo_dir):
             return Outcome(
-                State.BLOCKED,
-                "branch contains no new commits vs origin/main; "
-                "nothing to deliver (re-run implement)",
+                State.DONE,
+                "no change needed — branch contains no new commits vs "
+                f"{s.forge_target_branch}; the spec was already satisfied "
+                "by the current codebase",
             )
 
         title = f"mill: {ticket.title} ({ticket.id})"

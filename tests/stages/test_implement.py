@@ -2159,6 +2159,53 @@ def test_no_change_needed_empty_rationale_still_blocks(
     assert "no changes produced" in out.note
 
 
+def test_no_change_needed_on_resume_still_routes_to_done(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Regression: the ``no_change_needed`` → DONE bypass must fire
+    on a resume too (the bc-check "remove dead X" case where the
+    operator unblocks expecting the agent to confirm a sibling
+    ticket already did the work). The original check was gated on
+    ``not resuming`` and silently skipped that path, so the empty
+    branch leaked downstream to deliver and got re-BLOCKED there."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+
+    def _run(*, repo_dir, **_kwargs):
+        del repo_dir
+        return (
+            "Confirmed the dead guard was already removed by ticket 5678.",
+            [],
+            "",
+            None,
+            None,
+            True,
+            "The hasattr guard the spec asks us to remove was deleted "
+            "by ticket 5678. Verified by reading pass_runner.py — the "
+            "symbol is no longer present.",
+        )
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    t = _ticket(ctx)
+    # Simulate a resume: pre-create the per-ticket clone so the
+    # implement stage takes the resume path (skipping re-clone) and
+    # sets ``resuming=True`` inside ``_run_single_implement_pass``.
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    git_ops.clone(remote, repo_dir, "main", None)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo_dir, branch)
+    ctx.service.set_branch(t.id, branch)
+    t = ctx.service.get(t.id)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "no change needed" in out.note.lower()
+    assert "5678" in out.note
+
+
 # --- unit tests for _run_scope_guardrail --------------------------------
 
 

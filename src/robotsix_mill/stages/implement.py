@@ -695,32 +695,35 @@ class ImplementStage(Stage):
         )
 
         if decision.next_action == "proceed":
+            # ``no_change_needed`` → DONE works on both fresh runs and
+            # resumes. The agent's signal that the spec is already
+            # satisfied is meaningful regardless of how we got here; in
+            # fact the resume case is exactly the bc-check
+            # "remove-dead-X" flavour where a human unblocked the
+            # ticket precisely because they suspect the work was
+            # already landed by a sibling.
+            if (
+                not git_ops.has_changes(repo_dir)
+                and no_change_needed
+                and no_change_rationale.strip()
+            ):
+                rationale = no_change_rationale.strip()
+                short = rationale[:400] + ("…" if len(rationale) > 400 else "")
+                ImplementStage._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    f"no change needed — {rationale}",
+                    ok=True,
+                    reference_files=ref_files,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(State.DONE, f"no change needed — {short}"),
+                )
             if not git_ops.has_changes(repo_dir) and not resuming:
-                # Legitimate no-change: the agent explicitly signaled
-                # the ticket's intent was already satisfied (e.g. the
-                # dead code the spec asks us to remove was already
-                # removed by a sibling ticket). Route to DONE with the
-                # rationale as the closing note — same shape as
-                # refine's ``no_change_needed`` bypass — so the ticket
-                # leaves the queue cleanly instead of sitting in
-                # BLOCKED waiting for operator attention.
-                if no_change_needed and no_change_rationale.strip():
-                    rationale = no_change_rationale.strip()
-                    short = rationale[:400] + ("…" if len(rationale) > 400 else "")
-                    ImplementStage._finalize(
-                        ctx,
-                        ticket,
-                        repo_dir,
-                        branch,
-                        f"no change needed — {rationale}",
-                        ok=True,
-                        reference_files=ref_files,
-                    )
-                    return _SinglePassResult(
-                        next_action="return",
-                        outcome=Outcome(State.DONE, f"no change needed — {short}"),
-                    )
-                # Silent no-change (agent didn't signal): still
+                # Silent no-change on a fresh run (agent didn't signal):
                 # BLOCK so the operator can investigate. Capture the
                 # agent's own narrative so they have something to
                 # inspect — otherwise the ticket lands in BLOCKED with
