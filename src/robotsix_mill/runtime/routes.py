@@ -12,6 +12,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import threading
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -357,6 +358,87 @@ def get_retrospect(
     if not p.exists():
         return {"retrospect": ""}
     return {"retrospect": p.read_text(encoding="utf-8")}
+
+
+# Artifact filename → stage that produced it. Drives the v1 drawer
+# expanded view: a history row whose stage owns a file gets a
+# "details" button that fetches that file via the route below.
+# Listed once here so the UI and the listing endpoint stay in sync.
+_STAGE_ARTIFACTS: dict[str, list[str]] = {
+    "refine": ["draft-original.md", "file_map.json", "refine-verbose.md",
+               "epic-body-proposed.md"],
+    "implement": ["implement.md", "implement_summary.md",
+                  "reference_files.json"],
+    "review": ["review.md"],
+    "document": [],
+    "deliver": ["deliver.md"],
+    "merge": ["merge.md", "merge_reason.txt", "review_feedback.json"],
+    "retrospect": ["retrospect.md"],
+    "answer": ["question-original.md"],
+}
+
+
+@router.get("/tickets/{ticket_id}/artifacts")
+def list_artifacts(
+    ticket_id: str,
+    svc=Depends(get_service),
+) -> dict:
+    """List artifact files in this ticket's workspace.
+
+    Returns ``{"artifacts": [{"name": str, "size": int, "mtime": str},
+    ...]}`` sorted by mtime ascending. Used by the board UI's drawer
+    to surface each agent's output — pre-v1 the implement / refine /
+    retrospect markdowns only existed on disk."""
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    ws = svc.workspace(ticket)
+    d = ws.artifacts_dir
+    items: list[dict] = []
+    if d.exists():
+        for p in d.iterdir():
+            if not p.is_file():
+                continue
+            try:
+                stat = p.stat()
+            except OSError:
+                continue
+            items.append({
+                "name": p.name,
+                "size": stat.st_size,
+                "mtime": datetime.fromtimestamp(
+                    stat.st_mtime, tz=timezone.utc,
+                ).isoformat().replace("+00:00", "Z"),
+            })
+    items.sort(key=lambda x: x["mtime"])
+    return {"artifacts": items}
+
+
+@router.get("/tickets/{ticket_id}/artifacts/{name}")
+def get_artifact(
+    ticket_id: str,
+    name: str,
+    svc=Depends(get_service),
+) -> dict:
+    """Return the text content of a single artifact file.
+
+    Refuses path-traversal (``..``, ``/``) so the route only serves
+    files directly under the ticket's ``artifacts_dir``. Binary files
+    return decoded-with-replace text since the drawer renders
+    markdown / JSON; a hex viewer can be added later if needed."""
+    if "/" in name or ".." in name or name.startswith("."):
+        raise HTTPException(400, "invalid artifact name")
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    p = svc.workspace(ticket).artifacts_dir / name
+    if not p.is_file():
+        raise HTTPException(404, "artifact not found")
+    try:
+        content = p.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        raise HTTPException(500, f"read failed: {e}") from None
+    return {"name": name, "content": content}
 
 
 @router.delete("/tickets/{ticket_id}", status_code=204)

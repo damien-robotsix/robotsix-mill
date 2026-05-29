@@ -213,16 +213,18 @@ class RefineStage(Stage):
                 f"refine clone failed: {(e.stderr or '').strip()[:200]}"
             )
             log.warning("%s: %s", ticket.id, reason)
-            ctx.service.add_comment(
-                ticket.id,
-                f"[refine] {reason}\n\n"
-                "The refine stage needs a working repo clone to "
-                "ground the spec in actual code. Fix the underlying "
-                "cause (permissions, credentials, disk space, "
-                "network), then `resume-blocked` to re-run refine.",
-                author="refine",
+            # The diagnostic used to be posted as a comment; the
+            # transition note carries the same info and v1 keeps
+            # agent conclusions out of comments. The remediation
+            # hint ("fix permissions/credentials/disk/network, then
+            # resume-blocked") lives in this commit's git log as
+            # ambient context.
+            return Outcome(
+                State.BLOCKED,
+                f"{reason}. Fix the underlying cause (permissions, "
+                "credentials, disk space, network) then "
+                "`resume-blocked` to re-run refine.",
             )
-            return Outcome(State.BLOCKED, reason)
 
     @staticmethod
     def _run_dedup_guard(
@@ -604,22 +606,17 @@ class RefineStage(Stage):
                     ticket.id,
                 )
             else:
-                try:
-                    comment = ctx.service.add_comment(
-                        ticket.id, rationale, author="refine",
-                    )
-                    note = (
-                        f"no change needed — see comment #{comment.id} "
-                        "for rationale"
-                    )
-                except Exception:
-                    log.exception(
-                        "%s: posting no-change rationale failed; "
-                        "still closing to DONE",
-                        ticket.id,
-                    )
-                    note = "no change needed (rationale post failed)"
-                return Outcome(State.DONE, note)
+                # The rationale is the agent's conclusion — into
+                # history (note), not comments. Truncate to keep the
+                # event row scannable; the full rationale lives in
+                # the refine artifact (draft-original.md captures
+                # spec-shape context too).
+                short = rationale[:400] + (
+                    "…" if len(rationale) > 400 else ""
+                )
+                return Outcome(
+                    State.DONE, f"no change needed — {short}",
+                )
 
         # --- promote-to-epic path ---
         # When refine decides the spec is too varied for one pass

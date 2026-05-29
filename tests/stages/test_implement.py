@@ -1042,9 +1042,15 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
     # (agent called at least twice).
     assert call_count["n"] >= 2, "EXPAND with unmodified file should continue the loop"
     assert out.next_state is not State.BLOCKED
-    # A scope-triage comment should be posted
+    # The EXPAND decision lands in history, not comments (v1).
+    history = ctx.service.history(t.id)
+    assert any(
+        (ev.note or "").startswith("scope-triage EXPAND") for ev in history
+    )
     comments = ctx.service.list_comments(t.id)
-    assert any("[scope-triage] EXPAND" in c.body for c in comments)
+    assert not any(
+        "[scope-triage]" in (c.body or "") for c in comments
+    ), "scope-triage no longer emits comments — it uses add_step_event"
 
 
 def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, monkeypatch):
@@ -1097,9 +1103,11 @@ def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, mo
     assert out.next_state is State.DOCUMENTING, (
         f"expected DOCUMENTING, got {out.next_state}"
     )
-    # A [scope-triage] EXPAND comment is still posted.
-    comments = ctx.service.list_comments(t.id)
-    assert any("[scope-triage] EXPAND" in c.body for c in comments)
+    # The EXPAND decision lands in history (v1 — no more comments).
+    history = ctx.service.history(t.id)
+    assert any(
+        (ev.note or "").startswith("scope-triage EXPAND") for ev in history
+    )
     # Outcome message is the agent's summary, not a scope-violation message.
     assert "agent summary text" in out.note
 
@@ -1143,8 +1151,14 @@ def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):
 
     assert out.next_state is State.READY
     assert "REJECT" in out.note
+    # The REJECT details live in the transition note (history) — not
+    # in comments. Files are quoted in backticks so the dedup loop
+    # can scan history events.
+    assert "README.md" in (out.note or "")
     comments = ctx.service.list_comments(t.id)
-    assert any("REJECT" in c.body and "scope-triage" in c.body for c in comments)
+    assert not any(
+        "scope-triage" in (c.body or "") for c in comments
+    )
 
 
 def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
@@ -1185,8 +1199,13 @@ def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
 
     assert out.next_state is State.BLOCKED
     assert "ESCALATE" in out.note
+    # ESCALATE reasoning + the out-of-scope file list now live in the
+    # transition note rather than a comment.
+    assert "README.md" in (out.note or "")
     comments = ctx.service.list_comments(t.id)
-    assert any("ESCALATE" in c.body and "scope-triage" in c.body for c in comments)
+    assert not any(
+        "scope-triage" in (c.body or "") for c in comments
+    )
 
 
 def test_scope_triage_disabled_falls_through(ctx_factory, tmp_path, monkeypatch):
@@ -1258,8 +1277,10 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
 
     assert out.next_state is State.BLOCKED
     assert "agent error" in out.note
+    # The "agent error" diagnostic lives in the transition note now
+    # (v1 — scope-triage no longer comments).
     comments = ctx.service.list_comments(t.id)
-    assert any("agent error" in c.body for c in comments)
+    assert not any("scope-triage" in (c.body or "") for c in comments)
 
 
 # --- post-edit reference_files persistence ------------------------------
@@ -1485,8 +1506,10 @@ def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monke
 def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     ctx_factory, tmp_path, monkeypatch,
 ):
-    """When all out-of-scope files were already REJECTed in prior comments,
-    the dedup guard fires → skip_iteration (implicit EXPAND)."""
+    """When all out-of-scope files were already REJECTed in prior history
+    events, the dedup guard fires → skip_iteration (implicit EXPAND).
+    v1: the source of truth for the REJECT seed is a step event, not
+    a comment (scope-triage no longer comments)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote, test_command="true",
@@ -1494,11 +1517,10 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     t = _ticket(ctx)
     _write_file_map(ctx, t, "a.txt")
 
-    # Seed a prior scope-triage REJECT comment naming b.txt.
-    ctx.service.add_comment(
+    # Seed a prior scope-triage REJECT history event naming b.txt.
+    ctx.service.add_step_event(
         t.id,
-        "[scope-triage] REJECT: prior run\n\nOut-of-scope:\n- `b.txt`",
-        author="scope-triage",
+        "scope-triage REJECT: prior run — out-of-scope: `b.txt`",
     )
 
     repo = ctx.service.workspace(t).dir / "repo"

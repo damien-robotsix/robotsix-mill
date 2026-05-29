@@ -1664,10 +1664,16 @@ def test_eligible_forge_merge_failed_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    comments = ctx.service.list_comments(t.id)
-    assert len(comments) == 1
-    assert comments[0].author == "merge"
-    assert "forge merge failed: branch protection" in comments[0].body
+    merge_events = [e for e in ctx.service.history(t.id)
+
+
+                    if (e.note or "").startswith("merge:")]
+
+
+    assert len(merge_events) == 1
+
+
+    assert "forge merge failed: branch protection" in (merge_events[0].note or "")
 
 
 def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
@@ -1693,10 +1699,16 @@ def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    comments = ctx.service.list_comments(t.id)
-    assert len(comments) == 1
-    assert comments[0].author == "merge"
-    assert "auto-merge disabled in config" in comments[0].body
+    merge_events = [e for e in ctx.service.history(t.id)
+
+
+                    if (e.note or "").startswith("merge:")]
+
+
+    assert len(merge_events) == 1
+
+
+    assert "auto-merge disabled in config" in (merge_events[0].note or "")
 
 
 def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
@@ -1722,10 +1734,16 @@ def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    comments = ctx.service.list_comments(t.id)
-    assert len(comments) == 1
-    assert comments[0].author == "merge"
-    assert "review gate disabled" in comments[0].body
+    merge_events = [e for e in ctx.service.history(t.id)
+
+
+                    if (e.note or "").startswith("merge:")]
+
+
+    assert len(merge_events) == 1
+
+
+    assert "review gate disabled" in (merge_events[0].note or "")
 
 
 def test_not_eligible_artifact_missing_stays_human_mr_approval_with_comment(
@@ -1751,10 +1769,16 @@ def test_not_eligible_artifact_missing_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    comments = ctx.service.list_comments(t.id)
-    assert len(comments) == 1
-    assert comments[0].author == "merge"
-    assert "no review artifact" in comments[0].body
+    merge_events = [e for e in ctx.service.history(t.id)
+
+
+                    if (e.note or "").startswith("merge:")]
+
+
+    assert len(merge_events) == 1
+
+
+    assert "no review artifact" in (merge_events[0].note or "")
 
 
 def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
@@ -1780,10 +1804,16 @@ def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    comments = ctx.service.list_comments(t.id)
-    assert len(comments) == 1
-    assert comments[0].author == "merge"
-    assert "not auto-merge eligible" in comments[0].body
+    merge_events = [e for e in ctx.service.history(t.id)
+
+
+                    if (e.note or "").startswith("merge:")]
+
+
+    assert len(merge_events) == 1
+
+
+    assert "not auto-merge eligible" in (merge_events[0].note or "")
 
 
 def test_comment_dedup_same_reason_no_duplicate(tmp_path, monkeypatch):
@@ -1806,11 +1836,19 @@ def test_comment_dedup_same_reason_no_duplicate(tmp_path, monkeypatch):
 
     # First poll → writes comment.
     MergeStage().run(t, ctx)
-    assert len(ctx.service.list_comments(t.id)) == 1
+    merge_events_ = [e for e in ctx.service.history(t.id)
+
+                     if (e.note or "").startswith("merge:")]
+
+    assert len(merge_events_) == 1
 
     # Second poll — same conditions, same reason → no new comment.
     MergeStage().run(t, ctx)
-    assert len(ctx.service.list_comments(t.id)) == 1
+    merge_events_ = [e for e in ctx.service.history(t.id)
+
+                     if (e.note or "").startswith("merge:")]
+
+    assert len(merge_events_) == 1
 
 
 def test_comment_dedup_different_reason_new_comment(
@@ -1835,7 +1873,11 @@ def test_comment_dedup_different_reason_new_comment(
 
     # First poll → disabled flag comment.
     MergeStage().run(t, ctx)
-    assert len(ctx.service.list_comments(t.id)) == 1
+    merge_events_ = [e for e in ctx.service.history(t.id)
+
+                     if (e.note or "").startswith("merge:")]
+
+    assert len(merge_events_) == 1
 
     # Hack: change the stored reason to simulate a prior different
     # reason (e.g., was CI pending, now CI succeeded but still not
@@ -1846,7 +1888,11 @@ def test_comment_dedup_different_reason_new_comment(
     reason_path.write_text("old different reason", encoding="utf-8")
 
     MergeStage().run(t, ctx)
-    assert len(ctx.service.list_comments(t.id)) == 2
+    merge_events_ = [e for e in ctx.service.history(t.id)
+
+                     if (e.note or "").startswith("merge:")]
+
+    assert len(merge_events_) == 2
 
 
 def test_waiting_auto_merge_becomes_implement_complete_on_ci_failure(
@@ -1907,9 +1953,10 @@ def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    comments = ctx.service.list_comments(t.id)
-    assert len(comments) == 1
-    assert "not auto-merge eligible" in comments[0].body
+    merge_events = [e for e in ctx.service.history(t.id)
+                    if (e.note or "").startswith("merge:")]
+    assert len(merge_events) == 1
+    assert "not auto-merge eligible" in (merge_events[0].note or "")
 
 
 def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):

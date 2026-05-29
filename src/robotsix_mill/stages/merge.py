@@ -303,19 +303,24 @@ class MergeStage(Stage):
         return True, "eligible"
 
     def _maybe_comment(self, ticket: Ticket, ctx: StageContext, reason: str) -> None:
-        """Write a de-duplicated comment naming the auto-merge blocking condition.
+        """Append a de-duplicated step event naming the auto-merge blocking condition.
 
-        Reads ``merge_reason.txt`` from the workspace; skips the comment
-        if the stored reason matches *reason* exactly. Otherwise writes
-        the comment, then persists the new reason.
+        Reads ``merge_reason.txt`` from the workspace; skips emission
+        if the stored reason matches *reason* exactly. Otherwise emits
+        a same-state history event, then persists the new reason.
+
+        Pre-v1 this used add_comment so the merge agent's reason
+        appeared in the comments pane; that polluted comments with
+        agent conclusions. The reason now lands in history alongside
+        every other agent step.
         """
         reason_path = (
             ctx.service.workspace(ticket).artifacts_dir / _MERGE_REASON
         )
         stored = _read_reason(reason_path)
         if stored == reason:
-            return  # already commented — de-dupe
-        ctx.service.add_comment(ticket.id, reason, author="merge")
+            return  # already emitted — de-dupe
+        ctx.service.add_step_event(ticket.id, f"merge: {reason}")
         _write_reason(reason_path, reason)
 
     def _poll_waiting_auto_merge(self, ticket: Ticket, ctx: StageContext) -> Outcome:

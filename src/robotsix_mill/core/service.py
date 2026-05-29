@@ -494,6 +494,33 @@ class TicketService:
             s.refresh(ticket)
             return ticket
 
+    def add_step_event(
+        self, ticket_id: str, note: str,
+    ) -> None:
+        """Append a same-state event to a ticket's history.
+
+        For agent conclusions that don't change state — scope-triage
+        EXPAND continues the implement loop, doc-classifier verdict
+        leaves the stage running. Those used to be emitted as
+        comments so the UI showed them; they now live in history so
+        comments stay reserved for human/agent interaction (ASK_USER,
+        code review threads).
+
+        The event carries the ticket's CURRENT state and the
+        ``note`` describing what the agent concluded. The hash chain
+        is extended like any other event.
+        """
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            s.add(_make_event(
+                s, ticket_id=ticket_id, state=ticket.state, note=note,
+            ))
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def transition(
         self, ticket_id: str, dst: State, note: str | None = None
     ) -> Ticket:

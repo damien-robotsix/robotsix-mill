@@ -268,9 +268,11 @@ def test_dedup_check_exception_proceeds_to_refine(ctx_factory, monkeypatch):
 # 7. clone failure → draft-only refine succeeds
 # ---------------------------------------------------------------------------
 
-def test_clone_failure_escalates_to_blocked_with_comment(ctx_factory, monkeypatch):
-    """A clone failure escalates to BLOCKED with an operator-visible
-    comment rather than silently degrading into a tool-less refine."""
+def test_clone_failure_escalates_to_blocked_with_history_note(ctx_factory, monkeypatch):
+    """A clone failure escalates to BLOCKED. The diagnostic + remediation
+    hint land in the transition note (history) — v1 moved agent
+    conclusions out of comments to keep comments reserved for ASK_USER
+    + review threads."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
     t = _ticket(ctx, body="Add endpoint")
 
@@ -285,11 +287,10 @@ def test_clone_failure_escalates_to_blocked_with_comment(ctx_factory, monkeypatc
 
     assert out.next_state is State.BLOCKED
     assert "refine clone failed" in (out.note or "")
+    assert "resume-blocked" in (out.note or "")
+    # No agent-authored comment.
     comments = ctx.service.list_comments(t.id)
-    assert any(
-        c.author == "refine" and "refine clone failed" in (c.body or "")
-        for c in comments
-    )
+    assert not any(c.author == "refine" for c in comments)
 
 
 # ---------------------------------------------------------------------------
@@ -1274,16 +1275,15 @@ def test_no_change_needed_closes_to_done_with_rationale_comment(
     """When refine returns ``no_change_needed=True`` with a rationale,
     the stage:
 
-    - posts the rationale as a top-level comment authored by 'refine';
+    - folds the rationale into the transition note (history) — v1
+      moved agent conclusions out of comments;
     - transitions DRAFT → DONE directly (skipping implement, review,
-      etc.);
-    - includes the comment id in the outcome note so the operator can
-      jump straight to the rationale.
+      etc.).
 
     This is the bypass that catches the d129-style failure mode: a
     config-drift ticket whose deliverable was 'post a comment with
-    findings' got stuck because implement had no way to post a top-
-    level comment. Now refine handles it directly."""
+    findings' got stuck because implement had no way to communicate.
+    Now refine handles it directly via history."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body=(
         "## Problem\n\nThe env_sync detector flagged X as drift, but "
@@ -1308,17 +1308,11 @@ def test_no_change_needed_closes_to_done_with_rationale_comment(
 
     assert out.next_state is State.DONE
     assert "no change needed" in out.note
-    # The note carries the comment id for the operator's reference.
-    assert "comment #" in out.note
-
-    # Ticket itself was NOT modified (we don't transition it here —
-    # the worker handles that — but the rationale comment IS present).
+    # Rationale (truncated) is folded into the transition note.
+    assert "wired correctly" in (out.note or "")
+    # No agent-authored comment.
     comments = ctx.service.list_comments(t.id)
-    assert len(comments) == 1
-    assert comments[0].author == "refine"
-    assert "false positive" in comments[0].body.lower() or (
-        "wired correctly" in comments[0].body
-    )
+    assert not any(c.author == "refine" for c in comments)
 
     # No epic / no split children spawned by this path.
     all_tickets = ctx.service.list()

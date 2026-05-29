@@ -106,11 +106,13 @@ class DocumentStage(Stage):
             classifier_result = self._run_doc_classifier(
                 settings=s, diff=diff, spec=spec,
             )
-            ctx.service.add_comment(
-                ticket.id,
-                f"classifier: {classifier_result.classification}",
-                author="doc_classifier",
-            )
+            # The classifier verdict used to be posted as a comment;
+            # it's an agent conclusion, not interaction with the
+            # operator. Internal-only diffs short-circuit, so the
+            # verdict lands in the next transition's note. For the
+            # user-facing path the agent will still run and write a
+            # doc artifact — the verdict is captured as a history
+            # step event so it doesn't get lost.
             if not classifier_result.user_facing:
                 log.info(
                     "%s: classifier says internal-only — skipping doc agent",
@@ -118,8 +120,14 @@ class DocumentStage(Stage):
                 )
                 return Outcome(
                     State.DELIVERABLE,
-                    f"no user-facing changes ({classifier_result.classification})",
+                    f"doc_classifier: {classifier_result.classification} — "
+                    f"no user-facing changes; skipping doc agent",
                 )
+            ctx.service.add_step_event(
+                ticket.id,
+                f"doc_classifier: {classifier_result.classification} — "
+                f"running full doc agent",
+            )
         except Exception:
             log.warning(
                 "%s: doc classifier failed — falling through to full doc agent",

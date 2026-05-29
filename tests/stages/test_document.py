@@ -378,11 +378,14 @@ def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypat
 # --- classifier verdict recorded in history ---------------------------
 
 def test_classifier_verdict_recorded_in_history(ctx_factory, monkeypatch):
+    """The classifier verdict is an agent conclusion — it lands in the
+    transition note (history), not in comments. The previous behaviour
+    posted a comment authored by `doc_classifier`; v1 removed that to
+    keep comments reserved for ASK_USER + review threads."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     add_comment_calls = []
-
     orig_add = ctx.service.add_comment
 
     def _spy_add_comment(ticket_id, body, *, author="user", parent_id=None):
@@ -400,8 +403,12 @@ def test_classifier_verdict_recorded_in_history(ctx_factory, monkeypatch):
 
     monkeypatch.setattr(DocumentStage, "_run_doc_classifier", _fake_classifier)
 
-    DocumentStage().run(t, ctx)
+    out = DocumentStage().run(t, ctx)
 
-    classifier_comments = [c for c in add_comment_calls if c["author"] == "doc_classifier"]
-    assert len(classifier_comments) == 1
-    assert classifier_comments[0]["body"] == "classifier: internal-only — model field rename"
+    classifier_comments = [
+        c for c in add_comment_calls if c["author"] == "doc_classifier"
+    ]
+    assert classifier_comments == []  # no comment emitted
+    # Verdict captured in transition note (visible in history).
+    assert "doc_classifier" in (out.note or "")
+    assert "internal-only" in (out.note or "")

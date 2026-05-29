@@ -296,9 +296,11 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
     assert seen["repo_dir"] == repo
 
 
-def test_refine_clone_failure_blocks_with_comment(ctx, service, monkeypatch):
-    """Clone failure escalates to BLOCKED with an operator-visible
-    comment — not silent fall-through to a tool-less refine."""
+def test_refine_clone_failure_blocks_with_history_note(ctx, service, monkeypatch):
+    """Clone failure escalates to BLOCKED. The diagnostic and remediation
+    hint land in the transition note (history) rather than a comment —
+    v1 moved agent conclusions out of comments so comments stay
+    reserved for ASK_USER + review threads."""
     import subprocess
 
     from robotsix_mill.vcs import git_ops
@@ -319,14 +321,12 @@ def test_refine_clone_failure_blocks_with_comment(ctx, service, monkeypatch):
     out = RefineStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "refine clone failed" in (out.note or "")
+    assert "resume-blocked" in (out.note or "")
     # Refine agent was NOT invoked — we bailed before reaching it.
     assert refine_called == []
-    # An operator-visible comment was filed.
+    # No agent-authored comment.
     comments = ctx.service.list_comments(t.id)
-    assert any(
-        c.author == "refine" and "refine clone failed" in (c.body or "")
-        for c in comments
-    ), f"expected a refine-authored clone-failure comment; got {comments}"
+    assert not any(c.author == "refine" for c in comments)
 
 
 def test_web_fetch_confined_to_web_research_subagent():

@@ -294,11 +294,15 @@ class ImplementStage(Stage):
                 "%s: scope-triage EXPAND — %s", ticket.id,
                 verdict.justification,
             )
-            ctx.service.add_comment(
+            # Pre-v1 this was an add_comment; agent conclusions now
+            # live in history, comments are reserved for ASK_USER +
+            # review threads. The implement state doesn't change
+            # here (the loop continues), so this is a same-state
+            # step event.
+            ctx.service.add_step_event(
                 ticket.id,
-                f"[scope-triage] EXPAND: {verdict.justification}\n\n"
-                f"Added to scope: {', '.join(verdict.expand_files)}",
-                author="scope-triage",
+                f"scope-triage EXPAND: {verdict.justification} "
+                f"(added: {', '.join(verdict.expand_files)})",
             )
             # Retroactive short-circuit: when every expand-file was
             # already modified in this pass, fall through to the test
@@ -322,19 +326,21 @@ class ImplementStage(Stage):
 
         if verdict is not None and verdict.action == "REJECT":
             # Dedup guard: if ALL current out-of-scope files were
-            # already REJECTed in a prior scope-triage comment on this
+            # already REJECTed by a prior scope-triage step on this
             # ticket, the agent has seen this diff before and the
-            # operator already has the signal.  Don't post another
-            # comment / bounce back to READY — treat as implicit
+            # operator already has the signal.  Don't emit another
+            # event / bounce back to READY — treat as implicit
             # EXPAND so the implement loop can make actual progress.
+            # Pre-v1 this read prior REJECT *comments*; now reads
+            # prior REJECT *history events* since scope-triage is no
+            # longer a commenter.
             prior_rejects = [
-                c for c in ctx.service.list_comments(ticket.id)
-                if c.author == "scope-triage"
-                and (c.body or "").find("REJECT") >= 0
+                ev for ev in ctx.service.history(ticket.id)
+                if ev.note and ev.note.startswith("scope-triage REJECT")
             ]
             already_rejected: set[str] = set()
-            for c in prior_rejects:
-                for m in _re.findall(r"`([^`]+)`", c.body or ""):
+            for ev in prior_rejects:
+                for m in _re.findall(r"`([^`]+)`", ev.note or ""):
                     already_rejected.add(m)
             new_oos = [
                 f for f in out_of_scope
@@ -359,22 +365,20 @@ class ImplementStage(Stage):
                 "%s: scope-triage REJECT — %s", ticket.id,
                 verdict.justification,
             )
-            ctx.service.add_comment(
-                ticket.id,
-                f"[scope-triage] REJECT: {verdict.justification}\n\n"
-                f"Out-of-scope files:\n" +
-                "\n".join(f"- `{f}`" for f in out_of_scope),
-                author="scope-triage",
-            )
             ImplementStage._finalize(
                 ctx, ticket, repo_dir, branch, summary, ok=False,
                 reference_files=ref_files,
             )
+            # Files listed in backticks so the same-pattern dedup
+            # loop (line ~340) keeps working when this REJECT event
+            # is re-scanned next pass.
+            file_list = ", ".join(f"`{f}`" for f in out_of_scope)
             return _ScopeGuardrailResult(
                 action="return",
                 outcome=Outcome(
                     State.READY,
-                    f"scope-triage REJECT: {verdict.justification[:120]}",
+                    f"scope-triage REJECT: {verdict.justification[:200]} "
+                    f"— out-of-scope: {file_list}",
                 ),
             )
 
@@ -385,19 +389,20 @@ class ImplementStage(Stage):
             else "scope-triage agent error — escalated for human review"
         )
         log.warning("%s: %s", ticket.id, reason)
-        ctx.service.add_comment(
-            ticket.id,
-            f"[scope-triage] {reason}\n\nOut-of-scope files:\n" +
-            "\n".join(f"- `{f}`" for f in out_of_scope),
-            author="scope-triage",
-        )
         ImplementStage._finalize(
             ctx, ticket, repo_dir, branch, summary, ok=False,
             reference_files=ref_files,
         )
+        file_list = ", ".join(f"`{f}`" for f in out_of_scope)
+        # The reason becomes the transition note; the out-of-scope
+        # file list is included so operators see what triggered the
+        # escalation without digging into artifacts.
         return _ScopeGuardrailResult(
             action="return",
-            outcome=Outcome(State.BLOCKED, reason),
+            outcome=Outcome(
+                State.BLOCKED,
+                f"{reason} — out-of-scope: {file_list}",
+            ),
         )
 
     @staticmethod

@@ -25,6 +25,52 @@ const ACTIVE_LABEL={
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const renderMD = s => { if (!s) return ""; return marked.parse(s); };
 const SOURCE_CLASS={retrospect:"retrospect",audit:"audit",config_sync:"config-sync","trace-health":"trace-health",health:"health",test_gap:"test-gap",agent:"agent","deep-review":"deep-review",survey:"survey",ci:"ci",agent_check:"agent-check",bc_check:"bc-check",cost_reconciliation:"cost-reconciliation",completeness_check:"completeness-check","trace-review":"trace-review",roadmap_sync:"roadmap-sync"};const srcClass=s=>SOURCE_CLASS[s]||"user";
+// History row → artifact that the stage producing this state wrote.
+// Drives the collapsible-history expanded view. States without an
+// entry (draft, blocked, errored, awaiting_user_reply, …) just show
+// the note when the user expands them.
+const STATE_ARTIFACT={
+ human_issue_approval:"draft-original.md",
+ ready:"file_map.json",
+ code_review:"implement.md",
+ documenting:"review.md",
+ implement_complete:"deliver.md",
+ human_mr_approval:"merge.md",
+ waiting_auto_merge:"merge.md",
+ fixing_ci:"merge.md",
+ rebasing:"merge.md",
+ done:"merge.md",
+ closed:"retrospect.md",
+ answered:"question-original.md",
+};
+async function toggleEvent(summaryEl){
+ const wrap=summaryEl.parentElement;
+ const detail=wrap.querySelector(".ev-detail");
+ const arrow=summaryEl.querySelector(".ev-arrow");
+ if(detail.style.display==="none"){
+  detail.style.display="block";
+  if(arrow&&arrow.textContent==="▶")arrow.textContent="▼";
+  const art=wrap.dataset.art;
+  const tid=wrap.dataset.tid;
+  const aEl=wrap.querySelector(".ev-artifact");
+  if(art&&aEl&&aEl.dataset.loaded==="0"){
+   aEl.dataset.loaded="1";
+   try{
+    const r=await jget("/tickets/"+encodeURIComponent(tid)+"/artifacts/"+encodeURIComponent(art));
+    if(r&&r.content){
+     aEl.innerHTML=`<details open><summary class="muted" style="cursor:pointer;font-size:11px">📄 ${esc(art)}</summary><div class="md-body" style="margin-top:6px">${renderMD(r.content)}</div></details>`;
+    } else {
+     aEl.innerHTML=`<span class="muted" style="font-size:11px">(${esc(art)} not yet written)</span>`;
+    }
+   } catch(_){
+    aEl.innerHTML=`<span class="muted" style="font-size:11px">(${esc(art)} not yet written)</span>`;
+   }
+  }
+ } else {
+  detail.style.display="none";
+  if(arrow&&arrow.textContent==="▼")arrow.textContent="▶";
+ }
+}
 function fmtRelative(iso){
  const d=(new Date(iso)).getTime()-Date.now();
  if(d<=0)return"now";
@@ -1044,7 +1090,26 @@ async function open_(id){
  }
  function flushHistory(){
   if(_h===undefined)return;const el=document.getElementById("ticket-history");if(!el)return;
-  el.innerHTML=`<h3>History</h3>`+(_h||[]).map(e=>`<div class="ev"><b>${e.state}</b> ${e.at}${e.note?"<br>"+renderMD(e.note):""}</div>`).join("");
+  // First view: timestamp + state name only. Click to expand the
+  // note and, when available, fetch+render the artifact that the
+  // stage producing this state wrote (implement.md, review.md, etc.).
+  // The artifact name comes from STATE_ARTIFACT; if missing, only
+  // the note is shown.
+  el.innerHTML=`<h3>History</h3>`+(_h||[]).map((e,i)=>{
+   const art=STATE_ARTIFACT[e.state]||"";
+   const hasDetail=!!(e.note||art);
+   return `<div class="ev" data-tid="${id}" data-art="${esc(art)}">`+
+    `<div class="ev-summary" onclick="toggleEvent(this)">`+
+     `<span class="ev-arrow">${hasDetail?"▶":"·"}</span>`+
+     `<span class="ev-at muted">${e.at}</span>`+
+     `<b class="ev-state s-${e.state}">${e.state}</b>`+
+    `</div>`+
+    `<div class="ev-detail" style="display:none">`+
+     (e.note?`<div class="ev-note">${renderMD(e.note)}</div>`:"")+
+     (art?`<div class="ev-artifact" data-loaded="0"><span class="muted">Click expand for ${esc(art)}…</span></div>`:"")+
+    `</div>`+
+   `</div>`;
+  }).join("");
  }
  function flushDescription(){
   if(_d===undefined)return;const el=document.getElementById("ticket-body-area");if(!el)return;
