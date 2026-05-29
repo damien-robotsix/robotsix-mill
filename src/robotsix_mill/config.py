@@ -579,6 +579,17 @@ class Settings(BaseSettings):
     review_revision_model: str = Field(
         default="deepseek/deepseek-v4-pro"
     )
+    # When True, the deliver stage generates a structured PR body
+    # (Summary / Changes / Test Plan) from the implementation diff
+    # via a cheap one-shot LLM call instead of pasting the raw spec.
+    pr_summary_enabled: bool = Field(
+        default=False, alias="MILL_PR_SUMMARY_ENABLED"
+    )
+    # Model for the PR-summary generation call — must be cheap and
+    # fast (one-shot, small diff, structured output).
+    pr_summary_model: str = Field(
+        default="openai/gpt-4o-mini", alias="MILL_PR_SUMMARY_MODEL"
+    )
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
     # A value ≤ 0 means escalate on the first REQUEST_CHANGES (the loop is

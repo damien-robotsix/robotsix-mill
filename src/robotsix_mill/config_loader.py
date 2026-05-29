@@ -338,6 +338,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.refine_triage_enabled": "refine_triage_enabled",
     "gates.spec_review_enabled": "spec_review_enabled",
     "gates.scope_triage_enabled": "scope_triage_enabled",
+    "gates.pr_summary_enabled": "pr_summary_enabled",
+    "gates.pr_summary_model": "pr_summary_model",
     # -- pipeline --
     "pipeline.branch_prefix": "branch_prefix",
     "pipeline.merge_poll_seconds": "merge_poll_seconds",

@@ -4,6 +4,11 @@ Push the ticket's branch to the configured forge and open a PR/MR
 against ``FORGE_TARGET_BRANCH``. The forge adapter only does the API
 call; this stage owns the git push (it has the workspace clone).
 
+When ``MILL_PR_SUMMARY_ENABLED`` is true, the stage generates a
+structured PR body (Summary / Changes / Test Plan) from the
+implementation diff via a cheap one-shot LLM call, falling back to
+the raw spec on error.  Otherwise the raw spec is used as-is.
+
 Anything that isn't success is BLOCKED-resumable (move back to
 DELIVERABLE to retry) — never terminal FAILED, so a transient forge/
 network problem doesn't lose the implemented branch. The PR URL is
@@ -15,6 +20,8 @@ from __future__ import annotations
 import logging
 import subprocess
 
+from ..agents.base import build_agent
+from ..agents.retry import call_with_retry
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
@@ -23,6 +30,84 @@ from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.deliver")
+
+PR_SUMMARY_SYSTEM_PROMPT = """\
+You are a technical PR description writer. Given an implementation diff \
+and the original ticket spec, produce a structured PR body with exactly \
+three sections:
+
+## Summary
+One paragraph summarising what this PR does at a high level. Focus on \
+the concrete changes, not the intent.
+
+## Changes
+A bullet list of the specific files and modifications made. Be precise \
+and concrete — mention file paths and what was changed.
+
+## Test Plan
+A short list of verification steps a reviewer or CI should run to \
+confirm correctness. When the diff includes tests, note that.
+
+Output only the Markdown body — no preamble, no code fences."""
+
+PR_SUMMARY_USER_TEMPLATE = """\
+## Ticket Spec
+{spec}
+
+## Implementation Diff
+{diff}
+
+Generate the structured PR body."""
+
+
+def generate_pr_description(
+    diff: str,
+    spec: str,
+    settings: "Settings",  # noqa: F821 — forward reference
+) -> str:
+    """Generate a structured PR body from the implementation diff.
+
+    Falls back to *spec* when PR summary is disabled or the LLM call fails.
+    """
+    if not settings.pr_summary_enabled:
+        return spec
+
+    truncated = False
+    diff_text = diff
+    if len(diff_text) > 16_000:
+        diff_text = diff_text[:16_000]
+        truncated = True
+
+    try:
+        agent = build_agent(
+            settings,
+            system_prompt=PR_SUMMARY_SYSTEM_PROMPT,
+            output_type=str,
+            model_name=settings.pr_summary_model,
+            report_issue=False,
+            read_ticket=False,
+            reply_to_thread=False,
+            close_thread=False,
+            ask_user=False,
+            retries=1,
+        )
+        prompt = PR_SUMMARY_USER_TEMPLATE.format(
+            spec=spec[:4000],
+            diff=diff_text,
+        )
+        result = call_with_retry(
+            lambda: agent.run_sync(prompt),
+            settings=settings,
+            what="PR summary generation",
+        )
+        body = result.data.strip()
+        if truncated:
+            body += "\n\n> ⚠️ The diff was truncated to 16 000 characters" \
+                    " for this summary."
+        return body
+    except Exception:
+        log.exception("PR summary generation failed; falling back to raw spec")
+        return spec
 
 
 class DeliverStage(Stage):
@@ -74,10 +159,36 @@ class DeliverStage(Stage):
             )
 
         title = f"mill: {ticket.title} ({ticket.id})"
-        body = (
-            ws.read_description()[:8000]
-            + f"\n\n---\nAutomated by robotsix-mill · ticket `{ticket.id}`"
+        spec = ws.read_description()
+
+        # Generate a structured PR body from the diff when enabled.
+        # Fall back to the raw spec on any failure.
+        body: str
+        if s.pr_summary_enabled:
+            try:
+                diff = git_ops.diff_base(repo_dir, s.forge_target_branch)
+                if not diff.strip():
+                    body = spec[:8000]
+                else:
+                    body = generate_pr_description(diff, spec, s)
+            except Exception:
+                log.exception(
+                    "%s: PR summary diff/summary failed; falling back to raw spec",
+                    ticket.id,
+                )
+                body = spec[:8000]
+        else:
+            body = spec[:8000]
+
+        body += (
+            f"\n\n---\nAutomated by robotsix-mill · ticket `{ticket.id}`"
         )
+        if s.pr_summary_enabled:
+            body += (
+                f"\n\n<details>\n<summary>Original ticket spec</summary>\n\n"
+                f"{spec}\n</details>"
+            )
+
         try:
             url = get_forge(s, repo_config=ctx.repo_config).open_merge_request(
                 source_branch=branch, title=title, body=body
