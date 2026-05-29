@@ -142,6 +142,11 @@ TRANSITIONS: dict[State, set[State]] = {
         State.ERRORED,
         State.BLOCKED,
         State.AWAITING_USER_REPLY,
+        # deliver routes to DONE directly when the branch has no new
+        # commits vs origin/main — the spec was already satisfied and
+        # there's nothing to ship. Mirrors refine's and implement's
+        # ``no_change_needed`` bypasses.
+        State.DONE,
     },
     # implement_complete: merge stage polls gates (CI + mergeability).
     # Both gates green → human_mr_approval (notify human).  CI failing →

@@ -77,9 +77,11 @@ def test_state_machine_edges():
     assert can_transition(State.REBASING, State.ERRORED)  # rebase crash
     assert can_transition(State.DONE, State.CLOSED)  # retrospected
     assert not can_transition(State.CLOSED, State.DONE)  # terminal
-    assert not can_transition(
-        State.DELIVERABLE, State.DONE
-    )  # via implement_complete + human_mr_approval
+    # deliver-stage no-change bypass: when the branch has no new
+    # commits vs origin/main the spec was already satisfied, so route
+    # straight to DONE instead of pushing an empty branch and getting
+    # a 422 from the forge.
+    assert can_transition(State.DELIVERABLE, State.DONE)
     assert not can_transition(State.READY, State.DONE)
 
 
