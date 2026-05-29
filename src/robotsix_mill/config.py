@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file_encoding="utf-8", extra="ignore"
+        env_file_encoding="utf-8", extra="ignore", populate_by_name=True
     )
 
     @classmethod
@@ -553,7 +553,7 @@ class Settings(BaseSettings):
     # decides EXPAND (legitimate), REJECT (scope creep), or ESCALATE
     # (uncertain). Set False to restore immediate BLOCKED behaviour.
     scope_triage_enabled: bool = Field(
-        default=True
+        default=True, alias="MILL_SCOPE_TRIAGE_ENABLED"
     )
     # Model for the review agent. Defaults to the capable coordinator model.
     # Override to use a *different* model for a genuinely independent review

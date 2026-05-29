@@ -122,7 +122,7 @@ class RefineStage(Stage):
     name = "refine"
     input_state = State.DRAFT
 
-    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:  # noqa: C901  # TODO: split dedup, clone, refine into sub-functions (ticket: split_refine_stage)
+    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         ws = ctx.service.workspace(ticket)
         draft = ws.read_description().strip()
         epic_ctx = ctx.service.get_epic_context(ticket)
@@ -141,117 +141,159 @@ class RefineStage(Stage):
             )
             return Outcome(State.DRAFT)
 
-        # Ground the spec in the ACTUAL repo: clone it locally so the
-        # refine agent uses explore/read_file instead of web-fetching
-        # the project's own files. Best-effort — a clone failure (or no
-        # forge configured) just falls back to draft-only refinement.
-        # Honour the per-ticket repo_config so multi-repo tickets clone
-        # their own repo, not the mill's own (same bug fixed for
-        # implement/deliver in 4518cd1).
+        s = ctx.settings
+
+        # Phase 1: clone
+        result = RefineStage._clone_or_resume(ctx, ticket, ws)
+        if isinstance(result, Outcome):
+            return result
+        repo_dir = result
+
+        # Phase 2: dedup guard
+        dup = RefineStage._run_dedup_guard(ctx, ticket, draft, repo_dir, s)
+        if dup is not None:
+            return dup
+
+        # Phase 3: refine agent + result handling
+        return RefineStage._run_refine_agent(ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s)
+
+    @staticmethod
+    def _clone_or_resume(ctx: StageContext, ticket: Ticket, ws) -> Path | Outcome | None:
+        """Resolve remote URL, reuse or clone repo, escalate clone failures.
+
+        Returns the ``repo_dir`` ``Path`` when a clone exists or is
+        successfully created.  On clone failure, adds a BLOCKED comment
+        via ``ctx.service.add_comment`` and returns an ``Outcome``.
+        Returns ``None`` when no ``remote_url`` is configured (caller
+        treats ``None`` as "no repo available").
+        """
         s = ctx.settings
         remote_url = _resolve_remote_url(s, ctx.repo_config)
-        repo_dir = None
-        if remote_url:
-            cand = ws.dir / "repo"
-            if (cand / ".git").exists():
-                repo_dir = cand  # idempotent: reuse an existing clone
-            else:
-                try:
-                    try:
-                        token = github_token(s, repo_config=ctx.repo_config)
-                    except RuntimeError:
-                        token = None  # no credentials configured — clone will fail
-                    git_ops.clone(
-                        remote_url, cand,
-                        s.forge_target_branch, token,
-                    )
-                    repo_dir = cand
-                except subprocess.CalledProcessError as e:
-                    # Escalate clone failure to BLOCKED — running refine
-                    # with no repo grounds the agent's system prompt
-                    # against tools that aren't registered (the
-                    # `tools=[]` path in refining.py:385). The result is
-                    # an inconsistent, tool-less refine that wastes
-                    # tokens. Surface the cause to the operator instead.
-                    reason = (
-                        f"refine clone failed: {(e.stderr or '').strip()[:200]}"
-                    )
-                    log.warning("%s: %s", ticket.id, reason)
-                    ctx.service.add_comment(
-                        ticket.id,
-                        f"[refine] {reason}\n\n"
-                        "The refine stage needs a working repo clone to "
-                        "ground the spec in actual code. Fix the underlying "
-                        "cause (permissions, credentials, disk space, "
-                        "network), then `resume-blocked` to re-run refine.",
-                        author="refine",
-                    )
-                    return Outcome(State.BLOCKED, reason)
+        if not remote_url:
+            return None
 
-        # --- dedup / already-done guard (best-effort) ---
-        # Skip dedup entirely for trivial drafts — a title-only or
-        # near-empty draft has near-zero chance of being a duplicate
-        # worth detecting and the dedup LLM call's cost dwarfs the value.
+        cand = ws.dir / "repo"
+        if (cand / ".git").exists():
+            return cand  # idempotent: reuse an existing clone
+
+        try:
+            try:
+                token = github_token(s, repo_config=ctx.repo_config)
+            except RuntimeError:
+                token = None  # no credentials configured — clone will fail
+            git_ops.clone(
+                remote_url, cand,
+                s.forge_target_branch, token,
+            )
+            return cand
+        except subprocess.CalledProcessError as e:
+            # Escalate clone failure to BLOCKED — running refine
+            # with no repo grounds the agent's system prompt
+            # against tools that aren't registered (the
+            # `tools=[]` path in refining.py:385). The result is
+            # an inconsistent, tool-less refine that wastes
+            # tokens. Surface the cause to the operator instead.
+            reason = (
+                f"refine clone failed: {(e.stderr or '').strip()[:200]}"
+            )
+            log.warning("%s: %s", ticket.id, reason)
+            ctx.service.add_comment(
+                ticket.id,
+                f"[refine] {reason}\n\n"
+                "The refine stage needs a working repo clone to "
+                "ground the spec in actual code. Fix the underlying "
+                "cause (permissions, credentials, disk space, "
+                "network), then `resume-blocked` to re-run refine.",
+                author="refine",
+            )
+            return Outcome(State.BLOCKED, reason)
+
+    @staticmethod
+    def _run_dedup_guard(
+        ctx: StageContext, ticket: Ticket, draft: str,
+        repo_dir: Path | None, s,
+    ) -> Outcome | None:
+        """Run the dedup / already-done guard (best-effort).
+
+        Returns ``None`` for trivial drafts (< 100 chars) or when the
+        dedup check finds no match, signalling that refine should
+        proceed.  Returns ``Outcome(State.DONE, ...)`` when the verdict
+        indicates a duplicate or already-implemented ticket.
+        """
         if len(draft) < 100:
             log.debug(
                 "%s: trivial draft (%d chars), skipping dedup",
                 ticket.id, len(draft),
             )
-        else:
-            # Gather candidate tickets: all non-terminal + recently closed.
-            all_tickets = ctx.service.list()
-            now = datetime.now(timezone.utc)
-            lookback_cutoff = datetime.fromtimestamp(
-                now.timestamp() - s.dedup_lookback_days * 86400, tz=timezone.utc
+            return None
+
+        # Gather candidate tickets: all non-terminal + recently closed.
+        all_tickets = ctx.service.list()
+        now = datetime.now(timezone.utc)
+        lookback_cutoff = datetime.fromtimestamp(
+            now.timestamp() - s.dedup_lookback_days * 86400, tz=timezone.utc
+        )
+        non_terminal = {State.CLOSED, State.ERRORED}
+        candidates = [
+            t for t in all_tickets
+            if t.id != ticket.id and (
+                t.state not in non_terminal
+                or (
+                    t.state == State.CLOSED
+                    and _as_utc(t.updated_at) >= lookback_cutoff
+                )
             )
-            non_terminal = {State.CLOSED, State.ERRORED}
-            candidates = [
-                t for t in all_tickets
-                if t.id != ticket.id and (
-                    t.state not in non_terminal
-                    or (
-                        t.state == State.CLOSED
-                        and _as_utc(t.updated_at) >= lookback_cutoff
-                    )
-                )
-            ]
-            candidates_json = _build_candidates_block(candidates, ctx)
+        ]
+        candidates_json = _build_candidates_block(candidates, ctx)
 
-            try:
-                verdict = dedup.run_dedup_check(
-                    settings=s,
-                    draft_title=ticket.title,
-                    draft_body=draft,
-                    candidates_json=candidates_json,
-                    repo_dir=repo_dir,
-                )
-            except Exception:
-                log.warning(
-                    "%s: dedup check failed, proceeding with refine", ticket.id,
-                    exc_info=True,
-                )
-                verdict = {
-                    "duplicate_of": None,
-                    "already_done": None,
-                    "reason": "dedup check failed",
-                }
+        try:
+            verdict = dedup.run_dedup_check(
+                settings=s,
+                draft_title=ticket.title,
+                draft_body=draft,
+                candidates_json=candidates_json,
+                repo_dir=repo_dir,
+            )
+        except Exception:
+            log.warning(
+                "%s: dedup check failed, proceeding with refine", ticket.id,
+                exc_info=True,
+            )
+            verdict = {
+                "duplicate_of": None,
+                "already_done": None,
+                "reason": "dedup check failed",
+            }
 
-            # Discarded drafts go to DONE (not directly CLOSED) so retrospect
-            # still analyses them — sanity-check the dedup verdict, capture
-            # any lesson in the memory ledger, and keep the audit trail
-            # consistent with every other terminal-ish ticket.
-            if verdict.get("duplicate_of"):
-                return Outcome(
-                    State.DONE,
-                    f"duplicate of {verdict['duplicate_of']}: {verdict.get('reason', 'no reason')}",
-                )
-            if verdict.get("already_done"):
-                return Outcome(
-                    State.DONE,
-                    f"already implemented in {verdict['already_done']}: {verdict.get('reason', 'no reason')}",
-                )
-        # --- end dedup guard ---
+        # Discarded drafts go to DONE (not directly CLOSED) so retrospect
+        # still analyses them — sanity-check the dedup verdict, capture
+        # any lesson in the memory ledger, and keep the audit trail
+        # consistent with every other terminal-ish ticket.
+        if verdict.get("duplicate_of"):
+            return Outcome(
+                State.DONE,
+                f"duplicate of {verdict['duplicate_of']}: {verdict.get('reason', 'no reason')}",
+            )
+        if verdict.get("already_done"):
+            return Outcome(
+                State.DONE,
+                f"already implemented in {verdict['already_done']}: {verdict.get('reason', 'no reason')}",
+            )
+        return None
 
+    @staticmethod
+    def _run_refine_agent(
+        ctx: StageContext, ticket: Ticket, draft: str,
+        repo_dir: Path | None, epic_ctx: dict | None, title: str,
+        ws, s,
+    ) -> Outcome:
+        """Run the full refine-agent pipeline and handle the result.
+
+        Covers split-child fast-path, reviewer-comment collection,
+        triage skip, agent invocation, pause detection, artifact
+        persistence, spec review, single-scope and multi-scope split
+        outcomes.
+        """
         # --- skip re-refinement for split children ---
         # A child ticket created from a split already has a refined
         # spec in its description.md.  Detect this by checking whether
