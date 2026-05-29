@@ -649,6 +649,16 @@ class Settings(BaseSettings):
     trace_review_max_repeated_tool: int = Field(
         default=50,
     )
+    # Hard cap on the total number of drafts a single trace-review
+    # pass may file. The inspector emits one finding per flagged trace
+    # and a typical batch flags 5-10 traces with 2-5 findings each →
+    # up to 50 drafts per cycle (89 trace-review drafts piled up after
+    # one 2026-05-28 cycle). Findings are individually low-signal and
+    # the cross-trace analyzer is the right surface for recurring
+    # patterns; capping per-cycle bleeds keeps the board readable.
+    trace_review_max_drafts_per_run: int = Field(
+        default=5,
+    )
     # First-run lookback window when no watermark exists yet (hours).
     trace_review_initial_lookback_hours: int = Field(
         default=24,

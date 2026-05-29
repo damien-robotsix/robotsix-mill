@@ -460,7 +460,20 @@ def run_trace_review_pass(
             continue
 
         # Each finding -> one draft. Dedup against already-open titles.
+        # Cap per-run so a noisy batch can't dump 50+ low-signal drafts;
+        # cross-trace analysis is the right surface for recurring
+        # patterns. Default cap = 5 per run (config-tunable via
+        # trace_review_max_drafts_per_run).
+        max_drafts = settings.trace_review_max_drafts_per_run
         for finding in result.findings:
+            if max_drafts > 0 and len(drafts) >= max_drafts:
+                log.info(
+                    "trace-review: hit per-run cap of %d drafts — "
+                    "skipping remaining findings; bumped findings live "
+                    "in Langfuse for the next cycle",
+                    max_drafts,
+                )
+                break
             title = (
                 f"trace-review: {finding.category} — {finding.symptom[:90]}"
             )
@@ -498,6 +511,12 @@ def run_trace_review_pass(
                 log.exception(
                     "trace-review: failed to create draft for %r", title,
                 )
+        # Also break out of the per-trace loop when the run-wide cap hit.
+        if (
+            settings.trace_review_max_drafts_per_run > 0
+            and len(drafts) >= settings.trace_review_max_drafts_per_run
+        ):
+            break
 
     # Persist watermark so the next run picks up where this one left off.
     # Use ``now`` (not the latest trace's createdAt) so we don't re-scan
