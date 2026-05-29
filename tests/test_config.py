@@ -58,7 +58,7 @@ def test_extra_kwargs_forbidden():
 
     Reason this is REQUIRED, not just nice-to-have: a feature branch
     written before the YAML-only refactor may still pass legacy
-    ``MILL_X=...`` style kwargs. With ``extra='ignore'`` those drop
+    ``x=...`` style kwargs. With ``extra='ignore'`` those drop
     silently — the test passes because Settings constructs cleanly,
     the bug only surfaces when the value the test EXPECTED to set is
     actually read from somewhere else (real YAML default, real

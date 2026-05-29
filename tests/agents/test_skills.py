@@ -175,7 +175,7 @@ def _make_modules_yaml(tmp_path, modules: list[dict]) -> Path:
 def test_module_map_injected_when_modules_true(tmp_path, monkeypatch):
     """When modules=True, compose_prompt reads docs/modules.yaml and
     injects a ## Module Map section."""
-    s = _settings(tmp_path, MILL_SKILLS_DIR=str(tmp_path / "skills"))
+    s = _settings(tmp_path, skills_dir=str(tmp_path / "skills"))
 
     modules_path = _make_modules_yaml(tmp_path, [
         {
@@ -316,7 +316,7 @@ def test_module_map_missing_yaml_logs_warning(tmp_path, caplog, monkeypatch):
 
 def test_module_map_skills_and_modules_both_injected(tmp_path, monkeypatch):
     """Both skills and module-map can be injected together."""
-    s = _settings(tmp_path, MILL_SKILLS_DIR=str(tmp_path / "skills"))
+    s = _settings(tmp_path, skills_dir=str(tmp_path / "skills"))
 
     # Create a skill
     skill_dir = tmp_path / "skills" / "board"
