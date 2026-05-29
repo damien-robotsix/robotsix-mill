@@ -63,6 +63,7 @@ def test_valid_ticket_returns_structured_markdown(settings, service):
     # Comments
     assert "### Comments" in result
     assert "**reviewer**" in result
+    assert "id=" in result
     assert "check edge cases" in result
 
 
