@@ -873,6 +873,65 @@ class TestLoadReposConfig:
         rr = load_repos_config(str(repos_file))
         assert rr.repos["r"].language is None
 
+    def test_periodic_module_curator_enabled_parsed_from_yaml(self, tmp_path):
+        """``periodic.module_curator.enabled`` is parsed into the
+        ``module_curator_periodic`` RepoConfig field."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  r:\n"
+            "    board_id: b\n"
+            "    langfuse:\n"
+            "      project_name: p\n"
+            "      public_key: pk\n"
+            "      secret_key: sk\n"
+            "    periodic:\n"
+            "      module_curator:\n"
+            "        enabled: false\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert rr.repos["r"].module_curator_periodic is False
+
+    def test_periodic_module_curator_defaults_to_true(self, tmp_path):
+        """When ``periodic`` block is absent, ``module_curator_periodic``
+        defaults to True."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  r:\n"
+            "    board_id: b\n"
+            "    langfuse:\n"
+            "      project_name: p\n"
+            "      public_key: pk\n"
+            "      secret_key: sk\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert rr.repos["r"].module_curator_periodic is True
+
+    def test_periodic_module_curator_enabled_true_parsed(self, tmp_path):
+        """``periodic.module_curator.enabled: true`` yields True."""
+        from robotsix_mill.config import load_repos_config
+
+        repos_file = tmp_path / "repos.yaml"
+        repos_file.write_text(
+            "repos:\n"
+            "  r:\n"
+            "    board_id: b\n"
+            "    langfuse:\n"
+            "      project_name: p\n"
+            "      public_key: pk\n"
+            "      secret_key: sk\n"
+            "    periodic:\n"
+            "      module_curator:\n"
+            "        enabled: true\n"
+        )
+        rr = load_repos_config(str(repos_file))
+        assert rr.repos["r"].module_curator_periodic is True
+
 
 # ---------------------------------------------------------------------------
 # 11. Semantic validators

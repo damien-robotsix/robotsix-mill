@@ -98,6 +98,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Survey pass",
         "format": "memory_drafts",
     },
+    "module-curator": {
+        "module": "module_curator_runner",
+        "function": "run_module_curator_pass",
+        "label": "Module-curator pass",
+        "format": "memory_drafts",
+    },
     "verify": {
         "module": "verify_runner",
         "function": "run_verify_pass",
@@ -431,6 +437,16 @@ def main(argv: list[str] | None = None) -> int:
         "survey", help="run an OSS project discovery survey pass"
     )
     p_survey.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- module-curator command ---
+    p_module_curator = sub.add_parser(
+        "module-curator", help="run a module taxonomy drift detection pass"
+    )
+    p_module_curator.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
