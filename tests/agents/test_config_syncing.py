@@ -183,7 +183,7 @@ def test_config_sync_config_defaults():
     """Config-sync config has correct defaults."""
     from robotsix_mill.config import Settings
     s = Settings()
-    assert s.config_sync_model == "openai/gpt-4o-mini"
+    assert s.config_sync_model == "deepseek/deepseek-v4-flash"
     assert s.config_sync_periodic is True
     assert s.config_sync_interval_seconds == 86400
     assert s.config_sync_memory_path is None

@@ -32,14 +32,14 @@ core:
     dedup: *default_model                                 # pre-refine duplicate/already-done check
     web_research: *default_model                          # web lookups — conclusion only
     review: *default_model                                # blind dual-model diff audit
-    trace_inspector: *default_model                       # inspects full Langfuse observation tree
+    trace_inspector: deepseek/deepseek-v4-flash           # inspects Langfuse observation tree — flash is plenty for summarisation
     test_gap: *default_model                              # identifies modules with zero dedicated tests
     agent_check: *default_model                           # audits agent definitions for coherence
     health: *default_model                                # codebase-health across 6 dimensions
-    survey: *default_model                                # discovers OSS projects; proposes improvements
+    survey: deepseek/deepseek-v4-flash                    # discovers OSS projects; proposes improvements — flash is plenty (cf $15.32 trace 1bfa36ab)
     doc: *default_model                                   # documentation agent
-    triage: &cheap_model openai/gpt-4o-mini               # pre-refine triage — fast/cheap classification
-    auto_approve: deepseek/deepseek-v4-flash              # auto-approve triage — flash is plenty for spec-shape classification
+    triage: &cheap_model deepseek/deepseek-v4-flash       # pre-refine triage — fast/cheap classification
+    auto_approve: *cheap_model                            # auto-approve triage — flash is plenty for spec-shape classification
     scope_triage: *cheap_model                            # scope-violation triage — fast and cheap
     doc_classifier: *cheap_model                          # doc-diff classifier gate (fast + cheap)
     rate_limit_fallback: ""                               # empty = disabled; switch when rate-limit exhausted

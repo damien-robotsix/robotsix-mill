@@ -20,7 +20,7 @@ def test_default_model_settings():
     """Representative model-name defaults."""
     s = Settings()
     assert s.model == "deepseek/deepseek-v4-pro"
-    assert s.triage_model == "openai/gpt-4o-mini"
+    assert s.triage_model == "deepseek/deepseek-v4-flash"
     assert s.explore_model == "deepseek/deepseek-v4-flash"
     assert s.test_model == "deepseek/deepseek-v4-pro"
     assert s.auto_approve_model == "deepseek/deepseek-v4-flash"

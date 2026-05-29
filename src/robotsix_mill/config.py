@@ -181,13 +181,13 @@ class Settings(BaseSettings):
     # decides whether the draft needs refinement at all.  Must be a
     # fast, inexpensive model; classification is the only task.
     triage_model: str = Field(
-        default="openai/gpt-4o-mini"
+        default="deepseek/deepseek-v4-flash"
     )
     # Model for the scope-violation triage agent — a cheap call that
     # decides whether changed-out-of-scope files are legitimate
     # expansions or scope creep. Must be fast and inexpensive.
     scope_triage_model: str = Field(
-        default="openai/gpt-4o-mini"
+        default="deepseek/deepseek-v4-flash"
     )
     # Per-call request caps (bound each role's loop). Sized for slow
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
@@ -300,7 +300,7 @@ class Settings(BaseSettings):
     )
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(
-        default="openai/gpt-4o-mini"
+        default="deepseek/deepseek-v4-flash"
     )
     doc_classifier_request_limit: int = Field(
         default=3
@@ -611,7 +611,7 @@ class Settings(BaseSettings):
     # Model for the trace inspector sub-agent — a dedicated cheap model
     # that inspects a single trace's full observation tree.
     trace_inspector_model: str = Field(
-        default="deepseek/deepseek-v4-pro",
+        default="deepseek/deepseek-v4-flash",
     )
     # Model used by the periodic trace-review runner — a cheap-by-design
     # flash model so a 50-trace sweep doesn't burn the audit budget.
@@ -1083,7 +1083,7 @@ class Settings(BaseSettings):
     # Model for the config-sync agent. Defaults to a cheap model (read-only
     # file parsing — no web research or code generation).
     config_sync_model: str = Field(
-        default="openai/gpt-4o-mini"
+        default="deepseek/deepseek-v4-flash"
     )
     # Path to the config-sync agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/config_sync_memory.md.
