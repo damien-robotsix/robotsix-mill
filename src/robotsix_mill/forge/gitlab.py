@@ -38,6 +38,8 @@ def _parse_gitlab_project_path(remote_url: str) -> str:
 
 
 class GitLabForge(Forge):
+    """GitLab adapter — opens MRs, queries pipeline status, and merges via the GitLab API."""
+
     def __init__(self, settings, repo_config=None):
         super().__init__(settings)
         self._repo_config = repo_config

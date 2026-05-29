@@ -47,6 +47,8 @@ def _parse_owner_repo(remote_url: str) -> tuple[str, str]:
 
 
 class GitHubForge(Forge):
+    """GitHub adapter — opens PRs, queries checks/reviews/files, merges, and fetches workflow logs via the GitHub REST API."""
+
     def __init__(self, settings, repo_config=None):
         super().__init__(settings)
         self._repo_config = repo_config

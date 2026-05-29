@@ -87,6 +87,7 @@ def _mint_installation_token(
 def github_token(
     settings: Settings, repo_config: RepoConfig | None = None
 ) -> str:
+    """Return a forge auth token: either a static FORGE_TOKEN from secrets or a short-lived GitHub App installation token."""
     if settings.forge_auth != "app":
         if not get_secrets().forge_token:
             raise RuntimeError("FORGE_TOKEN not set")
