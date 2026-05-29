@@ -6,6 +6,11 @@ set -eu
 # config-file templating via envsubst before handing off to the Python CLI.
 # ---------------------------------------------------------------------------
 
+# Bypass config checks for flags that should never require config.
+case "${1-}" in
+    -h|--help|-V|--version|"") exec robotsix-auto-mail "$@" ;;
+esac
+
 _TEMP_CONFIG=""
 
 # Clean up any temporary config file on exit.
