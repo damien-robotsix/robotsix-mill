@@ -27,6 +27,8 @@ RUN groupadd --gid 1000 mailbot && \
     mkdir -p /home/mailbot/data /home/mailbot/config && \
     chown mailbot:mailbot /home/mailbot/data /home/mailbot/config
 
+COPY --chown=mailbot:mailbot entrypoint.sh /usr/local/bin/entrypoint.sh
+
 USER mailbot
 
-ENTRYPOINT ["robotsix-auto-mail"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
