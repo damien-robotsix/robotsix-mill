@@ -418,3 +418,61 @@ def test_watermark_across_connections() -> None:
         conn2.close()
     finally:
         os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# record_exists
+# ---------------------------------------------------------------------------
+
+
+def test_record_exists_returns_false_when_empty() -> None:
+    """record_exists returns False when no matching row exists."""
+    conn = init_db(":memory:")
+    try:
+        from robotsix_auto_mail.db import record_exists
+
+        assert record_exists(conn, "<nonexistent@x>") is False
+    finally:
+        conn.close()
+
+
+def test_record_exists_returns_true_after_insert() -> None:
+    """record_exists returns True after a record is inserted."""
+    conn = init_db(":memory:")
+    try:
+        from robotsix_auto_mail.db import record_exists
+
+        record = _make_record(message_id="<exists@x>")
+        insert_record(conn, record)
+        assert record_exists(conn, "<exists@x>") is True
+    finally:
+        conn.close()
+
+
+def test_record_exists_fresh_connection_no_error() -> None:
+    """record_exists on a non-init_db connection (table created manually) returns False, not an error."""
+    import sqlite3
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        """\
+CREATE TABLE IF NOT EXISTS mail_records (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    imap_uid        INTEGER,
+    message_id      TEXT    NOT NULL UNIQUE,
+    sender          TEXT    NOT NULL,
+    subject         TEXT    NOT NULL,
+    date            TEXT    NOT NULL,
+    recipients_json TEXT    NOT NULL,
+    body_plain      TEXT    NOT NULL,
+    body_html       TEXT    NOT NULL,
+    attachments_json TEXT   NOT NULL
+)
+"""
+    )
+    try:
+        from robotsix_auto_mail.db import record_exists
+
+        assert record_exists(conn, "<anything@x>") is False
+    finally:
+        conn.close()

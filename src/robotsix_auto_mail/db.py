@@ -123,6 +123,20 @@ VALUES
         return cur.lastrowid
 
 
+def record_exists(conn: sqlite3.Connection, message_id: str) -> bool:
+    """Check whether a message with *message_id* already exists in the DB.
+
+    Used as a fast pre-check before ``insert_record`` to avoid
+    triggering and catching ``IntegrityError`` in the hot path.
+    The ``UNIQUE`` constraint remains the last-resort guard.
+    """
+    cur = conn.execute(
+        "SELECT 1 FROM mail_records WHERE message_id = ? LIMIT 1",
+        (message_id,),
+    )
+    return cur.fetchone() is not None
+
+
 def get_watermark(conn: sqlite3.Connection, key: str) -> str | None:
     """Return the watermark value for *key*, or ``None`` if it hasn't been set."""
     cur = conn.execute(

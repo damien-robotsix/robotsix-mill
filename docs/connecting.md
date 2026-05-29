@@ -177,3 +177,75 @@ ESMTP features:
 ```
 
 Exit code is `0` when both probes succeed, `1` when either fails.
+
+## The `ingest` command
+
+Once your configuration is in place, run the ingestion pipeline to fetch new mail
+from the IMAP server and store it in the local datastore:
+
+```sh
+$ robotsix-auto-mail ingest
+```
+
+### What it does
+
+`ingest` loads the mail configuration, then:
+
+- Opens (or creates) the local SQLite database at the configured `db_path`
+  (default: `mail.db`).
+- Opens an authenticated IMAP connection.
+- Reads the current IMAP UID watermark from the database so only messages
+  newer than the last fetch are retrieved.
+- Fetches the batch of new messages from the server.
+- Parses each raw MIME message into a structured record (sender, subject,
+  date, recipients, body, attachments).
+- Stores each record idempotently — if a message with the same `Message-ID`
+  header already exists in the database, it is counted as a duplicate skip
+  rather than inserted again.
+- Advances the watermark to the highest IMAP UID in the batch so the next
+  run starts from where this one left off.
+- Prints a human-readable summary of how many messages were fetched, newly
+  stored, skipped as duplicates, and failed with errors.
+
+If any individual message cannot be parsed or stored, its error is printed and
+the pipeline continues with the remaining messages.  Unparseable messages are
+skipped permanently (their UID is recorded past the watermark).
+
+### Representative output
+
+```text
+Fetched: 12 messages
+Stored:  10 new
+Skipped:  1 duplicate
+Errors:   1
+  UID 42 (<msg-id@example.com>): failed to parse raw bytes as MIME message
+```
+
+Exit code is `0` when no errors occurred, `1` when any errors were collected
+(including configuration-load failures).
+
+### Idempotency
+
+The pipeline is safe to re-run even if a previous run crashed partway through:
+
+- **Crash before watermark update:** Already-stored messages have their
+  `message_id` recorded in the database.  On re-run, the same UIDs are
+  re-fetched (the watermark hasn't moved), but the `UNIQUE` constraint on
+  `message_id` causes them to be counted as duplicates (skipped) rather than
+  stored again.
+- **Crash after watermark update:** The watermark has already advanced, so
+  subsequent runs start from the new watermark and never re-fetch those UIDs.
+- **Empty batch:** If no new messages exist, the pipeline returns immediately
+  without touching the watermark.
+
+### Configuration
+
+The `ingest` subcommand uses the same configuration path as `probe` (env vars
+or TOML file).  Two additional keys control the local datastore:
+
+| Variable | TOML key | Default | Purpose |
+|---|---|---|---|
+| `MAIL_DB_PATH` | `store.path` | `mail.db` | Filesystem path to the SQLite database |
+| `MAIL_IMAP_FOLDER` | `imap.folder` | `INBOX` | IMAP mailbox folder to fetch from |
+
+The database is created automatically on first use — no manual setup is needed.

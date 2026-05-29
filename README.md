@@ -24,7 +24,7 @@ This project is currently a stub — there is no source code, no build pipeline,
 
 ## Connecting
 
-Configuration keys, precedence rules, and a walkthrough of the `probe` diagnostics command are documented in [docs/connecting.md](docs/connecting.md).
+Configuration keys, precedence rules, and walkthroughs of the `probe` diagnostics command and the `ingest` mail-fetching command are documented in [docs/connecting.md](docs/connecting.md).
 
 ## License
 

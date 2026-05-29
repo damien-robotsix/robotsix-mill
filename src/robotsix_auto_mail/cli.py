@@ -11,7 +11,9 @@ from typing import TextIO
 
 from robotsix_auto_mail import __version__
 from robotsix_auto_mail.config import MailConfig, load
+from robotsix_auto_mail.db import init_db
 from robotsix_auto_mail.imap import ImapClient, ImapError
+from robotsix_auto_mail.pipeline import IngestResult, ingest_mail
 from robotsix_auto_mail.smtp_client import SmtpClient, SmtpError
 
 
@@ -28,7 +30,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub = parser.add_subparsers(dest="command", title="subcommands")
-    sub.add_parser("probe", help="Probe IMAP and SMTP servers for diagnostics")
+    sub.add_parser(
+        "probe", help="Probe IMAP and SMTP servers for diagnostics"
+    )
+    sub.add_parser("ingest", help="Fetch new mail and store it locally")
 
     return parser
 
@@ -108,6 +113,38 @@ def _cmd_probe(config: MailConfig) -> int:
     return 0 if failures == 0 else 1
 
 
+def _cmd_ingest(config: MailConfig) -> int:
+    """Run the ingest subcommand: fetch, parse, store, and update watermark.
+
+    Returns 0 on success, 1 if any errors occurred.
+    """
+    result: IngestResult | None = None
+    conn = init_db(config.db_path)
+    try:
+        with ImapClient(config) as imap_client:
+            result = ingest_mail(conn, imap_client, config)
+    finally:
+        conn.close()
+
+    # If ImapClient(config) raised before ingest_mail ran, result is None.
+    if result is None:
+        return 1
+
+    # -- Print summary -------------------------------------------------------
+    sys.stdout.write(f"Fetched: {result.total_fetched:>2} messages\n")
+    sys.stdout.write(f"Stored:  {result.stored:>2} new\n")
+    sys.stdout.write(f"Skipped: {result.skipped:>2} duplicate\n")
+    sys.stdout.write(f"Errors:  {len(result.errors):>2}\n")
+
+    if result.errors:
+        for err_obj in result.errors:
+            # Guard against empty message_id.
+            mid = f" ({err_obj.message_id})" if err_obj.message_id else ""
+            sys.stdout.write(f"  UID {err_obj.uid}{mid}: {err_obj.error}\n")
+
+    return 1 if result.errors else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse args and dispatch to the appropriate subcommand handler.
 
@@ -123,6 +160,14 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(f"Error loading configuration: {exc}\n")
             return 1
         return _cmd_probe(config)
+
+    if args.command == "ingest":
+        try:
+            config = load()
+        except Exception as exc:
+            sys.stderr.write(f"Error loading configuration: {exc}\n")
+            return 1
+        return _cmd_ingest(config)
 
     # No command given — print help and exit 1.
     parser.print_help(sys.stderr)
