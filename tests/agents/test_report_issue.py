@@ -263,15 +263,15 @@ def test_no_evidence_creates_no_file_and_no_pointer(settings):
     assert "Raw evidence attached at artifacts/evidence.txt" not in desc
 
 
-def test_evidence_truncated_at_8kb(settings):
-    """Evidence longer than 8192 bytes is truncated to exactly 8192
-    bytes before writing."""
+def test_evidence_truncated_at_64kb(settings):
+    """Evidence longer than 64 KiB is truncated to exactly 65536 bytes
+    before writing. The cap was raised from 8 KiB to 64 KiB so CI
+    logs / stack traces / longer test diagnostics survive without
+    losing signal."""
     tool = make_report_issue_tool(settings)
-    # Build exactly 8192 bytes of evidence content.
     chunk = "line "  # 5 bytes
-    evidence = chunk * 1639  # 5 * 1639 = 8195 bytes
-    # Ensure it's > 8192 bytes but not huge.
-    assert len(evidence.encode("utf-8")) > 8192
+    evidence = chunk * 14000  # 5 * 14000 = 70_000 bytes > 64 KiB
+    assert len(evidence.encode("utf-8")) > 65536
 
     out = tool("Truncation test", "body", "error", evidence=evidence)
     assert out.startswith("report_issue: filed draft ")
@@ -281,7 +281,21 @@ def test_evidence_truncated_at_8kb(settings):
     workspace = svc.workspace(t)
     evidence_path = workspace.artifacts_dir / "evidence.txt"
     written = evidence_path.read_bytes()
-    assert len(written) == 8192
+    assert len(written) == 65536
+
+
+def test_evidence_under_8kb_passes_through_after_cap_raise(settings):
+    """Sanity: a payload that was over the OLD 8 KiB cap (but under
+    the new 64 KiB cap) survives intact — guards against accidentally
+    dropping the threshold back."""
+    tool = make_report_issue_tool(settings)
+    payload = "x" * (16 * 1024)  # 16 KiB
+    tool("Mid-size evidence", "body", "error", evidence=payload)
+    svc = TicketService(settings)
+    t = svc.list()[0]
+    workspace = svc.workspace(t)
+    written = (workspace.artifacts_dir / "evidence.txt").read_bytes()
+    assert len(written) == len(payload)
 
     # Description must still have the pointer line.
     desc = workspace.read_description()

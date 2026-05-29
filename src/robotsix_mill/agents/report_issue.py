@@ -115,10 +115,17 @@ def make_report_issue_tool(
 
             evidence = (evidence or "").strip()
             if evidence:
-                # Truncate at 8 KB to keep the workspace lean.
+                # Truncate at 64 KB. The old 8 KB cap dated to smaller
+                # context windows; modern models digest 10× that
+                # easily and a CI log / stack trace often runs longer
+                # than 8 KB, forcing the agent to drop diagnostic
+                # signal. The workspace has no practical size
+                # constraint either. 64 KB is a soft sanity cap, not
+                # a context-window guard.
+                _EVIDENCE_MAX = 64 * 1024
                 evidence_bytes = evidence.encode("utf-8")
-                if len(evidence_bytes) > 8192:
-                    evidence_bytes = evidence_bytes[:8192]
+                if len(evidence_bytes) > _EVIDENCE_MAX:
+                    evidence_bytes = evidence_bytes[:_EVIDENCE_MAX]
                     # Decode back, replacing any trailing partial multi-byte char.
                     evidence = evidence_bytes.decode("utf-8", errors="ignore")
                 else:

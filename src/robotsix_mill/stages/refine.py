@@ -77,10 +77,23 @@ def _resolve_next_state(
         return State.HUMAN_ISSUE_APPROVAL, None
     if not ctx.settings.auto_approve_enabled:
         return State.HUMAN_ISSUE_APPROVAL, None
-    if source == "test_gap":
+    # Deterministic auto-approve for sources whose drafts are
+    # internal-only by construction: they're proposed by mill's own
+    # periodic agents (audit, agent_check, bc_check, …) whose scope
+    # is dead-code removal, prompt updates, memory ledger structure,
+    # config cleanup, docstring additions — no behavioural risk a
+    # human reviewer can meaningfully veto. test_gap (the original
+    # rule in 28a6b02) joins the same family. Three rounds of
+    # rubber-stamping all 21+ tickets from these sources without
+    # rejection (see 09cc) made the LLM hop pure toil.
+    _AUTO_APPROVE_SOURCES = {
+        "test_gap", "audit", "agent_check", "bc_check",
+        "completeness_check", "module_curator", "copy_paste",
+    }
+    if source in _AUTO_APPROVE_SOURCES:
         return State.READY, (
-            "auto-approve: APPROVE — test-gap (deterministic rule: "
-            "test-only tickets carry no design risk)"
+            f"auto-approve: APPROVE — {source} (deterministic rule: "
+            "mill-internal periodic-agent proposal, no design risk)"
         )
     try:
         result = refining.triage_auto_approve(

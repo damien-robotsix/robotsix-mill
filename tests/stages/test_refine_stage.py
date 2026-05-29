@@ -408,7 +408,53 @@ def test_auto_approve_test_gap_source_short_circuits_to_ready(
 
     assert out.next_state is State.READY
     assert "auto-approve: APPROVE" in out.note
-    assert "test-gap" in out.note
+    assert "test_gap" in out.note
+
+
+def test_auto_approve_audit_source_also_short_circuits(
+    ctx_factory, monkeypatch,
+):
+    """Round 3: audit, agent_check, bc_check, completeness_check,
+    module_curator, copy_paste join test_gap as deterministic
+    auto-approve sources. These are mill-internal periodic agents
+    whose drafts are dead-code / prompt / config / docstring
+    cleanups — historically every one was rubber-stamped without
+    rejection, so the LLM triage was pure toil."""
+    for source in (
+        "audit", "agent_check", "bc_check", "completeness_check",
+        "module_curator", "copy_paste",
+    ):
+        ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
+                          refine_triage_enabled="false")
+        t = ctx.service.create(
+            f"{source} proposal",
+            "Substantive ticket body padded above the trivial-draft "
+            "threshold so refine actually exercises the auto-approve "
+            "gate against the source-based rule.",
+            source=source,
+        )
+        triage_calls: list = []
+
+        def fail_if_called(**_):
+            triage_calls.append(True)
+            raise AssertionError(
+                f"triage_auto_approve must not be called for {source}",
+            )
+
+        _apply_default_mocks(
+            monkeypatch,
+            run_refine_agent=_mock_refine_ok(
+                spec_markdown="## Problem\nDo a thing",
+            ),
+            triage_auto_approve=fail_if_called,
+        )
+
+        out = RefineStage().run(t, ctx)
+        assert out.next_state is State.READY, (
+            f"{source}: expected READY, got {out.next_state}"
+        )
+        assert source in (out.note or ""), out.note
+        assert triage_calls == []
     assert triage_calls == []
 
 
