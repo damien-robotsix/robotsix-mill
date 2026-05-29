@@ -96,12 +96,12 @@ RUN groupadd --system --gid 1000 mill \
 
 WORKDIR /app
 
-ENV MILL_DATA_DIR=/data
-# Bind the API on all interfaces inside the container so a future web
-# frontend / published port can reach it; still localhost-only unless
-# the port is published in compose.
-ENV MILL_API_HOST=0.0.0.0
-ENV MILL_API_URL=http://127.0.0.1:8077
+# Runtime config used to be set here via MILL_* env vars (data_dir,
+# api_host, api_url). The MILL_* alias surface was retired in
+# 9cd2630; the equivalent settings now live in config/mill.local.yaml
+# (data_dir, api_host, api_url) and ship to the container via the
+# config/ bind-mount in docker-compose.yml. See config/mill.local.example.yaml
+# for the canonical operator surface.
 EXPOSE 8077
 
 # Health check uses Python stdlib (no curl needed).
