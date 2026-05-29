@@ -361,6 +361,9 @@ def build_fs_tools(
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
+        if not p.is_file():
+            return f"error: {path!r} is not a file"
+
         # Normalize offset (offset ≤ 0 is treated as 1).
         _offset = offset if offset >= 1 else 1
         is_full_read = _offset == 1 and limit is None
