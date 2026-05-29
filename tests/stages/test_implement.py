@@ -1434,3 +1434,126 @@ def test_persistence_without_file_map_still_writes(ctx_factory, tmp_path, monkey
     assert summary_path.exists(), (
         "implement_summary.md should exist from agent summary"
     )
+
+
+# --- unit tests for _run_scope_guardrail --------------------------------
+
+
+def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monkeypatch):
+    """scope_triage_enabled=False: any out-of-scope file → BLOCKED outcome."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+        MILL_SCOPE_TRIAGE_ENABLED="false",
+    )
+    t = _ticket(ctx)
+    # file_map only allows "a.txt"
+    _write_file_map(ctx, t, "a.txt")
+
+    # Write out-of-scope file to the repo so git_ops.changed_files
+    # sees it as a change from origin/main.
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "b.txt").write_text("out of scope")
+    # Commit so that changed_files detects it against origin/main
+    # (changed_files uses diff between HEAD and origin/<target>).
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-q", "-m", "wip")
+    # Write file_map.json so the guardrail has a scope to enforce.
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "a.txt", "note": "only a.txt"}]', encoding="utf-8",
+    )
+    settings = ctx.settings
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx, t, repo, f"mill/{t.id}",
+        summary="agent summary", ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "return"
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "scope violation" in result.outcome.note
+    assert "b.txt" in result.outcome.note
+
+
+def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
+    ctx_factory, tmp_path, monkeypatch,
+):
+    """When all out-of-scope files were already REJECTed in prior comments,
+    the dedup guard fires → skip_iteration (implicit EXPAND)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, MILL_TEST_COMMAND="true",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    # Seed a prior scope-triage REJECT comment naming b.txt.
+    ctx.service.add_comment(
+        t.id,
+        "[scope-triage] REJECT: prior run\n\nOut-of-scope:\n- `b.txt`",
+        author="scope-triage",
+    )
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "b.txt").write_text("out of scope again")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-q", "-m", "wip")
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "a.txt", "note": "only a.txt"}]', encoding="utf-8",
+    )
+    settings = ctx.settings
+
+    # Mock the scope-triage agent to return REJECT (the dedup guard
+    # should intercept before this matters, but the agent is called).
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+        return ScopeTriageVerdict(
+            action="REJECT",
+            justification="Still out of scope",
+            expand_files=[],
+        )
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx, t, repo, f"mill/{t.id}",
+        summary="agent summary", ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "skip_iteration"
+    # file_map was expanded in-place to include b.txt
+    assert result.file_map is not None
+    assert "b.txt" in result.file_map
+    assert result.feedback is None
+
+
+# --- misc helper --------------------------------------------------------
+
+def _clone_repo_to(ctx, remote_url, repo_dir):
+    """Clone to *repo_dir* without the full stage machinery."""
+    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.forge.auth import github_token
+
+    if repo_dir.exists():
+        import shutil
+        shutil.rmtree(repo_dir)
+    token = None
+    try:
+        token = github_token(ctx.settings, repo_config=ctx.repo_config)
+    except RuntimeError:
+        pass
+    git_ops.clone(remote_url, repo_dir, ctx.settings.forge_target_branch, token)
