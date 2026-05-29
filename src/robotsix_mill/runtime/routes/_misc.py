@@ -1,17 +1,21 @@
-"""Miscellaneous route handlers — health, status, board, runs, active."""
+"""Miscellaneous route handlers — health, status, board, runs, active,
+WebSocket board push."""
 
 from __future__ import annotations
 
 import json as _json
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from ...core.states import State
 from ..board_html import BOARD_HTML
 from ..deps import (
+    enrich_ticket_read,
+    get_broadcaster,
     get_repos_registry,
     get_run_registry,
+    get_service,
     get_settings,
     get_worker,
 )
@@ -158,3 +162,48 @@ def list_active(
                     filtered.append(item)
             active = filtered
     return active
+
+
+# -- WebSocket board push --------------------------------------------------
+
+
+@router.websocket("/ws/board")
+async def ws_board(
+    websocket: WebSocket,
+    request: Request,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+    broadcaster=Depends(get_broadcaster),
+):
+    """WebSocket endpoint for real-time board updates.
+
+    On connect, sends the full ticket list as the first message so the
+    board doesn't need an initial HTTP fetch.  Subsequent messages are
+    ``ticket_update`` events pushed by the broadcaster whenever a
+    ticket state transition occurs.
+    """
+    await websocket.accept()
+
+    # Build the initial ticket list (same as GET /tickets, excluding
+    # closed by default — matches the board's initial render).
+    exclude = {State.CLOSED, State.EPIC_CLOSED}
+    tickets = svc.list(exclude_states=exclude)
+    initial = [
+        enrich_ticket_read(
+            t, settings, svc, blocking_cost=False, fetch_pr_url=False,
+        ).model_dump(mode="json")
+        for t in tickets
+    ]
+
+    q = await broadcaster.subscribe(initial)
+
+    try:
+        while True:
+            data = await q.get()
+            await websocket.send_text(data)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        broadcaster.unsubscribe(q)

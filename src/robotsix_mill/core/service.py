@@ -1092,6 +1092,7 @@ class TicketService:
                 )
             )
             s.commit()
+            s.refresh(ticket)
             log.info(
                 "%s: auto-resumed from AWAITING_USER_REPLY → %s "
                 "(all %d ask_user threads closed)",
@@ -1099,6 +1100,8 @@ class TicketService:
                 dst.value,
                 len(ask_threads),
             )
+            if self._on_transition is not None:
+                self._on_transition(ticket)
 
     def reopen_thread(
         self,
