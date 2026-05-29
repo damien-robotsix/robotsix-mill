@@ -1,9 +1,14 @@
 # Keep local-only artifacts out of the build context so they can't be
-# baked into the image (notably .mill-data).
+# baked into the image (notably .mill-data, .data).
 .git
 .venv
 venv
 .mill-data
+# Host's data dir — bind-mounted to /data in compose, so it must NOT be
+# baked into /app/.data via the `COPY . /app` step. When it was baked in,
+# every restart resurrected stale test pollution and divorced the running
+# mill from what the host shows.
+.data
 .pytest_cache
 __pycache__
 *.py[cod]
