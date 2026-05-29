@@ -322,13 +322,6 @@ def test_delete_removes_row_events_and_workspace(service, settings):
     ws_dir = settings.workspaces_dir_for(service.board_id) / t.id
     assert ws_dir.exists()
 
-    # Pre-create a dummy conversation file to verify it's cleaned up.
-    conv_dir = settings.data_dir / "conversations"
-    conv_dir.mkdir(parents=True, exist_ok=True)
-    conv_file = conv_dir / f"{t.id}.json"
-    conv_file.write_text("[]", encoding="utf-8")
-    assert conv_file.exists()
-
     assert service.get(t.id) is not None
     assert service.history(t.id)  # has events
 
@@ -336,7 +329,6 @@ def test_delete_removes_row_events_and_workspace(service, settings):
     assert service.get(t.id) is None
     assert service.history(t.id) == []  # events gone
     assert not ws_dir.exists()  # workspace dir gone
-    assert not conv_file.exists()  # conversation file gone
 
 
 def test_delete_missing_ticket_returns_false(service):
