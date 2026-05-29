@@ -130,7 +130,9 @@ class RunRegistry:
                     break
             self.flush()
 
-    def most_recent(self, kind: str) -> dict | None:
+    def most_recent(
+        self, kind: str, repo_id: str | None = None,
+    ) -> dict | None:
         """Return the newest successful entry of the given *kind*.
 
         Only ``status == "ok"`` counts as "ran" for the periodic
@@ -138,11 +140,18 @@ class RunRegistry:
         an errored run hasn't actually executed the work, so the
         next fire window should be measured from the last successful
         run instead of bumping forward on every crash.
+
+        When *repo_id* is given, only entries with a matching
+        ``repo_id`` are considered. ``repo_id=None`` (default) keeps
+        the legacy any-repo behaviour for non-per-repo callers.
         """
         with self._lock:
             for e in reversed(self._entries):
-                if e.kind == kind and e.status == "ok":
-                    return asdict(e)
+                if e.kind != kind or e.status != "ok":
+                    continue
+                if repo_id is not None and e.repo_id != repo_id:
+                    continue
+                return asdict(e)
             return None
 
     def list_all(self) -> list[dict]:

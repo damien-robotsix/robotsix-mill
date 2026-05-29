@@ -903,7 +903,7 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
     async def counting_sleep(delay):
         nonlocal sleep_calls
         sleep_calls += 1
-        if sleep_calls >= 2:  # after initial delay + one loop iteration
+        if sleep_calls >= 2:  # after initial sleep + one body iteration
             raise asyncio.CancelledError
         await _real_sleep(0)
 
@@ -911,7 +911,11 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
 
     w = Worker(ctx)
     with pytest.raises(asyncio.CancelledError):
-        await w._run_periodic_pass_per_repo("audit", fake_runner, 60)
+        await w._run_periodic_pass_per_repo(
+            "audit", fake_runner,
+            settings_interval_attr="audit_interval_seconds",
+            settings_enabled_attr="audit_periodic",
+        )
 
     assert seen.get("root_opened") is True
     assert seen.get("repo_config") is not None, (
