@@ -13,6 +13,8 @@ from ..config import RepoConfig, Settings
 
 
 class Forge(ABC):
+    """Abstract contract for forge adapters: open MR/PR, query status, reviews, and merge."""
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
