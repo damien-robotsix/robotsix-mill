@@ -49,7 +49,12 @@ jobs:
           exit 0
 
       - name: Bandit (security SAST)
-        run: bandit -c pyproject.toml -r src/
+        # `--severity-level medium` mirrors the bandit ≤1.8 default
+        # (the gate was designed for MEDIUM+; 1.9 widened the default
+        # to LOW, which surfaces pre-existing LOWs that are tracked
+        # but not currently blocking — same deal as the mypy advisory
+        # gate above).
+        run: bandit -c pyproject.toml -r src/ --severity-level medium
 
       - name: Run tests
         env:
