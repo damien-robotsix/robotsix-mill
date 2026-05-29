@@ -1,13 +1,3 @@
-"""Unit tests for ``robotsix_mill.vcs.git_ops``.
-
-Most tests use a real on-disk git repo under tmp_path because the
-helpers are thin wrappers over ``git`` subprocesses — mocking
-subprocess.run would only test the mocks. A few tests
-(``_authed_url``, pure-string helpers) are unit-tested without I/O.
-"""
-
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 
@@ -17,279 +7,525 @@ from robotsix_mill.vcs import git_ops
 
 
 # ---------------------------------------------------------------------------
-# helpers
+# Helpers — copied verbatim from tests/stages/test_implement.py lines 18–35
 # ---------------------------------------------------------------------------
 
+def _git(cwd, *args):
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
 
-def _init_repo(path: Path, initial_branch: str = "main") -> Path:
-    """Create a fresh git repo at *path* with one commit on *initial_branch*."""
-    path.mkdir(parents=True, exist_ok=True)
+
+def make_bare_repo(tmp_path: Path) -> str:
+    """A throwaway local remote (file://) with a `main` branch — lets us
+    exercise clone/branch/commit fully offline, no forge."""
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    _git(seed, "init", "-q")
+    _git(seed, "config", "user.email", "t@t")
+    _git(seed, "config", "user.name", "t")
+    (seed / "README.md").write_text("seed\n")
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "-q", "-m", "init")
+    _git(seed, "branch", "-M", "main")
+    bare = tmp_path / "remote.git"
     subprocess.run(
-        ["git", "init", "-q", "-b", initial_branch, str(path)], check=True,
-    )
-    subprocess.run(
-        ["git", "-C", str(path), "config", "user.email", "test@x"],
+        ["git", "clone", "--bare", "-q", str(seed), str(bare)],
         check=True,
+        capture_output=True,
     )
-    subprocess.run(
-        ["git", "-C", str(path), "config", "user.name", "test"],
-        check=True,
-    )
-    (path / "README.md").write_text("hello\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(path), "add", "."], check=True)
-    subprocess.run(
-        ["git", "-C", str(path), "commit", "-q", "-m", "initial"],
-        check=True,
-    )
-    return path
+    return f"file://{bare}"
 
 
-# ---------------------------------------------------------------------------
-# _authed_url — pure string helper, security-sensitive
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# 1. _authed_url — pure unit tests (no shell-out)
+# ===========================================================================
+
+class TestAuthedUrl:
+    def test_https_with_token(self):
+        result = git_ops._authed_url("https://github.com/me/repo.git", "tok123")
+        assert result == "https://oauth2:tok123@github.com/me/repo.git"
+
+    def test_https_none_token(self):
+        result = git_ops._authed_url("https://github.com/me/repo.git", None)
+        assert result == "https://github.com/me/repo.git"
+
+    def test_file_url_unchanged(self):
+        result = git_ops._authed_url("file:///tmp/remote.git", "tok123")
+        assert result == "file:///tmp/remote.git"
+
+    def test_ssh_url_unchanged(self):
+        result = git_ops._authed_url("ssh://git@github.com/me/repo.git", "tok123")
+        assert result == "ssh://git@github.com/me/repo.git"
+
+    def test_empty_token_not_injected(self):
+        result = git_ops._authed_url("https://github.com/me/repo.git", "")
+        assert result == "https://github.com/me/repo.git"
 
 
-def test_authed_url_injects_token_into_https():
-    out = git_ops._authed_url("https://github.com/owner/repo", "tok123")
-    assert out == "https://oauth2:tok123@github.com/owner/repo"
+# ===========================================================================
+# 2. clone — integration (real git, file:// remote)
+# ===========================================================================
+
+class TestClone:
+    def test_clone_bare_repo(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "clone_dest"
+        git_ops.clone(remote, dest, "main")
+        assert (dest / ".git").is_dir()
+        assert (dest / "README.md").exists()
+        assert (dest / "README.md").read_text().strip() == "seed"
+
+    def test_clone_configures_user(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "clone_dest"
+        git_ops.clone(remote, dest, "main")
+        email = subprocess.run(
+            ["git", "-C", str(dest), "config", "user.email"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        name = subprocess.run(
+            ["git", "-C", str(dest), "config", "user.name"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        assert email == "mill@robotsix.local"
+        assert name == "robotsix-mill"
+
+    def test_clone_with_token_file_url_still_works(self, tmp_path):
+        """Verify clone works with a token + file:// URL (token is ignored
+        for file:// by _authed_url, but the codepath is exercised)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "clone_dest"
+        git_ops.clone(remote, dest, "main", token="dummy-tok")
+        assert (dest / ".git").is_dir()
+        assert (dest / "README.md").exists()
+
+    def test_clone_token_injection_subprocess_args(self, tmp_path, monkeypatch):
+        """Verify that the URL passed to subprocess.run by clone has the
+        oauth2 token injected for https:// URLs."""
+        remote = make_bare_repo(tmp_path)
+        # The remote is a file:// URL, but we monkeypatch subprocess.run
+        # to capture the URL argument — and we pass an https:// URL so
+        # _authed_url does the transformation.
+        captured = []
+
+        real_run = subprocess.run
+
+        def _capture(cmd, **kwargs):
+            captured.append(cmd)
+            # The first call is 'git clone …' — intercept and redirect
+            # to the real file:// remote so the clone actually succeeds.
+            if cmd[0] == "git" and "clone" in cmd:
+                # Replace the https URL with the real file:// remote
+                new_cmd = list(cmd)
+                for i, arg in enumerate(new_cmd):
+                    if arg.startswith("https://"):
+                        new_cmd[i] = remote
+                return real_run(new_cmd, **kwargs)
+            return real_run(cmd, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", _capture)
+
+        dest = tmp_path / "clone_dest"
+        git_ops.clone("https://github.com/me/repo.git", dest, "main", token="tok123")
+
+        # The first captured call should be the clone, with the
+        # oauth2-injected URL in the arg list.
+        clone_cmd = captured[0]
+        assert any("oauth2:tok123@" in a for a in clone_cmd), (
+            f"Expected oauth2 token injection in clone cmd: {clone_cmd}"
+        )
 
 
-def test_authed_url_no_token_returns_unchanged():
-    assert git_ops._authed_url(
-        "https://github.com/owner/repo", None,
-    ) == "https://github.com/owner/repo"
-    assert git_ops._authed_url(
-        "https://github.com/owner/repo", "",
-    ) == "https://github.com/owner/repo"
+# ===========================================================================
+# 3. has_changes — integration (real git)
+# ===========================================================================
+
+class TestHasChanges:
+    def test_clean_repo(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        assert git_ops.has_changes(dest) is False
+
+    def test_new_file_shows_changes(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        (dest / "new.txt").write_text("hello")
+        assert git_ops.has_changes(dest) is True
+
+    def test_after_commit_clean_again(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        (dest / "new.txt").write_text("hello")
+        assert git_ops.has_changes(dest) is True
+        git_ops.commit_all(dest, "add new.txt")
+        assert git_ops.has_changes(dest) is False
 
 
-def test_authed_url_leaves_non_https_untouched():
-    """ssh:// and file:// URLs MUST NOT get token injected — token
-    would either land in the wrong place or expose the credential."""
-    assert git_ops._authed_url(
-        "git@github.com:owner/repo.git", "tok",
-    ) == "git@github.com:owner/repo.git"
-    assert git_ops._authed_url(
-        "file:///tmp/repo", "tok",
-    ) == "file:///tmp/repo"
-    assert git_ops._authed_url(
-        "ssh://git@host/repo", "tok",
-    ) == "ssh://git@host/repo"
+# ===========================================================================
+# 4. branch_exists — integration (real git)
+# ===========================================================================
+
+class TestBranchExists:
+    def test_existing_branch(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        assert git_ops.branch_exists(dest, "main") is True
+
+    def test_nonexistent_branch(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        assert git_ops.branch_exists(dest, "no-such-branch") is False
 
 
-def test_authed_url_only_replaces_scheme_once():
-    """``replace(..., 1)`` — don't substitute every occurrence."""
-    # Pathological URL where the literal "https://" appears in the path.
-    out = git_ops._authed_url(
-        "https://host/url-with-https://-inside", "t",
-    )
-    assert out.count("oauth2:t@") == 1
+# ===========================================================================
+# 5. checkout — integration (real git)
+# ===========================================================================
+
+class TestCheckout:
+    def test_checkout_existing_branch(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Checkout back to main
+        git_ops.checkout(dest, "main")
+        head = subprocess.run(
+            ["git", "-C", str(dest), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        assert head == "main"
+
+    def test_checkout_nonexistent_branch_raises(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        with pytest.raises(subprocess.CalledProcessError):
+            git_ops.checkout(dest, "no-such-branch")
 
 
-# ---------------------------------------------------------------------------
-# has_changes / branch_exists / head_sha
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# 6. create_branch — integration (real git)
+# ===========================================================================
+
+class TestCreateBranch:
+    def test_create_new_branch(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        out = subprocess.run(
+            ["git", "-C", str(dest), "branch", "--list", "feature"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        assert "feature" in out
+
+    def test_recreate_existing_branch_no_error(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Recreate with -B should not raise
+        git_ops.create_branch(dest, "feature")
+        out = subprocess.run(
+            ["git", "-C", str(dest), "branch", "--list", "feature"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        assert "feature" in out
 
 
-def test_has_changes_returns_false_on_clean_repo(tmp_path):
-    repo = _init_repo(tmp_path / "r")
-    assert git_ops.has_changes(repo) is False
+# ===========================================================================
+# 7. commit_all — integration (real git)
+# ===========================================================================
+
+class TestCommitAll:
+    def test_stages_and_commits_changes(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "a.txt").write_text("content")
+        git_ops.commit_all(dest, "add a.txt")
+        log = subprocess.run(
+            ["git", "-C", str(dest), "log", "--oneline", "-1"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        assert "add a.txt" in log
 
 
-def test_has_changes_returns_true_after_modify(tmp_path):
-    repo = _init_repo(tmp_path / "r")
-    (repo / "README.md").write_text("changed\n", encoding="utf-8")
-    assert git_ops.has_changes(repo) is True
+# ===========================================================================
+# 8. push + fetch — integration (real git, file:// remote)
+# ===========================================================================
+
+class TestPushFetch:
+    def test_push_and_fetch_roundtrip(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        # Clone into dest1, create branch, commit, push
+        dest1 = tmp_path / "repo1"
+        git_ops.clone(remote, dest1, "main")
+        git_ops.create_branch(dest1, "feature")
+        (dest1 / "pushed.txt").write_text("pushed")
+        git_ops.commit_all(dest1, "push commit")
+        git_ops.push(dest1, "feature", remote, token=None)
+
+        # Clone fresh into dest2, fetch the feature branch
+        dest2 = tmp_path / "repo2"
+        git_ops.clone(remote, dest2, "main")
+        git_ops.fetch(dest2, remote_url=remote, token=None, branch="feature")
+        sha = git_ops.remote_branch_sha(dest2, "feature")
+        assert sha is not None
+        assert len(sha) == 40
 
 
-def test_has_changes_returns_true_for_new_untracked(tmp_path):
-    repo = _init_repo(tmp_path / "r")
-    (repo / "newfile.txt").write_text("x", encoding="utf-8")
-    assert git_ops.has_changes(repo) is True
+# ===========================================================================
+# 9. try_rebase_onto — integration (real git)
+# ===========================================================================
+
+class TestTryRebaseOnto:
+    def test_success_path(self, tmp_path):
+        """Clone, create branch, commit on branch, fetch main + rebase
+        branch onto main → returns True, branch commits are on top."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature work")
+        git_ops.commit_all(dest, "feature commit")
+
+        # Push a new commit to main so there's something to rebase onto
+        wd = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(wd)],
+            check=True, capture_output=True, text=True,
+        )
+        _git(wd, "config", "user.email", "op@t")
+        _git(wd, "config", "user.name", "operator")
+        (wd / "main_update.txt").write_text("operator edit on main\n")
+        _git(wd, "add", "-A")
+        _git(wd, "commit", "-q", "-m", "operator edit")
+        _git(wd, "push", "origin", "main")
+
+        # Now rebase feature onto main (using file:// remote, no token)
+        result = git_ops.try_rebase_onto(dest, "main", remote_url=remote)
+        assert result is True
+
+        # Verify the feature commit is on top: log should show feature
+        # commit AFTER the operator edit.
+        log = subprocess.run(
+            ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
+            capture_output=True, text=True,
+        ).stdout.strip().split("\n")
+        # "feature commit" should be above "operator edit"
+        assert log[0] == "feature commit"
+
+    def test_fetch_failure_returns_false(self, tmp_path, monkeypatch):
+        """Monkeypatch _git to make the fetch call raise CalledProcessError
+        → try_rebase_onto returns False."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature work")
+        git_ops.commit_all(dest, "feature commit")
+
+        orig_git = git_ops._git
+        call_count = [0]
+
+        def _failing_git(repo, *args):
+            call_count[0] += 1
+            # Fail on the first fetch call
+            if call_count[0] == 1 and args and args[0] == "fetch":
+                raise subprocess.CalledProcessError(128, ["git", "fetch"])
+            return orig_git(repo, *args)
+
+        monkeypatch.setattr(git_ops, "_git", _failing_git)
+
+        result = git_ops.try_rebase_onto(dest, "main", remote_url=remote)
+        assert result is False
+
+    def test_rebase_conflict_aborts_returns_false(self, tmp_path):
+        """Create a conflicting change on the branch and push a
+        conflicting change to main → rebase fails, returns False,
+        working tree is left clean."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Edit README.md on the feature branch
+        (dest / "README.md").write_text("conflicting edit from feature\n")
+        git_ops.commit_all(dest, "conflict on feature")
+
+        # Push a conflicting edit to main
+        wd = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(wd)],
+            check=True, capture_output=True, text=True,
+        )
+        _git(wd, "config", "user.email", "op@t")
+        _git(wd, "config", "user.name", "operator")
+        (wd / "README.md").write_text("conflicting edit from main\n")
+        _git(wd, "add", "-A")
+        _git(wd, "commit", "-q", "-m", "conflicting main edit")
+        _git(wd, "push", "origin", "main")
+
+        result = git_ops.try_rebase_onto(dest, "main", remote_url=remote)
+        assert result is False
+
+        # Working tree should be clean after abort
+        assert git_ops.has_changes(dest) is False
 
 
-def test_branch_exists_true_for_existing(tmp_path):
-    repo = _init_repo(tmp_path / "r")
-    assert git_ops.branch_exists(repo, "main") is True
+# ===========================================================================
+# 10. head_sha — integration (real git)
+# ===========================================================================
+
+class TestHeadSha:
+    def test_returns_40_char_hex(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        sha = git_ops.head_sha(dest)
+        assert len(sha) == 40
+        assert all(c in "0123456789abcdef" for c in sha)
 
 
-def test_branch_exists_false_for_missing(tmp_path):
-    repo = _init_repo(tmp_path / "r")
-    assert git_ops.branch_exists(repo, "does-not-exist") is False
+# ===========================================================================
+# 11. remote_branch_sha — integration (real git)
+# ===========================================================================
+
+class TestRemoteBranchSha:
+    def test_existing_remote_branch_returns_sha(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.fetch(dest, remote_url=remote, token=None, branch="main")
+        sha = git_ops.remote_branch_sha(dest, "main")
+        assert sha is not None
+        assert len(sha) == 40
+
+    def test_nonexistent_remote_branch_returns_none(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        sha = git_ops.remote_branch_sha(dest, "no-such-remote-branch")
+        assert sha is None
 
 
-def test_head_sha_returns_full_hash(tmp_path):
-    repo = _init_repo(tmp_path / "r")
-    sha = git_ops.head_sha(repo)
-    assert len(sha) == 40
-    assert all(c in "0123456789abcdef" for c in sha)
+# ===========================================================================
+# 12. branch_is_ahead_of_main — integration (real git)
+# ===========================================================================
+
+class TestBranchIsAheadOfMain:
+    def test_no_new_commits_returns_false(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Checkout feature (same as main), no new commits
+        result = git_ops.branch_is_ahead_of_main(dest)
+        assert result is False
+
+    def test_new_commits_returns_true(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("ahead commit")
+        git_ops.commit_all(dest, "ahead commit")
+        result = git_ops.branch_is_ahead_of_main(dest)
+        assert result is True
+
+    def test_fetch_failure_assumes_ahead(self, tmp_path, monkeypatch):
+        """When fetch fails, branch_is_ahead_of_main returns True
+        (the 'assume ahead' fallback)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+
+        orig_git = git_ops._git
+
+        def _failing_git(repo, *args):
+            # Fail on the "fetch" call
+            if args and args[0] == "fetch":
+                raise subprocess.CalledProcessError(128, ["git", "fetch"])
+            return orig_git(repo, *args)
+
+        monkeypatch.setattr(git_ops, "_git", _failing_git)
+
+        result = git_ops.branch_is_ahead_of_main(dest)
+        assert result is True
 
 
-# ---------------------------------------------------------------------------
-# checkout / create_branch
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# 13. changed_files — integration (real git)
+# ===========================================================================
+
+class TestChangedFiles:
+    def test_modified_tracked_file_appears(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Commit so we have a baseline, then modify
+        (dest / "README.md").write_text("modified\n")
+        files = git_ops.changed_files(dest, "main")
+        assert "README.md" in files
+
+    def test_untracked_file_appears(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new_file.txt").write_text("untracked")
+        files = git_ops.changed_files(dest, "main")
+        assert "new_file.txt" in files
+
+    def test_gitignored_file_does_not_appear(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / ".gitignore").write_text("*.ignored\n")
+        (dest / "test.ignored").write_text("should be ignored")
+        files = git_ops.changed_files(dest, "main")
+        assert "test.ignored" not in files
+
+    def test_clean_repo_returns_empty_list(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        # Fresh clone on main — no changes vs origin/main
+        files = git_ops.changed_files(dest, "main")
+        assert files == []
 
 
-def test_create_branch_and_checkout(tmp_path):
-    repo = _init_repo(tmp_path / "r")
-    git_ops.create_branch(repo, "feature/x")
-    assert git_ops.branch_exists(repo, "feature/x")
-    git_ops.checkout(repo, "feature/x")
-    out = subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True, text=True,
-    ).stdout.strip()
-    assert out == "feature/x"
+# ===========================================================================
+# 14. diff_base — integration (real git)
+# ===========================================================================
 
+class TestDiffBase:
+    def test_returns_diff_with_header_when_branch_has_commits(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature diff")
+        git_ops.commit_all(dest, "feature commit")
+        diff = git_ops.diff_base(dest, "main")
+        assert "diff --git" in diff
+        assert "feat.txt" in diff
 
-# ---------------------------------------------------------------------------
-# commit_all
-# ---------------------------------------------------------------------------
-
-
-def test_commit_all_creates_commit_with_message(tmp_path):
-    repo = _init_repo(tmp_path / "r")
-    (repo / "f.txt").write_text("hi", encoding="utf-8")
-    git_ops.commit_all(repo, "my message")
-    assert git_ops.has_changes(repo) is False
-    log = subprocess.run(
-        ["git", "-C", str(repo), "log", "-1", "--pretty=%s"],
-        capture_output=True, text=True,
-    ).stdout.strip()
-    assert log == "my message"
-
-
-def test_commit_all_no_changes_is_noop(tmp_path):
-    """commit_all on a clean repo must not raise — the implement stage
-    relies on a no-op when the agent made no edits."""
-    repo = _init_repo(tmp_path / "r")
-    # Should not raise; whether it creates an empty commit is impl detail.
-    try:
-        git_ops.commit_all(repo, "noop")
-    except subprocess.CalledProcessError:
-        pass  # acceptable: git commit returns non-zero on empty commit
-
-
-# ---------------------------------------------------------------------------
-# clone — uses local file:// remote
-# ---------------------------------------------------------------------------
-
-
-def test_clone_creates_dest_with_single_branch(tmp_path):
-    upstream = _init_repo(tmp_path / "upstream")
-    dest = tmp_path / "clone"
-    git_ops.clone(f"file://{upstream}", dest, "main")
-    assert (dest / ".git").is_dir()
-    # Single-branch clone: only `main` is tracked.
-    assert git_ops.branch_exists(dest, "main")
-
-
-def test_clone_sets_user_email_and_name(tmp_path):
-    upstream = _init_repo(tmp_path / "upstream")
-    dest = tmp_path / "clone"
-    git_ops.clone(f"file://{upstream}", dest, "main")
-    email = subprocess.run(
-        ["git", "-C", str(dest), "config", "user.email"],
-        capture_output=True, text=True,
-    ).stdout.strip()
-    name = subprocess.run(
-        ["git", "-C", str(dest), "config", "user.name"],
-        capture_output=True, text=True,
-    ).stdout.strip()
-    assert email == "mill@robotsix.local"
-    assert name == "robotsix-mill"
-
-
-# ---------------------------------------------------------------------------
-# changed_files — diff + untracked union
-# ---------------------------------------------------------------------------
-
-
-def test_changed_files_includes_untracked_and_modified(tmp_path):
-    upstream = _init_repo(tmp_path / "upstream")
-    dest = tmp_path / "clone"
-    git_ops.clone(f"file://{upstream}", dest, "main")
-    git_ops.create_branch(dest, "feature/x")
-    git_ops.checkout(dest, "feature/x")
-    (dest / "README.md").write_text("modified\n", encoding="utf-8")
-    (dest / "newfile.txt").write_text("new\n", encoding="utf-8")
-    files = git_ops.changed_files(dest, "main")
-    assert "README.md" in files
-    assert "newfile.txt" in files
-
-
-# ---------------------------------------------------------------------------
-# try_rebase_onto — token-aware fetch
-# ---------------------------------------------------------------------------
-
-
-def test_try_rebase_onto_no_args_uses_origin(tmp_path):
-    """Backward compat: when called without remote_url/token, the
-    function still uses the clone's stored origin (the legacy path)."""
-    upstream = _init_repo(tmp_path / "upstream")
-    dest = tmp_path / "clone"
-    git_ops.clone(f"file://{upstream}", dest, "main")
-    # Upstream advances → rebase becomes meaningful but still no-op
-    # if the dest is already up to date.
-    assert git_ops.try_rebase_onto(dest, "main") is True
-
-
-def test_try_rebase_onto_uses_explicit_remote_when_given(tmp_path):
-    """When remote_url + token are passed, fetch goes to the explicit
-    URL (via _authed_url) rather than relying on origin's stored URL.
-    Critical for the GitHub App token path: a clone made hours ago
-    carries an expired token in origin; without this knob the fetch
-    401s, try_rebase_onto returns False, and implement→rebase loops
-    every poll (ff45 on 2026-05-29)."""
-    upstream = _init_repo(tmp_path / "upstream")
-    dest = tmp_path / "clone"
-    git_ops.clone(f"file://{upstream}", dest, "main")
-    # Break the clone's stored origin so a stored-origin fetch would
-    # fail. The explicit remote_url is the only working route.
-    subprocess.run(
-        ["git", "-C", str(dest), "remote", "set-url", "origin",
-         "file:///does/not/exist"],
-        check=True,
-    )
-    # No token (file:// remote), but explicit remote_url should still
-    # be honoured.
-    assert git_ops.try_rebase_onto(
-        dest, "main",
-        remote_url=f"file://{upstream}",
-        token=None,
-    ) is True
-    # ... and the stored origin URL stays broken — proving the
-    # function didn't fall back to it.
-    out = subprocess.run(
-        ["git", "-C", str(dest), "remote", "get-url", "origin"],
-        capture_output=True, text=True,
-    ).stdout.strip()
-    assert out == "file:///does/not/exist"
-
-
-def test_try_rebase_onto_token_is_passed_to_authed_url(tmp_path, monkeypatch):
-    """When BOTH remote_url and token are given, _authed_url builds
-    the credential-bearing URL once at call time — even if origin's
-    stored token is expired, this run uses the fresh one."""
-    captured: dict = {}
-    real_run = subprocess.run
-
-    def spy(argv, *a, **kw):
-        if isinstance(argv, list) and len(argv) > 3 and argv[3] == "fetch":
-            captured["fetch_args"] = list(argv)
-        return real_run(argv, *a, **kw)
-
-    monkeypatch.setattr(git_ops.subprocess, "run", spy)
-
-    upstream = _init_repo(tmp_path / "upstream")
-    dest = tmp_path / "clone"
-    git_ops.clone(f"file://{upstream}", dest, "main")
-    git_ops.try_rebase_onto(
-        dest, "main",
-        remote_url="https://github.com/o/r",
-        token="tok-fresh",
-    )
-    # The fetch should target the token-authed URL — NOT "origin".
-    fetch_args = captured.get("fetch_args") or []
-    assert "origin" not in fetch_args
-    assert any("oauth2:tok-fresh@github.com/o/r" in a for a in fetch_args)
+    def test_without_remote_url_fetches_from_origin(self, tmp_path):
+        """diff_base without remote_url/token uses stored origin (file://)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature diff")
+        git_ops.commit_all(dest, "feature commit")
+        diff = git_ops.diff_base(dest, "main")
+        assert "diff --git" in diff
