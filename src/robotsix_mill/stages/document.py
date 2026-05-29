@@ -45,6 +45,7 @@ def _paths_from_diff(diff: str) -> list[str]:
 
 
 class DocumentStage(Stage):
+    """Generate or update project documentation from the implemented code changes in the cloned repo."""
     name = "document"
     input_state = State.DOCUMENTING
     traced = True

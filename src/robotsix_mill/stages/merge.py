@@ -96,6 +96,7 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
 
 
 class MergeStage(Stage):
+    """Orchestrate the merge pipeline: poll CI, rebase, address review feedback, and auto-merge when green."""
     name = "merge"
     input_state = State.HUMAN_MR_APPROVAL
     traced = False

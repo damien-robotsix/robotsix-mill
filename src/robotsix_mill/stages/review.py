@@ -158,6 +158,7 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
 
 
 class ReviewStage(Stage):
+    """Check out the target branch and perform automated code review on the ticket's implemented changes."""
     name = "review"
     input_state = State.CODE_REVIEW
     traced = True

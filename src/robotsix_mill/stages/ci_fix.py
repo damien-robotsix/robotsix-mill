@@ -82,6 +82,7 @@ def _build_failing_summary(failing: list[dict], log_text: str = "") -> str:
 
 
 class CIFixStage(Stage):
+    """Check forge CI status and run automated fix logic to resolve CI failures on the ticket branch."""
     name = "ci_fix"
     input_state = State.FIXING_CI
     traced = False

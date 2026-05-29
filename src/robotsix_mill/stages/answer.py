@@ -22,6 +22,7 @@ log = logging.getLogger("robotsix_mill.stages.answer")
 
 
 class AnswerStage(Stage):
+    """Answer a user question by cloning the repo for context and invoking an answering agent against the ticket description."""
     name = "answer"
     input_state = State.ASKED
 

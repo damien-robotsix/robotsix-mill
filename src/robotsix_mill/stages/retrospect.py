@@ -210,6 +210,7 @@ def _is_noop_draft(title: str | None, body: str | None = None) -> bool:
 
 
 class RetrospectStage(Stage):
+    """Run a deep-analysis retrospective on completed tickets and optionally spawn follow-up draft tickets."""
     name = "retrospect"
     input_state = State.DONE
 
