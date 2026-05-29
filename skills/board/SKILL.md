@@ -9,16 +9,29 @@ existing tickets), use the tools described below.
 
 ### `report_issue` — file a draft ticket
 
-Only file for **blocking** issues:
+### When to file
 
 - **missing-tool** — a tool you need is not registered
 - **error** — a non-recoverable error occurred
 - **workflow-improvement** — a gap in the workflow that blocks progress
 - **missing-input** — a required input (file, config, credential) is absent
+- **code-quality** — a concrete, actionable code-quality problem you
+  discovered in files you read that is genuinely out of scope for the
+  current ticket. Explain the issue and why it matters (e.g. a function
+  that should be split, a missing docstring on a public API, a redundant
+  database query).
 - **other** — anything else that blocks completion
 
-Never file for cosmetic observations, style nits, nice-to-have
-improvements, or non-blocking observations. When in doubt, do NOT file.
+### Don't file for trivial observations
+
+Do NOT file for:
+
+- Cosmetic observations (whitespace, variable rename preferences)
+- Style nits or opinionated formatting preferences
+- Non-actionable musings or vague hunches
+- A "looks good" / "task complete" signal
+
+When in doubt whether something is genuinely actionable, do NOT file.
 
 A dedup guard prevents spam — filing a ticket with the same title as an
 existing open ticket is a no-op. The `evidence` parameter accepts up to

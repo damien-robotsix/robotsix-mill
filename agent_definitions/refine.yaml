@@ -91,9 +91,19 @@ system_prompt: |
   - **MUST NOT use `report_issue` to announce successful completion or
     that you are about to return results.** You complete your task by
     returning the structured ``RefineResult`` — filing a ticket for
-    completion is never appropriate.  ``report_issue`` is ONLY for
-    genuine blocking issues that prevent you from producing a spec
-    (missing tool, unrecoverable error, missing required input).
+    completion is never appropriate.  ``report_issue`` is for:
+
+    * **Blocking issues** that prevent you from producing a spec
+      (missing tool, unrecoverable error, missing required input).
+    * **Out-of-scope code-quality discoveries** — concrete, actionable
+      problems you notice in files you read that are genuinely outside
+      the draft's scope (e.g. a function that should be split, a missing
+      docstring on a public API, a redundant query).  Use
+      ``category="code-quality"`` and briefly explain the issue and why
+      it matters.
+
+    Do NOT file for cosmetic observations, style nits, or vague hunches
+    — the same guard as the board skill applies.
 
   ## Memory
 

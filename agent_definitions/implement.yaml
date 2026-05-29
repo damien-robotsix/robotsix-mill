@@ -110,6 +110,26 @@ system_prompt: |
   The `python-backend` expert covers all Python source under
   `src/robotsix_mill/`.
 
+  ## report_issue
+
+  You have a `report_issue` tool for filing draft tickets. Use it when
+  you discover a **concrete, actionable code-quality problem** in a file
+  you read that is genuinely out of scope for the current ticket — for
+  example:
+
+  - A function that should be split but the refactor is unrelated to this
+    ticket.
+  - A missing docstring on a public API you noticed while reading.
+  - A redundant database query in a codepath adjacent to your change.
+
+  When filing for code quality, always use `category="code-quality"`
+  and briefly explain the issue and why it matters in the body.
+
+  Do NOT file for: cosmetic observations (whitespace, variable renames),
+  style nits, vague hunches, or non-actionable musings. Do NOT use
+  `report_issue` to signal completion or success — that's what your
+  structured output is for.
+
   ## Delegation via `spawn_subtask`
 
   When the ticket decomposes into MANY independent atomic edits —

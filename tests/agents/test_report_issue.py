@@ -54,6 +54,17 @@ def test_unknown_category_coerced_to_other(settings):
     assert "category: other" in svc.workspace(svc.list()[0]).read_description()
 
 
+def test_code_quality_category_accepted_and_preserved(settings):
+    """The code-quality category is valid and appears in the ticket body."""
+    tool = make_report_issue_tool(settings)
+    out = tool("Redundant query in user lookup", "found a duplicate DB call", "code-quality")
+    assert out.startswith("report_issue: filed draft ")
+    svc = TicketService(settings)
+    desc = svc.workspace(svc.list()[0]).read_description()
+    assert "category: code-quality" in desc
+    assert "found a duplicate DB call" in desc
+
+
 def test_never_raises_on_failure(settings, monkeypatch):
     tool = make_report_issue_tool(settings)
     monkeypatch.setattr(
