@@ -255,6 +255,194 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
     return 0
 
 
+def _serve(args: argparse.Namespace, settings: Settings) -> int:
+    # Raise nofile soft cap: docker-compose's ulimits only set the
+    # hard cap, and PAM (via runuser in the container entrypoint)
+    # clamps the soft back to 1024. Workers cascade-crash with
+    # OSError: [Errno 24] once they exhaust it across parallel
+    # git/trivy/agent subprocesses.
+    import resource
+
+    try:
+        _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = max(65536, hard) if hard != resource.RLIM_INFINITY else 65536
+        resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+    except ValueError, OSError:
+        pass
+
+    import uvicorn
+
+    from .runtime.api import create_app
+    from .config import get_repos_config
+    from .config_loader import ConfigError
+
+    if args.repo_id:
+        # Single-repo override for tests/dev.
+        try:
+            repos = get_repos_config()
+        except ConfigError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        if args.repo_id not in repos.repos:
+            known = sorted(repos.repos.keys())
+            print(
+                f"Error: Unknown repo '{args.repo_id}'. Known repos: {known}",
+                file=sys.stderr,
+            )
+            return 2
+        single_repo_id: str | None = args.repo_id
+    else:
+        # Multi-repo mode: load all repos from config/repos.yaml.
+        try:
+            repos = get_repos_config()
+        except ConfigError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        if not repos.repos:
+            print(
+                "Error: no repos defined in config/repos.yaml",
+                file=sys.stderr,
+            )
+            return 2
+        single_repo_id = None
+
+    uvicorn.run(
+        create_app(repos, settings, single_repo_id=single_repo_id),
+        host=settings.api_host,
+        port=settings.api_port,
+    )
+    return 0
+
+
+def _repos_list(args: argparse.Namespace, settings: Settings) -> int:
+    from .config import get_repos_config
+    from .config_loader import ConfigError
+
+    try:
+        repos = get_repos_config()
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    print(f"{'REPO_ID':30s} {'BOARD_ID'}")
+    for rc in repos.repos.values():
+        print(f"{rc.repo_id:30s} {rc.board_id}")
+    return 0
+
+
+def _inquire(args: argparse.Namespace, settings: Settings) -> int:
+    body = ""
+    if args.description_file == "-":
+        body = sys.stdin.read()
+    elif args.description_file:
+        with open(args.description_file, encoding="utf-8") as f:
+            body = f.read()
+    with _client(settings) as c:
+        r = c.post(
+            "/tickets",
+            json={"title": args.title, "description": body, "kind": "inquiry"},
+        )
+        r.raise_for_status()
+        print(r.json()["id"])
+    return 0
+
+
+def _ticket_new(args: argparse.Namespace, settings: Settings) -> int:
+    body = ""
+    if args.description_file == "-":
+        body = sys.stdin.read()
+    elif args.description_file:
+        with open(args.description_file, encoding="utf-8") as f:
+            body = f.read()
+    # Resolve repo_id: required in multi-repo mode, optional in single-repo.
+    repo_id = args.repo_id
+    if repo_id is None:
+        from .config import get_repos_config
+        from .config_loader import ConfigError as _ConfigError
+
+        try:
+            repos = get_repos_config()
+        except _ConfigError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        if len(repos.repos) == 1:
+            repo_id = next(iter(repos.repos.keys()))
+        elif not repos.repos:
+            print("Error: no repos defined in config/repos.yaml", file=sys.stderr)
+            return 2
+        else:
+            sorted_keys = sorted(repos.repos.keys())
+            print(
+                f"Error: --repo-id is required when multiple repos are configured. "
+                f"Available repos: {sorted_keys}",
+                file=sys.stderr,
+            )
+            return 2
+    with _client(settings) as c:
+        r = c.post(
+            "/tickets",
+            json={"title": args.title, "description": body, "repo_id": repo_id},
+        )
+        r.raise_for_status()
+        print(r.json()["id"])
+    return 0
+
+
+def _ticket_list(args: argparse.Namespace, settings: Settings) -> int:
+    params: dict = {"state": args.state} if args.state else {}
+    if args.repo_id:
+        params["repo_id"] = args.repo_id
+    with _client(settings) as c:
+        r = c.get("/tickets", params=params)
+        r.raise_for_status()
+        for t in r.json():
+            print(f"{t['id']}\t{t['state']}\t{t['title']}")
+    return 0
+
+
+def _ticket_show(args: argparse.Namespace, settings: Settings) -> int:
+    with _client(settings) as c:
+        r = c.get(f"/tickets/{args.id}")
+        r.raise_for_status()
+        print(r.json())
+        h = c.get(f"/tickets/{args.id}/history")
+        print("--- history ---")
+        for e in h.json():
+            print(f"{e['at']}\t{e['state']}\t{e.get('note')}")
+    return 0
+
+
+def _ticket_approve(args: argparse.Namespace, settings: Settings) -> int:
+    with _client(settings) as c:
+        r = c.post(f"/tickets/{args.id}/approve")
+        if r.is_success:
+            data = r.json()
+            print(f"ticket {data['id']} approved — now in {data['state']}")
+            return 0
+        else:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            print(f"approve failed: {detail}", file=sys.stderr)
+            return 1
+
+
+def _ticket_resume_blocked(args: argparse.Namespace, settings: Settings) -> int:
+    with _client(settings) as c:
+        r = c.post(f"/tickets/{args.id}/resume-blocked")
+        if r.is_success:
+            data = r.json()
+            print(f"ticket {data['id']} resumed — now in {data['state']}")
+            return 0
+        else:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            print(f"resume-blocked failed: {detail}", file=sys.stderr)
+            return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the robotsix-mill CLI.
 
@@ -460,182 +648,24 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings()
 
     if args.cmd == "serve":
-        # Raise nofile soft cap: docker-compose's ulimits only set the
-        # hard cap, and PAM (via runuser in the container entrypoint)
-        # clamps the soft back to 1024. Workers cascade-crash with
-        # OSError: [Errno 24] once they exhaust it across parallel
-        # git/trivy/agent subprocesses.
-        import resource
-
-        try:
-            _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-            target = max(65536, hard) if hard != resource.RLIM_INFINITY else 65536
-            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
-        except ValueError, OSError:
-            pass
-
-        import uvicorn
-
-        from .runtime.api import create_app
-        from .config import get_repos_config
-        from .config_loader import ConfigError
-
-        if args.repo_id:
-            # Single-repo override for tests/dev.
-            try:
-                repos = get_repos_config()
-            except ConfigError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                return 2
-            if args.repo_id not in repos.repos:
-                known = sorted(repos.repos.keys())
-                print(
-                    f"Error: Unknown repo '{args.repo_id}'. Known repos: {known}",
-                    file=sys.stderr,
-                )
-                return 2
-            single_repo_id: str | None = args.repo_id
-        else:
-            # Multi-repo mode: load all repos from config/repos.yaml.
-            try:
-                repos = get_repos_config()
-            except ConfigError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                return 2
-            if not repos.repos:
-                print(
-                    "Error: no repos defined in config/repos.yaml",
-                    file=sys.stderr,
-                )
-                return 2
-            single_repo_id = None
-
-        uvicorn.run(
-            create_app(repos, settings, single_repo_id=single_repo_id),
-            host=settings.api_host,
-            port=settings.api_port,
-        )
-        return 0
-
-    if args.cmd == "repos":
-        if args.rcmd == "list":
-            from .config import get_repos_config
-            from .config_loader import ConfigError
-
-            try:
-                repos = get_repos_config()
-            except ConfigError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                return 2
-            print(f"{'REPO_ID':30s} {'BOARD_ID'}")
-            for rc in repos.repos.values():
-                print(f"{rc.repo_id:30s} {rc.board_id}")
-            return 0
-
+        return _serve(args, settings)
+    if args.cmd == "repos" and args.rcmd == "list":
+        return _repos_list(args, settings)
     if args.cmd in _RUNNERS:
         return _run_and_print(args.cmd, args)
-
     if args.cmd == "inquire":
-        body = ""
-        if args.description_file == "-":
-            body = sys.stdin.read()
-        elif args.description_file:
-            with open(args.description_file, encoding="utf-8") as f:
-                body = f.read()
-        with _client(settings) as c:
-            r = c.post(
-                "/tickets",
-                json={"title": args.title, "description": body, "kind": "inquiry"},
-            )
-            r.raise_for_status()
-            print(r.json()["id"])
-        return 0
-
-    with _client(settings) as c:
+        return _inquire(args, settings)
+    if args.cmd == "ticket":
         if args.tcmd == "new":
-            body = ""
-            if args.description_file == "-":
-                body = sys.stdin.read()
-            elif args.description_file:
-                with open(args.description_file, encoding="utf-8") as f:
-                    body = f.read()
-            # Resolve repo_id: required in multi-repo mode, optional in single-repo.
-            repo_id = args.repo_id
-            if repo_id is None:
-                from .config import get_repos_config
-                from .config_loader import ConfigError as _ConfigError
-
-                try:
-                    repos = get_repos_config()
-                except _ConfigError as exc:
-                    print(f"Error: {exc}", file=sys.stderr)
-                    return 2
-                if len(repos.repos) == 1:
-                    repo_id = next(iter(repos.repos.keys()))
-                elif not repos.repos:
-                    print(
-                        "Error: no repos defined in config/repos.yaml", file=sys.stderr
-                    )
-                    return 2
-                else:
-                    sorted_keys = sorted(repos.repos.keys())
-                    print(
-                        f"Error: --repo-id is required when multiple repos are configured. "
-                        f"Available repos: {sorted_keys}",
-                        file=sys.stderr,
-                    )
-                    return 2
-            r = c.post(
-                "/tickets",
-                json={"title": args.title, "description": body, "repo_id": repo_id},
-            )
-            r.raise_for_status()
-            print(r.json()["id"])
-            return 0
+            return _ticket_new(args, settings)
         if args.tcmd == "list":
-            params: dict = {"state": args.state} if args.state else {}
-            if args.repo_id:
-                params["repo_id"] = args.repo_id
-            r = c.get("/tickets", params=params)
-            r.raise_for_status()
-            for t in r.json():
-                print(f"{t['id']}\t{t['state']}\t{t['title']}")
-            return 0
+            return _ticket_list(args, settings)
         if args.tcmd == "show":
-            r = c.get(f"/tickets/{args.id}")
-            r.raise_for_status()
-            print(r.json())
-            h = c.get(f"/tickets/{args.id}/history")
-            print("--- history ---")
-            for e in h.json():
-                print(f"{e['at']}\t{e['state']}\t{e.get('note')}")
-            return 0
+            return _ticket_show(args, settings)
         if args.tcmd == "approve":
-            r = c.post(f"/tickets/{args.id}/approve")
-            if r.is_success:
-                data = r.json()
-                print(f"ticket {data['id']} approved — now in {data['state']}")
-                return 0
-            else:
-                try:
-                    detail = r.json().get("detail", r.text)
-                except Exception:
-                    detail = r.text
-                print(f"approve failed: {detail}", file=sys.stderr)
-                return 1
+            return _ticket_approve(args, settings)
         if args.tcmd == "resume-blocked":
-            r = c.post(f"/tickets/{args.id}/resume-blocked")
-            if r.is_success:
-                data = r.json()
-                print(f"ticket {data['id']} resumed — now in {data['state']}")
-                return 0
-            else:
-                try:
-                    detail = r.json().get("detail", r.text)
-                except Exception:
-                    detail = r.text
-                print(f"resume-blocked failed: {detail}", file=sys.stderr)
-                return 1
+            return _ticket_resume_blocked(args, settings)
 
     parser.error("unknown command")
     return 2
