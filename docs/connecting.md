@@ -1,34 +1,110 @@
 # Connecting
 
 `robotsix-auto-mail` needs IMAP and SMTP connection parameters. They can be
-supplied via **environment variables**, a **TOML config file**, or a
-**combination** of both.
+supplied via **YAML config files**, a **TOML config file**, **environment
+variables**, or a **combination**.
+
+The recommended approach for operators is the **YAML defaults + local
+overrides** pattern, which ships with the Docker Compose setup described
+below.
+
+## Quick start — Docker Compose (recommended)
+
+The project includes a `docker-compose.yml` that builds the container and
+mounts configuration without rebuilding the image.
+
+```sh
+# 1. Create your local config from the template
+cp config/mail.local.example.yaml config/mail.local.yaml
+
+# 2. Edit it with your real credentials
+$EDITOR config/mail.local.yaml
+
+# 3. Build the image
+docker compose build
+
+# 4. Run commands via `docker compose run`
+docker compose run robotsix-auto-mail probe
+docker compose run robotsix-auto-mail ingest
+docker compose run robotsix-auto-mail board
+```
+
+### How it works
+
+- `config/mail.defaults.yaml` *(tracked in git)* ships every config field
+  at its default value.
+- `config/mail.local.yaml` *(git-ignored)* contains only the fields the
+  operator wants to override — typically `imap.host`, `smtp.host`,
+  `auth.username`, and `auth.password`.
+- The config loader deep-merges the two files: defaults first, local on top.
+- The `./config` directory is bind-mounted read-only into the container at
+  `/home/mailbot/config`, so editing `config/mail.local.yaml` on the host
+  is picked up immediately — no rebuild needed.
+- The `MAIL_CONFIG_PATH` environment variable is set to
+  `/home/mailbot/config/mail.local.yaml` by `docker-compose.yml`.
+- The mail database persists in a named Docker volume (`mail_data`).
 
 ## Configuration keys
 
-### Environment variables
+### YAML config (recommended)
 
-| Variable | Required | Default | Purpose |
+#### Defaults file (`config/mail.defaults.yaml`)
+
+```yaml
+imap:
+  host: ""          # required — operator must supply in mail.local.yaml
+  port: 993
+  tls_mode: direct-tls
+  folder: INBOX
+
+smtp:
+  host: ""          # required — operator must supply in mail.local.yaml
+  port: 587
+  tls_mode: starttls
+
+auth:
+  username: ""      # required — operator must supply in mail.local.yaml
+  password: ""      # required — operator must supply in mail.local.yaml
+
+store:
+  path: /home/mailbot/data/mail.db
+```
+
+#### Local overrides (`config/mail.local.yaml`)
+
+```yaml
+imap:
+  host: imap.example.com
+  # port: 993
+  # tls_mode: direct-tls
+
+smtp:
+  host: smtp.example.com
+  # port: 587
+  # tls_mode: starttls
+
+auth:
+  username: user@example.com
+  password: your-password-here
+
+# store:
+#   path: /home/mailbot/data/mail.db
+```
+
+| Key | Required | Default | Purpose |
 |---|---|---|---|
-| `MAIL_IMAP_HOST` | yes | – | IMAP server hostname |
-| `MAIL_SMTP_HOST` | yes | – | SMTP server hostname |
-| `MAIL_USERNAME` | yes | – | Login username (typically the full email address) |
-| `MAIL_PASSWORD` | yes | – | Login password |
-| `MAIL_IMAP_PORT` | no | `993` | IMAP server port |
-| `MAIL_IMAP_TLS_MODE` | no | `direct-tls` | TLS negotiation for IMAP — one of `direct-tls`, `starttls`, `none` |
-| `MAIL_SMTP_PORT` | no | `587` | SMTP server port |
-| `MAIL_SMTP_TLS_MODE` | no | `starttls` | TLS negotiation for SMTP — one of `starttls`, `direct-tls`, `none` |
-| `MAIL_CONFIG_PATH` | no | `config/mail.toml` | Filesystem path to the TOML config file |
+| `imap.host` | yes | – | IMAP server hostname |
+| `imap.port` | no | `993` | IMAP server port |
+| `imap.tls_mode` | no | `"direct-tls"` | IMAP TLS mode |
+| `imap.folder` | no | `"INBOX"` | IMAP mailbox folder name |
+| `smtp.host` | yes | – | SMTP server hostname |
+| `smtp.port` | no | `587` | SMTP server port |
+| `smtp.tls_mode` | no | `"starttls"` | SMTP TLS mode |
+| `auth.username` | yes | – | Login username (typically the full email address) |
+| `auth.password` | yes | – | Login password |
+| `store.path` | no | `"mail.db"` | Filesystem path for the SQLite database |
 
-**TLS modes**
-
-| Mode | Behaviour |
-|---|---|
-| `direct-tls` | TLS from the first byte, no plaintext negotiation (IMAP port 993, SMTP port 465) |
-| `starttls` | Plain connection upgraded to TLS via STARTTLS (IMAP port 143, SMTP port 587) |
-| `none` | No TLS at all — **insecure, for local development only** |
-
-### TOML config file
+### TOML config file (alternative)
 
 The TOML file mirrors the same settings under three sections:
 
@@ -61,26 +137,79 @@ password = "s3cret"
 
 A commented template is available at `config/mail.example.toml`.
 
+### Environment variables
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `MAIL_IMAP_HOST` | yes | – | IMAP server hostname |
+| `MAIL_SMTP_HOST` | yes | – | SMTP server hostname |
+| `MAIL_USERNAME` | yes | – | Login username (typically the full email address) |
+| `MAIL_PASSWORD` | yes | – | Login password |
+| `MAIL_IMAP_PORT` | no | `993` | IMAP server port |
+| `MAIL_IMAP_TLS_MODE` | no | `direct-tls` | TLS negotiation for IMAP — one of `direct-tls`, `starttls`, `none` |
+| `MAIL_SMTP_PORT` | no | `587` | SMTP server port |
+| `MAIL_SMTP_TLS_MODE` | no | `starttls` | TLS negotiation for SMTP — one of `starttls`, `direct-tls`, `none` |
+| `MAIL_IMAP_FOLDER` | no | `INBOX` | IMAP mailbox folder name |
+| `MAIL_DB_PATH` | no | `mail.db` | Filesystem path for the SQLite database |
+| `MAIL_CONFIG_PATH` | no | `config/mail.toml` | Filesystem path to the config file (TOML or YAML) |
+| `MAIL_DEFAULTS_PATH` | no | – | Filesystem path to the YAML defaults file (auto-detected alongside `MAIL_CONFIG_PATH` when unset) |
+
+**TLS modes**
+
+| Mode | Behaviour |
+|---|---|
+| `direct-tls` | TLS from the first byte, no plaintext negotiation (IMAP port 993, SMTP port 465) |
+| `starttls` | Plain connection upgraded to TLS via STARTTLS (IMAP port 143, SMTP port 587) |
+| `none` | No TLS at all — **insecure, for local development only** |
+
 ## Precedence rules
 
 `mail.load()` resolves configuration in this order:
 
 1. **Environment variables are evaluated first.** If all four required
    variables (`MAIL_IMAP_HOST`, `MAIL_SMTP_HOST`, `MAIL_USERNAME`,
-   `MAIL_PASSWORD`) are set, they are used and the TOML file is ignored.
-2. **TOML fallback.** If only required fields are missing from the
-   environment (no invalid values), `load()` reads the TOML file at
-   `MAIL_CONFIG_PATH` (default: `config/mail.toml`).
-3. **Env-override merge.** Every environment variable that *is* set is
-   then re-applied on top of the TOML values. This lets you keep shared
-   settings in a TOML file while overriding just the password via
+   `MAIL_PASSWORD`) are set, they are used and file config is ignored.
+2. **File fallback.** If only required fields are missing from the
+   environment (no invalid values), `load()` reads the config file at
+   `MAIL_CONFIG_PATH` (default: `config/mail.toml`). If the path ends with
+   `.yaml` or `.yml` it is parsed as YAML; otherwise as TOML.
+3. **Defaults merge (YAML only).** If a defaults file is set via
+   `MAIL_DEFAULTS_PATH`, or a file named `mail.defaults.yaml` exists
+   alongside the main config, it is loaded (without validation) and
+   deep-merged — the main config overrides the defaults field-by-field.
+4. **Env-override merge.** Every environment variable that *is* set is
+   then re-applied on top of the file values. This lets you keep shared
+   settings in a config file while overriding just the password via
    `MAIL_PASSWORD`, for example.
 
 If any environment variable has an *invalid* value (e.g. a non-integer
-port), the error is raised immediately — the TOML fallback is skipped so
+port), the error is raised immediately — the file fallback is skipped so
 your typo is not silently swallowed.
 
 ## Example setups
+
+### Docker Compose with YAML (recommended)
+
+```yaml
+# config/mail.local.yaml (git-ignored)
+imap:
+  host: imap.mail.example.com
+  port: 993
+  tls_mode: direct-tls
+
+smtp:
+  host: smtp.mail.example.com
+  port: 587
+  tls_mode: starttls
+
+auth:
+  username: user@mail.example.com
+  password: your-app-password-here
+```
+
+```sh
+docker compose run robotsix-auto-mail probe
+```
 
 ### Generic IMAP + SMTP (.env)
 

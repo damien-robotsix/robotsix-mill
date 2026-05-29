@@ -38,3 +38,4 @@ tests/
 # Self-referential — the Docker build doesn't need these in context
 Dockerfile
 .dockerignore
+docker-compose.yml

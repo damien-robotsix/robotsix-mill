@@ -6,7 +6,9 @@ build-backend = "hatchling.build"
 name = "robotsix-auto-mail"
 version = "0.0.0"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pyyaml>=6.0",
+]
 
 [dependency-groups]
 dev = [

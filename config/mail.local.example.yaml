@@ -1,0 +1,25 @@
+# Example local configuration for robotsix-auto-mail.
+#
+# Copy this file to config/mail.local.yaml and fill in your real values.
+# config/mail.local.yaml is git-ignored so credentials never land in the repo.
+#
+# All fields shown below override the defaults in config/mail.defaults.yaml.
+# Commented lines show every available option; uncomment to override.
+
+imap:
+  host: imap.example.com
+  # port: 993
+  # tls_mode: direct-tls
+  # folder: INBOX
+
+smtp:
+  host: smtp.example.com
+  # port: 587
+  # tls_mode: starttls
+
+auth:
+  username: user@example.com
+  password: your-password-here
+
+# store:
+#   path: /home/mailbot/data/mail.db

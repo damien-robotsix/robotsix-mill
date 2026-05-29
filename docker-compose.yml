@@ -1,0 +1,42 @@
+version: "3.9"
+
+# -------------------------------------------------------------------------
+# robotsix-auto-mail — single-service Docker Compose file.
+#
+# This is a CLI tool, not a long-running daemon.  The primary invocation
+# pattern is `docker compose run` (not `docker compose up`):
+#
+#     docker compose run robotsix-auto-mail probe
+#     docker compose run robotsix-auto-mail ingest
+#     docker compose run robotsix-auto-mail board
+#     docker compose run robotsix-auto-mail --help
+#
+# Configuration is delivered via YAML files bind-mounted from the host
+# ./config directory.  The only environment variable set here points the
+# application at the mounted config file.  All secrets live in the
+# git-ignored config/mail.local.yaml.
+# -------------------------------------------------------------------------
+
+services:
+  robotsix-auto-mail:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: false
+    restart: "no"
+
+    # No command: is set — the operator supplies the subcommand at
+    # runtime via `docker compose run robotsix-auto-mail <subcommand>`.
+
+    environment:
+      MAIL_CONFIG_PATH: /home/mailbot/config/mail.local.yaml
+
+    volumes:
+      # Config bind-mount — YAML files available without image rebuild.
+      - ./config:/home/mailbot/config:ro
+      # Data named volume — SQLite database persists across runs.
+      - mail_data:/home/mailbot/data
+
+volumes:
+  mail_data:
