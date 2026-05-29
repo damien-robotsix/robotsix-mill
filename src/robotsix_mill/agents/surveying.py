@@ -68,7 +68,10 @@ def run_survey_agent(
     from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "survey.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "periodic"
+        / "survey.yaml"
     )
 
     tools: list = []
@@ -77,36 +80,46 @@ def run_survey_agent(
         from .fs_tools import build_fs_tools
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t
+            for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
     from .overlays import apply_overlay, load_overlay
+
     system_prompt = apply_overlay(
-        definition.system_prompt, load_overlay(repo_dir, "survey"),
+        definition.system_prompt,
+        load_overlay(repo_dir, "survey"),
     )
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         model_name=definition.model or settings.survey_model,
         system_prompt=system_prompt,
     )
     from .prompt_blocks import section
+
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
         f"{recent_proposals}"
-        + section("forge-remote-url", forge_url) + "\n\n"
-        + section("memory", memory or "(empty — start a new ledger)") + "\n\n"
+        + section("forge-remote-url", forge_url)
+        + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Survey similar open-source projects and return your proposals."
     )
     from .retry import call_with_retry
 
     from pydantic_ai.usage import UsageLimits
+
     limits = UsageLimits(request_limit=settings.survey_request_limit)
     try:
         result = call_with_retry(
             lambda: agent.run_sync(prompt, usage_limits=limits),
-            settings=settings, what="survey",
+            settings=settings,
+            what="survey",
         )
     finally:
         _safe_close(agent)

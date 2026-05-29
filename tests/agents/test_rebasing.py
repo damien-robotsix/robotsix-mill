@@ -19,6 +19,7 @@ def _s(tmp_path, **kw):
     key = kw.get("OPENROUTER_API_KEY")
     if key is not None:
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**kw)
@@ -28,22 +29,31 @@ def _s(tmp_path, **kw):
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fake_ai(monkeypatch):
     """Monkeypatch the pydantic-ai layer so no real LLM is called."""
     box = {}
 
     class FakeModel:
-        def __init__(self, name, **kw): pass
+        def __init__(self, name, **kw):
+            pass
 
     class FakeAgent:
-        def __init__(self, **kw): pass
+        def __init__(self, **kw):
+            pass
 
         def run_sync(self, *a, **k):
-            return type("R", (), {"output": RebaseResult(
-                status=box["status"],
-                summary=box.get("summary", ""),
-            )})()
+            return type(
+                "R",
+                (),
+                {
+                    "output": RebaseResult(
+                        status=box["status"],
+                        summary=box.get("summary", ""),
+                    )
+                },
+            )()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
@@ -55,15 +65,21 @@ def fake_ai(monkeypatch):
 # Existing parametrized test (output parsing)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("status,expected", [
-    ("DONE", True),
-    ("FAILED", False),
-])
+
+@pytest.mark.parametrize(
+    "status,expected",
+    [
+        ("DONE", True),
+        ("FAILED", False),
+    ],
+)
 def test_run_rebase_agent_reads_output_not_data(tmp_path, fake_ai, status, expected):
     fake_ai["status"] = status
     result = run_rebase_agent(
-        settings=_s(tmp_path), repo_dir=tmp_path,
-        branch="mill/x", target="main",
+        settings=_s(tmp_path),
+        repo_dir=tmp_path,
+        branch="mill/x",
+        target="main",
     )
     assert (result.status == "DONE") is expected
 
@@ -72,20 +88,24 @@ def test_run_rebase_agent_reads_output_not_data(tmp_path, fake_ai, status, expec
 # API-key guard
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("key", [None, ""])
 def test_run_rebase_agent_raises_when_api_key_falsy(tmp_path, key):
     """Must raise BEFORE any agent is built."""
     s = _s(tmp_path, OPENROUTER_API_KEY=key)
     with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY is not set"):
         run_rebase_agent(
-            settings=s, repo_dir=tmp_path,
-            branch="mill/x", target="main",
+            settings=s,
+            repo_dir=tmp_path,
+            branch="mill/x",
+            target="main",
         )
 
 
 # ---------------------------------------------------------------------------
 # Agent construction: verify args passed to build_agent
 # ---------------------------------------------------------------------------
+
 
 def test_build_agent_called_with_web_false_and_settings(tmp_path, monkeypatch):
     """build_agent is called with web=False, a Settings, and shell tools."""
@@ -97,26 +117,31 @@ def test_build_agent_called_with_web_false_and_settings(tmp_path, monkeypatch):
         captured["output_type"] = output_type
         captured["tools"] = tools
         captured["web"] = web
+
         # Return a fake agent whose run_sync returns DONE.
         class FakeAgent:
             def run_sync(self, *a, **k):
-                return type("R", (), {"output": RebaseResult(status="DONE", summary="ok")})()
+                return type(
+                    "R", (), {"output": RebaseResult(status="DONE", summary="ok")}
+                )()
+
         return FakeAgent()
 
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", fake_build_agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
 
     s = _s(tmp_path)
     result = run_rebase_agent(
-        settings=s, repo_dir=tmp_path,
-        branch="mill/x", target="main",
+        settings=s,
+        repo_dir=tmp_path,
+        branch="mill/x",
+        target="main",
     )
     assert result.status == "DONE"
     assert captured["web"] is False
     assert isinstance(captured["settings"], Settings)
     # output_type is now PromptedOutput(RebaseResult), not str
     from pydantic_ai import PromptedOutput
+
     assert isinstance(captured["output_type"], PromptedOutput)
 
 
@@ -126,18 +151,23 @@ def test_tools_include_shell_tools(tmp_path, monkeypatch):
 
     def fake_build_agent(settings, *, system_prompt, output_type, tools, web, **kw):
         captured_tools.extend(tools or [])
+
         class FakeAgent:
             def run_sync(self, *a, **k):
-                return type("R", (), {"output": RebaseResult(status="DONE", summary="ok")})()
+                return type(
+                    "R", (), {"output": RebaseResult(status="DONE", summary="ok")}
+                )()
+
         return FakeAgent()
 
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", fake_build_agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
 
     s = _s(tmp_path)
     run_rebase_agent(
-        settings=s, repo_dir=tmp_path, branch="mill/x", target="main",
+        settings=s,
+        repo_dir=tmp_path,
+        branch="mill/x",
+        target="main",
     )
 
     tool_names = {getattr(t, "__name__", str(t)) for t in captured_tools}
@@ -152,24 +182,30 @@ def test_tools_include_shell_tools(tmp_path, monkeypatch):
 # System prompt content
 # ---------------------------------------------------------------------------
 
+
 def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
     """The system_prompt captures the rebase workflow."""
     captured_prompt = []
 
     def fake_build_agent(settings, *, system_prompt, output_type, tools, web, **kw):
         captured_prompt.append(system_prompt)
+
         class FakeAgent:
             def run_sync(self, *a, **k):
-                return type("R", (), {"output": RebaseResult(status="DONE", summary="ok")})()
+                return type(
+                    "R", (), {"output": RebaseResult(status="DONE", summary="ok")}
+                )()
+
         return FakeAgent()
 
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", fake_build_agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
 
     s = _s(tmp_path)
     run_rebase_agent(
-        settings=s, repo_dir=tmp_path, branch="mill/x", target="main",
+        settings=s,
+        repo_dir=tmp_path,
+        branch="mill/x",
+        target="main",
     )
 
     prompt = captured_prompt[0]

@@ -36,8 +36,7 @@ def run_test_agent(
     from .. import sandbox
 
     cmd = (
-        (repo_config.test_command if repo_config else "")
-        or settings.test_command
+        (repo_config.test_command if repo_config else "") or settings.test_command
     ).strip()
     if not cmd:
         return True, "no test gate configured (treated as passing)"
@@ -66,13 +65,13 @@ def run_test_agent(
 
     all_fs = build_fs_tools(repo_dir, settings)
     ro_fs_tools = [
-        t for t in all_fs
-        if t.__name__ in ("read_file", "list_dir", "run_command")
+        t for t in all_fs if t.__name__ in ("read_file", "list_dir", "run_command")
     ]
     explore_tool = make_explore_tool(settings, repo_dir)
 
     agent = build_agent_from_definition(
-        settings, definition,
+        settings,
+        definition,
         tools=[*ro_fs_tools, explore_tool],
         model_name=definition.model or settings.test_model,
     )
@@ -83,7 +82,8 @@ def run_test_agent(
                 f"<test_output rc={rc}>\n{tail}\n</test_output>",
                 usage_limits=limits,
             ),
-            settings=settings, what="test-distill",
+            settings=settings,
+            what="test-distill",
         )
         return False, str(result.output).strip()
     except Exception as e:  # noqa: BLE001 — degrade to raw tail

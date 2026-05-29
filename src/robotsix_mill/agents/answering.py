@@ -53,8 +53,8 @@ def _build_langfuse_tools(settings: Settings):
         for t in traces:
             cost = t.get("totalCost") or 0
             lines.append(
-                f"{t['id']}  {t.get('name','?')}  "
-                f"{t.get('timestamp','')}  ${float(cost):.4f}"
+                f"{t['id']}  {t.get('name', '?')}  "
+                f"{t.get('timestamp', '')}  ${float(cost):.4f}"
             )
         return "\n".join(lines)
 
@@ -79,7 +79,7 @@ def _build_langfuse_tools(settings: Settings):
             f"timestamp: {detail.get('timestamp')}",
             f"cost: ${float(detail.get('totalCost') or 0):.4f}",
             f"latency: {float(detail.get('latency') or 0):.1f}s",
-            f"observations: {len(obs)} ({', '.join(f'{k}={v}' for k,v in sorted(obs_summary.items()))})",
+            f"observations: {len(obs)} ({', '.join(f'{k}={v}' for k, v in sorted(obs_summary.items()))})",
         ]
         return "\n".join(lines)
 
@@ -118,7 +118,8 @@ def run_answer_agent(
         from .fs_tools import build_fs_tools
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t
+            for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
@@ -128,7 +129,9 @@ def run_answer_agent(
     tools.extend(langfuse_tools)
 
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         model_name=definition.model or settings.answer_model,
     )
 
@@ -137,7 +140,8 @@ def run_answer_agent(
     try:
         result = call_with_retry(
             lambda: agent.run_sync(user_prompt),
-            settings=settings, what="answer",
+            settings=settings,
+            what="answer",
         )
     finally:
         _safe_close(agent)

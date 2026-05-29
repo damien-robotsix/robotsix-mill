@@ -30,6 +30,7 @@ from robotsix_mill.agents.documenting import (
 # helpers
 # ---------------------------------------------------------------------------
 
+
 class _FakeAgent:
     """Replacement for a pydantic-ai Agent with a ``run_sync`` that
     records calls and returns a controlled output."""
@@ -98,8 +99,10 @@ def _make_definition(**kw):
 
 def _dummy_fs_tool(name: str):
     """Return a dummy callable whose ``__name__`` is *name*."""
+
     def _fn(*a, **k):
         pass
+
     _fn.__name__ = name
     return _fn
 
@@ -107,6 +110,7 @@ def _dummy_fs_tool(name: str):
 # ---------------------------------------------------------------------------
 # DocClassifierResult model tests
 # ---------------------------------------------------------------------------
+
 
 class TestDocClassifierResult:
     def test_valid_construction(self):
@@ -148,6 +152,7 @@ class TestDocClassifierResult:
 # DocResult model tests
 # ---------------------------------------------------------------------------
 
+
 class TestDocResult:
     def test_valid_construction(self):
         r = DocResult(
@@ -184,6 +189,7 @@ class TestDocResult:
 # ---------------------------------------------------------------------------
 # run_doc_classifier orchestration tests
 # ---------------------------------------------------------------------------
+
 
 class TestRunDocClassifier:
     DIFF = "diff --git a/foo.py b/foo.py"
@@ -355,6 +361,7 @@ class TestRunDocClassifier:
 
     def test_exception_propagates(self, settings, monkeypatch):
         """run_doc_classifier has no fallback — exceptions propagate."""
+
         def fake_build(*a, tools=None, **kw):
             raise RuntimeError("agent build failed")
 
@@ -411,6 +418,7 @@ class TestRunDocClassifier:
 # run_doc_agent orchestration tests
 # ---------------------------------------------------------------------------
 
+
 class TestRunDocAgent:
     DIFF = "diff --git a/src/app.py b/src/app.py"
     SPEC = "## Problem\nAdd rate-limiting middleware."
@@ -440,8 +448,12 @@ class TestRunDocAgent:
             lambda repo_dir, settings, extra_roots=None: [
                 _dummy_fs_tool(n)
                 for n in (
-                    "read_file", "write_file", "list_dir", "edit_file",
-                    "run_command", "delete_file",
+                    "read_file",
+                    "write_file",
+                    "list_dir",
+                    "edit_file",
+                    "run_command",
+                    "delete_file",
                 )
             ],
         )
@@ -470,9 +482,7 @@ class TestRunDocAgent:
         """Only read_file, write_file, list_dir, edit_file + explore
         are passed as tools."""
         captured_tools: list | None = None
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
 
         def fake_build(settings_, definition, *, tools=None, **overrides):
             nonlocal captured_tools
@@ -489,8 +499,12 @@ class TestRunDocAgent:
             lambda repo_dir, settings, extra_roots=None: [
                 _dummy_fs_tool(n)
                 for n in (
-                    "read_file", "write_file", "list_dir", "edit_file",
-                    "run_command", "delete_file",
+                    "read_file",
+                    "write_file",
+                    "list_dir",
+                    "edit_file",
+                    "run_command",
+                    "delete_file",
                 )
             ],
         )
@@ -512,7 +526,13 @@ class TestRunDocAgent:
 
         assert captured_tools is not None
         tool_names = {t.__name__ for t in captured_tools}
-        assert tool_names == {"read_file", "write_file", "list_dir", "edit_file", "explore"}
+        assert tool_names == {
+            "read_file",
+            "write_file",
+            "list_dir",
+            "edit_file",
+            "explore",
+        }
 
     # -- memory section in system prompt -------------------------------
 
@@ -520,13 +540,13 @@ class TestRunDocAgent:
         """When no memory file exists, the system prompt includes the
         empty-ledger placeholder."""
         captured_system_prompt: str | None = None
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
 
         def fake_build(settings_, definition, *, tools=None, **overrides):
             nonlocal captured_system_prompt
-            captured_system_prompt = overrides.get("system_prompt", definition.system_prompt)
+            captured_system_prompt = overrides.get(
+                "system_prompt", definition.system_prompt
+            )
             return fake_agent
 
         _patch_build_agent_from_definition(monkeypatch, fake_build)
@@ -562,14 +582,14 @@ class TestRunDocAgent:
         """When a memory ledger exists, its content appears in the
         system prompt's memory section."""
         captured_system_prompt: str | None = None
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
         existing = "docs/ lives at repo root; README covers config keys."
 
         def fake_build(settings_, definition, *, tools=None, **overrides):
             nonlocal captured_system_prompt
-            captured_system_prompt = overrides.get("system_prompt", definition.system_prompt)
+            captured_system_prompt = overrides.get(
+                "system_prompt", definition.system_prompt
+            )
             return fake_agent
 
         _patch_build_agent_from_definition(monkeypatch, fake_build)
@@ -605,9 +625,7 @@ class TestRunDocAgent:
 
     def test_user_prompt_sections(self, settings, repo_dir, monkeypatch):
         """The user prompt contains ticket-spec and git-diff sections."""
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
         self._patch_dependencies(monkeypatch, fake_agent)
 
         run_doc_agent(
@@ -626,12 +644,12 @@ class TestRunDocAgent:
 
     # -- reference_files → message_history -----------------------------
 
-    def test_reference_files_triggers_message_history(self, settings, repo_dir, monkeypatch):
+    def test_reference_files_triggers_message_history(
+        self, settings, repo_dir, monkeypatch
+    ):
         """When reference_files is provided, message_history is passed
         and run_user_prompt is None."""
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=True, summary="updated docs")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=True, summary="updated docs"))
         self._patch_dependencies(monkeypatch, fake_agent)
         # Override build_preseed_history to return a non-empty history.
         preseed_val = [{"role": "system"}, {"role": "user"}]
@@ -654,12 +672,12 @@ class TestRunDocAgent:
         assert kwargs.get("message_history") is preseed_val
         assert "usage_limits" in kwargs
 
-    def test_reference_files_empty_preseed_still_runs(self, settings, repo_dir, monkeypatch):
+    def test_reference_files_empty_preseed_still_runs(
+        self, settings, repo_dir, monkeypatch
+    ):
         """When build_preseed_history returns an empty list,
         message_history is NOT set and run_user_prompt stays."""
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
         self._patch_dependencies(monkeypatch, fake_agent)
         # Empty preseed.
         monkeypatch.setattr(
@@ -684,9 +702,7 @@ class TestRunDocAgent:
     def test_explicit_model_name_overrides(self, settings, repo_dir, monkeypatch):
         """When model_name is passed explicitly, it appears in overrides."""
         captured_overrides: dict = {}
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
 
         def fake_build(settings_, definition, *, tools=None, **overrides):
             captured_overrides.update(overrides)
@@ -723,13 +739,13 @@ class TestRunDocAgent:
 
         assert captured_overrides.get("model_name") == "openai/gpt-4o"
 
-    def test_model_name_fallback_to_settings_doc_model(self, settings, repo_dir, monkeypatch):
+    def test_model_name_fallback_to_settings_doc_model(
+        self, settings, repo_dir, monkeypatch
+    ):
         """When model_name is None and definition.model is None/falsy,
         settings.doc_model is used."""
         captured_overrides: dict = {}
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
 
         def fake_build(settings_, definition, *, tools=None, **overrides):
             captured_overrides.update(overrides)
@@ -766,13 +782,13 @@ class TestRunDocAgent:
 
         assert captured_overrides.get("model_name") == settings.doc_model
 
-    def test_definition_model_used_when_no_explicit_override(self, settings, repo_dir, monkeypatch):
+    def test_definition_model_used_when_no_explicit_override(
+        self, settings, repo_dir, monkeypatch
+    ):
         """When definition.model is set and no explicit model_name is
         given, no override is injected (definition.model flows through)."""
         captured_overrides: dict = {}
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
 
         def fake_build(settings_, definition, *, tools=None, **overrides):
             captured_overrides.update(overrides)
@@ -813,9 +829,7 @@ class TestRunDocAgent:
 
     def test_usage_limits_wired(self, settings, repo_dir, monkeypatch):
         """usage_limits uses settings.doc_request_limit."""
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
         self._patch_dependencies(monkeypatch, fake_agent)
 
         from pydantic_ai.usage import UsageLimits
@@ -835,7 +849,10 @@ class TestRunDocAgent:
     # -- persist_memory -------------------------------------------------
 
     def test_persist_memory_called_when_updated_memory_non_empty(
-        self, settings, repo_dir, monkeypatch,
+        self,
+        settings,
+        repo_dir,
+        monkeypatch,
     ):
         """When output.updated_memory is non-empty, persist_memory is
         called with the memory content."""
@@ -870,7 +887,10 @@ class TestRunDocAgent:
         assert path == settings.memory_file_for("doc", "")
 
     def test_persist_memory_not_called_when_updated_memory_empty(
-        self, settings, repo_dir, monkeypatch,
+        self,
+        settings,
+        repo_dir,
+        monkeypatch,
     ):
         """When output.updated_memory is empty, persist_memory is NOT called."""
         fake_agent = _FakeAgent(
@@ -902,9 +922,7 @@ class TestRunDocAgent:
 
     def test_agent_close_called_on_success(self, settings, repo_dir, monkeypatch):
         """agent.close() is called after a successful run."""
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
         self._patch_dependencies(monkeypatch, fake_agent)
 
         run_doc_agent(
@@ -917,9 +935,7 @@ class TestRunDocAgent:
 
     def test_agent_close_called_on_error(self, settings, repo_dir, monkeypatch):
         """agent.close() is called even when run_sync raises."""
-        fake_agent = _FakeAgent(
-            DocResult(user_facing=False, summary="no changes")
-        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
         fake_agent.run_sync = lambda *a, **kw: (_ for _ in ()).throw(
             RuntimeError("model timeout")
         )

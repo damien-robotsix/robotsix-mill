@@ -107,7 +107,8 @@ def load_agent_definition(path: Path) -> AgentDefinition:
 
 
 def load_periodic_agent_definition(
-    name: str, repo_dir: Path | None = None,
+    name: str,
+    repo_dir: Path | None = None,
 ) -> AgentDefinition:
     """Load a periodic agent's definition with per-repo override support.
 
@@ -122,13 +123,13 @@ def load_periodic_agent_definition(
     Raises ``FileNotFoundError`` when neither file exists.
     """
     if repo_dir is not None:
-        override = (
-            Path(repo_dir) / ".robotsix-mill" / "agents" / f"{name}.yaml"
-        )
+        override = Path(repo_dir) / ".robotsix-mill" / "agents" / f"{name}.yaml"
         if override.is_file():
             return load_agent_definition(override)
     builtin = (
         Path(__file__).parent.parent.parent.parent
-        / "agent_definitions" / "periodic" / f"{name}.yaml"
+        / "agent_definitions"
+        / "periodic"
+        / f"{name}.yaml"
     )
     return load_agent_definition(builtin)

@@ -16,9 +16,20 @@ MAX_ENTRIES = 50
 @dataclass
 class RunEntry:
     id: str
-    kind: Literal["audit", "trace-health", "health", "agent_check",
-                   "completeness-check", "cost-reconciliation", "deep-review", "survey",
-                   "epic-breakdown", "config-sync", "test-gap", "bc-check"]
+    kind: Literal[
+        "audit",
+        "trace-health",
+        "health",
+        "agent_check",
+        "completeness-check",
+        "cost-reconciliation",
+        "deep-review",
+        "survey",
+        "epic-breakdown",
+        "config-sync",
+        "test-gap",
+        "bc-check",
+    ]
     started_at: str  # ISO-8601 UTC
     finished_at: str | None = None
     status: Literal["running", "ok", "error"] = "running"
@@ -61,7 +72,7 @@ class RunRegistry:
                 )
                 for e in data
             ]
-        except (json.JSONDecodeError, KeyError):
+        except json.JSONDecodeError, KeyError:
             self._entries = []
             return
 
@@ -131,7 +142,9 @@ class RunRegistry:
             self.flush()
 
     def most_recent(
-        self, kind: str, repo_id: str | None = None,
+        self,
+        kind: str,
+        repo_id: str | None = None,
     ) -> dict | None:
         """Return the newest successful entry of the given *kind*.
 
@@ -158,4 +171,3 @@ class RunRegistry:
         """Return all entries as dicts, newest first (includes running)."""
         with self._lock:
             return [asdict(e) for e in reversed(self._entries)]
-

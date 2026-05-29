@@ -27,7 +27,12 @@ _COST_TTL_SECONDS = 60.0
 _cost_cache: dict[str, tuple[float, float]] = {}  # id -> (cost, monotonic)
 
 
-def _langfuse_api_get(settings: Settings, path: str, params: dict | None = None, repo_config: RepoConfig | None = None):
+def _langfuse_api_get(
+    settings: Settings,
+    path: str,
+    params: dict | None = None,
+    repo_config: RepoConfig | None = None,
+):
     """Low-level authenticated GET to the Langfuse public API.
 
     When *repo_config* is provided, its credentials are used for auth
@@ -44,16 +49,18 @@ def _langfuse_api_get(settings: Settings, path: str, params: dict | None = None,
     ):
         return None
     if repo_config is not None:
-        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
+            "/"
+        )
         auth = base64.b64encode(
-            f"{repo_config.langfuse_public_key}:{repo_config.langfuse_secret_key}"
-            .encode()
+            f"{repo_config.langfuse_public_key}:{repo_config.langfuse_secret_key}".encode()
         ).decode()
     else:
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip(
+            "/"
+        )
         auth = base64.b64encode(
-            f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}"
-            .encode()
+            f"{get_secrets().langfuse_public_key}:{get_secrets().langfuse_secret_key}".encode()
         ).decode()
     try:
         import httpx
@@ -71,7 +78,9 @@ def _langfuse_api_get(settings: Settings, path: str, params: dict | None = None,
         return None
 
 
-def session_total_cost(settings: Settings, session_id: str, repo_config: RepoConfig | None = None) -> float | None:
+def session_total_cost(
+    settings: Settings, session_id: str, repo_config: RepoConfig | None = None
+) -> float | None:
     """Return the total USD cost for a Langfuse session (sum of
     ``totalCost`` across all its traces), or ``None`` when Langfuse
     is unconfigured / unreachable / returns no data."""
@@ -89,7 +98,7 @@ def session_total_cost(settings: Settings, session_id: str, repo_config: RepoCon
     def _num(x):
         try:
             return float(x or 0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0.0
 
     for t in traces:
@@ -121,7 +130,7 @@ def session_traces(
     def _num(x):
         try:
             return float(x or 0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0.0
 
     out: list[dict] = []
@@ -130,18 +139,22 @@ def session_traces(
         # the trace is still running it'll be 0/null — the drawer uses
         # this to keep an in-flight trace from being labelled
         # `interrupted` (it isn't — it just hasn't finished yet).
-        out.append({
-            "name": t.get("name") or "?",
-            "cost": _num(t.get("totalCost")),
-            "at": t.get("timestamp") or "",
-            "trace_id": t.get("id") or "",
-            "latency": _num(t.get("latency")),
-        })
+        out.append(
+            {
+                "name": t.get("name") or "?",
+                "cost": _num(t.get("totalCost")),
+                "at": t.get("timestamp") or "",
+                "trace_id": t.get("id") or "",
+                "latency": _num(t.get("latency")),
+            }
+        )
     out.sort(key=lambda r: r["at"])
     return out
 
 
-def session_cost(settings: Settings, session_id: str, repo_config: RepoConfig | None = None) -> float:
+def session_cost(
+    settings: Settings, session_id: str, repo_config: RepoConfig | None = None
+) -> float:
     """Read-time per-ticket cost: the Langfuse session total, cached for
     ``_COST_TTL_SECONDS``. Always returns a number (0.0 when Langfuse is
     unconfigured / unreachable / has no data) so callers never special-
@@ -175,17 +188,22 @@ def session_cost_cached(session_id: str) -> float:
     return hit[0]
 
 
-def fetch_trace_detail(settings: Settings, trace_id: str, repo_config: RepoConfig | None = None) -> dict | None:
+def fetch_trace_detail(
+    settings: Settings, trace_id: str, repo_config: RepoConfig | None = None
+) -> dict | None:
     """Fetch a single trace by ID from the Langfuse API.
 
     Returns the JSON-decoded response body, or ``None`` on failure
     (including when Langfuse is unconfigured).
     """
-    return _langfuse_api_get(settings, f"/api/public/traces/{trace_id}", repo_config=repo_config)
+    return _langfuse_api_get(
+        settings, f"/api/public/traces/{trace_id}", repo_config=repo_config
+    )
 
 
-
-def fetch_session_summary(settings: Settings, session_id: str, repo_config: RepoConfig | None = None) -> str | None:
+def fetch_session_summary(
+    settings: Settings, session_id: str, repo_config: RepoConfig | None = None
+) -> str | None:
     """Return a short text summary of the session's traces grouped by
     stage, with per-stage cost/latency/observation subtotals and a
     ``## Warnings/Errors`` section sourced from per-trace detail calls.
@@ -207,7 +225,7 @@ def fetch_session_summary(settings: Settings, session_id: str, repo_config: Repo
     def num(x):
         try:
             return float(x or 0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0.0
 
     total_cost = sum(num(t.get("totalCost")) for t in traces)
@@ -230,14 +248,9 @@ def fetch_session_summary(settings: Settings, session_id: str, repo_config: Repo
         stage_traces = stages[stage_name]
         stage_cost = sum(num(t.get("totalCost")) for t in stage_traces)
         stage_lat = sum(num(t.get("latency")) for t in stage_traces)
-        stage_obs = sum(
-            len(t.get("observations") or []) for t in stage_traces
-        )
+        stage_obs = sum(len(t.get("observations") or []) for t in stage_traces)
         lines.append(
-            f"- {stage_name}: "
-            f"${stage_cost:.4f}  "
-            f"{stage_lat:.1f}s  "
-            f"obs={stage_obs}"
+            f"- {stage_name}: ${stage_cost:.4f}  {stage_lat:.1f}s  obs={stage_obs}"
         )
 
     # --- per-trace detail: collect warnings / errors -------------------
@@ -255,9 +268,7 @@ def fetch_session_summary(settings: Settings, session_id: str, repo_config: Repo
             level = obs.get("level")
             if level in ("WARNING", "ERROR"):
                 msg = obs.get("statusMessage", "")
-                warnings_errors.append(
-                    f"- {t.get('name', '?')} [{level}] {msg}"
-                )
+                warnings_errors.append(f"- {t.get('name', '?')} [{level}] {msg}")
 
     if len(warnings_errors) > MAX_WARNINGS:
         omitted = len(warnings_errors) - MAX_WARNINGS
@@ -332,7 +343,7 @@ def list_recent_traces(
     def _cost(t: dict) -> float:
         try:
             return float(t.get("totalCost") or 0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0.0
 
     PAGE_SIZE = 100
@@ -404,9 +415,7 @@ def list_all_traces_since(
                 repo_config=repo_config,
             )
             if body is None:
-                log.warning(
-                    "Langfuse trace list failed on page %d", page
-                )
+                log.warning("Langfuse trace list failed on page %d", page)
                 return []
             data = body.get("data", [])
             all_traces.extend(data)
@@ -528,9 +537,11 @@ def aggregate_cost_trend(
             if not ts_str:
                 continue
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(
+                    tzinfo=None
+                )
                 timestamps.append(ts)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 continue
 
         if not timestamps:
@@ -548,11 +559,10 @@ def aggregate_cost_trend(
             num_buckets = int(span_hours)
             if span_hours != int(span_hours):
                 num_buckets += 1
-            bucket_starts = [
-                span_start + bucket_delta * i
-                for i in range(num_buckets)
-            ]
-            ts_fmt = lambda dt: dt.replace(minute=0, second=0, microsecond=0).isoformat() + "Z"
+            bucket_starts = [span_start + bucket_delta * i for i in range(num_buckets)]
+            ts_fmt = lambda dt: (
+                dt.replace(minute=0, second=0, microsecond=0).isoformat() + "Z"
+            )
         else:
             # Daily buckets
             bucket_delta = timedelta(days=1)
@@ -560,7 +570,9 @@ def aggregate_cost_trend(
             if span_hours % 24 != 0:
                 num_days += 1
             bucket_starts = [
-                (span_start + bucket_delta * i).replace(hour=0, minute=0, second=0, microsecond=0)
+                (span_start + bucket_delta * i).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
                 for i in range(num_days)
             ]
             ts_fmt = lambda dt: dt.isoformat() + "Z"
@@ -579,16 +591,18 @@ def aggregate_cost_trend(
             if not ts_str:
                 continue
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
-            except (ValueError, TypeError):
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(
+                    tzinfo=None
+                )
+            except ValueError, TypeError:
                 continue
 
             cost = float(t.get("totalCost") or 0)
             assigned = None
             for key in bucket_keys:
-                bucket_dt = datetime.fromisoformat(
-                    key.replace("Z", "+00:00")
-                ).replace(tzinfo=None)
+                bucket_dt = datetime.fromisoformat(key.replace("Z", "+00:00")).replace(
+                    tzinfo=None
+                )
                 if bucket_dt <= ts:
                     assigned = key
                 else:
@@ -661,7 +675,9 @@ def aggregate_cost_trend(
             (now - timedelta(hours=lookback_hours)) + bucket_delta * i
             for i in range(num_buckets)
         ]
-        ts_fmt = lambda dt: dt.replace(minute=0, second=0, microsecond=0).isoformat() + "Z"
+        ts_fmt = lambda dt: (
+            dt.replace(minute=0, second=0, microsecond=0).isoformat() + "Z"
+        )
     else:
         # Daily buckets
         bucket_delta = timedelta(days=1)
@@ -671,7 +687,9 @@ def aggregate_cost_trend(
         now = datetime.utcnow()
         start = now - timedelta(hours=lookback_hours)
         bucket_starts = [
-            (start + bucket_delta * i).replace(hour=0, minute=0, second=0, microsecond=0)
+            (start + bucket_delta * i).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
             for i in range(num_days)
         ]
         ts_fmt = lambda dt: dt.isoformat() + "Z"
@@ -695,7 +713,7 @@ def aggregate_cost_trend(
             ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
             # Replace tzinfo to naive for comparison with naive bucket boundaries
             ts_naive = ts.replace(tzinfo=None)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             continue
 
         cost = float(t.get("totalCost") or 0)
@@ -703,9 +721,9 @@ def aggregate_cost_trend(
         # Find the right bucket: the last bucket whose start <= trace timestamp
         assigned = None
         for key in bucket_keys:
-            bucket_dt = datetime.fromisoformat(
-                key.replace("Z", "+00:00")
-            ).replace(tzinfo=None)
+            bucket_dt = datetime.fromisoformat(key.replace("Z", "+00:00")).replace(
+                tzinfo=None
+            )
             if bucket_dt <= ts_naive:
                 assigned = key
             else:
@@ -756,7 +774,9 @@ def aggregate_cost_by_name(
         all_traces = _fetch_traces_for_tickets(settings, max_tickets, repo_config)
     else:
         # --- time-window mode ---
-        from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+        from_timestamp = (
+            datetime.utcnow() - timedelta(hours=lookback_hours)
+        ).isoformat() + "Z"
 
         PAGE_SIZE = 100
         MAX_PAGES = 100
@@ -809,7 +829,11 @@ def aggregate_cost_by_name(
         agg[name]["trace_count"] += 1
 
     result = [
-        {"name": name, "total_cost": entry["total_cost"], "trace_count": entry["trace_count"]}
+        {
+            "name": name,
+            "total_cost": entry["total_cost"],
+            "trace_count": entry["trace_count"],
+        }
         for name, entry in agg.items()
     ]
     result.sort(key=lambda x: x["total_cost"], reverse=True)
@@ -857,7 +881,9 @@ def most_expensive_ticket(
         all_traces = _fetch_traces_for_tickets(settings, max_tickets, repo_config)
     else:
         # --- time-window mode ---
-        from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+        from_timestamp = (
+            datetime.utcnow() - timedelta(hours=lookback_hours)
+        ).isoformat() + "Z"
 
         PAGE_SIZE = 100
         EXAMINE_CAP = 500
@@ -964,7 +990,9 @@ def most_expensive_trace(
         all_traces = _fetch_traces_for_tickets(settings, max_tickets, repo_config)
     else:
         # --- time-window mode ---
-        from_timestamp = (datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat() + "Z"
+        from_timestamp = (
+            datetime.utcnow() - timedelta(hours=lookback_hours)
+        ).isoformat() + "Z"
 
         PAGE_SIZE = 100
         EXAMINE_CAP = 500

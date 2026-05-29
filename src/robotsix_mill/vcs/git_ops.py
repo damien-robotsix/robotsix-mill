@@ -29,14 +29,18 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def clone(
-    remote_url: str, dest: Path, branch: str, token: str | None = None
-) -> None:
+def clone(remote_url: str, dest: Path, branch: str, token: str | None = None) -> None:
     """Single-branch clone of ``branch`` into ``dest`` (fresh per ticket)."""
     subprocess.run(
         [
-            "git", "clone", "--quiet", "--single-branch",
-            "--branch", branch, _authed_url(remote_url, token), str(dest),
+            "git",
+            "clone",
+            "--quiet",
+            "--single-branch",
+            "--branch",
+            branch,
+            _authed_url(remote_url, token),
+            str(dest),
         ],
         check=True,
         capture_output=True,
@@ -55,8 +59,15 @@ def branch_exists(repo: Path, name: str) -> bool:
     """Return ``True`` if the local branch *name* exists."""
     return (
         subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "--verify", "--quiet",
-             f"refs/heads/{name}"],
+            [
+                "git",
+                "-C",
+                str(repo),
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                f"refs/heads/{name}",
+            ],
             capture_output=True,
             text=True,
         ).returncode
@@ -122,8 +133,7 @@ def try_rebase_onto(
     # picks up what we just fetched.
     if fetch_remote != "origin":
         try:
-            _git(repo, "update-ref", f"refs/remotes/origin/{target}",
-                 "FETCH_HEAD")
+            _git(repo, "update-ref", f"refs/remotes/origin/{target}", "FETCH_HEAD")
         except subprocess.CalledProcessError:
             # If the update fails the rebase target will be stale —
             # bail rather than rebase onto an old SHA.
@@ -294,5 +304,7 @@ def diff_base(
         _git(repo, "fetch", "origin", target_branch)
     return subprocess.run(
         ["git", "-C", str(repo), "diff", f"origin/{target_branch}...HEAD"],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout

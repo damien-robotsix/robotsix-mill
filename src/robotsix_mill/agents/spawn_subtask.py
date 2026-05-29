@@ -73,10 +73,16 @@ def run_spawn_subtask(
 
     fs = build_fs_tools(repo_dir, settings)
     fs_tools = [
-        t for t in fs
-        if t.__name__ in (
-            "read_file", "write_file", "list_dir",
-            "edit_file", "delete_file", "run_command",
+        t
+        for t in fs
+        if t.__name__
+        in (
+            "read_file",
+            "write_file",
+            "list_dir",
+            "edit_file",
+            "delete_file",
+            "run_command",
         )
     ]
 
@@ -123,9 +129,7 @@ def run_spawn_subtask(
     scope_block = ""
     if files_in_scope:
         scope_block = (
-            "## files-in-scope\n"
-            + "\n".join(f"- {p}" for p in files_in_scope)
-            + "\n\n"
+            "## files-in-scope\n" + "\n".join(f"- {p}" for p in files_in_scope) + "\n\n"
         )
     user_prompt = (
         f"## subtask-spec\n\n{prompt.strip()}\n\n"
@@ -139,7 +143,9 @@ def run_spawn_subtask(
     except UsageLimitExceeded as exc:
         log.warning(
             "subtask %r exceeded its %d-request budget: %s",
-            name, settings.subtask_request_limit, exc,
+            name,
+            settings.subtask_request_limit,
+            exc,
         )
         return (
             f"subtask incomplete: budget cap reached after "
@@ -200,24 +206,26 @@ def make_spawn_subtask_tool(settings: Settings, repo_dir: Path):
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="spawn_subtask",
-        description=(
-            "Delegate ONE atomic chunk of work to a sub-agent with its "
-            "own ~30-request budget and the same fs/explore/run_command "
-            "tools you have. Use when the ticket decomposes into many "
-            "independent edits (per-file moves, per-module migrations, "
-            "per-test additions) — keeps your own context lean and the "
-            "per-chunk budget bounded. Returns the sub-agent's summary."
-        ),
-        category="exploration",
-        parameters={
-            "name": "str (short kebab-case label for this subtask)",
-            "prompt": "str (self-contained mini-spec for the sub-agent)",
-            "files_in_scope": (
-                "list[str] (optional: paths the sub-agent should focus on)"
+    ToolRegistry.register(
+        ToolInfo(
+            name="spawn_subtask",
+            description=(
+                "Delegate ONE atomic chunk of work to a sub-agent with its "
+                "own ~30-request budget and the same fs/explore/run_command "
+                "tools you have. Use when the ticket decomposes into many "
+                "independent edits (per-file moves, per-module migrations, "
+                "per-test additions) — keeps your own context lean and the "
+                "per-chunk budget bounded. Returns the sub-agent's summary."
             ),
-        },
-    ))
+            category="exploration",
+            parameters={
+                "name": "str (short kebab-case label for this subtask)",
+                "prompt": "str (self-contained mini-spec for the sub-agent)",
+                "files_in_scope": (
+                    "list[str] (optional: paths the sub-agent should focus on)"
+                ),
+            },
+        )
+    )
 
     return spawn_subtask

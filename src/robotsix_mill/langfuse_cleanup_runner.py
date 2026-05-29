@@ -44,12 +44,16 @@ def run_langfuse_cleanup_pass(
     import httpx
 
     if repo_config is not None:
-        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        host = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
+            "/"
+        )
         public_key = repo_config.langfuse_public_key
         secret_key = repo_config.langfuse_secret_key
         label = repo_config.repo_id
     else:
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip(
+            "/"
+        )
         public_key = get_secrets().langfuse_public_key
         secret_key = get_secrets().langfuse_secret_key
         label = "default"
@@ -58,7 +62,9 @@ def run_langfuse_cleanup_pass(
         log.info("langfuse_cleanup: %s — no credentials, skipping", label)
         return CleanupResult(project=label, traces_before=0, traces_deleted=0)
     if max_traces <= 0:
-        log.info("langfuse_cleanup: %s — max_traces=%d ≤ 0, skipping", label, max_traces)
+        log.info(
+            "langfuse_cleanup: %s — max_traces=%d ≤ 0, skipping", label, max_traces
+        )
         return CleanupResult(project=label, traces_before=0, traces_deleted=0)
 
     auth = "Basic " + base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
@@ -74,14 +80,20 @@ def run_langfuse_cleanup_pass(
             if total <= max_traces:
                 log.info(
                     "langfuse_cleanup: %s — %d traces (≤ cap %d), nothing to delete",
-                    label, total, max_traces,
+                    label,
+                    total,
+                    max_traces,
                 )
-                return CleanupResult(project=label, traces_before=total, traces_deleted=0)
+                return CleanupResult(
+                    project=label, traces_before=total, traces_deleted=0
+                )
 
             to_delete = total - max_traces
             log.info(
                 "langfuse_cleanup: %s — %d over cap, deleting %d oldest",
-                label, to_delete, to_delete,
+                label,
+                to_delete,
+                to_delete,
             )
 
             # 2. Delete oldest in batches of _PAGE_SIZE. Always fetch page=1
@@ -104,7 +116,9 @@ def run_langfuse_cleanup_pass(
                     log.warning(
                         "langfuse_cleanup: %s — list returned no IDs at "
                         "%d/%d, stopping",
-                        label, deleted_total, to_delete,
+                        label,
+                        deleted_total,
+                        to_delete,
                     )
                     break
                 r = c.request(
@@ -116,14 +130,23 @@ def run_langfuse_cleanup_pass(
                 deleted_total += len(ids)
                 log.info(
                     "langfuse_cleanup: %s — deleted %d (%d/%d)",
-                    label, len(ids), deleted_total, to_delete,
+                    label,
+                    len(ids),
+                    deleted_total,
+                    to_delete,
                 )
             return CleanupResult(
-                project=label, traces_before=total, traces_deleted=deleted_total,
+                project=label,
+                traces_before=total,
+                traces_deleted=deleted_total,
             )
     except Exception as e:  # noqa: BLE001 — periodic sweep must not crash worker
         log.exception(
             "langfuse_cleanup: %s — pass failed after deleting %d: %s",
-            label, deleted_total, e,
+            label,
+            deleted_total,
+            e,
         )
-        return CleanupResult(project=label, traces_before=0, traces_deleted=deleted_total)
+        return CleanupResult(
+            project=label, traces_before=0, traces_deleted=deleted_total
+        )

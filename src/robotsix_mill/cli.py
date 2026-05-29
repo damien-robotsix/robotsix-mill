@@ -116,9 +116,7 @@ _RUNNERS: dict[str, dict[str, str]] = {
 def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
     """Dynamically import and run a subcommand's runner, then print results."""
     entry = _RUNNERS[cmd]
-    mod = importlib.import_module(
-        f".{entry['module']}", package="robotsix_mill"
-    )
+    mod = importlib.import_module(f".{entry['module']}", package="robotsix_mill")
     func = getattr(mod, entry["function"])
 
     try:
@@ -126,19 +124,27 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             result = func()
         elif cmd == "verify":
             from .runtime.tracing import make_session_id
+
             session_id = make_session_id(cmd)
             ticket_id = getattr(args, "ticket_id", None)
             result = func(session_id=session_id, ticket_id=ticket_id)
         elif cmd == "langfuse-cleanup":
             from .config import Settings
+
             settings = Settings()
-            result = func(settings=settings, repo_config=None, max_traces=settings.langfuse_cleanup_max_traces)
+            result = func(
+                settings=settings,
+                repo_config=None,
+                max_traces=settings.langfuse_cleanup_max_traces,
+            )
         elif cmd == "cost-reconciliation":
             from .runtime.tracing import make_session_id
+
             session_id = make_session_id(cmd)
             repo_id = getattr(args, "repo_id", None)
             if repo_id:
                 from .config import get_repos_config
+
                 repos = get_repos_config()
                 if repo_id not in repos.repos:
                     sorted_keys = sorted(repos.repos.keys())
@@ -241,9 +247,7 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             print(f"{entry['label']} complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
             if result.drafts_created:
-                print(
-                    f"Draft tickets created: {len(result.drafts_created)}"
-                )
+                print(f"Draft tickets created: {len(result.drafts_created)}")
                 for d in result.drafts_created:
                     print(f"  - {d['id']}: {d['title']}")
             else:
@@ -286,9 +290,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_new = tsub.add_parser("new", help="emit a ticket (worker picks it up)")
     p_new.add_argument("--title", required=True)
-    p_new.add_argument(
-        "--description-file", help="file with the body; '-' reads stdin"
-    )
+    p_new.add_argument("--description-file", help="file with the body; '-' reads stdin")
     p_new.add_argument(
         "--repo-id",
         help="repository identifier (required when multiple repos are "
@@ -317,9 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     p_resume.add_argument("id")
 
     # --- audit command ---
-    p_audit = sub.add_parser(
-        "audit", help="run an audit pass and emit gap drafts"
-    )
+    p_audit = sub.add_parser("audit", help="run an audit pass and emit gap drafts")
     p_audit.add_argument(
         "--json",
         action="store_true",
@@ -349,9 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # --- health command ---
-    p_health = sub.add_parser(
-        "health", help="run a health pass and emit gap drafts"
-    )
+    p_health = sub.add_parser("health", help="run a health pass and emit gap drafts")
     p_health.add_argument(
         "--json",
         action="store_true",
@@ -369,9 +367,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # --- verify command ---
-    p_verify = sub.add_parser(
-        "verify", help="verify TicketEvent hash-chain integrity"
-    )
+    p_verify = sub.add_parser("verify", help="verify TicketEvent hash-chain integrity")
     p_verify.add_argument(
         "--ticket-id",
         default=None,
@@ -420,7 +416,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- cost-reconciliation command ---
     p_cost_reconciliation = sub.add_parser(
-        "cost-reconciliation", help="run an OpenRouter vs Langfuse cost drift detection pass"
+        "cost-reconciliation",
+        help="run an OpenRouter vs Langfuse cost drift detection pass",
     )
     p_cost_reconciliation.add_argument(
         "--json",
@@ -433,9 +430,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # --- survey command ---
-    p_survey = sub.add_parser(
-        "survey", help="run an OSS project discovery survey pass"
-    )
+    p_survey = sub.add_parser("survey", help="run an OSS project discovery survey pass")
     p_survey.add_argument(
         "--json",
         action="store_true",
@@ -471,17 +466,18 @@ def main(argv: list[str] | None = None) -> int:
         # OSError: [Errno 24] once they exhaust it across parallel
         # git/trivy/agent subprocesses.
         import resource
+
         try:
             _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
             target = max(65536, hard) if hard != resource.RLIM_INFINITY else 65536
             resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
-        except (ValueError, OSError):
+        except ValueError, OSError:
             pass
 
         import uvicorn
 
         from .runtime.api import create_app
-        from .config import get_repos_config, ReposRegistry
+        from .config import get_repos_config
         from .config_loader import ConfigError
 
         if args.repo_id:
@@ -549,8 +545,7 @@ def main(argv: list[str] | None = None) -> int:
         with _client(settings) as c:
             r = c.post(
                 "/tickets",
-                json={"title": args.title, "description": body,
-                      "kind": "inquiry"},
+                json={"title": args.title, "description": body, "kind": "inquiry"},
             )
             r.raise_for_status()
             print(r.json()["id"])
@@ -569,6 +564,7 @@ def main(argv: list[str] | None = None) -> int:
             if repo_id is None:
                 from .config import get_repos_config
                 from .config_loader import ConfigError as _ConfigError
+
                 try:
                     repos = get_repos_config()
                 except _ConfigError as exc:
@@ -577,7 +573,9 @@ def main(argv: list[str] | None = None) -> int:
                 if len(repos.repos) == 1:
                     repo_id = next(iter(repos.repos.keys()))
                 elif not repos.repos:
-                    print("Error: no repos defined in config/repos.yaml", file=sys.stderr)
+                    print(
+                        "Error: no repos defined in config/repos.yaml", file=sys.stderr
+                    )
                     return 2
                 else:
                     sorted_keys = sorted(repos.repos.keys())

@@ -33,7 +33,6 @@ def _langfuse_settings(**overrides):
     the Langfuse credentials (the old ``LANGFUSE_*`` env-var-style
     keys are mapped automatically).
     """
-    from robotsix_mill.config import Settings
 
     # Map old LANGFUSE_* keys to Secrets field names.
     secrets_kwargs: dict = {}
@@ -47,9 +46,12 @@ def _langfuse_settings(**overrides):
 
     # Populate Secrets so get_secrets() returns matching values.
     import robotsix_mill.config as _cfg
+
     _reset_secrets()
     _cfg._secrets = Secrets(
-        langfuse_base_url=secrets_kwargs.get("langfuse_base_url", "https://lf.example.com"),
+        langfuse_base_url=secrets_kwargs.get(
+            "langfuse_base_url", "https://lf.example.com"
+        ),
         langfuse_public_key=secrets_kwargs.get("langfuse_public_key", "pk-test"),
         langfuse_secret_key=secrets_kwargs.get("langfuse_secret_key", "sk-test"),
     )
@@ -125,10 +127,13 @@ def test_langfuse_api_get_returns_none_on_non_200(status_code, monkeypatch):
     assert result is None
 
 
-@pytest.mark.parametrize("exc", [
-    httpx.ConnectError("connection refused"),
-    httpx.ReadTimeout("timed out"),
-])
+@pytest.mark.parametrize(
+    "exc",
+    [
+        httpx.ConnectError("connection refused"),
+        httpx.ReadTimeout("timed out"),
+    ],
+)
 def test_langfuse_api_get_returns_none_on_network_error(exc, monkeypatch):
     """Network errors (ConnectError, ReadTimeout) are caught → None
     (no exception propagates)."""
@@ -214,7 +219,7 @@ def test_langfuse_api_get_constructs_correct_auth_header(monkeypatch):
     auth_header = captured_headers[0]["Authorization"]
     assert auth_header.startswith("Basic ")
 
-    encoded = auth_header[len("Basic "):]
+    encoded = auth_header[len("Basic ") :]
     decoded = base64.b64decode(encoded).decode()
     assert decoded == "pk-mykey:sk-secret"
 
@@ -277,10 +282,12 @@ def test_session_total_cost_handles_missing_totalcost_key(settings, monkeypatch)
     """Traces without a 'totalCost' key → _num(None) → 0.0."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client._langfuse_api_get",
-        _fake_api_response([
-            {"id": "t1", "name": "ok", "totalCost": 0.10},
-            {"id": "t2", "name": "missing-key"},
-        ]),
+        _fake_api_response(
+            [
+                {"id": "t1", "name": "ok", "totalCost": 0.10},
+                {"id": "t2", "name": "missing-key"},
+            ]
+        ),
     )
     cost = session_total_cost(settings, "s")
     assert cost == 0.10  # missing-key trace contributes 0.0
@@ -290,10 +297,12 @@ def test_session_total_cost_handles_non_numeric_totalcost(settings, monkeypatch)
     """totalCost is a non-numeric string → _num catches ValueError → 0.0."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client._langfuse_api_get",
-        _fake_api_response([
-            {"id": "t1", "totalCost": "not-a-number"},
-            {"id": "t2", "totalCost": 0.05},
-        ]),
+        _fake_api_response(
+            [
+                {"id": "t1", "totalCost": "not-a-number"},
+                {"id": "t2", "totalCost": 0.05},
+            ]
+        ),
     )
     cost = session_total_cost(settings, "s")
     assert cost == 0.05  # "not-a-number" contributes 0.0
@@ -303,10 +312,12 @@ def test_session_total_cost_handles_totalcost_typeerror(settings, monkeypatch):
     """totalCost is a list → float(list) raises TypeError → caught → 0.0."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client._langfuse_api_get",
-        _fake_api_response([
-            {"id": "t1", "totalCost": [1, 2, 3]},
-            {"id": "t2", "totalCost": 0.03},
-        ]),
+        _fake_api_response(
+            [
+                {"id": "t1", "totalCost": [1, 2, 3]},
+                {"id": "t2", "totalCost": 0.03},
+            ]
+        ),
     )
     cost = session_total_cost(settings, "s")
     assert cost == 0.03  # list contributes 0.0
@@ -486,7 +497,9 @@ def test_aggregate_cost_trend_buckets_daily(monkeypatch):
     assert sum(b["trace_count"] for b in result) == 2
     # At least two buckets have non-zero cost (each trace in its own day)
     nonzero = [b for b in result if b["total_cost"] > 0]
-    assert len(nonzero) >= 2, f"expected traces in different daily buckets, got: {nonzero}"
+    assert len(nonzero) >= 2, (
+        f"expected traces in different daily buckets, got: {nonzero}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +528,9 @@ def _multi_page_mock_client(pages: dict[int, dict]):
             if page in pages:
                 return _FakeResponse(200, pages[page])
             # Simulate pagination past the end — empty page
-            return _FakeResponse(200, {"data": [], "meta": {"totalPages": max(pages.keys())}})
+            return _FakeResponse(
+                200, {"data": [], "meta": {"totalPages": max(pages.keys())}}
+            )
 
     return _PagingClient
 
@@ -545,13 +560,21 @@ def test_aggregate_cost_by_name_multi_page(monkeypatch):
             ts = (now - timedelta(hours=seq * 0.01)).isoformat() + "Z"
             if pg <= 2:
                 page_traces.append(
-                    {"id": f"r{seq}", "name": "refine",
-                     "timestamp": ts, "totalCost": 0.01}
+                    {
+                        "id": f"r{seq}",
+                        "name": "refine",
+                        "timestamp": ts,
+                        "totalCost": 0.01,
+                    }
                 )
             else:
                 page_traces.append(
-                    {"id": f"i{seq}", "name": "implement",
-                     "timestamp": ts, "totalCost": 0.02}
+                    {
+                        "id": f"i{seq}",
+                        "name": "implement",
+                        "timestamp": ts,
+                        "totalCost": 0.02,
+                    }
                 )
         pages[pg] = {
             "data": page_traces,
@@ -599,8 +622,7 @@ def test_aggregate_cost_trend_multi_page(monkeypatch):
             offset_hours = (seq % 30) / 10.0  # 0.0 – 2.9 hours ago
             ts = (now - timedelta(hours=offset_hours)).isoformat() + "Z"
             page_traces.append(
-                {"id": f"t{seq}", "name": "test",
-                 "timestamp": ts, "totalCost": 0.001}
+                {"id": f"t{seq}", "name": "test", "timestamp": ts, "totalCost": 0.001}
             )
         pages[pg] = {
             "data": page_traces,
@@ -613,5 +635,5 @@ def test_aggregate_cost_trend_multi_page(monkeypatch):
 
     total_cost = sum(b["total_cost"] for b in result)
     total_count = sum(b["trace_count"] for b in result)
-    assert total_cost == pytest.approx(0.60)   # 600 × $0.001
+    assert total_cost == pytest.approx(0.60)  # 600 × $0.001
     assert total_count == 600

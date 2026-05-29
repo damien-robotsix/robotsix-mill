@@ -18,7 +18,9 @@ def _make_settings(tmp_path, **overrides):
 
 
 @pytest.mark.asyncio
-async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
+async def test_worker_survey_task_created_when_periodic(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._survey_task is created when survey_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -38,6 +40,7 @@ async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch, r
     # Patch _run_periodic_pass to be a no-op to avoid running immediately
     async def noop_periodic(self, label, runner_fn, interval):
         import asyncio
+
         await asyncio.sleep(3600)
 
     monkeypatch.setattr(Worker, "_run_periodic_pass", noop_periodic)
@@ -52,7 +55,9 @@ async def test_worker_survey_task_created_when_periodic(tmp_path, monkeypatch, r
 
 
 @pytest.mark.asyncio
-async def test_worker_survey_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
+async def test_worker_survey_task_not_created_when_periodic_false(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._survey_task is NOT created when survey_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker

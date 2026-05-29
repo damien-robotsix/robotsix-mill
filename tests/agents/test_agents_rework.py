@@ -18,6 +18,7 @@ def _settings(tmp_path, **env):
     # Populate Secrets so get_secrets() returns matching values
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key=env.get("OPENROUTER_API_KEY", "k"))
     return Settings(**env)
@@ -33,9 +34,7 @@ def fake_ai(monkeypatch):
 
     class FakeAgent:
         def __init__(self, **kw):
-            cap["tools"] = sorted(
-                t.__name__ for t in (kw.get("tools") or [])
-            )
+            cap["tools"] = sorted(t.__name__ for t in (kw.get("tools") or []))
             cap["name"] = kw.get("name")
 
         def run_sync(self, prompt, *, usage_limits=None, **kw):
@@ -54,7 +53,8 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     web_research. There is NO run_tests tool — the implement stage owns
     the test→retry→escalate loop and runs the suite itself."""
     s = _settings(
-        tmp_path, model="main/cap",
+        tmp_path,
+        model="main/cap",
         coordinator_request_limit="9",
     )
     out = coordinating.run_coordinator(
@@ -64,12 +64,22 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["model"] == "main/cap"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
-        "ask_user", "close_thread", "consult_expert", "consult_library",
-        "delete_file", "edit_file", "explore",
-        "list_dir", "post_comment",
-        "read_file", "reply_to_thread", "report_issue",
-        "run_command", "spawn_subtask",
-        "web_research", "write_file",
+        "ask_user",
+        "close_thread",
+        "consult_expert",
+        "consult_library",
+        "delete_file",
+        "edit_file",
+        "explore",
+        "list_dir",
+        "post_comment",
+        "read_file",
+        "reply_to_thread",
+        "report_issue",
+        "run_command",
+        "spawn_subtask",
+        "web_research",
+        "write_file",
     ]
     assert fake_ai["name"] == "implement"
 
@@ -90,8 +100,9 @@ def test_test_agent_pass(tmp_path, monkeypatch):
 
     s = _settings(tmp_path, test_command="pytest")
     monkeypatch.setattr(
-        sandbox, "run", lambda cmd, *, repo_dir, settings,
-        epic_workspace_path=None: (0, "ok")
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, epic_workspace_path=None: (0, "ok"),
     )
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is True and "passed" in fb
@@ -101,12 +112,17 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
 
     s = _settings(
-        tmp_path, test_command="pytest", test_model="test/cheap",
+        tmp_path,
+        test_command="pytest",
+        test_model="test/cheap",
     )
     monkeypatch.setattr(
-        sandbox, "run",
-        lambda cmd, *, repo_dir, settings,
-        epic_workspace_path=None: (1, "E   assert 1 == 2\n" * 50),
+        sandbox,
+        "run",
+        lambda cmd, *, repo_dir, settings, epic_workspace_path=None: (
+            1,
+            "E   assert 1 == 2\n" * 50,
+        ),
     )
     cap = {}
 
@@ -117,9 +133,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     class FakeAgent:
         def __init__(self, **kw):
             cap["name"] = kw.get("name")
-            cap["tools"] = sorted(
-                t.__name__ for t in (kw.get("tools") or [])
-            )
+            cap["tools"] = sorted(t.__name__ for t in (kw.get("tools") or []))
 
         def run_sync(self, prompt, *, usage_limits=None, **kw):
             cap["got_output"] = "assert 1 == 2" in prompt
@@ -175,7 +189,9 @@ def test_build_agent_forwards_name(tmp_path, monkeypatch):
 
     s = _settings(tmp_path)
     base_mod.build_agent(
-        s, system_prompt="test", name="test-agent",
+        s,
+        system_prompt="test",
+        name="test-agent",
     )
     assert cap["name"] == "test-agent"
 
@@ -194,10 +210,14 @@ def test_build_agent_does_not_inject_tool_prose_into_prompt(tmp_path, monkeypatc
 
     s = _settings(tmp_path)
 
-    ToolRegistry.register(ToolInfo(
-        name="write_file", description="Write a file.",
-        category="fs", parameters={"path": "str", "content": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="write_file",
+            description="Write a file.",
+            category="fs",
+            parameters={"path": "str", "content": "str"},
+        )
+    )
 
     def dummy_tool():
         """A dummy tool."""
@@ -258,7 +278,8 @@ def test_build_agent_without_name_is_compatible(tmp_path, monkeypatch):
 
     s = _settings(tmp_path)
     base_mod.build_agent(
-        s, system_prompt="test",
+        s,
+        system_prompt="test",
     )
     assert cap["name"] is None
 
@@ -276,18 +297,23 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
 
     class FakeAgent:
         def __init__(self, **kw):
-            cap["tools"] = sorted(
-                t.__name__ for t in (kw.get("tools") or [])
-            )
+            cap["tools"] = sorted(t.__name__ for t in (kw.get("tools") or []))
 
         def run_sync(self, prompt, *, usage_limits=None, **kw):
             from robotsix_mill.agents.auditing import AuditResult
-            return type("R", (), {
-                "output": AuditResult(
-                    draft_ticket_titles=[], draft_ticket_bodies=[],
-                    gap_ids=[], updated_memory="",
-                )
-            })()
+
+            return type(
+                "R",
+                (),
+                {
+                    "output": AuditResult(
+                        draft_ticket_titles=[],
+                        draft_ticket_bodies=[],
+                        gap_ids=[],
+                        updated_memory="",
+                    )
+                },
+            )()
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
@@ -297,15 +323,25 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
     auditing.run_audit_agent(settings=s, repo_dir=tmp_path, memory="")
 
     assert cap["tools"] == [
-        "ask_user", "close_thread", "detect_duplication", "explore", "list_dir",
-        "read_file", "read_ticket", "run_command", "web_research",
+        "ask_user",
+        "close_thread",
+        "detect_duplication",
+        "explore",
+        "list_dir",
+        "read_file",
+        "read_ticket",
+        "run_command",
+        "web_research",
     ]
 
 
 def test_validation_result_decide_proceed():
     """A passing gate routes to proceed regardless of iteration count."""
     vr = ValidationResult.decide(
-        passed=True, iterations=1, max_iters=8, feedback="",
+        passed=True,
+        iterations=1,
+        max_iters=8,
+        feedback="",
     )
     assert vr.passed is True
     assert vr.next_action == "proceed"
@@ -317,7 +353,10 @@ def test_validation_result_decide_retry():
     """A failing gate with attempts remaining routes to retry and
     carries the diagnosis as failure_summary."""
     vr = ValidationResult.decide(
-        passed=False, iterations=1, max_iters=8, feedback="boom in test_x",
+        passed=False,
+        iterations=1,
+        max_iters=8,
+        feedback="boom in test_x",
     )
     assert vr.passed is False
     assert vr.next_action == "retry"
@@ -329,7 +368,10 @@ def test_validation_result_decide_escalate():
     """A failing gate on the last allowed attempt routes to escalate —
     no LLM involvement, the bound is enforced here."""
     vr = ValidationResult.decide(
-        passed=False, iterations=3, max_iters=3, feedback="still broken",
+        passed=False,
+        iterations=3,
+        max_iters=3,
+        feedback="still broken",
     )
     assert vr.next_action == "escalate"
     assert vr.passed is False

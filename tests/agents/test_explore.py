@@ -11,6 +11,7 @@ def _settings(tmp_path, **env):
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**env)
@@ -18,9 +19,7 @@ def _settings(tmp_path, **env):
 
 def test_no_key_degrades_not_raises(tmp_path):
     s = _settings(tmp_path, OPENROUTER_API_KEY="")
-    out = explore.run_explore(
-        settings=s, repo_dir=tmp_path, question="where is X?"
-    )
+    out = explore.run_explore(settings=s, repo_dir=tmp_path, question="where is X?")
     assert "unavailable" in out and "OPENROUTER_API_KEY" in out
 
 
@@ -30,9 +29,7 @@ def test_missing_repo_degrades_not_raises(tmp_path):
     making any HTTP call."""
     missing = tmp_path / "nonexistent"
     s = _settings(tmp_path, OPENROUTER_API_KEY="valid-key")
-    out = explore.run_explore(
-        settings=s, repo_dir=missing, question="where is X?"
-    )
+    out = explore.run_explore(settings=s, repo_dir=missing, question="where is X?")
     assert "explore unavailable" in out
     assert "workspace repo directory does not exist" in out
     assert "not been cloned yet" in out
@@ -55,16 +52,16 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     assert seen["extra_roots"] is None
 
 
-def test_explore_subagent_is_read_only_and_uses_explore_model(
-    tmp_path, monkeypatch
-):
+def test_explore_subagent_is_read_only_and_uses_explore_model(tmp_path, monkeypatch):
     """The sub-agent gets ONLY read_file/list_dir/run_command (never
     write_file/edit_file/delete_file) and runs on its own explore_model,
     bounded."""
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
-        tmp_path, OPENROUTER_API_KEY="k",
-        model="coordinator/big", explore_model="explore/cheap",
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        model="coordinator/big",
+        explore_model="explore/cheap",
         explore_request_limit="7",
         explore_max_tokens="600",
     )
@@ -95,7 +92,11 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
     out = explore.run_explore(settings=s, repo_dir=tmp_path, question="q")
     assert out == "answer"
     assert cap["model"] == "explore/cheap"  # its own model, not coordinator
-    assert cap["tools"] == ["list_dir", "read_file", "run_command"]  # NO write/edit/delete
+    assert cap["tools"] == [
+        "list_dir",
+        "read_file",
+        "run_command",
+    ]  # NO write/edit/delete
     assert cap["limit"] == 7
     assert cap["name"] == "explore"
     # model_settings with max_tokens is wired
@@ -105,6 +106,7 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(
 
 
 # --- bounded retry + sentinel tests -------------------------------------
+
 
 class _FakeUsageLimitExceeded(Exception):
     pass
@@ -119,7 +121,8 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
     request_limit=2.  If the retry succeeds, its answer is returned."""
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
-        tmp_path, OPENROUTER_API_KEY="k",
+        tmp_path,
+        OPENROUTER_API_KEY="k",
         explore_model="explore/cheap",
         explore_request_limit="20",
     )
@@ -137,11 +140,13 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
             self._tools = kw.get("tools", [])
             self._system_prompt = kw.get("system_prompt", "")
             if self._name == "explore-retry":
-                retry_agent_calls.append(dict(
-                    name=self._name,
-                    tools=self._tools,
-                    system_prompt=self._system_prompt,
-                ))
+                retry_agent_calls.append(
+                    dict(
+                        name=self._name,
+                        tools=self._tools,
+                        system_prompt=self._system_prompt,
+                    )
+                )
 
         def run_sync(self, q, *, usage_limits=None):
             if self._name == "explore":
@@ -155,8 +160,9 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
     from robotsix_mill.agents import openrouter_cost as oc
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(pydantic_ai.exceptions, "UsageLimitExceeded",
-                        _FakeUsageLimitExceeded)
+    monkeypatch.setattr(
+        pydantic_ai.exceptions, "UsageLimitExceeded", _FakeUsageLimitExceeded
+    )
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
 
@@ -177,7 +183,8 @@ def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
     UsageLimitExceeded, is_explore_budget_exhausted() returns True."""
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
-        tmp_path, OPENROUTER_API_KEY="k",
+        tmp_path,
+        OPENROUTER_API_KEY="k",
         explore_model="explore/cheap",
         explore_request_limit="20",
     )
@@ -198,8 +205,9 @@ def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
     from robotsix_mill.agents import openrouter_cost as oc
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
-    monkeypatch.setattr(pydantic_ai.exceptions, "UsageLimitExceeded",
-                        _FakeUsageLimitExceeded)
+    monkeypatch.setattr(
+        pydantic_ai.exceptions, "UsageLimitExceeded", _FakeUsageLimitExceeded
+    )
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
 

@@ -11,6 +11,13 @@ from .periodic_runner import (
 )
 
 
-def run_agent_check_pass(session_id: str, repo_config: RepoConfig | None = None) -> AgentCheckPassResult:
+def run_agent_check_pass(
+    session_id: str, repo_config: RepoConfig | None = None
+) -> AgentCheckPassResult:
     settings = Settings()
-    return run_periodic_pass(session_id, repo_config, config=PERIODIC_PASS_CONFIGS["agent_check"], settings=settings)
+    return run_periodic_pass(
+        session_id,
+        repo_config,
+        config=PERIODIC_PASS_CONFIGS["agent_check"],
+        settings=settings,
+    )

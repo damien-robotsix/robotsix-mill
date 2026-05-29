@@ -1,7 +1,5 @@
 """Tests for the epic breakdown agent."""
 
-import pytest
-
 from robotsix_mill.agents.epic_breakdown import (
     SYSTEM_PROMPT,
     EpicBreakdownResult,

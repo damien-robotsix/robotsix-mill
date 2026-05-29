@@ -11,7 +11,6 @@ from robotsix_mill.agents import (
     refining,
     health,
     auditing,
-    retrospecting,
     agent_check,
 )
 from robotsix_mill.agents.yaml_loader import load_agent_definition
@@ -141,19 +140,46 @@ def test_agent_check_prompt_no_tool_signatures():
 
 _PER_TICKET_MEMORY_PATTERNS = [
     (r"record[ \t]+(the[ \t]+)?ticket[ \t]+IDs?\b", "record the ticket ID(s)"),
-    (r"note[ \t]+(down[ \t]+)?(the[ \t]+)?ticket[ \t]+IDs?\b", "note down the ticket ID(s)"),
-    (r"keep[ \t]+(a[ \t]+)?(log|diary|record)[ \t]+of[ \t]+tickets?\b", "keep a log/diary of tickets"),
+    (
+        r"note[ \t]+(down[ \t]+)?(the[ \t]+)?ticket[ \t]+IDs?\b",
+        "note down the ticket ID(s)",
+    ),
+    (
+        r"keep[ \t]+(a[ \t]+)?(log|diary|record)[ \t]+of[ \t]+tickets?\b",
+        "keep a log/diary of tickets",
+    ),
     (r"per-ticket[ \t]+(notes?|diary|log|record)\b", "per-ticket notes/diary"),
     (r"per-proposal[ \t]+(notes?|diary|log|record)\b", "per-proposal notes/diary"),
     (r"per-finding[ \t]+(notes?|diary|log|record)\b", "per-finding notes/diary"),
-    (r"track[ \t]+what[ \t]+you[ \t]+(proposed|filed|submitted)", "track what you proposed"),
-    (r"record[ \t]+each[ \t]+(finding|proposal|ticket|gap)", "record each finding/proposal"),
-    (r"diary[ \t]+of[ \t]+(tickets?|proposals?|findings?)", "diary of tickets/proposals"),
-    (r"log[ \t]+(each|every)[ \t]+(ticket|proposal|finding)", "log each ticket/proposal"),
-    (r"maintain[ \t]+a[ \t]+(list|log)[ \t]+of[ \t]+(tickets?|proposals?)", "maintain a list of tickets"),
-    (r"write[ \t]+(down[ \t]+)?(the[ \t]+)?ticket[ \t]+(ID|number|reference)", "write down the ticket ID"),
+    (
+        r"track[ \t]+what[ \t]+you[ \t]+(proposed|filed|submitted)",
+        "track what you proposed",
+    ),
+    (
+        r"record[ \t]+each[ \t]+(finding|proposal|ticket|gap)",
+        "record each finding/proposal",
+    ),
+    (
+        r"diary[ \t]+of[ \t]+(tickets?|proposals?|findings?)",
+        "diary of tickets/proposals",
+    ),
+    (
+        r"log[ \t]+(each|every)[ \t]+(ticket|proposal|finding)",
+        "log each ticket/proposal",
+    ),
+    (
+        r"maintain[ \t]+a[ \t]+(list|log)[ \t]+of[ \t]+(tickets?|proposals?)",
+        "maintain a list of tickets",
+    ),
+    (
+        r"write[ \t]+(down[ \t]+)?(the[ \t]+)?ticket[ \t]+(ID|number|reference)",
+        "write down the ticket ID",
+    ),
     (r"store[ \t]+(the[ \t]+)?ticket[ \t]+(ID|number)", "store the ticket ID"),
-    (r"capture[ \t]+(the[ \t]+)?ticket[ \t]+(ID|number|state)", "capture the ticket ID"),
+    (
+        r"capture[ \t]+(the[ \t]+)?ticket[ \t]+(ID|number|state)",
+        "capture the ticket ID",
+    ),
 ]
 
 
@@ -199,5 +225,5 @@ def test_periodic_prompts_prohibit_per_ticket_memory_writes(
                     f"{agent_name} prompt contains prohibited "
                     f"per-ticket-memory language: {desc!r}\n"
                     f"Match: {m.group()!r}\n"
-                    f"Context: …{prompt[max(0,m.start()-40):m.end()+40]}…"
+                    f"Context: …{prompt[max(0, m.start() - 40) : m.end() + 40]}…"
                 )

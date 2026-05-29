@@ -46,11 +46,13 @@ def make_close_thread_tool(settings: Settings, agent_name: str):
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="close_thread",
-        description="Close a top-level comment thread on the current ticket (marks it resolved).",
-        category="reporting",
-        parameters={"comment_id": "int"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="close_thread",
+            description="Close a top-level comment thread on the current ticket (marks it resolved).",
+            category="reporting",
+            parameters={"comment_id": "int"},
+        )
+    )
 
     return close_thread

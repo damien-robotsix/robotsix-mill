@@ -19,7 +19,13 @@ from ..config import Settings
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "copy_paste.yaml"
+
+_SYSPROMPT_PATH = (
+    Path(__file__).parent.parent.parent.parent
+    / "agent_definitions"
+    / "periodic"
+    / "copy_paste.yaml"
+)
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -72,7 +78,10 @@ def run_copy_paste_agent(
     from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "copy_paste.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "periodic"
+        / "copy_paste.yaml"
     )
 
     tools: list = []
@@ -82,26 +91,32 @@ def run_copy_paste_agent(
         from .jscpd_tool import make_jscpd_tool
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t
+            for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir")
         ]
         tools = [make_explore_tool(settings, repo_dir), make_jscpd_tool(repo_dir), *ro]
 
     from .overlays import apply_overlay, load_overlay
+
     system_prompt = apply_overlay(
         definition.system_prompt,
         load_overlay(repo_dir, "copy_paste"),
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         model_name=definition.model or settings.copy_paste_model,
         system_prompt=system_prompt,
     )
     from .prompt_blocks import section
+
     prompt = (
         f"{recent_proposals}"
-        + section("memory", memory or "(empty — start a new ledger)") + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Run detect_duplication, triage the clone pairs, and return your findings."
     )
     from .retry import call_with_retry

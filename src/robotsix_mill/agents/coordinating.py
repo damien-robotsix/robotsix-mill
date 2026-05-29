@@ -37,6 +37,16 @@ class ImplementResult(BaseModel):
     # used by ``check_for_pause`` so an old ask_user sentinel from a
     # prior turn doesn't re-trigger after resume.
     new_messages: bytes | None = None
+    # When True the agent concluded that the ticket's intent is
+    # already satisfied by the codebase (e.g. a "remove dead
+    # ``hasattr`` guard" cleanup that has already been removed by a
+    # sibling ticket). The stage routes such tickets to DONE with
+    # ``no_change_rationale`` as the closing note — same shape as
+    # refine's ``no_change_needed`` mode — instead of BLOCKING with a
+    # generic "no changes produced" error. Default False keeps the
+    # existing BLOCK-on-silent-no-changes behaviour.
+    no_change_needed: bool = False
+    no_change_rationale: str = ""
 
     @model_validator(mode="before")
     @classmethod
@@ -65,8 +75,15 @@ class ImplementResult(BaseModel):
         if data.get("summary"):
             return data
         # Tier 1: known near-misses in priority order.
-        for k in ("summary_text", "summary_str", "summaryText",
-                  "result_summary", "text", "result", "output"):
+        for k in (
+            "summary_text",
+            "summary_str",
+            "summaryText",
+            "result_summary",
+            "text",
+            "result",
+            "output",
+        ):
             v = data.get(k)
             if isinstance(v, str) and v.strip():
                 data["summary"] = v
@@ -75,9 +92,11 @@ class ImplementResult(BaseModel):
         # longest — heuristically the most likely candidate for a
         # multi-sentence summary.
         candidates = [
-            (k, v) for k, v in data.items()
+            (k, v)
+            for k, v in data.items()
             if k not in ("summary", "updated_memory")
-            and isinstance(v, str) and v.strip()
+            and isinstance(v, str)
+            and v.strip()
         ]
         if candidates:
             best_k, best_v = max(candidates, key=lambda kv: len(kv[1]))
@@ -129,7 +148,6 @@ class ValidationResult(BaseModel):
         )
 
 
-
 def make_run_tests_tool(settings: Settings, repo_dir: Path):
     def run_tests() -> str:
         """Run the project's test suite (isolated sandbox) via the test
@@ -137,19 +155,19 @@ def make_run_tests_tool(settings: Settings, repo_dir: Path):
         actionable diagnosis — never the raw log."""
         from .testing import run_test_agent
 
-        passed, feedback = run_test_agent(
-            settings=settings, repo_dir=repo_dir
-        )
+        passed, feedback = run_test_agent(settings=settings, repo_dir=repo_dir)
         return f"{'PASS' if passed else 'FAIL'}: {feedback}"
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="run_tests",
-        description="Run the project's test suite (isolated sandbox) via the test sub-agent.",
-        category="testing",
-        parameters={},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="run_tests",
+            description="Run the project's test suite (isolated sandbox) via the test sub-agent.",
+            category="testing",
+            parameters={},
+        )
+    )
 
     return run_tests
 
@@ -179,7 +197,6 @@ def run_coordinator(
     partial edits from earlier passes persist on disk in ``repo_dir``,
     so a retry continues from the current working tree. The seam tests
     monkeypatch this."""
-    from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
@@ -189,7 +206,9 @@ def run_coordinator(
     from .retry import call_with_retry
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "implement.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "implement.yaml"
     )
 
     # Pre-seed fs_tools cache and build synthetic message_history when
@@ -205,7 +224,8 @@ def run_coordinator(
             file_path = repo_dir / rf["path"]
             try:
                 pre_seeded[file_path.resolve()] = file_path.read_text(
-                    encoding="utf-8", errors="replace",
+                    encoding="utf-8",
+                    errors="replace",
                 )
             except OSError:
                 log.warning(
@@ -215,14 +235,24 @@ def run_coordinator(
 
     extra_roots: list[Path] | None = None
 
-    fs = build_fs_tools(repo_dir, settings, pre_seeded=pre_seeded,
-                        extra_roots=extra_roots)
+    fs = build_fs_tools(
+        repo_dir, settings, pre_seeded=pre_seeded, extra_roots=extra_roots
+    )
     # the main agent reads + writes itself and includes run_command for
     # focused diagnosis (re-run a single failing test, run a linter,
     # inspect git diff, etc.). The full suite is run by the stage.
     fs_tools = [
-        t for t in fs if t.__name__ in
-        ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
+        t
+        for t in fs
+        if t.__name__
+        in (
+            "read_file",
+            "write_file",
+            "list_dir",
+            "edit_file",
+            "delete_file",
+            "run_command",
+        )
     ]
 
     overrides = {}
@@ -241,7 +271,8 @@ def run_coordinator(
     from .spawn_subtask import make_spawn_subtask_tool
 
     agent = build_agent_from_definition(
-        settings, definition,
+        settings,
+        definition,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
             make_consult_expert_tool(settings, repo_dir, board_id=board_id),
@@ -253,12 +284,14 @@ def run_coordinator(
     )
     try:
         from .prompt_blocks import section
+
         limits = UsageLimits(request_limit=settings.coordinator_request_limit)
         user_prompt = ""
         if epic_context:
             user_prompt += f"{epic_context}\n\n"
         user_prompt += (
-            section("ticket-spec", spec) + "\n\n"
+            section("ticket-spec", spec)
+            + "\n\n"
             + section("memory", memory or "(empty — start a new ledger)")
         )
         if feedback:
@@ -271,7 +304,8 @@ def run_coordinator(
                         "Your previous edit pass produced this summary "
                         "(already on disk):\n"
                         f"{previous_attempt_summary}",
-                    ) + "\n\n"
+                    )
+                    + "\n\n"
                 ) + user_prompt
             if feedback.startswith("[REVIEW"):
                 # Review feedback — prepend to the spec so the coordinator
@@ -286,7 +320,8 @@ def run_coordinator(
                         "need to explain your approach or ask a clarifying "
                         "question, call `reply_to_thread(thread_id, body)` first.\n"
                         f"{feedback}",
-                    ) + "\n\n"
+                    )
+                    + "\n\n"
                 ) + user_prompt
             elif feedback.startswith("[SCOPE"):
                 user_prompt += (
@@ -342,7 +377,8 @@ def run_coordinator(
                 message_history=final_message_history,
                 usage_limits=limits,
             ),
-            settings=settings, what="implement",
+            settings=settings,
+            what="implement",
         )
         output: ImplementResult = result.output
         try:
@@ -388,7 +424,9 @@ def run_coordinator(
 
 
 def _resolve_expert_memory_path(
-    settings: "Settings", definition, board_id: str = "",
+    settings: "Settings",
+    definition,
+    board_id: str = "",
 ) -> Path:
     """Resolve the on-disk memory ledger path for an expert.
 
@@ -423,6 +461,7 @@ def _build_expert_prompt(
     puts it in the system prompt instead.
     """
     from .prompt_blocks import section
+
     parts: list[str] = []
     if epic_context:
         parts.append(epic_context)
@@ -437,23 +476,28 @@ def _build_expert_prompt(
         if matched_files
         else "  (no in-scope files passed; fall back to module_paths in your definition)"
     )
-    parts.append(section(
-        "domain-context",
-        f"You are the `{domain}` expert. Focus on these in-scope files "
-        f"matched against your domain's module_paths:\n"
-        f"{files_block}\n"
-        f"{other_line}",
-    ))
+    parts.append(
+        section(
+            "domain-context",
+            f"You are the `{domain}` expert. Focus on these in-scope files "
+            f"matched against your domain's module_paths:\n"
+            f"{files_block}\n"
+            f"{other_line}",
+        )
+    )
     user_prompt = "\n\n".join(parts)
     if feedback:
         prefix = ""
         if previous_attempt_summary:
-            prefix = section(
-                "previous-attempt",
-                "Your previous edit pass produced this summary "
-                "(already on disk):\n"
-                f"{previous_attempt_summary}",
-            ) + "\n\n"
+            prefix = (
+                section(
+                    "previous-attempt",
+                    "Your previous edit pass produced this summary "
+                    "(already on disk):\n"
+                    f"{previous_attempt_summary}",
+                )
+                + "\n\n"
+            )
         if feedback.startswith("[REVIEW"):
             block = section(
                 "review-feedback",
@@ -464,7 +508,8 @@ def _build_expert_prompt(
             user_prompt = prefix + block + "\n\n" + user_prompt
         elif feedback.startswith("[SCOPE"):
             user_prompt = (
-                prefix + user_prompt
+                prefix
+                + user_prompt
                 + "\n\n"
                 + section(
                     "scope-violation",
@@ -476,7 +521,8 @@ def _build_expert_prompt(
             )
         else:
             user_prompt = (
-                prefix + user_prompt
+                prefix
+                + user_prompt
                 + "\n\n"
                 + section(
                     "test-failure",
@@ -543,14 +589,18 @@ def run_coordinator_with_experts(
     from .expert_manager import ExpertManager
     from ..pass_runner import load_memory, persist_memory
     from .retry import call_with_retry
-    from .base import _safe_close
 
     def _fallback(reason: str) -> ImplementResult:
         log.info("run_coordinator_with_experts: falling back (%s)", reason)
         return run_coordinator(
-            settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
-            model_name=model_name, feedback=feedback,
-            epic_context=epic_context, reference_files=reference_files,
+            settings=settings,
+            repo_dir=repo_dir,
+            spec=spec,
+            memory=memory,
+            model_name=model_name,
+            feedback=feedback,
+            epic_context=epic_context,
+            reference_files=reference_files,
             message_history=message_history,
             previous_attempt_summary=previous_attempt_summary,
             board_id=board_id,
@@ -570,14 +620,13 @@ def run_coordinator_with_experts(
     # Step 2: Route. Today we only support the file_map path; the
     # LLM-routing fallback is documented and left as a future hook.
     if not file_map:
-        return _fallback(
-            "file_map missing or empty (LLM routing not yet implemented)"
-        )
+        return _fallback("file_map missing or empty (LLM routing not yet implemented)")
 
     files_by_domain: dict[str, list[str]] = {}
     for domain, definition in definitions.items():
         matched = [
-            f for f in sorted(file_map)
+            f
+            for f in sorted(file_map)
             if ExpertManager.match_module_paths(definition.module_paths, f)
         ]
         if matched:
@@ -588,7 +637,8 @@ def run_coordinator_with_experts(
 
     log.info(
         "run_coordinator_with_experts: routing to %d expert(s): %s",
-        len(files_by_domain), sorted(files_by_domain.keys()),
+        len(files_by_domain),
+        sorted(files_by_domain.keys()),
     )
 
     # Build the same synthetic read_file message_history that
@@ -610,7 +660,8 @@ def run_coordinator_with_experts(
     from pydantic_ai import PromptedOutput
     from pydantic_ai.usage import UsageLimits
     from pydantic_ai.exceptions import (
-        UnexpectedModelBehavior, UsageLimitExceeded,
+        UnexpectedModelBehavior,
+        UsageLimitExceeded,
     )
 
     results: list[tuple[str, ImplementResult]] = []
@@ -627,7 +678,9 @@ def run_coordinator_with_experts(
             except Exception:  # noqa: BLE001
                 log.warning(
                     "could not load memory for expert %s at %s",
-                    domain, memory_path, exc_info=True,
+                    domain,
+                    memory_path,
+                    exc_info=True,
                 )
                 expert_memory = ""
 
@@ -657,17 +710,20 @@ def run_coordinator_with_experts(
                         usage_limits=limits,
                         message_history=preseed_history,
                     ),
-                    settings=settings, what=f"expert:{domain}",
+                    settings=settings,
+                    what=f"expert:{domain}",
                 )
             except (UsageLimitExceeded, UnexpectedModelBehavior) as e:
                 log.warning(
                     "expert %s failed (%s); skipping and continuing",
-                    domain, type(e).__name__,
+                    domain,
+                    type(e).__name__,
                 )
                 continue
             except Exception:  # noqa: BLE001
                 log.exception(
-                    "expert %s raised; skipping and continuing", domain,
+                    "expert %s raised; skipping and continuing",
+                    domain,
                 )
                 continue
 
@@ -682,7 +738,9 @@ def run_coordinator_with_experts(
                 except Exception:  # noqa: BLE001
                     log.warning(
                         "failed to persist memory for expert %s at %s",
-                        domain, memory_path, exc_info=True,
+                        domain,
+                        memory_path,
+                        exc_info=True,
                     )
     finally:
         mgr.close_all()

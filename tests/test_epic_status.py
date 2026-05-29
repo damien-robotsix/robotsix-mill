@@ -5,7 +5,6 @@ import pytest
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import (
     _process_ticket_inner,
-    _spawn_epic_reeval,
     _run_epic_reeval,
 )
 from robotsix_mill.stages import Outcome, StageContext
@@ -31,9 +30,7 @@ async def test_hook_fires_on_done_for_epic_parent(ctx, service, monkeypatch):
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
 
     class DoneStage(Stage):
         name = "merge"
@@ -46,7 +43,12 @@ async def test_hook_fires_on_done_for_epic_parent(ctx, service, monkeypatch):
 
     epic = service.create("My Epic", "Big goal", kind="epic")
     child = service.create("Child", "do the thing", parent_id=epic.id)
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
         service.transition(child.id, st)
 
     await _process_ticket_inner(child.id, ctx)
@@ -62,9 +64,7 @@ async def test_hook_does_not_fire_for_non_epic_parent(ctx, service, monkeypatch)
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
 
     class DoneStage(Stage):
         name = "merge"
@@ -77,7 +77,12 @@ async def test_hook_does_not_fire_for_non_epic_parent(ctx, service, monkeypatch)
 
     parent = service.create("Parent task", "some task")
     child = service.create("Child", "do the thing", parent_id=parent.id)
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
         service.transition(child.id, st)
 
     await _process_ticket_inner(child.id, ctx)
@@ -93,9 +98,7 @@ async def test_hook_does_not_fire_for_non_done_transition(ctx, service, monkeypa
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
 
     class ReviewStage(Stage):
         name = "implement"
@@ -127,9 +130,7 @@ def test_epic_status_agent_result_shape(monkeypatch):
     """Monkeypatch run_epic_status_agent and verify the result shape."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
-    result = EpicStatusResult(
-        decision="close", note="All children complete."
-    )
+    result = EpicStatusResult(decision="close", note="All children complete.")
 
     def fake_agent(*, settings, epic_title, epic_description, children):
         return result
@@ -163,9 +164,7 @@ def test_e2e_all_children_done_closes_epic(settings, service, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
-        lambda **kw: EpicStatusResult(
-            decision="close", note="All children complete."
-        ),
+        lambda **kw: EpicStatusResult(decision="close", note="All children complete."),
     )
 
     epic = service.create("My Epic", "Build the thing", kind="epic")
@@ -195,7 +194,7 @@ def test_e2e_one_child_in_progress_keeps_open(settings, service, monkeypatch):
 
     epic = service.create("My Epic", "Build the thing", kind="epic")
     c1 = service.create("Child 1", "part 1", parent_id=epic.id)
-    c2 = service.create("Child 2", "part 2", parent_id=epic.id)
+    service.create("Child 2", "part 2", parent_id=epic.id)
 
     service.transition(c1.id, State.DONE)
 
@@ -214,7 +213,8 @@ def test_e2e_update_description(settings, service, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
         lambda **kw: EpicStatusResult(
-            decision="update_description", note=new_desc,
+            decision="update_description",
+            note=new_desc,
         ),
     )
 
@@ -250,7 +250,8 @@ def test_e2e_rewrites_generic_description(settings, service, monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
         lambda **kw: EpicStatusResult(
-            decision="update_description", note=strategic,
+            decision="update_description",
+            note=strategic,
         ),
     )
 
@@ -514,11 +515,13 @@ def test_e2e_new_child_not_a_dict(settings, service, monkeypatch, caplog):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
-        lambda **kw: EpicStatusResult.model_validate({
-            "decision": "keep_open",
-            "note": "Malformed.",
-            "new_children": ["not a dict"],
-        }),
+        lambda **kw: EpicStatusResult.model_validate(
+            {
+                "decision": "keep_open",
+                "note": "Malformed.",
+                "new_children": ["not a dict"],
+            }
+        ),
     )
 
     _run_epic_reeval(epic.id, settings)
@@ -538,11 +541,13 @@ def test_e2e_child_rescopes_not_a_dict(settings, service, monkeypatch, caplog):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
-        lambda **kw: EpicStatusResult.model_validate({
-            "decision": "keep_open",
-            "note": "Malformed.",
-            "child_rescopes": {child.id: "not a dict"},
-        }),
+        lambda **kw: EpicStatusResult.model_validate(
+            {
+                "decision": "keep_open",
+                "note": "Malformed.",
+                "child_rescopes": {child.id: "not a dict"},
+            }
+        ),
     )
 
     _run_epic_reeval(epic.id, settings)
@@ -571,7 +576,9 @@ def test_e2e_reconciliation_failure_does_not_crash(settings, service, monkeypatc
     # Force svc.set_title to raise an exception to simulate a service failure
     monkeypatch.setattr(
         "robotsix_mill.core.service.TicketService.set_title",
-        lambda self, tid, title: (_ for _ in ()).throw(RuntimeError("simulated failure")),
+        lambda self, tid, title: (_ for _ in ()).throw(
+            RuntimeError("simulated failure")
+        ),
     )
 
     # Must not raise — the worker catches and logs
@@ -588,11 +595,13 @@ def test_e2e_closure_bad_id_type(settings, service, monkeypatch, caplog):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
-        lambda **kw: EpicStatusResult.model_validate({
-            "decision": "keep_open",
-            "note": "Bad closure.",
-            "child_closures": [12345],
-        }),
+        lambda **kw: EpicStatusResult.model_validate(
+            {
+                "decision": "keep_open",
+                "note": "Bad closure.",
+                "child_closures": [12345],
+            }
+        ),
     )
 
     _run_epic_reeval(epic.id, settings)
@@ -681,9 +690,7 @@ async def test_hook_fires_on_closed_for_epic_parent(ctx, service, monkeypatch):
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
 
     class CloseStage(Stage):
         name = "retrospect"
@@ -696,7 +703,13 @@ async def test_hook_fires_on_closed_for_epic_parent(ctx, service, monkeypatch):
 
     epic = service.create("My Epic", "Big goal", kind="epic")
     child = service.create("Child", "do the thing", parent_id=epic.id)
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         service.transition(child.id, st)
 
     await _process_ticket_inner(child.id, ctx)
@@ -712,9 +725,7 @@ async def test_hook_fires_on_answered_for_epic_parent(ctx, service, monkeypatch)
     def fake_spawn(epic_id, _ctx):
         called_with.append(epic_id)
 
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.worker._spawn_epic_reeval", fake_spawn)
 
     class AnswerStage(Stage):
         name = "answer"
@@ -736,7 +747,6 @@ async def test_hook_fires_on_answered_for_epic_parent(ctx, service, monkeypatch)
 def test_idempotent_already_closed_epic_noop(settings, service, monkeypatch):
     """Calling _run_epic_reeval on an already EPIC_CLOSED epic is a no-op:
     no exception, no state change, and the agent is never invoked."""
-    from robotsix_mill.agents.epic_status import run_epic_status_agent
 
     epic = service.create("My Epic", "Build the thing", kind="epic")
     service.transition(epic.id, State.EPIC_CLOSED)
@@ -765,9 +775,7 @@ def test_closure_triggers_from_child_closed(settings, service, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.epic_status.run_epic_status_agent",
-        lambda **kw: EpicStatusResult(
-            decision="close", note="All children terminal."
-        ),
+        lambda **kw: EpicStatusResult(decision="close", note="All children terminal."),
     )
 
     epic = service.create("My Epic", "Build the thing", kind="epic")

@@ -32,6 +32,7 @@ class StageContext:
             ``--repo-id`` CLI argument (board identity, Langfuse
             credentials for the repository).
     """
+
     settings: Settings
     service: TicketService
     repo_config: RepoConfig | None = None
@@ -76,6 +77,7 @@ class Stage(ABC):
     :meth:`run`. Set ``traced = False`` for poll-driven, no-LLM stages
     (e.g. merge, deliver) to avoid spamming empty Langfuse traces.
     """
+
     #: unique stage name
     name: str
     #: the state this stage consumes

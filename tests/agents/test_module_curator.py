@@ -1,11 +1,10 @@
 """Tests for the module-curator agent and runner."""
 
-import re
-
-import pytest
-
 from robotsix_mill.agents import module_curator as mc_agent
-from robotsix_mill.module_curator_runner import run_module_curator_pass, ModuleCuratorPassResult
+from robotsix_mill.module_curator_runner import (
+    run_module_curator_pass,
+    ModuleCuratorPassResult,
+)
 from robotsix_mill.pass_runner import _GAP_ID_RE
 
 
@@ -22,7 +21,12 @@ def test_module_curator_system_prompt_covers_all_drift_classes():
     # 3. New module proposals
     assert "new module" in p
     # Must be read-only
-    assert "read-only" in p or "read only" in p or "do not move" in p or "do not delete" in p
+    assert (
+        "read-only" in p
+        or "read only" in p
+        or "do not move" in p
+        or "do not delete" in p
+    )
     # Must use the de-duplication guidance
     assert "de-duplication" in p or "deduplication" in p
     # Must reference docs/modules.yaml
@@ -115,9 +119,17 @@ def test_gap_id_re_matches_cost_reconciliation():
 def test_gap_id_re_matches_all_legacy_labels():
     """All 11 labels the old alternation captured must still match."""
     for label in (
-        "audit", "health", "agent_check", "retrospect", "survey",
-        "test_gap", "bc_check", "config_sync", "completeness_check",
-        "copy_paste", "module_curator",
+        "audit",
+        "health",
+        "agent_check",
+        "retrospect",
+        "survey",
+        "test_gap",
+        "bc_check",
+        "config_sync",
+        "completeness_check",
+        "copy_paste",
+        "module_curator",
     ):
         marker = f"<!-- {label}-gap-id: anchor -->"
         matches = _GAP_ID_RE.findall(marker)

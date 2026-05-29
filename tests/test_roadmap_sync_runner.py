@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core.models import State, SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.roadmap_sync_runner import (
@@ -76,12 +76,7 @@ class TestParseRoadmap:
         assert sections[2].body == "body C"
 
     def test_marker_in_middle_of_body_still_extracted(self):
-        md = (
-            "## Phase\n"
-            "First line.\n"
-            "<!-- epic-id: id-mid -->\n"
-            "Last line.\n"
-        )
+        md = "## Phase\nFirst line.\n<!-- epic-id: id-mid -->\nLast line.\n"
         sections = parse_roadmap(md)
         assert sections[0].marker_id == "id-mid"
         # Body keeps the surrounding lines, marker line is dropped.
@@ -158,6 +153,7 @@ def settings(tmp_path, monkeypatch):
     # test's tmp_path.
     from robotsix_mill.core import db
     from robotsix_mill.config import _reset_repos_config
+
     db.reset_engine()
     _reset_repos_config()
     return Settings(data_dir=str(tmp_path))
@@ -175,7 +171,8 @@ class TestCreateOrUpdateEpics:
             EpicSection(title="B", body="body B", marker_id=None, raw_span=(0, 0)),
         ]
         created, updated, skipped, new_ids = _create_or_update_epics(
-            service, sections,
+            service,
+            sections,
         )
         assert len(created) == 2
         assert len(updated) == 0
@@ -192,12 +189,15 @@ class TestCreateOrUpdateEpics:
     def test_skips_marker_pointing_to_missing_epic(self, service):
         sections = [
             EpicSection(
-                title="Ghost", body="b", marker_id="nonexistent-id",
+                title="Ghost",
+                body="b",
+                marker_id="nonexistent-id",
                 raw_span=(0, 0),
             ),
         ]
         created, updated, skipped, new_ids = _create_or_update_epics(
-            service, sections,
+            service,
+            sections,
         )
         assert created == []
         assert updated == []
@@ -209,17 +209,22 @@ class TestCreateOrUpdateEpics:
     def test_updates_existing_epic_title_and_body(self, service):
         # Seed an epic on the board.
         epic = service.create(
-            title="Old Title", description="Old body",
-            source=SourceKind.ROADMAP_SYNC, kind="epic",
+            title="Old Title",
+            description="Old body",
+            source=SourceKind.ROADMAP_SYNC,
+            kind="epic",
         )
         sections = [
             EpicSection(
-                title="New Title", body="New body",
-                marker_id=epic.id, raw_span=(0, 0),
+                title="New Title",
+                body="New body",
+                marker_id=epic.id,
+                raw_span=(0, 0),
             ),
         ]
         created, updated, skipped, new_ids = _create_or_update_epics(
-            service, sections,
+            service,
+            sections,
         )
         assert created == []
         assert len(updated) == 1
@@ -232,17 +237,22 @@ class TestCreateOrUpdateEpics:
 
     def test_no_change_no_update(self, service):
         epic = service.create(
-            title="Same", description="Same body",
-            source=SourceKind.ROADMAP_SYNC, kind="epic",
+            title="Same",
+            description="Same body",
+            source=SourceKind.ROADMAP_SYNC,
+            kind="epic",
         )
         sections = [
             EpicSection(
-                title="Same", body="Same body",
-                marker_id=epic.id, raw_span=(0, 0),
+                title="Same",
+                body="Same body",
+                marker_id=epic.id,
+                raw_span=(0, 0),
             ),
         ]
         created, updated, skipped, new_ids = _create_or_update_epics(
-            service, sections,
+            service,
+            sections,
         )
         assert updated == []
         assert created == []
@@ -250,17 +260,22 @@ class TestCreateOrUpdateEpics:
 
     def test_partial_update_title_only(self, service):
         epic = service.create(
-            title="Old", description="body unchanged",
-            source=SourceKind.ROADMAP_SYNC, kind="epic",
+            title="Old",
+            description="body unchanged",
+            source=SourceKind.ROADMAP_SYNC,
+            kind="epic",
         )
         sections = [
             EpicSection(
-                title="Renamed", body="body unchanged",
-                marker_id=epic.id, raw_span=(0, 0),
+                title="Renamed",
+                body="body unchanged",
+                marker_id=epic.id,
+                raw_span=(0, 0),
             ),
         ]
         created, updated, skipped, new_ids = _create_or_update_epics(
-            service, sections,
+            service,
+            sections,
         )
         assert len(updated) == 1
         assert updated[0]["fields"] == ["title"]

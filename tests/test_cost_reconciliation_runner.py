@@ -1,7 +1,6 @@
 """Tests for the cost-reconciliation runner."""
 
 from robotsix_mill.cost_reconciliation_runner import (
-    CostReconciliationPassResult,
     _fetch_openrouter_daily,
     _fetch_langfuse_daily,
     _yesterday_utc_range,
@@ -66,7 +65,6 @@ def test_fetch_openrouter_skips_on_401(settings, monkeypatch):
 
 def test_fetch_openrouter_parses_data(settings, monkeypatch):
     """Valid 200 response → (total, breakdown)."""
-    import json
     import httpx
 
     class _FakeResponse:
@@ -139,7 +137,9 @@ def test_fetch_langfuse_aggregates_traces(settings, monkeypatch):
         "robotsix_mill.langfuse_client._langfuse_api_get",
         fake_api_get,
     )
-    total, breakdown = _fetch_langfuse_daily(settings, "2025-01-01T00:00:00Z", "2025-01-02T00:00:00Z")
+    total, breakdown = _fetch_langfuse_daily(
+        settings, "2025-01-01T00:00:00Z", "2025-01-02T00:00:00Z"
+    )
     assert total == 3.5
     assert "implement" in breakdown
     assert "refine" in breakdown
@@ -157,7 +157,9 @@ def test_fetch_langfuse_graceful_on_error(settings, monkeypatch):
         "robotsix_mill.langfuse_client._langfuse_api_get",
         fake_api_get,
     )
-    total, breakdown = _fetch_langfuse_daily(settings, "2025-01-01T00:00:00Z", "2025-01-02T00:00:00Z")
+    total, breakdown = _fetch_langfuse_daily(
+        settings, "2025-01-01T00:00:00Z", "2025-01-02T00:00:00Z"
+    )
     assert total == 0.0
     assert "error" in breakdown.lower()
 
@@ -196,6 +198,7 @@ def test_clean_pass_no_agent_no_ticket(tmp_path, monkeypatch):
     def fake_agent(**kwargs):
         agent_called.append(True)
         from robotsix_mill.agents.cost_reconciling import CostReconciliationResult
+
         return CostReconciliationResult(analysis="", conclusion="")
 
     monkeypatch.setattr(
@@ -346,12 +349,14 @@ def _patch_dirty_pass(monkeypatch, settings, delta=5.00):
     )
 
     from robotsix_mill.agents.cost_reconciling import CostReconciliationResult
+
     agent_calls: list = []
 
     def fake_agent(**kwargs):
         agent_calls.append(kwargs)
         return CostReconciliationResult(
-            analysis="x", conclusion="y",
+            analysis="x",
+            conclusion="y",
         )
 
     monkeypatch.setattr(
@@ -389,7 +394,8 @@ def test_duplicate_date_suppressed(tmp_path, monkeypatch):
 
 
 def test_new_date_creates_draft_when_prior_exists_for_other_date(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """A prior draft for a DIFFERENT date must not block today's draft."""
     settings = _make_settings(tmp_path)

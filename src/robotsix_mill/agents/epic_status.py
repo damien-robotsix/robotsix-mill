@@ -53,20 +53,27 @@ def run_epic_status_agent(
     from .retry import call_with_retry
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "epic_status.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "epic_status.yaml"
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=[],
+        settings,
+        definition,
+        tools=[],
         model_name=definition.model or settings.audit_model,
     )
     import json
 
     children_json = json.dumps(children, indent=2, default=str)
     prompt = (
-        section("epic-title", epic_title) + "\n\n"
-        + section("epic-description", epic_description) + "\n\n"
-        + section("children", children_json) + "\n\n"
+        section("epic-title", epic_title)
+        + "\n\n"
+        + section("epic-description", epic_description)
+        + "\n\n"
+        + section("children", children_json)
+        + "\n\n"
         + "Evaluate the epic's status and return your decision."
     )
     try:

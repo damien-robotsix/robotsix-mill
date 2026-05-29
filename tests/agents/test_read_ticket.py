@@ -22,6 +22,7 @@ from robotsix_mill.core.states import State
 # AC 1 — Tool is callable
 # ---------------------------------------------------------------------------
 
+
 def test_returns_callable(settings):
     tool = make_read_ticket_tool(settings)
     assert callable(tool)
@@ -30,6 +31,7 @@ def test_returns_callable(settings):
 # ---------------------------------------------------------------------------
 # AC 2 — Valid ticket returns structured Markdown
 # ---------------------------------------------------------------------------
+
 
 def test_valid_ticket_returns_structured_markdown(settings, service):
     t = service.create("Fix auth timeout", "Increase the timeout from 5s to 30s.")
@@ -94,6 +96,7 @@ def test_ticket_without_comments_shows_placeholder(settings, service):
 # AC 3 — Nonexistent ticket returns error
 # ---------------------------------------------------------------------------
 
+
 def test_nonexistent_ticket_returns_error(settings):
     tool = make_read_ticket_tool(settings)
     result = tool("nonexistent-id")
@@ -104,6 +107,7 @@ def test_nonexistent_ticket_returns_error(settings):
 # ---------------------------------------------------------------------------
 # AC 4 — Empty / missing ID returns error
 # ---------------------------------------------------------------------------
+
 
 def test_empty_ticket_id_returns_error(settings):
     tool = make_read_ticket_tool(settings)
@@ -120,6 +124,7 @@ def test_whitespace_only_ticket_id_returns_error(settings):
 # ---------------------------------------------------------------------------
 # AC 5 — No write paths reachable
 # ---------------------------------------------------------------------------
+
 
 def test_no_write_paths_reachable(settings, monkeypatch):
     """The tool closure only calls get, history, list_comments, and
@@ -180,6 +185,7 @@ def test_no_write_paths_reachable(settings, monkeypatch):
 # ---------------------------------------------------------------------------
 # AC 6 — Truncation applied
 # ---------------------------------------------------------------------------
+
 
 def test_truncation_long_description(settings, service):
     """Description > 3000 chars is truncated with a marker."""
@@ -293,9 +299,7 @@ def test_registered_in_tool_registry(settings):
 
     make_read_ticket_tool(settings)
     tools = ToolRegistry.list_tools()
-    read_ticket_info = next(
-        (t for t in tools if t.name == "read_ticket"), None
-    )
+    read_ticket_info = next((t for t in tools if t.name == "read_ticket"), None)
     assert read_ticket_info is not None, "read_ticket not found in ToolRegistry"
     assert read_ticket_info.category == "reporting"
     assert read_ticket_info.parameters == {"ticket_id": "str"}
@@ -304,6 +308,7 @@ def test_registered_in_tool_registry(settings):
 # ---------------------------------------------------------------------------
 # AC 9 — Never raises
 # ---------------------------------------------------------------------------
+
 
 def test_never_raises_on_failure(settings, monkeypatch):
     """The tool always returns a string error, never raises."""

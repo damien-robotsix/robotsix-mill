@@ -69,9 +69,7 @@ def _read_yaml_file(path: Path) -> dict:
         with open(path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     except yaml.YAMLError as exc:
-        raise ConfigError(
-            f"YAML parse error in {path}: {exc}"
-        ) from exc
+        raise ConfigError(f"YAML parse error in {path}: {exc}") from exc
     if data is None:
         return {}
     if not isinstance(data, dict):
@@ -81,9 +79,7 @@ def _read_yaml_file(path: Path) -> dict:
     return data
 
 
-def load_yaml_config(
-    config_file: str | None = None, skip_local: bool = False
-) -> dict:
+def load_yaml_config(config_file: str | None = None, skip_local: bool = False) -> dict:
     """Load and deep-merge YAML config files in RFC §6 precedence order.
 
     1. ``config/mill.defaults.yaml`` (always, committed)
@@ -163,9 +159,7 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
         with open(path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     except yaml.YAMLError as exc:
-        raise ConfigError(
-            f"YAML parse error in {path}: {exc}"
-        ) from exc
+        raise ConfigError(f"YAML parse error in {path}: {exc}") from exc
 
     if data is None:
         return {}
@@ -209,9 +203,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
         with open(path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     except yaml.YAMLError as exc:
-        raise ConfigError(
-            f"YAML parse error in {path}: {exc}"
-        ) from exc
+        raise ConfigError(f"YAML parse error in {path}: {exc}") from exc
 
     if data is None:
         return {}

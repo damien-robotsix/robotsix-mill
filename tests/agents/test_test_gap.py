@@ -2,7 +2,6 @@
 
 import json
 import threading
-import time
 
 import pytest
 from pathlib import Path
@@ -31,8 +30,11 @@ def test_test_gap_system_prompt_covers_key_dimensions():
     """The test-gap agent prompt must cover key inspection dimensions."""
     p = test_gap_agent.SYSTEM_PROMPT.lower()
     for kw in (
-        "zero dedicated", "indirect", "i/o surface",
-        "state-transition", "memory",
+        "zero dedicated",
+        "indirect",
+        "i/o surface",
+        "state-transition",
+        "memory",
     ):
         assert kw in p, f"test-gap prompt missing dimension cue: {kw}"
     # Must use explore/read_file/list_dir tools.
@@ -97,9 +99,7 @@ def test_run_test_gap_pass_empty_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     run_test_gap_pass(session_id="test-sid")
     assert captured_memory == [""]
@@ -124,9 +124,7 @@ def test_run_test_gap_pass_reads_existing_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     run_test_gap_pass(session_id="test-sid")
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
@@ -146,9 +144,7 @@ def test_run_test_gap_pass_writes_memory_verbatim(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     run_test_gap_pass(session_id="test-sid")
     memory_file = settings.test_gap_memory_file
@@ -167,16 +163,16 @@ def test_run_test_gap_pass_creates_draft_tickets(tmp_path, monkeypatch):
     def mock_agent(**kwargs):
         return test_gap_agent.TestGapResult(
             updated_memory="# Memory\n",
-            draft_titles=["test gap: add unit tests for agents/refining.py",
-                           "test gap: add unit tests for agents/coordinating.py"],
+            draft_titles=[
+                "test gap: add unit tests for agents/refining.py",
+                "test gap: add unit tests for agents/coordinating.py",
+            ],
             draft_bodies=["Body1", "Body2"],
             gap_ids=["refining_untested", "coordinating_untested"],
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     result = run_test_gap_pass(session_id="test-sid")
     assert len(result.drafts_created) == 2
@@ -202,9 +198,7 @@ def test_run_test_gap_pass_no_drafts_when_empty(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     result = run_test_gap_pass(session_id="test-sid")
     assert len(result.drafts_created) == 0
@@ -229,11 +223,9 @@ def test_run_test_gap_pass_missing_memory_file(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
-    result = run_test_gap_pass(session_id="test-sid")
+    run_test_gap_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -252,9 +244,7 @@ def test_run_test_gap_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     result = run_test_gap_pass(session_id="test-sid")
     assert len(result.drafts_created) == 1  # only first has both title + body
@@ -273,9 +263,7 @@ def test_test_gap_pass_result_structure(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     result = run_test_gap_pass(session_id="test-sid")
     assert isinstance(result, TestGapPassResult)
@@ -337,9 +325,7 @@ def test_test_gap_cli_command(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "test gap: add unit tests for X"}],
         )
 
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run)
 
     result = main(["test-gap"])
     assert result == 0
@@ -358,9 +344,7 @@ def test_test_gap_cli_json_output(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "test gap: add unit tests for X"}],
         )
 
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run)
 
     result = main(["test-gap", "--json"])
     assert result == 0
@@ -368,7 +352,9 @@ def test_test_gap_cli_json_output(capsys, tmp_path, monkeypatch):
     data = json.loads(captured.out)
     assert "memory" in data
     assert "tickets_created" in data
-    assert data["tickets_created"] == [{"id": "123", "title": "test gap: add unit tests for X"}]
+    assert data["tickets_created"] == [
+        {"id": "123", "title": "test gap: add unit tests for X"}
+    ]
 
 
 def test_test_gap_cli_no_drafts(capsys, tmp_path, monkeypatch):
@@ -381,9 +367,7 @@ def test_test_gap_cli_no_drafts(capsys, tmp_path, monkeypatch):
             drafts_created=[],
         )
 
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run)
 
     result = main(["test-gap"])
     assert result == 0
@@ -398,9 +382,7 @@ def test_test_gap_cli_failure(capsys, monkeypatch):
     def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run)
 
     result = main(["test-gap"])
     assert result == 1
@@ -425,9 +407,7 @@ def test_run_test_gap_pass_opens_langfuse_session(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     res = run_test_gap_pass(session_id="test-sid")
 
@@ -438,14 +418,13 @@ def test_run_test_gap_pass_opens_langfuse_session(tmp_path, monkeypatch):
 def test_test_gap_session_ids_are_unique_per_run(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        test_gap_agent, "run_test_gap_agent",
+        test_gap_agent,
+        "run_test_gap_agent",
         lambda **k: test_gap_agent.TestGapResult(
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         ),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
     a = run_test_gap_pass(session_id="test-sid").session_id
     assert a == "test-sid"
 
@@ -459,7 +438,8 @@ def test_run_test_gap_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     from robotsix_mill.vcs import git_ops
 
     settings = _make_settings(
-        tmp_path, FORGE_REMOTE_URL="https://example.test/r.git",
+        tmp_path,
+        FORGE_REMOTE_URL="https://example.test/r.git",
         FORGE_TARGET_BRANCH="main",
     )
     seen = {"clone": 0, "repo_dir": "unset"}
@@ -476,9 +456,7 @@ def test_run_test_gap_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(test_gap_agent, "run_test_gap_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
 
     run_test_gap_pass(session_id="test-sid")
     repo = settings.data_dir / "test_gap_workspace" / "repo"
@@ -490,17 +468,19 @@ def test_run_test_gap_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
 
 def test_run_test_gap_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
-    settings = _make_settings(tmp_path)   # no FORGE_REMOTE_URL
+    settings = _make_settings(tmp_path)  # no FORGE_REMOTE_URL
     got = {}
     monkeypatch.setattr(
-        test_gap_agent, "run_test_gap_agent",
-        lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or
-        test_gap_agent.TestGapResult(updated_memory="m", draft_titles=[],
-                                     draft_bodies=[], gap_ids=[]),
+        test_gap_agent,
+        "run_test_gap_agent",
+        lambda **k: (
+            got.__setitem__("repo_dir", k.get("repo_dir"))
+            or test_gap_agent.TestGapResult(
+                updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+            )
+        ),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.Settings", lambda: settings)
     run_test_gap_pass(session_id="test-sid")
     assert got["repo_dir"] is None
 
@@ -509,7 +489,9 @@ def test_run_test_gap_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_test_gap_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
+async def test_worker_test_gap_task_created_when_periodic(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._test_gap_task is created when test_gap_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -527,11 +509,14 @@ async def test_worker_test_gap_task_created_when_periodic(tmp_path, monkeypatch,
     # Patch _run_periodic_pass_per_repo to a no-op so the task hangs
     # without actually invoking the test-gap runner.
     import asyncio as asyncio_mod
+
     async def noop_periodic(self, *a, **kw):
         await asyncio_mod.sleep(3600)
 
     monkeypatch.setattr(
-        Worker, "_run_periodic_pass_per_repo", noop_periodic,
+        Worker,
+        "_run_periodic_pass_per_repo",
+        noop_periodic,
     )
 
     worker = Worker(ctx)
@@ -544,7 +529,9 @@ async def test_worker_test_gap_task_created_when_periodic(tmp_path, monkeypatch,
 
 
 @pytest.mark.asyncio
-async def test_worker_test_gap_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
+async def test_worker_test_gap_task_not_created_when_periodic_false(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._test_gap_task is NOT created when test_gap_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -585,9 +572,7 @@ def test_post_test_gap_returns_202(tmp_path, monkeypatch, repos_registry):
             drafts_created=[],
         )
 
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.run_test_gap_pass", slow_run
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.run_test_gap_pass", slow_run)
 
     from robotsix_mill.runtime.api import create_app
 
@@ -624,9 +609,7 @@ def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry)
             drafts_created=[{"id": "test-id", "title": "Test-gap draft"}],
         )
 
-    monkeypatch.setattr(
-        "robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.test_gap_runner.run_test_gap_pass", mock_run)
 
     from robotsix_mill.runtime.api import create_app
 
@@ -653,14 +636,14 @@ def test_board_html_contains_test_gap_button():
     """Board HTML contains the 'Test Gaps' button; the JS file
     references the /test-gap endpoint."""
     from robotsix_mill.runtime.board_html import BOARD_HTML
+
     assert "Test Gaps" in BOARD_HTML
     assert "runTestGap()" in BOARD_HTML
 
-    from pathlib import Path
     import robotsix_mill.runtime.board_html
+
     js = (
-        Path(robotsix_mill.runtime.board_html.__file__).parent
-        / "static" / "board.js"
+        Path(robotsix_mill.runtime.board_html.__file__).parent / "static" / "board.js"
     ).read_text()
     assert "/test-gap" in js
 
@@ -668,7 +651,6 @@ def test_board_html_contains_test_gap_button():
 def test_board_contains_test_gap_js_and_css():
     """The static CSS file contains .src-test_gap class; the JS file
     maps the 'test_gap' source in srcClass()."""
-    from pathlib import Path
     import robotsix_mill.runtime.board_html
 
     base = Path(robotsix_mill.runtime.board_html.__file__).parent / "static"
@@ -676,4 +658,4 @@ def test_board_contains_test_gap_js_and_css():
     js = (base / "board.js").read_text()
     assert ".src-test_gap" in css
     assert "src-test_gap" in css
-    assert 'test_gap' in js
+    assert "test_gap" in js

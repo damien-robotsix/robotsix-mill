@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import contextvars
 import logging
-import os
 import uuid
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
@@ -77,7 +76,9 @@ _EXPORT_FAILURE_CAP = 20
 _export_lock = __import__("threading").Lock()
 
 
-def record_export_failure(*, project: str, error: str, status: int | None = None) -> None:
+def record_export_failure(
+    *, project: str, error: str, status: int | None = None
+) -> None:
     """Append a Langfuse export-failure entry; capped at the most
     recent ``_EXPORT_FAILURE_CAP`` items."""
     from datetime import datetime as _dt, timezone as _tz
@@ -137,15 +138,14 @@ def _check_rejected_generation(span) -> None:  # noqa: ANN001
     accepts writes even on already-ended spans.
     """
     attrs = span.attributes or {}
-    is_per_call_span = (
-        attrs.get("gen_ai.operation.name") == "chat"
-        and attrs.get("gen_ai.input.messages")
+    is_per_call_span = attrs.get("gen_ai.operation.name") == "chat" and attrs.get(
+        "gen_ai.input.messages"
     )
     if not is_per_call_span:
         return
     try:
         out_tokens = int(attrs.get("gen_ai.usage.output_tokens") or 0)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         out_tokens = 0
     if out_tokens <= 0 or attrs.get("gen_ai.output.messages"):
         return
@@ -171,10 +171,7 @@ def make_session_id(kind: str) -> str:
     directly to ``start_ticket_root_span`` — the ticket id is already a
     self-unique ``<ts>-<slug>-<hash>`` and serves as its own session id.
     """
-    return (
-        f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-"
-        f"{uuid.uuid4().hex[:8]}"
-    )
+    return f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
 
 
 def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:
@@ -186,14 +183,8 @@ def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:
     per-repo credentials.
     """
     if repo_config is not None:
-        return bool(
-            repo_config.langfuse_public_key
-            and repo_config.langfuse_secret_key
-        )
-    return bool(
-        get_secrets().langfuse_public_key
-        and get_secrets().langfuse_secret_key
-    )
+        return bool(repo_config.langfuse_public_key and repo_config.langfuse_secret_key)
+    return bool(get_secrets().langfuse_public_key and get_secrets().langfuse_secret_key)
 
 
 def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
@@ -228,13 +219,17 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
 
     # Resolve credentials for THIS call.
     if repo_config is not None:
-        base_url = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        base_url = (
+            repo_config.langfuse_base_url or "https://cloud.langfuse.com"
+        ).rstrip("/")
         public_key = repo_config.langfuse_public_key
         secret_key = repo_config.langfuse_secret_key
         project_name = repo_config.langfuse_project_name
     else:
         secrets = get_secrets()
-        base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
+            "/"
+        )
         public_key = secrets.langfuse_public_key
         secret_key = secrets.langfuse_secret_key
         project_name = None
@@ -293,7 +288,8 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
                     )
                     log.warning(
                         "Langfuse export raised for %s: %s",
-                        self._project_label, e,
+                        self._project_label,
+                        e,
                     )
                     return SpanExportResult.FAILURE
                 if result != SpanExportResult.SUCCESS:
@@ -325,6 +321,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
 
         # --- one-time global provider setup -----------------------------
         if _provider is None:
+
             class _SessionStampProcessor(SpanProcessor):
                 """Stamp ``session.id`` (+ Langfuse alias) and the
                 in-scope ``langfuse.public_key`` onto every span at
@@ -394,13 +391,16 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         # (no ``add_span_processor``) when something else races our
         # ``set_tracer_provider`` call. ``_provider`` is set inside the
         # one-time init block above.
-        target_provider = _provider if _provider is not None else trace.get_tracer_provider()
+        target_provider = (
+            _provider if _provider is not None else trace.get_tracer_provider()
+        )
         if not hasattr(target_provider, "add_span_processor"):
             log.warning(
                 "tracing: TracerProvider lacks add_span_processor — "
                 "skipping exporter registration for project %s "
                 "(type=%s). Traces for this repo will not be exported.",
-                project_name or public_key, type(target_provider).__name__,
+                project_name or public_key,
+                type(target_provider).__name__,
             )
             _registered_keys.add(public_key)  # don't retry forever
             del project_name
@@ -413,7 +413,6 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         del project_name
     except ImportError:
         _provider_ready = False
-
 
 
 def current_session() -> str | None:
@@ -495,9 +494,10 @@ class _RootIO:
             s = value
         else:
             import json as _json
+
             try:
                 s = _json.dumps(value, default=str, ensure_ascii=False)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 s = str(value)
         if len(s) > self._MAX_LEN:
             s = s[: self._MAX_LEN] + "… (truncated)"
@@ -591,7 +591,9 @@ def start_ticket_root_span(
 
 
 @contextmanager
-def trace_stage(stage_name: str, repo_config: RepoConfig | None = None) -> Iterator[None]:
+def trace_stage(
+    stage_name: str, repo_config: RepoConfig | None = None
+) -> Iterator[None]:
     """Create a child span of whatever span is currently active.
 
     Usage::

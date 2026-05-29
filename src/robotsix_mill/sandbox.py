@@ -58,8 +58,7 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
         rel = repo_dir.relative_to(data_dir)
     except ValueError as e:
         raise SandboxError(
-            f"repo_dir {repo_dir} is not under data_dir "
-            f"{data_dir}; refusing to mount"
+            f"repo_dir {repo_dir} is not under data_dir {data_dir}; refusing to mount"
         ) from e
     if rel == Path("."):
         raise SandboxError("refusing to mount the data-dir root as repo")
@@ -106,15 +105,26 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
     repo_dir = Path(repo_dir).resolve()
     name = f"mill-sbx-{uuid.uuid4().hex[:12]}"
     argv = [
-        "docker", "run", "--rm", "--name", name,
-        "--network", "none",
-        "--user", f"{os.getuid()}:{os.getgid()}",
-        "--pids-limit", str(settings.sandbox_pids_limit),
-        "--memory", settings.sandbox_memory,
-        "--tmpfs", "/tmp",
-        "-e", "HOME=/tmp",
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        name,
+        "--network",
+        "none",
+        "--user",
+        f"{os.getuid()}:{os.getgid()}",
+        "--pids-limit",
+        str(settings.sandbox_pids_limit),
+        "--memory",
+        settings.sandbox_memory,
+        "--tmpfs",
+        "/tmp",  # nosec B108 — /tmp here is a Docker tmpfs INSIDE the sandbox, not the host's
+        "-e",
+        "HOME=/tmp",  # nosec B108
         *_repo_mount(repo_dir, settings),
-        "-w", str(repo_dir),
+        "-w",
+        str(repo_dir),
     ]
     if settings.sandbox_readonly:
         argv.append("--read-only")
@@ -140,16 +150,12 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
         raise SandboxError("docker CLI not found in the mill image") from e
     except subprocess.TimeoutExpired:
         # the `docker run` client was killed; force-remove the container
-        subprocess.run(
-            ["docker", "rm", "-f", name], capture_output=True, text=True
-        )
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, text=True)
         return 124, f"command timed out after {settings.command_timeout}s"
 
     # 125 == docker daemon/usage error (not the command's own exit code)
     if r.returncode == 125:
-        raise SandboxError(
-            f"docker run failed: {(r.stderr or '').strip()[:300]}"
-        )
+        raise SandboxError(f"docker run failed: {(r.stderr or '').strip()[:300]}")
     return r.returncode, _truncate((r.stdout or "") + (r.stderr or ""))
 
 
@@ -167,18 +173,32 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
 
     name = f"mill-fetch-{uuid.uuid4().hex[:12]}"
     argv = [
-        "docker", "run", "--rm", "--name", name,
-        "--read-only", "--tmpfs", "/tmp",
-        "--cap-drop", "ALL",
-        "--security-opt", "no-new-privileges",
-        "--pids-limit", str(settings.sandbox_pids_limit),
-        "--memory", settings.sandbox_memory,
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        name,
+        "--read-only",
+        "--tmpfs",
+        "/tmp",  # nosec B108 — Docker tmpfs INSIDE the sandbox container, not host /tmp
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--pids-limit",
+        str(settings.sandbox_pids_limit),
+        "--memory",
+        settings.sandbox_memory,
         settings.fetch_image,
         "-sSL",
-        "--max-time", str(settings.web_fetch_timeout),
-        "--max-filesize", str(settings.web_fetch_max_bytes),
-        "-A", "robotsix-mill-fetch",
-        "--", url,
+        "--max-time",
+        str(settings.web_fetch_timeout),
+        "--max-filesize",
+        str(settings.web_fetch_max_bytes),
+        "-A",
+        "robotsix-mill-fetch",
+        "--",
+        url,
     ]
     try:
         r = subprocess.run(
@@ -190,15 +210,11 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
     except FileNotFoundError as e:
         raise SandboxError("docker CLI not found in the mill image") from e
     except subprocess.TimeoutExpired:
-        subprocess.run(
-            ["docker", "rm", "-f", name], capture_output=True, text=True
-        )
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, text=True)
         return 124, f"fetch timed out after {settings.web_fetch_timeout}s"
 
     if r.returncode == 125:
-        raise SandboxError(
-            f"docker run failed: {(r.stderr or '').strip()[:300]}"
-        )
+        raise SandboxError(f"docker run failed: {(r.stderr or '').strip()[:300]}")
     body = r.stdout or ""
     if len(body) > settings.web_fetch_max_bytes:
         body = body[: settings.web_fetch_max_bytes] + "\n... [truncated]"

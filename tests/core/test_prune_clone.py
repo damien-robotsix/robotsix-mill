@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 
 from robotsix_mill.agents import retrospecting
 from robotsix_mill.agents.retrospecting import RetrospectResult
@@ -33,13 +31,31 @@ def _ctx(tmp_path: Path, **env_overrides):
     s = Settings(**env)
     db.init_db(s)
     from robotsix_mill.core.service import TicketService
-    from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=TicketService(s), repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+    from robotsix_mill.config import RepoConfig
+
+    return StageContext(
+        settings=s,
+        service=TicketService(s),
+        repo_config=RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        ),
+    )
 
 
 def _done(ctx):
     """Create a ticket, move it to DONE, return the ticket."""
     t = ctx.service.create("prune test", "body")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         ctx.service.transition(t.id, st)
     return ctx.service.get(t.id)
 
@@ -118,7 +134,8 @@ class TestPruneCloneIntegration:
         _make_repo(ws)
 
         monkeypatch.setattr(
-            retrospecting, "run_retrospect_agent",
+            retrospecting,
+            "run_retrospect_agent",
             lambda **kwargs: _default_result(),
         )
 
@@ -139,7 +156,8 @@ class TestPruneCloneIntegration:
         _make_repo(ws)
 
         monkeypatch.setattr(
-            retrospecting, "run_retrospect_agent",
+            retrospecting,
+            "run_retrospect_agent",
             lambda **kwargs: _default_result(),
         )
 
@@ -156,7 +174,8 @@ class TestPruneCloneIntegration:
         _make_repo(ws)
 
         monkeypatch.setattr(
-            retrospecting, "run_retrospect_agent",
+            retrospecting,
+            "run_retrospect_agent",
             lambda **kwargs: _default_result(),
         )
 
@@ -195,10 +214,13 @@ class TestPruneCloneIntegration:
 
         # Add some artifacts
         (ws.artifacts_dir / "implement.md").write_text("impl", encoding="utf-8")
-        (ws.artifacts_dir / "implement_messages.json").write_text("{}", encoding="utf-8")
+        (ws.artifacts_dir / "implement_messages.json").write_text(
+            "{}", encoding="utf-8"
+        )
 
         monkeypatch.setattr(
-            retrospecting, "run_retrospect_agent",
+            retrospecting,
+            "run_retrospect_agent",
             lambda **kwargs: _default_result(),
         )
 

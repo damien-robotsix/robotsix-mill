@@ -22,7 +22,6 @@ session_id (the parent retrospect's) so they roll up automatically.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -32,13 +31,9 @@ from robotsix_mill.config import get_repos_config, load_settings
 from robotsix_mill.langfuse_client import _langfuse_api_get
 
 
-def _fetch_traces(
-    settings, hours: float, repo_config=None
-) -> list[dict[str, Any]]:
+def _fetch_traces(settings, hours: float, repo_config=None) -> list[dict[str, Any]]:
     """Pull retrospect traces from Langfuse over the last `hours`."""
-    from_ts = (
-        datetime.now(timezone.utc) - timedelta(hours=hours)
-    ).isoformat()
+    from_ts = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     all_traces: list[dict[str, Any]] = []
     page = 1
     while True:
@@ -84,7 +79,9 @@ def _fetch_observations(
     """Pull the observation tree for one trace.  Generations carry the
     per-call model name + token usage."""
     r = _langfuse_api_get(
-        settings, f"/api/public/traces/{trace_id}", repo_config=repo_config,
+        settings,
+        f"/api/public/traces/{trace_id}",
+        repo_config=repo_config,
     )
     return r.get("observations", []) or []
 
@@ -110,11 +107,13 @@ def _gen_summary(obs: list[dict[str, Any]]) -> dict[str, Any]:
         model = o.get("model") or "?"
         usage = o.get("usageDetails") or o.get("usage") or {}
         in_tok = (
-            usage.get("input") if isinstance(usage.get("input"), (int, float))
+            usage.get("input")
+            if isinstance(usage.get("input"), (int, float))
             else usage.get("promptTokens", 0)
         )
         out_tok = (
-            usage.get("output") if isinstance(usage.get("output"), (int, float))
+            usage.get("output")
+            if isinstance(usage.get("output"), (int, float))
             else usage.get("completionTokens", 0)
         )
         by_model[model]["calls"] += 1
@@ -150,8 +149,10 @@ def _print_session(
     print()
     print("─" * 75)
     print(f"SESSION  {sid}")
-    print(f"  start  {parent.get('timestamp','')[:19]}   "
-          f"parent cost ${parent.get('totalCost', 0):.4f}")
+    print(
+        f"  start  {parent.get('timestamp', '')[:19]}   "
+        f"parent cost ${parent.get('totalCost', 0):.4f}"
+    )
     print("─" * 75)
 
     session_traces = _fetch_session_traces(settings, sid, repo_config=repo_config)
@@ -205,27 +206,34 @@ def _print_session(
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
-        "--hours", type=float, default=72,
+        "--hours",
+        type=float,
+        default=72,
         help="Look back this many hours (default: 72).",
     )
     p.add_argument(
-        "--top", type=int, default=10,
+        "--top",
+        type=int,
+        default=10,
         help="Show only the N most expensive sessions in the window "
-             "(default: 10). Use --all to bypass the cap.",
+        "(default: 10). Use --all to bypass the cap.",
     )
     p.add_argument(
-        "--all", action="store_true",
+        "--all",
+        action="store_true",
         help="Show every session in the window (no top-N cap).",
     )
     p.add_argument(
-        "--session-id", type=str, default=None,
-        help="Drill into one specific Langfuse session_id "
-             "(skips the window scan).",
+        "--session-id",
+        type=str,
+        default=None,
+        help="Drill into one specific Langfuse session_id (skips the window scan).",
     )
     p.add_argument(
-        "--repo-id", type=str, default=None,
-        help="Repo to query Langfuse for (default: first repo in "
-             "config/repos.yaml).",
+        "--repo-id",
+        type=str,
+        default=None,
+        help="Repo to query Langfuse for (default: first repo in config/repos.yaml).",
     )
     args = p.parse_args()
 
@@ -251,7 +259,11 @@ def main() -> int:
 
     if args.session_id:
         # Synthesize a parent-like dict to feed _print_session.
-        fake_parent = {"sessionId": args.session_id, "timestamp": "", "id": args.session_id}
+        fake_parent = {
+            "sessionId": args.session_id,
+            "timestamp": "",
+            "id": args.session_id,
+        }
         cost, in_tok, out_tok, gens = _print_session(
             settings, fake_parent, repo_config=repo_config
         )
@@ -263,9 +275,7 @@ def main() -> int:
         f"Scanning retrospect traces in the last {args.hours}h "
         f"(repo: {repo_config.repo_id if repo_config else '(global settings)'})..."
     )
-    traces = _fetch_traces(
-        settings, hours=args.hours, repo_config=repo_config
-    )
+    traces = _fetch_traces(settings, hours=args.hours, repo_config=repo_config)
     if not traces:
         print("No retrospect traces found in the window.")
         return 0

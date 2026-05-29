@@ -25,9 +25,7 @@ class _FakeAgent:
 
 
 def _patch_agent(monkeypatch, agent):
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", lambda *a, **k: agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", lambda *a, **k: agent)
 
 
 def test_returns_cost_reconciliation_result(settings, monkeypatch):
@@ -72,6 +70,7 @@ def test_prompt_includes_all_data(settings, monkeypatch):
 
 def test_graceful_on_agent_error(settings, monkeypatch):
     """Agent failure returns fallback result (never raises)."""
+
     class _Boom:
         def run_sync(self, *a, **k):
             raise RuntimeError("model down")
@@ -91,6 +90,7 @@ def test_graceful_on_agent_error(settings, monkeypatch):
 
 def test_non_result_output_handled(settings, monkeypatch):
     """Agent returning wrong type → fallback with warning."""
+
     class _Weird:
         def run_sync(self, *a, **k):
             return _Result("not a CostReconciliationResult")

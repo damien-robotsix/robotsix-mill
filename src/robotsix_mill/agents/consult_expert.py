@@ -109,16 +109,16 @@ def run_consult_expert(
     except Exception:
         log.warning(
             "could not load memory for expert %s at %s",
-            domain, memory_path, exc_info=True,
+            domain,
+            memory_path,
+            exc_info=True,
         )
         expert_memory = ""
 
     # 3. Build a fresh agent (bypass ExpertManager cache for stale-memory safety).
     system_prompt = definition.system_prompt
     if expert_memory:
-        system_prompt = (
-            f"{system_prompt}\n\n<memory>\n{expert_memory}\n</memory>"
-        )
+        system_prompt = f"{system_prompt}\n\n<memory>\n{expert_memory}\n</memory>"
     system_prompt += (
         "\n\n## Memory\n"
         "Return a structured ``ExpertConsultResult`` with two fields:\n"
@@ -165,7 +165,8 @@ def run_consult_expert(
 
         result = call_with_retry(
             lambda: agent.run_sync(question, usage_limits=limits),
-            settings=settings, what=f"consult:{domain}",
+            settings=settings,
+            what=f"consult:{domain}",
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the coordinator
         return f"consult {domain} failed: {e}"
@@ -186,7 +187,9 @@ def run_consult_expert(
         except Exception:  # noqa: BLE001 — memory persistence is best-effort
             log.warning(
                 "could not persist memory for expert %s at %s",
-                domain, memory_path, exc_info=True,
+                domain,
+                memory_path,
+                exc_info=True,
             )
 
     return output.answer
@@ -205,29 +208,33 @@ def make_consult_expert_tool(settings: Settings, repo_dir: Path, board_id: str =
         your edits. Available domains match expert_definitions/*.yaml
         (e.g. 'python-backend')."""
         return run_consult_expert(
-            settings=settings, repo_dir=repo_dir,
-            domain=domain, question=question,
+            settings=settings,
+            repo_dir=repo_dir,
+            domain=domain,
+            question=question,
             board_id=board_id,
         )
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="consult_expert",
-        description=(
-            "Consult a domain expert sub-agent about a specific codebase "
-            "question. Use when the ticket touches a domain you're less "
-            "familiar with (e.g. Python backend internals). The expert has "
-            "deep knowledge of that domain's conventions, file layout, and "
-            "gotchas — ask focused questions and use the answer to guide "
-            "your edits. Available domains match expert_definitions/*.yaml "
-            "(e.g. 'python-backend')."
-        ),
-        category="exploration",
-        parameters={
-            "domain": "str (the expert domain to consult, e.g. 'python-backend')",
-            "question": "str (a focused, specific question for the expert)",
-        },
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="consult_expert",
+            description=(
+                "Consult a domain expert sub-agent about a specific codebase "
+                "question. Use when the ticket touches a domain you're less "
+                "familiar with (e.g. Python backend internals). The expert has "
+                "deep knowledge of that domain's conventions, file layout, and "
+                "gotchas — ask focused questions and use the answer to guide "
+                "your edits. Available domains match expert_definitions/*.yaml "
+                "(e.g. 'python-backend')."
+            ),
+            category="exploration",
+            parameters={
+                "domain": "str (the expert domain to consult, e.g. 'python-backend')",
+                "question": "str (a focused, specific question for the expert)",
+            },
+        )
+    )
 
     return consult_expert

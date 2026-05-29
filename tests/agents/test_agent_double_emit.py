@@ -18,7 +18,9 @@ goes green.
 from __future__ import annotations
 
 
-def _collect_build_agent_kwargs(monkeypatch, agent_module, callable_name, **call_kwargs):
+def _collect_build_agent_kwargs(
+    monkeypatch, agent_module, callable_name, **call_kwargs
+):
     """Monkeypatch ``build_agent`` to capture its kwargs without actually
     constructing an LLM client, then invoke the agent's entry function.
 
@@ -30,6 +32,7 @@ def _collect_build_agent_kwargs(monkeypatch, agent_module, callable_name, **call
         def run_sync(self, *_args, **_kwargs):
             class _R:
                 output = ""
+
             return _R()
 
     def _fake_build_agent(*_args, **kwargs):
@@ -41,20 +44,28 @@ def _collect_build_agent_kwargs(monkeypatch, agent_module, callable_name, **call
     # the agent module is too late — the import resolves to base.py at
     # call time. Patch the source instead.
     import robotsix_mill.agents.base as base_mod
+
     monkeypatch.setattr(base_mod, "build_agent", _fake_build_agent)
     # Also stub call_with_retry so the fake .run_sync result isn't
     # double-wrapped or retried.
     import robotsix_mill.agents.retry as retry_mod
+
     monkeypatch.setattr(
-        retry_mod, "call_with_retry",
+        retry_mod,
+        "call_with_retry",
         lambda fn, **_: fn(),
     )
 
     from robotsix_mill.config import Settings
+
     s = Settings()
-    fn = getattr(__import__(
-        f"robotsix_mill.agents.{agent_module}", fromlist=[callable_name],
-    ), callable_name)
+    fn = getattr(
+        __import__(
+            f"robotsix_mill.agents.{agent_module}",
+            fromlist=[callable_name],
+        ),
+        callable_name,
+    )
     try:
         fn(settings=s, **call_kwargs)
     except Exception:
@@ -77,8 +88,12 @@ def test_audit_agent_has_report_issue_false(monkeypatch):
 
 def test_retrospect_agent_has_report_issue_false(monkeypatch):
     kw = _collect_build_agent_kwargs(
-        monkeypatch, "retrospecting", "run_retrospect_agent",
-        ticket_summary="", history_text="", langfuse_summary=None,
+        monkeypatch,
+        "retrospecting",
+        "run_retrospect_agent",
+        ticket_summary="",
+        history_text="",
+        langfuse_summary=None,
         memory="",
     )
     assert kw.get("report_issue") is False, (
@@ -89,7 +104,9 @@ def test_retrospect_agent_has_report_issue_false(monkeypatch):
 
 def test_agent_check_has_report_issue_false(monkeypatch):
     kw = _collect_build_agent_kwargs(
-        monkeypatch, "agent_check", "run_agent_check_agent",
+        monkeypatch,
+        "agent_check",
+        "run_agent_check_agent",
         memory="",
     )
     assert kw.get("report_issue") is False, (
@@ -100,7 +117,9 @@ def test_agent_check_has_report_issue_false(monkeypatch):
 
 def test_health_agent_has_report_issue_false(monkeypatch):
     kw = _collect_build_agent_kwargs(
-        monkeypatch, "health", "run_health_agent",
+        monkeypatch,
+        "health",
+        "run_health_agent",
         memory="",
     )
     assert kw.get("report_issue") is False, (

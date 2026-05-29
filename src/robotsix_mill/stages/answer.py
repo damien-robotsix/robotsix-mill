@@ -23,6 +23,7 @@ log = logging.getLogger("robotsix_mill.stages.answer")
 
 class AnswerStage(Stage):
     """Answer a user question by cloning the repo for context and invoking an answering agent against the ticket description."""
+
     name = "answer"
     input_state = State.ASKED
 
@@ -34,7 +35,9 @@ class AnswerStage(Stage):
             question = epic_ctx + "\n\n" + question
         title = ticket.title.strip()
         if not title and not question:
-            return Outcome(State.BLOCKED, "empty title and question — nothing to answer")
+            return Outcome(
+                State.BLOCKED, "empty title and question — nothing to answer"
+            )
 
         s = ctx.settings
 
@@ -53,14 +56,17 @@ class AnswerStage(Stage):
                     except RuntimeError:
                         token = None
                     git_ops.clone(
-                        remote_url, cand,
-                        s.forge_target_branch, token,
+                        remote_url,
+                        cand,
+                        s.forge_target_branch,
+                        token,
                     )
                     repo_dir = cand
                 except subprocess.CalledProcessError as e:
                     log.warning(
                         "%s: answer clone failed, no repo grounding: %s",
-                        ticket.id, (e.stderr or "")[:200],
+                        ticket.id,
+                        (e.stderr or "")[:200],
                     )
 
         # --- preserve the original question ---

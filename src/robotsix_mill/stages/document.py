@@ -46,6 +46,7 @@ def _paths_from_diff(diff: str) -> list[str]:
 
 class DocumentStage(Stage):
     """Generate or update project documentation from the implemented code changes in the cloned repo."""
+
     name = "document"
     input_state = State.DOCUMENTING
     traced = True
@@ -79,8 +80,10 @@ class DocumentStage(Stage):
         # Compute diff of all commits on the current branch vs origin/<target>.
         try:
             diff = git_ops.diff_base(
-                repo_dir, target_branch,
-                remote_url=remote_url, token=token,
+                repo_dir,
+                target_branch,
+                remote_url=remote_url,
+                token=token,
             )
         except Exception as e:
             return Outcome(
@@ -104,7 +107,9 @@ class DocumentStage(Stage):
         # Failure is non-blocking — we fall through to the full agent.
         try:
             classifier_result = self._run_doc_classifier(
-                settings=s, diff=diff, spec=spec,
+                settings=s,
+                diff=diff,
+                spec=spec,
             )
             # The classifier verdict used to be posted as a comment;
             # it's an agent conclusion, not interaction with the
@@ -163,7 +168,8 @@ class DocumentStage(Stage):
                 exc_info=True,
             )
             send_notification(
-                ticket, State.ERRORED,
+                ticket,
+                State.ERRORED,
                 "doc agent failed (non-blocking)",
                 ctx.settings,
             )

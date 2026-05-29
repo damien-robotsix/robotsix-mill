@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 
 import httpx
-import pytest
 
 from robotsix_mill.config import RepoConfig, Settings, _reset_secrets, Secrets
 from robotsix_mill import config as _cfg
@@ -66,10 +65,13 @@ def test_returns_empty_when_credentials_missing(tmp_path, monkeypatch):
     rc = _repo(public="", secret="")
     called = []
     _patch_httpx(
-        monkeypatch, lambda req: called.append(req) or httpx.Response(200),
+        monkeypatch,
+        lambda req: called.append(req) or httpx.Response(200),
     )
     out = run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=100,
+        settings=s,
+        repo_config=rc,
+        max_traces=100,
     )
     assert out.traces_deleted == 0
     assert out.project == "r"
@@ -83,10 +85,13 @@ def test_returns_empty_when_max_traces_non_positive(tmp_path, monkeypatch):
     rc = _repo()
     called = []
     _patch_httpx(
-        monkeypatch, lambda req: called.append(req) or httpx.Response(200),
+        monkeypatch,
+        lambda req: called.append(req) or httpx.Response(200),
     )
     out = run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=0,
+        settings=s,
+        repo_config=rc,
+        max_traces=0,
     )
     assert out.traces_deleted == 0
     assert called == []
@@ -113,7 +118,9 @@ def test_uses_global_secrets_when_repo_config_none(tmp_path, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     out = run_langfuse_cleanup_pass(
-        settings=s, repo_config=None, max_traces=50,
+        settings=s,
+        repo_config=None,
+        max_traces=50,
     )
     assert out.project == "default"
     # total (10) ≤ max (50) → no DELETE
@@ -135,12 +142,15 @@ def test_under_cap_returns_without_deleting(tmp_path, monkeypatch):
     def handler(req):
         seen_methods.append(req.method)
         return httpx.Response(
-            200, json={"meta": {"totalItems": 50}, "data": []},
+            200,
+            json={"meta": {"totalItems": 50}, "data": []},
         )
 
     _patch_httpx(monkeypatch, handler)
     out = run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=100,
+        settings=s,
+        repo_config=rc,
+        max_traces=100,
     )
     assert out.traces_before == 50
     assert out.traces_deleted == 0
@@ -154,15 +164,14 @@ def test_over_cap_deletes_oldest_until_under(tmp_path, monkeypatch):
     rc = _repo()
     deletes: list[list] = []
 
-    state = {"remaining_to_list": [50]}
-
     def handler(req: httpx.Request) -> httpx.Response:
         if req.method == "GET":
             # First call may be the count (limit=1). Subsequent are list.
             qs = dict(httpx.QueryParams(req.url.query.decode()))
             if qs.get("limit") == "1":
                 return httpx.Response(
-                    200, json={"meta": {"totalItems": 250}, "data": []},
+                    200,
+                    json={"meta": {"totalItems": 250}, "data": []},
                 )
             # listing: return up to 'limit' ids
             limit = int(qs["limit"])
@@ -176,7 +185,9 @@ def test_over_cap_deletes_oldest_until_under(tmp_path, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     out = run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=200,
+        settings=s,
+        repo_config=rc,
+        max_traces=200,
     )
     assert out.traces_before == 250
     assert out.traces_deleted == 50
@@ -197,7 +208,8 @@ def test_empty_list_response_breaks_loop(tmp_path, monkeypatch):
             qs = dict(httpx.QueryParams(req.url.query.decode()))
             if qs.get("limit") == "1":
                 return httpx.Response(
-                    200, json={"meta": {"totalItems": 300}, "data": []},
+                    200,
+                    json={"meta": {"totalItems": 300}, "data": []},
                 )
             # First list returns 100, second returns empty.
             if state["deleted_already"] == 0:
@@ -211,7 +223,9 @@ def test_empty_list_response_breaks_loop(tmp_path, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     out = run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=200,
+        settings=s,
+        repo_config=rc,
+        max_traces=200,
     )
     assert out.traces_deleted == 100  # only one batch, then empty list
 
@@ -226,10 +240,13 @@ def test_count_http_failure_returns_zero_deleted(tmp_path, monkeypatch, caplog):
     s = _settings(tmp_path)
     rc = _repo()
     _patch_httpx(
-        monkeypatch, lambda req: httpx.Response(503, text="upstream down"),
+        monkeypatch,
+        lambda req: httpx.Response(503, text="upstream down"),
     )
     out = run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=100,
+        settings=s,
+        repo_config=rc,
+        max_traces=100,
     )
     assert out.traces_deleted == 0
 
@@ -245,7 +262,8 @@ def test_delete_failure_preserves_partial_count(tmp_path, monkeypatch):
             qs = dict(httpx.QueryParams(req.url.query.decode()))
             if qs.get("limit") == "1":
                 return httpx.Response(
-                    200, json={"meta": {"totalItems": 300}, "data": []},
+                    200,
+                    json={"meta": {"totalItems": 300}, "data": []},
                 )
             ids = [{"id": f"t-{i}"} for i in range(100)]
             return httpx.Response(200, json={"data": ids})
@@ -258,7 +276,9 @@ def test_delete_failure_preserves_partial_count(tmp_path, monkeypatch):
 
     _patch_httpx(monkeypatch, handler)
     out = run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=200,
+        settings=s,
+        repo_config=rc,
+        max_traces=200,
     )
     # First batch succeeded, second crashed mid-call.
     assert out.traces_deleted == 100
@@ -279,14 +299,18 @@ def test_basic_auth_header_built_from_keys(tmp_path, monkeypatch):
     def handler(req):
         captured["auth"] = req.headers.get("authorization", "")
         return httpx.Response(
-            200, json={"meta": {"totalItems": 0}, "data": []},
+            200,
+            json={"meta": {"totalItems": 0}, "data": []},
         )
 
     _patch_httpx(monkeypatch, handler)
     run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=10,
+        settings=s,
+        repo_config=rc,
+        max_traces=10,
     )
     import base64
+
     expected = "Basic " + base64.b64encode(b"pk-abc:sk-xyz").decode()
     assert captured["auth"] == expected
 
@@ -300,12 +324,15 @@ def test_uses_langfuse_base_url_from_repo_config(tmp_path, monkeypatch):
     def handler(req):
         captured["url"] = str(req.url)
         return httpx.Response(
-            200, json={"meta": {"totalItems": 0}, "data": []},
+            200,
+            json={"meta": {"totalItems": 0}, "data": []},
         )
 
     _patch_httpx(monkeypatch, handler)
     run_langfuse_cleanup_pass(
-        settings=s, repo_config=rc, max_traces=10,
+        settings=s,
+        repo_config=rc,
+        max_traces=10,
     )
     assert captured["url"].startswith("https://lf.custom.example.com/")
 

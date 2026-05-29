@@ -1,6 +1,8 @@
 """Tests for skill injection into agent prompts."""
 
 import logging
+from pathlib import Path
+
 import pytest
 
 from robotsix_mill.agents.base import compose_prompt
@@ -22,6 +24,7 @@ def _clear_registry():
 
 # ── skill injection ───────────────────────────────────────────────────
 
+
 def test_skill_injected_after_system_prompt(tmp_path):
     """Skill content appears after the system prompt under a ``##
     Skills`` heading, with YAML frontmatter stripped. (Previously
@@ -36,10 +39,14 @@ def test_skill_injected_after_system_prompt(tmp_path):
         "---\nname: board\n---\n\nBoard interaction guidance here.\n"
     )
 
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="Read a file.",
-        category="fs", parameters={"path": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="Read a file.",
+            category="fs",
+            parameters={"path": "str"},
+        )
+    )
 
     result = compose_prompt(s, "SYSTEM PROMPT", skills=["board"])
 
@@ -78,10 +85,14 @@ def test_frontmatter_stripped_from_skill_content(tmp_path):
         "\nMore content here.\n"
     )
 
-    ToolRegistry.register(ToolInfo(
-        name="run_command", description="Run a shell command.",
-        category="shell", parameters={"command": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="run_command",
+            description="Run a shell command.",
+            category="shell",
+            parameters={"command": "str"},
+        )
+    )
 
     result = compose_prompt(s, "PROMPT", skills=["board"])
 
@@ -99,10 +110,14 @@ def test_compose_prompt_backward_compatible_no_skills(tmp_path):
     """compose_prompt() without skills parameter works exactly as before."""
     s = _settings(tmp_path)
 
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="Read a file.",
-        category="fs", parameters={"path": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="Read a file.",
+            category="fs",
+            parameters={"path": "str"},
+        )
+    )
 
     result = compose_prompt(s, "BASE PROMPT")
     assert result.startswith("BASE PROMPT")
@@ -113,10 +128,14 @@ def test_compose_prompt_skills_none_same_as_omitted(tmp_path):
     """Explicit skills=None produces the same output as omitting it."""
     s = _settings(tmp_path)
 
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="Read a file.",
-        category="fs", parameters={"path": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="Read a file.",
+            category="fs",
+            parameters={"path": "str"},
+        )
+    )
 
     result = compose_prompt(s, "BASE", skills=None)
     assert "## Skills" not in result
@@ -177,20 +196,23 @@ def test_module_map_injected_when_modules_true(tmp_path, monkeypatch):
     injects a ## Module Map section."""
     s = _settings(tmp_path, skills_dir=str(tmp_path / "skills"))
 
-    modules_path = _make_modules_yaml(tmp_path, [
-        {
-            "id": "config",
-            "description": "App configuration layer.",
-            "paths": ["src/config.py", "src/config_loader.py"],
-            "dependencies": [],
-        },
-        {
-            "id": "core",
-            "description": "Core domain model.",
-            "paths": ["src/core/models.py"],
-            "dependencies": ["config"],
-        },
-    ])
+    modules_path = _make_modules_yaml(
+        tmp_path,
+        [
+            {
+                "id": "config",
+                "description": "App configuration layer.",
+                "paths": ["src/config.py", "src/config_loader.py"],
+                "dependencies": [],
+            },
+            {
+                "id": "core",
+                "description": "Core domain model.",
+                "paths": ["src/core/models.py"],
+                "dependencies": ["config"],
+            },
+        ],
+    )
 
     # Patch pathlib.Path so that Path("docs/modules.yaml") resolves
     # to our test fixture inside tmp_path.
@@ -246,16 +268,28 @@ def test_module_map_tiered_view_above_20_modules(tmp_path, monkeypatch):
 
     # Create 25 modules; first 2 have no deps, the rest depend on them
     large_taxonomy: list[dict] = [
-        {"id": "foundation_a", "description": "Base A.", "paths": ["a.py"], "dependencies": []},
-        {"id": "foundation_b", "description": "Base B.", "paths": ["b.py"], "dependencies": []},
+        {
+            "id": "foundation_a",
+            "description": "Base A.",
+            "paths": ["a.py"],
+            "dependencies": [],
+        },
+        {
+            "id": "foundation_b",
+            "description": "Base B.",
+            "paths": ["b.py"],
+            "dependencies": [],
+        },
     ]
     for i in range(23):
-        large_taxonomy.append({
-            "id": f"leaf_{i}",
-            "description": f"Leaf {i}.",
-            "paths": [f"leaf_{i}.py"],
-            "dependencies": ["foundation_a"],
-        })
+        large_taxonomy.append(
+            {
+                "id": f"leaf_{i}",
+                "description": f"Leaf {i}.",
+                "paths": [f"leaf_{i}.py"],
+                "dependencies": ["foundation_a"],
+            }
+        )
 
     modules_path = _make_modules_yaml(tmp_path, large_taxonomy)
 
@@ -326,14 +360,17 @@ def test_module_map_skills_and_modules_both_injected(tmp_path, monkeypatch):
     )
 
     # Create modules.yaml
-    modules_path = _make_modules_yaml(tmp_path, [
-        {
-            "id": "config",
-            "description": "Config layer.",
-            "paths": ["src/config.py"],
-            "dependencies": [],
-        },
-    ])
+    modules_path = _make_modules_yaml(
+        tmp_path,
+        [
+            {
+                "id": "config",
+                "description": "Config layer.",
+                "paths": ["src/config.py"],
+                "dependencies": [],
+            },
+        ],
+    )
 
     # Patch pathlib.Path
     import pathlib

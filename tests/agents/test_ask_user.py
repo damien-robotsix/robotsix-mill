@@ -1,8 +1,6 @@
 """Tests for the ``ask_user`` tool — pause a ticket and ask the
 operator a clarifying question."""
 
-import pytest
-
 from robotsix_mill.agents.ask_user import make_ask_user_tool
 from robotsix_mill.agents.tool_registry import ToolRegistry
 from robotsix_mill.core.service import TicketService
@@ -125,8 +123,7 @@ def test_build_agent_injects_ask_user_by_default(settings, monkeypatch, secrets_
         lambda *a, **k: object(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost."
-        "CostInstrumentedOpenRouterModel",
+        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
         lambda *a, **k: object(),
     )
     secrets_set(openrouter_api_key="k")
@@ -152,8 +149,7 @@ def test_build_agent_omits_ask_user_when_false(settings, monkeypatch, secrets_se
         lambda *a, **k: object(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost."
-        "CostInstrumentedOpenRouterModel",
+        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
         lambda *a, **k: object(),
     )
     secrets_set(openrouter_api_key="k")

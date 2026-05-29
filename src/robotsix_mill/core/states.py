@@ -52,26 +52,34 @@ from enum import StrEnum
 
 
 class State(StrEnum):
-    DRAFT = "draft"            # raw idea, awaiting refinement
+    DRAFT = "draft"  # raw idea, awaiting refinement
     HUMAN_ISSUE_APPROVAL = "human_issue_approval"  # refined; awaiting human approval
-    READY = "ready"           # actionable; awaiting implementation
+    READY = "ready"  # actionable; awaiting implementation
     DOCUMENTING = "documenting"  # implemented; documentation agent updating docs
     CODE_REVIEW = "code_review"  # documented; awaiting automated code review
     DELIVERABLE = "deliverable"  # reviewed; awaiting MR delivery
-    HUMAN_MR_APPROVAL = "human_mr_approval"   # PR/MR open; awaiting human merge
-    IMPLEMENT_COMPLETE = "implement_complete"  # PR open; CI/mergeability gates not yet verified
-    WAITING_AUTO_MERGE = "waiting_auto_merge"  # PR open + CI pending; auto-merge when green
-    REBASING = "rebasing"     # conflicting PR; rebase agent in progress
-    FIXING_CI = "fixing_ci"   # PR open + failing CI; auto-fix in progress
-    ADDRESSING_REVIEW = "addressing_review"  # PR has human change requests; agent responding
-    DONE = "done"             # PR/MR merged; awaiting retrospect
-    CLOSED = "closed"        # retrospected; pipeline complete (terminal)
-    ERRORED = "errored"       # a stage threw an unhandled exception
-    BLOCKED = "blocked"       # escalated; needs a human
-    ASKED = "asked"           # inquiry submitted; awaiting answer
-    ANSWERED = "answered"     # inquiry answered (terminal)
-    AWAITING_USER_REPLY = "awaiting_user_reply"  # paused mid-stage; awaiting human reply
-    EPIC_OPEN = "epic_open"   # epic actively collecting/grouping children
+    HUMAN_MR_APPROVAL = "human_mr_approval"  # PR/MR open; awaiting human merge
+    IMPLEMENT_COMPLETE = (
+        "implement_complete"  # PR open; CI/mergeability gates not yet verified
+    )
+    WAITING_AUTO_MERGE = (
+        "waiting_auto_merge"  # PR open + CI pending; auto-merge when green
+    )
+    REBASING = "rebasing"  # conflicting PR; rebase agent in progress
+    FIXING_CI = "fixing_ci"  # PR open + failing CI; auto-fix in progress
+    ADDRESSING_REVIEW = (
+        "addressing_review"  # PR has human change requests; agent responding
+    )
+    DONE = "done"  # PR/MR merged; awaiting retrospect
+    CLOSED = "closed"  # retrospected; pipeline complete (terminal)
+    ERRORED = "errored"  # a stage threw an unhandled exception
+    BLOCKED = "blocked"  # escalated; needs a human
+    ASKED = "asked"  # inquiry submitted; awaiting answer
+    ANSWERED = "answered"  # inquiry answered (terminal)
+    AWAITING_USER_REPLY = (
+        "awaiting_user_reply"  # paused mid-stage; awaiting human reply
+    )
+    EPIC_OPEN = "epic_open"  # epic actively collecting/grouping children
     EPIC_CLOSED = "epic_closed"  # epic closed (terminal)
 
 
@@ -82,21 +90,59 @@ TRANSITIONS: dict[State, set[State]] = {
     # refine decided the work is too varied to spec in one pass, flips
     # ``kind=epic`` via ``service.promote_to_epic`` and emits this
     # transition so the worker writes the canonical state event.
-    State.DRAFT: {State.READY, State.HUMAN_ISSUE_APPROVAL, State.ERRORED, State.BLOCKED, State.CLOSED, State.DONE, State.AWAITING_USER_REPLY, State.EPIC_OPEN},
+    State.DRAFT: {
+        State.READY,
+        State.HUMAN_ISSUE_APPROVAL,
+        State.ERRORED,
+        State.BLOCKED,
+        State.CLOSED,
+        State.DONE,
+        State.AWAITING_USER_REPLY,
+        State.EPIC_OPEN,
+    },
     # human_issue_approval is a human-wait state; the human approves → ready,
     # rejects back to draft with comments, or escalates → blocked/failed.
-    State.HUMAN_ISSUE_APPROVAL: {State.READY, State.DRAFT, State.ERRORED, State.BLOCKED},
+    State.HUMAN_ISSUE_APPROVAL: {
+        State.READY,
+        State.DRAFT,
+        State.ERRORED,
+        State.BLOCKED,
+    },
     # implement routes to code_review when review is enabled, otherwise
     # straight to deliverable.
     # implement routes to code_review when review is enabled, otherwise
     # straight to documenting (then deliverable).
-    State.READY: {State.CODE_REVIEW, State.DOCUMENTING, State.DELIVERABLE, State.REBASING, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
+    State.READY: {
+        State.CODE_REVIEW,
+        State.DOCUMENTING,
+        State.DELIVERABLE,
+        State.REBASING,
+        State.ERRORED,
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+    },
     # review APPROVE -> documenting; REQUEST_CHANGES -> back to ready
     # (the implement<->review loop never touches documenting).
-    State.CODE_REVIEW: {State.DOCUMENTING, State.READY, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
+    State.CODE_REVIEW: {
+        State.DOCUMENTING,
+        State.READY,
+        State.ERRORED,
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+    },
     # documenting always routes to deliverable — review already happened.
-    State.DOCUMENTING: {State.DELIVERABLE, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
-    State.DELIVERABLE: {State.IMPLEMENT_COMPLETE, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
+    State.DOCUMENTING: {
+        State.DELIVERABLE,
+        State.ERRORED,
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+    },
+    State.DELIVERABLE: {
+        State.IMPLEMENT_COMPLETE,
+        State.ERRORED,
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+    },
     # implement_complete: merge stage polls gates (CI + mergeability).
     # Both gates green → human_mr_approval (notify human).  CI failing →
     # fixing_ci; conflicting → rebasing; CI pending → same-state re-poll.
@@ -135,16 +181,37 @@ TRANSITIONS: dict[State, set[State]] = {
     },
     # rebasing: merge stage runs rebase agent → back to implement_complete on
     # success (re-verify gates), retry on failure, block on exhaustion.
-    State.REBASING: {State.IMPLEMENT_COMPLETE, State.READY, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
+    State.REBASING: {
+        State.IMPLEMENT_COMPLETE,
+        State.READY,
+        State.ERRORED,
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+    },
     # ci fix: on success → implement_complete (re-verify gates); on failure → blocked; on crash → errored.
-    State.FIXING_CI: {State.IMPLEMENT_COMPLETE, State.BLOCKED, State.ERRORED, State.AWAITING_USER_REPLY},
+    State.FIXING_CI: {
+        State.IMPLEMENT_COMPLETE,
+        State.BLOCKED,
+        State.ERRORED,
+        State.AWAITING_USER_REPLY,
+    },
     # addressing review: on success → human_mr_approval (re-verify gates); on failure → blocked; on crash → errored.
-    State.ADDRESSING_REVIEW: {State.HUMAN_MR_APPROVAL, State.BLOCKED, State.ERRORED, State.AWAITING_USER_REPLY},
+    State.ADDRESSING_REVIEW: {
+        State.HUMAN_MR_APPROVAL,
+        State.BLOCKED,
+        State.ERRORED,
+        State.AWAITING_USER_REPLY,
+    },
     # done = merged: retrospect analyses it -> reviewed
     State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
     State.CLOSED: set(),
     # inquiry states: asked -> answered (terminal), or errored/blocked
-    State.ASKED: {State.ANSWERED, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
+    State.ASKED: {
+        State.ANSWERED,
+        State.ERRORED,
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+    },
     State.ANSWERED: set(),
     # paused mid-stage: operator reply resumes to originating state (paused_from);
     # errored / blocked are the always-available escapes.
@@ -178,7 +245,12 @@ STAGE_FOR_STATE: dict[State, str] = {
 }
 
 
-def can_transition(src: State, dst: State, blocked_from: State | None = None, paused_from: State | None = None) -> bool:
+def can_transition(
+    src: State,
+    dst: State,
+    blocked_from: State | None = None,
+    paused_from: State | None = None,
+) -> bool:
     """Return True if ``src → dst`` is a legal transition.
 
     When *src* is ``BLOCKED``, *dst* is also allowed when it matches
@@ -196,6 +268,10 @@ def can_transition(src: State, dst: State, blocked_from: State | None = None, pa
         return True
     if src is State.BLOCKED and blocked_from is not None and dst is blocked_from:
         return True
-    if src is State.AWAITING_USER_REPLY and paused_from is not None and dst is paused_from:
+    if (
+        src is State.AWAITING_USER_REPLY
+        and paused_from is not None
+        and dst is paused_from
+    ):
         return True
     return False

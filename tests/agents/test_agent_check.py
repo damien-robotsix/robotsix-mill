@@ -1,7 +1,6 @@
 """Tests for the agent-check agent and runner."""
 
 import json
-import pytest
 from pathlib import Path
 
 from robotsix_mill.agents import agent_check
@@ -46,8 +45,10 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
         assert kw in p, f"agent-check prompt missing tool-prompt cue: {kw}"
     # pydantic-ai auto-injection must be documented so the agent knows
     # not to flag absent tool mentions as gaps.
-    assert "docstring_format" in p or "auto-injects" in p or (
-        "pydantic-ai" in p and "auto" in p
+    assert (
+        "docstring_format" in p
+        or "auto-injects" in p
+        or ("pydantic-ai" in p and "auto" in p)
     )
     # "tool in actual set but never mentioned" must NOT be treated as a gap.
     assert "do not flag" in p or "DO NOT flag" in p or "absence from the prompt" in p
@@ -66,7 +67,14 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
     for kw in ("self-consistency", "copy-paste", "drift"):
         assert kw in p, f"agent-check prompt missing self-consistency cue: {kw}"
     # Dimension F: Memory Ledger Coherence
-    for kw in ("memory ledger", "*_memory.md", "staleness", "reconciliation", "format consistency", "truncated"):
+    for kw in (
+        "memory ledger",
+        "*_memory.md",
+        "staleness",
+        "reconciliation",
+        "format consistency",
+        "truncated",
+    ):
         assert kw in p, f"agent-check prompt missing memory-ledger cue: {kw}"
     assert "skip `agent_check_memory.md`" in p or "agent_check_memory.md" in p
     # Must reference YAML files and agent_definitions/
@@ -84,8 +92,11 @@ def test_agent_check_prompt_covers_all_coherence_dimensions():
     assert "skills/" in p or "SKILL.md" in p
     assert "agent_references/" in p
     # Memory note about deleted false-positive drafts
-    assert "90ac" in p or "d847" in p or "false-positive" in p or (
-        "deleted" in p and "draft" in p
+    assert (
+        "90ac" in p
+        or "d847" in p
+        or "false-positive" in p
+        or ("deleted" in p and "draft" in p)
     )
     # Must mention `${VAR}` references for model field
     assert "${var}" in p or "settings field" in p
@@ -143,9 +154,7 @@ def test_run_agent_check_pass_empty_memory(tmp_path, monkeypatch):
         return _empty_result()
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     run_agent_check_pass(session_id="test-sid")
     assert captured_memory == [""]
@@ -156,9 +165,7 @@ def test_run_agent_check_pass_reads_existing_memory(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     memory_file = settings.agent_check_memory_file
     memory_file.parent.mkdir(parents=True, exist_ok=True)
-    memory_file.write_text(
-        "# Existing memory\n## Proposed\n- gap1\n", encoding="utf-8"
-    )
+    memory_file.write_text("# Existing memory\n## Proposed\n- gap1\n", encoding="utf-8")
 
     captured_memory = []
 
@@ -167,9 +174,7 @@ def test_run_agent_check_pass_reads_existing_memory(tmp_path, monkeypatch):
         return _empty_result()
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     run_agent_check_pass(session_id="test-sid")
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
@@ -189,9 +194,7 @@ def test_run_agent_check_pass_writes_memory_verbatim(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     run_agent_check_pass(session_id="test-sid")
     memory_file = settings.agent_check_memory_file
@@ -215,9 +218,7 @@ def test_run_agent_check_pass_creates_draft_tickets(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     result = run_agent_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 2
@@ -229,7 +230,7 @@ def test_run_agent_check_pass_creates_draft_tickets(tmp_path, monkeypatch):
     # Each draft should have origin_session == the run's session_id.
     for t in ac_tickets:
         assert t.origin_session == result.session_id
-        assert t.origin_session== "test-sid"
+        assert t.origin_session == "test-sid"
 
 
 def test_run_agent_check_pass_no_drafts_when_empty(tmp_path, monkeypatch):
@@ -242,9 +243,7 @@ def test_run_agent_check_pass_no_drafts_when_empty(tmp_path, monkeypatch):
         return _empty_result()
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     result = run_agent_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 0
@@ -264,9 +263,7 @@ def test_run_agent_check_pass_missing_memory_file(tmp_path, monkeypatch):
         return _empty_result()
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     run_agent_check_pass(session_id="test-sid")
     assert captured_memory == [""]
@@ -285,9 +282,7 @@ def test_agent_check_pass_result_structure(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     result = run_agent_check_pass(session_id="test-sid")
     assert isinstance(result, AgentCheckPassResult)
@@ -310,9 +305,7 @@ def test_run_agent_check_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     result = run_agent_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 1  # only first has both title + body
@@ -344,9 +337,7 @@ def test_agent_check_memory_file_default(tmp_path):
 def test_agent_check_memory_file_override(tmp_path):
     """When agent_check_memory_path is set, uses that path."""
     custom_path = tmp_path / "custom_agent_check.md"
-    s = _make_settings(
-        tmp_path, agent_check_memory_path=str(custom_path)
-    )
+    s = _make_settings(tmp_path, agent_check_memory_path=str(custom_path))
     assert s.agent_check_memory_file == custom_path
 
 
@@ -455,9 +446,7 @@ def test_run_agent_check_pass_opens_langfuse_session(tmp_path, monkeypatch):
         return _empty_result()
 
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     res = run_agent_check_pass(session_id="test-sid")
 
@@ -468,12 +457,11 @@ def test_run_agent_check_pass_opens_langfuse_session(tmp_path, monkeypatch):
 def test_agent_check_session_ids_are_unique_per_run(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        agent_check, "run_agent_check_agent",
+        agent_check,
+        "run_agent_check_agent",
         lambda **k: _empty_result(),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
     a = run_agent_check_pass(session_id="test-sid").session_id
     assert a == "test-sid"
 
@@ -487,7 +475,8 @@ def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     from robotsix_mill.vcs import git_ops
 
     settings = _make_settings(
-        tmp_path, FORGE_REMOTE_URL="https://example.test/r.git",
+        tmp_path,
+        FORGE_REMOTE_URL="https://example.test/r.git",
         FORGE_TARGET_BRANCH="main",
     )
     seen = {"clone": 0, "repo_dir": "unset", "memory_dir": "unset"}
@@ -503,9 +492,7 @@ def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(agent_check, "run_agent_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
 
     run_agent_check_pass(session_id="test-sid")
     repo = settings.data_dir / "agent_check_workspace" / "repo"
@@ -543,6 +530,7 @@ def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
     def fake_explore_tool(s, repo_dir):
         async def _explore(ctx, question):
             return "answer"
+
         _explore.__name__ = "explore"
         return _explore
 
@@ -577,15 +565,13 @@ def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
 
 
 def test_run_agent_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
-    settings = _make_settings(tmp_path)   # no FORGE_REMOTE_URL
+    settings = _make_settings(tmp_path)  # no FORGE_REMOTE_URL
     got = {}
     monkeypatch.setattr(
-        agent_check, "run_agent_check_agent",
-        lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or
-        _empty_result(),
+        agent_check,
+        "run_agent_check_agent",
+        lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or _empty_result(),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.agent_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.agent_check_runner.Settings", lambda: settings)
     run_agent_check_pass(session_id="test-sid")
     assert got["repo_dir"] is None

@@ -3,14 +3,12 @@
 import json
 import time
 
-import pytest
 
 from robotsix_mill.config import (
     RepoConfig,
     ReposRegistry,
     Settings,
     _reset_repos_config,
-    get_repos_config,
 )
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -40,6 +38,7 @@ def _ctx(tmp_path, repo_config=None, **env):
     if ft is not None:
         from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
     db.init_db(s)
@@ -57,6 +56,7 @@ def _ctx(tmp_path, repo_config=None, **env):
     # Patch the repos registry so the poll loop sees our test repo.
     _reset_repos_config()
     import robotsix_mill.config as _cfg
+
     _cfg._repos_config = ReposRegistry(repos={repo_config.repo_id: repo_config})
 
     return StageContext(
@@ -105,13 +105,21 @@ def test_detects_new_failure_and_creates_draft(tmp_path, monkeypatch):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
-    forge = _make_fake_forge(monkeypatch, runs=[
-        {
-            "id": 1, "name": "docker-publish", "workflow_id": 200,
-            "head_sha": "abc", "conclusion": "failure",
-            "html_url": "http://run/1", "created_at": "2025-01-01T00:00:00Z",
-        },
-    ], logs="build error\n")
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "docker-publish",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs="build error\n",
+    )
 
     # Clear any existing state file.
     state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
@@ -123,12 +131,14 @@ def test_detects_new_failure_and_creates_draft(tmp_path, monkeypatch):
     worker._ci_monitor_task = None  # force fresh task
     monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
     import asyncio
+
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()  # stop after first cycle
+
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
         try:
             await worker._ci_monitor_poll_loop()
@@ -161,13 +171,20 @@ def test_dedup_skips_already_seen_failure(tmp_path, monkeypatch):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
-    forge = _make_fake_forge(monkeypatch, runs=[
-        {
-            "id": 1, "name": "CI", "workflow_id": 100,
-            "head_sha": "abc", "conclusion": "failure",
-            "html_url": "http://x", "created_at": "2025-01-01T00:00:00Z",
-        },
-    ])
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "CI",
+                "workflow_id": 100,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://x",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+    )
 
     # Pre-populate the dedup state with the same key.
     state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
@@ -179,12 +196,14 @@ def test_dedup_skips_already_seen_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
+
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
+
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
         try:
             await worker._ci_monitor_poll_loop()
@@ -207,13 +226,20 @@ def test_dedup_key_is_workflow_id_and_head_sha(tmp_path, monkeypatch):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
-    forge = _make_fake_forge(monkeypatch, runs=[
-        {
-            "id": 2, "name": "CI", "workflow_id": 100,
-            "head_sha": "def", "conclusion": "failure",
-            "html_url": "http://x", "created_at": "2025-01-01T00:00:00Z",
-        },
-    ])
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 2,
+                "name": "CI",
+                "workflow_id": 100,
+                "head_sha": "def",
+                "conclusion": "failure",
+                "html_url": "http://x",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+    )
 
     # State has 100:abc but the run is 100:def.
     state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
@@ -225,12 +251,14 @@ def test_dedup_key_is_workflow_id_and_head_sha(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
+
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
+
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
         try:
             await worker._ci_monitor_poll_loop()
@@ -253,28 +281,35 @@ def test_prunes_old_entries_from_state(tmp_path, monkeypatch):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
-    forge = _make_fake_forge(monkeypatch, runs=[])
+    _make_fake_forge(monkeypatch, runs=[])
 
     # Pre-populate with one old entry and one recent entry.
     now = int(time.time())
     old = now - (31 * 86400)  # 31 days ago
     state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({
-        "seen": {"100:old": old, "200:recent": now},
-    }), "utf-8")
+    state_path.write_text(
+        json.dumps(
+            {
+                "seen": {"100:old": old, "200:recent": now},
+            }
+        ),
+        "utf-8",
+    )
 
     worker = Worker(ctx)
     worker._ci_monitor_task = None
     monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
+
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
+
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
         try:
             await worker._ci_monitor_poll_loop()
@@ -297,13 +332,20 @@ def test_successful_run_not_filed(tmp_path, monkeypatch):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
-    _make_fake_forge(monkeypatch, runs=[
-        {
-            "id": 1, "name": "CI", "workflow_id": 100,
-            "head_sha": "abc", "conclusion": "success",
-            "html_url": "http://x", "created_at": "2025-01-01T00:00:00Z",
-        },
-    ])
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "CI",
+                "workflow_id": 100,
+                "head_sha": "abc",
+                "conclusion": "success",
+                "html_url": "http://x",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+    )
 
     state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     if state_path.exists():
@@ -314,12 +356,14 @@ def test_successful_run_not_filed(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
+
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
+
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
         try:
             await worker._ci_monitor_poll_loop()
@@ -341,13 +385,20 @@ def test_pending_run_not_filed(tmp_path, monkeypatch):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
-    _make_fake_forge(monkeypatch, runs=[
-        {
-            "id": 1, "name": "CI", "workflow_id": 100,
-            "head_sha": "abc", "conclusion": None,
-            "html_url": "http://x", "created_at": "2025-01-01T00:00:00Z",
-        },
-    ])
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "CI",
+                "workflow_id": 100,
+                "head_sha": "abc",
+                "conclusion": None,
+                "html_url": "http://x",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+    )
 
     state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     if state_path.exists():
@@ -358,12 +409,14 @@ def test_pending_run_not_filed(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
+
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
+
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
         try:
             await worker._ci_monitor_poll_loop()
@@ -385,13 +438,21 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
-    _make_fake_forge(monkeypatch, runs=[
-        {
-            "id": 1, "name": "docker-publish", "workflow_id": 200,
-            "head_sha": "abc", "conclusion": "failure",
-            "html_url": "http://run/1", "created_at": "2025-01-01T00:00:00Z",
-        },
-    ], logs="Step 5/10: ERROR: build failed\n")
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "docker-publish",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs="Step 5/10: ERROR: build failed\n",
+    )
 
     state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
     if state_path.exists():
@@ -402,12 +463,14 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
 
     import asyncio
+
     loop = asyncio.new_event_loop()
 
     async def _run_one_cycle():
         async def _fast_sleep(s):
             if s >= 1:
                 raise asyncio.CancelledError()
+
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
         try:
             await worker._ci_monitor_poll_loop()
@@ -462,35 +525,43 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
     passes after the refactor — i.e., the ci_fix stage still works
     when log fetching fails (the exception path is handled)."""
     from robotsix_mill.forge import github as gh_mod
-    from robotsix_mill.stages import StageContext as SC
     from robotsix_mill.stages.ci_fix import CIFixStage as CFS
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github", FORGE_TOKEN="t",
+        FORGE_KIND="github",
+        FORGE_TOKEN="t",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
     )
     # check_status returns failure.
     monkeypatch.setattr(
-        gh_mod.GitHubForge, "check_status",
+        gh_mod.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "lint", "summary": "err", "text": None, "annotations": []}],
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
         },
     )
     # pr_status returns a sha.
     monkeypatch.setattr(
-        gh_mod.GitHubForge, "pr_status",
+        gh_mod.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "http://pr",
-            "mergeable": True, "sha": "abc123",
+            "merged": False,
+            "state": "open",
+            "url": "http://pr",
+            "mergeable": True,
+            "sha": "abc123",
         },
     )
     # list_workflow_runs raises (simulating no runs or API issue).
     monkeypatch.setattr(
-        gh_mod.GitHubForge, "list_workflow_runs",
-        lambda self, *, branch=None, head_sha=None: (
-            (_ for _ in ()).throw(RuntimeError("not available"))
+        gh_mod.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: (_ for _ in ()).throw(
+            RuntimeError("not available")
         ),
     )
     monkeypatch.setattr(
@@ -503,12 +574,18 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
         push_seen.update(branch=branch, token=token)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push", fake_push,
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        fake_push,
     )
 
     # Create a FIXING_CI ticket via helper.
     t = ctx.service.create("x", "y")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.FIXING_CI):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.FIXING_CI,
+    ):
         ctx.service.transition(t.id, st)
     ctx.service.set_branch(t.id, f"mill/{t.id}")
 

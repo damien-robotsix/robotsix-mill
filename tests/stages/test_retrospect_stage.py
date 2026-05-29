@@ -46,7 +46,9 @@ def _result(**overrides) -> RetrospectResult:
     return RetrospectResult(**defaults)
 
 
-def _ticket(ctx, title="Test ticket", body="Test description", branch="mill/test-branch"):
+def _ticket(
+    ctx, title="Test ticket", body="Test description", branch="mill/test-branch"
+):
     """Create a ticket and transition it through to State.DONE."""
     t = ctx.service.create(title, body)
     ctx.service.transition(t.id, State.READY)
@@ -79,7 +81,19 @@ def ctx_factory(tmp_path, fake_sandbox):
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
-        from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=svc, repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+        from robotsix_mill.config import RepoConfig
+
+        return StageContext(
+            settings=s,
+            service=svc,
+            repo_config=RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        )
 
     yield make
     db.reset_engine()
@@ -94,32 +108,37 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
     """Happy path: agent returns normal findings → CLOSED with
     retrospect.md artifact written, langfuse: yes."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     # Default ALL seams
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(findings="All good.", conclusion="done"),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "session summary text",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -145,28 +164,32 @@ def test_langfuse_none_workflow_only_still_succeeds(ctx_factory, monkeypatch):
     """When fetch_session_summary returns None, the stage still
     transitions to CLOSED and the artifact notes 'workflow-only'."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: None,
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -187,7 +210,6 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
     """When run_retrospect_agent raises, the stage returns BLOCKED
     with a resumable note and no retrospect.md artifact."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -197,18 +219,22 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
 
     monkeypatch.setattr(retrospecting, "run_retrospect_agent", _boom)
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -232,13 +258,13 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
     """When retrospect_spawn_drafts=false, a proposed draft is
     noted but NOT created."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory(retrospect_spawn_drafts="false")
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             propose_draft=True,
             draft_title="Fix X",
@@ -246,21 +272,26 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -285,13 +316,13 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
     """When spawning is enabled (default) and the agent proposes
     a draft, a new ticket is created with parent_id set."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             propose_draft=True,
             draft_title="Fix X",
@@ -299,21 +330,26 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -341,13 +377,13 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
     """A draft titled 'No notable issues - clean run' is filtered
     and no ticket is created."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             propose_draft=True,
             draft_title="No notable issues — clean run",
@@ -355,21 +391,26 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -391,34 +432,39 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
     """When agent returns follow_up_title + follow_up_body,
     a concrete follow-up ticket is created with parent_id."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             follow_up_title="Incomplete: add tests",
             follow_up_body="Missing coverage",
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -444,7 +490,6 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
     """A follow-up is created even when a CLOSED ticket with the
     same title exists (CLOSED is in _DONE_WITH)."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -460,28 +505,34 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
     ctx.service.transition(pre.id, State.CLOSED)
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             follow_up_title="Incomplete: add tests",
             follow_up_body="Missing coverage",
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -503,7 +554,6 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
     """A follow-up is NOT created when a DRAFT ticket with the same
     case-insensitive title already exists (DRAFT not in _DONE_WITH)."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -512,28 +562,34 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
     ctx.service.create("Incomplete: add tests", "Existing draft")
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             follow_up_title="Incomplete: add tests",
             follow_up_body="Missing coverage",
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -559,7 +615,6 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
 def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     """Agent's updated_memory is written to the retrospect_memory_file."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -567,22 +622,27 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     memory_content = "## Issue\nEvidence: observed in TKT-001"
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(updated_memory=memory_content),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -606,35 +666,36 @@ def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
     """When the memory ledger has count drift (claims 5 tickets but
     evidence lists 2), the stage still transitions to CLOSED."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     drift_memory = (
-        "## Bug\n"
-        "Claims 5 tickets demonstrate this pattern.\n"
-        "- `TKT-001`\n"
-        "- `TKT-002`\n"
+        "## Bug\nClaims 5 tickets demonstrate this pattern.\n- `TKT-001`\n- `TKT-002`\n"
     )
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(updated_memory=drift_memory),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -652,7 +713,6 @@ def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
 def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
     """When prune_clone_on_close is True (default), prune_clone is called."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -660,15 +720,18 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
     prune_calls = []
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     # Mock prune_clone locally where it's called
@@ -677,7 +740,8 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
         lambda ws: prune_calls.append(ws),
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -697,7 +761,6 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
 def test_prune_clone_on_close_false_no_prune(ctx_factory, monkeypatch):
     """When prune_clone_on_close=false, prune_clone is NOT called."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory(prune_clone_on_close="false")
@@ -705,15 +768,18 @@ def test_prune_clone_on_close_false_no_prune(ctx_factory, monkeypatch):
     prune_calls = []
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
@@ -721,7 +787,8 @@ def test_prune_clone_on_close_false_no_prune(ctx_factory, monkeypatch):
         lambda ws: prune_calls.append(ws),
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -780,12 +847,7 @@ class TestExtractTicketIds:
 
 class TestCheckMemoryCountConsistency:
     def test_drift_detected(self):
-        memory = (
-            "## Bug pattern\n"
-            "5 tickets show this bug.\n"
-            "- `TKT-001`\n"
-            "- `TKT-002`\n"
-        )
+        memory = "## Bug pattern\n5 tickets show this bug.\n- `TKT-001`\n- `TKT-002`\n"
         warnings = _check_memory_count_consistency(memory)
         assert len(warnings) == 1
         assert "Bug pattern" in warnings[0]
@@ -797,12 +859,7 @@ class TestCheckMemoryCountConsistency:
         assert _check_memory_count_consistency(memory) == []
 
     def test_exact_match_no_warning(self):
-        memory = (
-            "## Bug pattern\n"
-            "2 tickets show this bug.\n"
-            "- `TKT-001`\n"
-            "- `TKT-002`\n"
-        )
+        memory = "## Bug pattern\n2 tickets show this bug.\n- `TKT-001`\n- `TKT-002`\n"
         assert _check_memory_count_consistency(memory) == []
 
     def test_empty_memory(self):
@@ -847,13 +904,13 @@ def test_agented_proposals_written_to_candidates_file(ctx_factory, monkeypatch):
     AGENT_CANDIDATES.md in the persistent per-board data directory
     (outside the ephemeral clone)."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             agented_md_proposals=[
                 {
@@ -865,21 +922,26 @@ def test_agented_proposals_written_to_candidates_file(ctx_factory, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -903,31 +965,36 @@ def test_agented_proposals_none_no_file_created(ctx_factory, monkeypatch):
     """When agented_md_proposals is None, AGENT_CANDIDATES.md is NOT created
     (or left unchanged if it existed)."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(agented_md_proposals=None),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -944,31 +1011,36 @@ def test_agented_proposals_none_no_file_created(ctx_factory, monkeypatch):
 def test_agented_proposals_empty_list_no_file_created(ctx_factory, monkeypatch):
     """An empty list is treated the same as None — no file created."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(agented_md_proposals=[]),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -986,7 +1058,6 @@ def test_agented_proposals_append_only(ctx_factory, monkeypatch):
     """When AGENT_CANDIDATES.md already exists in the persistent data dir,
     new proposals are appended without overwriting."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory()
@@ -996,14 +1067,13 @@ def test_agented_proposals_append_only(ctx_factory, monkeypatch):
     candidates_path = s.data_dir / "test-board" / "AGENT_CANDIDATES.md"
     candidates_path.parent.mkdir(parents=True, exist_ok=True)
     candidates_path.write_text(
-        "### Proposed addition to ## Prior Section\n\n"
-        "> **Rule:** Old rule.\n\n"
-        "---\n",
+        "### Proposed addition to ## Prior Section\n\n> **Rule:** Old rule.\n\n---\n",
         encoding="utf-8",
     )
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             agented_md_proposals=[
                 {
@@ -1015,21 +1085,26 @@ def test_agented_proposals_append_only(ctx_factory, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -1051,13 +1126,13 @@ def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
     """When MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS=false, proposals
     are not written even if present."""
     from robotsix_mill import langfuse_client
-    from robotsix_mill.stages import retrospect as retrospect_module
     from robotsix_mill import pass_runner
 
     ctx = ctx_factory(MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS="false")
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             agented_md_proposals=[
                 {
@@ -1069,21 +1144,26 @@ def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc",
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -1109,24 +1189,32 @@ def _multirepo_ctx(tmp_path):
     topology where retrospect must choose between two real
     destinations."""
     from robotsix_mill.config import (
-        RepoConfig, ReposRegistry, Settings,
+        RepoConfig,
+        ReposRegistry,
+        Settings,
     )
     from robotsix_mill.core import db
     from robotsix_mill.core.service import TicketService
     import robotsix_mill.config as _cfg
 
-    _cfg._repos_config = ReposRegistry(repos={
-        "test-repo": RepoConfig(
-            repo_id="test-repo", board_id="test-board",
-            langfuse_project_name="t", langfuse_public_key="pk",
-            langfuse_secret_key="sk",
-        ),
-        "robotsix-mill": RepoConfig(
-            repo_id="robotsix-mill", board_id="mill-board",
-            langfuse_project_name="mill", langfuse_public_key="pk2",
-            langfuse_secret_key="sk2",
-        ),
-    })
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="t",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+            ),
+            "robotsix-mill": RepoConfig(
+                repo_id="robotsix-mill",
+                board_id="mill-board",
+                langfuse_project_name="mill",
+                langfuse_public_key="pk2",
+                langfuse_secret_key="sk2",
+            ),
+        }
+    )
     db.reset_engine()
     s = Settings(
         data_dir=str(tmp_path),
@@ -1136,7 +1224,8 @@ def _multirepo_ctx(tmp_path):
     db.init_db(s, board_id="mill-board")
     svc = TicketService(s, board_id="test-board")
     return StageContext(
-        settings=s, service=svc,
+        settings=s,
+        service=svc,
         repo_config=_cfg._repos_config.repos["test-repo"],
     )
 
@@ -1155,7 +1244,8 @@ def test_draft_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypa
     ctx = _multirepo_ctx(tmp_path)
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             propose_draft=True,
             draft_title="Doc agent silent failures",
@@ -1164,11 +1254,13 @@ def test_draft_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypa
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
@@ -1176,10 +1268,12 @@ def test_draft_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypa
         lambda: "sess-mill",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -1197,6 +1291,7 @@ def test_draft_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypa
 
         # Draft lives on the mill maintenance board.
         from robotsix_mill.core.service import TicketService
+
         mill_svc = TicketService(ctx.settings, board_id="mill-board")
         on_mill = mill_svc.list()
         assert len(on_mill) == 1
@@ -1224,7 +1319,8 @@ def test_draft_target_mill_falls_back_when_unset(ctx_factory, monkeypatch):
     ctx = ctx_factory()  # no MILL_TRACE_REVIEW_TARGET_REPO_ID
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             propose_draft=True,
             draft_title="Mill fix",
@@ -1233,11 +1329,13 @@ def test_draft_target_mill_falls_back_when_unset(ctx_factory, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
@@ -1245,10 +1343,12 @@ def test_draft_target_mill_falls_back_when_unset(ctx_factory, monkeypatch):
         lambda: "sess",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -1266,7 +1366,9 @@ def test_draft_target_mill_falls_back_when_unset(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_follow_up_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monkeypatch):
+def test_follow_up_target_mill_routes_to_mill_board(
+    tmp_path, fake_sandbox, monkeypatch
+):
     """``follow_up_target`` follows the same routing as ``draft_target``
     — a concrete incomplete-work item on a mill-internal feature
     belongs on the mill board, not on the audited repo."""
@@ -1276,7 +1378,8 @@ def test_follow_up_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monk
     ctx = _multirepo_ctx(tmp_path)
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _result(
             propose_draft=False,
             follow_up_title="Wire real X in mill",
@@ -1285,11 +1388,13 @@ def test_follow_up_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monk
         ),
     )
     monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary",
+        langfuse_client,
+        "fetch_session_summary",
         lambda settings, session_id: "summary",
     )
     monkeypatch.setattr(
-        langfuse_client, "_langfuse_api_get",
+        langfuse_client,
+        "_langfuse_api_get",
         lambda settings, path, params=None, repo_config=None: None,
     )
     monkeypatch.setattr(
@@ -1297,10 +1402,12 @@ def test_follow_up_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monk
         lambda: "sess",
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.retrospect.prune_clone", lambda ws: None,
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
     )
     monkeypatch.setattr(
-        pass_runner, "_verify_prior_proposals",
+        pass_runner,
+        "_verify_prior_proposals",
         lambda service, settings, source_label: {},
     )
 
@@ -1309,6 +1416,7 @@ def test_follow_up_target_mill_routes_to_mill_board(tmp_path, fake_sandbox, monk
         RetrospectStage().run(t, ctx)
 
         from robotsix_mill.core.service import TicketService
+
         mill_svc = TicketService(ctx.settings, board_id="mill-board")
         on_mill = mill_svc.list()
         assert any(tk.title == "Wire real X in mill" for tk in on_mill)

@@ -1,6 +1,7 @@
 """Tests for the tracing module — verify no-ops when env vars absent."""
 
 import os
+from datetime import datetime as _real_datetime, timezone as _real_timezone
 
 import pytest
 
@@ -126,10 +127,12 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
             if sid:
                 span.set_attribute("session.id", sid)
                 span.set_attribute("langfuse.session.id", sid)
-            captured.append({
-                "name": span.name,
-                "attrs": dict(span.attributes or {}),
-            })
+            captured.append(
+                {
+                    "name": span.name,
+                    "attrs": dict(span.attributes or {}),
+                }
+            )
 
         def on_end(self, span):
             pass
@@ -153,6 +156,7 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
     if hasattr(existing, "shutdown"):
         existing.shutdown()
     import opentelemetry.trace as _trace_mod
+
     _trace_mod._TRACER_PROVIDER_SET_ONCE._done = False
 
     provider = TracerProvider()
@@ -176,15 +180,15 @@ def test_sub_agent_spans_inherit_session_from_contextvar(monkeypatch):
             tracing._current_session.reset(token_inner)
 
         # Both spans must carry the session id.
-        assert len(captured) == 2, (
-            f"Expected 2 spans, got {len(captured)}: {captured}"
-        )
+        assert len(captured) == 2, f"Expected 2 spans, got {len(captured)}: {captured}"
         for i, span_data in enumerate(captured):
             assert span_data["attrs"].get("session.id") == "ticket-sub-agent-test", (
                 f"Span {i} ({span_data['name']}) missing session.id: "
                 f"{span_data['attrs']}"
             )
-            assert span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test", (
+            assert (
+                span_data["attrs"].get("langfuse.session.id") == "ticket-sub-agent-test"
+            ), (
                 f"Span {i} ({span_data['name']}) missing langfuse.session.id: "
                 f"{span_data['attrs']}"
             )
@@ -220,7 +224,6 @@ def test_no_otel_imports_at_module_level():
     pydantic_ai.agent (they are lazy, inside functions). Checked in a
     clean subprocess — asserting the session-global sys.modules would be
     polluted by other tests that import pydantic_ai/otel."""
-    import os
     import subprocess
     import sys
 
@@ -239,6 +242,7 @@ def test_no_otel_imports_at_module_level():
 
 # --- current_session() public getter ---
 
+
 def test_current_session_returns_none_when_not_set():
     """current_session() returns None when no session is in scope."""
     assert tracing.current_session() is None
@@ -254,9 +258,6 @@ def test_current_session_returns_contextvar_value():
 
 
 # --- make_session_id ---
-
-import uuid as _real_uuid
-from datetime import datetime as _real_datetime, timezone as _real_timezone
 
 
 class _FakeDatetime:
@@ -278,10 +279,12 @@ class _FakeUuidModule:
 def test_make_session_id_format(monkeypatch):
     """make_session_id returns <kind>-<UTC-ts>-<8hex>."""
     monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.datetime", _FakeDatetime,
+        "robotsix_mill.runtime.tracing.datetime",
+        _FakeDatetime,
     )
     monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.uuid", _FakeUuidModule,
+        "robotsix_mill.runtime.tracing.uuid",
+        _FakeUuidModule,
     )
 
     assert tracing.make_session_id("audit") == "audit-20260521T143025Z-a1b2c300"
@@ -311,12 +314,13 @@ def test_install_signal_handlers_registers_without_otel():
 def test_sigterm_calls_flush_tracing(monkeypatch):
     """Sending SIGTERM after install_signal_handlers must call
     flush_tracing() before raising SystemExit."""
-    import os
     import signal
 
     calls: list = []
+
     def fake_flush(timeout: int = 10_000) -> None:
         calls.append(timeout)
+
     monkeypatch.setattr(tracing, "flush_tracing", fake_flush)
 
     tracing.install_signal_handlers()
@@ -330,12 +334,13 @@ def test_sigterm_calls_flush_tracing(monkeypatch):
 def test_double_sigterm_no_deadlock(monkeypatch):
     """A second SIGTERM must not call flush_tracing again — the
     _shutdown_requested flag prevents re-entrant flushes."""
-    import os
     import signal
 
     calls: list = []
+
     def fake_flush(timeout: int = 10_000) -> None:
         calls.append(timeout)
+
     monkeypatch.setattr(tracing, "flush_tracing", fake_flush)
 
     tracing.install_signal_handlers()
@@ -359,6 +364,7 @@ def test_flush_tracing_timeout_passed_to_force_flush(monkeypatch):
     import opentelemetry.trace  # ensure module is importable for patching
 
     timeout_value: list = []
+
     class FakeProvider:
         def force_flush(self, timeout_millis: int | None = None) -> None:
             timeout_value.append(timeout_millis)
@@ -379,7 +385,6 @@ def test_flush_tracing_default_timeout():
 
 
 # --- Langfuse chat-IO flattener ----------------------------------------
-
 
 
 class TestCheckRejectedGeneration:
@@ -405,9 +410,10 @@ class TestCheckRejectedGeneration:
         span = _FakeSpan()
         _check_rejected_generation(span)
         assert span._attributes["langfuse.observation.level"] == "WARNING"
-        assert "pydantic-ai likely" in span._attributes[
-            "langfuse.observation.status_message"
-        ]
+        assert (
+            "pydantic-ai likely"
+            in span._attributes["langfuse.observation.status_message"]
+        )
 
     def test_no_warn_on_agent_span(self):
         from robotsix_mill.runtime.tracing import _check_rejected_generation
@@ -461,9 +467,11 @@ def test_ensure_tracing_recovers_after_no_global_creds(monkeypatch):
     tracing._provider_ready = False
 
     valid_config = RepoConfig(
-        repo_id="r", board_id="b",
+        repo_id="r",
+        board_id="b",
         langfuse_project_name="p",
-        langfuse_public_key="pk-valid", langfuse_secret_key="sk-valid",
+        langfuse_public_key="pk-valid",
+        langfuse_secret_key="sk-valid",
     )
 
     # Should NOT short-circuit — the per-repo config has valid creds.
@@ -493,9 +501,11 @@ def test_ensure_tracing_no_global_creds_does_not_poison_per_repo(monkeypatch):
 
     # Now a per-repo call with valid creds must NOT be blocked.
     valid_config = RepoConfig(
-        repo_id="r", board_id="b",
+        repo_id="r",
+        board_id="b",
         langfuse_project_name="p",
-        langfuse_public_key="pk-valid", langfuse_secret_key="sk-valid",
+        langfuse_public_key="pk-valid",
+        langfuse_secret_key="sk-valid",
     )
     tracing._ensure_tracing(repo_config=valid_config)
     assert tracing._provider_ready is True, (
@@ -512,9 +522,11 @@ def test_ensure_tracing_skips_repo_without_creds_without_poisoning(monkeypatch):
     from robotsix_mill.config import RepoConfig
 
     no_creds_config = RepoConfig(
-        repo_id="r", board_id="b",
+        repo_id="r",
+        board_id="b",
         langfuse_project_name="p",
-        langfuse_public_key="", langfuse_secret_key="",
+        langfuse_public_key="",
+        langfuse_secret_key="",
     )
 
     tracing._ensure_tracing(repo_config=no_creds_config)
@@ -527,9 +539,11 @@ def test_ensure_tracing_skips_repo_without_creds_without_poisoning(monkeypatch):
 
     # A subsequent call with valid creds must proceed.
     valid_config = RepoConfig(
-        repo_id="r", board_id="b",
+        repo_id="r",
+        board_id="b",
         langfuse_project_name="p",
-        langfuse_public_key="pk-valid", langfuse_secret_key="sk-valid",
+        langfuse_public_key="pk-valid",
+        langfuse_secret_key="sk-valid",
     )
     tracing._ensure_tracing(repo_config=valid_config)
     assert tracing._provider_ready is True

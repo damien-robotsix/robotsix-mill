@@ -18,15 +18,11 @@ class _FakeAgent:
 
     def run_sync(self, prompt, **kwargs):
         self.calls.append((prompt, kwargs))
-        return _Result(
-            DedupResult(duplicate_of="T-1", already_done=None, reason="dup")
-        )
+        return _Result(DedupResult(duplicate_of="T-1", already_done=None, reason="dup"))
 
 
 def _patch_agent(monkeypatch, agent):
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", lambda *a, **k: agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", lambda *a, **k: agent)
 
 
 def test_passes_usage_limits_not_bare_request_limit(settings, monkeypatch):
@@ -38,7 +34,9 @@ def test_passes_usage_limits_not_bare_request_limit(settings, monkeypatch):
     _patch_agent(monkeypatch, agent)
 
     out = dedup.run_dedup_check(
-        settings=settings, draft_title="t", draft_body="b",
+        settings=settings,
+        draft_title="t",
+        draft_body="b",
         candidates_json="[]",
     )
     assert out["duplicate_of"] == "T-1"  # real result, not the failure path
@@ -51,13 +49,16 @@ def test_passes_usage_limits_not_bare_request_limit(settings, monkeypatch):
 def test_graceful_on_agent_error(settings, monkeypatch):
     """Any exception → null verdict + 'dedup check failed' (never
     blocks refine), but it must be the EXCEPTION path, not the bug."""
+
     class _Boom:
         def run_sync(self, *a, **k):
             raise RuntimeError("model down")
 
     _patch_agent(monkeypatch, _Boom())
     out = dedup.run_dedup_check(
-        settings=settings, draft_title="t", draft_body="b",
+        settings=settings,
+        draft_title="t",
+        draft_body="b",
         candidates_json="[]",
     )
     assert out == {
@@ -74,7 +75,9 @@ def test_non_dedup_result_output_is_handled(settings, monkeypatch):
 
     _patch_agent(monkeypatch, _Weird())
     out = dedup.run_dedup_check(
-        settings=settings, draft_title="t", draft_body="b",
+        settings=settings,
+        draft_title="t",
+        draft_body="b",
         candidates_json="[]",
     )
     assert out["duplicate_of"] is None
@@ -88,14 +91,17 @@ def test_fs_tools_passed_when_repo_dir_provided(settings, monkeypatch):
     # Controlled fs mocks with __name__
     def _read_file(*a, **k):
         pass
+
     _read_file.__name__ = "read_file"
 
     def _list_dir(*a, **k):
         pass
+
     _list_dir.__name__ = "list_dir"
 
     def _write_file(*a, **k):
         pass
+
     _write_file.__name__ = "write_file"
 
     fs_mocks = [_read_file, _write_file, _list_dir]
@@ -112,15 +118,15 @@ def test_fs_tools_passed_when_repo_dir_provided(settings, monkeypatch):
         captured_tools = tools
         return _FakeAgent()
 
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", _capture_agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", _capture_agent)
 
     # Case 1: repo_dir provided → fs tools should be filtered in
     from pathlib import Path
 
     dedup.run_dedup_check(
-        settings=settings, draft_title="t", draft_body="b",
+        settings=settings,
+        draft_title="t",
+        draft_body="b",
         candidates_json="[]",
         repo_dir=Path("/fake/repo"),
     )
@@ -131,7 +137,9 @@ def test_fs_tools_passed_when_repo_dir_provided(settings, monkeypatch):
     # Case 2: repo_dir=None → no fs tools
     captured_tools = None
     dedup.run_dedup_check(
-        settings=settings, draft_title="t", draft_body="b",
+        settings=settings,
+        draft_title="t",
+        draft_body="b",
         candidates_json="[]",
         repo_dir=None,
     )

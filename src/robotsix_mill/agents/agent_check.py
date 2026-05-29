@@ -17,7 +17,12 @@ from ..config import Settings
 from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "agent_check.yaml"
+_SYSPROMPT_PATH = (
+    Path(__file__).parent.parent.parent.parent
+    / "agent_definitions"
+    / "periodic"
+    / "agent_check.yaml"
+)
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 MAX_GAPS = 10
@@ -51,23 +56,29 @@ def run_agent_check_agent(
 
         extra_roots = [memory_dir] if memory_dir is not None else None
         ro = [
-            t for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
+            t
+            for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
             if t.__name__ in ("read_file", "list_dir")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
     from .overlays import apply_overlay, load_overlay
+
     system_prompt = apply_overlay(
-        definition.system_prompt, load_overlay(repo_dir, "agent_check"),
+        definition.system_prompt,
+        load_overlay(repo_dir, "agent_check"),
     )
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         model_name=definition.model or settings.agent_check_model,
         system_prompt=system_prompt,
     )
     prompt = (
         f"{recent_proposals}"
-        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Inspect all agent definitions and return your coherence findings."
     )
     from .retry import call_with_retry

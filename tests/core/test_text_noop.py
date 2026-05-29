@@ -16,21 +16,27 @@ def test_empty_is_noop(title):
     assert is_noop_report(title)
 
 
-@pytest.mark.parametrize("title", [
-    "No notable issues - clean run",
-    "Clean ticket, no issues to flag",
-    "Nothing to report",
-    "ALL GOOD — nothing notable",          # case-insensitive
-])
+@pytest.mark.parametrize(
+    "title",
+    [
+        "No notable issues - clean run",
+        "Clean ticket, no issues to flag",
+        "Nothing to report",
+        "ALL GOOD — nothing notable",  # case-insensitive
+    ],
+)
 def test_realistic_noop_titles(title):
     assert is_noop_report(title)
 
 
-@pytest.mark.parametrize("title", [
-    "Cut retry tokens",
-    "Cap transient retries at 2 in agents/retry.py",
-    "Fix tz-naive datetime comparison in refine",
-    "Add Trivy scan to docker-publish",
-])
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Cut retry tokens",
+        "Cap transient retries at 2 in agents/retry.py",
+        "Fix tz-naive datetime comparison in refine",
+        "Add Trivy scan to docker-publish",
+    ],
+)
 def test_genuine_titles_not_flagged(title):
     assert not is_noop_report(title)

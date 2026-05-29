@@ -49,9 +49,9 @@ def send_notification(
     # whole notification fails. Use a plain hyphen and coerce the title
     # to ASCII (ntfy shows '?' for stripped chars — far better than no
     # push). The UTF-8 message body is unaffected.
-    title = f"mill: {dst.value} - {ticket.title}".encode(
-        "ascii", "replace"
-    ).decode("ascii")
+    title = f"mill: {dst.value} - {ticket.title}".encode("ascii", "replace").decode(
+        "ascii"
+    )
     headers: dict[str, str] = {
         "X-Title": title,
         "Content-Type": "text/plain",
@@ -78,4 +78,6 @@ def send_notification(
         call_with_retry(_post, settings=settings, what="ntfy")
         log.debug("ntfy notification sent for %s -> %s", ticket.id, dst.value)
     except Exception:
-        log.warning("ntfy notification failed for %s -> %s", ticket.id, dst.value, exc_info=True)
+        log.warning(
+            "ntfy notification failed for %s -> %s", ticket.id, dst.value, exc_info=True
+        )

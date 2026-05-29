@@ -12,10 +12,20 @@ from __future__ import annotations
 # Lower-case substrings that mark a report as a non-actionable
 # "everything is fine" no-op rather than a real improvement/issue.
 NOOP_MARKERS: tuple[str, ...] = (
-    "no notable issue", "no issues", "no issue", "clean run",
-    "nothing to flag", "nothing to report", "no improvement",
-    "no action needed", "no concerns", "no notable finding",
-    "all good", "no changes needed", "clean ticket", "nothing notable",
+    "no notable issue",
+    "no issues",
+    "no issue",
+    "clean run",
+    "nothing to flag",
+    "nothing to report",
+    "no improvement",
+    "no action needed",
+    "no concerns",
+    "no notable finding",
+    "all good",
+    "no changes needed",
+    "clean ticket",
+    "nothing notable",
 )
 
 

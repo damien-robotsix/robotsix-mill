@@ -23,7 +23,19 @@ def ctx_factory(tmp_path):
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
-        from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=svc, repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+        from robotsix_mill.config import RepoConfig
+
+        return StageContext(
+            settings=s,
+            service=svc,
+            repo_config=RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        )
 
     yield make
     db.reset_engine()
@@ -35,6 +47,7 @@ def _ticket(ctx, title="What is the meaning of life?", body="The question"):
 
 
 # --- happy path with clone --------------------------------------------
+
 
 def test_happy_path_with_clone(ctx_factory, monkeypatch):
     ctx = ctx_factory()
@@ -70,6 +83,7 @@ def test_happy_path_with_clone(ctx_factory, monkeypatch):
 
 
 # --- happy path with existing clone (idempotent) ----------------------
+
 
 def test_happy_path_with_existing_clone(ctx_factory, monkeypatch):
     ctx = ctx_factory()
@@ -138,6 +152,7 @@ def test_happy_path_with_existing_clone(ctx_factory, monkeypatch):
 
 # --- happy path without remote (no clone) -----------------------------
 
+
 def test_happy_path_without_remote(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx)
@@ -164,6 +179,7 @@ def test_happy_path_without_remote(ctx_factory, monkeypatch):
 
 
 # --- clone failure (best-effort, agent still runs) --------------------
+
 
 def test_clone_failure_agent_still_runs(ctx_factory, monkeypatch):
     ctx = ctx_factory()
@@ -205,6 +221,7 @@ def test_clone_failure_agent_still_runs(ctx_factory, monkeypatch):
 
 # --- empty title+question → BLOCKED -----------------------------------
 
+
 def test_empty_title_and_question_blocks(ctx_factory):
     ctx = ctx_factory()
     t = _ticket(ctx, title="", body="")
@@ -215,6 +232,7 @@ def test_empty_title_and_question_blocks(ctx_factory):
 
 
 # --- RuntimeError from agent → BLOCKED --------------------------------
+
 
 def test_runtime_error_from_agent_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory()
@@ -239,6 +257,7 @@ def test_runtime_error_from_agent_blocks(ctx_factory, monkeypatch):
 
 
 # --- empty answer → BLOCKED -------------------------------------------
+
 
 def test_empty_answer_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory()
@@ -286,6 +305,7 @@ def test_whitespace_only_answer_blocks(ctx_factory, monkeypatch):
 
 # --- epic context enrichment ------------------------------------------
 
+
 def test_epic_context_enrichment(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     # Create an epic with a description.
@@ -319,6 +339,7 @@ def test_epic_context_enrichment(ctx_factory, monkeypatch):
 
 
 # --- artifact preservation --------------------------------------------
+
 
 def test_artifact_preservation(ctx_factory, monkeypatch):
     ctx = ctx_factory()
@@ -377,6 +398,7 @@ def test_artifact_preservation_title_only(ctx_factory, monkeypatch):
 
 
 # --- title-only question (no body but has title) ----------------------
+
 
 def test_title_only_question_answered(ctx_factory, monkeypatch):
     ctx = ctx_factory()

@@ -15,5 +15,8 @@ def run_completeness_check_pass(
 ) -> CompletenessCheckPassResult:
     settings = Settings()
     return run_periodic_pass(
-        session_id, repo_config, config=PERIODIC_PASS_CONFIGS["completeness_check"], settings=settings
+        session_id,
+        repo_config,
+        config=PERIODIC_PASS_CONFIGS["completeness_check"],
+        settings=settings,
     )

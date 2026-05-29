@@ -82,11 +82,14 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         svc = TicketService(settings)
         try:
             comment = svc.add_comment(
-                ticket_id, body, author=agent_name,
+                ticket_id,
+                body,
+                author=agent_name,
             )
         except Exception as exc:  # noqa: BLE001 — never crash the agent loop
             log.exception(
-                "post_comment: add_comment failed for %s", ticket_id,
+                "post_comment: add_comment failed for %s",
+                ticket_id,
             )
             return f"post_comment: could not post ({exc!r})"
 
@@ -95,18 +98,20 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="post_comment",
-        description=(
-            "Post a top-level comment on the current ticket. Use for "
-            "tickets whose deliverable is information rather than "
-            "code — e.g. a spec that asks you to 'post a comment with "
-            "findings'. The comment is a fresh top-level thread; for "
-            "replies inside an existing PR review thread, use "
-            "``reply_to_thread`` instead."
-        ),
-        category="reporting",
-        parameters={"body": "str (Markdown comment body)"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="post_comment",
+            description=(
+                "Post a top-level comment on the current ticket. Use for "
+                "tickets whose deliverable is information rather than "
+                "code — e.g. a spec that asks you to 'post a comment with "
+                "findings'. The comment is a fresh top-level thread; for "
+                "replies inside an existing PR review thread, use "
+                "``reply_to_thread`` instead."
+            ),
+            category="reporting",
+            parameters={"body": "str (Markdown comment body)"},
+        )
+    )
 
     return post_comment

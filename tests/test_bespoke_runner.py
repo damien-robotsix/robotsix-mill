@@ -9,7 +9,6 @@ agents on the same repo.
 
 from __future__ import annotations
 
-import pytest
 
 from robotsix_mill.agents import bespoke as _bespoke
 from robotsix_mill.agents.bespoke import BespokeResult
@@ -57,8 +56,7 @@ class TestMemoryFile:
         s = _settings(tmp_path)
         p = _memory_file_for(s, "robotsix-auto-mail", "mail-checker")
         assert p == (
-            s.data_dir / "robotsix-auto-mail" /
-            "bespoke_mail-checker_memory.md"
+            s.data_dir / "robotsix-auto-mail" / "bespoke_mail-checker_memory.md"
         )
 
     def test_no_board_falls_back_to_data_dir(self, tmp_path):
@@ -77,7 +75,9 @@ class TestMemoryFile:
 
 class TestRunBespokePass:
     def test_pass_creates_draft_with_per_agent_source_label(
-        self, tmp_path, monkeypatch,
+        self,
+        tmp_path,
+        monkeypatch,
     ):
         """Drafts emitted by the bespoke pass carry ``source:
         bespoke:<name>``. The per-agent label is the dedup key — two
@@ -85,7 +85,8 @@ class TestRunBespokePass:
         cross-eat each other's prior proposals."""
         s = _settings(tmp_path)
         monkeypatch.setattr(
-            "robotsix_mill.bespoke_runner.Settings", lambda: s,
+            "robotsix_mill.bespoke_runner.Settings",
+            lambda: s,
         )
 
         def fake_agent(**kwargs):
@@ -97,7 +98,9 @@ class TestRunBespokePass:
             )
 
         monkeypatch.setattr(
-            _bespoke, "run_bespoke_agent", fake_agent,
+            _bespoke,
+            "run_bespoke_agent",
+            fake_agent,
         )
 
         result = run_bespoke_pass(
@@ -120,14 +123,17 @@ class TestRunBespokePass:
         assert tickets[0].source == "bespoke:mail-checker"
 
     def test_two_bespoke_agents_keep_separate_memories(
-        self, tmp_path, monkeypatch,
+        self,
+        tmp_path,
+        monkeypatch,
     ):
         """Two bespoke agents on the same repo each have their own
         memory ledger and their own dedup history. A draft filed by
         agent A is not surfaced as a prior proposal to agent B."""
         s = _settings(tmp_path)
         monkeypatch.setattr(
-            "robotsix_mill.bespoke_runner.Settings", lambda: s,
+            "robotsix_mill.bespoke_runner.Settings",
+            lambda: s,
         )
 
         captured_memory: dict[str, str] = {}
@@ -143,24 +149,29 @@ class TestRunBespokePass:
             )
 
         monkeypatch.setattr(
-            _bespoke, "run_bespoke_agent", fake_agent,
+            _bespoke,
+            "run_bespoke_agent",
+            fake_agent,
         )
 
         run_bespoke_pass(
             session_id="s1",
             definition=_definition(name="agent-a"),
-            repo_config=None, repo_dir=None,
+            repo_config=None,
+            repo_dir=None,
         )
         run_bespoke_pass(
             session_id="s2",
             definition=_definition(name="agent-b"),
-            repo_config=None, repo_dir=None,
+            repo_config=None,
+            repo_dir=None,
         )
         # A second run of agent-a should see ITS own memory, not B's.
         run_bespoke_pass(
             session_id="s3",
             definition=_definition(name="agent-a"),
-            repo_config=None, repo_dir=None,
+            repo_config=None,
+            repo_dir=None,
         )
 
         # The third call was agent-a; the memory it read must be the
@@ -169,7 +180,9 @@ class TestRunBespokePass:
         assert captured_memory["agent-a"] == "after-agent-a"
 
     def test_agent_invocation_receives_definition_and_repo_dir(
-        self, tmp_path, monkeypatch,
+        self,
+        tmp_path,
+        monkeypatch,
     ):
         """The bespoke runner forwards the definition + clone path to
         the inner agent function via ``functools.partial``. Guards
@@ -177,7 +190,8 @@ class TestRunBespokePass:
         leaves the bespoke agent running with no clone / no prompt."""
         s = _settings(tmp_path)
         monkeypatch.setattr(
-            "robotsix_mill.bespoke_runner.Settings", lambda: s,
+            "robotsix_mill.bespoke_runner.Settings",
+            lambda: s,
         )
         clone = tmp_path / "fake-clone"
         clone.mkdir()
@@ -188,7 +202,9 @@ class TestRunBespokePass:
             return BespokeResult()
 
         monkeypatch.setattr(
-            _bespoke, "run_bespoke_agent", fake_agent,
+            _bespoke,
+            "run_bespoke_agent",
+            fake_agent,
         )
 
         run_bespoke_pass(

@@ -25,16 +25,16 @@ class DocClassifierResult(BaseModel):
 
     user_facing: bool = Field(
         description="True when the diff introduces a user-facing change "
-                    "(new feature, API change, config key, CLI flag, "
-                    "behavioral change a user would notice). False for "
-                    "internal-only changes (refactor, bug-fix with no doc "
-                    "impact, test/CI-only, lint/format)."
+        "(new feature, API change, config key, CLI flag, "
+        "behavioral change a user would notice). False for "
+        "internal-only changes (refactor, bug-fix with no doc "
+        "impact, test/CI-only, lint/format)."
     )
     classification: str = Field(
         min_length=1,
         description="One-line human-readable classification, e.g. "
-                    "'internal-only — model field rename' or "
-                    "'user-facing — new CLI flag'.",
+        "'internal-only — model field rename' or "
+        "'user-facing — new CLI flag'.",
     )
 
 
@@ -43,24 +43,24 @@ class DocResult(BaseModel):
 
     user_facing: bool = Field(
         description="True when the diff introduces a user-facing change "
-                    "(new feature, API change, config key, CLI flag, "
-                    "behavioral change a user would notice). False for "
-                    "internal-only changes (refactor, bug-fix with no doc "
-                    "impact, test/CI-only, lint/format)."
+        "(new feature, API change, config key, CLI flag, "
+        "behavioral change a user would notice). False for "
+        "internal-only changes (refactor, bug-fix with no doc "
+        "impact, test/CI-only, lint/format)."
     )
     summary: str = Field(
         min_length=1,
         description="Summary of documentation changes made, or a note "
-                    "that no changes were needed.",
+        "that no changes were needed.",
     )
     updated_memory: str = Field(
         default="",
         description="Updated memory ledger — record the repo's doc "
-                    "layout, README sections, doc subdirs, and any "
-                    "conventions discovered during this run. Subsequent "
-                    "doc agents read this ledger so they don't have to "
-                    "explore the structure from scratch. Empty = no "
-                    "updates (incoming memory was complete).",
+        "layout, README sections, doc subdirs, and any "
+        "conventions discovered during this run. Subsequent "
+        "doc agents read this ledger so they don't have to "
+        "explore the structure from scratch. Empty = no "
+        "updates (incoming memory was complete).",
     )
 
 
@@ -100,10 +100,8 @@ def run_doc_classifier(
     )
     try:
         from .prompt_blocks import section
-        user_prompt = (
-            section("ticket-spec", spec) + "\n\n"
-            + section("git-diff", diff)
-        )
+
+        user_prompt = section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
         limits = UsageLimits(request_limit=settings.doc_classifier_request_limit)
         result = call_with_retry(
             lambda: agent.run_sync(user_prompt, usage_limits=limits),
@@ -153,7 +151,9 @@ def run_doc_agent(
     from ..pass_runner import load_memory, persist_memory
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "document.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "document.yaml"
     )
 
     # Load the doc memory ledger (empty string if unset / missing /
@@ -175,29 +175,31 @@ def run_doc_agent(
     # YAML's static prompt + a dynamic ``memory`` fenced block at the
     # end. The same pattern implement/refine/retrospect already use.
     from .prompt_blocks import section as _section
+
     system_prompt = definition.system_prompt
-    system_prompt += (
-        "\n\n" + _section(
-            "memory",
-            memory_text or "(empty — start a new ledger)",
-        )
+    system_prompt += "\n\n" + _section(
+        "memory",
+        memory_text or "(empty — start a new ledger)",
     )
 
     agent = build_agent_from_definition(
-        settings, definition,
+        settings,
+        definition,
         system_prompt=system_prompt,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
-            *(t for t in fs if t.__name__ in ("read_file", "write_file", "list_dir", "edit_file")),
+            *(
+                t
+                for t in fs
+                if t.__name__ in ("read_file", "write_file", "list_dir", "edit_file")
+            ),
         ],
         **overrides,
     )
     try:
         from .prompt_blocks import section
-        user_prompt = (
-            section("ticket-spec", spec) + "\n\n"
-            + section("git-diff", diff)
-        )
+
+        user_prompt = section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
         limits = UsageLimits(request_limit=settings.doc_request_limit)
         run_user_prompt: str | None = user_prompt
         run_kwargs: dict = {"usage_limits": limits}
@@ -209,7 +211,8 @@ def run_doc_agent(
             from .fs_tools import build_preseed_history
 
             preseed = build_preseed_history(
-                repo_dir, list(reference_files),
+                repo_dir,
+                list(reference_files),
                 user_prompt=user_prompt,
             )
             if preseed:
@@ -218,7 +221,8 @@ def run_doc_agent(
 
         result = call_with_retry(
             lambda: agent.run_sync(run_user_prompt, **run_kwargs),
-            settings=settings, what="document",
+            settings=settings,
+            what="document",
         )
         output: DocResult = result.output
         # Persist the agent's updated ledger; empty string = keep

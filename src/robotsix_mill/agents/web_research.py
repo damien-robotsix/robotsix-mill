@@ -67,7 +67,8 @@ def run_web_research(*, settings: Settings, query: str) -> str:
 
         result = call_with_retry(
             lambda: agent.run_sync(query, usage_limits=limits),
-            settings=settings, what="web_research",
+            settings=settings,
+            what="web_research",
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller
         return f"web research failed: {e}"
@@ -90,11 +91,13 @@ def make_web_research_tool(settings: Settings):
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="web_research",
-        description="Research a question on the web and return a concise factual conclusion with inline source URLs.",
-        category="web",
-        parameters={"query": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="web_research",
+            description="Research a question on the web and return a concise factual conclusion with inline source URLs.",
+            category="web",
+            parameters={"query": "str"},
+        )
+    )
 
     return web_research

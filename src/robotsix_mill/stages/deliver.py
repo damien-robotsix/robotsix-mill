@@ -102,8 +102,9 @@ def generate_pr_description(
         )
         body = result.data.strip()
         if truncated:
-            body += "\n\n> ⚠️ The diff was truncated to 16 000 characters" \
-                    " for this summary."
+            body += (
+                "\n\n> ⚠️ The diff was truncated to 16 000 characters for this summary."
+            )
         return body
     except Exception:
         log.exception("PR summary generation failed; falling back to raw spec")
@@ -112,6 +113,7 @@ def generate_pr_description(
 
 class DeliverStage(Stage):
     """Push the implemented branch to the remote forge for review."""
+
     name = "deliver"
     input_state = State.DELIVERABLE
     traced = False
@@ -124,7 +126,9 @@ class DeliverStage(Stage):
         if not remote_url:
             return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
         try:
-            token = github_token(s, repo_config=ctx.repo_config)  # PAT or minted App installation token
+            token = github_token(
+                s, repo_config=ctx.repo_config
+            )  # PAT or minted App installation token
         except RuntimeError as e:
             return Outcome(State.BLOCKED, f"forge auth not configured: {e}")
 
@@ -180,9 +184,7 @@ class DeliverStage(Stage):
         else:
             body = spec[:8000]
 
-        body += (
-            f"\n\n---\nAutomated by robotsix-mill · ticket `{ticket.id}`"
-        )
+        body += f"\n\n---\nAutomated by robotsix-mill · ticket `{ticket.id}`"
         if s.pr_summary_enabled:
             body += (
                 f"\n\n<details>\n<summary>Original ticket spec</summary>\n\n"

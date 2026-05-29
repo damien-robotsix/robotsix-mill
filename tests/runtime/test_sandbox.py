@@ -16,6 +16,7 @@ def _settings(tmp_path, **env):
 # tests assert the isolation flags without needing a Docker daemon
 # (subprocess.run is mocked).
 
+
 def test_argv_is_isolated(tmp_path, monkeypatch):
     s = _settings(
         tmp_path,
@@ -32,11 +33,11 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     # _repo_mount now checks repo_dir.exists(); mock it so the test
     # focuses on argv construction, not filesystem existence.
     monkeypatch.setattr(
-        sandbox, "_repo_mount",
+        sandbox,
+        "_repo_mount",
         lambda repo_dir, settings: [
             "--mount",
-            f"type=volume,src=mill_data,dst=/data/work/repo,"
-            f"volume-subpath=work/repo",
+            "type=volume,src=mill_data,dst=/data/work/repo,volume-subpath=work/repo",
         ],
     )
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
@@ -48,10 +49,7 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     assert "--network" in a and a[a.index("--network") + 1] == "none"
     assert "--read-only" in a
     # named-volume case: ONLY the ticket's repo sub-path, not the root
-    assert (
-        "type=volume,src=mill_data,dst=/data/work/repo,"
-        "volume-subpath=work/repo" in a
-    )
+    assert "type=volume,src=mill_data,dst=/data/work/repo,volume-subpath=work/repo" in a
     assert "mill_data:/data" not in a  # data-dir root NOT exposed
     assert a[a.index("-w") + 1] == "/data/work/repo"
     assert a[a.index("--entrypoint") + 1] == "sh"  # image ENTRYPOINT bypassed
@@ -63,7 +61,8 @@ def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
     expose the data-dir root, mill.db, the memory ledgers, or other
     tickets' workspaces — only THIS ticket's repo."""
     s = _settings(
-        tmp_path, data_dir="/data",
+        tmp_path,
+        data_dir="/data",
         sandbox_data_mount="/host/.data",
     )
     seen = {}
@@ -75,7 +74,8 @@ def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
     # _repo_mount now checks host_src.exists(); mock it so the test
     # focuses on isolation semantics, not filesystem existence.
     monkeypatch.setattr(
-        sandbox, "_repo_mount",
+        sandbox,
+        "_repo_mount",
         lambda repo_dir, settings: [
             "-v",
             "/host/.data/workspaces/T-1/repo:/data/workspaces/T-1/repo",
@@ -85,9 +85,7 @@ def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
     sandbox.run("true", repo_dir="/data/workspaces/T-1/repo", settings=s)
     a = seen["argv"]
     binds = [a[i + 1] for i, x in enumerate(a) if x in ("-v", "--mount")]
-    assert binds == [
-        "/host/.data/workspaces/T-1/repo:/data/workspaces/T-1/repo"
-    ]
+    assert binds == ["/host/.data/workspaces/T-1/repo:/data/workspaces/T-1/repo"]
     # no mount maps the data-dir root, and mill.db is never referenced
     assert not any(b.endswith(":/data") or "/host/.data:" in b for b in binds)
     assert "mill.db" not in " ".join(a)
@@ -117,7 +115,8 @@ def test_sandbox_data_mount_overrides_volume(tmp_path, monkeypatch):
     # _repo_mount now checks host_src.exists(); mock it so the test
     # focuses on argv construction, not filesystem existence.
     monkeypatch.setattr(
-        sandbox, "_repo_mount",
+        sandbox,
+        "_repo_mount",
         lambda repo_dir, settings: [
             "-v",
             "/host/abs/.data/work/repo:/data/work/repo",
@@ -164,9 +163,7 @@ def test_sandbox_resolves_relative_repo_dir_to_absolute(tmp_path, monkeypatch):
     )
     a = seen["argv"]
     workdir = a[a.index("-w") + 1]
-    assert Path(workdir).is_absolute(), (
-        f"workdir must be absolute, got {workdir!r}"
-    )
+    assert Path(workdir).is_absolute(), f"workdir must be absolute, got {workdir!r}"
     assert workdir == str(abs_repo)
 
 
@@ -226,7 +223,8 @@ def test_sandbox_injects_pythonpath_for_src_layout(tmp_path, monkeypatch):
     (repo / "src").mkdir()
 
     s = _settings(
-        tmp_path, data_dir=str(tmp_path),
+        tmp_path,
+        data_dir=str(tmp_path),
         sandbox_data_mount=str(tmp_path),
     )
     seen = {}
@@ -252,7 +250,8 @@ def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
     repo.mkdir()
 
     s = _settings(
-        tmp_path, data_dir=str(tmp_path),
+        tmp_path,
+        data_dir=str(tmp_path),
         sandbox_data_mount=str(tmp_path),
     )
     seen = {}

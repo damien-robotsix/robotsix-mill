@@ -12,6 +12,7 @@ from robotsix_mill.agents.scope_triage import ScopeTriageVerdict, run_scope_tria
 # Model tests
 # ---------------------------------------------------------------------------
 
+
 def test_scope_triage_verdict_model_valid():
     """A valid ScopeTriageVerdict validates without error."""
     v = ScopeTriageVerdict(
@@ -39,6 +40,7 @@ def test_scope_triage_verdict_model_expand_files_defaults_empty():
 # Agent call tests (monkeypatch pattern from test_refine.py)
 # ---------------------------------------------------------------------------
 
+
 def test_expand_for_new_test_file(monkeypatch):
     """A dif that adds a new test file → EXPAND with expand_files populated."""
     from robotsix_mill.config import Settings
@@ -52,18 +54,26 @@ def test_expand_for_new_test_file(monkeypatch):
                 assert "````file-map" in msg
                 assert "````out-of-scope-files" in msg
                 assert "````diff-summaries" in msg
-                return type("R", (), {
-                    "output": ScopeTriageVerdict(
-                        action="EXPAND",
-                        justification="New test file is a legitimate consequence of the ticket",
-                        expand_files=["tests/test_feature.py"],
-                    ),
-                })()
+                return type(
+                    "R",
+                    (),
+                    {
+                        "output": ScopeTriageVerdict(
+                            action="EXPAND",
+                            justification="New test file is a legitimate consequence of the ticket",
+                            expand_files=["tests/test_feature.py"],
+                        ),
+                    },
+                )()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
     from unittest.mock import MagicMock
-    scope_triage.load_agent_definition = MagicMock(return_value=type("D", (), {"model": None})())
+
+    scope_triage.load_agent_definition = MagicMock(
+        return_value=type("D", (), {"model": None})()
+    )
     scope_triage.call_with_retry = lambda fn, **kw: fn()
 
     result = run_scope_triage_agent(
@@ -86,17 +96,25 @@ def test_reject_for_unrelated_module(monkeypatch):
     def fake_build_agent(settings, definition, tools, model_name):
         class FakeAgent:
             def run_sync(self, msg):
-                return type("R", (), {
-                    "output": ScopeTriageVerdict(
-                        action="REJECT",
-                        justification="Unrelated module — scope creep",
-                    ),
-                })()
+                return type(
+                    "R",
+                    (),
+                    {
+                        "output": ScopeTriageVerdict(
+                            action="REJECT",
+                            justification="Unrelated module — scope creep",
+                        ),
+                    },
+                )()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
     from unittest.mock import MagicMock
-    scope_triage.load_agent_definition = MagicMock(return_value=type("D", (), {"model": None})())
+
+    scope_triage.load_agent_definition = MagicMock(
+        return_value=type("D", (), {"model": None})()
+    )
     scope_triage.call_with_retry = lambda fn, **kw: fn()
 
     result = run_scope_triage_agent(
@@ -118,17 +136,25 @@ def test_escalate_for_ambiguous(monkeypatch):
     def fake_build_agent(settings, definition, tools, model_name):
         class FakeAgent:
             def run_sync(self, msg):
-                return type("R", (), {
-                    "output": ScopeTriageVerdict(
-                        action="ESCALATE",
-                        justification="Ambiguous spec — cannot confidently classify",
-                    ),
-                })()
+                return type(
+                    "R",
+                    (),
+                    {
+                        "output": ScopeTriageVerdict(
+                            action="ESCALATE",
+                            justification="Ambiguous spec — cannot confidently classify",
+                        ),
+                    },
+                )()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
     from unittest.mock import MagicMock
-    scope_triage.load_agent_definition = MagicMock(return_value=type("D", (), {"model": None})())
+
+    scope_triage.load_agent_definition = MagicMock(
+        return_value=type("D", (), {"model": None})()
+    )
     scope_triage.call_with_retry = lambda fn, **kw: fn()
 
     result = run_scope_triage_agent(
@@ -153,17 +179,25 @@ def test_prompt_includes_all_sections(monkeypatch):
         class FakeAgent:
             def run_sync(self, msg):
                 captured_msg.append(msg)
-                return type("R", (), {
-                    "output": ScopeTriageVerdict(
-                        action="EXPAND",
-                        justification="test",
-                    ),
-                })()
+                return type(
+                    "R",
+                    (),
+                    {
+                        "output": ScopeTriageVerdict(
+                            action="EXPAND",
+                            justification="test",
+                        ),
+                    },
+                )()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
     from unittest.mock import MagicMock
-    scope_triage.load_agent_definition = MagicMock(return_value=type("D", (), {"model": None})())
+
+    scope_triage.load_agent_definition = MagicMock(
+        return_value=type("D", (), {"model": None})()
+    )
     scope_triage.call_with_retry = lambda fn, **kw: fn()
 
     run_scope_triage_agent(

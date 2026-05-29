@@ -85,18 +85,22 @@ def run_ci_fix_agent(
             verdict = "SUCCESS" if p.success else "FAILED"
             lines.append(
                 f"- [{verdict}, {p.attempts} attempt(s)] {p.category}: "
-                f"\"{p.signature}\" → {p.approach} (ticket {p.ticket_id})"
+                f'"{p.signature}" → {p.approach} (ticket {p.ticket_id})'
             )
         patterns_text = "\n".join(lines)
     else:
         patterns_text = "(no prior patterns for this failure)"
 
     system_prompt = definition.system_prompt.format(
-        repo_dir=repo_dir, branch=branch, patterns=patterns_text,
+        repo_dir=repo_dir,
+        branch=branch,
+        patterns=patterns_text,
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         system_prompt=system_prompt,
     )
 
@@ -104,7 +108,8 @@ def run_ci_fix_agent(
         f"CI is failing on branch '{branch}' in {repo_dir}. "
         + "Here is the failing check summary:\n\n"
         + f"```\n{failing_summary}\n```\n\n"
-        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Follow the system prompt exactly."
     )
 
@@ -117,6 +122,7 @@ def run_ci_fix_agent(
     output = result.output
     if output.pattern_signature:
         from datetime import datetime, timezone
+
         entry = CiPatternEntry(
             category=output.pattern_category or "unknown",
             signature=output.pattern_signature,
@@ -131,6 +137,7 @@ def run_ci_fix_agent(
             save_patterns(patterns_file, patterns)
         except Exception:
             import logging
+
             logging.getLogger(__name__).warning(
                 "ci_fix: failed to save patterns to %s",
                 patterns_file,

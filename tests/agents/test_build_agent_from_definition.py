@@ -11,6 +11,7 @@ from robotsix_mill.agents.yaml_loader import AgentDefinition, load_agent_definit
 
 # ── helpers ──────────────────────────────────────────────────────────
 
+
 def _make_definition(**overrides) -> AgentDefinition:
     """Minimal valid AgentDefinition with *overrides* applied."""
     defaults: dict = dict(
@@ -32,13 +33,12 @@ def _capture_build_agent_kwargs(monkeypatch):
         # Return a sentinel so callers can assert the return value.
         return mock.sentinel.AGENT_HANDLE
 
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", fake_build_agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
     return captured
 
 
 # ── happy path ───────────────────────────────────────────────────────
+
 
 def test_happy_path_passes_all_fields(monkeypatch):
     """All definition fields map to the correct build_agent kwargs."""
@@ -110,12 +110,12 @@ def test_real_refine_yaml_builds(monkeypatch):
 
 # ── output_type resolution ───────────────────────────────────────────
 
+
 def test_output_type_resolves_from_module(monkeypatch):
     """When output_type + module are set, the class is imported and
     wrapped in PromptedOutput."""
     from robotsix_mill.agents.base import build_agent_from_definition
     from robotsix_mill.config import Settings
-    from robotsix_mill.agents.refining import RefineResult
 
     captured = _capture_build_agent_kwargs(monkeypatch)
     definition = _make_definition(
@@ -182,6 +182,7 @@ def test_module_none_but_output_type_set_raises_valueerror():
 
 # ── override precedence ──────────────────────────────────────────────
 
+
 def test_override_replaces_system_prompt(monkeypatch):
     """system_prompt override replaces definition.system_prompt."""
     from robotsix_mill.agents.base import build_agent_from_definition
@@ -208,9 +209,7 @@ def test_override_replaces_model_name(monkeypatch):
     definition = _make_definition(model="definition/model")
     settings = Settings()
 
-    build_agent_from_definition(
-        settings, definition, model_name="override/model"
-    )
+    build_agent_from_definition(settings, definition, model_name="override/model")
 
     kwargs = captured[0]
     assert kwargs["model_name"] == "override/model"
@@ -228,9 +227,7 @@ def test_override_replaces_output_type(monkeypatch):
     )
     settings = Settings()
 
-    build_agent_from_definition(
-        settings, definition, output_type=int
-    )
+    build_agent_from_definition(settings, definition, output_type=int)
 
     kwargs = captured[0]
     assert kwargs["output_type"] is int
@@ -300,6 +297,7 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     # (model construction is local — no network call).
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="sk-fake")
     settings = Settings(OPENROUTER_API_KEY="sk-fake")
@@ -312,8 +310,7 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     # web=True → web_research tool injected.
     assert definition.web is True
     assert "web_research" in tool_names, (
-        f"web_research tool not injected despite web=True. "
-        f"Captured tools: {tool_names}"
+        f"web_research tool not injected despite web=True. Captured tools: {tool_names}"
     )
 
     # report_issue=True → report_issue tool injected.
@@ -351,7 +348,9 @@ def test_inject_agent_md_when_file_exists(tmp_path, monkeypatch):
     settings = Settings()
 
     build_agent_from_definition(
-        settings, definition, repo_dir=repo,
+        settings,
+        definition,
+        repo_dir=repo,
     )
 
     kwargs = captured[0]
@@ -380,7 +379,9 @@ def test_inject_agent_md_when_file_missing(tmp_path, monkeypatch):
     settings = Settings()
 
     build_agent_from_definition(
-        settings, definition, repo_dir=repo,
+        settings,
+        definition,
+        repo_dir=repo,
     )
 
     kwargs = captured[0]
@@ -404,7 +405,9 @@ def test_inject_agent_md_when_disabled(tmp_path, monkeypatch):
     settings = Settings()
 
     build_agent_from_definition(
-        settings, definition, repo_dir=repo,
+        settings,
+        definition,
+        repo_dir=repo,
     )
 
     kwargs = captured[0]
@@ -424,7 +427,8 @@ def test_inject_agent_md_when_no_repo_dir(tmp_path, monkeypatch):
     settings = Settings()
 
     build_agent_from_definition(
-        settings, definition,
+        settings,
+        definition,
         # No repo_dir passed.
     )
 
@@ -449,7 +453,9 @@ def test_inject_agent_md_with_override_prompt(tmp_path, monkeypatch):
     settings = Settings()
 
     build_agent_from_definition(
-        settings, definition, repo_dir=repo,
+        settings,
+        definition,
+        repo_dir=repo,
         system_prompt="Overridden prompt.",
     )
 

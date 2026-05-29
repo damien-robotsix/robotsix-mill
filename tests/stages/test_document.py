@@ -31,7 +31,8 @@ def _make_bare_repo(tmp_path: Path) -> str:
     bare = tmp_path / "remote.git"
     subprocess.run(
         ["git", "clone", "--bare", "-q", str(seed), str(bare)],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     return f"file://{bare}"
 
@@ -40,7 +41,9 @@ def _git_log(cwd) -> str:
     """Return the git log as a string for assertion."""
     return subprocess.run(
         ["git", "-C", str(cwd), "log", "--oneline"],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
 
 
@@ -56,7 +59,19 @@ def ctx_factory(tmp_path):
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
-        from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=svc, repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+        from robotsix_mill.config import RepoConfig
+
+        return StageContext(
+            settings=s,
+            service=svc,
+            repo_config=RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        )
 
     yield make
     db.reset_engine()
@@ -83,12 +98,23 @@ def _ticket(ctx, body="Add feature.txt"):
 
 # --- user-facing diff → doc edits + commit ----------------------------
 
+
 def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         del self, settings, diff, spec
         # Simulate agent writing a doc file as a side effect.
         (Path(repo_dir) / "README.md").write_text("# Updated README\n")
@@ -110,6 +136,7 @@ def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
 
 # --- internal-only diff → no-op ---------------------------------------
 
+
 def test_internal_skips_commit(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
@@ -118,7 +145,17 @@ def test_internal_skips_commit(ctx_factory, monkeypatch):
     # Count commits before the stage runs.
     commits_before = _git_log(repo_dir).count("\n") + 1
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         del self, settings, diff, spec
         return DocResult(
             user_facing=False,
@@ -141,6 +178,7 @@ def test_internal_skips_commit(ctx_factory, monkeypatch):
 
 # --- user-facing=True but no changes → no commit ----------------------
 
+
 def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
@@ -148,7 +186,17 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
 
     commits_before = _git_log(repo_dir).count("\n") + 1
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         del self, settings, repo_dir, diff, spec
         # Agent claims user-facing but writes nothing.
         return DocResult(user_facing=True, summary="updated README")
@@ -166,6 +214,7 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
 
 # --- empty diff → pass-through without agent --------------------------
 
+
 def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
@@ -176,7 +225,17 @@ def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
 
     agent_called = []
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         agent_called.append(1)
         return DocResult(user_facing=False, summary="")
 
@@ -188,6 +247,7 @@ def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
 
 
 # --- missing clone → BLOCKED ------------------------------------------
+
 
 def test_missing_clone_blocks(ctx_factory):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
@@ -203,11 +263,22 @@ def test_missing_clone_blocks(ctx_factory):
 
 # --- agent exception → warn-and-pass ----------------------------------
 
+
 def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         del self, settings, repo_dir, diff, spec
         raise RuntimeError("model unavailable")
 
@@ -219,6 +290,7 @@ def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
 
 
 # --- diff_base failure → BLOCKED --------------------------------------
+
 
 def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
@@ -239,11 +311,22 @@ def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
 
 # --- commit_all failure → warn-and-pass --------------------------------
 
+
 def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Changed\n")
         return DocResult(user_facing=True, summary="updated README")
@@ -264,11 +347,22 @@ def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
 
 # --- review disabled → transitions to DELIVERABLE ---------------------
 
+
 def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="false")
     t = _ticket(ctx)
 
-    def _fake_doc(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         del self, settings, repo_dir, diff, spec
         return DocResult(user_facing=True, summary="updated docs")
 
@@ -280,6 +374,7 @@ def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
 
 
 # --- classifier internal-only → skips full agent ----------------------
+
 
 def test_classifier_internal_skips_full_agent(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
@@ -316,6 +411,7 @@ def test_classifier_internal_skips_full_agent(ctx_factory, monkeypatch):
 
 # --- classifier user-facing → runs full agent -------------------------
 
+
 def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
@@ -328,7 +424,17 @@ def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
             classification="user-facing — new config key",
         )
 
-    def _fake_full_agent(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_full_agent(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Updated by doc agent\n")
         return DocResult(user_facing=True, summary="updated README")
@@ -348,6 +454,7 @@ def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
 
 # --- classifier exception → fall through to full agent ----------------
 
+
 def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypatch):
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
@@ -359,7 +466,17 @@ def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypat
         del self, settings, diff, spec
         raise RuntimeError("model unavailable")
 
-    def _fake_full_agent(self, *, settings, repo_dir, diff, spec, extra_roots=None, board_id="", reference_files=None):
+    def _fake_full_agent(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
         full_agent_called.append(1)
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Full agent ran\n")
@@ -376,6 +493,7 @@ def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypat
 
 
 # --- classifier verdict recorded in history ---------------------------
+
 
 def test_classifier_verdict_recorded_in_history(ctx_factory, monkeypatch):
     """The classifier verdict is an agent conclusion — it lands in the

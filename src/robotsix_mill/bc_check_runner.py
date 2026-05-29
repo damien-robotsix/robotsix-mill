@@ -11,6 +11,13 @@ from .periodic_runner import (
 )
 
 
-def run_bc_check_pass(session_id: str, repo_config: RepoConfig | None = None) -> BcCheckPassResult:
+def run_bc_check_pass(
+    session_id: str, repo_config: RepoConfig | None = None
+) -> BcCheckPassResult:
     settings = Settings()
-    return run_periodic_pass(session_id, repo_config, config=PERIODIC_PASS_CONFIGS["bc_check"], settings=settings)
+    return run_periodic_pass(
+        session_id,
+        repo_config,
+        config=PERIODIC_PASS_CONFIGS["bc_check"],
+        settings=settings,
+    )

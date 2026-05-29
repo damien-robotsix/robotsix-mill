@@ -27,7 +27,9 @@ from robotsix_mill.langfuse_client import list_all_traces_since
 @pytest.fixture
 def client(settings, repos_registry):
     """TestClient wired to the shared `settings` fixture from conftest."""
-    with TestClient(create_app(repos_registry, settings, single_repo_id="test-repo")) as c:
+    with TestClient(
+        create_app(repos_registry, settings, single_repo_id="test-repo")
+    ) as c:
         yield c
 
 
@@ -43,6 +45,7 @@ def _settings(tmp_path, **overrides):
     # Populate Secrets so get_secrets() returns matching values
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+
     _reset_secrets()
     _cfg._secrets = Secrets(
         langfuse_base_url=overrides.pop("LANGFUSE_BASE_URL", "https://lf.example.com"),
@@ -64,6 +67,7 @@ def _enable_tracing_secrets():
     """Populate Secrets with Langfuse credentials so tracing is enabled."""
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+
     _reset_secrets()
     _cfg._secrets = Secrets(
         langfuse_base_url="https://lf.example.com",
@@ -92,17 +96,13 @@ def _mixed_traces(sessioned, unsessioned):
             {"id": f"s-{i:03d}", "name": f"good-{i}", "sessionId": f"sess-{i:03d}"}
         )
     for i in range(unsessioned):
-        traces.append(
-            {"id": f"u-{i:03d}", "name": f"bad-{i}", "sessionId": None}
-        )
+        traces.append({"id": f"u-{i:03d}", "name": f"bad-{i}", "sessionId": None})
     return traces
 
 
 def _patch_settings(monkeypatch, settings):
     """Make run_trace_health_check use *settings* instead of its own."""
-    monkeypatch.setattr(
-        "robotsix_mill.trace_health_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.trace_health_runner.Settings", lambda: settings)
 
 
 def _patch_list_all_traces(monkeypatch, traces):
@@ -625,10 +625,13 @@ def test_start_ticket_root_span_not_called(tmp_path, monkeypatch):
     _init_db_for_test(settings)
     seen = {"span_called": False}
 
-    def fake_start_ticket_root_span(sid, stage_name, extra_attributes=None, repo_config=None):
+    def fake_start_ticket_root_span(
+        sid, stage_name, extra_attributes=None, repo_config=None
+    ):
         seen["span_called"] = True
         # If called, still need to yield so the body doesn't crash
         import contextlib
+
         return contextlib.nullcontext()
 
     # One unsessioned trace triggers ticket creation.
@@ -639,15 +642,19 @@ def test_start_ticket_root_span_not_called(tmp_path, monkeypatch):
         fake_start_ticket_root_span,
     )
     monkeypatch.setattr(
-        trace_health_runner, "make_session_id",
+        trace_health_runner,
+        "make_session_id",
         lambda kind: f"{kind}-test-session",
     )
     monkeypatch.setattr(
-        trace_health_runner, "list_all_traces_since",
+        trace_health_runner,
+        "list_all_traces_since",
         lambda s, ts, **kwargs: traces,
     )
     monkeypatch.setattr(
-        trace_health_runner, "Settings", lambda: settings,
+        trace_health_runner,
+        "Settings",
+        lambda: settings,
     )
 
     result = run_trace_health_check()

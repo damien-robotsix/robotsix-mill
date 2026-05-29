@@ -1,8 +1,6 @@
 """Tests for ``robotsix_mill.agents.fs_tools`` — the sole I/O gateway
 for every agent."""
 
-import os
-import sys
 import types
 
 import pytest
@@ -25,6 +23,7 @@ from robotsix_mill import sandbox
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _build(root, settings):
     """Return the 6 tools as a name→callable dict."""
     tools = build_fs_tools(root, settings)
@@ -40,6 +39,7 @@ def _make_file(root, path, content):
 # ===================================================================
 # _safe / path sandboxing
 # ===================================================================
+
 
 class TestSafe:
     def test_relative_inside_root(self, tmp_path):
@@ -104,6 +104,7 @@ class TestSafe:
 # Return type / shape
 # ===================================================================
 
+
 def test_build_fs_tools_returns_six_callables(tmp_path, settings):
     root = tmp_path / "repo"
     root.mkdir()
@@ -115,8 +116,12 @@ def test_build_fs_tools_returns_six_callables(tmp_path, settings):
 
     names = {t.__name__ for t in tools}
     assert names == {
-        "read_file", "write_file", "edit_file", "delete_file",
-        "list_dir", "run_command",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "delete_file",
+        "list_dir",
+        "run_command",
     }
 
     for t in tools:
@@ -132,6 +137,7 @@ def test_build_fs_tools_does_not_raise_on_valid_root(tmp_path, settings):
 # ===================================================================
 # read_file
 # ===================================================================
+
 
 class TestReadFile:
     def test_read_existing(self, tmp_path, settings):
@@ -168,6 +174,7 @@ class TestReadFile:
 # ===================================================================
 # read_file offset/limit
 # ===================================================================
+
 
 class TestReadFileOffsetLimit:
     def test_default_args_byte_identical(self, tmp_path, settings):
@@ -277,7 +284,10 @@ class TestReadFileOffsetLimit:
 
         root2 = tmp_path / "nonexistent"
         tools2 = _build(root2, settings)
-        assert "not been cloned yet" in tools2["read_file"](path="any.txt", offset=2, limit=1).lower()
+        assert (
+            "not been cloned yet"
+            in tools2["read_file"](path="any.txt", offset=2, limit=1).lower()
+        )
 
     def test_docstring_visible(self, tmp_path, settings):
         """Docstring is pydantic-ai-visible on the closure."""
@@ -304,6 +314,7 @@ class TestReadFileOffsetLimit:
 # ===================================================================
 # write_file
 # ===================================================================
+
 
 class TestWriteFile:
     def test_write_new_file(self, tmp_path, settings):
@@ -380,10 +391,12 @@ class TestWriteFile:
         assert (root / "notes.md").read_text() == body
 
     def test_write_file_lint_on_edit_off_allows_syntax_error(
-        self, tmp_path,
+        self,
+        tmp_path,
     ):
         """When lint_on_edit is False the guard is fully bypassed."""
         from robotsix_mill.config import Settings
+
         s = Settings(data_dir=str(tmp_path / "data"), lint_on_edit=False)
         root = tmp_path / "repo"
         root.mkdir()
@@ -397,6 +410,7 @@ class TestWriteFile:
 # ===================================================================
 # edit_file
 # ===================================================================
+
 
 class TestEditFile:
     def test_unique_match_replaces(self, tmp_path, settings):
@@ -466,7 +480,9 @@ class TestEditFile:
         tools = _build(root, settings)
         # Replace the body with malformed Python.
         result = tools["edit_file"](
-            "mod.py", "    return 1", "    return (",
+            "mod.py",
+            "    return 1",
+            "    return (",
         )
         assert "syntax error" in result.lower()
         # File on disk unchanged.
@@ -476,6 +492,7 @@ class TestEditFile:
 # ===================================================================
 # delete_file
 # ===================================================================
+
 
 class TestDeleteFile:
     def test_delete_existing(self, tmp_path, settings):
@@ -514,6 +531,7 @@ class TestDeleteFile:
 # ===================================================================
 # list_dir
 # ===================================================================
+
 
 class TestListDir:
     def test_empty_directory(self, tmp_path, settings):
@@ -568,6 +586,7 @@ class TestListDir:
 # ===================================================================
 # run_command
 # ===================================================================
+
 
 class TestRunCommand:
     def test_echo_hello(self, tmp_path, settings, fake_sandbox):
@@ -653,6 +672,7 @@ class TestRunCommand:
 # ===================================================================
 # Error-return semantics (the defining invariant)
 # ===================================================================
+
 
 class TestNeverRaises:
     """Every failure path returns a string — no exception ever escapes
@@ -742,6 +762,7 @@ class TestNeverRaises:
 # ===================================================================
 # File-read cache
 # ===================================================================
+
 
 class TestFileReadCache:
     """Tests for the in-memory file-content cache in ``build_fs_tools``."""
@@ -966,22 +987,27 @@ class TestFileReadCache:
 # read_file message-history pruning
 # ===================================================================
 
+
 def _read_call(path, tool_call_id):
     """A ModelResponse carrying a single read_file ToolCallPart."""
-    return ModelResponse(parts=[
-        ToolCallPart(
-            tool_name="read_file",
-            args={"path": path},
-            tool_call_id=tool_call_id,
-        )
-    ])
+    return ModelResponse(
+        parts=[
+            ToolCallPart(
+                tool_name="read_file",
+                args={"path": path},
+                tool_call_id=tool_call_id,
+            )
+        ]
+    )
 
 
 def _read_return(content, tool_call_id):
     """A read_file ToolReturnPart (returned bare so a test can assert
     on its ``.content`` after pruning)."""
     return ToolReturnPart(
-        tool_name="read_file", content=content, tool_call_id=tool_call_id,
+        tool_name="read_file",
+        content=content,
+        tool_call_id=tool_call_id,
     )
 
 
@@ -998,10 +1024,12 @@ class TestFileReadPruning:
         tools = _build(root, settings)
 
         a_return = _read_return("original A\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            _read_call("A.txt", "call-A"),
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                _read_call("A.txt", "call-A"),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         # Edit A → invalidates the cache.
         tools["edit_file"]("A.txt", "original", "edited")
@@ -1019,10 +1047,12 @@ class TestFileReadPruning:
         tools = _build(root, settings)
 
         a_return = _read_return("v1\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            _read_call("A.txt", "call-A"),
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                _read_call("A.txt", "call-A"),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         tools["write_file"]("A.txt", "v2\n")
 
@@ -1041,16 +1071,19 @@ class TestFileReadPruning:
 
         a_return = _read_return("A original\n", "call-A")
         b_call = ToolCallPart(
-            tool_name="read_file", args={"path": "B.txt"},
+            tool_name="read_file",
+            args={"path": "B.txt"},
             tool_call_id="call-B",
         )
         b_return = _read_return("B original\n", "call-B")
-        ctx = types.SimpleNamespace(messages=[
-            _read_call("A.txt", "call-A"),
-            ModelRequest(parts=[a_return]),
-            ModelResponse(parts=[b_call]),
-            ModelRequest(parts=[b_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                _read_call("A.txt", "call-A"),
+                ModelRequest(parts=[a_return]),
+                ModelResponse(parts=[b_call]),
+                ModelRequest(parts=[b_return]),
+            ]
+        )
 
         tools["edit_file"]("A.txt", "original", "edited")
         tools["read_file"](ctx, path="A.txt")
@@ -1068,19 +1101,27 @@ class TestFileReadPruning:
         tools = _build(root, settings)
 
         cmd_return = ToolReturnPart(
-            tool_name="run_command", content="exit=0\nbig output",
+            tool_name="run_command",
+            content="exit=0\nbig output",
             tool_call_id="cmd-1",
         )
         a_return = _read_return("v1\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            ModelResponse(parts=[ToolCallPart(
-                tool_name="run_command", args={"command": "ls"},
-                tool_call_id="cmd-1",
-            )]),
-            ModelRequest(parts=[cmd_return]),
-            _read_call("A.txt", "call-A"),
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            tool_name="run_command",
+                            args={"command": "ls"},
+                            tool_call_id="cmd-1",
+                        )
+                    ]
+                ),
+                ModelRequest(parts=[cmd_return]),
+                _read_call("A.txt", "call-A"),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         tools["write_file"]("A.txt", "v2\n")
         tools["read_file"](ctx, path="A.txt")
@@ -1104,10 +1145,12 @@ class TestFileReadPruning:
             tool_call_id="call-A",
         )
         a_return = _read_return("l1\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            ModelResponse(parts=[a_call]),
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                ModelResponse(parts=[a_call]),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
         assert result == "l2\n"
@@ -1120,10 +1163,12 @@ class TestFileReadPruning:
         tools = _build(root, settings)
 
         a_return = _read_return("stale", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            _read_call("missing.txt", "call-A"),
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                _read_call("missing.txt", "call-A"),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         result = tools["read_file"](ctx, path="missing.txt")
         assert "error" in result.lower()
@@ -1149,10 +1194,12 @@ class TestFileReadPruning:
         tools = _build(root, settings)
 
         a_return = _read_return("v1\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            _read_call("./sub/file.txt", "call-A"),
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                _read_call("./sub/file.txt", "call-A"),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         tools["edit_file"]("sub/file.txt", "v1", "v2")
         result = tools["read_file"](ctx, path="sub/file.txt")
@@ -1170,10 +1217,12 @@ class TestFileReadPruning:
 
         a_call_msg = _read_call("A.txt", "call-A")
         a_return = _read_return("v1\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            a_call_msg,
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                a_call_msg,
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         tools["write_file"]("A.txt", "v2\n")
         tools["read_file"](ctx, path="A.txt")
@@ -1185,10 +1234,7 @@ class TestFileReadPruning:
         assert a_return.content == _PRUNED_PLACEHOLDER
 
         # A follow-up read still returns the cached content.
-        assert (
-            tools["read_file"](ctx, path="A.txt")
-            == "v2\n"
-        )
+        assert tools["read_file"](ctx, path="A.txt") == "v2\n"
 
 
 class TestPartialReadRefusalWhenAlreadyLoaded:
@@ -1226,7 +1272,9 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         assert "A.txt" in result
 
     def test_partial_refused_after_prior_full_runtime_read(
-        self, tmp_path, settings,
+        self,
+        tmp_path,
+        settings,
     ):
         root = tmp_path / "repo"
         root.mkdir()
@@ -1239,10 +1287,12 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
             tool_call_id="call-A",
         )
         a_return = _read_return("l1\nl2\nl3\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            ModelResponse(parts=[a_call]),
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                ModelResponse(parts=[a_call]),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
         assert result.startswith("refused:")
@@ -1262,16 +1312,20 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
             tool_call_id="call-A",
         )
         a_return = _read_return("l1\nl2\n", "call-A")
-        ctx = types.SimpleNamespace(messages=[
-            ModelResponse(parts=[a_call]),
-            ModelRequest(parts=[a_return]),
-        ])
+        ctx = types.SimpleNamespace(
+            messages=[
+                ModelResponse(parts=[a_call]),
+                ModelRequest(parts=[a_return]),
+            ]
+        )
 
         result = tools["read_file"](ctx, path="A.txt", offset=3, limit=2)
         assert result == "l3\nl4\n"
 
     def test_partial_allowed_when_preload_was_pruned(
-        self, tmp_path, settings,
+        self,
+        tmp_path,
+        settings,
     ):
         """A pruned prior full read no longer counts — its content is
         gone from context, so a partial read is allowed again."""
@@ -1289,7 +1343,9 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         assert result == "l2\n"
 
     def test_full_read_of_preloaded_file_still_allowed(
-        self, tmp_path, settings,
+        self,
+        tmp_path,
+        settings,
     ):
         """Full reads always go through — they trigger pruning of the
         earlier copy. Refusal only targets partial slices."""
@@ -1307,7 +1363,9 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         assert req.parts[0].content == _PRUNED_PLACEHOLDER
 
     def test_partial_of_unrelated_file_still_allowed(
-        self, tmp_path, settings,
+        self,
+        tmp_path,
+        settings,
     ):
         """A preload of A.txt doesn't block partial reads of B.txt."""
         root = tmp_path / "repo"

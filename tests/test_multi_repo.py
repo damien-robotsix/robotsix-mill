@@ -15,6 +15,7 @@ from robotsix_mill.runtime.api import create_app
 
 # -- fixtures -----------------------------------------------------------
 
+
 @pytest.fixture
 def multi_repo_client(settings, two_repo_registry):
     """TestClient in true multi-repo mode (no single_repo_id).
@@ -29,6 +30,7 @@ def multi_repo_client(settings, two_repo_registry):
 
 
 # -- 2. Ticket creation routing -----------------------------------------
+
 
 def test_create_ticket_repo_a(multi_repo_client):
     """POST /tickets with repo_id="repo-a" → 201, visible under repo-a."""
@@ -79,6 +81,7 @@ def test_create_ticket_no_repo_id_multi_repo(multi_repo_client):
 
 # -- 2b. Ticket listing isolation ---------------------------------------
 
+
 def test_list_tickets_repo_isolation(multi_repo_client):
     """Tickets created under repo A only appear when filtering by repo-a."""
     # Create one ticket per repo.
@@ -125,6 +128,7 @@ def test_list_tickets_unknown_repo(multi_repo_client):
 
 # -- 2c. Langfuse project routing (cost endpoints) ----------------------
 
+
 def test_cost_by_agent_repo_a(multi_repo_client, monkeypatch):
     """GET /costs/by-agent?repo_id=repo-a routes through proj-a."""
     captured_projects: list[str | None] = []
@@ -135,9 +139,7 @@ def test_cost_by_agent_repo_a(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
-    )
+    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=repo-a")
     assert r.status_code == 200
@@ -158,9 +160,7 @@ def test_cost_by_agent_repo_b(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
-    )
+    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=repo-b")
     assert r.status_code == 200
@@ -180,16 +180,16 @@ def test_cost_by_agent_all(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
-    )
+    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/by-agent?repo_id=all")
     assert r.status_code == 200
     unique = set(captured_projects)
     assert "proj-a" in unique, f"expected proj-a in captures, got {captured_projects}"
     assert "proj-b" in unique, f"expected proj-b in captures, got {captured_projects}"
-    assert None not in unique, "should not fall back to global secrets in multi-repo mode"
+    assert None not in unique, (
+        "should not fall back to global secrets in multi-repo mode"
+    )
 
 
 def test_cost_trend_repo_routing(multi_repo_client, monkeypatch):
@@ -202,9 +202,7 @@ def test_cost_trend_repo_routing(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
-    )
+    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/trend?repo_id=repo-a")
     assert r.status_code == 200
@@ -224,9 +222,7 @@ def test_cost_trend_all(multi_repo_client, monkeypatch):
         )
         return {"data": []}
 
-    monkeypatch.setattr(
-        "robotsix_mill.langfuse_client._langfuse_api_get", fake_get
-    )
+    monkeypatch.setattr("robotsix_mill.langfuse_client._langfuse_api_get", fake_get)
 
     r = multi_repo_client.get("/costs/trend?repo_id=all")
     assert r.status_code == 200
@@ -244,6 +240,7 @@ def test_cost_endpoint_missing_repo_id_multi_repo(multi_repo_client):
 
 
 # -- 3. Board UI tests ---------------------------------------------------
+
 
 def test_repos_endpoint(multi_repo_client):
     """GET /repos returns both repos, no credential leaks."""
@@ -298,6 +295,7 @@ def test_board_filter_integration_smoke(multi_repo_client):
 
 
 # -- 4. Periodic-agent isolation (Approach B) ---------------------------
+
 
 def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
     """Audit pass for repo A writes sentinel only under repo A's dir."""
@@ -379,7 +377,7 @@ def test_bc_check_repo_isolation(settings, monkeypatch, tmp_path):
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
     )
-    repo_b = RepoConfig(
+    RepoConfig(
         repo_id="repo-b",
         board_id="board-b",
         langfuse_project_name="proj-b",

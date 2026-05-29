@@ -34,8 +34,8 @@ class TraceHealthResult:
     draft_created: bool
     unsessioned_count: int
     total_traces: int
-    window_start: str   # ISO 8601
-    window_end: str     # ISO 8601
+    window_start: str  # ISO 8601
+    window_end: str  # ISO 8601
 
 
 def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealthResult:
@@ -122,7 +122,7 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
     for t in unsessioned[:5]:
         tid = t.get("id", "?")
         tname = t.get("name", "?")
-        examples.append(f"- {tid}  \"{tname}\"")
+        examples.append(f'- {tid}  "{tname}"')
     examples_block = "\n".join(examples) if examples else "(none)"
     description = (
         f"Window: {window_start.isoformat()} UTC → {window_end.isoformat()} UTC\n"
@@ -137,7 +137,9 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
     )
 
     ticket = service.create(
-        title, description, source=SourceKind.TRACE_HEALTH,
+        title,
+        description,
+        source=SourceKind.TRACE_HEALTH,
         origin_session=session_id,
     )
     log.info(

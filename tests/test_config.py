@@ -20,9 +20,9 @@ def test_extra_kwargs_forbidden():
     ad2f's PR. ``extra='forbid'`` makes the typo a test-collection
     error so the implement agent can see it and fix it in-pass."""
     import pydantic
+
     with pytest.raises(pydantic.ValidationError, match="not_a_real_field"):
         Settings(not_a_real_field=42)
-
 
     s = Settings()
     assert s.web_search is True
@@ -104,13 +104,23 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("rate_limit_backoff_base", "MILL_RATE_LIMIT_BACKOFF_BASE", "10.0", 10.0),
     ("rate_limit_backoff_cap", "MILL_RATE_LIMIT_BACKOFF_CAP", "300.0", 300.0),
     ("rate_limit_fallback_retries", "MILL_RATE_LIMIT_FALLBACK_RETRIES", "5", 5),
-    ("rate_limit_fallback_model", "MILL_RATE_LIMIT_FALLBACK_MODEL", "fb/model", "fb/model"),
+    (
+        "rate_limit_fallback_model",
+        "MILL_RATE_LIMIT_FALLBACK_MODEL",
+        "fb/model",
+        "fb/model",
+    ),
     ("explore_request_limit", "MILL_EXPLORE_REQUEST_LIMIT", "99", 99),
     ("dedup_request_limit", "MILL_DEDUP_REQUEST_LIMIT", "3", 3),
     # --- memory / reference files ---
     ("max_memory_chars", "MILL_MAX_MEMORY_CHARS", "16000", 16000),
     ("reference_files_max_count", "MILL_REFERENCE_FILES_MAX_COUNT", "10", 10),
-    ("reference_files_max_total_lines", "MILL_REFERENCE_FILES_MAX_TOTAL_LINES", "5000", 5000),
+    (
+        "reference_files_max_total_lines",
+        "MILL_REFERENCE_FILES_MAX_TOTAL_LINES",
+        "5000",
+        5000,
+    ),
     ("dedup_lookback_days", "MILL_DEDUP_LOOKBACK_DAYS", "14", 14),
     # --- paths ---
     ("data_dir", "MILL_DATA_DIR", "/custom/data", Path("/custom/data")),
@@ -120,15 +130,35 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("api_url", "MILL_API_URL", "http://example.com:9999", "http://example.com:9999"),
     # --- forge ---
     ("forge_kind", "FORGE_KIND", "none", "none"),
-    ("forge_remote_url", "FORGE_REMOTE_URL", "https://git.example.com/repo", "https://git.example.com/repo"),
+    (
+        "forge_remote_url",
+        "FORGE_REMOTE_URL",
+        "https://git.example.com/repo",
+        "https://git.example.com/repo",
+    ),
     ("forge_token", "FORGE_TOKEN", "glpat-xxxx", "glpat-xxxx"),
     ("forge_target_branch", "FORGE_TARGET_BRANCH", "develop", "develop"),
     ("forge_auth", "FORGE_AUTH", "token", "token"),
     ("github_app_id", "GITHUB_APP_ID", "123456", "123456"),
     ("github_app_private_key", "GITHUB_APP_PRIVATE_KEY", "pk-----", "pk-----"),
-    ("github_app_private_key_path", "GITHUB_APP_PRIVATE_KEY_PATH", "/keys/app.pem", "/keys/app.pem"),
-    ("github_api_url", "MILL_GITHUB_API_URL", "https://github.myco.com", "https://github.myco.com"),
-    ("gitlab_api_url", "MILL_GITLAB_API_URL", "https://gitlab.myco.com/api/v4", "https://gitlab.myco.com/api/v4"),
+    (
+        "github_app_private_key_path",
+        "GITHUB_APP_PRIVATE_KEY_PATH",
+        "/keys/app.pem",
+        "/keys/app.pem",
+    ),
+    (
+        "github_api_url",
+        "MILL_GITHUB_API_URL",
+        "https://github.myco.com",
+        "https://github.myco.com",
+    ),
+    (
+        "gitlab_api_url",
+        "MILL_GITLAB_API_URL",
+        "https://gitlab.myco.com/api/v4",
+        "https://gitlab.myco.com/api/v4",
+    ),
     # --- implement ---
     ("test_command", "MILL_TEST_COMMAND", "pytest -x", "pytest -x"),
     ("branch_prefix", "MILL_BRANCH_PREFIX", "auto/", "auto/"),
@@ -146,7 +176,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("web_search", "MILL_WEB_SEARCH", "0", False),
     ("web_research_model", "MILL_WEB_RESEARCH_MODEL", "web/model", "web/model"),
     ("web_research_request_limit", "MILL_WEB_RESEARCH_REQUEST_LIMIT", "4", 4),
-    ("fetch_image", "MILL_FETCH_IMAGE", "curlimages/curl:latest", "curlimages/curl:latest"),
+    (
+        "fetch_image",
+        "MILL_FETCH_IMAGE",
+        "curlimages/curl:latest",
+        "curlimages/curl:latest",
+    ),
     ("web_fetch_max_bytes", "MILL_WEB_FETCH_MAX_BYTES", "500000", 500000),
     ("web_fetch_timeout", "MILL_WEB_FETCH_TIMEOUT", "15", 15),
     ("skills_dir", "MILL_SKILLS_DIR", "/skills", Path("/skills")),
@@ -164,10 +199,25 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("doc_model", "MILL_DOC_MODEL", "doc/model", "doc/model"),
     # --- retrospect ---
     ("retrospect_spawn_drafts", "MILL_RETROSPECT_SPAWN_DRAFTS", "0", False),
-    ("retrospect_spawn_agented_proposals", "MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS", "1", True),
+    (
+        "retrospect_spawn_agented_proposals",
+        "MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS",
+        "1",
+        True,
+    ),
     ("trace_inspector_model", "MILL_TRACE_INSPECTOR_MODEL", "ti/model", "ti/model"),
-    ("trace_inspector_memory_path", "MILL_TRACE_INSPECTOR_MEMORY_PATH", "/mem/ti.md", Path("/mem/ti.md")),
-    ("retrospect_memory_path", "MILL_RETROSPECT_MEMORY_PATH", "/mem/retro.md", Path("/mem/retro.md")),
+    (
+        "trace_inspector_memory_path",
+        "MILL_TRACE_INSPECTOR_MEMORY_PATH",
+        "/mem/ti.md",
+        Path("/mem/ti.md"),
+    ),
+    (
+        "retrospect_memory_path",
+        "MILL_RETROSPECT_MEMORY_PATH",
+        "/mem/retro.md",
+        Path("/mem/retro.md"),
+    ),
     ("merge_poll_seconds", "MILL_MERGE_POLL_SECONDS", "60", 60),
     ("prune_clone_on_close", "MILL_PRUNE_CLONE_ON_CLOSE", "false", False),
     ("max_archived_tickets", "MILL_MAX_ARCHIVED_TICKETS", "50", 50),
@@ -179,35 +229,85 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- audit ---
     ("audit_periodic", "MILL_AUDIT_PERIODIC", "true", True),
     ("audit_interval_seconds", "MILL_AUDIT_INTERVAL_SECONDS", "7200", 7200),
-    ("audit_memory_path", "MILL_AUDIT_MEMORY_PATH", "/mem/audit.md", Path("/mem/audit.md")),
+    (
+        "audit_memory_path",
+        "MILL_AUDIT_MEMORY_PATH",
+        "/mem/audit.md",
+        Path("/mem/audit.md"),
+    ),
     # --- trace health ---
     ("trace_health_periodic", "MILL_TRACE_HEALTH_PERIODIC", "1", True),
-    ("trace_health_interval_seconds", "MILL_TRACE_HEALTH_INTERVAL_SECONDS", "3600", 3600),
+    (
+        "trace_health_interval_seconds",
+        "MILL_TRACE_HEALTH_INTERVAL_SECONDS",
+        "3600",
+        3600,
+    ),
     # --- test gap ---
     ("test_gap_model", "MILL_TEST_GAP_MODEL", "tg/model", "tg/model"),
     ("test_gap_periodic", "MILL_TEST_GAP_PERIODIC", "1", True),
     ("test_gap_interval_seconds", "MILL_TEST_GAP_INTERVAL_SECONDS", "1800", 1800),
-    ("test_gap_memory_path", "MILL_TEST_GAP_MEMORY_PATH", "/mem/tg.md", Path("/mem/tg.md")),
+    (
+        "test_gap_memory_path",
+        "MILL_TEST_GAP_MEMORY_PATH",
+        "/mem/tg.md",
+        Path("/mem/tg.md"),
+    ),
     # --- agent check ---
     ("agent_check_model", "MILL_AGENT_CHECK_MODEL", "ac/model", "ac/model"),
-    ("agent_check_memory_path", "MILL_AGENT_CHECK_MEMORY_PATH", "/mem/ac.md", Path("/mem/ac.md")),
+    (
+        "agent_check_memory_path",
+        "MILL_AGENT_CHECK_MEMORY_PATH",
+        "/mem/ac.md",
+        Path("/mem/ac.md"),
+    ),
     ("agent_check_periodic", "MILL_AGENT_CHECK_PERIODIC", "1", True),
     ("agent_check_interval_seconds", "MILL_AGENT_CHECK_INTERVAL_SECONDS", "7200", 7200),
     # --- health ---
     ("health_model", "MILL_HEALTH_MODEL", "h/model", "h/model"),
     ("health_periodic", "MILL_HEALTH_PERIODIC", "true", True),
     ("health_interval_seconds", "MILL_HEALTH_INTERVAL_SECONDS", "43200", 43200),
-    ("health_memory_path", "MILL_HEALTH_MEMORY_PATH", "/mem/health.md", Path("/mem/health.md")),
+    (
+        "health_memory_path",
+        "MILL_HEALTH_MEMORY_PATH",
+        "/mem/health.md",
+        Path("/mem/health.md"),
+    ),
     # --- survey ---
     ("survey_model", "MILL_SURVEY_MODEL", "s/model", "s/model"),
-    ("survey_memory_path", "MILL_SURVEY_MEMORY_PATH", "/mem/survey.md", Path("/mem/survey.md")),
+    (
+        "survey_memory_path",
+        "MILL_SURVEY_MEMORY_PATH",
+        "/mem/survey.md",
+        Path("/mem/survey.md"),
+    ),
     ("survey_periodic", "MILL_SURVEY_PERIODIC", "0", False),
     ("survey_interval_seconds", "MILL_SURVEY_INTERVAL_SECONDS", "3600", 3600),
     # --- action-agent memory paths ---
-    ("implement_memory_path", "MILL_IMPLEMENT_MEMORY_PATH", "/mem/imp.md", Path("/mem/imp.md")),
-    ("refine_memory_path", "MILL_REFINE_MEMORY_PATH", "/mem/ref.md", Path("/mem/ref.md")),
-    ("ci_fix_memory_path", "MILL_CI_FIX_MEMORY_PATH", "/mem/cifix.md", Path("/mem/cifix.md")),
-    ("rebase_memory_path", "MILL_REBASE_MEMORY_PATH", "/mem/rebase.md", Path("/mem/rebase.md")),
+    (
+        "implement_memory_path",
+        "MILL_IMPLEMENT_MEMORY_PATH",
+        "/mem/imp.md",
+        Path("/mem/imp.md"),
+    ),
+    (
+        "refine_memory_path",
+        "MILL_REFINE_MEMORY_PATH",
+        "/mem/ref.md",
+        Path("/mem/ref.md"),
+    ),
+    (
+        "ci_fix_memory_path",
+        "MILL_CI_FIX_MEMORY_PATH",
+        "/mem/cifix.md",
+        Path("/mem/cifix.md"),
+    ),
+    (
+        "rebase_memory_path",
+        "MILL_REBASE_MEMORY_PATH",
+        "/mem/rebase.md",
+        Path("/mem/rebase.md"),
+    ),
     # --- notifications ---
     ("ntfy_url", "NTFY_URL", "https://ntfy.example.com", "https://ntfy.example.com"),
     ("ntfy_token", "NTFY_TOKEN", "tk-test", "tk-test"),
@@ -237,6 +337,7 @@ def test_alias_resolution(
 # 3. Type coercion
 # ---------------------------------------------------------------------------
 
+
 class TestTypeCoercion:
     """Pydantic Settings coerces string env vars to the field type."""
 
@@ -252,14 +353,17 @@ class TestTypeCoercion:
         assert s.model_request_timeout == 2.5
         assert isinstance(s.model_request_timeout, float)
 
-    @pytest.mark.parametrize("env_val,expected", [
-        ("true", True),
-        ("false", False),
-        ("1", True),
-        ("0", False),
-        ("True", True),
-        ("False", False),
-    ])
+    @pytest.mark.parametrize(
+        "env_val,expected",
+        [
+            ("true", True),
+            ("false", False),
+            ("1", True),
+            ("0", False),
+            ("True", True),
+            ("False", False),
+        ],
+    )
     def test_bool_coercion(self, monkeypatch, env_val, expected):
         monkeypatch.setenv("MILL_REVIEW_ENABLED", env_val)
         s = Settings()
@@ -294,6 +398,7 @@ class TestTypeCoercion:
 # ---------------------------------------------------------------------------
 # 4. Computed @property methods
 # ---------------------------------------------------------------------------
+
 
 class TestComputedProperties:
     """All @property methods on Settings."""
@@ -354,7 +459,11 @@ class TestComputedProperties:
 
     MEMORY_FILE_PROPERTIES = [
         ("retrospect_memory_file", "retrospect_memory_path", "retrospect_memory.md"),
-        ("trace_inspector_memory_file", "trace_inspector_memory_path", "trace_inspector_memory.md"),
+        (
+            "trace_inspector_memory_file",
+            "trace_inspector_memory_path",
+            "trace_inspector_memory.md",
+        ),
         ("audit_memory_file", "audit_memory_path", "audit_memory.md"),
         ("agent_check_memory_file", "agent_check_memory_path", "agent_check_memory.md"),
         ("health_memory_file", "health_memory_path", "health_memory.md"),
@@ -369,7 +478,9 @@ class TestComputedProperties:
     @pytest.mark.parametrize(
         "prop_name,override_field,fallback_filename", MEMORY_FILE_PROPERTIES
     )
-    def test_memory_file_fallback(self, tmp_path, prop_name, override_field, fallback_filename):
+    def test_memory_file_fallback(
+        self, tmp_path, prop_name, override_field, fallback_filename
+    ):
         """When the override path is None, the property derives from data_dir."""
         s = Settings(data_dir=str(tmp_path))
         assert getattr(s, prop_name) == tmp_path / fallback_filename
@@ -392,7 +503,9 @@ class TestComputedProperties:
     @pytest.mark.parametrize(
         "prop_name,override_field,fallback_filename", MEMORY_FILE_PROPERTIES
     )
-    def test_memory_file_override(self, monkeypatch, tmp_path, prop_name, override_field, fallback_filename):
+    def test_memory_file_override(
+        self, monkeypatch, tmp_path, prop_name, override_field, fallback_filename
+    ):
         """When the override path is set, it wins over the derived path."""
         custom = Path("/custom/memory.md")
         alias = self.MEMORY_PATH_ALIASES[override_field]
@@ -415,6 +528,7 @@ class TestComputedProperties:
 # 5. extra="ignore" behaviour
 # ---------------------------------------------------------------------------
 
+
 def test_extra_ignore(monkeypatch):
     """Unknown env vars don't cause ValidationError."""
     monkeypatch.setenv("UNKNOWN_SETTING", "foo")
@@ -427,6 +541,7 @@ def test_extra_ignore(monkeypatch):
 # 6. load_settings() smoke test
 # ---------------------------------------------------------------------------
 
+
 def test_load_settings_returns_settings_instance():
     """Trivial: the module-level factory returns a Settings object."""
     s = load_settings()
@@ -436,6 +551,7 @@ def test_load_settings_returns_settings_instance():
 # ---------------------------------------------------------------------------
 # 7. YAML config loading
 # ---------------------------------------------------------------------------
+
 
 class TestYamlLoading:
     """Tests for ``config_loader.load_yaml_config`` and
@@ -465,12 +581,14 @@ class TestYamlLoading:
         defaults = local_dir / "mill.defaults.yaml"
         # Copy the real defaults so the loader finds them
         import shutil
+
         shutil.copy("config/mill.defaults.yaml", defaults)
         local = local_dir / "mill.local.yaml"
         local.write_text("core:\n  limits:\n    max_concurrency: 99\n")
 
         # Patch the module-level path to point at our temp dir
         import robotsix_mill.config_loader as cl
+
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", local)
 
@@ -529,6 +647,7 @@ class TestYamlLoading:
 # 8. Secrets model
 # ---------------------------------------------------------------------------
 
+
 class TestSecretsModel:
     """Tests for the ``Secrets`` class."""
 
@@ -541,7 +660,7 @@ class TestSecretsModel:
         secrets_file.write_text(
             "openrouter_api_key: sk-or-123\n"
             "forge_token: ghp_abc\n"
-            "github_app_id: \"456\"\n"
+            'github_app_id: "456"\n'
             "github_app_private_key: pk-data\n"
             "langfuse_public_key: pk-lf\n"
             "langfuse_secret_key: sk-lf\n"
@@ -707,7 +826,9 @@ class TestLoadReposYaml:
             "      secret_key: sk-exp\n"
         )
         env_file = tmp_path / "env.yaml"
-        env_file.write_text("repos:\n  env-repo:\n    board_id: wrong\n    langfuse:\n      project_name: w\n      public_key: w\n      secret_key: w\n")
+        env_file.write_text(
+            "repos:\n  env-repo:\n    board_id: wrong\n    langfuse:\n      project_name: w\n      public_key: w\n      secret_key: w\n"
+        )
         monkeypatch.setenv("MILL_REPOS_FILE", str(env_file))
         result = load_repos_yaml(str(explicit_file))
         assert "explicit-repo" in result
@@ -1009,6 +1130,7 @@ class TestLoadReposConfig:
         )
         _reset_repos_config()
         import robotsix_mill.config as _cfg
+
         _cfg._repos_config = load_repos_config(str(repos_file))
 
         rc = get_repo_config("my-repo")
@@ -1072,6 +1194,7 @@ class TestLoadReposConfig:
         )
         _reset_repos_config()
         import robotsix_mill.config as _cfg
+
         _cfg._repos_config = load_repos_config(str(repos_file))
 
         rr1 = get_repos_config()
@@ -1120,6 +1243,7 @@ class TestLoadReposConfig:
 # ---------------------------------------------------------------------------
 # 11. Semantic validators
 # ---------------------------------------------------------------------------
+
 
 class TestValidationValid:
     """Valid Settings constructions that pass all validators."""
@@ -1208,22 +1332,19 @@ class TestValidationInvalid:
 
     def test_review_enabled_without_review_model_raises(self):
         """``review_enabled=True`` with empty ``review_model`` raises."""
-        with pytest.raises(
-            ValidationError, match="review_model must be non-empty"
-        ):
+        with pytest.raises(ValidationError, match="review_model must be non-empty"):
             Settings(review_enabled="true", review_model="")
 
     def test_explore_request_limit_zero_raises(self):
         """``explore_request_limit=0`` raises ValidationError."""
-        with pytest.raises(
-            ValidationError, match="explore_request_limit must be ≥ 1"
-        ):
+        with pytest.raises(ValidationError, match="explore_request_limit must be ≥ 1"):
             Settings(explore_request_limit=0)
 
 
 # ---------------------------------------------------------------------------
 # 12. Integration: load_settings / load_secrets factories
 # ---------------------------------------------------------------------------
+
 
 class TestFactories:
     """Integration tests for ``load_settings()`` and ``load_secrets()``."""
@@ -1243,9 +1364,7 @@ class TestFactories:
 
         shutil.copy("config/mill.defaults.yaml", defaults)
         defaults.write_text(
-            defaults.read_text().replace(
-                "max_concurrency: 4", "max_concurrency: 42"
-            )
+            defaults.read_text().replace("max_concurrency: 4", "max_concurrency: 42")
         )
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", cl.Path("/nonexistent/mill.local.yaml"))
@@ -1284,9 +1403,7 @@ class TestFactories:
         s = load_settings()
         assert s.max_concurrency == 77  # env var wins, not YAML's 42
 
-    def test_settings_init_applies_yaml_fallback(
-        self, tmp_path, monkeypatch
-    ):
+    def test_settings_init_applies_yaml_fallback(self, tmp_path, monkeypatch):
         """``Settings()`` applies YAML when field is at default;
         constructor kwargs override YAML."""
         import robotsix_mill.config_loader as cl
@@ -1298,9 +1415,7 @@ class TestFactories:
 
         shutil.copy("config/mill.defaults.yaml", defaults)
         defaults.write_text(
-            defaults.read_text().replace(
-                "max_concurrency: 4", "max_concurrency: 42"
-            )
+            defaults.read_text().replace("max_concurrency: 4", "max_concurrency: 42")
         )
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", cl.Path("/nonexistent/mill.local.yaml"))

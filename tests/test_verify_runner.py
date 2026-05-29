@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from robotsix_mill.core import db
 from robotsix_mill.core.models import TicketEvent
@@ -52,6 +51,7 @@ def test_compute_hash_matches_service():
 def test_verify_no_events(monkeypatch, tmp_path):
     """Empty DB → zero events, zero tickets, zero breaks."""
     from robotsix_mill.config import Settings
+
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path), require_approval="false")
     db.init_db(s)
@@ -109,7 +109,8 @@ def test_verify_corrupted_hash(monkeypatch, tmp_path):
     # Corrupt the second event's hash.
     with db.session(s, "") as sess:
         ev = sess.exec(
-            __import__("sqlmodel").select(TicketEvent)
+            __import__("sqlmodel")
+            .select(TicketEvent)
             .where(TicketEvent.ticket_id == t.id)
             .order_by(TicketEvent.id.desc())
         ).first()
@@ -150,7 +151,8 @@ def test_verify_corrupted_prev_hash(monkeypatch, tmp_path):
     # Corrupt the second event's prev_hash.
     with db.session(s, "") as sess:
         ev = sess.exec(
-            __import__("sqlmodel").select(TicketEvent)
+            __import__("sqlmodel")
+            .select(TicketEvent)
             .where(TicketEvent.ticket_id == t.id)
             .order_by(TicketEvent.id.desc())
         ).first()

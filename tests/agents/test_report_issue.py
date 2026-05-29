@@ -8,7 +8,9 @@ from robotsix_mill.core.states import State
 
 def test_files_a_draft_with_agent_source(settings):
     tool = make_report_issue_tool(settings)
-    out = tool("rebase agent lacks a force-with-lease option", "details", "missing-tool")
+    out = tool(
+        "rebase agent lacks a force-with-lease option", "details", "missing-tool"
+    )
     assert out.startswith("report_issue: filed draft ")
 
     svc = TicketService(settings)
@@ -57,7 +59,9 @@ def test_unknown_category_coerced_to_other(settings):
 def test_code_quality_category_accepted_and_preserved(settings):
     """The code-quality category is valid and appears in the ticket body."""
     tool = make_report_issue_tool(settings)
-    out = tool("Redundant query in user lookup", "found a duplicate DB call", "code-quality")
+    out = tool(
+        "Redundant query in user lookup", "found a duplicate DB call", "code-quality"
+    )
     assert out.startswith("report_issue: filed draft ")
     svc = TicketService(settings)
     desc = svc.workspace(svc.list()[0]).read_description()
@@ -75,7 +79,9 @@ def test_never_raises_on_failure(settings, monkeypatch):
     assert out.startswith("report_issue: could not file ticket")
 
 
-def test_build_agent_attaches_report_issue_by_default(settings, monkeypatch, secrets_set):
+def test_build_agent_attaches_report_issue_by_default(
+    settings, monkeypatch, secrets_set
+):
     """Every agent built via build_agent gets report_issue without the
     caller asking for it (build_agent does lazy imports, so patch at
     the source modules)."""
@@ -91,8 +97,7 @@ def test_build_agent_attaches_report_issue_by_default(settings, monkeypatch, sec
         lambda *a, **k: object(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost."
-        "CostInstrumentedOpenRouterModel",
+        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
         lambda *a, **k: object(),
     )
     secrets_set(openrouter_api_key="k")
@@ -108,9 +113,11 @@ def test_noop_title_not_filed(settings):
     """A 'nothing to report' self-report is dropped (no ticket), with a
     friendly non-error string — shares the retrospect no-op detector."""
     tool = make_report_issue_tool(settings)
-    for t in ("No notable issues - clean run",
-              "Nothing to report",
-              "Clean ticket, no issues to flag"):
+    for t in (
+        "No notable issues - clean run",
+        "Nothing to report",
+        "Clean ticket, no issues to flag",
+    ):
         out = tool(t, "agent had nothing to flag")
         assert "not filed" in out and "no-op" in out
     assert TicketService(settings).list() == []  # zero tickets created
@@ -138,8 +145,7 @@ def test_build_agent_without_report_issue(settings, monkeypatch, secrets_set):
         lambda *a, **k: object(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost."
-        "CostInstrumentedOpenRouterModel",
+        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
         lambda *a, **k: object(),
     )
     secrets_set(openrouter_api_key="k")
@@ -157,7 +163,9 @@ def test_audit_agent_omits_report_issue(settings, monkeypatch, secrets_set):
     captured = {}
 
     class _FakeAgent:
-        def __init__(self, *, model, system_prompt, output_type, tools, name=None, retries=None):
+        def __init__(
+            self, *, model, system_prompt, output_type, tools, name=None, retries=None
+        ):
             captured["tools"] = tools
             captured["name"] = name
 
@@ -167,8 +175,7 @@ def test_audit_agent_omits_report_issue(settings, monkeypatch, secrets_set):
         lambda *a, **k: object(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.agents.openrouter_cost."
-        "CostInstrumentedOpenRouterModel",
+        "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel",
         lambda *a, **k: object(),
     )
     # Also stub PromptedOutput so we don't need a real model

@@ -37,7 +37,8 @@ log = logging.getLogger(__name__)
 # response so we don't scan a multi-MB payload to decide. Any of
 # DOCTYPE / <html / <body / <head wins.
 _HTML_SNIFF = re.compile(
-    rb"<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]", re.IGNORECASE,
+    rb"<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]",
+    re.IGNORECASE,
 )
 
 # Tags whose entire content (open → close, inclusive) must be
@@ -134,8 +135,7 @@ def _prune_cache(now: float) -> None:
     budget. Called from inside the tool, single-threaded use only
     (the tool runs inside the agent's synchronous loop)."""
     expired = [
-        k for k, (ts, _) in _cache.items()
-        if now - ts > _PER_RUN_CACHE_TTL_SECONDS
+        k for k, (ts, _) in _cache.items() if now - ts > _PER_RUN_CACHE_TTL_SECONDS
     ]
     for k in expired:
         _cache.pop(k, None)
@@ -197,7 +197,8 @@ def make_web_fetch(settings: Settings):
                 if now - ts <= _PER_RUN_CACHE_TTL_SECONDS:
                     log.info(
                         "web_fetch: cache hit %r (canonical %r)",
-                        url, canonical,
+                        url,
+                        canonical,
                     )
                     return body if rc == 0 else f"fetch failed: {body}"
 
@@ -218,7 +219,8 @@ def make_web_fetch(settings: Settings):
             except Exception:  # noqa: BLE001 — never crash the tool
                 log.warning(
                     "web_fetch: html_to_text failed on %r — returning raw",
-                    url, exc_info=True,
+                    url,
+                    exc_info=True,
                 )
         body = _apply_text_cap(body, settings.web_fetch_max_text_bytes)
         _cache[canonical] = (now, (rc, body))

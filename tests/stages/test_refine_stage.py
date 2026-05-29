@@ -37,6 +37,7 @@ from robotsix_mill.vcs import git_ops
 # fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def ctx_factory(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
@@ -49,7 +50,19 @@ def ctx_factory(tmp_path, fake_sandbox):
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
-        from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=svc, repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+        from robotsix_mill.config import RepoConfig
+
+        return StageContext(
+            settings=s,
+            service=svc,
+            repo_config=RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        )
 
     yield make
     db.reset_engine()
@@ -81,30 +94,72 @@ def _ticket(ctx, title="Add feature", body=None):
 # helpers: mock seams
 # ---------------------------------------------------------------------------
 
+
 def _mock_refine_ok(spec_markdown="## Problem\nFix it", **overrides):
     """Return a *callable* that returns a canned RefineResult."""
-    def _run(*, settings, title, draft, repo_dir=None, reviewer_comments=None,
-             memory="", epic_context="", **kw):
-        del settings, title, draft, repo_dir, reviewer_comments, memory, epic_context, kw
+
+    def _run(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        del (
+            settings,
+            title,
+            draft,
+            repo_dir,
+            reviewer_comments,
+            memory,
+            epic_context,
+            kw,
+        )
         kwargs = dict(spec_markdown=spec_markdown)
         kwargs.update(overrides)
         return RefineResult(**kwargs)
+
     return _run
 
 
 def _mock_refine_raises(exc):
-    def _run(*, settings, title, draft, repo_dir=None, reviewer_comments=None,
-             memory="", epic_context="", **kw):
-        del settings, title, draft, repo_dir, reviewer_comments, memory, epic_context, kw
+    def _run(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        del (
+            settings,
+            title,
+            draft,
+            repo_dir,
+            reviewer_comments,
+            memory,
+            epic_context,
+            kw,
+        )
         raise exc
+
     return _run
 
 
 def _mock_dedup(**verdict):
-    def _run(*, settings, draft_title, draft_body, candidates_json,
-             repo_dir=None, **kw):
+    def _run(
+        *, settings, draft_title, draft_body, candidates_json, repo_dir=None, **kw
+    ):
         del settings, draft_title, draft_body, candidates_json, repo_dir, kw
         return verdict
+
     return _run
 
 
@@ -112,6 +167,7 @@ def _mock_triage_refine(decision="REFINE", reason="needs refinement"):
     def _run(*, settings, title, draft, **kw):
         del settings, title, draft, kw
         return TriageResult(decision=decision, reason=reason)
+
     return _run
 
 
@@ -119,13 +175,17 @@ def _mock_auto_approve(decision="NEEDS_APPROVAL", reason="design decision presen
     def _run(*, settings, spec, **kw):
         del settings, spec, kw
         return AutoApproveResult(decision=decision, reason=reason)
+
     return _run
 
 
 def _mock_spec_review(concise_spec="## concise", stripped_summary="stripped 3 lines"):
     def _run(*, settings, spec_markdown, **kw):
         del settings, spec_markdown, kw
-        return SpecReviewResult(concise_spec=concise_spec, stripped_summary=stripped_summary)
+        return SpecReviewResult(
+            concise_spec=concise_spec, stripped_summary=stripped_summary
+        )
+
     return _run
 
 
@@ -133,28 +193,49 @@ def _apply_default_mocks(monkeypatch, **overrides):
     """Apply all mock seams with sensible defaults so the happy refine
     path works out of the box.  Individual tests override specific mocks
     as needed."""
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        overrides.get("run_refine_agent", _mock_refine_ok()))
-    monkeypatch.setattr(refining, "triage_refine",
-                        overrides.get("triage_refine", _mock_triage_refine()))
-    monkeypatch.setattr(refining, "triage_auto_approve",
-                        overrides.get("triage_auto_approve", _mock_auto_approve()))
-    monkeypatch.setattr(refining, "review_spec_for_conciseness",
-                        overrides.get("review_spec_for_conciseness", _mock_spec_review()))
-    monkeypatch.setattr(dedup, "run_dedup_check",
-                        overrides.get("run_dedup_check",
-                                      _mock_dedup(duplicate_of=None, already_done=None, reason="no match")))
-    monkeypatch.setattr(git_ops, "clone",
-                        overrides.get("clone", lambda *a, **k: None))
-    monkeypatch.setattr(refine_module, "load_memory",
-                        overrides.get("load_memory", lambda memory_file, max_chars=None: ""))
-    monkeypatch.setattr(refine_module, "persist_memory",
-                        overrides.get("persist_memory", lambda memory_file, text: None))
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        overrides.get("run_refine_agent", _mock_refine_ok()),
+    )
+    monkeypatch.setattr(
+        refining, "triage_refine", overrides.get("triage_refine", _mock_triage_refine())
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        overrides.get("triage_auto_approve", _mock_auto_approve()),
+    )
+    monkeypatch.setattr(
+        refining,
+        "review_spec_for_conciseness",
+        overrides.get("review_spec_for_conciseness", _mock_spec_review()),
+    )
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        overrides.get(
+            "run_dedup_check",
+            _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+        ),
+    )
+    monkeypatch.setattr(git_ops, "clone", overrides.get("clone", lambda *a, **k: None))
+    monkeypatch.setattr(
+        refine_module,
+        "load_memory",
+        overrides.get("load_memory", lambda memory_file, max_chars=None: ""),
+    )
+    monkeypatch.setattr(
+        refine_module,
+        "persist_memory",
+        overrides.get("persist_memory", lambda memory_file, text: None),
+    )
 
 
 # ---------------------------------------------------------------------------
 # 1. empty title and draft
 # ---------------------------------------------------------------------------
+
 
 def test_empty_title_and_draft_blocks(ctx_factory):
     ctx = ctx_factory()
@@ -170,14 +251,16 @@ def test_empty_title_and_draft_blocks(ctx_factory):
 # 2. unmet dependencies → same-state no-op
 # ---------------------------------------------------------------------------
 
+
 def test_unmet_dependencies_noop(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     dep = ctx.service.create("Dep ticket", "Blocking change")
     t = ctx.service.create("Depender", "Please fix", depends_on=f'["{dep.id}"]')
 
     agent_called = []
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        lambda *a, **k: agent_called.append(1))
+    monkeypatch.setattr(
+        refining, "run_refine_agent", lambda *a, **k: agent_called.append(1)
+    )
 
     out = RefineStage().run(t, ctx)
 
@@ -189,15 +272,18 @@ def test_unmet_dependencies_noop(ctx_factory, monkeypatch):
 # 3. dedup: duplicate → DONE
 # ---------------------------------------------------------------------------
 
+
 def test_dedup_duplicate_short_circuits_to_done(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx, body="Fix the login form")
 
     agent_called = []
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        lambda *a, **k: agent_called.append(1))
     monkeypatch.setattr(
-        dedup, "run_dedup_check",
+        refining, "run_refine_agent", lambda *a, **k: agent_called.append(1)
+    )
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
         _mock_dedup(duplicate_of="ticket-abc", reason="same title", already_done=None),
     )
 
@@ -212,15 +298,18 @@ def test_dedup_duplicate_short_circuits_to_done(ctx_factory, monkeypatch):
 # 4. dedup: already done → DONE
 # ---------------------------------------------------------------------------
 
+
 def test_dedup_already_done_short_circuits_to_done(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx, body="Add dark mode toggle")
 
     agent_called = []
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        lambda *a, **k: agent_called.append(1))
     monkeypatch.setattr(
-        dedup, "run_dedup_check",
+        refining, "run_refine_agent", lambda *a, **k: agent_called.append(1)
+    )
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
         _mock_dedup(duplicate_of=None, already_done="abc123", reason="commit found"),
     )
 
@@ -235,27 +324,36 @@ def test_dedup_already_done_short_circuits_to_done(ctx_factory, monkeypatch):
 # 5. dedup exception → fall through to refine
 # ---------------------------------------------------------------------------
 
+
 def test_dedup_check_exception_proceeds_to_refine(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false")
     t = _ticket(ctx, body="Fix the bug")
 
     refine_called = []
 
-    monkeypatch.setattr(dedup, "run_dedup_check",
-                        lambda *a, **k: (_ for _ in ()).throw(Exception("boom")))
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        dedup,
+        "run_dedup_check",
+        lambda *a, **k: (_ for _ in ()).throw(Exception("boom")),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
         _mock_refine_ok(spec_markdown="## Problem\nDone"),
     )
     monkeypatch.setattr(refining, "triage_refine", _mock_triage_refine())
-    monkeypatch.setattr(refine_module, "load_memory", lambda memory_file, max_chars=None: "")
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
     monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
 
     # track that refine was called
     orig = refining.run_refine_agent
+
     def _track(*a, **k):
         refine_called.append(1)
         return orig(*a, **k)
+
     monkeypatch.setattr(refining, "run_refine_agent", _track)
 
     out = RefineStage().run(t, ctx)
@@ -268,6 +366,7 @@ def test_dedup_check_exception_proceeds_to_refine(ctx_factory, monkeypatch):
 # 7. clone failure → draft-only refine succeeds
 # ---------------------------------------------------------------------------
 
+
 def test_clone_failure_escalates_to_blocked_with_history_note(ctx_factory, monkeypatch):
     """A clone failure escalates to BLOCKED. The diagnostic + remediation
     hint land in the transition note (history) — v1 moved agent
@@ -279,7 +378,9 @@ def test_clone_failure_escalates_to_blocked_with_history_note(ctx_factory, monke
     _apply_default_mocks(
         monkeypatch,
         clone=lambda remote_url, dest, branch, token: (_ for _ in ()).throw(
-            subprocess.CalledProcessError(1, "git", stderr=b"fatal: repository not found")
+            subprocess.CalledProcessError(
+                1, "git", stderr=b"fatal: repository not found"
+            )
         ),
     )
 
@@ -297,12 +398,15 @@ def test_clone_failure_escalates_to_blocked_with_history_note(ctx_factory, monke
 # 8. successful refine → READY (autonomous)
 # ---------------------------------------------------------------------------
 
+
 def test_successful_refine_to_ready_autonomous(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, title="Fix logout", body="The logout button does nothing")
 
-    _apply_default_mocks(monkeypatch,
-                         run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nFix logout"))
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nFix logout"),
+    )
 
     out = RefineStage().run(t, ctx)
 
@@ -318,13 +422,15 @@ def test_successful_refine_to_ready_autonomous(ctx_factory, monkeypatch):
 # 9. successful refine with title override
 # ---------------------------------------------------------------------------
 
+
 def test_successful_refine_with_title_override(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, title="Fix thing", body="The logout button does nothing")
 
-    _apply_default_mocks(monkeypatch,
-                         run_refine_agent=_mock_refine_ok(spec_markdown="## P",
-                                                          title="Better Title"))
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(spec_markdown="## P", title="Better Title"),
+    )
 
     out = RefineStage().run(t, ctx)
 
@@ -336,13 +442,18 @@ def test_successful_refine_with_title_override(ctx_factory, monkeypatch):
 # 10. successful refine → HUMAN_ISSUE_APPROVAL (gated, auto-approve off)
 # ---------------------------------------------------------------------------
 
+
 def test_successful_refine_to_human_issue_approval_gated(ctx_factory, monkeypatch):
-    ctx = ctx_factory(require_approval="true", auto_approve_enabled="false",
-                      refine_triage_enabled="false")
+    ctx = ctx_factory(
+        require_approval="true",
+        auto_approve_enabled="false",
+        refine_triage_enabled="false",
+    )
     t = _ticket(ctx, body="Implement the thing")
 
-    _apply_default_mocks(monkeypatch,
-                         run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nFix"))
+    _apply_default_mocks(
+        monkeypatch, run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nFix")
+    )
 
     out = RefineStage().run(t, ctx)
 
@@ -353,15 +464,21 @@ def test_successful_refine_to_human_issue_approval_gated(ctx_factory, monkeypatc
 # 11. auto-approve: APPROVE → READY
 # ---------------------------------------------------------------------------
 
+
 def test_auto_approve_approve_routes_to_ready(ctx_factory, monkeypatch):
-    ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
-                      refine_triage_enabled="false")
+    ctx = ctx_factory(
+        require_approval="true",
+        auto_approve_enabled="true",
+        refine_triage_enabled="false",
+    )
     t = _ticket(ctx, body="Add a docstring to utils.py")
 
     _apply_default_mocks(
         monkeypatch,
         run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nAdd docstring"),
-        triage_auto_approve=_mock_auto_approve(decision="APPROVE", reason="no design decisions"),
+        triage_auto_approve=_mock_auto_approve(
+            decision="APPROVE", reason="no design decisions"
+        ),
     )
 
     out = RefineStage().run(t, ctx)
@@ -374,16 +491,21 @@ def test_auto_approve_approve_routes_to_ready(ctx_factory, monkeypatch):
 # 11b. auto-approve: test-gap source short-circuits to READY without LLM
 # ---------------------------------------------------------------------------
 
+
 def test_auto_approve_test_gap_source_short_circuits_to_ready(
-    ctx_factory, monkeypatch,
+    ctx_factory,
+    monkeypatch,
 ):
     """test_gap-sourced tickets must auto-approve deterministically and
     must NOT invoke the LLM triage. Test-gap tickets only add coverage
     so there's no design risk a human reviewer can meaningfully veto;
     three triage runs on 2026-05-28 all fell back to human and were
     rubber-stamped."""
-    ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
-                      refine_triage_enabled="false")
+    ctx = ctx_factory(
+        require_approval="true",
+        auto_approve_enabled="true",
+        refine_triage_enabled="false",
+    )
     t = ctx.service.create(
         "Add unit tests for foo.py",
         "Add unit tests for foo.py covering the bar branch — substantive "
@@ -412,7 +534,8 @@ def test_auto_approve_test_gap_source_short_circuits_to_ready(
 
 
 def test_auto_approve_audit_source_also_short_circuits(
-    ctx_factory, monkeypatch,
+    ctx_factory,
+    monkeypatch,
 ):
     """Round 3: audit, agent_check, bc_check, completeness_check,
     module_curator, copy_paste join test_gap as deterministic
@@ -421,11 +544,18 @@ def test_auto_approve_audit_source_also_short_circuits(
     cleanups — historically every one was rubber-stamped without
     rejection, so the LLM triage was pure toil."""
     for source in (
-        "audit", "agent_check", "bc_check", "completeness_check",
-        "module_curator", "copy_paste",
+        "audit",
+        "agent_check",
+        "bc_check",
+        "completeness_check",
+        "module_curator",
+        "copy_paste",
     ):
-        ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
-                          refine_triage_enabled="false")
+        ctx = ctx_factory(
+            require_approval="true",
+            auto_approve_enabled="true",
+            refine_triage_enabled="false",
+        )
         t = ctx.service.create(
             f"{source} proposal",
             "Substantive ticket body padded above the trivial-draft "
@@ -462,15 +592,21 @@ def test_auto_approve_audit_source_also_short_circuits(
 # 12. auto-approve: NEEDS_APPROVAL → HUMAN_ISSUE_APPROVAL
 # ---------------------------------------------------------------------------
 
+
 def test_auto_approve_needs_approval_routes_to_human(ctx_factory, monkeypatch):
-    ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
-                      refine_triage_enabled="false")
+    ctx = ctx_factory(
+        require_approval="true",
+        auto_approve_enabled="true",
+        refine_triage_enabled="false",
+    )
     t = _ticket(ctx, body="Redesign the auth module")
 
     _apply_default_mocks(
         monkeypatch,
         run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nRedesign auth"),
-        triage_auto_approve=_mock_auto_approve(decision="NEEDS_APPROVAL", reason="new API design"),
+        triage_auto_approve=_mock_auto_approve(
+            decision="NEEDS_APPROVAL", reason="new API design"
+        ),
     )
 
     out = RefineStage().run(t, ctx)
@@ -483,15 +619,21 @@ def test_auto_approve_needs_approval_routes_to_human(ctx_factory, monkeypatch):
 # 13. auto-approve triage failure → fallback to human
 # ---------------------------------------------------------------------------
 
+
 def test_auto_approve_triage_failure_falls_back_to_human(ctx_factory, monkeypatch):
-    ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
-                      refine_triage_enabled="false")
+    ctx = ctx_factory(
+        require_approval="true",
+        auto_approve_enabled="true",
+        refine_triage_enabled="false",
+    )
     t = _ticket(ctx, body="Update config defaults")
 
     _apply_default_mocks(
         monkeypatch,
         run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nUpdate config"),
-        triage_auto_approve=lambda *a, **k: (_ for _ in ()).throw(Exception("LLM timeout")),
+        triage_auto_approve=lambda *a, **k: (_ for _ in ()).throw(
+            Exception("LLM timeout")
+        ),
     )
 
     out = RefineStage().run(t, ctx)
@@ -504,6 +646,7 @@ def test_auto_approve_triage_failure_falls_back_to_human(ctx_factory, monkeypatc
 # 14. refine triage SKIP → bypasses agent
 # ---------------------------------------------------------------------------
 
+
 def test_refine_triage_skip_bypasses_agent(ctx_factory, monkeypatch):
     """When triage returns SKIP and the draft contains backtick-quoted
     file paths, the refine agent is bypassed and those paths are written
@@ -512,13 +655,22 @@ def test_refine_triage_skip_bypasses_agent(ctx_factory, monkeypatch):
     t = _ticket(ctx, body="Add docstring to foo() in `src/bar.py`")
 
     agent_called = []
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        lambda *a, **k: agent_called.append(1))
-    monkeypatch.setattr(refining, "triage_refine",
-                        _mock_triage_refine(decision="SKIP", reason="already precise"))
-    monkeypatch.setattr(dedup, "run_dedup_check",
-                        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"))
-    monkeypatch.setattr(refine_module, "load_memory", lambda memory_file, max_chars=None: "")
+    monkeypatch.setattr(
+        refining, "run_refine_agent", lambda *a, **k: agent_called.append(1)
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="SKIP", reason="already precise"),
+    )
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
     monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
 
     out = RefineStage().run(t, ctx)
@@ -541,6 +693,7 @@ def test_refine_triage_skip_bypasses_agent(ctx_factory, monkeypatch):
 # 14b. refine triage SKIP + no paths → falls through to refine agent
 # ---------------------------------------------------------------------------
 
+
 def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkeypatch):
     """When triage returns SKIP but the draft has no backtick-quoted
     file paths, do NOT write an empty file_map — fall through to the
@@ -552,7 +705,8 @@ def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkey
 
     refine_called = []
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda *a, **k: (
             refine_called.append(1),
             RefineResult(
@@ -561,11 +715,19 @@ def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkey
             ),
         )[-1],
     )
-    monkeypatch.setattr(refining, "triage_refine",
-                        _mock_triage_refine(decision="SKIP", reason="already precise"))
-    monkeypatch.setattr(dedup, "run_dedup_check",
-                        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"))
-    monkeypatch.setattr(refine_module, "load_memory", lambda memory_file, max_chars=None: "")
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="SKIP", reason="already precise"),
+    )
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
     monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
 
     out = RefineStage().run(t, ctx)
@@ -586,21 +748,31 @@ def test_refine_triage_skip_no_paths_falls_through_to_refine(ctx_factory, monkey
 # 15. refine triage exception → fall through to full refine
 # ---------------------------------------------------------------------------
 
+
 def test_refine_triage_exception_falls_through_to_full_refine(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="true")
     t = _ticket(ctx, body="Fix the thing")
 
     refine_called = []
-    monkeypatch.setattr(refining, "triage_refine",
-                        lambda *a, **k: (_ for _ in ()).throw(Exception("timeout")))
-    monkeypatch.setattr(dedup, "run_dedup_check",
-                        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"))
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        lambda *a, **k: (_ for _ in ()).throw(Exception("timeout")),
+    )
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
 
     def _refine(*a, **k):
         refine_called.append(1)
         return RefineResult(spec_markdown="## Problem\nDone")
+
     monkeypatch.setattr(refining, "run_refine_agent", _refine)
-    monkeypatch.setattr(refine_module, "load_memory", lambda memory_file, max_chars=None: "")
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
     monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
 
     out = RefineStage().run(t, ctx)
@@ -613,15 +785,24 @@ def test_refine_triage_exception_falls_through_to_full_refine(ctx_factory, monke
 # 16. refine agent RuntimeError → BLOCKED
 # ---------------------------------------------------------------------------
 
+
 def test_refine_agent_runtime_error_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory(refine_triage_enabled="false")
     t = _ticket(ctx, body="Fix the thing")
 
-    monkeypatch.setattr(dedup, "run_dedup_check",
-                        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"))
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        _mock_refine_raises(RuntimeError("OPENROUTER_API_KEY is not set")))
-    monkeypatch.setattr(refine_module, "load_memory", lambda memory_file, max_chars=None: "")
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        _mock_refine_raises(RuntimeError("OPENROUTER_API_KEY is not set")),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
     monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
 
     out = RefineStage().run(t, ctx)
@@ -634,12 +815,14 @@ def test_refine_agent_runtime_error_blocks(ctx_factory, monkeypatch):
 # 17. refiner empty spec → fallback (kept original draft)
 # ---------------------------------------------------------------------------
 
+
 def test_refiner_empty_spec_falls_back_to_draft(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Original draft body")
 
-    _apply_default_mocks(monkeypatch,
-                         run_refine_agent=_mock_refine_ok(spec_markdown=""))
+    _apply_default_mocks(
+        monkeypatch, run_refine_agent=_mock_refine_ok(spec_markdown="")
+    )
 
     out = RefineStage().run(t, ctx)
 
@@ -651,13 +834,32 @@ def test_refiner_empty_spec_falls_back_to_draft(ctx_factory, monkeypatch):
 # 18. refiner None spec → fallback
 # ---------------------------------------------------------------------------
 
+
 def test_refiner_none_spec_falls_back(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Original draft body")
 
-    def _refine_none(*, settings, title, draft, repo_dir=None, reviewer_comments=None,
-                     memory="", epic_context="", **kw):
-        del settings, title, draft, repo_dir, reviewer_comments, memory, epic_context, kw
+    def _refine_none(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        **kw,
+    ):
+        del (
+            settings,
+            title,
+            draft,
+            repo_dir,
+            reviewer_comments,
+            memory,
+            epic_context,
+            kw,
+        )
         return RefineResult(spec_markdown=None)
 
     _apply_default_mocks(monkeypatch, run_refine_agent=_refine_none)
@@ -672,6 +874,7 @@ def test_refiner_none_spec_falls_back(ctx_factory, monkeypatch):
 # 19. split child shortcut → detected and resolved
 # ---------------------------------------------------------------------------
 
+
 def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false")
     parent = ctx.service.create("Epic parent", "Split me", kind="epic")
@@ -680,6 +883,7 @@ def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
     from robotsix_mill.core.models import TicketEvent, Ticket as TicketModel
     from robotsix_mill.core.db import session as db_session
     from datetime import datetime, timezone
+
     with db_session(ctx.settings) as sess:
         tm = sess.get(TicketModel, parent.id)
         tm.state = State.CLOSED.value
@@ -692,12 +896,14 @@ def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
         sess.add(evt)
         sess.commit()
 
-    child = ctx.service.create("Child ticket", "## Problem\nAlready refined spec",
-                               parent_id=parent.id)
+    child = ctx.service.create(
+        "Child ticket", "## Problem\nAlready refined spec", parent_id=parent.id
+    )
 
     agent_called = []
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        lambda *a, **k: agent_called.append(1))
+    monkeypatch.setattr(
+        refining, "run_refine_agent", lambda *a, **k: agent_called.append(1)
+    )
 
     out = RefineStage().run(child, ctx)
 
@@ -710,6 +916,7 @@ def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
 # 20. split child empty description → BLOCKED
 # ---------------------------------------------------------------------------
 
+
 def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     parent = ctx.service.create("Epic parent", "Split me", kind="epic")
@@ -718,6 +925,7 @@ def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
     from robotsix_mill.core.models import TicketEvent, Ticket as TicketModel
     from robotsix_mill.core.db import session as db_session
     from datetime import datetime, timezone
+
     with db_session(ctx.settings) as sess:
         tm = sess.get(TicketModel, parent.id)
         tm.state = State.CLOSED.value
@@ -741,6 +949,7 @@ def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 # 21. successful split → creates children and closes parent
 # ---------------------------------------------------------------------------
+
 
 def test_successful_split_creates_children_and_closes_parent(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
@@ -788,6 +997,7 @@ def test_successful_split_creates_children_and_closes_parent(ctx_factory, monkey
 # 22. split with depends_on → resolves indices to real IDs
 # ---------------------------------------------------------------------------
 
+
 def test_split_with_depends_on_resolves_indices(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Big feature")
@@ -827,6 +1037,7 @@ def test_split_with_depends_on_resolves_indices(ctx_factory, monkeypatch):
 # 23. split with no valid children → BLOCKED
 # ---------------------------------------------------------------------------
 
+
 def test_split_no_valid_children_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory(refine_triage_enabled="false")
     t = _ticket(ctx, body="Big feature")
@@ -852,6 +1063,7 @@ def test_split_no_valid_children_blocks(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 # 24. split with single valid child → falls back to single spec
 # ---------------------------------------------------------------------------
+
 
 def test_split_single_valid_child_falls_back_to_single_spec(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
@@ -881,9 +1093,13 @@ def test_split_single_valid_child_falls_back_to_single_spec(ctx_factory, monkeyp
 # 25. spec review conciseness pass
 # ---------------------------------------------------------------------------
 
+
 def test_spec_review_conciseness_pass(ctx_factory, monkeypatch):
-    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false",
-                      spec_review_enabled="true")
+    ctx = ctx_factory(
+        require_approval="false",
+        refine_triage_enabled="false",
+        spec_review_enabled="true",
+    )
     t = _ticket(ctx, body="Do the change")
 
     verbose = "## Problem\nVerbose spec with exploration narrative\n\nI found that..."
@@ -891,7 +1107,8 @@ def test_spec_review_conciseness_pass(ctx_factory, monkeypatch):
         monkeypatch,
         run_refine_agent=_mock_refine_ok(spec_markdown=verbose),
         review_spec_for_conciseness=_mock_spec_review(
-            concise_spec="## short", stripped_summary="removed 3 lines",
+            concise_spec="## short",
+            stripped_summary="removed 3 lines",
         ),
     )
 
@@ -907,16 +1124,22 @@ def test_spec_review_conciseness_pass(ctx_factory, monkeypatch):
 # 26. spec review failure → uses verbose spec
 # ---------------------------------------------------------------------------
 
+
 def test_spec_review_failure_uses_verbose_spec(ctx_factory, monkeypatch):
-    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false",
-                      spec_review_enabled="true")
+    ctx = ctx_factory(
+        require_approval="false",
+        refine_triage_enabled="false",
+        spec_review_enabled="true",
+    )
     t = _ticket(ctx, body="Do the change")
 
     verbose = "## Problem\nOriginal verbose spec"
     _apply_default_mocks(
         monkeypatch,
         run_refine_agent=_mock_refine_ok(spec_markdown=verbose),
-        review_spec_for_conciseness=lambda *a, **k: (_ for _ in ()).throw(Exception("timeout")),
+        review_spec_for_conciseness=lambda *a, **k: (_ for _ in ()).throw(
+            Exception("timeout")
+        ),
     )
 
     out = RefineStage().run(t, ctx)
@@ -929,6 +1152,7 @@ def test_spec_review_failure_uses_verbose_spec(ctx_factory, monkeypatch):
 # 27. epic body applied in autonomous mode
 # ---------------------------------------------------------------------------
 
+
 def test_epic_body_applied_in_autonomous_mode(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     epic = ctx.service.create("Epic", "Original epic goal", kind="epic")
@@ -937,7 +1161,8 @@ def test_epic_body_applied_in_autonomous_mode(ctx_factory, monkeypatch):
     _apply_default_mocks(
         monkeypatch,
         run_refine_agent=_mock_refine_ok(
-            spec_markdown="## P", epic_body="Updated epic goal",
+            spec_markdown="## P",
+            epic_body="Updated epic goal",
         ),
     )
 
@@ -951,16 +1176,21 @@ def test_epic_body_applied_in_autonomous_mode(ctx_factory, monkeypatch):
 # 28. epic body stored as artifact in gated mode
 # ---------------------------------------------------------------------------
 
+
 def test_epic_body_stored_as_artifact_in_gated_mode(ctx_factory, monkeypatch):
-    ctx = ctx_factory(require_approval="true", auto_approve_enabled="false",
-                      refine_triage_enabled="false")
+    ctx = ctx_factory(
+        require_approval="true",
+        auto_approve_enabled="false",
+        refine_triage_enabled="false",
+    )
     epic = ctx.service.create("Epic", "Original epic goal", kind="epic")
     child = ctx.service.create("Child", "Do part of epic", parent_id=epic.id)
 
     _apply_default_mocks(
         monkeypatch,
         run_refine_agent=_mock_refine_ok(
-            spec_markdown="## P", epic_body="Updated epic goal",
+            spec_markdown="## P",
+            epic_body="Updated epic goal",
         ),
     )
 
@@ -980,20 +1210,33 @@ def test_epic_body_stored_as_artifact_in_gated_mode(ctx_factory, monkeypatch):
 # 29. memory load and persist cycle
 # ---------------------------------------------------------------------------
 
+
 def test_memory_load_and_persist_cycle(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx, body="Fix the widget")
 
     persisted: list[str] = []
-    monkeypatch.setattr(refine_module, "load_memory",
-                        lambda memory_file, max_chars=None: "prior knowledge")
-    monkeypatch.setattr(refine_module, "persist_memory",
-                        lambda memory_file, text: persisted.append(text))
-    monkeypatch.setattr(refining, "run_refine_agent",
-                        _mock_refine_ok(spec_markdown="## P", updated_memory="new knowledge"))
+    monkeypatch.setattr(
+        refine_module,
+        "load_memory",
+        lambda memory_file, max_chars=None: "prior knowledge",
+    )
+    monkeypatch.setattr(
+        refine_module,
+        "persist_memory",
+        lambda memory_file, text: persisted.append(text),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        _mock_refine_ok(spec_markdown="## P", updated_memory="new knowledge"),
+    )
     monkeypatch.setattr(refining, "triage_refine", _mock_triage_refine())
-    monkeypatch.setattr(dedup, "run_dedup_check",
-                        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"))
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
 
     out = RefineStage().run(t, ctx)
 
@@ -1005,6 +1248,7 @@ def test_memory_load_and_persist_cycle(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 # 30. no forge remote URL → skips clone
 # ---------------------------------------------------------------------------
+
 
 def test_no_forge_remote_url_skips_clone(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
@@ -1026,6 +1270,7 @@ def test_no_forge_remote_url_skips_clone(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 # 31. split creates umbrella epic with title from result.title
 # ---------------------------------------------------------------------------
+
 
 def test_split_creates_umbrella_epic_with_result_title(ctx_factory, monkeypatch):
     """When no epic parent exists, a new umbrella epic is created and
@@ -1069,6 +1314,7 @@ def test_split_creates_umbrella_epic_with_result_title(ctx_factory, monkeypatch)
 # 32. split epic title fallback — uses ticket title when result.title is None
 # ---------------------------------------------------------------------------
 
+
 def test_split_epic_title_fallback_to_ticket_title(ctx_factory, monkeypatch):
     """When result.title is None or empty, the epic title = original ticket title."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
@@ -1100,6 +1346,7 @@ def test_split_epic_title_fallback_to_ticket_title(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 # 33. split epic description fallback — uses draft when spec_markdown is empty
 # ---------------------------------------------------------------------------
+
 
 def test_split_epic_description_fallback_to_draft(ctx_factory, monkeypatch):
     """When result.spec_markdown is empty/None, epic description = original draft."""
@@ -1136,13 +1383,16 @@ def test_split_epic_description_fallback_to_draft(ctx_factory, monkeypatch):
 # 34. split with existing epic parent — children reparented to it
 # ---------------------------------------------------------------------------
 
+
 def test_split_with_existing_epic_reparents_children(ctx_factory, monkeypatch):
     """When the ticket already belongs to an epic, children are reparented
     to the existing epic — no new epic is created."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     existing_epic = ctx.service.create("Existing Epic", "Epic description", kind="epic")
     child_of_epic = ctx.service.create(
-        "Split me", "Break into parts", parent_id=existing_epic.id,
+        "Split me",
+        "Break into parts",
+        parent_id=existing_epic.id,
     )
 
     _apply_default_mocks(
@@ -1180,7 +1430,9 @@ def test_split_with_existing_epic_reparents_children(ctx_factory, monkeypatch):
         assert child.state is State.READY
 
     # Epic body write-back fired: the existing epic's description was updated.
-    assert "Updated epic body" in ctx.service.workspace(existing_epic).read_description()
+    assert (
+        "Updated epic body" in ctx.service.workspace(existing_epic).read_description()
+    )
 
     # Original (closed) ticket has no children parented to it.
     orphaned = [tk for tk in all_tickets if tk.parent_id == child_of_epic.id]
@@ -1190,6 +1442,7 @@ def test_split_with_existing_epic_reparents_children(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 # 30. promote_to_epic: refine converts ticket to epic and spawns children
 # ---------------------------------------------------------------------------
+
 
 def test_promote_to_epic_converts_and_spawns_children(ctx_factory, monkeypatch):
     """When refine returns ``promote_to_epic=true`` with an ``epic_body``,
@@ -1209,19 +1462,29 @@ def test_promote_to_epic_converts_and_spawns_children(ctx_factory, monkeypatch):
     from robotsix_mill.agents import epic_breakdown as _ebreak
 
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
-    t = _ticket(ctx, title="Reorganize repo into modular layout",
-                body="For each module in docs/modules.yaml, "
-                     "create the parallel directories...")
+    t = _ticket(
+        ctx,
+        title="Reorganize repo into modular layout",
+        body="For each module in docs/modules.yaml, create the parallel directories...",
+    )
 
     class _FakeBreakdown:
         def __init__(self):
-            self.child_titles = ["Migrate runners", "Migrate langfuse",
-                                 "Migrate notify"]
-            self.child_bodies = ["## Migrate runners\n...", "## Migrate langfuse\n...", "## Migrate notify\n..."]
+            self.child_titles = [
+                "Migrate runners",
+                "Migrate langfuse",
+                "Migrate notify",
+            ]
+            self.child_bodies = [
+                "## Migrate runners\n...",
+                "## Migrate langfuse\n...",
+                "## Migrate notify\n...",
+            ]
             self.epic_body = "## Epic: modular layout migration\n..."
 
     monkeypatch.setattr(
-        _ebreak, "run_epic_breakdown_agent",
+        _ebreak,
+        "run_epic_breakdown_agent",
         lambda **kw: _FakeBreakdown(),
     )
 
@@ -1270,6 +1533,7 @@ def test_promote_to_epic_converts_and_spawns_children(ctx_factory, monkeypatch):
 # 31. promote_to_epic: breakdown failure leaves epic in place
 # ---------------------------------------------------------------------------
 
+
 def test_promote_to_epic_breakdown_failure_leaves_epic_intact(ctx_factory, monkeypatch):
     """A flaky epic-breakdown run must NOT block the refine stage —
     the ticket is still promoted to an epic so the operator can hit
@@ -1315,8 +1579,10 @@ def test_promote_to_epic_breakdown_failure_leaves_epic_intact(ctx_factory, monke
 # 32. no_change_needed: refine closes ticket directly to DONE with rationale comment
 # ---------------------------------------------------------------------------
 
+
 def test_no_change_needed_closes_to_done_with_rationale_comment(
-    ctx_factory, monkeypatch,
+    ctx_factory,
+    monkeypatch,
 ):
     """When refine returns ``no_change_needed=True`` with a rationale,
     the stage:
@@ -1331,12 +1597,15 @@ def test_no_change_needed_closes_to_done_with_rationale_comment(
     findings' got stuck because implement had no way to communicate.
     Now refine handles it directly via history."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
-    t = _ticket(ctx, body=(
-        "## Problem\n\nThe env_sync detector flagged X as drift, but "
-        "investigation shows it's a false positive — see Evidence "
-        "below.\n\n## Acceptance criteria\n\nPost a comment explaining "
-        "the false positive and close."
-    ))
+    t = _ticket(
+        ctx,
+        body=(
+            "## Problem\n\nThe env_sync detector flagged X as drift, but "
+            "investigation shows it's a false positive — see Evidence "
+            "below.\n\n## Acceptance criteria\n\nPost a comment explaining "
+            "the false positive and close."
+        ),
+    )
 
     _apply_default_mocks(
         monkeypatch,
@@ -1370,8 +1639,10 @@ def test_no_change_needed_closes_to_done_with_rationale_comment(
 # 33. no_change_needed without rationale falls back to normal spec path
 # ---------------------------------------------------------------------------
 
+
 def test_no_change_needed_empty_rationale_falls_back_to_spec(
-    ctx_factory, monkeypatch,
+    ctx_factory,
+    monkeypatch,
 ):
     """Refine returning no_change_needed=true with an EMPTY rationale
     must NOT close the ticket — closing without explanation is worse

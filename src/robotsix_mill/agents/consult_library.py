@@ -43,10 +43,12 @@ log = logging.getLogger(__name__)
 
 _LIBRARY_SLUG_RE = re.compile(r"[^a-z0-9._-]+")
 _FRONTMATTER_RE = re.compile(
-    r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL,
+    r"\A---\n(.*?)\n---\n(.*)\Z",
+    re.DOTALL,
 )
 _LAST_UPDATED_RE = re.compile(
-    r"^last_updated:\s*(\S+)\s*$", re.MULTILINE,
+    r"^last_updated:\s*(\S+)\s*$",
+    re.MULTILINE,
 )
 
 
@@ -148,7 +150,9 @@ def _is_fresh(last_updated: datetime | None, stale_days: int) -> bool:
 
 
 def _stamp_frontmatter(
-    library: str, body: str, sources: list[str] | None = None,
+    library: str,
+    body: str,
+    sources: list[str] | None = None,
 ) -> str:
     """Render the frontmatter + body for a knowledge file."""
     now = datetime.now(timezone.utc).isoformat()
@@ -195,7 +199,8 @@ def run_consult_library(
             last_updated, cached_body = _parse_cache(raw)
         except OSError:
             log.warning(
-                "consult_library: %s exists but is unreadable", path,
+                "consult_library: %s exists but is unreadable",
+                path,
             )
 
     fresh = _is_fresh(last_updated, settings.library_knowledge_stale_days)
@@ -253,7 +258,8 @@ def _answer_from_cache(
         name="library_answerer",
     )
     prompt = (
-        section("cached-knowledge", cached_body) + "\n\n"
+        section("cached-knowledge", cached_body)
+        + "\n\n"
         + section("question", question)
     )
     limits = UsageLimits(
@@ -262,7 +268,8 @@ def _answer_from_cache(
     try:
         result = call_with_retry(
             lambda: agent.run_sync(prompt, usage_limits=limits),
-            settings=settings, what="consult_library:answer",
+            settings=settings,
+            what="consult_library:answer",
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller
         return f"consult_library failed: {e}"
@@ -322,7 +329,8 @@ def _refresh_and_answer(
     try:
         result = call_with_retry(
             lambda: agent.run_sync(prompt, usage_limits=limits),
-            settings=settings, what="consult_library:curate",
+            settings=settings,
+            what="consult_library:curate",
         )
     except Exception as e:  # noqa: BLE001 — degrade
         log.warning("consult_library curator failed: %s", e)
@@ -347,14 +355,17 @@ def _refresh_and_answer(
         except Exception:  # noqa: BLE001 — best-effort
             log.warning(
                 "consult_library: could not persist %s",
-                knowledge_path, exc_info=True,
+                knowledge_path,
+                exc_info=True,
             )
 
     return output.answer
 
 
 def make_consult_library_tool(
-    settings: Settings, *, board_id: str = "",
+    settings: Settings,
+    *,
+    board_id: str = "",
 ):
     """Build the ``consult_library`` tool exposed to a coordinator.
 
@@ -386,20 +397,22 @@ def make_consult_library_tool(
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="consult_library",
-        description=(
-            "Look up information about a library or framework. "
-            "Cached per-library; refreshes from the web only when the "
-            "cache is stale or doesn't cover the question. Prefer this "
-            "over web_research for library API questions."
-        ),
-        category="exploration",
-        parameters={
-            "library": "str (import name, e.g. 'imaplib')",
-            "question": "str (one focused question)",
-        },
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="consult_library",
+            description=(
+                "Look up information about a library or framework. "
+                "Cached per-library; refreshes from the web only when the "
+                "cache is stale or doesn't cover the question. Prefer this "
+                "over web_research for library API questions."
+            ),
+            category="exploration",
+            parameters={
+                "library": "str (import name, e.g. 'imaplib')",
+                "question": "str (one focused question)",
+            },
+        )
+    )
 
     return consult_library
 

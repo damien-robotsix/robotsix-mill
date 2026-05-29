@@ -32,7 +32,7 @@ _CI_FIX_COUNTER = "ci_fix_attempts.txt"
 def _read_counter(path) -> int:
     try:
         return int(path.read_text(encoding="utf-8").strip())
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError, ValueError:
         return 0
 
 
@@ -83,6 +83,7 @@ def _build_failing_summary(failing: list[dict], log_text: str = "") -> str:
 
 class CIFixStage(Stage):
     """Check forge CI status and run automated fix logic to resolve CI failures on the ticket branch."""
+
     name = "ci_fix"
     input_state = State.FIXING_CI
     traced = False
@@ -111,7 +112,9 @@ class CIFixStage(Stage):
 
         # Fetch check status from the forge.
         try:
-            status = get_forge(s, repo_config=ctx.repo_config).check_status(source_branch=branch)
+            status = get_forge(s, repo_config=ctx.repo_config).check_status(
+                source_branch=branch
+            )
         except Exception as e:  # noqa: BLE001 — transient
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
@@ -148,9 +151,7 @@ class CIFixStage(Stage):
                 runs = forge.list_workflow_runs(head_sha=head_sha)
                 for run in runs:
                     if run.get("conclusion") == "failure":
-                        logs = forge.fetch_workflow_job_logs(
-                            run_id=run["id"]
-                        )
+                        logs = forge.fetch_workflow_job_logs(run_id=run["id"])
                         if logs:
                             log_text += (
                                 f"\n--- {run.get('name', 'workflow')} "
@@ -161,15 +162,15 @@ class CIFixStage(Stage):
 
         failing_summary = _build_failing_summary(failing, log_text)
 
-        counter_path = (
-            ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
-        )
+        counter_path = ctx.service.workspace(ticket).artifacts_dir / _CI_FIX_COUNTER
         attempt = _read_counter(counter_path) + 1
         max_attempts = s.ci_fix_max_attempts
 
         log.info(
             "%s: CI failing — ci-fix attempt %d/%d",
-            ticket.id, attempt, max_attempts,
+            ticket.id,
+            attempt,
+            max_attempts,
         )
 
         try:
@@ -208,9 +209,7 @@ class CIFixStage(Stage):
                     token=github_token(s),
                 )
             except Exception as e:  # noqa: BLE001
-                log.exception(
-                    "%s: force-push after ci-fix failed: %s", ticket.id, e
-                )
+                log.exception("%s: force-push after ci-fix failed: %s", ticket.id, e)
                 _write_counter(counter_path, attempt)
                 return Outcome(
                     State.BLOCKED,
@@ -226,7 +225,9 @@ class CIFixStage(Stage):
             _write_counter(counter_path, attempt)
             log.warning(
                 "%s: ci-fix attempt %d/%d failed — retrying next poll",
-                ticket.id, attempt, max_attempts,
+                ticket.id,
+                attempt,
+                max_attempts,
             )
             return Outcome(State.IMPLEMENT_COMPLETE)  # no-op; retry next poll
 

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import select
 
 from .core.db import session
-from .core.models import Comment, Ticket
+from .core.models import Ticket
 from .core.service import TicketService
 from .core.states import State
 from .notify import send_notification
@@ -122,15 +122,14 @@ def run_timeout_escalation(settings: Settings) -> dict:
                 # operator HAS responded — skip escalation.
                 comments = service.list_comments(ticket.id)
                 ask_threads = [
-                    c for c in comments
+                    c
+                    for c in comments
                     if c.parent_id is None and (c.body or "").startswith("[ASK_USER]")
                 ]
                 if ask_threads:
                     # Collect all top-level ask-thread IDs.
                     ask_ids = {t.id for t in ask_threads}
-                    has_reply = any(
-                        c.parent_id in ask_ids for c in comments
-                    )
+                    has_reply = any(c.parent_id in ask_ids for c in comments)
                     if has_reply:
                         log.info(
                             "timeout_escalation: %s has operator reply in "
@@ -141,7 +140,9 @@ def run_timeout_escalation(settings: Settings) -> dict:
                         continue
 
                 # Calculate staleness for the comment.
-                stale_delta = datetime.now(timezone.utc) - ticket.updated_at.replace(tzinfo=timezone.utc)
+                stale_delta = datetime.now(timezone.utc) - ticket.updated_at.replace(
+                    tzinfo=timezone.utc
+                )
                 stale_days = max(1, stale_delta.days)
 
                 # Build the escalation note (fits in a 200-char transition note).
@@ -187,6 +188,7 @@ def run_timeout_escalation(settings: Settings) -> dict:
 
     log.info(
         "timeout_escalation: pass complete — escalated=%d skipped=%d",
-        escalated, skipped,
+        escalated,
+        skipped,
     )
     return {"escaped": escalated, "skipped": skipped}

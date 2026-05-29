@@ -53,8 +53,8 @@ def test_service_error_returns_formatted_error(settings, monkeypatch):
     )
     monkeypatch.setattr(
         "robotsix_mill.core.service.TicketService.add_comment",
-        lambda self, ticket_id, body, author, parent_id=None: (
-            (_ for _ in ()).throw(ValueError("parent comment not found"))
+        lambda self, ticket_id, body, author, parent_id=None: (_ for _ in ()).throw(
+            ValueError("parent comment not found")
         ),
     )
 

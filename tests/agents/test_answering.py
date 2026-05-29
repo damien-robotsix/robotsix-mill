@@ -176,6 +176,7 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
             def run_sync(self, prompt):
                 class R:
                     output = "the answer"
+
                 return R()
 
             def close(self):
@@ -235,6 +236,7 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
             def run_sync(self, prompt):
                 class R:
                     output = "the answer"
+
                 return R()
 
             def close(self):
@@ -264,9 +266,7 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
         lambda settings, tid: None,
     )
 
-    result = run_answer_agent(
-        settings=s, title="T", question="Q", repo_dir=tmp_path
-    )
+    result = run_answer_agent(settings=s, title="T", question="Q", repo_dir=tmp_path)
     assert result == "the answer"
     # Explore and fs tools present
     assert "explore" in cap["tools"]
@@ -311,5 +311,6 @@ def test_run_answer_agent_runtime_error_on_missing_api_key(tmp_path, monkeypatch
     )
 
     import pytest
+
     with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
         run_answer_agent(settings=s, title="T", question="Q")

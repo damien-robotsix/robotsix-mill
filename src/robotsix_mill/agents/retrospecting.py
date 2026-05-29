@@ -104,7 +104,9 @@ def run_retrospect_agent(
     from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "retrospect.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "retrospect.yaml"
     )
 
     # PromptedOutput (not the default ToolOutput): the cheap driver
@@ -113,17 +115,23 @@ def run_retrospect_agent(
     # either — but it produces schema-valid JSON from a prompt fine.
     # This keeps retrospect on the cheap model (no deepseek cost).
     agent = build_agent_from_definition(
-        settings, definition, tools=[],
+        settings,
+        definition,
+        tools=[],
         model_name=definition.model or settings.retrospect_model,
     )
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (
         f"{recent_proposals}"
-        + section("ticket", ticket_summary) + "\n\n"
-        + section("workflow", history_text) + "\n\n"
-        + section("langfuse", lf) + "\n\n"
-        + section("comments", comments_text or '(no comments)') + "\n\n"
-        + section("memory", memory or '(empty — start a new ledger)')
+        + section("ticket", ticket_summary)
+        + "\n\n"
+        + section("workflow", history_text)
+        + "\n\n"
+        + section("langfuse", lf)
+        + "\n\n"
+        + section("comments", comments_text or "(no comments)")
+        + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
     )
     if epic_context:
         prompt += f"\n\n{epic_context}"

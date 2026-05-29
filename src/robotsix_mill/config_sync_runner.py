@@ -10,6 +10,13 @@ from .periodic_runner import (
 )
 
 
-def run_config_sync_pass(session_id: str, repo_config: RepoConfig | None = None) -> ConfigSyncPassResult:
+def run_config_sync_pass(
+    session_id: str, repo_config: RepoConfig | None = None
+) -> ConfigSyncPassResult:
     settings = Settings()
-    return run_periodic_pass(session_id, repo_config, config=PERIODIC_PASS_CONFIGS["config_sync"], settings=settings)
+    return run_periodic_pass(
+        session_id,
+        repo_config,
+        config=PERIODIC_PASS_CONFIGS["config_sync"],
+        settings=settings,
+    )

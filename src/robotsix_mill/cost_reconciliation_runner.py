@@ -53,7 +53,8 @@ def _yesterday_date_str() -> str:
 
 
 def _fetch_openrouter_daily(
-    settings: Settings, date_str: str,
+    settings: Settings,
+    date_str: str,
 ) -> tuple[float, str] | None:
     """Fetch yesterday's spend from the OpenRouter management API.
 
@@ -85,7 +86,8 @@ def _fetch_openrouter_daily(
     except Exception:
         log.warning(
             "cost_reconciliation: OpenRouter API request failed for %s",
-            date_str, exc_info=True,
+            date_str,
+            exc_info=True,
         )
         return None
 
@@ -100,16 +102,15 @@ def _fetch_openrouter_daily(
     if r.status_code != 200:
         log.warning(
             "cost_reconciliation: OpenRouter API returned %d for %s",
-            r.status_code, date_str,
+            r.status_code,
+            date_str,
         )
         return None
 
     try:
         data = r.json()
     except ValueError:
-        log.warning(
-            "cost_reconciliation: OpenRouter API returned non-JSON response"
-        )
+        log.warning("cost_reconciliation: OpenRouter API returned non-JSON response")
         return None
 
     entries = data.get("data", [])
@@ -134,7 +135,9 @@ def _fetch_openrouter_daily(
 
     log.info(
         "cost_reconciliation: OpenRouter %s total = $%.4f (%d model entries)",
-        date_str, total_usd, len(entries),
+        date_str,
+        total_usd,
+        len(entries),
     )
     return total_usd, breakdown
 
@@ -145,7 +148,9 @@ def _fetch_openrouter_daily(
 
 
 def _fetch_langfuse_daily(
-    settings: Settings, from_ts: str, to_ts: str,
+    settings: Settings,
+    from_ts: str,
+    to_ts: str,
     repo_config: RepoConfig | None = None,
 ) -> tuple[float, str]:
     """Fetch yesterday's total cost from Langfuse by paginating all
@@ -157,7 +162,7 @@ def _fetch_langfuse_daily(
     from .langfuse_client import _langfuse_api_get
 
     PAGE_SIZE = 100
-    EXAMINE_CAP = 2000   # safety cap — a single day shouldn't exceed this
+    EXAMINE_CAP = 2000  # safety cap — a single day shouldn't exceed this
 
     all_traces: list[dict] = []
     page = 1
@@ -229,15 +234,17 @@ def _fetch_langfuse_daily(
         )
 
     if zero_cost_count > 0:
-        breakdown_lines.append(
-            f"\n  ({zero_cost_count} traces with zero cost)"
-        )
+        breakdown_lines.append(f"\n  ({zero_cost_count} traces with zero cost)")
 
     breakdown = "\n".join(breakdown_lines) if breakdown_lines else "(no traces)"
 
     log.info(
         "cost_reconciliation: Langfuse %s → %s total = $%.4f (%d traces, %d pages)",
-        from_ts[:10], to_ts[:10], total_cost, len(traces), page,
+        from_ts[:10],
+        to_ts[:10],
+        total_cost,
+        len(traces),
+        page,
     )
     return total_cost, breakdown
 
@@ -286,23 +293,29 @@ def run_cost_reconciliation_pass(
     or_total, or_breakdown = or_result
 
     # --- Langfuse ------------------------------------------------------
-    lf_total, lf_breakdown = _fetch_langfuse_daily(settings, from_ts, to_ts, repo_config=repo_config)
+    lf_total, lf_breakdown = _fetch_langfuse_daily(
+        settings, from_ts, to_ts, repo_config=repo_config
+    )
 
     # --- Compare -------------------------------------------------------
     delta = abs(or_total - lf_total)
 
     log.info(
         "cost_reconciliation: %s — OR=$%.4f LF=$%.4f delta=$%.4f",
-        date_str, or_total, lf_total, delta,
+        date_str,
+        or_total,
+        lf_total,
+        delta,
     )
 
     if delta <= 1.00:
-        summary = (
-            f"clean: OR=${or_total:.2f} LF=${lf_total:.2f} delta=${delta:.2f}"
-        )
+        summary = f"clean: OR=${or_total:.2f} LF=${lf_total:.2f} delta=${delta:.2f}"
         log.info("cost_reconciliation: %s", summary)
         return CostReconciliationPassResult(
-            drafts_created=[], summary=summary, updated_memory="", session_id=session_id,
+            drafts_created=[],
+            summary=summary,
+            updated_memory="",
+            session_id=session_id,
         )
 
     # --- Prior-proposal dedup -----------------------------------------
@@ -311,14 +324,18 @@ def run_cost_reconciliation_pass(
     from .pass_runner import _verify_prior_proposals
 
     prior = _verify_prior_proposals(
-        service, settings, SourceKind.COST_RECONCILIATION,
+        service,
+        settings,
+        SourceKind.COST_RECONCILIATION,
     )
     if date_str in prior:
         ticket_id = prior[date_str].get("ticket_id", "?")
         summary = f"already filed: {ticket_id} (date={date_str})"
         log.info("cost_reconciliation: %s", summary)
         return CostReconciliationPassResult(
-            drafts_created=[], summary=summary, updated_memory="",
+            drafts_created=[],
+            summary=summary,
+            updated_memory="",
             session_id=session_id,
         )
 
@@ -379,7 +396,8 @@ def run_cost_reconciliation_pass(
         )
         log.info(
             "cost_reconciliation: created draft %s — %s",
-            ticket.id, title,
+            ticket.id,
+            title,
         )
         return CostReconciliationPassResult(
             drafts_created=[{"id": ticket.id, "title": ticket.title}],

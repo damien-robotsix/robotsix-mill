@@ -57,9 +57,7 @@ class GitLabForge(Forge):
     # Public methods mandated by Forge ABC
     # ------------------------------------------------------------------
 
-    def open_merge_request(
-        self, *, source_branch: str, title: str, body: str
-    ) -> str:
+    def open_merge_request(self, *, source_branch: str, title: str, body: str) -> str:
         s = self.settings
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._create_mr(
@@ -72,7 +70,6 @@ class GitLabForge(Forge):
 
     def pr_status(self, *, source_branch: str) -> dict | None:
         try:
-            s = self.settings
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
@@ -82,8 +79,7 @@ class GitLabForge(Forge):
                 "state": mr["state"],
                 "url": mr["web_url"],
                 "mergeable": _map_merge_status(mr.get("merge_status", "")),
-                "sha": (mr.get("diff_refs") or {}).get("head_sha")
-                       or mr.get("sha", ""),
+                "sha": (mr.get("diff_refs") or {}).get("head_sha") or mr.get("sha", ""),
                 "number": mr["iid"],
             }
         except Exception:
@@ -91,7 +87,6 @@ class GitLabForge(Forge):
 
     def check_status(self, *, source_branch: str) -> dict | None:
         try:
-            s = self.settings
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
@@ -114,20 +109,19 @@ class GitLabForge(Forge):
 
     def pr_files(self, *, source_branch: str) -> list[dict]:
         try:
-            s = self.settings
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
                 return []
             return self._mr_changes(
-                project_path=project_path, mr_iid=mr["iid"],
+                project_path=project_path,
+                mr_iid=mr["iid"],
             )
         except Exception:
             return []
 
     def merge_pr(self, *, source_branch: str) -> dict:
         try:
-            s = self.settings
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
@@ -176,8 +170,7 @@ class GitLabForge(Forge):
             if r.status_code == 200:
                 return r.json()["id"]
             raise RuntimeError(
-                f"GitLab project lookup failed: {r.status_code} "
-                f"{r.text[:300]}"
+                f"GitLab project lookup failed: {r.status_code} {r.text[:300]}"
             )
 
     def _find_mr(
@@ -206,9 +199,7 @@ class GitLabForge(Forge):
                 return None
             return items[0]
 
-    def _get_latest_pipeline(
-        self, project_path: str, mr_iid: int
-    ) -> dict | None:
+    def _get_latest_pipeline(self, project_path: str, mr_iid: int) -> dict | None:
         """GET /projects/:id/merge_requests/:iid/pipelines?per_page=1."""
         import httpx
 
@@ -228,9 +219,7 @@ class GitLabForge(Forge):
                 return None
             return items[0]
 
-    def _get_failed_jobs(
-        self, project_path: str, pipeline_id: int
-    ) -> list[dict]:
+    def _get_failed_jobs(self, project_path: str, pipeline_id: int) -> list[dict]:
         """GET /projects/:id/pipelines/:pipeline_id/jobs?scope=failed&per_page=20."""
         import httpx
 
@@ -302,12 +291,13 @@ class GitLabForge(Forge):
                 if existing:
                     return existing["web_url"]
             raise RuntimeError(
-                f"GitLab MR create failed: {r.status_code} "
-                f"{r.text[:300]}"
+                f"GitLab MR create failed: {r.status_code} {r.text[:300]}"
             )
 
     def _mr_changes(
-        self, project_path: str, mr_iid: int,
+        self,
+        project_path: str,
+        mr_iid: int,
     ) -> list[dict]:
         """GET /projects/:id/merge_requests/:iid/changes → normalized file list."""
         import httpx
@@ -349,12 +339,14 @@ class GitLabForge(Forge):
                     elif line.startswith("-") and not line.startswith("---"):
                         deletions += 1
 
-            result.append({
-                "path": path,
-                "status": status,
-                "additions": additions,
-                "deletions": deletions,
-            })
+            result.append(
+                {
+                    "path": path,
+                    "status": status,
+                    "additions": additions,
+                    "deletions": deletions,
+                }
+            )
         return result
 
     def _merge_mr(self, project_path: str, mr_iid: int) -> dict:
@@ -417,8 +409,13 @@ def _map_pipeline_status(status: str) -> str | None:
     if status in ("failed", "canceled"):
         return "failure"
     if status in (
-        "pending", "running", "created", "waiting_for_resource",
-        "preparing", "manual", "scheduled",
+        "pending",
+        "running",
+        "created",
+        "waiting_for_resource",
+        "preparing",
+        "manual",
+        "scheduled",
     ):
         return "pending"
     return None

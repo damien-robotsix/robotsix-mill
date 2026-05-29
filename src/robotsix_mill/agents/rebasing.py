@@ -62,18 +62,22 @@ def run_rebase_agent(
     tools = build_fs_tools(Path(repo_dir), settings)
 
     system_prompt = definition.system_prompt.format(
-        repo_dir=repo_dir, target=target, branch=branch,
+        repo_dir=repo_dir,
+        target=target,
+        branch=branch,
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         system_prompt=system_prompt,
     )
 
     user_prompt = (
         f"Rebase branch '{branch}' onto origin/{target} in {repo_dir}. "
         + "Follow the system prompt exactly.\n\n"
-        + section("memory", memory or '(empty — start a new ledger)')
+        + section("memory", memory or "(empty — start a new ledger)")
     )
 
     try:

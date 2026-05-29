@@ -4,8 +4,6 @@ Covers prompt-content semantic anchors (auto-merge eligibility) and
 the configurable request-limit plumbing (MILL_REVIEW_REQUEST_LIMIT).
 """
 
-from pathlib import Path
-
 import pytest
 from pydantic_ai.usage import UsageLimits
 
@@ -20,6 +18,7 @@ from robotsix_mill.config import Settings, Secrets, _reset_secrets
 # ------------------------------------------------------------------
 # Field description — semantic anchors
 # ------------------------------------------------------------------
+
 
 def test_auto_merge_eligible_description_approve_true():
     """Field description anchors: APPROVE + no specific concern → true."""
@@ -56,6 +55,7 @@ def test_auto_merge_eligible_description_request_changes_false():
 # ------------------------------------------------------------------
 # Normalise whitespace so assertions aren't tripped up by multi-line
 # prose that wraps long lines at ~80 cols.
+
 
 @pytest.fixture
 def prompt() -> str:
@@ -103,6 +103,7 @@ def test_system_prompt_tie_breaker_human_judgment_concern(prompt):
 # Pydantic default unchanged
 # ------------------------------------------------------------------
 
+
 def test_auto_merge_eligible_default_is_false():
     """Pydantic default=False must be preserved — the prompt bias is what
     changes operational behaviour, not the structural fallback."""
@@ -113,12 +114,14 @@ def test_auto_merge_eligible_default_is_false():
 # Request-limit config knob
 # ------------------------------------------------------------------
 
+
 def _settings(tmp_path, **env):
     env.setdefault("data_dir", str(tmp_path))
     # Mirror openrouter_api_key into Secrets so get_secrets() works
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**env)
@@ -145,9 +148,7 @@ class _FakeAgent:
 
 
 def _patch_agent(monkeypatch, agent):
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", lambda *a, **k: agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", lambda *a, **k: agent)
 
 
 def test_request_limit_from_settings_not_hardcoded(tmp_path, monkeypatch):

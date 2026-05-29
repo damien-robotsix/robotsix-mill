@@ -10,6 +10,13 @@ from .periodic_runner import (
 )
 
 
-def run_test_gap_pass(session_id: str, repo_config: RepoConfig | None = None) -> TestGapPassResult:
+def run_test_gap_pass(
+    session_id: str, repo_config: RepoConfig | None = None
+) -> TestGapPassResult:
     settings = Settings()
-    return run_periodic_pass(session_id, repo_config, config=PERIODIC_PASS_CONFIGS["test_gap"], settings=settings)
+    return run_periodic_pass(
+        session_id,
+        repo_config,
+        config=PERIODIC_PASS_CONFIGS["test_gap"],
+        settings=settings,
+    )

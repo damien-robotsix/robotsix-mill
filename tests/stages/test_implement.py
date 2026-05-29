@@ -53,7 +53,19 @@ def ctx_factory(tmp_path, fake_sandbox):
         db.init_db(s)
         svc = TicketService(s)
         created.append(s)
-        from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=svc, repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+        from robotsix_mill.config import RepoConfig
+
+        return StageContext(
+            settings=s,
+            service=svc,
+            repo_config=RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        )
 
     yield make
     db.reset_engine()
@@ -68,6 +80,7 @@ def _ticket(ctx, title="Add feature", body="Please add feature.txt"):
 def _write_file_map(ctx, ticket, *files):
     """Write a minimal file_map.json for *ticket* listing *files*."""
     import json as _json
+
     ws = ctx.service.workspace(ticket)
     (ws.artifacts_dir / "file_map.json").write_text(
         _json.dumps([{"file": f, "note": "test"} for f in files]),
@@ -76,8 +89,29 @@ def _write_file_map(ctx, ticket, *files):
 
 
 def _fake_agent(write: dict | None):
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path, previous_attempt_summary  # signature must match the seam
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+            previous_attempt_summary,
+        )  # signature must match the seam
         if write:
             for name, content in write.items():
                 (Path(repo_dir) / name).write_text(content)
@@ -88,12 +122,13 @@ def _fake_agent(write: dict | None):
 
 # --- fs_tools sandbox ---------------------------------------------------
 
+
 def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
     s = Settings(data_dir=str(tmp_path))
-    read_file, write_file, edit_file, delete_file, list_dir, run_command = build_fs_tools(
-        tmp_path, s
+    read_file, write_file, edit_file, delete_file, list_dir, run_command = (
+        build_fs_tools(tmp_path, s)
     )
     assert "wrote" in write_file("a/b.txt", "hi")
     assert read_file(path="a/b.txt") == "hi"
@@ -132,7 +167,9 @@ def test_edit_file_replaces_unique_substring_preserves_rest(tmp_path, fake_sandb
     assert new == "line1\nREPLACED\nline3\nline4\n"
 
 
-def test_edit_file_old_string_absent_returns_error_file_unchanged(tmp_path, fake_sandbox):
+def test_edit_file_old_string_absent_returns_error_file_unchanged(
+    tmp_path, fake_sandbox
+):
     from robotsix_mill.config import Settings
 
     s = Settings(data_dir=str(tmp_path))
@@ -145,7 +182,8 @@ def test_edit_file_old_string_absent_returns_error_file_unchanged(tmp_path, fake
 
 
 def test_edit_file_old_string_appears_multiple_returns_error_file_unchanged(
-    tmp_path, fake_sandbox,
+    tmp_path,
+    fake_sandbox,
 ):
     from robotsix_mill.config import Settings
 
@@ -219,8 +257,8 @@ def test_fs_tools_non_existent_root_returns_clear_error(tmp_path, fake_sandbox):
 
     fake_root = tmp_path / "does-not-exist"
     s = Settings(data_dir=str(tmp_path))
-    read_file, write_file, edit_file, delete_file, list_dir, run_command = build_fs_tools(
-        fake_root, s
+    read_file, write_file, edit_file, delete_file, list_dir, run_command = (
+        build_fs_tools(fake_root, s)
     )
     msg = "workspace repo directory does not exist"
 
@@ -236,6 +274,7 @@ def test_fs_tools_non_existent_root_returns_clear_error(tmp_path, fake_sandbox):
 
 # --- implement stage ----------------------------------------------------
 
+
 def test_blocked_without_remote(ctx_factory):
     ctx = ctx_factory(test_command="true")
     out = ImplementStage().run(_ticket(ctx), ctx)
@@ -245,7 +284,9 @@ def test_blocked_without_remote(ctx_factory):
 
 def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
     monkeypatch.setattr(
         coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
     )
@@ -259,7 +300,8 @@ def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     assert (repo / "feature.txt").exists()
     head = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
     assert head == f"mill/{t.id}"
     assert ctx.service.get(t.id).branch == f"mill/{t.id}"
@@ -268,7 +310,9 @@ def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
 
 def test_no_changes_blocks(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
     monkeypatch.setattr(coding, "run_implement_agent", _fake_agent(None))
     t = _ticket(ctx)
     _write_file_map(ctx, t, "dummy.txt")
@@ -285,13 +329,32 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote,
-        test_command="false",        # gate always fails
-        max_fix_iterations="2",      # keep the loop short
+        test_command="false",  # gate always fails
+        max_fix_iterations="2",  # keep the loop short
     )
     calls = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, reference_files, message_history, memory, epic_workspace_path  # seam signature
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )  # seam signature
         calls.append(feedback)
         (Path(repo_dir) / "wip.txt").write_text("did work")
         return ("tried", [], "", None, None)
@@ -306,12 +369,13 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     assert "still failing" in out.note and "resumable" in out.note
     # The stage re-invokes the coordinator once per iteration.
     assert len(calls) == 2
-    assert calls[0] is None              # first pass: no feedback
-    assert calls[1] is not None          # retry: prior diagnosis fed back
+    assert calls[0] is None  # first pass: no feedback
+    assert calls[1] is not None  # retry: prior diagnosis fed back
     repo = ctx.service.workspace(t).dir / "repo"
     log = subprocess.run(
         ["git", "-C", str(repo), "log", "-1", "--pretty=%s"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout
     assert "WIP" in log  # WIP committed so a human can pick it up
 
@@ -319,16 +383,39 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
 def _commits(repo):
     return subprocess.run(
         ["git", "-C", str(repo), "log", "--pretty=%s"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout.splitlines()
 
 
 def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         (Path(repo_dir) / "partial.txt").write_text("half done")
         raise coding.AgentBudgetError("request_limit of 50", [])
 
@@ -353,11 +440,33 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     """Resume = run the coordinator FRESH (no transcript replay), and
     crucially do NOT re-clone — the prior WIP branch is reused."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
     n = {"i": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         n["i"] += 1
         if n["i"] == 1:  # first pass: partial work, hit the cap
             (Path(repo_dir) / "first.txt").write_text("1")
@@ -380,9 +489,9 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     second = ImplementStage().run(ctx.service.get(t.id), ctx)
 
     assert second.next_state is State.DOCUMENTING
-    assert n["i"] == 2                                      # coordinator re-run
-    assert (repo / ".git").stat().st_ino == git_inode      # NOT re-cloned
-    assert (repo / "first.txt").exists()                   # prior WIP kept
+    assert n["i"] == 2  # coordinator re-run
+    assert (repo / ".git").stat().st_ino == git_inode  # NOT re-cloned
+    assert (repo / "first.txt").exists()  # prior WIP kept
     assert (repo / "second.txt").exists()
     msgs = _commits(repo)
     assert any("WIP" in m for m in msgs) and len(msgs) >= 2
@@ -398,10 +507,13 @@ def _add_commit_to_bare_remote(bare_url: str, tmp_path: Path) -> str:
     and pushes back to the bare remote. Returns the filename created.
     """
     import uuid
+
     wd = tmp_path / f"push-tmp-{uuid.uuid4().hex[:8]}"
     subprocess.run(
         ["git", "clone", "-q", bare_url, str(wd)],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     _git(wd, "config", "user.email", "op@t")
     _git(wd, "config", "user.name", "operator")
@@ -416,10 +528,13 @@ def _add_commit_to_bare_remote(bare_url: str, tmp_path: Path) -> str:
 def _conflicting_edit_on_remote(bare_url: str, tmp_path: Path) -> None:
     """Push a conflicting edit to README.md on the bare remote."""
     import uuid
+
     wd = tmp_path / f"conflict-tmp-{uuid.uuid4().hex[:8]}"
     subprocess.run(
         ["git", "clone", "-q", bare_url, str(wd)],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     _git(wd, "config", "user.email", "op@t")
     _git(wd, "config", "user.name", "operator")
@@ -440,15 +555,35 @@ def test_fresh_clone_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monke
     fname = _add_commit_to_bare_remote(remote, tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
 
     seen_files: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         # Record what the agent can see in the working tree.
         for p in sorted(Path(repo_dir).iterdir()):
             if p.name != ".git":
@@ -476,16 +611,36 @@ def test_resume_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monkeypatc
     sees the new file."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
     n = {"i": 0}
 
     seen_files: list[list[str]] = [[], []]
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         idx = n["i"]
         n["i"] += 1
         if idx == 0:
@@ -525,14 +680,34 @@ def test_rebase_conflict_blocks_on_resume(ctx_factory, tmp_path, monkeypatch):
     rebase failure. The workspace is left intact for operator inspection."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
     n = {"i": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         n["i"] += 1
         if n["i"] == 1:
             # Edit README.md to create a conflicting WIP commit.
@@ -573,7 +748,8 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
     the stage returns REBASING with a note about rebase failure."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
 
@@ -591,9 +767,28 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         agent_called.append(1)
         return ("done", [], "", None, None)
 
@@ -609,10 +804,13 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
 
 # --- dependency gating -------------------------------------------------
 
+
 def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
     """Implement stage returns READY (no-op) when deps are unmet."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
 
     # Create the dependency ticket (in DRAFT — not terminal)
     dep = ctx.service.create("Dep ticket")
@@ -625,8 +823,28 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
         return ("done", [], "", None, None)
@@ -636,14 +854,16 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
     out = ImplementStage().run(t, ctx)
 
     assert out.next_state is State.READY  # same-state no-op
-    assert len(agent_called) == 0          # agent NOT called
-    assert out.note is None                # no note for no-op
+    assert len(agent_called) == 0  # agent NOT called
+    assert out.note is None  # no note for no-op
 
 
 def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     """Implement stage proceeds to DELIVERABLE when dep is CLOSED."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
 
     # Create and close the dependency
     dep = ctx.service.create("Dep ticket")
@@ -660,7 +880,8 @@ def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     _write_file_map(ctx, t, "feature.txt")
 
     monkeypatch.setattr(
-        coding, "run_implement_agent",
+        coding,
+        "run_implement_agent",
         _fake_agent({"feature.txt": "done"}),
     )
 
@@ -672,7 +893,9 @@ def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
 def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     """Implement stage proceeds when a dep ID doesn't exist (treated satisfied)."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
 
     t = ctx.service.create("Depender", depends_on='["nonexistent-12345"]')
     ctx.service.transition(t.id, State.READY)
@@ -680,7 +903,8 @@ def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     _write_file_map(ctx, t, "feature.txt")
 
     monkeypatch.setattr(
-        coding, "run_implement_agent",
+        coding,
+        "run_implement_agent",
         _fake_agent({"feature.txt": "done"}),
     )
 
@@ -691,13 +915,16 @@ def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
 def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch):
     """Tickets without depends_on have zero behavioral change."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
 
     t = _ticket(ctx)  # creates ticket without depends_on
     _write_file_map(ctx, t, "feature.txt")
 
     monkeypatch.setattr(
-        coding, "run_implement_agent",
+        coding,
+        "run_implement_agent",
         _fake_agent({"feature.txt": "done"}),
     )
 
@@ -726,12 +953,14 @@ def test_success_to_code_review_when_review_enabled(ctx_factory, tmp_path, monke
 
 # --- epic context -------------------------------------------------------
 
+
 def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     """When a ticket has an epic parent, the spec passed to
     run_implement_agent starts with the epic context wrapper."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",  # this test asserts the no-review path
     )
 
@@ -739,7 +968,8 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     epic = ctx.service.create("Global Epic", "High-level goal: unify UX", kind="epic")
     # Create a child ticket under this epic
     child = ctx.service.create(
-        "Add dark mode", "Please add dark mode toggle",
+        "Add dark mode",
+        "Please add dark mode toggle",
         parent_id=epic.id,
     )
     ctx.service.transition(child.id, State.READY)
@@ -748,8 +978,27 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "", None, None)
@@ -759,21 +1008,46 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     out = ImplementStage().run(child, ctx)
     assert out.next_state is State.DOCUMENTING
     assert len(seen_spec) == 1
-    expected = "````epic-context\nHigh-level goal: unify UX\n````\n<!-- /epic-context -->"
+    expected = (
+        "````epic-context\nHigh-level goal: unify UX\n````\n<!-- /epic-context -->"
+    )
     assert seen_spec[0].startswith(expected)
 
 
-def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, monkeypatch):
+def test_epic_context_not_injected_without_epic_parent(
+    ctx_factory, tmp_path, monkeypatch
+):
     """Ticket without a parent: no epic context in spec."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
 
     t = _ticket(ctx, title="Standalone", body="Just a task")
     _write_file_map(ctx, t, "feature.txt")
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "", None, None)
@@ -785,15 +1059,20 @@ def test_epic_context_not_injected_without_epic_parent(ctx_factory, tmp_path, mo
     assert "````epic-context" not in seen_spec[0]
 
 
-def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, monkeypatch):
+def test_epic_context_not_injected_for_non_epic_parent(
+    ctx_factory, tmp_path, monkeypatch
+):
     """Ticket with a parent that is NOT an epic: no epic context."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
 
     # Create a regular task parent (kind="task")
     parent = ctx.service.create("Parent task", "Ordinary task", kind="task")
     child = ctx.service.create(
-        "Child of task", "Do a sub-thing",
+        "Child of task",
+        "Do a sub-thing",
         parent_id=parent.id,
     )
     ctx.service.transition(child.id, State.READY)
@@ -802,8 +1081,27 @@ def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, mo
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "", None, None)
@@ -815,14 +1113,19 @@ def test_epic_context_not_injected_for_non_epic_parent(ctx_factory, tmp_path, mo
     assert "````epic-context" not in seen_spec[0]
 
 
-def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_path, monkeypatch):
+def test_epic_context_not_injected_for_empty_epic_description(
+    ctx_factory, tmp_path, monkeypatch
+):
     """Epic with empty description: no injection."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
 
     epic = ctx.service.create("Empty Epic", "", kind="epic")
     child = ctx.service.create(
-        "Child of empty epic", "Do a thing",
+        "Child of empty epic",
+        "Do a thing",
         parent_id=epic.id,
     )
     ctx.service.transition(child.id, State.READY)
@@ -831,8 +1134,27 @@ def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_p
 
     seen_spec: list[str] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None, message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         seen_spec.append(spec)
         (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "", None, None)
@@ -846,14 +1168,17 @@ def test_epic_context_not_injected_for_empty_epic_description(ctx_factory, tmp_p
 
 # --- scope guardrail ----------------------------------------------------
 
+
 def test_scope_violation_blocks_ticket(ctx_factory, tmp_path, monkeypatch):
     """When the agent modifies a tracked file not in file_map, the scope
     check catches it and immediately blocks the ticket — no retry.
     The test gate is never reached on the violating iteration."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
-        review_enabled="false", max_fix_iterations="3",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        max_fix_iterations="3",
         scope_triage_enabled="false",
     )
     t = _ticket(ctx)
@@ -868,9 +1193,28 @@ def test_scope_violation_blocks_ticket(ctx_factory, tmp_path, monkeypatch):
 
     call_count = {"n": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         call_count["n"] += 1
         # Write wip.txt (in-scope) AND modify README.md (out-of-scope)
         (Path(repo_dir) / "wip.txt").write_text("in scope")
@@ -884,17 +1228,18 @@ def test_scope_violation_blocks_ticket(ctx_factory, tmp_path, monkeypatch):
     assert out.next_state is State.BLOCKED
     assert "scope violation" in out.note
     assert call_count["n"] == 1, "agent must not be retried"
-    assert (
-        ctx.service.workspace(t).artifacts_dir / "implement.md"
-    ).exists()
+    assert (ctx.service.workspace(t).artifacts_dir / "implement.md").exists()
 
 
-def test_scope_check_passes_when_all_in_scope(ctx_factory, tmp_path, monkeypatch, caplog):
+def test_scope_check_passes_when_all_in_scope(
+    ctx_factory, tmp_path, monkeypatch, caplog
+):
     """When every changed file is in file_map, the scope check passes,
     logs an info message, and the loop proceeds to the test gate."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
     t = _ticket(ctx)
@@ -908,7 +1253,8 @@ def test_scope_check_passes_when_all_in_scope(ctx_factory, tmp_path, monkeypatch
     )
 
     monkeypatch.setattr(
-        coding, "run_implement_agent",
+        coding,
+        "run_implement_agent",
         _fake_agent({"wip.txt": "done"}),
     )
     import logging
@@ -917,17 +1263,19 @@ def test_scope_check_passes_when_all_in_scope(ctx_factory, tmp_path, monkeypatch
         out = ImplementStage().run(t, ctx)
     assert out.next_state is State.DOCUMENTING
     assert any(
-        "scope check passed" in m and "1 file(s) changed" in m
-        for m in caplog.messages
+        "scope check passed" in m and "1 file(s) changed" in m for m in caplog.messages
     ), f"expected scope-passed info log, got: {caplog.messages}"
 
 
-def test_scope_check_skipped_when_no_file_map(ctx_factory, tmp_path, monkeypatch, caplog):
+def test_scope_check_skipped_when_no_file_map(
+    ctx_factory, tmp_path, monkeypatch, caplog
+):
     """When file_map.json is absent, the stage logs a warning and
     proceeds — scope enforcement is skipped, not blocked."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
     t = _ticket(ctx)
@@ -935,9 +1283,28 @@ def test_scope_check_skipped_when_no_file_map(ctx_factory, tmp_path, monkeypatch
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
         return ("done", [], "", None, None)
@@ -949,19 +1316,24 @@ def test_scope_check_skipped_when_no_file_map(ctx_factory, tmp_path, monkeypatch
     with caplog.at_level(logging.WARNING, logger="robotsix_mill.stages.implement"):
         out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.DOCUMENTING, f"expected DOCUMENTING, got {out.next_state}"
+    assert out.next_state is State.DOCUMENTING, (
+        f"expected DOCUMENTING, got {out.next_state}"
+    )
     assert len(agent_called) == 1, "agent must be called when file_map is missing"
-    assert any(
-        "skipping scope enforcement" in m for m in caplog.messages
-    ), f"expected scope-skip warning, got: {caplog.messages}"
+    assert any("skipping scope enforcement" in m for m in caplog.messages), (
+        f"expected scope-skip warning, got: {caplog.messages}"
+    )
 
 
-def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypatch, caplog):
+def test_scope_check_skipped_when_file_map_empty(
+    ctx_factory, tmp_path, monkeypatch, caplog
+):
     """When file_map.json exists but is an empty array, the stage logs
     a warning and proceeds — same as a missing file_map."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
     t = _ticket(ctx)
@@ -971,9 +1343,28 @@ def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypa
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
         return ("done", [], "", None, None)
@@ -985,11 +1376,13 @@ def test_scope_check_skipped_when_file_map_empty(ctx_factory, tmp_path, monkeypa
     with caplog.at_level(logging.WARNING, logger="robotsix_mill.stages.implement"):
         out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.DOCUMENTING, f"expected DOCUMENTING, got {out.next_state}"
+    assert out.next_state is State.DOCUMENTING, (
+        f"expected DOCUMENTING, got {out.next_state}"
+    )
     assert len(agent_called) == 1, "agent must be called when file_map is empty"
-    assert any(
-        "skipping scope enforcement" in m for m in caplog.messages
-    ), f"expected scope-skip warning, got: {caplog.messages}"
+    assert any("skipping scope enforcement" in m for m in caplog.messages), (
+        f"expected scope-skip warning, got: {caplog.messages}"
+    )
 
 
 # --- scope-triage integration tests -------------------------------------
@@ -1001,21 +1394,43 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
     been modified yet, the agent is re-run (no retroactive short-circuit)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
-        review_enabled="false", max_fix_iterations="3",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        max_fix_iterations="3",
     )
     t = _ticket(ctx)
 
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
-        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+        '[{"file": "wip.txt", "note": "only this file"}]',
+        encoding="utf-8",
     )
 
     call_count = {"n": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         call_count["n"] += 1
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
@@ -1026,7 +1441,9 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
     import robotsix_mill.agents.scope_triage as scope_triage_mod
     from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
-    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
         return ScopeTriageVerdict(
             action="EXPAND",
             justification="Minor dependency edit is a legitimate consequence",
@@ -1034,6 +1451,7 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
             # new work to do → loop MUST continue.
             expand_files=["README.md", "CHANGELOG.md"],
         )
+
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
     out = ImplementStage().run(t, ctx)
@@ -1044,38 +1462,59 @@ def test_scope_triage_expand_continues_loop(ctx_factory, tmp_path, monkeypatch):
     assert out.next_state is not State.BLOCKED
     # The EXPAND decision lands in history, not comments (v1).
     history = ctx.service.history(t.id)
-    assert any(
-        (ev.note or "").startswith("scope-triage EXPAND") for ev in history
-    )
+    assert any((ev.note or "").startswith("scope-triage EXPAND") for ev in history)
     comments = ctx.service.list_comments(t.id)
-    assert not any(
-        "[scope-triage]" in (c.body or "") for c in comments
-    ), "scope-triage no longer emits comments — it uses add_step_event"
+    assert not any("[scope-triage]" in (c.body or "") for c in comments), (
+        "scope-triage no longer emits comments — it uses add_step_event"
+    )
 
 
-def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, monkeypatch):
+def test_scope_triage_expand_retroactive_short_circuit(
+    ctx_factory, tmp_path, monkeypatch
+):
     """When scope-triage EXPANDs files that are *all* already in the
     current diff, the retroactive short-circuit fires: the agent is NOT
     re-run, the loop falls through to the test gate, and (with tests
     passing) the ticket finalizes without wasting an iteration."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
     t = _ticket(ctx)
 
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
-        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+        '[{"file": "wip.txt", "note": "only this file"}]',
+        encoding="utf-8",
     )
 
     call_count = {"n": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None,
-             previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path, previous_attempt_summary
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+            previous_attempt_summary,
+        )
         call_count["n"] += 1
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
@@ -1086,20 +1525,21 @@ def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, mo
     import robotsix_mill.agents.scope_triage as scope_triage_mod
     from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
-    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
         return ScopeTriageVerdict(
             action="EXPAND",
             justification="README.md is a natural side-effect edit",
             expand_files=["README.md"],
         )
+
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
     out = ImplementStage().run(t, ctx)
 
     # Agent must be called exactly once (no wasted re-run).
-    assert call_count["n"] == 1, (
-        "retroactive short-circuit should skip agent re-run"
-    )
+    assert call_count["n"] == 1, "retroactive short-circuit should skip agent re-run"
     assert out.next_state is State.DOCUMENTING, (
         f"expected DOCUMENTING, got {out.next_state}"
     )
@@ -1109,9 +1549,7 @@ def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, mo
     # The transition note is now a short stage-name marker, not the
     # summary.
     history = ctx.service.history(t.id)
-    assert any(
-        (ev.note or "").startswith("scope-triage EXPAND") for ev in history
-    )
+    assert any((ev.note or "").startswith("scope-triage EXPAND") for ev in history)
     assert any(
         (ev.note or "").startswith("implement:")
         and "agent summary text" in (ev.note or "")
@@ -1124,19 +1562,41 @@ def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):
     the rogue files."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
-        review_enabled="false", max_fix_iterations="3",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        max_fix_iterations="3",
     )
     t = _ticket(ctx)
 
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
-        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+        '[{"file": "wip.txt", "note": "only this file"}]',
+        encoding="utf-8",
     )
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
         return ("edit done", [], "", None, None)
@@ -1146,12 +1606,15 @@ def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):
     import robotsix_mill.agents.scope_triage as scope_triage_mod
     from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
-    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
         return ScopeTriageVerdict(
             action="REJECT",
             justification="Unrelated module — scope creep",
             expand_files=[],
         )
+
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
     out = ImplementStage().run(t, ctx)
@@ -1163,28 +1626,48 @@ def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):
     # can scan history events.
     assert "README.md" in (out.note or "")
     comments = ctx.service.list_comments(t.id)
-    assert not any(
-        "scope-triage" in (c.body or "") for c in comments
-    )
+    assert not any("scope-triage" in (c.body or "") for c in comments)
 
 
 def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
     """ESCALATE verdict: ticket goes to BLOCKED with triage reasoning."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
-        review_enabled="false", max_fix_iterations="3",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        max_fix_iterations="3",
     )
     t = _ticket(ctx)
 
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
-        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+        '[{"file": "wip.txt", "note": "only this file"}]',
+        encoding="utf-8",
     )
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
         return ("edit done", [], "", None, None)
@@ -1194,12 +1677,15 @@ def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
     import robotsix_mill.agents.scope_triage as scope_triage_mod
     from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
-    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
         return ScopeTriageVerdict(
             action="ESCALATE",
             justification="Ambiguous spec — cannot classify",
             expand_files=[],
         )
+
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
     out = ImplementStage().run(t, ctx)
@@ -1210,9 +1696,7 @@ def test_scope_triage_escalate_to_blocked(ctx_factory, tmp_path, monkeypatch):
     # transition note rather than a comment.
     assert "README.md" in (out.note or "")
     comments = ctx.service.list_comments(t.id)
-    assert not any(
-        "scope-triage" in (c.body or "") for c in comments
-    )
+    assert not any("scope-triage" in (c.body or "") for c in comments)
 
 
 def test_scope_triage_disabled_falls_through(ctx_factory, tmp_path, monkeypatch):
@@ -1220,22 +1704,44 @@ def test_scope_triage_disabled_falls_through(ctx_factory, tmp_path, monkeypatch)
     preserved exactly — no triage agent is called."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
-        review_enabled="false", max_fix_iterations="3",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        max_fix_iterations="3",
         scope_triage_enabled="false",
     )
     t = _ticket(ctx)
 
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
-        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+        '[{"file": "wip.txt", "note": "only this file"}]',
+        encoding="utf-8",
     )
 
     call_count = {"n": 0}
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         call_count["n"] += 1
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
@@ -1255,19 +1761,41 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
     to BLOCKED with an agent-error note."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
-        review_enabled="false", max_fix_iterations="3",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        max_fix_iterations="3",
     )
     t = _ticket(ctx)
 
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
-        '[{"file": "wip.txt", "note": "only this file"}]', encoding="utf-8",
+        '[{"file": "wip.txt", "note": "only this file"}]',
+        encoding="utf-8",
     )
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         (Path(repo_dir) / "wip.txt").write_text("in scope")
         (Path(repo_dir) / "README.md").write_text("out of scope edit")
         return ("edit done", [], "", None, None)
@@ -1276,8 +1804,11 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
 
     import robotsix_mill.agents.scope_triage as scope_triage_mod
 
-    def _failing_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+    def _failing_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
         raise RuntimeError("model unavailable")
+
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _failing_triage)
 
     out = ImplementStage().run(t, ctx)
@@ -1299,16 +1830,36 @@ def test_post_edit_reference_files_persisted(ctx_factory, tmp_path, monkeypatch)
     to artifacts_dir."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None,
-             previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path, previous_attempt_summary
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+            previous_attempt_summary,
+        )
         agent_called.append(1)
         # Agent edits a file AND curates a list that includes an
         # additional file it didn't touch on disk — curated, not
@@ -1347,16 +1898,36 @@ def test_reference_files_reloaded_on_retry(ctx_factory, tmp_path, monkeypatch):
     (paths-only, reloaded from disk)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="false",
-        review_enabled="false", max_fix_iterations="2",
+        FORGE_REMOTE_URL=remote,
+        test_command="false",
+        review_enabled="false",
+        max_fix_iterations="2",
     )
 
     captured_refs: list[list[dict] | None] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None,
-             previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, message_history, memory, epic_workspace_path, previous_attempt_summary
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            message_history,
+            memory,
+            epic_workspace_path,
+            previous_attempt_summary,
+        )
         captured_refs.append(reference_files)
         (Path(repo_dir) / "wip.txt").write_text("post-edit pass content")
         return ("agent summary", ["wip.txt"], "", None, None)
@@ -1384,17 +1955,36 @@ def test_summary_included_in_retry_feedback(ctx_factory, tmp_path, monkeypatch):
     the agent alongside the test failure diagnosis as feedback."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="false",
-        review_enabled="false", max_fix_iterations="2",
+        FORGE_REMOTE_URL=remote,
+        test_command="false",
+        review_enabled="false",
+        max_fix_iterations="2",
     )
 
     captured_feedback: list[str | None] = []
     captured_prev_summaries: list[str | None] = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None,
-             previous_attempt_summary=None, **_kwargs):
-        del settings, spec, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         captured_feedback.append(feedback)
         captured_prev_summaries.append(previous_attempt_summary)
         (Path(repo_dir) / "wip.txt").write_text("edited")
@@ -1429,15 +2019,35 @@ def test_persistence_without_file_map_still_writes(ctx_factory, tmp_path, monkey
     summary are still persisted — no crash."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         review_enabled="false",
     )
 
     agent_called = []
 
-    def _run(*, settings, repo_dir, spec, feedback=None, reference_files=None,
-             message_history=None, memory="", epic_workspace_path=None, previous_attempt_summary=None, **_kwargs):
-        del settings, spec, feedback, reference_files, message_history, memory, epic_workspace_path
+    def _run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+        )
         agent_called.append(1)
         (Path(repo_dir) / "out.txt").write_text("done")
         return ("summary", [], "", None, None)
@@ -1459,9 +2069,7 @@ def test_persistence_without_file_map_still_writes(ctx_factory, tmp_path, monkey
     )
 
     summary_path = artifacts / "implement_summary.md"
-    assert summary_path.exists(), (
-        "implement_summary.md should exist from agent summary"
-    )
+    assert summary_path.exists(), "implement_summary.md should exist from agent summary"
 
 
 # --- unit tests for _run_scope_guardrail --------------------------------
@@ -1471,7 +2079,8 @@ def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monke
     """scope_triage_enabled=False: any out-of-scope file → BLOCKED outcome."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
         scope_triage_enabled="false",
     )
     t = _ticket(ctx)
@@ -1490,13 +2099,18 @@ def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monke
     # Write file_map.json so the guardrail has a scope to enforce.
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
-        '[{"file": "a.txt", "note": "only a.txt"}]', encoding="utf-8",
+        '[{"file": "a.txt", "note": "only a.txt"}]',
+        encoding="utf-8",
     )
     settings = ctx.settings
 
     result = ImplementStage._run_scope_guardrail(
-        ctx, t, repo, f"mill/{t.id}",
-        summary="agent summary", ref_files=None,
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
         file_map={"a.txt"},
         settings=settings,
         spec="add a.txt",
@@ -1511,7 +2125,9 @@ def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monke
 
 
 def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
-    ctx_factory, tmp_path, monkeypatch,
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
 ):
     """When all out-of-scope files were already REJECTed in prior history
     events, the dedup guard fires → skip_iteration (implicit EXPAND).
@@ -1519,7 +2135,8 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     a comment (scope-triage no longer comments)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true",
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
     )
     t = _ticket(ctx)
     _write_file_map(ctx, t, "a.txt")
@@ -1537,7 +2154,8 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     _git(repo, "commit", "-q", "-m", "wip")
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
-        '[{"file": "a.txt", "note": "only a.txt"}]', encoding="utf-8",
+        '[{"file": "a.txt", "note": "only a.txt"}]',
+        encoding="utf-8",
     )
     settings = ctx.settings
 
@@ -1546,17 +2164,24 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     import robotsix_mill.agents.scope_triage as scope_triage_mod
     from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
-    def _fake_triage(*, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries):
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
         return ScopeTriageVerdict(
             action="REJECT",
             justification="Still out of scope",
             expand_files=[],
         )
+
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
     result = ImplementStage._run_scope_guardrail(
-        ctx, t, repo, f"mill/{t.id}",
-        summary="agent summary", ref_files=None,
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
         file_map={"a.txt"},
         settings=settings,
         spec="add a.txt",
@@ -1572,6 +2197,7 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
 
 # --- misc helper --------------------------------------------------------
 
+
 def _clone_repo_to(ctx, remote_url, repo_dir):
     """Clone to *repo_dir* without the full stage machinery."""
     from robotsix_mill.vcs import git_ops
@@ -1579,6 +2205,7 @@ def _clone_repo_to(ctx, remote_url, repo_dir):
 
     if repo_dir.exists():
         import shutil
+
         shutil.rmtree(repo_dir)
     token = None
     try:

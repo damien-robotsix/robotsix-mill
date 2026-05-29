@@ -1,5 +1,3 @@
-import pytest
-
 from robotsix_mill.agents import retrospecting
 from robotsix_mill.agents.retrospecting import RetrospectResult
 from robotsix_mill.config import Settings
@@ -18,20 +16,36 @@ def _ctx(tmp_path, **env):
     env.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**env)
     db.init_db(s)
-    from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=TicketService(s), repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+    from robotsix_mill.config import RepoConfig
+
+    return StageContext(
+        settings=s,
+        service=TicketService(s),
+        repo_config=RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        ),
+    )
 
 
 def _done(ctx):
     t = ctx.service.create("Add X", "spec body")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         ctx.service.transition(t.id, st)
     return ctx.service.get(t.id)
 
 
 def _no_langfuse(monkeypatch):
-    monkeypatch.setattr(
-        langfuse_client, "fetch_session_summary", lambda s, sid: None
-    )
+    monkeypatch.setattr(langfuse_client, "fetch_session_summary", lambda s, sid: None)
 
 
 def _default_result(**overrides):
@@ -52,7 +66,8 @@ def test_reviewed_no_draft(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(propose_draft=False),
     )
     t = _done(ctx)
@@ -73,7 +88,8 @@ def test_spawns_linked_draft(tmp_path, monkeypatch):
         lambda: "parent-ticket-session-id",
     )
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="wastes tokens",
             conclusion="improvement draft filed",
@@ -99,7 +115,8 @@ def test_spawned_draft_has_source_retrospect(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="wastes tokens",
             conclusion="improvement draft filed",
@@ -119,7 +136,8 @@ def test_spawning_disabled(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path, retrospect_spawn_drafts="false")
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="x",
             conclusion="found an issue",
@@ -155,7 +173,8 @@ def test_conclusion_is_transition_note(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             conclusion="pipeline ran cleanly, no issues",
         ),
@@ -169,9 +188,13 @@ def test_memory_passed_to_agent(tmp_path, monkeypatch):
     """Memory file contents are passed to the agent."""
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
-    memory_file = ctx.settings.memory_file_for("retrospect", ctx.repo_config.board_id if ctx.repo_config else "")
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect", ctx.repo_config.board_id if ctx.repo_config else ""
+    )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
-    memory_file.write_text("## Issue: slow tests\n- ticket-A: 3 retries\n", encoding="utf-8")
+    memory_file.write_text(
+        "## Issue: slow tests\n- ticket-A: 3 retries\n", encoding="utf-8"
+    )
 
     captured_memory = []
 
@@ -206,9 +229,10 @@ def test_comments_passed_to_agent(tmp_path, monkeypatch):
     assert "Fixed in rebase" in text
     # Each comment line follows the YYYY-MM-DD HH:MM | body pattern
     import re
-    assert re.match(
-        r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} \|", text.split("\n")[0]
-    ), f"unexpected first line format: {text.split(chr(10))[0]!r}"
+
+    assert re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} \|", text.split("\n")[0]), (
+        f"unexpected first line format: {text.split(chr(10))[0]!r}"
+    )
 
 
 def test_no_comments_passes_empty_string(tmp_path, monkeypatch):
@@ -232,13 +256,16 @@ def test_updated_memory_written_back(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             updated_memory="## Issue: slow tests\n- ticket-A: 3 retries\n- ticket-B: 2 retries\n",
         ),
     )
     RetrospectStage().run(_done(ctx), ctx)
-    memory_file = ctx.settings.memory_file_for("retrospect", ctx.repo_config.board_id if ctx.repo_config else "")
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect", ctx.repo_config.board_id if ctx.repo_config else ""
+    )
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == (
         "## Issue: slow tests\n- ticket-A: 3 retries\n- ticket-B: 2 retries\n"
@@ -251,7 +278,9 @@ def test_missing_memory_file_still_closed(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     # Ensure memory file doesn't exist.
-    memory_file = ctx.settings.memory_file_for("retrospect", ctx.repo_config.board_id if ctx.repo_config else "")
+    memory_file = ctx.settings.memory_file_for(
+        "retrospect", ctx.repo_config.board_id if ctx.repo_config else ""
+    )
     if memory_file.exists():
         memory_file.unlink()
 
@@ -275,11 +304,13 @@ def test_unreadable_memory_file_still_closed(tmp_path, monkeypatch):
     class _UnreadableFile:
         def exists(self):
             return True
+
         def read_text(self, **kwargs):
             raise OSError("permission denied")
 
     monkeypatch.setattr(
-        ctx.settings.__class__, "retrospect_memory_file",
+        ctx.settings.__class__,
+        "retrospect_memory_file",
         property(lambda self: _UnreadableFile()),
     )
 
@@ -303,7 +334,8 @@ def test_draft_spawn_only_when_agent_proposes_and_enabled(tmp_path, monkeypatch)
 
     # Agent proposes a draft — spawn should fire.
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="should spawn",
             conclusion="spawning improvement",
@@ -327,7 +359,8 @@ def test_no_draft_when_memory_not_sufficient(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="minor issue, not enough evidence yet",
             conclusion="noted, insufficient evidence",
@@ -358,7 +391,8 @@ def test_noop_draft_is_not_spawned(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="clean run, nothing notable",
             conclusion="clean",
@@ -375,11 +409,12 @@ def test_noop_draft_is_not_spawned(tmp_path, monkeypatch):
 
 def test_is_noop_draft_helper():
     from robotsix_mill.stages.retrospect import _is_noop_draft
+
     real_body = "Problem: X retries 5x. Fix: cap at 2 in retry.py."
     assert _is_noop_draft("No notable issues - clean run", real_body)
     assert _is_noop_draft("Clean ticket, no issues to flag", real_body)
     assert _is_noop_draft("Nothing to report", real_body)
-    assert _is_noop_draft("", real_body)   # empty title
+    assert _is_noop_draft("", real_body)  # empty title
     assert _is_noop_draft(None, real_body)
     # Title-only: legitimately terse tickets are NOT flagged.
     assert not _is_noop_draft("Cut retry tokens", "do the thing")
@@ -402,8 +437,8 @@ def test_truncate_at_sentence_boundary():
     truncates at the boundary, not at the hard 6000 limit."""
     # Build a description where the last ". " before 6000 is at ~5950.
     prefix = "A" * 5948 + ". "  # sentence boundary ends at position 5950
-    suffix = "B" * 200           # pushes total well past 6000
-    text = prefix + suffix       # len ≈ 6150
+    suffix = "B" * 200  # pushes total well past 6000
+    text = prefix + suffix  # len ≈ 6150
     result = truncate_at_boundary(text, 6000)
     # Should have truncated at the ". " boundary (position 5950).
     assert result.startswith("A" * 5948 + ".")
@@ -421,6 +456,7 @@ def test_truncation_indicator_appended():
     # The omitted count should equal len(text) minus the cut position.
     # Extract the number from the indicator.
     import re
+
     m = re.search(r"\[\.\.\. description truncated; (\d+) chars omitted\]", result)
     assert m is not None
     omitted = int(m.group(1))
@@ -439,9 +475,7 @@ def test_count_drift_detected():
     memory = (
         "## Issue: Slow test suite\n"
         "**Assessment:** Eleven tickets now demonstrate this pattern.\n"
-        "**Evidence:**\n"
-        + "\n".join(f"- `TKT-{i:03d}`" for i in range(1, 11))
-        + "\n"
+        "**Evidence:**\n" + "\n".join(f"- `TKT-{i:03d}`" for i in range(1, 11)) + "\n"
     )
     warnings = _check_memory_count_consistency(memory)
     assert len(warnings) == 1
@@ -514,10 +548,14 @@ def test_multiple_issues_mixed():
     warnings = _check_memory_count_consistency(memory)
     # Both "Slow tests" (claims 5, has 3) and "Token waste" (claims 4, has 3) drifted.
     assert len(warnings) == 2
-    assert any("Slow tests" in w and "claims 5 ticket" in w and "has 3 distinct" in w
-               for w in warnings)
-    assert any("Token waste" in w and "claims 4 ticket" in w and "has 3 distinct" in w
-               for w in warnings)
+    assert any(
+        "Slow tests" in w and "claims 5 ticket" in w and "has 3 distinct" in w
+        for w in warnings
+    )
+    assert any(
+        "Token waste" in w and "claims 4 ticket" in w and "has 3 distinct" in w
+        for w in warnings
+    )
 
 
 def test_word_number_parsing():
@@ -592,7 +630,8 @@ def test_draft_gap_id_marker_injected_on_spawn(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="pattern found",
             conclusion="filing draft",
@@ -616,7 +655,8 @@ def test_no_marker_when_draft_gap_id_is_none(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="pattern found",
             conclusion="filing draft",
@@ -682,9 +722,18 @@ def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path
     svc = TicketService(s)
 
     # Create a retrospect-sourced ticket with NO gap-id marker.
-    ticket = svc.create("Old retrospect draft", "No marker here.", source=SourceKind.RETROSPECT)
+    ticket = svc.create(
+        "Old retrospect draft", "No marker here.", source=SourceKind.RETROSPECT
+    )
     # Move it to CLOSED (with DONE in history).
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+        State.CLOSED,
+    ):
         svc.transition(ticket.id, st)
 
     result = _verify_prior_proposals(svc, s, SourceKind.RETROSPECT)
@@ -704,7 +753,8 @@ def test_follow_up_spawned_for_stub(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="stub found",
             conclusion="follow-up filed",
@@ -736,7 +786,8 @@ def test_follow_up_dedup_skips_duplicate(tmp_path, monkeypatch):
     # Leave in DRAFT (default) — an open, non-terminal ticket.
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="stub found",
             conclusion="follow-up already filed",
@@ -759,7 +810,8 @@ def test_follow_up_not_spawned_for_clean_ticket(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="clean run",
             conclusion="closed",
@@ -779,7 +831,8 @@ def test_follow_up_in_artifact_and_note(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="stub found",
             conclusion="follow-up filed",
@@ -810,11 +863,19 @@ def test_follow_up_dedup_allows_refile_when_closed(tmp_path, monkeypatch):
         "Wire real doc agent in DocumentStage._run_doc_agent",
         "Already closed.",
     )
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE, State.CLOSED):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+        State.CLOSED,
+    ):
         ctx.service.transition(closed_ticket.id, st)
 
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="stub still present",
             conclusion="follow-up re-filed",
@@ -841,7 +902,8 @@ def test_systemic_proposals_still_work(tmp_path, monkeypatch):
         lambda: "parent-ticket-session-id",
     )
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="wastes tokens",
             conclusion="improvement draft filed",
@@ -886,7 +948,13 @@ def test_epic_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
         "Connect the YAML loader.",
         parent_id=epic.id,
     )
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         ctx.service.transition(child.id, st)
     child = ctx.service.get(child.id)
 
@@ -911,13 +979,25 @@ def test_sibling_context_passed_to_retrospect_agent(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
 
-    epic = ctx.service.create("Epic: Multi-stage refactor", "Big refactor.", kind="epic")
+    epic = ctx.service.create(
+        "Epic: Multi-stage refactor", "Big refactor.", kind="epic"
+    )
 
     current = ctx.service.create("Refactor refine stage", "desc", parent_id=epic.id)
-    sibling_a = ctx.service.create("Refactor implement stage", "desc", parent_id=epic.id)
-    sibling_b = ctx.service.create("Refactor retrospect stage", "desc", parent_id=epic.id)
+    sibling_a = ctx.service.create(
+        "Refactor implement stage", "desc", parent_id=epic.id
+    )
+    sibling_b = ctx.service.create(
+        "Refactor retrospect stage", "desc", parent_id=epic.id
+    )
 
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         ctx.service.transition(current.id, st)
     current = ctx.service.get(current.id)
 
@@ -965,7 +1045,13 @@ def test_no_epic_context_for_non_epic_parent(tmp_path, monkeypatch):
 
     parent = ctx.service.create("Regular parent ticket", "Not an epic.")
     child = ctx.service.create("Child of regular ticket", "desc", parent_id=parent.id)
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         ctx.service.transition(child.id, st)
     child = ctx.service.get(child.id)
 
@@ -990,17 +1076,26 @@ def test_follow_up_suppressed_when_sibling_covers_gap(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
 
-    epic = ctx.service.create("Epic: Doc system", "Wire doc agent + tests.", kind="epic")
+    epic = ctx.service.create(
+        "Epic: Doc system", "Wire doc agent + tests.", kind="epic"
+    )
     current = ctx.service.create("Wire doc agent stub", "desc", parent_id=epic.id)
     ctx.service.create("Doc agent unit tests", "desc", parent_id=epic.id)
 
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         ctx.service.transition(current.id, st)
     current = ctx.service.get(current.id)
 
     # The agent sees a stub but notes a sibling covers it — no follow_up.
     monkeypatch.setattr(
-        retrospecting, "run_retrospect_agent",
+        retrospecting,
+        "run_retrospect_agent",
         lambda **kwargs: _default_result(
             findings="_run_doc_agent is a stub, deferred to sibling TKT-...",
             conclusion="closed — gap deferred to sibling",
@@ -1023,7 +1118,13 @@ def test_sibling_context_empty_when_no_other_children(tmp_path, monkeypatch):
 
     epic = ctx.service.create("Epic: Solo mission", "Just one child.", kind="epic")
     child = ctx.service.create("The only child", "desc", parent_id=epic.id)
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         ctx.service.transition(child.id, st)
     child = ctx.service.get(child.id)
 
@@ -1049,7 +1150,13 @@ def test_sibling_title_truncated_at_80_chars(tmp_path, monkeypatch):
     long_title = "A" * 100 + " suffix"
     ctx.service.create(long_title, "desc", parent_id=epic.id)
 
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         ctx.service.transition(current.id, st)
     current = ctx.service.get(current.id)
 

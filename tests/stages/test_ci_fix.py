@@ -1,7 +1,5 @@
 """Tests for the CIFixStage (FIXING_CI → IMPLEMENT_COMPLETE | BLOCKED)."""
 
-import pytest
-
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -26,15 +24,33 @@ def _ctx(tmp_path, **env):
     if ft is not None:
         from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
     db.init_db(s)
-    from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=TicketService(s), repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+    from robotsix_mill.config import RepoConfig
+
+    return StageContext(
+        settings=s,
+        service=TicketService(s),
+        repo_config=RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        ),
+    )
 
 
 def _fixing_ci(ctx):
     t = ctx.service.create("x", "y")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.FIXING_CI):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.FIXING_CI,
+    ):
         ctx.service.transition(t.id, st)
     ctx.service.set_branch(t.id, f"mill/{t.id}")
     return ctx.service.get(t.id)
@@ -42,8 +58,11 @@ def _fixing_ci(ctx):
 
 def _gh(tmp_path, **extra):
     return _ctx(
-        tmp_path, FORGE_KIND="github", FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git", **extra,
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_TOKEN="t",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        **extra,
     )
 
 
@@ -57,18 +76,23 @@ def _setup_repo(ctx, ticket):
 
 # --- Fix success + push success → IMPLEMENT_COMPLETE ---
 
+
 def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "lint", "summary": "err", "text": None, "annotations": []}],
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
         },
     )
     # pr_status is called to get head_sha for job-log fetching.
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {"sha": "abc123"},
     )
     monkeypatch.setattr(
@@ -81,7 +105,8 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
         push_seen.update(branch=branch, token=token)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.push", fake_push,
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        fake_push,
     )
 
     t = _fixing_ci(ctx)
@@ -98,17 +123,22 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
 
 # --- Fix success + push failure → BLOCKED ---
 
+
 def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {"sha": "abc123"},
     )
     monkeypatch.setattr(
@@ -130,17 +160,22 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
 
 # --- Fix failure, attempts remaining → IMPLEMENT_COMPLETE ---
 
+
 def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, ci_fix_max_attempts="3")
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "test", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "test", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {"sha": "abc123"},
     )
     monkeypatch.setattr(
@@ -168,17 +203,22 @@ def test_fix_failure_retries_next_poll(tmp_path, monkeypatch):
 
 # --- Fix failure, attempts exhausted → BLOCKED ---
 
+
 def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, ci_fix_max_attempts="2")
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "test", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "test", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {"sha": "abc123"},
     )
     monkeypatch.setattr(
@@ -209,17 +249,22 @@ def test_fix_failure_exhausted_blocks(tmp_path, monkeypatch):
 
 # --- Agent crash → treated as failure ---
 
+
 def test_agent_crash_treated_as_failure(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, ci_fix_max_attempts="1")
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {"sha": "abc123"},
     )
     monkeypatch.setattr(
@@ -237,6 +282,7 @@ def test_agent_crash_treated_as_failure(tmp_path, monkeypatch):
 
 # --- Missing workspace clone → BLOCKED ---
 
+
 def test_missing_workspace_clone_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     t = _fixing_ci(ctx)
@@ -249,6 +295,7 @@ def test_missing_workspace_clone_blocks(tmp_path, monkeypatch):
 
 # --- Forge not configured → BLOCKED ---
 
+
 def test_forge_not_configured_blocks(tmp_path):
     ctx = _ctx(tmp_path)
     out = CIFixStage().run(_fixing_ci(ctx), ctx)
@@ -258,17 +305,22 @@ def test_forge_not_configured_blocks(tmp_path):
 
 # --- Force-push refspec is ticket branch only ---
 
+
 def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {"sha": "abc123"},
     )
     monkeypatch.setattr(
@@ -292,11 +344,13 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
 
 # --- CI green/pending while in FIXING_CI → back to IMPLEMENT_COMPLETE ---
 
+
 def test_ci_green_while_in_fixing_ci_returns_implement_complete(tmp_path, monkeypatch):
     """If CI turns green while we're in FIXING_CI, go back to IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
@@ -307,10 +361,13 @@ def test_ci_green_while_in_fixing_ci_returns_implement_complete(tmp_path, monkey
     assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
-def test_ci_pending_while_in_fixing_ci_returns_implement_complete(tmp_path, monkeypatch):
+def test_ci_pending_while_in_fixing_ci_returns_implement_complete(
+    tmp_path, monkeypatch
+):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
     )
 
@@ -325,7 +382,8 @@ def test_check_status_returns_none_while_in_fixing_ci(tmp_path, monkeypatch):
     """PR disappeared → back to IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: None,
     )
 
@@ -340,7 +398,8 @@ def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
     """Transient error → back to IMPLEMENT_COMPLETE for re-poll."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("api down")),
     )
 
@@ -353,18 +412,23 @@ def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
 
 # --- Counter location ---
 
+
 def test_counter_location_is_artifacts_dir(tmp_path, monkeypatch):
     """Counter is at artifacts_dir / ci_fix_attempts.txt."""
     ctx = _gh(tmp_path, ci_fix_max_attempts="3")
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "test", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "test", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {"sha": "abc123"},
     )
     monkeypatch.setattr(
@@ -388,6 +452,7 @@ def test_counter_location_is_artifacts_dir(tmp_path, monkeypatch):
 
 # --- _build_failing_summary ---
 
+
 def test_build_failing_summary_formats_correctly():
     failing = [
         {
@@ -395,7 +460,12 @@ def test_build_failing_summary_formats_correctly():
             "summary": "Found 3 errors",
             "text": "line 1: unused import\nline 2: missing docstring",
             "annotations": [
-                {"path": "src/foo.py", "start_line": 10, "message": "unused import os", "level": "failure"},
+                {
+                    "path": "src/foo.py",
+                    "start_line": 10,
+                    "message": "unused import os",
+                    "level": "failure",
+                },
             ],
         },
         {
@@ -419,6 +489,7 @@ def test_build_failing_summary_empty():
 
 # --- Counter helpers ---
 
+
 def test_ci_fix_counter_read_write(tmp_path):
     p = tmp_path / "ci_fix_counter.txt"
     assert _read_counter(p) == 0
@@ -433,6 +504,7 @@ def test_ci_fix_counter_read_write(tmp_path):
 # ---------------------------------------------------------------------------
 # _build_failing_summary with log_text
 # ---------------------------------------------------------------------------
+
 
 def test_build_failing_summary_includes_job_logs():
     """_build_failing_summary includes **Job logs:** section when log_text provided."""
@@ -460,32 +532,47 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     # PR status returns a sha.
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "http://pr",
-            "mergeable": True, "sha": "abc123",
+            "merged": False,
+            "state": "open",
+            "url": "http://pr",
+            "mergeable": True,
+            "sha": "abc123",
         },
     )
     # check_status returns failure.
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "build", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "build", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     # list_workflow_runs returns one failed run.
     monkeypatch.setattr(
-        github.GitHubForge, "list_workflow_runs",
+        github.GitHubForge,
+        "list_workflow_runs",
         lambda self, *, branch=None, head_sha=None: [
-            {"id": 42, "name": "CI", "workflow_id": 100,
-             "head_sha": "abc123", "conclusion": "failure",
-             "html_url": "http://x", "created_at": "2025-01-01T00:00:00Z"},
+            {
+                "id": 42,
+                "name": "CI",
+                "workflow_id": 100,
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "html_url": "http://x",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
         ],
     )
     # fetch_workflow_job_logs returns log text.
     monkeypatch.setattr(
-        github.GitHubForge, "fetch_workflow_job_logs",
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
         lambda self, *, run_id: "docker build error\n",
     )
     # ci-fix agent succeeds.

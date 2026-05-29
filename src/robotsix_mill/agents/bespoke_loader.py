@@ -95,7 +95,8 @@ def load_bespoke_definitions(
         except yaml.YAMLError as exc:
             log.warning(
                 "bespoke definition %s: YAML parse error — skipping (%s)",
-                path, exc,
+                path,
+                exc,
             )
             continue
         if not isinstance(raw, dict):
@@ -109,7 +110,8 @@ def load_bespoke_definitions(
         except ValidationError as exc:
             log.warning(
                 "bespoke definition %s: schema error — skipping (%s)",
-                path, exc,
+                path,
+                exc,
             )
             continue
         if definition.name in seen_names:
@@ -118,7 +120,8 @@ def load_bespoke_definitions(
             # First write wins; warn about the duplicate.
             log.warning(
                 "bespoke definition %s: duplicate name %r — skipping",
-                path, definition.name,
+                path,
+                definition.name,
             )
             continue
         seen_names.add(definition.name)

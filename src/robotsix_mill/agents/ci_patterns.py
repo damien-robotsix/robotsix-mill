@@ -34,7 +34,7 @@ def load_patterns(path: Path) -> list[CiPatternEntry]:
     """Load pattern entries from *path*, returning [] on any error."""
     try:
         raw = json.loads(path.read_text("utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         log.debug("ci_patterns: could not load %s", path, exc_info=True)
         return []
     entries: list[CiPatternEntry] = []

@@ -1,9 +1,10 @@
 """Tests for the shared agent-pass runner."""
 
-import pytest
-from pathlib import Path
-
-from robotsix_mill.pass_runner import run_agent_pass, _verify_prior_proposals
+from robotsix_mill.pass_runner import (
+    run_agent_pass,
+    _verify_prior_proposals,
+    load_memory,
+)
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -16,8 +17,7 @@ class _FakeAgentResult:
     """Returned by mock agent callables — matches the interface that
     run_agent_pass accesses: .updated_memory, .draft_titles, .draft_bodies."""
 
-    def __init__(self, updated_memory, draft_titles, draft_bodies,
-                 gap_ids=None):
+    def __init__(self, updated_memory, draft_titles, draft_bodies, gap_ids=None):
         self.updated_memory = updated_memory
         self.draft_titles = draft_titles
         self.draft_bodies = draft_bodies
@@ -257,8 +257,8 @@ def test_memory_write_ioerror_swallowed(tmp_path, monkeypatch):
     monkeypatch.setattr(
         memory_file.__class__,
         "write_text",
-        lambda self, content, encoding=None: (
-            (_ for _ in ()).throw(OSError("permission denied"))
+        lambda self, content, encoding=None: (_ for _ in ()).throw(
+            OSError("permission denied")
         ),
     )
 
@@ -299,7 +299,8 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
 
     # Ticket A: CLOSED with DONE event → resolution "merged"
     ta = service.create(
-        "Gap A", "body A\n\n<!-- audit-gap-id: gap_alpha -->",
+        "Gap A",
+        "body A\n\n<!-- audit-gap-id: gap_alpha -->",
         source=SourceKind.AUDIT,
     )
     with db.session(settings) as s:
@@ -312,7 +313,8 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
 
     # Ticket B: CLOSED without DONE → resolution "declined"
     tb = service.create(
-        "Gap B", "body B\n\n<!-- audit-gap-id: gap_beta -->",
+        "Gap B",
+        "body B\n\n<!-- audit-gap-id: gap_beta -->",
         source=SourceKind.AUDIT,
     )
     with db.session(settings) as s:
@@ -323,13 +325,18 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
 
     # Ticket C: HUMAN_MR_APPROVAL → resolution "in-flight"
     tc = service.create(
-        "Gap C", "body C\n\n<!-- audit-gap-id: gap_gamma -->",
+        "Gap C",
+        "body C\n\n<!-- audit-gap-id: gap_gamma -->",
         source=SourceKind.AUDIT,
     )
     with db.session(settings) as s:
         ticket = s.get(type(tc), tc.id)
         ticket.state = State.HUMAN_MR_APPROVAL
-        s.add(TicketEvent(ticket_id=tc.id, state=State.HUMAN_MR_APPROVAL, note="reviewing"))
+        s.add(
+            TicketEvent(
+                ticket_id=tc.id, state=State.HUMAN_MR_APPROVAL, note="reviewing"
+            )
+        )
         s.commit()
 
     memory_file = tmp_path / "audit_memory.md"
@@ -423,7 +430,8 @@ def test_no_marker_ticket_not_in_mapping(tmp_path):
 
     # Create a ticket WITH the correct source but NO gap-id marker.
     service.create(
-        "Old draft", "No marker here, just old pre-rollout.",
+        "Old draft",
+        "No marker here, just old pre-rollout.",
         source=SourceKind.AUDIT,
     )
 
@@ -471,8 +479,6 @@ def test_missing_gap_ids_no_crash(tmp_path):
 
 
 # --- memory truncation tests (load_memory) ---
-
-from robotsix_mill.pass_runner import load_memory
 
 
 def test_load_memory_under_limit_noop(tmp_path):

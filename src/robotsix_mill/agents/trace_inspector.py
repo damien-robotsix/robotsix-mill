@@ -155,7 +155,7 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
         return (
             trace_data[: max_chars // 2]
             + f"\n…[trimmed {len(trace_data) - max_chars} chars]…\n"
-            + trace_data[-max_chars // 2:]
+            + trace_data[-max_chars // 2 :]
         )
 
     obs = trace.get("observations") or []
@@ -178,7 +178,7 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> str:
     return (
         shrunk[: max_chars // 2]
         + f"\n…[trimmed {len(shrunk) - max_chars} chars]…\n"
-        + shrunk[-max_chars // 2:]
+        + shrunk[-max_chars // 2 :]
     )
 
 
@@ -244,7 +244,8 @@ def run_trace_inspector(
         from .explore import make_explore_tool
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t
+            for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
@@ -270,7 +271,8 @@ def run_trace_inspector(
     )
     limits = UsageLimits(request_limit=request_limit)
     prompt = (
-        section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Analyse the following Langfuse trace JSON for tool errors, "
         + "agent limitations, and optimisation opportunities. For each "
         + "finding, propose a CONCRETE solution grounded in the code "
@@ -292,7 +294,7 @@ def run_trace_inspector(
         if "maximum context length" in msg.lower():
             return TraceInspectResult(
                 error=f"trace too large for the model context even after "
-                      f"trimming ({len(trimmed)} chars sent): {msg[:300]}"
+                f"trimming ({len(trimmed)} chars sent): {msg[:300]}"
             )
         return TraceInspectResult(error=msg[:500])
     finally:
@@ -337,7 +339,9 @@ def make_trace_inspect_tool(settings: Settings):
         # exists we tack it on as a parenthetical, keeping per-line
         # density readable.
         by_cat: dict[str, list[TraceFinding]] = {
-            "tool_error": [], "agent_limitation": [], "optimization": [],
+            "tool_error": [],
+            "agent_limitation": [],
+            "optimization": [],
         }
         for f in result.findings:
             by_cat.setdefault(f.category, []).append(f)

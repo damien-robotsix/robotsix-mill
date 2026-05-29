@@ -12,6 +12,7 @@ from robotsix_mill.config import Settings, Secrets, _reset_secrets
 
 # ── helpers ──────────────────────────────────────────────────────────
 
+
 def _settings(tmp_path, **env):
     env.setdefault("data_dir", str(tmp_path))
     env.setdefault("OPENROUTER_API_KEY", "k")
@@ -19,6 +20,7 @@ def _settings(tmp_path, **env):
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**env)
@@ -34,25 +36,42 @@ def _clear_registry():
 
 # ── ToolRegistry tests ────────────────────────────────────────────────
 
+
 def test_tool_registry_register_and_list():
     """Register a few ToolInfo objects, assert correct count, sort order,
     and content."""
-    ToolRegistry.register(ToolInfo(
-        name="run_command", description="Run a shell command.",
-        category="shell", parameters={"command": "str"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="Read a file.",
-        category="fs", parameters={"path": "str"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="explore", description="Explore the repo.",
-        category="exploration", parameters={"question": "str"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="write_file", description="Write a file.",
-        category="fs", parameters={"path": "str", "content": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="run_command",
+            description="Run a shell command.",
+            category="shell",
+            parameters={"command": "str"},
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="Read a file.",
+            category="fs",
+            parameters={"path": "str"},
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="explore",
+            description="Explore the repo.",
+            category="exploration",
+            parameters={"question": "str"},
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="write_file",
+            description="Write a file.",
+            category="fs",
+            parameters={"path": "str", "content": "str"},
+        )
+    )
 
     tools = ToolRegistry.list_tools()
     assert len(tools) == 4
@@ -74,10 +93,14 @@ def test_tool_registry_describe_for_prompt_is_deprecated_noop():
     pydantic-ai already injects via the structured ``tools`` array.
     After deduplication, the method is a deprecated shim that returns
     an empty string regardless of registry contents."""
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="Return the text content of a file.",
-        category="fs", parameters={"path": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="Return the text content of a file.",
+            category="fs",
+            parameters={"path": "str"},
+        )
+    )
 
     out = ToolRegistry.describe_for_prompt()
     assert out == ""
@@ -89,22 +112,28 @@ def test_tool_registry_describe_for_prompt_is_deprecated_noop():
 def test_tool_registry_deduplicates_by_name():
     """Register two ToolInfo with the same name, assert only the last
     one survives."""
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="First registration.",
-        category="fs", parameters={},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="Second registration wins.",
-        category="fs", parameters={"path": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="First registration.",
+            category="fs",
+            parameters={},
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="Second registration wins.",
+            category="fs",
+            parameters={"path": "str"},
+        )
+    )
 
     tools = ToolRegistry.list_tools()
     assert len(tools) == 1
     assert tools[0].name == "read_file"
     assert tools[0].description == "Second registration wins."
     assert tools[0].parameters == {"path": "str"}
-
-
 
 
 def test_all_tools_registered(tmp_path, monkeypatch):
@@ -122,9 +151,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
 
     class FakeAgent:
         def __init__(self, **kw):
-            cap["tools"] = sorted(
-                t.__name__ for t in (kw.get("tools") or [])
-            )
+            cap["tools"] = sorted(t.__name__ for t in (kw.get("tools") or []))
 
         def run_sync(self, prompt, *, usage_limits=None, **kw):
             return type("R", (), {"output": ImplementResult(summary="ok")})()
@@ -142,8 +169,17 @@ def test_all_tools_registered(tmp_path, monkeypatch):
     # all the tool registrations as a side effect.
     fs = build_fs_tools(tmp_path, s)
     fs_tools = [
-        t for t in fs if t.__name__ in
-        ("read_file", "write_file", "list_dir", "edit_file", "delete_file", "run_command")
+        t
+        for t in fs
+        if t.__name__
+        in (
+            "read_file",
+            "write_file",
+            "list_dir",
+            "edit_file",
+            "delete_file",
+            "run_command",
+        )
     ]
     _agent = build_agent(
         s,
@@ -152,7 +188,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
         tools=[
             make_explore_tool(s, tmp_path),
             *fs_tools,
-            make_run_tests_tool := coordinating.make_run_tests_tool(s, tmp_path),
+            _make_run_tests_tool := coordinating.make_run_tests_tool(s, tmp_path),
         ],
         web=True,
         name="implement",
@@ -161,9 +197,19 @@ def test_all_tools_registered(tmp_path, monkeypatch):
 
     registered = {t.name for t in ToolRegistry.list_tools()}
     expected = {
-        "ask_user", "read_file", "write_file", "edit_file", "delete_file",
-        "list_dir", "run_command", "explore", "run_tests",
-        "web_research", "report_issue", "reply_to_thread", "close_thread",
+        "ask_user",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "delete_file",
+        "list_dir",
+        "run_command",
+        "explore",
+        "run_tests",
+        "web_research",
+        "report_issue",
+        "reply_to_thread",
+        "close_thread",
     }
     assert registered == expected
 
@@ -177,10 +223,14 @@ def test_compose_prompt_does_not_inject_tool_table(tmp_path):
 
     s = _settings(tmp_path)
 
-    ToolRegistry.register(ToolInfo(
-        name="read_file", description="Read a file.",
-        category="fs", parameters={"path": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="Read a file.",
+            category="fs",
+            parameters={"path": "str"},
+        )
+    )
 
     result = compose_prompt(s, "test prompt")
     assert "## Available tools" not in result

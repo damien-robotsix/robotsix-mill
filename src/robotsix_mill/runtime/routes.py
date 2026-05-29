@@ -25,14 +25,13 @@ from ..core.models import (
     TicketRead,
     TicketTransition,
 )
-from ..config import get_repo_config, get_secrets
+from ..config import get_secrets
 from ..core.service import TransitionError
 from ..core.states import STAGE_FOR_STATE, State
 from ..forge import get_forge
 from .board_html import BOARD_HTML
 from .deps import (
     enrich_ticket_read,
-    get_repo_config_for,
     get_repos_registry,
     get_run_registry,
     get_service,
@@ -102,7 +101,6 @@ def _resolve_agent_run_repos(
     per repo.  A ``None`` element means single-repo backward compat
     (the runner uses global secrets / memory paths).
     """
-    from ..config import RepoConfig
 
     repos = request.app.state.repos
     if repo_id is None:
@@ -163,8 +161,7 @@ def list_repos(
         rc = repos.repos[single]
         return [{"repo_id": rc.repo_id, "board_id": rc.board_id}]
     return [
-        {"repo_id": rc.repo_id, "board_id": rc.board_id}
-        for rc in repos.repos.values()
+        {"repo_id": rc.repo_id, "board_id": rc.board_id} for rc in repos.repos.values()
     ]
 
 
@@ -298,9 +295,7 @@ def list_tickets(
             log.exception("list_tickets: failed to query board %r", s.board_id)
 
     return [
-        enrich_ticket_read(
-            t, settings, svc, blocking_cost=False, fetch_pr_url=False
-        )
+        enrich_ticket_read(t, settings, svc, blocking_cost=False, fetch_pr_url=False)
         for t in tickets
     ]
 
@@ -365,10 +360,13 @@ def get_retrospect(
 # "details" button that fetches that file via the route below.
 # Listed once here so the UI and the listing endpoint stay in sync.
 _STAGE_ARTIFACTS: dict[str, list[str]] = {
-    "refine": ["draft-original.md", "file_map.json", "refine-verbose.md",
-               "epic-body-proposed.md"],
-    "implement": ["implement.md", "implement_summary.md",
-                  "reference_files.json"],
+    "refine": [
+        "draft-original.md",
+        "file_map.json",
+        "refine-verbose.md",
+        "epic-body-proposed.md",
+    ],
+    "implement": ["implement.md", "implement_summary.md", "reference_files.json"],
     "review": ["review.md"],
     "document": [],
     "deliver": ["deliver.md"],
@@ -403,13 +401,18 @@ def list_artifacts(
                 stat = p.stat()
             except OSError:
                 continue
-            items.append({
-                "name": p.name,
-                "size": stat.st_size,
-                "mtime": datetime.fromtimestamp(
-                    stat.st_mtime, tz=timezone.utc,
-                ).isoformat().replace("+00:00", "Z"),
-            })
+            items.append(
+                {
+                    "name": p.name,
+                    "size": stat.st_size,
+                    "mtime": datetime.fromtimestamp(
+                        stat.st_mtime,
+                        tz=timezone.utc,
+                    )
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                }
+            )
     items.sort(key=lambda x: x["mtime"])
     return {"artifacts": items}
 
@@ -463,6 +466,7 @@ def cost_breakdown(
         raise HTTPException(404, "ticket not found")
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     from ..langfuse_client import session_traces
+
     rows = session_traces(settings, ticket_id, repo_config=repo_config)
     if rows is None:
         return {"available": False, "traces": []}
@@ -509,9 +513,7 @@ def approve_ticket(
     settings=Depends(get_settings),
 ) -> TicketRead:
     try:
-        ticket = svc.transition(
-            ticket_id, State.READY, note="approved by human"
-        )
+        ticket = svc.transition(ticket_id, State.READY, note="approved by human")
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
@@ -523,16 +525,11 @@ def approve_ticket(
         if ticket.parent_id:
             parent = svc.get(ticket.parent_id)
             if parent is not None and parent.kind == "epic":
-                artifact = (
-                    svc.workspace(ticket).artifacts_dir
-                    / "epic-body-proposed.md"
-                )
+                artifact = svc.workspace(ticket).artifacts_dir / "epic-body-proposed.md"
                 if artifact.exists():
                     epic_body = artifact.read_text(encoding="utf-8").strip()
                     if epic_body:
-                        new_hash = svc.workspace(parent).write_description(
-                            epic_body
-                        )
+                        new_hash = svc.workspace(parent).write_description(epic_body)
                         svc.set_content_hash(parent.id, new_hash)
     except Exception:
         pass  # best-effort: approval always succeeds
@@ -562,17 +559,13 @@ def merge_now(
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     if ticket.state is not State.HUMAN_MR_APPROVAL:
-        raise HTTPException(
-            409, "ticket is not in human_mr_approval"
-        )
+        raise HTTPException(409, "ticket is not in human_mr_approval")
 
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     forge = get_forge(settings, repo_config=repo_config)
     pr = forge.pr_status(source_branch=ticket.branch)
     if pr is None:
-        raise HTTPException(
-            409, "no PR found for branch — nothing to merge"
-        )
+        raise HTTPException(409, "no PR found for branch — nothing to merge")
     pr_url = pr.get("url", ticket.branch)
 
     result = forge.merge_pr(source_branch=ticket.branch)
@@ -636,8 +629,10 @@ def get_merge_info(
                 ci_conclusion = cs.get("conclusion")
                 if ci_conclusion == "failure":
                     ci_failing = [
-                        {"name": f.get("name", ""),
-                         "summary": (f.get("summary") or "")[:200]}
+                        {
+                            "name": f.get("name", ""),
+                            "summary": (f.get("summary") or "")[:200],
+                        }
                         for f in (cs.get("failing") or [])
                     ]
         except Exception:
@@ -649,8 +644,10 @@ def get_merge_info(
         try:
             raw = forge.pr_files(source_branch=branch)
             # Sort by total changes desc, cap at 50.
-            raw.sort(key=lambda f: f.get("additions", 0) + f.get("deletions", 0),
-                     reverse=True)
+            raw.sort(
+                key=lambda f: f.get("additions", 0) + f.get("deletions", 0),
+                reverse=True,
+            )
             files = raw[:50]
         except Exception:
             pass
@@ -673,9 +670,7 @@ def get_merge_reason(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    reason_path = (
-        svc.workspace(ticket).artifacts_dir / "merge_reason.txt"
-    )
+    reason_path = svc.workspace(ticket).artifacts_dir / "merge_reason.txt"
     if not reason_path.exists():
         return {"reason": ""}
     return {"reason": reason_path.read_text(encoding="utf-8").strip()}
@@ -703,7 +698,11 @@ def get_merge_status(
 
     # Only relevant for merge-ready states.  Everything else gets a
     # clean "no" so the drawer doesn't bother rendering a button.
-    if ticket.state not in (State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE, State.IMPLEMENT_COMPLETE):
+    if ticket.state not in (
+        State.HUMAN_MR_APPROVAL,
+        State.WAITING_AUTO_MERGE,
+        State.IMPLEMENT_COMPLETE,
+    ):
         return {
             "mergeable": None,
             "ci_conclusion": None,
@@ -801,7 +800,9 @@ def add_comment(
     persisted.
     """
     try:
-        comment = svc.add_comment(ticket_id, body.body, author=body.author, parent_id=body.parent_id)
+        comment = svc.add_comment(
+            ticket_id, body.body, author=body.author, parent_id=body.parent_id
+        )
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except ValueError as e:
@@ -894,7 +895,10 @@ def request_changes(
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
+    return {
+        "comment": comment,
+        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
+    }
 
 
 @router.post("/tickets/{ticket_id}/priority", response_model=TicketRead)
@@ -945,14 +949,19 @@ def redraft(
     """Redraft a ticket from any active state back to DRAFT with an
     optional comment."""
     try:
-        comment, ticket = svc.redraft(ticket_id, body.body or "", author=body.author or "user")
+        comment, ticket = svc.redraft(
+            ticket_id, body.body or "", author=body.author or "user"
+        )
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
+    return {
+        "comment": comment,
+        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
+    }
 
 
 @router.post("/tickets/{ticket_id}/mark-done")
@@ -1024,7 +1033,9 @@ def create_epic(
 
     try:
         ticket = svc.create(
-            title=title, description=description, kind="epic",
+            title=title,
+            description=description,
+            kind="epic",
             board_id=board_id or None,
         )
     except ValueError as e:
@@ -1049,7 +1060,11 @@ def list_children(
     repo_config = _repo_config_for_ticket(parent, request.app.state.repos)
     return [
         enrich_ticket_read(
-            t, settings, svc, blocking_cost=False, fetch_pr_url=False,
+            t,
+            settings,
+            svc,
+            blocking_cost=False,
+            fetch_pr_url=False,
             repo_config=repo_config,
         )
         for t in svc.list_children(ticket_id)
@@ -1085,6 +1100,7 @@ def generate_children(
     # children on the mill board. Use a service pinned to the epic's
     # actual board for every mutation in the background runner.
     from ..core.service import TicketService as _TicketService
+
     epic_board_id = ticket.board_id or svc.board_id
     epic_svc = _TicketService(settings, board_id=epic_board_id)
 
@@ -1112,14 +1128,17 @@ def generate_children(
             # spent money breaking itself down.
             session_id = ticket_id
             with tracing.start_ticket_root_span(
-                session_id, "epic-breakdown",
+                session_id,
+                "epic-breakdown",
                 repo_config=epic_repo_config,
                 extra_attributes={"ticket_id": ticket_id},
             ) as root:
-                root.set_input({
-                    "ticket_id": ticket_id,
-                    "epic_title": ticket.title,
-                })
+                root.set_input(
+                    {
+                        "ticket_id": ticket_id,
+                        "epic_title": ticket.title,
+                    }
+                )
                 description = epic_svc.workspace(ticket).read_description()
                 result = run_epic_breakdown_agent(
                     settings=settings,
@@ -1153,21 +1172,21 @@ def generate_children(
                     f"{', '.join(created_ids[:5])}"
                     f"{'…' if len(created_ids) > 5 else ''}"
                 )
-                root.set_output({
-                    "children_created": len(created_ids),
-                    "child_ids": created_ids,
-                    "epic_body_updated": bool(
-                        result.epic_body and result.epic_body.strip()
-                    ),
-                })
+                root.set_output(
+                    {
+                        "children_created": len(created_ids),
+                        "child_ids": created_ids,
+                        "epic_body_updated": bool(
+                            result.epic_body and result.epic_body.strip()
+                        ),
+                    }
+                )
                 # Record the breakdown in the epic's own history so the
                 # drawer shows what happened (and how much it cost).
                 # add_step_event uses the current state, so this stays
                 # in EPIC_OPEN — no state machine churn.
                 try:
-                    body_changed = bool(
-                        result.epic_body and result.epic_body.strip()
-                    )
+                    body_changed = bool(result.epic_body and result.epic_body.strip())
                     epic_svc.add_step_event(
                         ticket_id,
                         "epic-breakdown: spawned "
@@ -1182,7 +1201,8 @@ def generate_children(
             registry.finish_ok(run_id, summary)
             log.info(
                 "epic-breakdown done: %d children for %s",
-                len(created_ids), ticket_id,
+                len(created_ids),
+                ticket_id,
             )
         except Exception as e:  # noqa: BLE001 — background; just log
             log.exception("epic-breakdown failed for %s", ticket_id)
@@ -1268,17 +1288,13 @@ def audit_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "audit pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("audit pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("audit pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="audit-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="audit-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -1314,17 +1330,13 @@ def bc_check_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "bc-check pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("bc-check pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("bc-check pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="bc-check-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="bc-check-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -1343,7 +1355,9 @@ def completeness_check_pass(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("completeness-check", repo_id=rc.repo_id if rc else "")
+                run_id = registry.start(
+                    "completeness-check", repo_id=rc.repo_id if rc else ""
+                )
                 session_id = make_session_id("completeness-check")
                 r = run_completeness_check_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
@@ -1353,7 +1367,9 @@ def completeness_check_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info("completeness-check pass done: %d draft(s)", len(r.drafts_created))
+                log.info(
+                    "completeness-check pass done: %d draft(s)", len(r.drafts_created)
+                )
             except Exception as e:
                 log.exception("completeness-check pass failed")
                 if run_id:
@@ -1403,9 +1419,7 @@ def agent_check_pass(
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="agent-check-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="agent-check-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -1428,7 +1442,9 @@ def trace_health_check(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("trace-health", repo_id=rc.repo_id if rc else "")
+                run_id = registry.start(
+                    "trace-health", repo_id=rc.repo_id if rc else ""
+                )
                 r = run_trace_health_check(repo_config=rc)
                 summary = (
                     f"{r.unsessioned_count}/{r.total_traces} "
@@ -1439,15 +1455,13 @@ def trace_health_check(
                 registry.finish_ok(run_id, summary)
                 if r.draft_created:
                     log.info(
-                        "trace-health check: draft created — "
-                        "%d/%d traces unsessioned",
+                        "trace-health check: draft created — %d/%d traces unsessioned",
                         r.unsessioned_count,
                         r.total_traces,
                     )
                 else:
                     log.info(
-                        "trace-health check: no alert "
-                        "(%d/%d traces unsessioned)",
+                        "trace-health check: no alert (%d/%d traces unsessioned)",
                         r.unsessioned_count,
                         r.total_traces,
                     )
@@ -1456,9 +1470,7 @@ def trace_health_check(
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="trace-health-check", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="trace-health-check", daemon=True).start()
     return {"status": "started"}
 
 
@@ -1481,7 +1493,9 @@ def langfuse_cleanup_pass(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("langfuse-cleanup", repo_id=rc.repo_id if rc else "")
+                run_id = registry.start(
+                    "langfuse-cleanup", repo_id=rc.repo_id if rc else ""
+                )
                 r = run_langfuse_cleanup_pass(
                     settings=settings,
                     repo_config=rc,
@@ -1495,16 +1509,16 @@ def langfuse_cleanup_pass(
                 registry.finish_ok(run_id, summary)
                 log.info(
                     "langfuse-cleanup: %s — %d traces → %d deleted",
-                    r.project, r.traces_before, r.traces_deleted,
+                    r.project,
+                    r.traces_before,
+                    r.traces_deleted,
                 )
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("langfuse-cleanup failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="langfuse-cleanup", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="langfuse-cleanup", daemon=True).start()
     return {"status": "started"}
 
 
@@ -1538,7 +1552,8 @@ def list_runs(
             # repo_id today. Strict equality on a non-empty filter would
             # hide every pre-wiring run in single-repo deployments.
             entries = [
-                e for e in entries
+                e
+                for e in entries
                 if e.get("repo_id") == repo_id or not e.get("repo_id")
             ]
     return entries
@@ -1610,8 +1625,10 @@ def cost_trend(
         all_buckets: dict[str, dict] = {}
         for rc in repo_config:
             buckets = aggregate_cost_trend(
-                settings, lookback_hours,
-                max_tickets=max_tickets, repo_config=rc,
+                settings,
+                lookback_hours,
+                max_tickets=max_tickets,
+                repo_config=rc,
             )
             for b in buckets:
                 key = b["ts"]
@@ -1621,8 +1638,10 @@ def cost_trend(
                 all_buckets[key]["trace_count"] += b["trace_count"]
         return {"buckets": sorted(all_buckets.values(), key=lambda x: x["ts"])}
     buckets = aggregate_cost_trend(
-        settings, lookback_hours,
-        max_tickets=max_tickets, repo_config=repo_config,
+        settings,
+        lookback_hours,
+        max_tickets=max_tickets,
+        repo_config=repo_config,
     )
     return {"buckets": buckets}
 
@@ -1656,8 +1675,10 @@ def cost_by_agent(
         agg: dict[str, dict] = {}
         for rc in repo_config:
             entries = aggregate_cost_by_name(
-                settings, lookback_hours,
-                max_tickets=max_tickets, repo_config=rc,
+                settings,
+                lookback_hours,
+                max_tickets=max_tickets,
+                repo_config=rc,
             )
             for e in entries:
                 name = e["name"]
@@ -1669,8 +1690,10 @@ def cost_by_agent(
         result.sort(key=lambda x: x["total_cost"], reverse=True)
         return result
     return aggregate_cost_by_name(
-        settings, lookback_hours,
-        max_tickets=max_tickets, repo_config=repo_config,
+        settings,
+        lookback_hours,
+        max_tickets=max_tickets,
+        repo_config=repo_config,
     )
 
 
@@ -1705,16 +1728,20 @@ def most_expensive_ticket_endpoint(
         best: dict | None = None
         for rc in repo_config:
             result = most_expensive_ticket(
-                settings, lookback_hours,
-                max_tickets=max_tickets, repo_config=rc,
+                settings,
+                lookback_hours,
+                max_tickets=max_tickets,
+                repo_config=rc,
             )
             if result and (best is None or result["total_cost"] > best["total_cost"]):
                 best = result
         result = best
     else:
         result = most_expensive_ticket(
-            settings, lookback_hours,
-            max_tickets=max_tickets, repo_config=repo_config,
+            settings,
+            lookback_hours,
+            max_tickets=max_tickets,
+            repo_config=repo_config,
         )
 
     if result is None:
@@ -1760,15 +1787,19 @@ def most_expensive_trace_endpoint(
         best: dict | None = None
         for rc in repo_config:
             result = most_expensive_trace(
-                settings, lookback_hours,
-                max_tickets=max_tickets, repo_config=rc,
+                settings,
+                lookback_hours,
+                max_tickets=max_tickets,
+                repo_config=rc,
             )
             if result and (best is None or result["total_cost"] > best["total_cost"]):
                 best = result
         return best
     return most_expensive_trace(
-        settings, lookback_hours,
-        max_tickets=max_tickets, repo_config=repo_config,
+        settings,
+        lookback_hours,
+        max_tickets=max_tickets,
+        repo_config=repo_config,
     )
 
 
@@ -1866,8 +1897,10 @@ def deep_review_trace(
                         repo_dir = cand
                     else:
                         git_ops.clone(
-                            settings.forge_remote_url, cand,
-                            settings.forge_target_branch, get_secrets().forge_token,
+                            settings.forge_remote_url,
+                            cand,
+                            settings.forge_target_branch,
+                            get_secrets().forge_token,
                         )
                         repo_dir = cand
                 except subprocess.CalledProcessError as e:
@@ -1890,7 +1923,8 @@ def deep_review_trace(
             # spans get exported as a properly-named, session-grouped
             # Langfuse trace.
             with tracing.start_ticket_root_span(
-                tracing.make_session_id("deep-review"), "deep-review",
+                tracing.make_session_id("deep-review"),
+                "deep-review",
                 extra_attributes={"source_trace_id": trace_id},
             ):
                 result = run_trace_inspector(
@@ -1907,9 +1941,7 @@ def deep_review_trace(
                     tmp.write_text(result.updated_memory, encoding="utf-8")
                     tmp.replace(memory_file)
                 except OSError as e:
-                    log.warning(
-                        "deep review: could not write memory file: %s", e
-                    )
+                    log.warning("deep review: could not write memory file: %s", e)
 
             data = {
                 # JS renderDeepReviewResult treats status=="error" as
@@ -1953,9 +1985,7 @@ def deep_review_trace(
 
     # Mark as running before thread starts.
     state.deep_review_results[trace_id] = {"status": "running"}
-    threading.Thread(
-        target=_run, name=f"deep-review-{trace_id}", daemon=True
-    ).start()
+    threading.Thread(target=_run, name=f"deep-review-{trace_id}", daemon=True).start()
     return {"status": "started", "trace_id": trace_id}
 
 
@@ -2029,17 +2059,13 @@ def health_check_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "health pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("health pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("health pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="health-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="health-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -2069,17 +2095,13 @@ def test_gap_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "test-gap pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("test-gap pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("test-gap pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="test-gap-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="test-gap-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -2114,17 +2136,13 @@ def survey_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "survey pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("survey pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("survey pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="survey-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="survey-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -2154,17 +2172,13 @@ def config_sync_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "config-sync pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("config-sync pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:
                 log.exception("config-sync pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="config-sync-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="config-sync-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -2192,15 +2206,15 @@ def trace_review_pass(
             run_id = None
             try:
                 run_id = registry.start(
-                    "trace-review", repo_id=rc.repo_id if rc else "",
+                    "trace-review",
+                    repo_id=rc.repo_id if rc else "",
                 )
                 session_id = make_session_id("trace-review")
                 r = run_trace_review_pass(
-                    session_id=session_id, repo_config=rc,
+                    session_id=session_id,
+                    repo_config=rc,
                 )
-                summary = (
-                    r.summary or f"created {len(r.drafts_created)} drafts"
-                )
+                summary = r.summary or f"created {len(r.drafts_created)} drafts"
                 registry.finish_ok(run_id, summary)
                 log.info("trace-review pass done: %s", summary)
             except Exception as e:  # noqa: BLE001 — background; just log
@@ -2209,7 +2223,9 @@ def trace_review_pass(
                     registry.finish_error(run_id, str(e))
 
     threading.Thread(
-        target=_run, name="trace-review-pass", daemon=True,
+        target=_run,
+        name="trace-review-pass",
+        daemon=True,
     ).start()
     return {"status": "started"}
 
@@ -2239,11 +2255,13 @@ def roadmap_sync_pass(
             run_id = None
             try:
                 run_id = registry.start(
-                    "roadmap-sync", repo_id=rc.repo_id if rc else "",
+                    "roadmap-sync",
+                    repo_id=rc.repo_id if rc else "",
                 )
                 session_id = make_session_id("roadmap-sync")
                 r = run_roadmap_sync_pass(
-                    session_id=session_id, repo_config=rc,
+                    session_id=session_id,
+                    repo_config=rc,
                 )
                 registry.finish_ok(run_id, r.summary or "no changes")
                 log.info("roadmap-sync pass done: %s", r.summary)
@@ -2253,7 +2271,9 @@ def roadmap_sync_pass(
                     registry.finish_error(run_id, str(e))
 
     threading.Thread(
-        target=_run, name="roadmap-sync-pass", daemon=True,
+        target=_run,
+        name="roadmap-sync-pass",
+        daemon=True,
     ).start()
     return {"status": "started"}
 
@@ -2274,7 +2294,9 @@ def cost_reconciliation_pass(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("cost-reconciliation", repo_id=rc.repo_id if rc else "")
+                run_id = registry.start(
+                    "cost-reconciliation", repo_id=rc.repo_id if rc else ""
+                )
                 session_id = make_session_id("cost-reconciliation")
                 r = run_cost_reconciliation_pass(session_id=session_id, repo_config=rc)
                 # Prefer the runner's own summary (delta or "no overrun");
@@ -2299,7 +2321,5 @@ def cost_reconciliation_pass(
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="cost-reconciliation-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="cost-reconciliation-pass", daemon=True).start()
     return {"status": "started"}

@@ -22,9 +22,11 @@ from .prompt_blocks import section
 
 class DedupResult(BaseModel):
     """Structured output from the dedup check agent."""
+
     duplicate_of: str | None = None
     already_done: str | None = None
     reason: str = ""
+
 
 log = logging.getLogger("robotsix_mill.agents.dedup")
 
@@ -35,13 +37,14 @@ def _build_prompt(
     draft_body: str,
     candidates_json: str,
 ) -> str:
-    draft_block = "\n".join([
-        section("title", draft_title),
-        section("body", draft_body),
-    ])
+    draft_block = "\n".join(
+        [
+            section("title", draft_title),
+            section("body", draft_body),
+        ]
+    )
     return (
-        section("draft", draft_block) + "\n\n"
-        + section("candidates", candidates_json)
+        section("draft", draft_block) + "\n\n" + section("candidates", candidates_json)
     )
 
 
@@ -78,7 +81,9 @@ def run_dedup_check(
         tools = [t for t in fs if t.__name__ in ("read_file", "list_dir")]
 
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         model_name=definition.model or settings.dedup_model,
     )
     # request_limit must be passed via usage_limits=UsageLimits(...),

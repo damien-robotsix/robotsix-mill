@@ -28,6 +28,7 @@ def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     db.reset_engine()
     from robotsix_mill.config import _reset_repos_config, _reset_secrets
+
     _reset_secrets()
     _reset_repos_config()
     return Settings(
@@ -55,7 +56,9 @@ async def _run_one_cycle(worker: Worker, monkeypatch):
     """
     # Bypass the random initial-delay jitter so the test runs deterministically.
     monkeypatch.setattr(
-        worker, "_initial_delay", lambda kind, interval: 0,
+        worker,
+        "_initial_delay",
+        lambda kind, interval: 0,
     )
     task = asyncio.create_task(worker._cost_warmer_loop())
     # Yield repeatedly to let the cycle progress; cancel as soon as
@@ -70,7 +73,9 @@ async def _run_one_cycle(worker: Worker, monkeypatch):
 
 
 def test_cost_warmer_refreshes_every_non_archived_ticket(
-    settings, worker, monkeypatch,
+    settings,
+    worker,
+    monkeypatch,
 ):
     """One cycle visits each non-archived ticket exactly once."""
     svc = TicketService(settings, board_id="")
@@ -89,7 +94,9 @@ def test_cost_warmer_refreshes_every_non_archived_ticket(
 
 
 def test_cost_warmer_skips_old_terminal_tickets(
-    settings, worker, monkeypatch,
+    settings,
+    worker,
+    monkeypatch,
 ):
     """CLOSED / EPIC_CLOSED tickets older than 24h are not refreshed —
     their cost is final and warming them on every cycle is wasted."""
@@ -100,6 +107,7 @@ def test_cost_warmer_skips_old_terminal_tickets(
 
     # Backdate the closed ticket past the 24h skip window.
     from robotsix_mill.core.models import Ticket
+
     long_ago = datetime.now(timezone.utc) - timedelta(days=3)
     with db.session(settings) as s:
         row = s.get(Ticket, old.id)
@@ -120,7 +128,9 @@ def test_cost_warmer_skips_old_terminal_tickets(
 
 
 def test_cost_warmer_survives_per_ticket_failure(
-    settings, worker, monkeypatch,
+    settings,
+    worker,
+    monkeypatch,
 ):
     """A Langfuse error on one ticket must not stop the loop from
     refreshing the rest of the batch."""
@@ -138,7 +148,8 @@ def test_cost_warmer_survives_per_ticket_failure(
         return 0.10
 
     monkeypatch.setattr(
-        "robotsix_mill.langfuse_client.session_cost", flaky,
+        "robotsix_mill.langfuse_client.session_cost",
+        flaky,
     )
 
     asyncio.run(_run_one_cycle(worker, monkeypatch))
@@ -148,13 +159,16 @@ def test_cost_warmer_survives_per_ticket_failure(
 
 
 def test_cost_warmer_survives_listing_failure(
-    settings, worker, monkeypatch,
+    settings,
+    worker,
+    monkeypatch,
 ):
     """A listing failure on one repo must not stop the loop or other
     repos from being processed. (Single-repo test: the listing
     failure simply yields an empty cycle.)"""
     monkeypatch.setattr(
-        TicketService, "list",
+        TicketService,
+        "list",
         lambda self, *a, **k: (_ for _ in ()).throw(RuntimeError("DB down")),
     )
     seen: list = []
@@ -167,7 +181,9 @@ def test_cost_warmer_survives_listing_failure(
 
 
 def test_cost_warmer_skips_repo_with_flag_off(
-    settings, worker, monkeypatch,
+    settings,
+    worker,
+    monkeypatch,
 ):
     """A repo whose ``RepoConfig.cost_warmer_periodic`` is False is
     skipped, while peers continue to be warmed. Without the per-repo
@@ -177,19 +193,25 @@ def test_cost_warmer_skips_repo_with_flag_off(
     from robotsix_mill.config import RepoConfig, ReposRegistry
 
     # Two repos: one opted in (default True), one opted out.
-    _cfg._repos_config = ReposRegistry(repos={
-        "kept": RepoConfig(
-            repo_id="kept", board_id="kept-board",
-            langfuse_project_name="kept", langfuse_public_key="pk",
-            langfuse_secret_key="sk",
-        ),
-        "skipped": RepoConfig(
-            repo_id="skipped", board_id="skipped-board",
-            langfuse_project_name="skipped", langfuse_public_key="pk2",
-            langfuse_secret_key="sk2",
-            cost_warmer_periodic=False,
-        ),
-    })
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "kept": RepoConfig(
+                repo_id="kept",
+                board_id="kept-board",
+                langfuse_project_name="kept",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+            ),
+            "skipped": RepoConfig(
+                repo_id="skipped",
+                board_id="skipped-board",
+                langfuse_project_name="skipped",
+                langfuse_public_key="pk2",
+                langfuse_secret_key="sk2",
+                cost_warmer_periodic=False,
+            ),
+        }
+    )
 
     # Seed one ticket in each board so a *warming* cycle would visit it.
     kept_svc = TicketService(settings, board_id="kept-board")

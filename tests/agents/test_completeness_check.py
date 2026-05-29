@@ -1,18 +1,15 @@
 """Tests for the completeness-check agent and runner."""
 
 import json
-import threading
-import time
 
 import pytest
-from pathlib import Path
 
 from robotsix_mill.agents import completeness_check as cc_agent
 from robotsix_mill.completeness_check_runner import (
     run_completeness_check_pass,
     CompletenessCheckPassResult,
 )
-from robotsix_mill.config import RepoConfig, Settings
+from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
@@ -34,9 +31,12 @@ def test_completeness_check_system_prompt_covers_gap_patterns():
     """The completeness-check agent prompt must cover all six gap patterns."""
     p = cc_agent.SYSTEM_PROMPT.lower()
     for kw in (
-        "missing yaml mapping", "missing yaml defaults",
-        "periodic runner with no route", "route with no button",
-        "runner with no cli", "agent file with no caller",
+        "missing yaml mapping",
+        "missing yaml defaults",
+        "periodic runner with no route",
+        "route with no button",
+        "runner with no cli",
+        "agent file with no caller",
     ):
         assert kw in p, f"completeness_check prompt missing pattern cue: {kw}"
     # Must exercise judgement, not just regex.
@@ -241,7 +241,7 @@ def test_run_completeness_check_pass_missing_memory_file(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass(session_id="test-sid")
+    run_completeness_check_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -327,7 +327,9 @@ def test_completeness_check_memory_file_override(tmp_path):
 
 def test_completeness_check_periodic_config():
     """Completeness-check periodic can be enabled."""
-    s = Settings(completeness_check_periodic="true", completeness_check_interval_seconds="43200")
+    s = Settings(
+        completeness_check_periodic="true", completeness_check_interval_seconds="43200"
+    )
     assert s.completeness_check_periodic is True
     assert s.completeness_check_interval_seconds == 43200
 
@@ -376,7 +378,9 @@ def test_completeness_check_cli_json_output(capsys, tmp_path, monkeypatch):
     data = json.loads(captured.out)
     assert "memory" in data
     assert "tickets_created" in data
-    assert data["tickets_created"] == [{"id": "123", "title": "Add YAML mapping for foo"}]
+    assert data["tickets_created"] == [
+        {"id": "123", "title": "Add YAML mapping for foo"}
+    ]
 
 
 def test_completeness_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
@@ -446,7 +450,8 @@ def test_run_completeness_check_pass_opens_langfuse_session(tmp_path, monkeypatc
 def test_completeness_check_session_ids_are_unique_per_run(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        cc_agent, "run_completeness_check_agent",
+        cc_agent,
+        "run_completeness_check_agent",
         lambda **k: cc_agent.CompletenessCheckResult(
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         ),
@@ -467,7 +472,8 @@ def test_run_completeness_check_pass_clones_and_passes_repo_dir(tmp_path, monkey
     from robotsix_mill.vcs import git_ops
 
     settings = _make_settings(
-        tmp_path, FORGE_REMOTE_URL="https://example.test/r.git",
+        tmp_path,
+        FORGE_REMOTE_URL="https://example.test/r.git",
         FORGE_TARGET_BRANCH="main",
     )
     seen = {"clone": 0, "repo_dir": "unset"}
@@ -498,13 +504,17 @@ def test_run_completeness_check_pass_clones_and_passes_repo_dir(tmp_path, monkey
 
 
 def test_run_completeness_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
-    settings = _make_settings(tmp_path)   # no FORGE_REMOTE_URL
+    settings = _make_settings(tmp_path)  # no FORGE_REMOTE_URL
     got = {}
     monkeypatch.setattr(
-        cc_agent, "run_completeness_check_agent",
-        lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or
-        cc_agent.CompletenessCheckResult(updated_memory="m", draft_titles=[],
-                                         draft_bodies=[], gap_ids=[]),
+        cc_agent,
+        "run_completeness_check_agent",
+        lambda **k: (
+            got.__setitem__("repo_dir", k.get("repo_dir"))
+            or cc_agent.CompletenessCheckResult(
+                updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+            )
+        ),
     )
     monkeypatch.setattr(
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
@@ -527,6 +537,7 @@ def test_run_completeness_check_pass_clips_to_max_gaps(tmp_path, monkeypatch):
     db.init_db(settings)
 
     n = MAX_GAPS + 3  # 15 entries, exceeds the 12-entry cap
+
     def mock_agent(**kwargs):
         return cc_agent.CompletenessCheckResult(
             updated_memory="# Memory\n",
@@ -548,7 +559,9 @@ def test_run_completeness_check_pass_clips_to_max_gaps(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_completeness_check_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
+async def test_worker_completeness_check_task_created_when_periodic(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._completeness_check_task is created when completeness_check_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -566,6 +579,7 @@ async def test_worker_completeness_check_task_created_when_periodic(tmp_path, mo
     # Patch _run_periodic_pass to be a no-op (avoid running immediately)
     async def noop_periodic(self, label, runner_fn, interval):
         import asyncio as asyncio_mod
+
         await asyncio_mod.sleep(3600)
 
     monkeypatch.setattr(Worker, "_run_periodic_pass", noop_periodic)
@@ -580,7 +594,9 @@ async def test_worker_completeness_check_task_created_when_periodic(tmp_path, mo
 
 
 @pytest.mark.asyncio
-async def test_worker_completeness_check_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
+async def test_worker_completeness_check_task_not_created_when_periodic_false(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._completeness_check_task is NOT created when completeness_check_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker

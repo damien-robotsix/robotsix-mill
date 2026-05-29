@@ -91,14 +91,10 @@ class DeepReviewStore:
         with self._lock:
             self._ensure_loaded()
             # Remove existing entry for this trace_id (overwrite).
-            self._entries = [
-                e for e in self._entries if e.get("trace_id") != trace_id
-            ]
+            self._entries = [e for e in self._entries if e.get("trace_id") != trace_id]
             self._entries.append(entry)
             # Sort newest-first by finished_at.
-            self._entries.sort(
-                key=lambda e: e.get("finished_at", ""), reverse=True
-            )
+            self._entries.sort(key=lambda e: e.get("finished_at", ""), reverse=True)
             # Prune to MAX_ENTRIES.
             self._entries = self._entries[: self.MAX_ENTRIES]
             self._flush()

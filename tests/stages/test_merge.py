@@ -1,5 +1,3 @@
-import pytest
-
 from robotsix_mill.agents.rebasing import RebaseResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -19,15 +17,33 @@ def _ctx(tmp_path, **env):
     if ft is not None:
         from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
     db.init_db(s)
-    from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=TicketService(s), repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+    from robotsix_mill.config import RepoConfig
+
+    return StageContext(
+        settings=s,
+        service=TicketService(s),
+        repo_config=RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        ),
+    )
 
 
 def _human_mr_approval(ctx):
     t = ctx.service.create("x", "y")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
         ctx.service.transition(t.id, st)
     ctx.service.set_branch(t.id, f"mill/{t.id}")
     return ctx.service.get(t.id)
@@ -51,8 +67,11 @@ def _in_rebasing(ctx):
 
 def _gh(tmp_path, **extra):
     return _ctx(
-        tmp_path, FORGE_KIND="github", FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git", **extra,
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_TOKEN="t",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        **extra,
     )
 
 
@@ -60,18 +79,25 @@ def _gh(tmp_path, **extra):
 # IMPLEMENT_COMPLETE gate-check poll path (new)
 # ============================================================
 
-def test_implement_complete_ci_green_mergeable_promotes_to_human_mr_approval(tmp_path, monkeypatch):
+
+def test_implement_complete_ci_green_mergeable_promotes_to_human_mr_approval(
+    tmp_path, monkeypatch
+):
     """CI green + PR mergeable → HUMAN_MR_APPROVAL (gates passed)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     t = _implement_complete(ctx)
@@ -83,17 +109,23 @@ def test_implement_complete_ci_failing_transitions_to_fixing_ci(tmp_path, monkey
     """CI failing → FIXING_CI."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     t = _implement_complete(ctx)
@@ -105,9 +137,12 @@ def test_implement_complete_conflicting_transitions_to_rebasing(tmp_path, monkey
     """PR conflicting → REBASING."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": False,
         },
     )
@@ -120,14 +155,18 @@ def test_implement_complete_ci_pending_stays_same_state(tmp_path, monkeypatch):
     """CI pending → same-state IMPLEMENT_COMPLETE (re-poll)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
     )
     t = _implement_complete(ctx)
@@ -139,14 +178,18 @@ def test_implement_complete_no_check_status_stays_same_state(tmp_path, monkeypat
     """check_status returns None → same-state IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: None,
     )
     t = _implement_complete(ctx)
@@ -158,9 +201,12 @@ def test_implement_complete_merged_transitions_to_done(tmp_path, monkeypatch):
     """PR merged while polling → DONE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": True, "state": "closed", "url": "https://gh/o/r/pull/3",
+            "merged": True,
+            "state": "closed",
+            "url": "https://gh/o/r/pull/3",
         },
     )
     t = _implement_complete(ctx)
@@ -172,9 +218,12 @@ def test_implement_complete_closed_unmerged_blocks(tmp_path, monkeypatch):
     """PR closed unmerged → BLOCKED."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "closed", "url": "u",
+            "merged": False,
+            "state": "closed",
+            "url": "u",
         },
     )
     t = _implement_complete(ctx)
@@ -186,7 +235,8 @@ def test_implement_complete_pr_status_none_stays_same_state(tmp_path, monkeypatc
     """pr_status returns None → same-state IMPLEMENT_COMPLETE (re-poll)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: None,
     )
     t = _implement_complete(ctx)
@@ -198,7 +248,8 @@ def test_implement_complete_transient_error_stays_same_state(tmp_path, monkeypat
     """pr_status raises → same-state IMPLEMENT_COMPLETE (re-poll)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("api down")),
     )
     t = _implement_complete(ctx)
@@ -206,18 +257,24 @@ def test_implement_complete_transient_error_stays_same_state(tmp_path, monkeypat
     assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
-def test_implement_complete_check_status_transient_error_stays_same_state(tmp_path, monkeypatch):
+def test_implement_complete_check_status_transient_error_stays_same_state(
+    tmp_path, monkeypatch
+):
     """check_status raises → same-state IMPLEMENT_COMPLETE (re-poll)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("api down")),
     )
     t = _implement_complete(ctx)
@@ -226,6 +283,7 @@ def test_implement_complete_check_status_transient_error_stays_same_state(tmp_pa
 
 
 # --- existing paths (updated for IMPLEMENT_COMPLETE) ---
+
 
 def test_blocked_when_forge_unconfigured(tmp_path):
     ctx = _ctx(tmp_path)
@@ -236,9 +294,11 @@ def test_blocked_when_forge_unconfigured(tmp_path):
 def test_merged_to_done(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": True, "state": "closed",
+            "merged": True,
+            "state": "closed",
             "url": "https://github.com/o/r/pull/3",
         },
     )
@@ -251,9 +311,12 @@ def test_merged_to_done(tmp_path, monkeypatch):
 def test_closed_unmerged_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "closed", "url": "u",
+            "merged": False,
+            "state": "closed",
+            "url": "u",
         },
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -264,9 +327,12 @@ def test_closed_unmerged_blocks(tmp_path, monkeypatch):
 def test_open_is_noop(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
         },
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -286,18 +352,23 @@ def test_transient_error_is_noop(tmp_path, monkeypatch):
 
 # --- mergeable flag: explicit True/None treated as mergeable (no rebase) ---
 
+
 def test_open_mergeable_true_is_noop(tmp_path, monkeypatch):
     """PR open with mergeable=True → standard no-op, no rebase."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -308,14 +379,18 @@ def test_open_mergeable_none_is_noop(tmp_path, monkeypatch):
     """mergeable=None (unchecked) → treat as mergeable, no rebase."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": None,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -324,14 +399,18 @@ def test_open_mergeable_none_is_noop(tmp_path, monkeypatch):
 
 # --- New: mergeable PR never enters REBASING ---
 
+
 def test_mergeable_pr_never_enters_rebasing(tmp_path, monkeypatch):
     """mergeable=True/None → OUTCOME(HUMAN_MR_APPROVAL), never REBASING."""
     ctx = _gh(tmp_path)
     for mergeable in (True, None):
         monkeypatch.setattr(
-            github.GitHubForge, "pr_status",
+            github.GitHubForge,
+            "pr_status",
             lambda self, *, source_branch, m=mergeable: {
-                "merged": False, "state": "open", "url": "u",
+                "merged": False,
+                "state": "open",
+                "url": "u",
                 "mergeable": m,
             },
         )
@@ -342,13 +421,19 @@ def test_mergeable_pr_never_enters_rebasing(tmp_path, monkeypatch):
 
 # --- HUMAN_MR_APPROVAL silent fallback: conflicting → IMPLEMENT_COMPLETE ---
 
-def test_human_mr_approval_conflicting_falls_back_to_implement_complete(tmp_path, monkeypatch):
+
+def test_human_mr_approval_conflicting_falls_back_to_implement_complete(
+    tmp_path, monkeypatch
+):
     """HUMAN_MR_APPROVAL + mergeable=False → IMPLEMENT_COMPLETE (silent fallback)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": False,
         },
     )
@@ -358,21 +443,29 @@ def test_human_mr_approval_conflicting_falls_back_to_implement_complete(tmp_path
     assert "gates no longer pass" in out.note
 
 
-def test_human_mr_approval_ci_failing_falls_back_to_implement_complete(tmp_path, monkeypatch):
+def test_human_mr_approval_ci_failing_falls_back_to_implement_complete(
+    tmp_path, monkeypatch
+):
     """HUMAN_MR_APPROVAL + mergeable=True + CI failure → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     t = _human_mr_approval(ctx)
@@ -383,6 +476,7 @@ def test_human_mr_approval_ci_failing_falls_back_to_implement_complete(tmp_path,
 
 # --- REBASING path: clean rebase → IMPLEMENT_COMPLETE ---
 
+
 def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypatch):
     """Ticket in REBASING → rebase agent succeeds → force-push → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
@@ -391,7 +485,8 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -404,15 +499,19 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
         push_calls.update(branch=branch, remote_url=remote_url)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+        "robotsix_mill.stages.merge.git_ops.push",
+        fake_push,
     )
 
     # Post-rebase routing checks whether a PR exists; mock so the
     # forge reports a PR → route stays IMPLEMENT_COMPLETE (regression).
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
@@ -436,7 +535,8 @@ def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -449,12 +549,14 @@ def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
         push_calls.update(branch=branch, remote_url=remote_url)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+        "robotsix_mill.stages.merge.git_ops.push",
+        fake_push,
     )
 
     # pr_status returns None → no PR exists → route to READY.
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: None,
     )
 
@@ -484,7 +586,8 @@ def test_rebasing_noop_skips_force_push(tmp_path, monkeypatch):
     )
     sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.head_sha", lambda repo: sha,
+        "robotsix_mill.stages.merge.git_ops.head_sha",
+        lambda repo: sha,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.remote_branch_sha",
@@ -521,7 +624,8 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
     )
     sha = "cafebabecafebabecafebabecafebabecafebabe"
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.head_sha", lambda repo: sha,
+        "robotsix_mill.stages.merge.git_ops.head_sha",
+        lambda repo: sha,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.remote_branch_sha",
@@ -546,13 +650,17 @@ def test_rebasing_noop_blocks_after_max_attempts(tmp_path, monkeypatch):
 
 # --- REBASING: retry stays REBASING ---
 
+
 def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
     """REBASING, rebase fails, attempt < max → Outcome(REBASING)."""
     ctx = _gh(tmp_path, rebase_max_attempts="3")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": False,
         },
     )
@@ -561,7 +669,8 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
         return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -576,13 +685,12 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.REBASING  # retry, not IMPLEMENT_COMPLETE
 
-    counter_path = (
-        ctx.service.workspace(t).artifacts_dir / "rebase_attempts.txt"
-    )
+    counter_path = ctx.service.workspace(t).artifacts_dir / "rebase_attempts.txt"
     assert _read_counter(counter_path) == 1
 
 
 # --- REBASING: exhausted → BLOCKED ---
+
 
 def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
     """REBASING, rebase fails, attempt == max → Outcome(BLOCKED)."""
@@ -592,7 +700,8 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
         return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -605,7 +714,8 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
         push_called.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+        "robotsix_mill.stages.merge.git_ops.push",
+        fake_push,
     )
 
     t = _in_rebasing(ctx)
@@ -621,13 +731,17 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
 
 # --- Full cycle: IMPLEMENT_COMPLETE → REBASING → IMPLEMENT_COMPLETE ---
 
+
 def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
     """Full cycle: IMPLEMENT_COMPLETE + mergeable=False → REBASING → then rebase success → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": False,
         },
     )
@@ -638,7 +752,8 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
         return RebaseResult(status="DONE", summary="ok")  # success
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -650,7 +765,8 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
         push_calls.update(branch=branch, remote_url=remote_url)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+        "robotsix_mill.stages.merge.git_ops.push",
+        fake_push,
     )
 
     t = _implement_complete(ctx)
@@ -670,9 +786,12 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
     # Switch pr_status to report a PR exists (mergeable=True) so the
     # post-rebase routing stays IMPLEMENT_COMPLETE.
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
@@ -707,7 +826,8 @@ def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
         return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -739,7 +859,8 @@ def test_rebase_agent_crash_is_treated_as_failure(tmp_path, monkeypatch):
         raise RuntimeError("LLM timeout")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", boom,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        boom,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -764,7 +885,8 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
         return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -777,7 +899,8 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
         push_called.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+        "robotsix_mill.stages.merge.git_ops.push",
+        fake_push,
     )
 
     t = _in_rebasing(ctx)
@@ -797,7 +920,8 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -808,7 +932,8 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
         raise RuntimeError("remote rejected")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push", boom_push,
+        "robotsix_mill.stages.merge.git_ops.push",
+        boom_push,
     )
 
     t = _in_rebasing(ctx)
@@ -821,9 +946,7 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
     assert "force-push failed" in out.note
 
 
-def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
-    tmp_path, monkeypatch
-):
+def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypatch):
     """A push is NOT proof the conflict is resolved (git rebase rewrites
     SHAs every run). The attempt counter must persist across rebase+push
     cycles and only reset to 0 when the IMPLEMENT_COMPLETE poll sees a
@@ -840,7 +963,8 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
         return RebaseResult(status="FAILED", summary="nope")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -849,9 +973,12 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
     # pr_status mock needed because step 2 rebase succeeds+pushes and
     # the post-rebase routing checks whether a PR exists.
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
@@ -860,7 +987,8 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
         pass
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+        "robotsix_mill.stages.merge.git_ops.push",
+        fake_push,
     )
 
     t = _in_rebasing(ctx)
@@ -868,9 +996,7 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
     repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / ".git").mkdir(exist_ok=True)
 
-    counter_path = (
-        ctx.service.workspace(t).artifacts_dir / "rebase_attempts.txt"
-    )
+    counter_path = ctx.service.workspace(t).artifacts_dir / "rebase_attempts.txt"
 
     # Attempt 1 fails → counter=1, stays REBASING
     out1 = MergeStage().run(t, ctx)
@@ -887,7 +1013,8 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(
     # → the conflict is really gone → counter resets to 0 AND ticket
     # promotes to HUMAN_MR_APPROVAL (gates passed).
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success"},
     )
     ctx.service.transition(t.id, State.IMPLEMENT_COMPLETE, note="rebased")
@@ -904,7 +1031,8 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
@@ -917,7 +1045,8 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
         push_args.update(branch=branch, remote_url=remote_url, token=token)
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.push", fake_push,
+        "robotsix_mill.stages.merge.git_ops.push",
+        fake_push,
     )
 
     t = _in_rebasing(ctx)
@@ -944,9 +1073,7 @@ def test_counter_read_write(tmp_path):
     assert _read_counter(p) == 0
 
 
-def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
-    tmp_path, monkeypatch
-):
+def test_rebase_force_push_uses_minted_token_not_raw_forge_token(tmp_path, monkeypatch):
     """Regression: the post-rebase force-push must use github_token()
     (the minted App/PAT token) — not the raw s.forge_token, which is
     empty under GitHub App auth -> unauthenticated push -> git exit 128
@@ -962,7 +1089,8 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
         lambda *a, **k: None,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.github_token", lambda s, repo_config=None: "MINTED-APP-TOK"
+        "robotsix_mill.stages.merge.github_token",
+        lambda s, repo_config=None: "MINTED-APP-TOK",
     )
     seen = {}
     monkeypatch.setattr(
@@ -977,28 +1105,35 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(
 
     MergeStage().run(t, ctx)
 
-    assert seen.get("token") == "MINTED-APP-TOK"   # not the raw "t"
+    assert seen.get("token") == "MINTED-APP-TOK"  # not the raw "t"
 
 
 # ============================================================
 # D. Merge-stage CI branching (updated for IMPLEMENT_COMPLETE)
 # ============================================================
 
+
 def test_mergeable_failing_ci_falls_back_to_implement_complete(tmp_path, monkeypatch):
     """Mergeable PR + failing CI → IMPLEMENT_COMPLETE (silent fallback from HUMAN_MR_APPROVAL)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {
             "conclusion": "failure",
-            "failing": [{"name": "lint", "summary": None, "text": None, "annotations": []}],
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
         },
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -1009,14 +1144,18 @@ def test_mergeable_green_ci_stays_human_mr_approval(tmp_path, monkeypatch):
     """Mergeable PR + green CI → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -1027,14 +1166,18 @@ def test_mergeable_none_ci_stays_human_mr_approval(tmp_path, monkeypatch):
     """check_status returns None (no checks) → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: None,
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -1045,14 +1188,18 @@ def test_mergeable_pending_ci_stays_human_mr_approval(tmp_path, monkeypatch):
     """Mergeable PR + pending CI → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -1063,14 +1210,18 @@ def test_check_status_exception_is_noop(tmp_path, monkeypatch):
     """check_status raises → transient re-poll."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -1081,9 +1232,12 @@ def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
     """Conflicting PR → silent fallback to IMPLEMENT_COMPLETE; check_status never called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": False,
         },
     )
@@ -1105,9 +1259,12 @@ def test_merged_pr_skips_check_status(tmp_path, monkeypatch):
     """Merged PR → DONE; check_status never called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": True, "state": "closed", "url": "u",
+            "merged": True,
+            "state": "closed",
+            "url": "u",
         },
     )
     check_calls = []
@@ -1126,9 +1283,12 @@ def test_closed_pr_skips_check_status(tmp_path, monkeypatch):
     """Closed PR → BLOCKED; check_status never called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "closed", "url": "u",
+            "merged": False,
+            "state": "closed",
+            "url": "u",
         },
     )
     check_calls = []
@@ -1145,6 +1305,7 @@ def test_closed_pr_skips_check_status(tmp_path, monkeypatch):
 
 # --- New: fetch-before-rebase-agent tests ---
 
+
 def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
     """git_ops.fetch is called before run_rebase_agent in _handle_conflict."""
     ctx = _gh(tmp_path)
@@ -1158,10 +1319,12 @@ def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.fetch", fake_fetch,
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        fake_fetch,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.push",
@@ -1192,10 +1355,12 @@ def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
         return RebaseResult(status="DONE", summary="ok")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.git_ops.fetch", fake_fetch,
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        fake_fetch,
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase,
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
     )
 
     t = _in_rebasing(ctx)
@@ -1210,6 +1375,7 @@ def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
 
 
 # --- tracing: root span only on first attempt ---
+
 
 def test_root_span_only_on_first_rebase_attempt(tmp_path, monkeypatch):
     """start_ticket_root_span must fire only on attempt==1.
@@ -1277,13 +1443,13 @@ def test_root_span_only_on_first_rebase_attempt(tmp_path, monkeypatch):
 # E. Auto-merge gate (new)
 # ============================================================
 
+
 def _write_review_artifact(ctx, ticket, *, verdict="APPROVE", eligible=True):
     """Helper: write a review.md artifact for auto-merge tests."""
     art_dir = ctx.service.workspace(ticket).artifacts_dir
     art_dir.mkdir(parents=True, exist_ok=True)
     (art_dir / "review.md").write_text(
-        f"verdict: {verdict}\n"
-        f"auto_merge_eligible: {str(eligible).lower()}\n",
+        f"verdict: {verdict}\nauto_merge_eligible: {str(eligible).lower()}\n",
         encoding="utf-8",
     )
 
@@ -1293,18 +1459,23 @@ def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
     artifact auto_merge_eligible: true + merge_pr returns merged → DONE."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "https://gh/o/r/pull/1",
+            "merged": False,
+            "state": "open",
+            "url": "https://gh/o/r/pull/1",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
 
@@ -1320,20 +1491,25 @@ def test_auto_merge_skipped_when_flag_disabled(tmp_path, monkeypatch):
     """auto_merge_enabled=False → HUMAN_MR_APPROVAL (standard no-op)."""
     ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
     merge_called = []
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
     )
 
@@ -1350,20 +1526,25 @@ def test_auto_merge_skipped_when_review_disabled(tmp_path, monkeypatch):
     and artifact says eligible."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="false")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
     merge_called = []
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
     )
 
@@ -1379,20 +1560,25 @@ def test_auto_merge_skipped_when_no_review_artifact(tmp_path, monkeypatch):
     """Artifact file doesn't exist → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
     merge_called = []
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
     )
 
@@ -1408,20 +1594,25 @@ def test_auto_merge_skipped_when_not_eligible(tmp_path, monkeypatch):
     """Artifact says auto_merge_eligible: false → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
     merge_called = []
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
     )
 
@@ -1438,20 +1629,25 @@ def test_auto_merge_skipped_when_ci_pending(tmp_path, monkeypatch):
     (auto-merge gate entered, waiting for CI to go green)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
     )
 
     merge_called = []
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
     )
 
@@ -1467,20 +1663,25 @@ def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
     """CI conclusion is 'failure' → IMPLEMENT_COMPLETE (silent fallback)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "failure", "failing": []},
     )
 
     merge_called = []
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
     )
 
@@ -1496,16 +1697,20 @@ def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
     """mergeable=False → IMPLEMENT_COMPLETE (silent fallback)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": False,
         },
     )
 
     merge_called = []
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
     )
 
@@ -1521,20 +1726,26 @@ def test_merge_pr_failure_stays_human_mr_approval(tmp_path, monkeypatch):
     """merge_pr returns {'merged': False} → HUMAN_MR_APPROVAL (not BLOCKED)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: {
-            "merged": False, "reason": "branch protection",
+            "merged": False,
+            "reason": "branch protection",
         },
     )
 
@@ -1549,18 +1760,23 @@ def test_auto_merge_writes_merge_artifact(tmp_path, monkeypatch):
     """On success, merge.md is written with the PR URL."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "https://gh/o/r/pull/42",
+            "merged": False,
+            "state": "open",
+            "url": "https://gh/o/r/pull/42",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
 
@@ -1579,25 +1795,29 @@ def test_auto_merge_writes_merge_artifact(tmp_path, monkeypatch):
 # F. WAITING_AUTO_MERGE — updated for IMPLEMENT_COMPLETE fallback
 # ============================================================
 
-def test_eligible_pending_ci_goes_to_waiting_auto_merge(
-    tmp_path, monkeypatch
-):
+
+def test_eligible_pending_ci_goes_to_waiting_auto_merge(tmp_path, monkeypatch):
     """Eligible + CI pending → WAITING_AUTO_MERGE."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
     )
     merge_called = []
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: merge_called.append(1) or {},
     )
 
@@ -1613,18 +1833,23 @@ def test_eligible_success_auto_merges_to_done(tmp_path, monkeypatch):
     """Eligible + CI success → DONE (already covered, ensure it still passes)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
 
@@ -1641,20 +1866,26 @@ def test_eligible_forge_merge_failed_stays_human_mr_approval_with_comment(
     """Eligible + CI success + forge rejects → HUMAN_MR_APPROVAL + comment."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: {
-            "merged": False, "reason": "branch protection",
+            "merged": False,
+            "reason": "branch protection",
         },
     )
 
@@ -1664,14 +1895,11 @@ def test_eligible_forge_merge_failed_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    merge_events = [e for e in ctx.service.history(t.id)
-
-
-                    if (e.note or "").startswith("merge:")]
-
+    merge_events = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events) == 1
-
 
     assert "forge merge failed: branch protection" in (merge_events[0].note or "")
 
@@ -1682,14 +1910,18 @@ def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
     """auto_merge_enabled=false → HUMAN_MR_APPROVAL + comment."""
     ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
@@ -1699,14 +1931,11 @@ def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    merge_events = [e for e in ctx.service.history(t.id)
-
-
-                    if (e.note or "").startswith("merge:")]
-
+    merge_events = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events) == 1
-
 
     assert "auto-merge disabled in config" in (merge_events[0].note or "")
 
@@ -1717,14 +1946,18 @@ def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
     """review_enabled=false → HUMAN_MR_APPROVAL + comment."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="false")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
@@ -1734,14 +1967,11 @@ def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    merge_events = [e for e in ctx.service.history(t.id)
-
-
-                    if (e.note or "").startswith("merge:")]
-
+    merge_events = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events) == 1
-
 
     assert "review gate disabled" in (merge_events[0].note or "")
 
@@ -1752,14 +1982,18 @@ def test_not_eligible_artifact_missing_stays_human_mr_approval_with_comment(
     """No review artifact → HUMAN_MR_APPROVAL + comment."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
@@ -1769,14 +2003,11 @@ def test_not_eligible_artifact_missing_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    merge_events = [e for e in ctx.service.history(t.id)
-
-
-                    if (e.note or "").startswith("merge:")]
-
+    merge_events = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events) == 1
-
 
     assert "no review artifact" in (merge_events[0].note or "")
 
@@ -1787,14 +2018,18 @@ def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
     """auto_merge_eligible: false → HUMAN_MR_APPROVAL + comment."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
@@ -1804,14 +2039,11 @@ def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    merge_events = [e for e in ctx.service.history(t.id)
-
-
-                    if (e.note or "").startswith("merge:")]
-
+    merge_events = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events) == 1
-
 
     assert "not auto-merge eligible" in (merge_events[0].note or "")
 
@@ -1820,14 +2052,18 @@ def test_comment_dedup_same_reason_no_duplicate(tmp_path, monkeypatch):
     """Two polls with the same reason → exactly 1 comment."""
     ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
@@ -1836,35 +2072,37 @@ def test_comment_dedup_same_reason_no_duplicate(tmp_path, monkeypatch):
 
     # First poll → writes comment.
     MergeStage().run(t, ctx)
-    merge_events_ = [e for e in ctx.service.history(t.id)
-
-                     if (e.note or "").startswith("merge:")]
+    merge_events_ = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events_) == 1
 
     # Second poll — same conditions, same reason → no new comment.
     MergeStage().run(t, ctx)
-    merge_events_ = [e for e in ctx.service.history(t.id)
-
-                     if (e.note or "").startswith("merge:")]
+    merge_events_ = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events_) == 1
 
 
-def test_comment_dedup_different_reason_new_comment(
-    tmp_path, monkeypatch
-):
+def test_comment_dedup_different_reason_new_comment(tmp_path, monkeypatch):
     """Reason changes → new comment fires."""
     ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
 
@@ -1873,24 +2111,22 @@ def test_comment_dedup_different_reason_new_comment(
 
     # First poll → disabled flag comment.
     MergeStage().run(t, ctx)
-    merge_events_ = [e for e in ctx.service.history(t.id)
-
-                     if (e.note or "").startswith("merge:")]
+    merge_events_ = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events_) == 1
 
     # Hack: change the stored reason to simulate a prior different
     # reason (e.g., was CI pending, now CI succeeded but still not
     # eligible). Then re-run — the new reason text differs.
-    reason_path = (
-        ctx.service.workspace(t).artifacts_dir / "merge_reason.txt"
-    )
+    reason_path = ctx.service.workspace(t).artifacts_dir / "merge_reason.txt"
     reason_path.write_text("old different reason", encoding="utf-8")
 
     MergeStage().run(t, ctx)
-    merge_events_ = [e for e in ctx.service.history(t.id)
-
-                     if (e.note or "").startswith("merge:")]
+    merge_events_ = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
 
     assert len(merge_events_) == 2
 
@@ -1901,14 +2137,18 @@ def test_waiting_auto_merge_becomes_implement_complete_on_ci_failure(
     """WAITING_AUTO_MERGE poll where CI now fails → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "failure", "failing": []},
     )
 
@@ -1929,14 +2169,18 @@ def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
     → HUMAN_MR_APPROVAL."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
     )
 
@@ -1953,8 +2197,9 @@ def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
-    merge_events = [e for e in ctx.service.history(t.id)
-                    if (e.note or "").startswith("merge:")]
+    merge_events = [
+        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
+    ]
     assert len(merge_events) == 1
     assert "not auto-merge eligible" in (merge_events[0].note or "")
 
@@ -1963,18 +2208,23 @@ def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
     """WAITING_AUTO_MERGE poll where CI is now green → DONE."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": True,
         },
     )
     monkeypatch.setattr(
-        github.GitHubForge, "check_status",
+        github.GitHubForge,
+        "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
     monkeypatch.setattr(
-        github.GitHubForge, "merge_pr",
+        github.GitHubForge,
+        "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
 
@@ -1991,15 +2241,19 @@ def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
 # WAITING_AUTO_MERGE → IMPLEMENT_COMPLETE on conflict
 # ============================================================
 
+
 def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     tmp_path, monkeypatch
 ):
     """WAITING_AUTO_MERGE + mergeable=False → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status",
+        github.GitHubForge,
+        "pr_status",
         lambda self, *, source_branch: {
-            "merged": False, "state": "open", "url": "u",
+            "merged": False,
+            "state": "open",
+            "url": "u",
             "mergeable": False,
         },
     )

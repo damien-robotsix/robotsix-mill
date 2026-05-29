@@ -58,9 +58,7 @@ def _no_real_http(monkeypatch):
         )
 
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _blocked)
-    monkeypatch.setattr(
-        httpx.AsyncHTTPTransport, "handle_async_request", _blocked
-    )
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _blocked)
 
 
 @pytest.fixture(autouse=True)
@@ -90,14 +88,22 @@ def _no_dotenv(monkeypatch):
     # leaks into any test, even when Settings.__init__ calls
     # load_yaml_config directly.
     import robotsix_mill.config_loader as _cl
+
     monkeypatch.setattr(_cl, "_LOCAL_FILE", _cl.Path("/nonexistent/mill.local.yaml"))
     for var in (
         "OPENROUTER_API_KEY",
-        "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL",
-        "FORGE_KIND", "FORGE_REMOTE_URL", "FORGE_TOKEN", "FORGE_AUTH",
-        "GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
+        "LANGFUSE_BASE_URL",
+        "FORGE_KIND",
+        "FORGE_REMOTE_URL",
+        "FORGE_TOKEN",
+        "FORGE_AUTH",
+        "GITHUB_APP_ID",
+        "GITHUB_APP_PRIVATE_KEY",
         "GITHUB_APP_PRIVATE_KEY_PATH",
-        "NTFY_URL", "NTFY_TOKEN",
+        "NTFY_URL",
+        "NTFY_TOKEN",
         # Deployment/DinD-only knob: the container sets this so the
         # sandbox bind-mounts the host ./data. Leaking it flips
         # _repo_mount from the named-volume branch to the bind branch,

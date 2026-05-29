@@ -19,9 +19,7 @@ class Forge(ABC):
         self.settings = settings
 
     @abstractmethod
-    def open_merge_request(
-        self, *, source_branch: str, title: str, body: str
-    ) -> str:
+    def open_merge_request(self, *, source_branch: str, title: str, body: str) -> str:
         """Open an MR/PR for ``source_branch`` against
         ``settings.forge_target_branch``. Returns the MR/PR URL."""
 
@@ -159,9 +157,7 @@ class Forge(ABC):
         """
 
 
-def get_forge(
-    settings: Settings, repo_config: RepoConfig | None = None
-) -> Forge:
+def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forge:
     """Resolve the configured forge adapter.
 
     When *repo_config* is provided, the forge adapter is built with
@@ -178,6 +174,4 @@ def get_forge(
         from .gitlab import GitLabForge
 
         return GitLabForge(settings, repo_config=repo_config)
-    raise RuntimeError(
-        f"no forge configured (FORGE_KIND={kind!r}); cannot deliver"
-    )
+    raise RuntimeError(f"no forge configured (FORGE_KIND={kind!r}); cannot deliver")

@@ -34,6 +34,7 @@ log = logging.getLogger("robotsix_mill.periodic_runner")
 @dataclass
 class AuditPassResult:
     """Result of running an audit pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -42,6 +43,7 @@ class AuditPassResult:
 @dataclass
 class AgentCheckPassResult:
     """Result of running an agent-check pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -50,6 +52,7 @@ class AgentCheckPassResult:
 @dataclass
 class BcCheckPassResult:
     """Result of running a bc-check pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -58,6 +61,7 @@ class BcCheckPassResult:
 @dataclass
 class SurveyPassResult:
     """Result of running a survey pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -66,6 +70,7 @@ class SurveyPassResult:
 @dataclass
 class CompletenessCheckPassResult:
     """Result of running a completeness-check pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -74,6 +79,7 @@ class CompletenessCheckPassResult:
 @dataclass
 class CopyPastePassResult:
     """Result of running a copy-paste pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -82,6 +88,7 @@ class CopyPastePassResult:
 @dataclass
 class ConfigSyncPassResult:
     """Result of running a config-sync pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -90,6 +97,7 @@ class ConfigSyncPassResult:
 @dataclass
 class HealthPassResult:
     """Result of running a health pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -98,6 +106,7 @@ class HealthPassResult:
 @dataclass
 class ModuleCuratorPassResult:
     """Result of running a module-curator pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -106,6 +115,7 @@ class ModuleCuratorPassResult:
 @dataclass
 class TestGapPassResult:
     """Result of running a test-gap pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
@@ -247,13 +257,16 @@ def run_periodic_pass(
 
     # Lazy import the agent module (keeps monkeypatch seam alive).
     import importlib
+
     agent_module = importlib.import_module(
         f".agents.{config.agent_module_attr}", package="robotsix_mill"
     )
     from .vcs import git_ops
 
     # Resolve clone token strategy.
-    token_fn = config.clone_token_fn if config.clone_token_fn is not None else _forge_token
+    token_fn = (
+        config.clone_token_fn if config.clone_token_fn is not None else _forge_token
+    )
 
     # Clone the repo locally so the agent inspects it via
     # explore/read_file instead of web-fetching the project's own
@@ -268,7 +281,8 @@ def run_periodic_pass(
         else:
             try:
                 git_ops.clone(
-                    forge_remote_url, cand,
+                    forge_remote_url,
+                    cand,
                     settings.forge_target_branch,
                     token_fn(settings, repo_config),
                 )
@@ -317,6 +331,7 @@ def run_periodic_pass(
 def _completeness_max_gaps() -> int:
     """Return ``MAX_GAPS`` from the completeness_check agent module."""
     from .agents import completeness_check
+
     return completeness_check.MAX_GAPS
 
 

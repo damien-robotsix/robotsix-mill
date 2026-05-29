@@ -75,18 +75,14 @@ def _mint_installation_token(
         inst = c.get(f"{api}/repos/{owner}/{repo}/installation", headers=h)
         inst.raise_for_status()
         iid = inst.json()["id"]
-        tok = c.post(
-            f"{api}/app/installations/{iid}/access_tokens", headers=h
-        )
+        tok = c.post(f"{api}/app/installations/{iid}/access_tokens", headers=h)
         tok.raise_for_status()
         data = tok.json()
     # expires_at is ISO; just cache for 50 min regardless
     return data["token"], time.time() + 50 * 60
 
 
-def github_token(
-    settings: Settings, repo_config: RepoConfig | None = None
-) -> str:
+def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> str:
     """Return a forge auth token: either a static FORGE_TOKEN from secrets or a short-lived GitHub App installation token."""
     if settings.forge_auth != "app":
         if not get_secrets().forge_token:
@@ -98,8 +94,7 @@ def github_token(
         or get_secrets().github_app_private_key_path
     ):
         raise RuntimeError(
-            "FORGE_AUTH=app needs GITHUB_APP_ID and "
-            "GITHUB_APP_PRIVATE_KEY[_PATH]"
+            "FORGE_AUTH=app needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY[_PATH]"
         )
     remote_url = _resolve_remote_url(settings, repo_config)
     ck = f"{get_secrets().github_app_id}:{remote_url}"

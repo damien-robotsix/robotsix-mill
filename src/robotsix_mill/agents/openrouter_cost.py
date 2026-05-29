@@ -46,7 +46,7 @@ def _get_cost_from_response(response: Any) -> float | None:
         return None
     try:
         return float(raw_cost)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -104,9 +104,7 @@ def record_openrouter_cost(response: Any) -> None:
     usage_obj = getattr(response, "usage", None)
 
     span.set_attribute("gen_ai.usage.cost", cost)
-    span.set_attribute(
-        "langfuse.observation.cost_details", json.dumps({"total": cost})
-    )
+    span.set_attribute("langfuse.observation.cost_details", json.dumps({"total": cost}))
     span.set_attribute("gen_ai.operation.name", "chat")
     span.set_attribute("gen_ai.provider.name", "openrouter")
     span.set_attribute("gen_ai.system", "openrouter")
@@ -131,11 +129,15 @@ def record_openrouter_cost(response: Any) -> None:
                 cache_creation = prompt_details.get("cache_creation_input_tokens")
             else:
                 cached = getattr(prompt_details, "cached_tokens", None)
-                cache_creation = getattr(prompt_details, "cache_creation_input_tokens", None)
+                cache_creation = getattr(
+                    prompt_details, "cache_creation_input_tokens", None
+                )
             if cached is not None:
                 span.set_attribute("gen_ai.usage.cache_read_input_tokens", cached)
             if cache_creation is not None:
-                span.set_attribute("gen_ai.usage.cache_creation_input_tokens", cache_creation)
+                span.set_attribute(
+                    "gen_ai.usage.cache_creation_input_tokens", cache_creation
+                )
 
         completion_details = getattr(usage_obj, "completion_tokens_details", None)
         if completion_details is not None:

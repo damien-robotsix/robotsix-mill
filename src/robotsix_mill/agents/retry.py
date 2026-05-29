@@ -46,7 +46,9 @@ def _status(exc: BaseException) -> int | None:
 # tool call / structured output; a re-run almost always yields valid
 # JSON, so treat it as transient instead of hard-ERRORing the ticket.
 _TRANSIENT_NAMES = {
-    "APITimeoutError", "APIConnectionError", "JSONDecodeError",
+    "APITimeoutError",
+    "APIConnectionError",
+    "JSONDecodeError",
 }
 
 
@@ -118,7 +120,7 @@ def _retry_after_seconds(exc: BaseException) -> float | None:
                 if ra_val is not None:
                     try:
                         return float(ra_val)
-                    except (TypeError, ValueError):
+                    except TypeError, ValueError:
                         pass
         cur = cur.__cause__ or cur.__context__
         seen += 1
@@ -196,12 +198,16 @@ def call_with_retry(
             if is_transient(e):
                 delay = min(
                     settings.transient_backoff_cap,
-                    settings.transient_backoff_base * (2 ** attempt),
+                    settings.transient_backoff_base * (2**attempt),
                 )
                 delay += random.uniform(0, delay / 2)  # jitter
                 log.warning(
                     "%s: transient %s (attempt %d/%d) — retrying in %.1fs",
-                    what, type(e).__name__, attempt + 1, attempts, delay,
+                    what,
+                    type(e).__name__,
+                    attempt + 1,
+                    attempts,
+                    delay,
                 )
                 try:
                     tracing.flush_tracing()
@@ -221,7 +227,8 @@ def call_with_retry(
                     log.warning(
                         "%s: rate-limit fallback activated on first "
                         "UsageLimitExceeded (model=%s)",
-                        what, fallback_model,
+                        what,
+                        fallback_model,
                     )
                     _record_rate_limit_span(
                         delay=0.0,

@@ -65,8 +65,7 @@ def _is_transient_called_process_error(exc: BaseException) -> bool:
     if isinstance(stderr, bytes):
         stderr = stderr.decode("utf-8", errors="replace")
     return bool(
-        _GIT_TRANSIENT_RE.search(stderr)
-        or _GIT_FATAL_TRANSIENT_RE.search(stderr)
+        _GIT_TRANSIENT_RE.search(stderr) or _GIT_FATAL_TRANSIENT_RE.search(stderr)
     )
 
 

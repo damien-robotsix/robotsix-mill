@@ -66,7 +66,9 @@ def repo_config():
 def worker(settings, repo_config):
     svc = TicketService(settings, board_id=repo_config.board_id)
     ctx = StageContext(
-        settings=settings, service=svc, repo_config=repo_config,
+        settings=settings,
+        service=svc,
+        repo_config=repo_config,
     )
     return Worker(ctx, run_registry=None)
 
@@ -74,9 +76,7 @@ def worker(settings, repo_config):
 def _make_clone(tmp_path, board_id) -> Path:
     """Build a fake clone tree at the path the supervisor would use,
     so the no-op clone/fetch monkeypatches don't try to create one."""
-    clone = (
-        tmp_path / "data" / "my-app" / "bespoke_workspace" / "repo"
-    )
+    clone = tmp_path / "data" / "my-app" / "bespoke_workspace" / "repo"
     clone.mkdir(parents=True)
     (clone / ".git").mkdir()  # so the "already cloned" branch hits
     return clone
@@ -103,7 +103,11 @@ def _stub_clone_helpers(monkeypatch):
 class TestBespokeSupervisor:
     @pytest.mark.asyncio
     async def test_new_yaml_spawns_loop(
-        self, tmp_path, monkeypatch, worker, repo_config,
+        self,
+        tmp_path,
+        monkeypatch,
+        worker,
+        repo_config,
     ):
         """A YAML committed to the managed repo's
         ``.robotsix-mill/agents/`` results in a per-bespoke loop task
@@ -126,13 +130,18 @@ class TestBespokeSupervisor:
             await asyncio.Event().wait()  # park forever
 
         monkeypatch.setattr(
-            Worker, "_run_bespoke_loop", fake_loop, raising=True,
+            Worker,
+            "_run_bespoke_loop",
+            fake_loop,
+            raising=True,
         )
 
         # Bound the supervisor to one cycle by setting a short
         # discovery interval, then cancel.
         monkeypatch.setattr(
-            worker.ctx.settings, "bespoke_discovery_interval_seconds", 60,
+            worker.ctx.settings,
+            "bespoke_discovery_interval_seconds",
+            60,
         )
         task = asyncio.create_task(worker._bespoke_supervisor(repo_config))
         # Let the discovery + spawn happen.
@@ -151,7 +160,11 @@ class TestBespokeSupervisor:
 
     @pytest.mark.asyncio
     async def test_removed_yaml_cancels_loop(
-        self, tmp_path, monkeypatch, worker, repo_config,
+        self,
+        tmp_path,
+        monkeypatch,
+        worker,
+        repo_config,
     ):
         """When a YAML disappears from the managed repo between cycles
         the supervisor MUST cancel the corresponding loop task. Without
@@ -160,9 +173,14 @@ class TestBespokeSupervisor:
         _stub_clone_helpers(monkeypatch)
         clone = _make_clone(tmp_path, repo_config.board_id)
         yaml_path = clone / ".robotsix-mill" / "agents" / "mail.yaml"
-        _write_yaml(yaml_path, {
-            "name": "mail", "interval_seconds": 3600, "system_prompt": "P",
-        })
+        _write_yaml(
+            yaml_path,
+            {
+                "name": "mail",
+                "interval_seconds": 3600,
+                "system_prompt": "P",
+            },
+        )
 
         cancel_events: list[str] = []
 
@@ -174,16 +192,22 @@ class TestBespokeSupervisor:
                 raise
 
         monkeypatch.setattr(
-            Worker, "_run_bespoke_loop", fake_loop, raising=True,
+            Worker,
+            "_run_bespoke_loop",
+            fake_loop,
+            raising=True,
         )
 
         # Discovery interval short so cycles tick fast.
         monkeypatch.setattr(
-            worker.ctx.settings, "bespoke_discovery_interval_seconds", 60,
+            worker.ctx.settings,
+            "bespoke_discovery_interval_seconds",
+            60,
         )
         # Hack: monkey the supervisor's max-sleep so the test
         # doesn't actually wait 60s between cycles.
         import robotsix_mill.runtime.worker as _w_mod
+
         real_sleep = asyncio.sleep
 
         async def fast_sleep(t):
@@ -210,7 +234,11 @@ class TestBespokeSupervisor:
 
     @pytest.mark.asyncio
     async def test_changed_yaml_respawns_loop(
-        self, tmp_path, monkeypatch, worker, repo_config,
+        self,
+        tmp_path,
+        monkeypatch,
+        worker,
+        repo_config,
     ):
         """When the YAML body changes (e.g. operator updates the
         prompt) the supervisor MUST cancel + respawn so the new
@@ -219,11 +247,14 @@ class TestBespokeSupervisor:
         _stub_clone_helpers(monkeypatch)
         clone = _make_clone(tmp_path, repo_config.board_id)
         yaml_path = clone / ".robotsix-mill" / "agents" / "mail.yaml"
-        _write_yaml(yaml_path, {
-            "name": "mail",
-            "interval_seconds": 3600,
-            "system_prompt": "old prompt",
-        })
+        _write_yaml(
+            yaml_path,
+            {
+                "name": "mail",
+                "interval_seconds": 3600,
+                "system_prompt": "old prompt",
+            },
+        )
 
         spawns: list[str] = []
 
@@ -235,11 +266,15 @@ class TestBespokeSupervisor:
                 raise
 
         monkeypatch.setattr(
-            Worker, "_run_bespoke_loop", fake_loop, raising=True,
+            Worker,
+            "_run_bespoke_loop",
+            fake_loop,
+            raising=True,
         )
 
         # Speed up the supervisor cycle.
         import robotsix_mill.runtime.worker as _w_mod
+
         real_sleep = asyncio.sleep
 
         async def fast_sleep(t):
@@ -250,11 +285,14 @@ class TestBespokeSupervisor:
         task = asyncio.create_task(worker._bespoke_supervisor(repo_config))
         await real_sleep(0.05)
         # Mutate the YAML body in place.
-        _write_yaml(yaml_path, {
-            "name": "mail",
-            "interval_seconds": 3600,
-            "system_prompt": "new prompt",
-        })
+        _write_yaml(
+            yaml_path,
+            {
+                "name": "mail",
+                "interval_seconds": 3600,
+                "system_prompt": "new prompt",
+            },
+        )
         await real_sleep(0.05)
         task.cancel()
         try:
@@ -268,7 +306,11 @@ class TestBespokeSupervisor:
 
     @pytest.mark.asyncio
     async def test_supervisor_cancel_cancels_children(
-        self, tmp_path, monkeypatch, worker, repo_config,
+        self,
+        tmp_path,
+        monkeypatch,
+        worker,
+        repo_config,
     ):
         """Worker.stop() cancels the supervisor; the supervisor's
         finally clause MUST cancel every child loop task it spawned.
@@ -280,7 +322,8 @@ class TestBespokeSupervisor:
             _write_yaml(
                 clone / ".robotsix-mill" / "agents" / f"{name}.yaml",
                 {
-                    "name": name, "interval_seconds": 3600,
+                    "name": name,
+                    "interval_seconds": 3600,
                     "system_prompt": "P",
                 },
             )
@@ -293,7 +336,10 @@ class TestBespokeSupervisor:
             await asyncio.Event().wait()
 
         monkeypatch.setattr(
-            Worker, "_run_bespoke_loop", fake_loop, raising=True,
+            Worker,
+            "_run_bespoke_loop",
+            fake_loop,
+            raising=True,
         )
 
         task = asyncio.create_task(worker._bespoke_supervisor(repo_config))

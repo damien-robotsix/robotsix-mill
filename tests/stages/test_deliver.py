@@ -1,5 +1,4 @@
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -30,7 +29,8 @@ def _bare(tmp_path) -> str:
     bare = tmp_path / "remote.git"
     subprocess.run(
         ["git", "clone", "--bare", "-q", str(seed), str(bare)],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     return f"file://{bare}", bare
 
@@ -44,10 +44,23 @@ def _ctx(tmp_path, **env):
     if ft is not None:
         from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
     db.init_db(s)
-    from robotsix_mill.config import RepoConfig; return StageContext(settings=s, service=TicketService(s), repo_config=RepoConfig(repo_id="test-repo", board_id="test-board", langfuse_project_name="test", langfuse_public_key="pk-test", langfuse_secret_key="sk-test"))
+    from robotsix_mill.config import RepoConfig
+
+    return StageContext(
+        settings=s,
+        service=TicketService(s),
+        repo_config=RepoConfig(
+            repo_id="test-repo",
+            board_id="test-board",
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        ),
+    )
 
 
 def _ticket_with_branch(ctx, remote):
@@ -68,15 +81,17 @@ def _ticket_with_branch(ctx, remote):
 
 # --- owner/repo parsing -------------------------------------------------
 
-@pytest.mark.parametrize("url", [
-    "https://github.com/damien-robotsix/robotsix-mill.git",
-    "https://github.com/damien-robotsix/robotsix-mill",
-    "git@github.com:damien-robotsix/robotsix-mill.git",
-])
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/damien-robotsix/robotsix-mill.git",
+        "https://github.com/damien-robotsix/robotsix-mill",
+        "git@github.com:damien-robotsix/robotsix-mill.git",
+    ],
+)
 def test_parse_owner_repo(url):
-    assert github._parse_owner_repo(url) == (
-        "damien-robotsix", "robotsix-mill"
-    )
+    assert github._parse_owner_repo(url) == ("damien-robotsix", "robotsix-mill")
 
 
 def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
@@ -108,11 +123,14 @@ def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
     monkeypatch.setattr(httpx, "Client", FakeClient)
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+
     _reset_secrets()
     _cfg._secrets = Secrets(forge_token="tok")
     s = Settings(
-        data_dir=str(tmp_path), FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git", FORGE_TOKEN="tok",
+        data_dir=str(tmp_path),
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
     )
     url = github.GitHubForge(s).open_merge_request(
         source_branch="mill/x", title="T", body="B"
@@ -120,12 +138,16 @@ def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
     assert url == "https://github.com/o/r/pull/7"
     assert calls["url"].endswith("/repos/o/r/pulls")
     assert calls["json"] == {
-        "title": "T", "head": "mill/x", "base": "main", "body": "B",
+        "title": "T",
+        "head": "mill/x",
+        "base": "main",
+        "body": "B",
     }
     assert calls["headers"]["Authorization"] == "Bearer tok"
 
 
 # --- deliver guards (no external calls) --------------------------------
+
 
 def test_blocked_without_forge_kind(tmp_path):
     ctx = _ctx(tmp_path, data_dir=str(tmp_path / "d0"))
@@ -149,8 +171,10 @@ def test_blocked_without_token(tmp_path):
 def test_blocked_without_branch(tmp_path):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
-        tmp_path, FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote, FORGE_TOKEN="t",
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
     )
     t = ctx.service.create("x", "y")
     ctx.service.transition(t.id, State.READY)
@@ -161,11 +185,14 @@ def test_blocked_without_branch(tmp_path):
 
 # --- success + resumable failure ---------------------------------------
 
+
 def test_success_pushes_and_opens_pr(tmp_path, monkeypatch):
     remote, bare = _bare(tmp_path)
     ctx = _ctx(
-        tmp_path, FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote, FORGE_TOKEN="t",
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
     )
     seen = {}
 
@@ -178,14 +205,17 @@ def test_success_pushes_and_opens_pr(tmp_path, monkeypatch):
 
     out = DeliverStage().run(t, ctx)
 
-    assert out.next_state is State.IMPLEMENT_COMPLETE  # PR opened, gates not checked yet
+    assert (
+        out.next_state is State.IMPLEMENT_COMPLETE
+    )  # PR opened, gates not checked yet
     assert "https://github.com/o/r/pull/42" in out.note
     assert seen["source_branch"] == branch
     assert t.id in seen["title"]
     # branch actually pushed to the bare remote
     refs = subprocess.run(
         ["git", "ls-remote", "--heads", str(bare)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout
     assert branch in refs
     assert (ctx.service.workspace(t).artifacts_dir / "deliver.md").exists()
@@ -194,8 +224,10 @@ def test_success_pushes_and_opens_pr(tmp_path, monkeypatch):
 def test_pr_api_error_blocks_resumable(tmp_path, monkeypatch):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
-        tmp_path, FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote, FORGE_TOKEN="t",
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
     )
 
     def boom(self, *, source_branch, title, body):
@@ -211,13 +243,16 @@ def test_pr_api_error_blocks_resumable(tmp_path, monkeypatch):
 
 # --- zero-diff guard ----------------------------------------------------
 
+
 def test_zero_diff_branch_blocks_without_pr_call(tmp_path, monkeypatch):
     """When the feature branch has no commits vs origin/main, the guard
     skips the PR API call and transitions to BLOCKED."""
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
-        tmp_path, FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote, FORGE_TOKEN="t",
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
     )
     pr_called = False
 
@@ -252,8 +287,10 @@ def test_zero_diff_guard_happy_path_unaffected(tmp_path, monkeypatch):
     creation proceeds as before."""
     remote, bare = _bare(tmp_path)
     ctx = _ctx(
-        tmp_path, FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote, FORGE_TOKEN="t",
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
     )
     seen = {}
 

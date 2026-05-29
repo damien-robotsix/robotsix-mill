@@ -57,17 +57,18 @@ def run_review_revision_agent(
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
-        / "agent_definitions" / "review_revision.yaml"
+        / "agent_definitions"
+        / "review_revision.yaml"
     )
 
     tools = build_fs_tools(Path(repo_dir), settings)
 
-    system_prompt = definition.system_prompt.format(
-        repo_dir=repo_dir, branch=branch
-    )
+    system_prompt = definition.system_prompt.format(repo_dir=repo_dir, branch=branch)
 
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         system_prompt=system_prompt,
     )
 
@@ -76,7 +77,8 @@ def run_review_revision_agent(
         + f"in {repo_dir}. Here are the review comments:\n\n"
         + f"{review_comments}\n\n"
         + f"Changed files in this PR: {', '.join(pr_files)}\n\n"
-        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Follow the system prompt exactly."
     )
 

@@ -15,7 +15,6 @@ import re
 import shutil
 from collections.abc import Iterable
 from datetime import datetime, timezone
-from pathlib import Path
 from secrets import token_hex
 
 from sqlmodel import select
@@ -24,6 +23,7 @@ from . import db
 from ..config import Settings
 from .models import SourceKind, Ticket, TicketEvent, Comment
 from .states import State, can_transition
+from .workspace import Workspace
 
 
 def _event_hash(
@@ -79,7 +79,7 @@ def _make_event(
         prev_hash=prev_hash,
         hash=h,
     )
-from .workspace import Workspace
+
 
 log = logging.getLogger("robotsix_mill.service")
 
@@ -99,7 +99,7 @@ def _parse_depends_on_str(raw: str | None) -> list[str]:
         parsed = json.loads(raw)
         if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
             return parsed
-    except (json.JSONDecodeError, TypeError):
+    except json.JSONDecodeError, TypeError:
         pass
     return []
 
@@ -292,9 +292,7 @@ class TicketService:
             if ticket is None:
                 return False
             for ev in s.exec(
-                select(TicketEvent).where(
-                    TicketEvent.ticket_id == ticket_id
-                )
+                select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
             ).all():
                 s.delete(ev)
             s.delete(ticket)
@@ -354,14 +352,21 @@ class TicketService:
         """Return True if *ticket_id* has at least one child whose
         state is NOT in ``_ARCHIVABLE_STATES``."""
         with db.session(self.settings, self.board_id) as s:
-            stmt = select(Ticket).where(
-                Ticket.parent_id == ticket_id,
-                Ticket.state.notin_(list(self._ARCHIVABLE_STATES)),
-            ).limit(1)
+            stmt = (
+                select(Ticket)
+                .where(
+                    Ticket.parent_id == ticket_id,
+                    Ticket.state.notin_(list(self._ARCHIVABLE_STATES)),
+                )
+                .limit(1)
+            )
             return s.exec(stmt).first() is not None
 
     def create(
-        self, title: str, description: str = "", source: str = SourceKind.USER,
+        self,
+        title: str,
+        description: str = "",
+        source: str = SourceKind.USER,
         origin_session: str | None = None,
         depends_on: str | None = None,
         kind: str = "task",
@@ -398,17 +403,13 @@ class TicketService:
         ticket_id = f"{stamp}-{_slug(title)}-{token_hex(2)}"
 
         if kind in ("inquiry", "epic") and depends_on:
-            raise ValueError(
-                f"{kind}s do not support depends_on — they are standalone"
-            )
+            raise ValueError(f"{kind}s do not support depends_on — they are standalone")
 
         # Reject self-dependency before persisting.
         if depends_on:
             dep_ids = _parse_depends_on_str(depends_on)
             if ticket_id in dep_ids:
-                raise ValueError(
-                    f"Ticket cannot depend on itself: {ticket_id}"
-                )
+                raise ValueError(f"Ticket cannot depend on itself: {ticket_id}")
 
         if kind == "epic":
             initial_state = State.EPIC_OPEN
@@ -432,6 +433,7 @@ class TicketService:
         # ``.data/workspaces/<id>`` directory.
         if not effective_board:
             from ..config import get_repos_config
+
             try:
                 repos = get_repos_config().repos
             except Exception:
@@ -489,13 +491,17 @@ class TicketService:
             )
             s.add(ticket)
             s.flush()
-            s.add(_make_event(s, ticket_id=ticket_id, state=initial_state, note="created"))
+            s.add(
+                _make_event(s, ticket_id=ticket_id, state=initial_state, note="created")
+            )
             s.commit()
             s.refresh(ticket)
             return ticket
 
     def add_step_event(
-        self, ticket_id: str, note: str,
+        self,
+        ticket_id: str,
+        note: str,
     ) -> None:
         """Append a same-state event to a ticket's history.
 
@@ -514,16 +520,19 @@ class TicketService:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
-            s.add(_make_event(
-                s, ticket_id=ticket_id, state=ticket.state, note=note,
-            ))
+            s.add(
+                _make_event(
+                    s,
+                    ticket_id=ticket_id,
+                    state=ticket.state,
+                    note=note,
+                )
+            )
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()
 
-    def transition(
-        self, ticket_id: str, dst: State, note: str | None = None
-    ) -> Ticket:
+    def transition(self, ticket_id: str, dst: State, note: str | None = None) -> Ticket:
         """Move a ticket to *dst* state.
 
         Returns the updated :class:`Ticket`. Raises :class:`KeyError` if
@@ -537,16 +546,8 @@ class TicketService:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(ticket_id)
-            blocked_from = (
-                State(ticket.blocked_from)
-                if ticket.blocked_from
-                else None
-            )
-            paused_from = (
-                State(ticket.paused_from)
-                if ticket.paused_from
-                else None
-            )
+            blocked_from = State(ticket.blocked_from) if ticket.blocked_from else None
+            paused_from = State(ticket.paused_from) if ticket.paused_from else None
             if not can_transition(ticket.state, dst, blocked_from, paused_from):
                 raise TransitionError(
                     f"{ticket_id}: {ticket.state} -> {dst} not allowed"
@@ -722,6 +723,7 @@ class TicketService:
         if not desc:
             return ""
         from ..agents.prompt_blocks import section
+
         return section("epic-context", desc)
 
     def list_children(self, ticket_id: str) -> list[Ticket]:
@@ -731,7 +733,11 @@ class TicketService:
             return list(s.exec(stmt).all())
 
     def cumulative_cost(
-        self, ticket_id: str, settings: Settings, *, blocking: bool = True,
+        self,
+        ticket_id: str,
+        settings: Settings,
+        *,
+        blocking: bool = True,
         repo_config: "RepoConfig | None" = None,
     ) -> float:
         """Return the cumulative cost of *ticket_id* and all descendants (recursive).
@@ -835,9 +841,7 @@ class TicketService:
         list of ticket IDs.  Raises :class:`ValueError` if *ticket_id*
         appears in *depends_on_ids* (self-dependency)."""
         if ticket_id in depends_on_ids:
-            raise ValueError(
-                f"Ticket cannot depend on itself: {ticket_id}"
-            )
+            raise ValueError(f"Ticket cannot depend on itself: {ticket_id}")
         raw = json.dumps(depends_on_ids) if depends_on_ids else None
         with db.session(self.settings, self._board_for(ticket_id)) as s:
             ticket = s.get(Ticket, ticket_id)
@@ -873,7 +877,8 @@ class TicketService:
             if dep_ticket is None:
                 log.debug(
                     "ticket %s: dependency %s not found — treating as satisfied",
-                    ticket.id, dep_id,
+                    ticket.id,
+                    dep_id,
                 )
                 continue
 
@@ -882,7 +887,8 @@ class TicketService:
             if ticket.id in dep_deps:
                 log.debug(
                     "ticket %s: direct cycle with dependency %s — treating as satisfied",
-                    ticket.id, dep_id,
+                    ticket.id,
+                    dep_id,
                 )
                 continue
 
@@ -894,7 +900,13 @@ class TicketService:
         return unmet
 
     # --- comments ---
-    def add_comment(self, ticket_id: str, body: str, author: str = "user", parent_id: int | None = None) -> Comment:
+    def add_comment(
+        self,
+        ticket_id: str,
+        body: str,
+        author: str = "user",
+        parent_id: int | None = None,
+    ) -> Comment:
         """Add a reviewer comment to a ticket. Raises ``KeyError`` if
         the ticket does not exist.
 
@@ -913,7 +925,9 @@ class TicketService:
                     raise ValueError(
                         f"parent comment {parent_id} does not belong to ticket {ticket_id}"
                     )
-            comment = Comment(ticket_id=ticket_id, body=body, author=author, parent_id=parent_id)
+            comment = Comment(
+                ticket_id=ticket_id, body=body, author=author, parent_id=parent_id
+            )
             s.add(comment)
             s.commit()
             s.refresh(comment)
@@ -934,7 +948,9 @@ class TicketService:
             return list(s.exec(stmt).all())
 
     def _board_for_comment(
-        self, comment_id: int, ticket_id: str | None = None,
+        self,
+        comment_id: int,
+        ticket_id: str | None = None,
     ) -> str:
         """Resolve the board that owns *comment_id*.
 
@@ -980,7 +996,9 @@ class TicketService:
         return self.board_id
 
     def close_thread(
-        self, comment_id: int, ticket_id: str | None = None,
+        self,
+        comment_id: int,
+        ticket_id: str | None = None,
     ) -> Comment:
         """Close a top-level comment thread.  Raises ``KeyError`` if
         the comment does not exist, ``ValueError`` if it is a reply
@@ -1022,7 +1040,9 @@ class TicketService:
         return comment
 
     def _maybe_resume_awaiting_user_reply(
-        self, ticket_id: str, board: str,
+        self,
+        ticket_id: str,
+        board: str,
     ) -> None:
         """If *ticket_id* is in ``AWAITING_USER_REPLY`` and every
         top-level ``[ASK_USER]`` comment thread on it is closed,
@@ -1034,8 +1054,8 @@ class TicketService:
 
             if not ticket.paused_from:
                 log.warning(
-                    "%s: AWAITING_USER_REPLY but no paused_from — "
-                    "cannot auto-resume", ticket_id,
+                    "%s: AWAITING_USER_REPLY but no paused_from — cannot auto-resume",
+                    ticket_id,
                 )
                 return
 
@@ -1043,7 +1063,7 @@ class TicketService:
             # every one is closed.
             stmt = select(Comment).where(
                 Comment.ticket_id == ticket_id,
-                Comment.parent_id == None,
+                Comment.parent_id == None,  # noqa: E711 (SQLAlchemy needs == None for SQL IS NULL)
                 Comment.body.startswith("[ASK_USER]"),
             )
             ask_threads = list(s.exec(stmt).all())
@@ -1076,16 +1096,22 @@ class TicketService:
             log.info(
                 "%s: auto-resumed from AWAITING_USER_REPLY → %s "
                 "(all %d ask_user threads closed)",
-                ticket_id, dst.value, len(ask_threads),
+                ticket_id,
+                dst.value,
+                len(ask_threads),
             )
 
     def reopen_thread(
-        self, comment_id: int, ticket_id: str | None = None,
+        self,
+        comment_id: int,
+        ticket_id: str | None = None,
     ) -> Comment:
         """Reopen a closed top-level comment thread.  Raises
         ``KeyError`` if the comment does not exist, ``ValueError`` if
         it is a reply (non-NULL parent_id) or is not currently closed."""
-        with db.session(self.settings, self._board_for_comment(comment_id, ticket_id)) as s:
+        with db.session(
+            self.settings, self._board_for_comment(comment_id, ticket_id)
+        ) as s:
             comment = s.get(Comment, comment_id)
             if comment is None:
                 raise KeyError(comment_id)
@@ -1111,8 +1137,11 @@ class TicketService:
         EPIC_OPEN epic.
         """
         _NON_REDRAFTABLE: set[State] = {
-            State.DRAFT, State.CLOSED, State.ANSWERED,
-            State.EPIC_CLOSED, State.EPIC_OPEN,
+            State.DRAFT,
+            State.CLOSED,
+            State.ANSWERED,
+            State.EPIC_CLOSED,
+            State.EPIC_OPEN,
         }
         with db.session(self.settings, self._board_for(ticket_id)) as s:
             ticket = s.get(Ticket, ticket_id)
@@ -1132,9 +1161,7 @@ class TicketService:
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.flush()
-            s.add(
-                _make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note)
-            )
+            s.add(_make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note))
             s.commit()
             if comment is not None:
                 s.refresh(comment)
@@ -1170,9 +1197,7 @@ class TicketService:
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.flush()
-            s.add(
-                _make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note)
-            )
+            s.add(_make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note))
             s.commit()
             if comment is not None:
                 s.refresh(comment)
@@ -1194,8 +1219,11 @@ class TicketService:
         not eligible.
         """
         _NON_MARK_DONEABLE: set[State] = {
-            State.DONE, State.CLOSED, State.ANSWERED,
-            State.EPIC_CLOSED, State.EPIC_OPEN,
+            State.DONE,
+            State.CLOSED,
+            State.ANSWERED,
+            State.EPIC_CLOSED,
+            State.EPIC_OPEN,
         }
         with db.session(self.settings, self._board_for(ticket_id)) as s:
             ticket = s.get(Ticket, ticket_id)

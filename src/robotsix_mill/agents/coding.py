@@ -43,7 +43,9 @@ class AgentRunError(RuntimeError):
     """
 
     def __init__(
-        self, message: str, messages: list,
+        self,
+        message: str,
+        messages: list,
         cause: BaseException | None = None,
     ) -> None:
         super().__init__(message)
@@ -96,8 +98,12 @@ def run_implement_agent(
 
     def _run_primary():
         return run_coordinator(
-            settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
-            feedback=feedback, epic_context=epic_context,
+            settings=settings,
+            repo_dir=repo_dir,
+            spec=spec,
+            memory=memory,
+            feedback=feedback,
+            epic_context=epic_context,
             reference_files=reference_files,
             message_history=message_history,
             previous_attempt_summary=previous_attempt_summary,
@@ -117,8 +123,12 @@ def run_implement_agent(
         )
         try:
             result = run_coordinator(
-                settings=settings, repo_dir=repo_dir, spec=spec, memory=memory,
-                feedback=feedback, model_name="deepseek/deepseek-v4-flash",
+                settings=settings,
+                repo_dir=repo_dir,
+                spec=spec,
+                memory=memory,
+                feedback=feedback,
+                model_name="deepseek/deepseek-v4-flash",
                 epic_context=epic_context,
                 reference_files=reference_files,
                 message_history=message_history,
@@ -132,12 +142,13 @@ def run_implement_agent(
                 f"primary={e}, fallback={fallback_e}",
                 [],
             ) from e
-    except (AgentBudgetError, AgentRunError):
+    except AgentBudgetError, AgentRunError:
         raise
     except Exception as e:  # noqa: BLE001 — block-as-resumable
         raise AgentRunError(str(e), [], cause=e) from e
 
     from .explore import is_explore_budget_exhausted, reset_explore_budget_exhausted
+
     if is_explore_budget_exhausted():
         reset_explore_budget_exhausted()
         raise AgentBudgetError(
@@ -154,6 +165,3 @@ def run_implement_agent(
         result.conversation_state,
         result.new_messages,
     )
-
-
-

@@ -1,5 +1,3 @@
-import pytest
-
 from robotsix_mill.cli import main
 from robotsix_mill.core.states import State
 
@@ -17,7 +15,7 @@ def test_approve_success(settings, service, repos_registry):
     from fastapi.testclient import TestClient
     from robotsix_mill.runtime.api import create_app
 
-    with TestClient(create_app(repos_registry, settings, single_repo_id="test-repo")) as client:
+    with TestClient(create_app(repos_registry, settings, single_repo_id="test-repo")):
         # The CLI uses settings.api_url to reach the server.
         # We can't override that easily without monkeypatching.
         pass
@@ -28,8 +26,6 @@ def test_approve_success(settings, service, repos_registry):
     # For this test, we'll use httpx mocks.
 
     import httpx
-
-    real_client = httpx.Client
 
     class FakeResponse:
         def __init__(self, status_code, json_data):
@@ -112,7 +108,8 @@ def test_approve_failure(settings, service):
 
         def post(self, url, **kwargs):
             return FakeResponse(
-                409, "draft -> ready not allowed",
+                409,
+                "draft -> ready not allowed",
             )
 
     original = cli_mod.httpx.Client
@@ -146,9 +143,7 @@ def test_resume_blocked_success(settings, service):
 
         def raise_for_status(self):
             if not self.is_success:
-                raise cli_mod.httpx.HTTPStatusError(
-                    "", request=None, response=self
-                )
+                raise cli_mod.httpx.HTTPStatusError("", request=None, response=self)
 
     class FakeClient:
         def __init__(self, *args, **kwargs):
@@ -196,9 +191,7 @@ def test_resume_blocked_failure(settings, service):
 
         def raise_for_status(self):
             if not self.is_success:
-                raise cli_mod.httpx.HTTPStatusError(
-                    "", request=None, response=self
-                )
+                raise cli_mod.httpx.HTTPStatusError("", request=None, response=self)
 
     class FakeClient:
         def __init__(self, *args, **kwargs):

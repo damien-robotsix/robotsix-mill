@@ -32,8 +32,12 @@ def truncate_at_boundary(text: str, max_chars: int) -> str:
     # We search for the **last** occurrence of each pattern in *prefix*;
     # the truncation point is *after* the pattern (pos + length).
     boundaries: list[tuple[str, int]] = [
-        (". ", 2), ("! ", 2), ("? ", 2),
-        (".\n", 2), ("!\n", 2), ("?\n", 2),
+        (". ", 2),
+        ("! ", 2),
+        ("? ", 2),
+        (".\n", 2),
+        ("!\n", 2),
+        ("?\n", 2),
         ("\n\n", 2),
         ("```", 3),
     ]

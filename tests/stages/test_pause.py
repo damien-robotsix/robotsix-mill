@@ -17,19 +17,25 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, call, patch
 
-import pytest
 
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.stages.pause import (
-    _SENTINEL, acknowledge_unanswered_threads, check_for_pause,
-    clear_conversation_state, load_conversation_state,
+    _SENTINEL,
+    acknowledge_unanswered_threads,
+    check_for_pause,
+    clear_conversation_state,
+    load_conversation_state,
     save_conversation_state,
 )
 
 
 def _msg(role: str, parts: list[dict]) -> dict:
     """Minimal serialized pydantic-ai message."""
-    return {"role": role, "kind": "request" if role == "request" else "response", "parts": parts}
+    return {
+        "role": role,
+        "kind": "request" if role == "request" else "response",
+        "parts": parts,
+    }
 
 
 def _tool_return_part(content: str, tool_call_id: str = "x") -> dict:
@@ -83,12 +89,17 @@ def test_sentinel_followed_by_text_response_still_triggers_pause():
 def test_non_sentinel_tool_return_in_last_message_returns_false():
     """A non-ask_user tool return in the last message → no pause."""
     msgs = [
-        _msg("request", [{
-            "part_kind": "tool-return",
-            "tool_name": "read_file",
-            "content": "file content",
-            "tool_call_id": "x",
-        }]),
+        _msg(
+            "request",
+            [
+                {
+                    "part_kind": "tool-return",
+                    "tool_name": "read_file",
+                    "content": "file content",
+                    "tool_call_id": "x",
+                }
+            ],
+        ),
     ]
     assert check_for_pause(json.dumps(msgs).encode()) is False
 
@@ -105,14 +116,22 @@ def test_sentinel_in_buried_tool_return_with_trailing_response():
     message is the model's text reply. Scanning ALL tool returns in
     this run's new_messages still catches it."""
     msgs = [
-        _msg("response", [
-            {"part_kind": "tool-call", "tool_name": "ask_user",
-             "args": {"question": "..."}, "tool_call_id": "ask-1"},
-        ]),
+        _msg(
+            "response",
+            [
+                {
+                    "part_kind": "tool-call",
+                    "tool_name": "ask_user",
+                    "args": {"question": "..."},
+                    "tool_call_id": "ask-1",
+                },
+            ],
+        ),
         _msg("request", [_tool_return_part(_SENTINEL, "ask-1")]),
-        _msg("response", [_text_part(
-            '{"summary": "asked the user", "updated_memory": ""}'
-        )]),
+        _msg(
+            "response",
+            [_text_part('{"summary": "asked the user", "updated_memory": ""}')],
+        ),
     ]
     assert check_for_pause(json.dumps(msgs).encode()) is True
 
@@ -133,6 +152,7 @@ def test_sentinel_in_both_old_and_new_returns_true():
 # ---------------------------------------------------------------------------
 # acknowledge_unanswered_threads
 # ---------------------------------------------------------------------------
+
 
 def _make_comment(
     id: int,
@@ -189,7 +209,9 @@ def test_acknowledge_open_thread_no_child_reply_adds_ack_and_closes():
     acknowledge_unanswered_threads(ctx, ticket, {1})
 
     ctx.service.add_comment.assert_called_once_with(
-        ticket.id, "Addressed.", parent_id=1,
+        ticket.id,
+        "Addressed.",
+        parent_id=1,
     )
     ctx.service.close_thread.assert_called_once_with(1)
 
@@ -224,7 +246,9 @@ def test_acknowledge_mixed_threads():
     ctx.service.close_thread.assert_has_calls([call(2), call(3)], any_order=True)
     # Thread 3: open no reply → add_comment + close.
     ctx.service.add_comment.assert_called_once_with(
-        ticket.id, "Addressed.", parent_id=3,
+        ticket.id,
+        "Addressed.",
+        parent_id=3,
     )
 
 
@@ -285,7 +309,9 @@ def test_acknowledge_thread_ids_subset_only_touches_specified():
 
     ctx.service.close_thread.assert_called_once_with(1)
     ctx.service.add_comment.assert_called_once_with(
-        ticket.id, "Addressed.", parent_id=1,
+        ticket.id,
+        "Addressed.",
+        parent_id=1,
     )
     # t2 was NOT touched.
     assert call(2) not in ctx.service.close_thread.call_args_list

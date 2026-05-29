@@ -127,14 +127,22 @@ class TestLoadBespokeDefinitions:
         order so scheduling is deterministic across mill restarts."""
         d = tmp_path / ".robotsix-mill" / "agents"
         d.mkdir(parents=True)
-        self._write(d / "zoo.yaml", {
-            "name": "zoo", "interval_seconds": 3600,
-            "system_prompt": "Z prompt",
-        })
-        self._write(d / "alpha.yaml", {
-            "name": "alpha", "interval_seconds": 7200,
-            "system_prompt": "A prompt",
-        })
+        self._write(
+            d / "zoo.yaml",
+            {
+                "name": "zoo",
+                "interval_seconds": 3600,
+                "system_prompt": "Z prompt",
+            },
+        )
+        self._write(
+            d / "alpha.yaml",
+            {
+                "name": "alpha",
+                "interval_seconds": 7200,
+                "system_prompt": "A prompt",
+            },
+        )
         defs = load_bespoke_definitions(tmp_path)
         assert [d.name for d in defs] == ["alpha", "zoo"]
         assert defs[0].interval_seconds == 7200
@@ -148,10 +156,14 @@ class TestLoadBespokeDefinitions:
         d = tmp_path / ".robotsix-mill" / "agents"
         d.mkdir(parents=True)
         (d / "broken.yaml").write_text("not: valid: yaml: at: all")
-        self._write(d / "good.yaml", {
-            "name": "good", "interval_seconds": 3600,
-            "system_prompt": "P",
-        })
+        self._write(
+            d / "good.yaml",
+            {
+                "name": "good",
+                "interval_seconds": 3600,
+                "system_prompt": "P",
+            },
+        )
         with caplog.at_level(logging.WARNING):
             defs = load_bespoke_definitions(tmp_path)
         assert [d.name for d in defs] == ["good"]
@@ -164,18 +176,30 @@ class TestLoadBespokeDefinitions:
         d = tmp_path / ".robotsix-mill" / "agents"
         d.mkdir(parents=True)
         # Missing required system_prompt.
-        self._write(d / "no-prompt.yaml", {
-            "name": "no-prompt", "interval_seconds": 3600,
-        })
+        self._write(
+            d / "no-prompt.yaml",
+            {
+                "name": "no-prompt",
+                "interval_seconds": 3600,
+            },
+        )
         # Invalid name (uppercase).
-        self._write(d / "bad-name.yaml", {
-            "name": "BadName", "interval_seconds": 3600,
-            "system_prompt": "P",
-        })
-        self._write(d / "good.yaml", {
-            "name": "good", "interval_seconds": 3600,
-            "system_prompt": "P",
-        })
+        self._write(
+            d / "bad-name.yaml",
+            {
+                "name": "BadName",
+                "interval_seconds": 3600,
+                "system_prompt": "P",
+            },
+        )
+        self._write(
+            d / "good.yaml",
+            {
+                "name": "good",
+                "interval_seconds": 3600,
+                "system_prompt": "P",
+            },
+        )
         with caplog.at_level(logging.WARNING):
             defs = load_bespoke_definitions(tmp_path)
         assert [d.name for d in defs] == ["good"]
@@ -187,14 +211,22 @@ class TestLoadBespokeDefinitions:
         warns about the rest — silent collision would be worse."""
         d = tmp_path / ".robotsix-mill" / "agents"
         d.mkdir(parents=True)
-        self._write(d / "a.yaml", {
-            "name": "shared", "interval_seconds": 3600,
-            "system_prompt": "First wins",
-        })
-        self._write(d / "b.yaml", {
-            "name": "shared", "interval_seconds": 7200,
-            "system_prompt": "Second skipped",
-        })
+        self._write(
+            d / "a.yaml",
+            {
+                "name": "shared",
+                "interval_seconds": 3600,
+                "system_prompt": "First wins",
+            },
+        )
+        self._write(
+            d / "b.yaml",
+            {
+                "name": "shared",
+                "interval_seconds": 7200,
+                "system_prompt": "Second skipped",
+            },
+        )
         with caplog.at_level(logging.WARNING):
             defs = load_bespoke_definitions(tmp_path)
         assert len(defs) == 1
@@ -211,10 +243,14 @@ class TestLoadBespokeDefinitions:
         d.mkdir(parents=True)
         (d / "list.yaml").write_text("- foo\n- bar\n")
         (d / "null.yaml").write_text("")
-        self._write(d / "good.yaml", {
-            "name": "good", "interval_seconds": 3600,
-            "system_prompt": "P",
-        })
+        self._write(
+            d / "good.yaml",
+            {
+                "name": "good",
+                "interval_seconds": 3600,
+                "system_prompt": "P",
+            },
+        )
         with caplog.at_level(logging.WARNING):
             defs = load_bespoke_definitions(tmp_path)
         assert [d.name for d in defs] == ["good"]

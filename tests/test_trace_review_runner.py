@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 import pytest
 
 from robotsix_mill.agents.trace_inspector import (
-    TraceFinding, TraceInspectResult,
+    TraceFinding,
+    TraceInspectResult,
 )
 from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core.models import SourceKind
@@ -35,6 +36,7 @@ def settings(tmp_path, monkeypatch):
     _reset_secrets()
     from robotsix_mill.core import db
     from robotsix_mill.config import _reset_repos_config
+
     db.reset_engine()
     _reset_repos_config()
     s = Settings(data_dir=str(tmp_path))
@@ -42,7 +44,8 @@ def settings(tmp_path, monkeypatch):
     # level reference so it picks up the test's data_dir instead of the
     # YAML-defaulted one.
     monkeypatch.setattr(
-        "robotsix_mill.trace_review_runner.Settings", lambda: s,
+        "robotsix_mill.trace_review_runner.Settings",
+        lambda: s,
     )
     return s
 
@@ -131,8 +134,9 @@ class TestComputeBaselines:
 class TestClassifier:
     """``_classify_trace`` flags traces by deterministic criteria."""
 
-    def _baselines(self, cost_threshold=None, obs_threshold=None,
-                   cost_median=None, obs_median=None):
+    def _baselines(
+        self, cost_threshold=None, obs_threshold=None, cost_median=None, obs_median=None
+    ):
         return _Baselines(
             cost_threshold=cost_threshold,
             obs_threshold=obs_threshold,
@@ -147,12 +151,16 @@ class TestClassifier:
 
     def test_cost_outlier_above_relative_threshold(self, settings):
         baselines = self._baselines(
-            cost_threshold=1.00, cost_median=0.30,
-            obs_threshold=45, obs_median=15,
+            cost_threshold=1.00,
+            cost_median=0.30,
+            obs_threshold=45,
+            obs_median=15,
         )
         flags = _classify_trace(
-            _trace(totalCost=2.50), settings,
-            observations=[], baselines=baselines,
+            _trace(totalCost=2.50),
+            settings,
+            observations=[],
+            baselines=baselines,
         )
         assert any("cost_outlier" in f for f in flags.flags)
         # The flag string carries the median + multiplier for context.
@@ -160,11 +168,14 @@ class TestClassifier:
 
     def test_cost_at_threshold_is_not_flagged(self, settings):
         baselines = self._baselines(
-            cost_threshold=1.00, cost_median=0.30,
+            cost_threshold=1.00,
+            cost_median=0.30,
         )
         flags = _classify_trace(
-            _trace(totalCost=1.00), settings,
-            observations=[], baselines=baselines,
+            _trace(totalCost=1.00),
+            settings,
+            observations=[],
+            baselines=baselines,
         )
         assert not any("cost_outlier" in f for f in flags.flags)
 
@@ -173,19 +184,26 @@ class TestClassifier:
         cost shouldn't flag as a relative outlier."""
         baselines = self._baselines(cost_threshold=None)
         flags = _classify_trace(
-            _trace(totalCost=100.0), settings,
-            observations=[], baselines=baselines,
+            _trace(totalCost=100.0),
+            settings,
+            observations=[],
+            baselines=baselines,
         )
         assert not any("cost_outlier" in f for f in flags.flags)
 
     def test_observation_storm_relative(self, settings):
         baselines = self._baselines(
-            obs_threshold=45, obs_median=15,
-            cost_threshold=1.0, cost_median=0.3,
+            obs_threshold=45,
+            obs_median=15,
+            cost_threshold=1.0,
+            cost_median=0.3,
         )
         obs = [_obs("read_file") for _ in range(50)]
         flags = _classify_trace(
-            _trace(), settings, observations=obs, baselines=baselines,
+            _trace(),
+            settings,
+            observations=obs,
+            baselines=baselines,
         )
         assert any("observation_storm" in f for f in flags.flags)
 
@@ -195,23 +213,27 @@ class TestClassifier:
         assert any("tool_errors" in f for f in flags.flags)
 
     def test_traceback_in_status_message_is_a_tool_error(self, settings):
-        obs = [_obs(
-            "read_file",
-            statusMessage="Traceback (most recent call last):\n  ...",
-        )]
+        obs = [
+            _obs(
+                "read_file",
+                statusMessage="Traceback (most recent call last):\n  ...",
+            )
+        ]
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("tool_errors" in f for f in flags.flags)
 
     def test_rejected_generation_marker(self, settings):
-        obs = [_obs(
-            "chat deepseek/deepseek-v4-pro",
-            level="WARNING",
-            statusMessage=(
-                "model produced 2636 output token(s) but no "
-                "gen_ai.output.messages was set — pydantic-ai likely "
-                "rejected the response"
-            ),
-        )]
+        obs = [
+            _obs(
+                "chat deepseek/deepseek-v4-pro",
+                level="WARNING",
+                statusMessage=(
+                    "model produced 2636 output token(s) but no "
+                    "gen_ai.output.messages was set — pydantic-ai likely "
+                    "rejected the response"
+                ),
+            )
+        ]
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("rejected_generations" in f for f in flags.flags)
 
@@ -236,12 +258,16 @@ class TestClassifier:
         observation-level flags don't fire; the cost flag still fires
         if the baseline thresholds are present."""
         baselines = self._baselines(
-            cost_threshold=1.00, cost_median=0.30,
-            obs_threshold=45, obs_median=15,
+            cost_threshold=1.00,
+            cost_median=0.30,
+            obs_threshold=45,
+            obs_median=15,
         )
         flags = _classify_trace(
-            _trace(totalCost=2.0), settings,
-            observations=None, baselines=baselines,
+            _trace(totalCost=2.0),
+            settings,
+            observations=None,
+            baselines=baselines,
         )
         assert any("cost_outlier" in f for f in flags.flags)
         assert not any("tool_errors" in f for f in flags.flags)
@@ -277,9 +303,7 @@ class TestWatermark:
 
 
 def test_normalize_strips_punctuation_and_case():
-    assert _normalize("Trace-Review: Tool Errors!") == (
-        "trace review tool errors"
-    )
+    assert _normalize("Trace-Review: Tool Errors!") == ("trace review tool errors")
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +325,9 @@ class TestRunTraceReviewPass:
         assert result.traces_flagged == 0
 
     def test_clean_traces_are_dropped_without_inspector(
-        self, settings, monkeypatch,
+        self,
+        settings,
+        monkeypatch,
     ):
         """Phase-1 catches everything; the LLM seam is never called."""
         monkeypatch.setattr(
@@ -315,8 +341,7 @@ class TestRunTraceReviewPass:
         inspector_calls: list = []
         monkeypatch.setattr(
             "robotsix_mill.agents.trace_inspector.run_trace_inspector",
-            lambda **kw: inspector_calls.append(kw)
-            or TraceInspectResult(findings=[]),
+            lambda **kw: inspector_calls.append(kw) or TraceInspectResult(findings=[]),
         )
         result = run_trace_review_pass(session_id="sess-2")
         assert result.traces_scanned == 1
@@ -324,7 +349,9 @@ class TestRunTraceReviewPass:
         assert inspector_calls == []
 
     def test_flagged_trace_inspector_findings_become_drafts(
-        self, settings, monkeypatch,
+        self,
+        settings,
+        monkeypatch,
     ):
         # Use a binary flag (tool_errors) so the test doesn't depend on
         # the batch-relative baseline machinery — a single tool error in
@@ -335,9 +362,11 @@ class TestRunTraceReviewPass:
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
-            lambda *a, **kw: {"observations": [
-                _obs("run_command", output="error: command failed"),
-            ]},
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
         )
         finding = TraceFinding(
             category="tool_error",
@@ -367,7 +396,9 @@ class TestRunTraceReviewPass:
         assert "Inspector confidence" in body
 
     def test_dedup_against_existing_open_trace_review_ticket(
-        self, settings, monkeypatch,
+        self,
+        settings,
+        monkeypatch,
     ):
         # Pre-seed an open trace-review ticket with the same normalized
         # title the inspector would produce.
@@ -383,18 +414,24 @@ class TestRunTraceReviewPass:
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
-            lambda *a, **kw: {"observations": [
-                _obs("run_command", output="error: command failed"),
-            ]},
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.trace_inspector.run_trace_inspector",
-            lambda **kw: TraceInspectResult(findings=[TraceFinding(
-                category="tool_error",
-                symptom="run_command kept failing on uv lock",
-                root_cause="x",
-                proposed_solution="y",
-            )]),
+            lambda **kw: TraceInspectResult(
+                findings=[
+                    TraceFinding(
+                        category="tool_error",
+                        symptom="run_command kept failing on uv lock",
+                        root_cause="x",
+                        proposed_solution="y",
+                    )
+                ]
+            ),
         )
         result = run_trace_review_pass(session_id="sess-4")
         assert result.traces_flagged == 1
@@ -414,14 +451,16 @@ class TestRunTraceReviewPass:
         assert after.tzinfo is not None  # UTC
 
     def test_relative_cost_outlier_in_a_batch(
-        self, settings, monkeypatch,
+        self,
+        settings,
+        monkeypatch,
     ):
         """In a batch where the median cost is $0.10, a $1.00 trace
         is 10× the median and gets flagged via the relative criterion
         even though the absolute number isn't astronomical."""
-        traces = [
-            _trace(id=f"t{i}", totalCost=0.10) for i in range(4)
-        ] + [_trace(id="t5", totalCost=1.00)]  # 10× median = outlier
+        traces = [_trace(id=f"t{i}", totalCost=0.10) for i in range(4)] + [
+            _trace(id="t5", totalCost=1.00)
+        ]  # 10× median = outlier
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.list_all_traces_since",
             lambda *a, **kw: traces,
@@ -432,9 +471,11 @@ class TestRunTraceReviewPass:
         )
         inspector_calls: list = []
         finding = TraceFinding(
-            category="optimization", symptom="trace is expensive",
+            category="optimization",
+            symptom="trace is expensive",
             root_cause="excessive sub-agent calls",
-            proposed_solution="batch them", confidence="medium",
+            proposed_solution="batch them",
+            confidence="medium",
         )
 
         def fake_inspect(**kw):
@@ -455,7 +496,9 @@ class TestRunTraceReviewPass:
         assert len(result.drafts_created) == 1
 
     def test_inspector_error_logged_but_does_not_crash(
-        self, settings, monkeypatch,
+        self,
+        settings,
+        monkeypatch,
     ):
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.list_all_traces_since",
@@ -463,9 +506,11 @@ class TestRunTraceReviewPass:
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
-            lambda *a, **kw: {"observations": [
-                _obs("run_command", output="error: command failed"),
-            ]},
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.trace_inspector.run_trace_inspector",
@@ -485,7 +530,9 @@ class TestTargetRepoRouting:
     application repo's board."""
 
     def test_target_repo_routes_drafts_to_configured_board(
-        self, tmp_path, monkeypatch,
+        self,
+        tmp_path,
+        monkeypatch,
     ):
         # Two repos: source (where the trace came from) and target
         # (where the draft should land).
@@ -493,25 +540,35 @@ class TestTargetRepoRouting:
         _reset_secrets()
         from robotsix_mill.core import db
         from robotsix_mill.config import (
-            _reset_repos_config, get_repos_config, RepoConfig, ReposRegistry,
+            _reset_repos_config,
+            get_repos_config,
+            RepoConfig,
+            ReposRegistry,
         )
         import robotsix_mill.config as _cfg
+
         db.reset_engine()
         _reset_repos_config()
 
         # Manually pin a repos registry so get_repos_config returns it.
-        _cfg._repos_config = ReposRegistry(repos={
-            "source-repo": RepoConfig(
-                repo_id="source-repo", board_id="source-board",
-                langfuse_project_name="src", langfuse_public_key="pk",
-                langfuse_secret_key="sk",
-            ),
-            "mill-repo": RepoConfig(
-                repo_id="mill-repo", board_id="mill-board",
-                langfuse_project_name="mill", langfuse_public_key="pk2",
-                langfuse_secret_key="sk2",
-            ),
-        })
+        _cfg._repos_config = ReposRegistry(
+            repos={
+                "source-repo": RepoConfig(
+                    repo_id="source-repo",
+                    board_id="source-board",
+                    langfuse_project_name="src",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                ),
+                "mill-repo": RepoConfig(
+                    repo_id="mill-repo",
+                    board_id="mill-board",
+                    langfuse_project_name="mill",
+                    langfuse_public_key="pk2",
+                    langfuse_secret_key="sk2",
+                ),
+            }
+        )
 
         s = Settings(
             data_dir=str(tmp_path),
@@ -520,7 +577,8 @@ class TestTargetRepoRouting:
         # The runner reconstructs Settings() internally — patch it so
         # the test's data_dir + target_repo_id propagate.
         monkeypatch.setattr(
-            "robotsix_mill.trace_review_runner.Settings", lambda: s,
+            "robotsix_mill.trace_review_runner.Settings",
+            lambda: s,
         )
         source_rc = get_repos_config().repos["source-repo"]
 
@@ -530,13 +588,18 @@ class TestTargetRepoRouting:
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse_client.fetch_trace_detail",
-            lambda *a, **kw: {"observations": [
-                _obs("run_command", output="error: failed"),
-            ]},
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: failed"),
+                ]
+            },
         )
         finding = TraceFinding(
-            category="tool_error", symptom="x", root_cause="y",
-            proposed_solution="z", confidence="medium",
+            category="tool_error",
+            symptom="x",
+            root_cause="y",
+            proposed_solution="z",
+            confidence="medium",
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.trace_inspector.run_trace_inspector",
@@ -544,7 +607,8 @@ class TestTargetRepoRouting:
         )
 
         result = run_trace_review_pass(
-            session_id="sess", repo_config=source_rc,
+            session_id="sess",
+            repo_config=source_rc,
         )
         assert len(result.drafts_created) == 1
 

@@ -34,10 +34,13 @@ from ..forge.auth import _resolve_remote_url, github_token
 from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .pause import (
-    check_for_pause, save_conversation_state,
-    load_conversation_state, clear_conversation_state,
+    check_for_pause,
+    save_conversation_state,
+    load_conversation_state,
+    clear_conversation_state,
     build_resume_message_history,
-    _collect_ask_user_replies, acknowledge_unanswered_threads,
+    _collect_ask_user_replies,
+    acknowledge_unanswered_threads,
 )
 from .base import Outcome, Stage, StageContext
 
@@ -45,7 +48,9 @@ log = logging.getLogger("robotsix_mill.stages.refine")
 
 
 def _resolve_next_state(
-    ctx: StageContext, spec: str, ticket_id: str,
+    ctx: StageContext,
+    spec: str,
+    ticket_id: str,
     source: str | None = None,
 ) -> tuple[State, str | None]:
     """Return (next_state, auto_approve_note_or_None).
@@ -87,8 +92,13 @@ def _resolve_next_state(
     # rubber-stamping all 21+ tickets from these sources without
     # rejection (see 09cc) made the LLM hop pure toil.
     _AUTO_APPROVE_SOURCES = {
-        "test_gap", "audit", "agent_check", "bc_check",
-        "completeness_check", "module_curator", "copy_paste",
+        "test_gap",
+        "audit",
+        "agent_check",
+        "bc_check",
+        "completeness_check",
+        "module_curator",
+        "copy_paste",
     }
     if source in _AUTO_APPROVE_SOURCES:
         return State.READY, (
@@ -97,19 +107,26 @@ def _resolve_next_state(
         )
     try:
         result = refining.triage_auto_approve(
-            settings=ctx.settings, spec=spec,
+            settings=ctx.settings,
+            spec=spec,
         )
         if result.decision == "APPROVE":
             return State.READY, f"auto-approve: APPROVE — {result.reason}"
         # NEEDS_APPROVAL — return the reason as a structured history
         # note (no side-effect comment; this is the sole surface).
-        return State.HUMAN_ISSUE_APPROVAL, f"auto-approve: NEEDS_APPROVAL — {result.reason}"
+        return (
+            State.HUMAN_ISSUE_APPROVAL,
+            f"auto-approve: NEEDS_APPROVAL — {result.reason}",
+        )
     except Exception:
         log.warning(
             "auto-approve triage failed, falling back to human approval",
             exc_info=True,
         )
-    return State.HUMAN_ISSUE_APPROVAL, "auto-approve: triage failed — falling back to human approval"
+    return (
+        State.HUMAN_ISSUE_APPROVAL,
+        "auto-approve: triage failed — falling back to human approval",
+    )
 
 
 def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
@@ -136,6 +153,7 @@ def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
         except Exception:
             body = ""
         from ..agents.prompt_blocks import section as _section
+
         meta = (
             f"## {t.id}\n"
             f"- title: {t.title}\n"
@@ -148,6 +166,7 @@ def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
 
 class RefineStage(Stage):
     """Refine a draft ticket into a detailed, self-contained engineering specification."""
+
     name = "refine"
     input_state = State.DRAFT
 
@@ -166,7 +185,8 @@ class RefineStage(Stage):
         if unmet:
             log.debug(
                 "%s: unmet dependencies — deferring refine: %s",
-                ticket.id, unmet,
+                ticket.id,
+                unmet,
             )
             return Outcome(State.DRAFT)
 
@@ -184,10 +204,14 @@ class RefineStage(Stage):
             return dup
 
         # Phase 3: refine agent + result handling
-        return RefineStage._run_refine_agent(ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s)
+        return RefineStage._run_refine_agent(
+            ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s
+        )
 
     @staticmethod
-    def _clone_or_resume(ctx: StageContext, ticket: Ticket, ws) -> Path | Outcome | None:
+    def _clone_or_resume(
+        ctx: StageContext, ticket: Ticket, ws
+    ) -> Path | Outcome | None:
         """Resolve remote URL, reuse or clone repo, escalate clone failures.
 
         Returns the ``repo_dir`` ``Path`` when a clone exists or is
@@ -211,8 +235,10 @@ class RefineStage(Stage):
             except RuntimeError:
                 token = None  # no credentials configured — clone will fail
             git_ops.clone(
-                remote_url, cand,
-                s.forge_target_branch, token,
+                remote_url,
+                cand,
+                s.forge_target_branch,
+                token,
             )
             return cand
         except subprocess.CalledProcessError as e:
@@ -222,9 +248,7 @@ class RefineStage(Stage):
             # `tools=[]` path in refining.py:385). The result is
             # an inconsistent, tool-less refine that wastes
             # tokens. Surface the cause to the operator instead.
-            reason = (
-                f"refine clone failed: {(e.stderr or '').strip()[:200]}"
-            )
+            reason = f"refine clone failed: {(e.stderr or '').strip()[:200]}"
             log.warning("%s: %s", ticket.id, reason)
             # The diagnostic used to be posted as a comment; the
             # transition note carries the same info and v1 keeps
@@ -241,8 +265,11 @@ class RefineStage(Stage):
 
     @staticmethod
     def _run_dedup_guard(
-        ctx: StageContext, ticket: Ticket, draft: str,
-        repo_dir: Path | None, s,
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        s,
     ) -> Outcome | None:
         """Run the dedup / already-done guard (best-effort).
 
@@ -254,7 +281,8 @@ class RefineStage(Stage):
         if len(draft) < 100:
             log.debug(
                 "%s: trivial draft (%d chars), skipping dedup",
-                ticket.id, len(draft),
+                ticket.id,
+                len(draft),
             )
             return None
 
@@ -266,12 +294,13 @@ class RefineStage(Stage):
         )
         non_terminal = {State.CLOSED, State.ERRORED}
         candidates = [
-            t for t in all_tickets
-            if t.id != ticket.id and (
+            t
+            for t in all_tickets
+            if t.id != ticket.id
+            and (
                 t.state not in non_terminal
                 or (
-                    t.state == State.CLOSED
-                    and _as_utc(t.updated_at) >= lookback_cutoff
+                    t.state == State.CLOSED and _as_utc(t.updated_at) >= lookback_cutoff
                 )
             )
         ]
@@ -287,7 +316,8 @@ class RefineStage(Stage):
             )
         except Exception:
             log.warning(
-                "%s: dedup check failed, proceeding with refine", ticket.id,
+                "%s: dedup check failed, proceeding with refine",
+                ticket.id,
                 exc_info=True,
             )
             verdict = {
@@ -314,9 +344,14 @@ class RefineStage(Stage):
 
     @staticmethod
     def _run_refine_agent(
-        ctx: StageContext, ticket: Ticket, draft: str,
-        repo_dir: Path | None, epic_ctx: dict | None, title: str,
-        ws, s,
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        epic_ctx: dict | None,
+        title: str,
+        ws,
+        s,
     ) -> Outcome:
         """Run the full refine-agent pipeline and handle the result.
 
@@ -355,9 +390,7 @@ class RefineStage(Stage):
             # "split from" note (children reparented to an epic).
             own_history = ctx.service.history(ticket.id)
             is_split_child = any(
-                ev.note
-                and ev.note.startswith("split from")
-                for ev in own_history
+                ev.note and ev.note.startswith("split from") for ev in own_history
             )
         if is_split_child:
             spec = draft
@@ -377,7 +410,9 @@ class RefineStage(Stage):
             file_map_path = ws.artifacts_dir / "file_map.json"
             if not file_map_path.exists():
                 file_map_path.write_text("[]", encoding="utf-8")
-            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id, source=ticket.source)
+            next_state, auto_note = _resolve_next_state(
+                ctx, spec, ticket.id, source=ticket.source
+            )
             note = "split child — spec already refined"
             if auto_note:
                 note += f" | {auto_note}"
@@ -391,8 +426,7 @@ class RefineStage(Stage):
             if comments:
                 # Only count non-closed top-level threads for sendback detection.
                 open_threads = [
-                    c for c in comments
-                    if c.parent_id is None and c.closed_at is None
+                    c for c in comments if c.parent_id is None and c.closed_at is None
                 ]
                 if open_threads:
                     open_thread_ids = {c.id for c in open_threads}
@@ -412,13 +446,12 @@ class RefineStage(Stage):
         # - the feature flag is enabled, AND
         # - no reviewer sendback (human-flagged changes always refine), AND
         # - the triage model says SKIP.
-        if (
-            s.refine_triage_enabled
-            and not reviewer_comments
-        ):
+        if s.refine_triage_enabled and not reviewer_comments:
             try:
                 triage = refining.triage_refine(
-                    settings=s, title=title, draft=draft,
+                    settings=s,
+                    title=title,
+                    draft=draft,
                 )
                 if triage.decision == "SKIP":
                     # The draft IS the spec — preserve it unchanged.
@@ -432,23 +465,26 @@ class RefineStage(Stage):
                     # Pattern: backtick-quoted strings that look like
                     # file paths (contain a '/' directory separator
                     # and a file extension).
-                    _PATH_RE = re.compile(
-                        r'`([^`]*/[^`]*\.[a-zA-Z]{1,10})`'
-                    )
+                    _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
                     extracted = _PATH_RE.findall(draft)
                     if extracted:
                         file_map_path = ws.artifacts_dir / "file_map.json"
                         if not file_map_path.exists():
                             file_map_path.write_text(
                                 json.dumps(
-                                    [{"file": p, "note": "from draft"}
-                                     for p in extracted],
+                                    [
+                                        {"file": p, "note": "from draft"}
+                                        for p in extracted
+                                    ],
                                     indent=2,
                                 ),
                                 encoding="utf-8",
                             )
                         next_state, auto_note = _resolve_next_state(
-                            ctx, draft, ticket.id, source=ticket.source,
+                            ctx,
+                            draft,
+                            ticket.id,
+                            source=ticket.source,
                         )
                         note = f"triage SKIP: {triage.reason}"
                         if auto_note:
@@ -468,7 +504,8 @@ class RefineStage(Stage):
             except Exception:
                 log.warning(
                     "%s: triage failed, falling through to full refine",
-                    ticket.id, exc_info=True,
+                    ticket.id,
+                    exc_info=True,
                 )
         # --- end triage ---
 
@@ -489,8 +526,7 @@ class RefineStage(Stage):
             # ticket history.
             own_history = ctx.service.history(ticket.id)
             was_paused = any(
-                ev.state == State.AWAITING_USER_REPLY
-                for ev in own_history
+                ev.state == State.AWAITING_USER_REPLY for ev in own_history
             )
             if was_paused:
                 # Collect operator replies from every closed [ASK_USER]
@@ -499,17 +535,21 @@ class RefineStage(Stage):
                 # contributes its replies.
                 reply_text = _collect_ask_user_replies(ctx, ticket)
                 resume_history = build_resume_message_history(
-                    saved_state, reply_text,
+                    saved_state,
+                    reply_text,
                 )
                 log.info(
                     "%s: resuming refine from pause — "
                     "loaded %d-byte conversation state",
-                    ticket.id, len(saved_state),
+                    ticket.id,
+                    len(saved_state),
                 )
 
         try:
             result = refining.run_refine_agent(
-                settings=s, title=ticket.title, draft=draft,
+                settings=s,
+                title=ticket.title,
+                draft=draft,
                 repo_dir=repo_dir,
                 reviewer_comments=reviewer_comments,
                 memory=memory_text,
@@ -530,7 +570,8 @@ class RefineStage(Stage):
         if check_for_pause(result.new_messages):
             save_conversation_state(ws, result.conversation_state, "refine")
             ctx.service.transition(
-                ticket.id, State.AWAITING_USER_REPLY,
+                ticket.id,
+                State.AWAITING_USER_REPLY,
                 note="paused — agent asked a clarifying question",
             )
             log.info(
@@ -624,11 +665,10 @@ class RefineStage(Stage):
                 # event row scannable; the full rationale lives in
                 # the refine artifact (draft-original.md captures
                 # spec-shape context too).
-                short = rationale[:400] + (
-                    "…" if len(rationale) > 400 else ""
-                )
+                short = rationale[:400] + ("…" if len(rationale) > 400 else "")
                 return Outcome(
-                    State.DONE, f"no change needed — {short}",
+                    State.DONE,
+                    f"no change needed — {short}",
                 )
 
         # --- promote-to-epic path ---
@@ -643,9 +683,7 @@ class RefineStage(Stage):
         if result.promote_to_epic and not result.split:
             from ..agents.epic_breakdown import run_epic_breakdown_agent
 
-            epic_body = (
-                (result.epic_body or result.spec_markdown or "").strip()
-            )
+            epic_body = (result.epic_body or result.spec_markdown or "").strip()
             if not epic_body:
                 log.warning(
                     "%s: promote_to_epic but no epic_body — "
@@ -664,7 +702,8 @@ class RefineStage(Stage):
                 )
                 created_ids: list[str] = []
                 for child_title, child_body in zip(
-                    breakdown.child_titles, breakdown.child_bodies,
+                    breakdown.child_titles,
+                    breakdown.child_bodies,
                 ):
                     child = ctx.service.create(
                         title=child_title,
@@ -677,7 +716,8 @@ class RefineStage(Stage):
                 # the /generate-children route's default behaviour.
                 for i in range(1, len(created_ids)):
                     ctx.service.set_depends_on(
-                        created_ids[i], [created_ids[i - 1]],
+                        created_ids[i],
+                        [created_ids[i - 1]],
                     )
                 # Apply the breakdown's revised epic body if any.
                 if breakdown.epic_body and breakdown.epic_body.strip():
@@ -685,14 +725,13 @@ class RefineStage(Stage):
                         breakdown.epic_body.strip(),
                     )
                     ctx.service.set_content_hash(ticket.id, revised_hash)
-                note = (
-                    f"promoted to epic; spawned {len(created_ids)} child(ren)"
-                )
+                note = f"promoted to epic; spawned {len(created_ids)} child(ren)"
             except Exception:
                 log.exception(
                     "%s: epic-breakdown after promote_to_epic failed — "
                     "epic body is in place, children left for "
-                    "/generate-children", ticket.id,
+                    "/generate-children",
+                    ticket.id,
                 )
                 note = (
                     "promoted to epic; breakdown failed — "
@@ -709,17 +748,21 @@ class RefineStage(Stage):
                     "proceeding with original draft",
                     ticket.id,
                 )
-                next_state, _auto_reason = _resolve_next_state(ctx, "", ticket.id, source=ticket.source)
+                next_state, _auto_reason = _resolve_next_state(
+                    ctx, "", ticket.id, source=ticket.source
+                )
                 return Outcome(next_state, "refined (empty spec — kept original draft)")
 
             # --- spec review (conciseness pass) ---
             if s.spec_review_enabled and not reviewer_comments:
                 try:
                     review_result = refining.review_spec_for_conciseness(
-                        settings=s, spec_markdown=spec,
+                        settings=s,
+                        spec_markdown=spec,
                     )
                     (ws.artifacts_dir / "refine-verbose.md").write_text(
-                        spec, encoding="utf-8",
+                        spec,
+                        encoding="utf-8",
                     )
                     concise = review_result.concise_spec
                     if not concise or not concise.strip():
@@ -732,12 +775,14 @@ class RefineStage(Stage):
                         spec = concise
                         log.info(
                             "%s: spec review: %s",
-                            ticket.id, review_result.stripped_summary,
+                            ticket.id,
+                            review_result.stripped_summary,
                         )
                 except Exception:
                     log.warning(
                         "%s: spec review failed, using verbose spec",
-                        ticket.id, exc_info=True,
+                        ticket.id,
+                        exc_info=True,
                     )
 
             new_hash = ws.write_description(spec)
@@ -747,7 +792,9 @@ class RefineStage(Stage):
             if reviewer_comments and open_thread_ids:
                 acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
 
-            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id, source=ticket.source)
+            next_state, auto_note = _resolve_next_state(
+                ctx, spec, ticket.id, source=ticket.source
+            )
             note = "refined"
             if auto_note:
                 note += f" | {auto_note}"
@@ -765,7 +812,9 @@ class RefineStage(Stage):
                     "proceeding with original draft",
                     ticket.id,
                 )
-                next_state, _auto_reason = _resolve_next_state(ctx, "", ticket.id, source=ticket.source)
+                next_state, _auto_reason = _resolve_next_state(
+                    ctx, "", ticket.id, source=ticket.source
+                )
                 # --- post-agent thread acknowledgment ---
                 if reviewer_comments and open_thread_ids:
                     acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
@@ -780,7 +829,9 @@ class RefineStage(Stage):
             if reviewer_comments and open_thread_ids:
                 acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
 
-            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id, source=ticket.source)
+            next_state, auto_note = _resolve_next_state(
+                ctx, spec, ticket.id, source=ticket.source
+            )
             note = "refined (split degraded — no valid children)"
             if auto_note:
                 note += f" | {auto_note}"
@@ -798,11 +849,13 @@ class RefineStage(Stage):
                 deps = []
             # Keep only non-negative integer indices.
             deps = [d for d in deps if isinstance(d, int) and d >= 0]
-            valid_children.append({
-                "title": child_title,
-                "spec_markdown": spec_md,
-                "depends_on": deps,
-            })
+            valid_children.append(
+                {
+                    "title": child_title,
+                    "spec_markdown": spec_md,
+                    "depends_on": deps,
+                }
+            )
 
         if len(valid_children) == 0:
             # --- post-agent thread acknowledgment ---
@@ -815,28 +868,35 @@ class RefineStage(Stage):
             for i, child in enumerate(valid_children):
                 try:
                     review_result = refining.review_spec_for_conciseness(
-                        settings=s, spec_markdown=child["spec_markdown"],
+                        settings=s,
+                        spec_markdown=child["spec_markdown"],
                     )
                     (ws.artifacts_dir / f"refine-verbose-child-{i + 1}.md").write_text(
-                        child["spec_markdown"], encoding="utf-8",
+                        child["spec_markdown"],
+                        encoding="utf-8",
                     )
                     concise = review_result.concise_spec
                     if not concise or not concise.strip():
                         log.warning(
                             "%s: spec review child %d returned empty concise spec, "
                             "using verbose spec",
-                            ticket.id, i + 1,
+                            ticket.id,
+                            i + 1,
                         )
                     else:
                         child["spec_markdown"] = concise
                         log.info(
                             "%s: spec review child %d: %s",
-                            ticket.id, i + 1, review_result.stripped_summary,
+                            ticket.id,
+                            i + 1,
+                            review_result.stripped_summary,
                         )
                 except Exception:
                     log.warning(
                         "%s: spec review failed for child %d, using verbose spec",
-                        ticket.id, i + 1, exc_info=True,
+                        ticket.id,
+                        i + 1,
+                        exc_info=True,
                     )
 
         if len(valid_children) == 1:
@@ -853,7 +913,9 @@ class RefineStage(Stage):
             if reviewer_comments and open_thread_ids:
                 acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
 
-            next_state, auto_note = _resolve_next_state(ctx, child["spec_markdown"], ticket.id, source=ticket.source)
+            next_state, auto_note = _resolve_next_state(
+                ctx, child["spec_markdown"], ticket.id, source=ticket.source
+            )
             note = "refined (single child, no split)"
             if auto_note:
                 note += f" | {auto_note}"
@@ -881,14 +943,8 @@ class RefineStage(Stage):
                 for cid in child_ids:
                     ctx.service.set_parent(cid, existing_epic_id)
         if existing_epic_id is None:
-            epic_title = (
-                (result.title and result.title.strip())
-                or ticket.title.strip()
-            )
-            epic_desc = (
-                (result.spec_markdown and result.spec_markdown.strip())
-                or draft
-            )
+            epic_title = (result.title and result.title.strip()) or ticket.title.strip()
+            epic_desc = (result.spec_markdown and result.spec_markdown.strip()) or draft
             epic = ctx.service.create(
                 title=epic_title,
                 description=epic_desc,
@@ -911,7 +967,9 @@ class RefineStage(Stage):
         # Transition each child to HUMAN_ISSUE_APPROVAL or READY.
         for i, cid in enumerate(child_ids):
             child_state, auto_note = _resolve_next_state(
-                ctx, valid_children[i]["spec_markdown"], cid,
+                ctx,
+                valid_children[i]["spec_markdown"],
+                cid,
             )
             child_note = f"split from {ticket.id}"
             if auto_note:

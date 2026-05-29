@@ -115,9 +115,7 @@ def build_agent_from_definition(
                 f"Agent definition '{definition.name}' specifies "
                 f"output_type='{definition.output_type}' but module is None"
             )
-        module = importlib.import_module(
-            f"robotsix_mill.agents.{definition.module}"
-        )
+        module = importlib.import_module(f"robotsix_mill.agents.{definition.module}")
         output_cls = getattr(module, definition.output_type)
         resolved_output_type: Any = PromptedOutput(output_cls)
     else:
@@ -152,9 +150,7 @@ def build_agent_from_definition(
         else:
             conventions_block = (
                 "\n\n## Repository Conventions (from AGENT.md)\n\n"
-                "<repo_conventions>\n"
-                + conventions.rstrip()
-                + "\n</repo_conventions>"
+                "<repo_conventions>\n" + conventions.rstrip() + "\n</repo_conventions>"
             )
             kwargs["system_prompt"] += conventions_block
 
@@ -328,9 +324,13 @@ def build_agent(
         # Every agent can self-report a blocking/degrading issue (missing
         # tool, error, workflow gap, missing input) as a draft ticket.
         # Dedup-guarded so a looping agent can't spam identical tickets.
-        all_tools.append(make_report_issue_tool(
-            settings, agent_name=name, board_id=board_id,
-        ))
+        all_tools.append(
+            make_report_issue_tool(
+                settings,
+                agent_name=name,
+                board_id=board_id,
+            )
+        )
     if read_ticket:
         # Read-only tool so periodic agents can fetch full context of a
         # past proposal when the one-line summary in <recent_proposals>
@@ -364,6 +364,7 @@ def build_agent(
         # questions — same library asked across tickets pays for ONE
         # web_research, not N.
         from .consult_library import make_consult_library_tool
+
         all_tools.append(
             make_consult_library_tool(settings, board_id=board_id),
         )
@@ -371,7 +372,10 @@ def build_agent(
     agent_kwargs: dict[str, Any] = dict(
         model=model,
         system_prompt=compose_prompt(
-            settings, system_prompt, skills=skills, modules=modules,
+            settings,
+            system_prompt,
+            skills=skills,
+            modules=modules,
         ),
         output_type=output_type,
         tools=all_tools,

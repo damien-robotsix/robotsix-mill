@@ -35,6 +35,7 @@ def _settings(tmp_path, **env):
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**env)
@@ -81,15 +82,18 @@ class TestImplementResult:
 
     # -- Tier 1 near-miss keys (parametrized) ----------------------------
 
-    @pytest.mark.parametrize("key", [
-        "summary_text",
-        "summary_str",
-        "summaryText",
-        "result_summary",
-        "text",
-        "result",
-        "output",
-    ])
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "summary_text",
+            "summary_str",
+            "summaryText",
+            "result_summary",
+            "text",
+            "result",
+            "output",
+        ],
+    )
     def test_tier1_near_miss_absorbed(self, key):
         """Each Tier-1 near-miss key is absorbed into ``summary``."""
         data = {key: "x"}
@@ -166,13 +170,23 @@ class TestRunCoordinator:
         from robotsix_mill.agents import base as _base
 
         def _fake_build_agent(
-            settings, *, system_prompt, output_type=None,
-            tools=None, web=False, library_knowledge=False,
+            settings,
+            *,
+            system_prompt,
+            output_type=None,
+            tools=None,
+            web=False,
+            library_knowledge=False,
             report_issue=True,
-            read_ticket=False, reply_to_thread=True,
-            close_thread=True, ask_user=True,
-            model_name=None, name=None, retries=2,
-            skills=None, modules=False,
+            read_ticket=False,
+            reply_to_thread=True,
+            close_thread=True,
+            ask_user=True,
+            model_name=None,
+            name=None,
+            retries=2,
+            skills=None,
+            modules=False,
         ):
             self.captured["system_prompt"] = system_prompt
             self.captured["output_type"] = output_type
@@ -183,14 +197,14 @@ class TestRunCoordinator:
 
             class _FakeAgent:
                 @staticmethod
-                def run_sync(prompt, *, usage_limits=None,
-                             message_history=None):
+                def run_sync(prompt, *, usage_limits=None, message_history=None):
                     self.captured["usage_limits"] = usage_limits
                     self.captured["message_history"] = message_history
                     self.captured["user_prompt"] = prompt
 
                     class _R:
                         pass
+
                     r = _R()
                     r.output = ImplementResult(summary="ok")
                     return r
@@ -210,10 +224,12 @@ class TestRunCoordinator:
 
         def _fake_build_fs_tools(root, settings, *, pre_seeded=None, extra_roots=None):
             self.captured["fs_pre_seeded"] = pre_seeded
+
             # Return a single read_file tool so the filtering in
             # run_coordinator doesn't blow up.
             def _read_file(path, offset=1, limit=None):
                 return "fake content"
+
             _read_file.__name__ = "read_file"
             return [_read_file]
 
@@ -225,10 +241,13 @@ class TestRunCoordinator:
         def _fake_make_explore_tool(settings, repo_dir, extra_roots=None):
             def _explore(question):
                 return "explored"
+
             return _explore
 
         monkeypatch.setattr(
-            _expl, "make_explore_tool", _fake_make_explore_tool,
+            _expl,
+            "make_explore_tool",
+            _fake_make_explore_tool,
         )
 
     # -- helper ----------------------------------------------------------
@@ -237,7 +256,9 @@ class TestRunCoordinator:
         """Call ``run_coordinator`` with (almost) every argument
         defaulted so individual tests only override what they need."""
         defaults: dict = dict(
-            settings=settings, repo_dir=tmp_path, spec="do X",
+            settings=settings,
+            repo_dir=tmp_path,
+            spec="do X",
         )
         defaults.update(kwargs)
         return run_coordinator(**defaults)
@@ -248,7 +269,9 @@ class TestRunCoordinator:
         """Non-review ``feedback`` is appended as a ``<test_failure>``
         block."""
         self._run(
-            settings, tmp_path, feedback="test_x failed",
+            settings,
+            tmp_path,
+            feedback="test_x failed",
         )
         prompt: str = self.captured["user_prompt"]
         assert "````test-failure" in prompt
@@ -256,11 +279,15 @@ class TestRunCoordinator:
         assert "Fix exactly this failure and stop." in prompt
 
     def test_feedback_as_review_prepended_before_spec(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """``[REVIEW`` feedback is prepended before ``<ticket_spec>``."""
         self._run(
-            settings, tmp_path, feedback="[REVIEW] fix docstring",
+            settings,
+            tmp_path,
+            feedback="[REVIEW] fix docstring",
         )
         prompt: str = self.captured["user_prompt"]
         assert prompt.startswith("````review-feedback")
@@ -275,7 +302,8 @@ class TestRunCoordinator:
     def test_epic_context_prepended(self, settings, tmp_path):
         """``epic_context`` appears before ``<ticket_spec>``."""
         self._run(
-            settings, tmp_path,
+            settings,
+            tmp_path,
             epic_context="## Epic goal",
             spec="do X",
         )
@@ -290,7 +318,8 @@ class TestRunCoordinator:
     def test_memory_in_prompt(self, settings, tmp_path):
         """Non-empty memory is wrapped in ``<memory>`` tags."""
         self._run(
-            settings, tmp_path,
+            settings,
+            tmp_path,
             memory="gotcha: use Path, not str",
         )
         prompt: str = self.captured["user_prompt"]
@@ -299,7 +328,9 @@ class TestRunCoordinator:
         assert "````\n<!-- /memory -->" in prompt
 
     def test_empty_memory_defaults_to_placeholder(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """Empty ``memory`` (default) yields the start-a-new-ledger
         placeholder."""
@@ -312,7 +343,9 @@ class TestRunCoordinator:
     # -- reference_files / message_history ------------------------------
 
     def test_reference_files_synthetic_history(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """``reference_files`` with no ``message_history`` and no
         ``feedback`` produces a 3-message synthetic history:
@@ -321,6 +354,7 @@ class TestRunCoordinator:
         ``ModelRequest(ToolReturnPart)`` (preload returns). The fs-tools
         cache is seeded for the preloaded path."""
         from pydantic_ai.messages import UserPromptPart
+
         (tmp_path / "foo.py").write_text("x=1")
         ref = [{"path": "foo.py"}]
         self._run(settings, tmp_path, reference_files=ref)
@@ -373,7 +407,9 @@ class TestRunCoordinator:
         assert self.captured["user_prompt"] is None
 
     def test_reference_files_multiple_paths_share_one_turn(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """All preloaded reference files land in a single turn —
         one ``ModelResponse`` carrying N parallel ``read_file``
@@ -408,7 +444,8 @@ class TestRunCoordinator:
 
         # Matching ToolReturnParts — same order, same ids.
         for part, (path, content) in zip(
-            req.parts, [("a.py", "A"), ("b.py", "B"), ("c.py", "C")],
+            req.parts,
+            [("a.py", "A"), ("b.py", "B"), ("c.py", "C")],
         ):
             assert isinstance(part, ToolReturnPart)
             assert part.tool_name == "read_file"
@@ -416,7 +453,9 @@ class TestRunCoordinator:
             assert part.tool_call_id == f"preload_{path}"
 
     def test_reference_files_with_message_history_passthrough(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """When ``message_history`` is provided it is passed directly
         to ``run_sync`` (no synthesis, no fs-cache pre-seeding —
@@ -425,7 +464,8 @@ class TestRunCoordinator:
         ref = [{"path": "bar.py"}]
         existing_mh = ["existing"]
         self._run(
-            settings, tmp_path,
+            settings,
+            tmp_path,
             reference_files=ref,
             message_history=existing_mh,
         )
@@ -437,14 +477,17 @@ class TestRunCoordinator:
         assert self.captured["message_history"] == existing_mh
 
     def test_reference_files_with_feedback_synthesis(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """``reference_files`` + ``feedback`` → synthetic history IS built
         (the old first-pass-only gate is lifted per ticket §3)."""
         (tmp_path / "baz.py").write_text("z=3")
         ref = [{"path": "baz.py"}]
         self._run(
-            settings, tmp_path,
+            settings,
+            tmp_path,
             reference_files=ref,
             feedback="assertion failed in test_z",
         )
@@ -471,13 +514,16 @@ class TestRunCoordinator:
     def test_explicit_model_name_forwarded(self, settings, tmp_path):
         """Explicit ``model_name`` is passed to ``build_agent``."""
         self._run(
-            settings, tmp_path,
+            settings,
+            tmp_path,
             model_name="anthropic/sonnet",
         )
         assert self.captured["model_name"] == "anthropic/sonnet"
 
     def test_model_name_none_uses_settings_model(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """When ``model_name`` is None, ``settings.model`` is used."""
         self._run(settings, tmp_path, model_name=None)
@@ -505,7 +551,9 @@ class TestRunCoordinator:
     # -- language_instructions -------------------------------------------
 
     def test_language_instructions_injected_into_system_prompt(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """When ``language_instructions`` is non-empty it is prepended
         after ``## Language conventions`` heading."""
@@ -522,10 +570,14 @@ class TestRunCoordinator:
         # The language conventions appear after the YAML preamble.
         conventions_pos = prompt.index("## Language conventions")
         # The snippet text itself appears after the heading.
-        assert prompt.index(snippet) == conventions_pos + len("## Language conventions\n\n")
+        assert prompt.index(snippet) == conventions_pos + len(
+            "## Language conventions\n\n"
+        )
 
     def test_language_instructions_empty_unchanged(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """When ``language_instructions`` is empty (default), the system
         prompt is unchanged."""
@@ -540,7 +592,9 @@ class TestRunCoordinator:
     # -- usage_limits ----------------------------------------------------
 
     def test_usage_limits_uses_coordinator_request_limit(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """The ``request_limit`` on the ``UsageLimits`` passed to
         ``run_sync`` comes from ``settings.coordinator_request_limit``."""
@@ -553,13 +607,16 @@ class TestRunCoordinator:
     # -- previous_attempt_summary ----------------------------------------
 
     def test_previous_attempt_summary_prepended_before_feedback(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """When ``previous_attempt_summary`` and ``feedback`` are both
         set, ``<previous_attempt>`` appears before
         ``<review_feedback>``/``<test_failure>`` in the user prompt."""
         self._run(
-            settings, tmp_path,
+            settings,
+            tmp_path,
             previous_attempt_summary="prior summary text",
             feedback="test_x failed",
         )
@@ -571,13 +628,16 @@ class TestRunCoordinator:
         assert "test_x failed" in prompt
 
     def test_previous_attempt_summary_no_feedback_no_block(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """When ``previous_attempt_summary`` is set but ``feedback`` is
         None, the ``<previous_attempt>`` block is NOT injected (it is
         only relevant on retries)."""
         self._run(
-            settings, tmp_path,
+            settings,
+            tmp_path,
             previous_attempt_summary="prior summary text",
         )
         prompt: str = self.captured["user_prompt"]
@@ -586,7 +646,10 @@ class TestRunCoordinator:
     # -- reference_files edge cases -------------------------------------
 
     def test_reference_files_missing_on_disk_omitted(
-        self, settings, tmp_path, caplog,
+        self,
+        settings,
+        tmp_path,
+        caplog,
     ):
         """A ``reference_files`` entry pointing to a file that doesn't
         exist on disk produces a warning log and is omitted from the
@@ -596,14 +659,15 @@ class TestRunCoordinator:
         ref = [{"path": "exists.py"}, {"path": "gone.py"}]
         (tmp_path / "exists.py").write_text("real content")
 
-        with caplog.at_level(logging.WARNING, logger="robotsix_mill.agents.coordinating"):
+        with caplog.at_level(
+            logging.WARNING, logger="robotsix_mill.agents.coordinating"
+        ):
             self._run(settings, tmp_path, reference_files=ref)
 
         # Warning logged for the missing file
-        assert any(
-            "gone.py" in m and "not found" in m
-            for m in caplog.messages
-        ), f"expected warning about gone.py, got: {caplog.messages}"
+        assert any("gone.py" in m and "not found" in m for m in caplog.messages), (
+            f"expected warning about gone.py, got: {caplog.messages}"
+        )
 
         # Synthetic history built only for the existing file (with the
         # leading user-prompt ModelRequest prepended → 3 entries).
@@ -625,7 +689,9 @@ class TestRunCoordinator:
         assert gone_resolved not in pre_seeded
 
     def test_reference_files_toolreturn_reflects_latest_disk_content(
-        self, settings, tmp_path,
+        self,
+        settings,
+        tmp_path,
     ):
         """When the file on disk is modified after reference_files is
         built, the synthetic ToolReturn contains the *latest* on-disk
@@ -652,11 +718,14 @@ class TestRunCoordinator:
 
 def _make_def(domain: str, module_paths: list[str], system_prompt: str = "You are X."):
     from robotsix_mill.agents.expert_loader import ExpertDefinition
-    return ExpertDefinition.model_validate({
-        "domain": domain,
-        "module_paths": module_paths,
-        "system_prompt": system_prompt,
-    })
+
+    return ExpertDefinition.model_validate(
+        {
+            "domain": domain,
+            "module_paths": module_paths,
+            "system_prompt": system_prompt,
+        }
+    )
 
 
 class _CapturingExpertAgent:
@@ -669,22 +738,27 @@ class _CapturingExpertAgent:
     def __init__(self, domain: str, output=None, exc=None) -> None:
         self.domain = domain
         self._output = output or ImplementResult(
-            summary=f"{domain} done", reference_files=[f"src/{domain}.py"],
+            summary=f"{domain} done",
+            reference_files=[f"src/{domain}.py"],
         )
         self._exc = exc
         self.calls: list[dict] = []
         self.closed = False
 
     def run_sync(self, user_prompt, *, usage_limits=None, message_history=None):
-        self.calls.append({
-            "prompt": user_prompt,
-            "usage_limits": usage_limits,
-            "message_history": message_history,
-        })
+        self.calls.append(
+            {
+                "prompt": user_prompt,
+                "usage_limits": usage_limits,
+                "message_history": message_history,
+            }
+        )
         if self._exc is not None:
             raise self._exc
+
         class _R:
             pass
+
         r = _R()
         r.output = self._output
         return r
@@ -704,36 +778,51 @@ class TestRunCoordinatorWithExperts:
     @pytest.fixture(autouse=True)
     def _seams(self, monkeypatch, tmp_path):
         from robotsix_mill.agents import expert_manager as _em
+
         # state captured per test
         self.created: list[tuple[str, dict]] = []
         self.run_coordinator_called = False
 
         def _fake_load_definitions(self_mgr, definitions_dir=None):
             return self._definitions
+
         self._definitions: dict = {}
         monkeypatch.setattr(
-            _em.ExpertManager, "load_definitions", _fake_load_definitions,
+            _em.ExpertManager,
+            "load_definitions",
+            _fake_load_definitions,
         )
 
-        def _fake_create_expert(self_mgr, definition, *, output_type=None, memory_text=""):
+        def _fake_create_expert(
+            self_mgr, definition, *, output_type=None, memory_text=""
+        ):
             agent = self._agents[definition.domain]
-            self.created.append((definition.domain, {
-                "output_type": output_type, "memory_text": memory_text,
-            }))
+            self.created.append(
+                (
+                    definition.domain,
+                    {
+                        "output_type": output_type,
+                        "memory_text": memory_text,
+                    },
+                )
+            )
             return agent
+
         self._agents: dict[str, _CapturingExpertAgent] = {}
         monkeypatch.setattr(
-            _em.ExpertManager, "create_expert", _fake_create_expert,
+            _em.ExpertManager,
+            "create_expert",
+            _fake_create_expert,
         )
 
         # Patch run_coordinator (the fallback) to a recorder so tests
         # can assert when the fallback fires.
         from robotsix_mill.agents import coordinating as _co
-        original_run_coordinator = _co.run_coordinator
 
         def _spy_run_coordinator(**kwargs):
             self.run_coordinator_called = True
             return ImplementResult(summary="fallback", reference_files=[])
+
         monkeypatch.setattr(_co, "run_coordinator", _spy_run_coordinator)
 
     def _settings_with_data(self, tmp_path):
@@ -743,10 +832,13 @@ class TestRunCoordinatorWithExperts:
         from robotsix_mill.agents.coordinating import (
             run_coordinator_with_experts,
         )
+
         return run_coordinator_with_experts(
             settings=self._settings_with_data(tmp_path),
-            repo_dir=tmp_path, spec=spec,
-            file_map=file_map, feedback=feedback,
+            repo_dir=tmp_path,
+            spec=spec,
+            file_map=file_map,
+            feedback=feedback,
         )
 
     # -- routing ----------------------------------------------------------
@@ -754,11 +846,11 @@ class TestRunCoordinatorWithExperts:
     def test_routes_to_single_matching_domain(self, tmp_path):
         self._definitions = {
             "python": _make_def("python", ["src/**/*.py"]),
-            "docs":   _make_def("docs",   ["docs/**/*.md"]),
+            "docs": _make_def("docs", ["docs/**/*.md"]),
         }
         self._agents = {
             "python": _CapturingExpertAgent("python"),
-            "docs":   _CapturingExpertAgent("docs"),
+            "docs": _CapturingExpertAgent("docs"),
         }
         result = self._call(tmp_path, file_map={"src/foo.py"})
 
@@ -772,11 +864,11 @@ class TestRunCoordinatorWithExperts:
     def test_routes_to_multiple_matching_domains(self, tmp_path):
         self._definitions = {
             "python": _make_def("python", ["src/**/*.py"]),
-            "tests":  _make_def("tests",  ["tests/**/*.py"]),
+            "tests": _make_def("tests", ["tests/**/*.py"]),
         }
         self._agents = {
             "python": _CapturingExpertAgent("python"),
-            "tests":  _CapturingExpertAgent("tests"),
+            "tests": _CapturingExpertAgent("tests"),
         }
         result = self._call(
             tmp_path,
@@ -801,7 +893,7 @@ class TestRunCoordinatorWithExperts:
 
     def test_falls_back_when_no_file_map(self, tmp_path):
         self._definitions = {"python": _make_def("python", ["src/**/*.py"])}
-        result = self._call(tmp_path, file_map=None)
+        self._call(tmp_path, file_map=None)
 
         assert self.run_coordinator_called
 
@@ -810,9 +902,10 @@ class TestRunCoordinatorWithExperts:
 
         def _raise(self_mgr, definitions_dir=None):
             raise FileNotFoundError("not present in test")
+
         monkeypatch.setattr(_em.ExpertManager, "load_definitions", _raise)
 
-        result = self._call(tmp_path, file_map={"src/foo.py"})
+        self._call(tmp_path, file_map={"src/foo.py"})
         assert self.run_coordinator_called
 
     # -- prompt + memory wiring ------------------------------------------
@@ -822,7 +915,10 @@ class TestRunCoordinatorWithExperts:
             "a": _make_def("a", ["src/**/*.py"]),
             "b": _make_def("b", ["tests/**/*.py"]),
         }
-        self._agents = {"a": _CapturingExpertAgent("a"), "b": _CapturingExpertAgent("b")}
+        self._agents = {
+            "a": _CapturingExpertAgent("a"),
+            "b": _CapturingExpertAgent("b"),
+        }
         self._call(tmp_path, file_map={"src/foo.py", "tests/bar.py"})
 
         ap = self._agents["a"].calls[0]["prompt"]
@@ -837,9 +933,14 @@ class TestRunCoordinatorWithExperts:
     def test_persists_per_expert_memory(self, tmp_path):
         self._definitions = {"a": _make_def("a", ["src/**/*.py"])}
         self._agents = {
-            "a": _CapturingExpertAgent("a", output=ImplementResult(
-                summary="hi", updated_memory="learned X", reference_files=[],
-            )),
+            "a": _CapturingExpertAgent(
+                "a",
+                output=ImplementResult(
+                    summary="hi",
+                    updated_memory="learned X",
+                    reference_files=[],
+                ),
+            ),
         }
         self._call(tmp_path, file_map={"src/foo.py"})
 
@@ -855,24 +956,38 @@ class TestRunCoordinatorWithExperts:
             "b": _make_def("b", ["tests/**/*.py"]),
         }
         self._agents = {
-            "a": _CapturingExpertAgent("a", output=ImplementResult(
-                summary="A", reference_files=["src/x.py", "src/shared.py"],
-            )),
-            "b": _CapturingExpertAgent("b", output=ImplementResult(
-                summary="B", reference_files=["tests/y.py", "src/shared.py"],
-            )),
+            "a": _CapturingExpertAgent(
+                "a",
+                output=ImplementResult(
+                    summary="A",
+                    reference_files=["src/x.py", "src/shared.py"],
+                ),
+            ),
+            "b": _CapturingExpertAgent(
+                "b",
+                output=ImplementResult(
+                    summary="B",
+                    reference_files=["tests/y.py", "src/shared.py"],
+                ),
+            ),
         }
         result = self._call(
-            tmp_path, file_map={"src/foo.py", "tests/bar.py"},
+            tmp_path,
+            file_map={"src/foo.py", "tests/bar.py"},
         )
         # shared.py appears once even though both experts mentioned it
         assert result.reference_files.count("src/shared.py") == 1
-        assert set(result.reference_files) == {"src/x.py", "src/shared.py", "tests/y.py"}
+        assert set(result.reference_files) == {
+            "src/x.py",
+            "src/shared.py",
+            "tests/y.py",
+        }
 
     # -- failure handling ------------------------------------------------
 
     def test_continues_when_one_expert_raises(self, tmp_path):
         from pydantic_ai.exceptions import UsageLimitExceeded
+
         self._definitions = {
             "a": _make_def("a", ["src/**/*.py"]),
             "b": _make_def("b", ["tests/**/*.py"]),
@@ -882,7 +997,8 @@ class TestRunCoordinatorWithExperts:
             "b": _CapturingExpertAgent("b"),
         }
         result = self._call(
-            tmp_path, file_map={"src/foo.py", "tests/bar.py"},
+            tmp_path,
+            file_map={"src/foo.py", "tests/bar.py"},
         )
         # b's summary is in result; a is silently skipped
         assert "[b] b done" in result.summary
@@ -891,6 +1007,7 @@ class TestRunCoordinatorWithExperts:
 
     def test_falls_back_when_all_experts_fail(self, tmp_path):
         from pydantic_ai.exceptions import UsageLimitExceeded
+
         self._definitions = {"a": _make_def("a", ["src/**/*.py"])}
         self._agents = {
             "a": _CapturingExpertAgent("a", exc=UsageLimitExceeded("over")),

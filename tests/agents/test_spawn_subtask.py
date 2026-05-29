@@ -41,7 +41,10 @@ def repo_dir(tmp_path):
 
 class TestRunSpawnSubtask:
     def test_returns_agent_output_on_happy_path(
-        self, settings, repo_dir, monkeypatch,
+        self,
+        settings,
+        repo_dir,
+        monkeypatch,
     ):
         """The sub-agent's final string output is returned to the
         parent verbatim. The summary IS the contract — it's how the
@@ -61,10 +64,12 @@ class TestRunSpawnSubtask:
                 pass
 
         from robotsix_mill.agents import base as _base
+
         monkeypatch.setattr(_base, "build_agent", lambda *a, **kw: _FakeAgent())
 
         out = _ss.run_spawn_subtask(
-            settings=settings, repo_dir=repo_dir,
+            settings=settings,
+            repo_dir=repo_dir,
             name="move-runners",
             prompt="Move every *_runner.py into runners/.",
             files_in_scope=["src/robotsix_mill/audit_runner.py"],
@@ -79,7 +84,10 @@ class TestRunSpawnSubtask:
         assert "audit_runner.py" in captured["user_prompt"]
 
     def test_budget_cap_returns_structured_string(
-        self, settings, repo_dir, monkeypatch,
+        self,
+        settings,
+        repo_dir,
+        monkeypatch,
     ):
         """A sub-agent that exhausts its per-subtask budget MUST NOT
         bubble UsageLimitExceeded into the parent's loop — that would
@@ -96,11 +104,14 @@ class TestRunSpawnSubtask:
                 pass
 
         from robotsix_mill.agents import base as _base
+
         monkeypatch.setattr(_base, "build_agent", lambda *a, **kw: _FakeAgent())
 
         out = _ss.run_spawn_subtask(
-            settings=settings, repo_dir=repo_dir,
-            name="too-big-subtask", prompt="...",
+            settings=settings,
+            repo_dir=repo_dir,
+            name="too-big-subtask",
+            prompt="...",
         )
 
         assert out.startswith("subtask incomplete: budget cap reached")
@@ -110,12 +121,16 @@ class TestRunSpawnSubtask:
         assert "7 requests" in out
 
     def test_other_exception_returns_structured_string(
-        self, settings, repo_dir, monkeypatch,
+        self,
+        settings,
+        repo_dir,
+        monkeypatch,
     ):
         """Same contract for non-budget errors. A networked LLM call
         that 503s mid-subtask must come back as a 'subtask failed'
         string, not a runtime crash the parent's coordinator has to
         catch ad-hoc."""
+
         class _FakeAgent:
             def run_sync(self, user_prompt, *, usage_limits=None):
                 raise RuntimeError("LLM upstream 503")
@@ -124,11 +139,14 @@ class TestRunSpawnSubtask:
                 pass
 
         from robotsix_mill.agents import base as _base
+
         monkeypatch.setattr(_base, "build_agent", lambda *a, **kw: _FakeAgent())
 
         out = _ss.run_spawn_subtask(
-            settings=settings, repo_dir=repo_dir,
-            name="x", prompt="...",
+            settings=settings,
+            repo_dir=repo_dir,
+            name="x",
+            prompt="...",
         )
 
         assert out.startswith("subtask failed: ")
@@ -136,12 +154,16 @@ class TestRunSpawnSubtask:
         assert "LLM upstream 503" in out
 
     def test_empty_output_replaced_with_placeholder(
-        self, settings, repo_dir, monkeypatch,
+        self,
+        settings,
+        repo_dir,
+        monkeypatch,
     ):
         """A sub-agent that returns the empty string would look like
         'success with no work done' to the parent. Replace with an
         explicit marker so the parent can distinguish that case from
         a real summary."""
+
         class _FakeResult:
             output = ""
 
@@ -153,11 +175,14 @@ class TestRunSpawnSubtask:
                 pass
 
         from robotsix_mill.agents import base as _base
+
         monkeypatch.setattr(_base, "build_agent", lambda *a, **kw: _FakeAgent())
 
         out = _ss.run_spawn_subtask(
-            settings=settings, repo_dir=repo_dir,
-            name="x", prompt="...",
+            settings=settings,
+            repo_dir=repo_dir,
+            name="x",
+            prompt="...",
         )
 
         assert "empty summary" in out

@@ -97,7 +97,7 @@ def _parse_jscpd_output(stdout: str) -> str:
 
     for i, clone in enumerate(duplications):
         fmt = clone.get("format", "unknown")
-        lines.append(f"### Clone pair {i+1} ({fmt})")
+        lines.append(f"### Clone pair {i + 1} ({fmt})")
 
         dup_lines = clone.get("lines", "?")
         dup_tokens = clone.get("tokens", "?")
@@ -113,15 +113,13 @@ def _parse_jscpd_output(stdout: str) -> str:
         fb_end = second_file.get("end", "?")
 
         lines.append(
-            f"- `{fa_name}:{fa_start}-{fa_end}` ↔ "
-            f"`{fb_name}:{fb_start}-{fb_end}`"
+            f"- `{fa_name}:{fa_start}-{fa_end}` ↔ `{fb_name}:{fb_start}-{fb_end}`"
         )
         lines.append(f"  — {dup_lines} lines, {dup_tokens} tokens")
         lines.append("")
 
     lines.append(
-        "ℹ To review a specific clone pair, use ``read_file`` on the "
-        "file paths above."
+        "ℹ To review a specific clone pair, use ``read_file`` on the file paths above."
     )
     return "\n".join(lines)
 
@@ -143,15 +141,17 @@ def make_jscpd_tool(repo_dir: Path) -> Callable[[], str]:
     from .tool_registry import ToolInfo, ToolRegistry
 
     if not any(t.name == "detect_duplication" for t in ToolRegistry.list_tools()):
-        ToolRegistry.register(ToolInfo(
-            name="detect_duplication",
-            description=(
-                "Run jscpd to detect copy-paste duplication across the "
-                "repository, returning clone pairs with file paths, line "
-                "ranges, and duplication metrics."
-            ),
-            category="exploration",
-            parameters={},
-        ))
+        ToolRegistry.register(
+            ToolInfo(
+                name="detect_duplication",
+                description=(
+                    "Run jscpd to detect copy-paste duplication across the "
+                    "repository, returning clone pairs with file paths, line "
+                    "ranges, and duplication metrics."
+                ),
+                category="exploration",
+                parameters={},
+            )
+        )
 
     return detect_duplication

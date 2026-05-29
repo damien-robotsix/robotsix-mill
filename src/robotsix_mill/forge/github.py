@@ -20,15 +20,27 @@ _REMOTE_RE = re.compile(
 )
 
 # Check-run conclusions that are not "success"-like.
-_FAILING_CONCLUSIONS = frozenset({
-    "failure", "timed_out", "action_required", "cancelled",
-    "startup_failure", "stale",
-})
+_FAILING_CONCLUSIONS = frozenset(
+    {
+        "failure",
+        "timed_out",
+        "action_required",
+        "cancelled",
+        "startup_failure",
+        "stale",
+    }
+)
 
 # Statuses that mean the check is still in-flight.
-_PENDING_STATUSES = frozenset({
-    "in_progress", "queued", "waiting", "requested", "pending",
-})
+_PENDING_STATUSES = frozenset(
+    {
+        "in_progress",
+        "queued",
+        "waiting",
+        "requested",
+        "pending",
+    }
+)
 
 
 def _build_headers(token: str) -> dict:
@@ -66,9 +78,7 @@ class GitHubForge(Forge):
     def _owner_repo(self) -> tuple[str, str]:
         return _parse_owner_repo(self._remote_url)
 
-    def open_merge_request(
-        self, *, source_branch: str, title: str, body: str
-    ) -> str:
+    def open_merge_request(self, *, source_branch: str, title: str, body: str) -> str:
         s = self.settings
         owner, repo = self._owner_repo
         return self._create_pr(
@@ -82,8 +92,14 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _create_pr(
-        self, *, owner: str, repo: str, head: str, base: str,
-        title: str, body: str,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        head: str,
+        base: str,
+        title: str,
+        body: str,
     ) -> str:
         import httpx
         import time
@@ -127,13 +143,12 @@ class GitHubForge(Forge):
                         and '"field":"head"' in err_text
                         and '"code":"invalid"' in err_text
                     ):
-                        time.sleep(2 ** attempt)  # 1s, 2s, 4s
+                        time.sleep(2**attempt)  # 1s, 2s, 4s
                         continue
                 # Non-422 (or final attempt) — surface the error.
                 break
             raise RuntimeError(
-                f"GitHub PR create failed: {r.status_code} "
-                f"{r.text[:300]}"
+                f"GitHub PR create failed: {r.status_code} {r.text[:300]}"
             )
 
     def pr_status(self, *, source_branch: str) -> dict | None:
@@ -150,7 +165,9 @@ class GitHubForge(Forge):
         if pr is None:
             return []
         return self._pr_files(
-            owner=owner, repo=repo, pull_number=pr["number"],
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
         )
 
     def merge_pr(self, *, source_branch: str) -> dict:
@@ -159,7 +176,9 @@ class GitHubForge(Forge):
         if pr is None:
             return {"merged": False, "reason": "PR not found"}
         return self._merge_pr(
-            owner=owner, repo=repo, pull_number=pr["number"],
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
         )
 
     def list_pr_comments(self, *, source_branch: str) -> list[dict]:
@@ -168,7 +187,9 @@ class GitHubForge(Forge):
         if pr is None:
             return []
         return self._list_pr_comments(
-            owner=owner, repo=repo, pull_number=pr["number"],
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
         )
 
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
@@ -177,7 +198,9 @@ class GitHubForge(Forge):
         if pr is None:
             return []
         return self._list_pr_reviews(
-            owner=owner, repo=repo, pull_number=pr["number"],
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
         )
 
     def list_review_comments(self, *, source_branch: str) -> list[dict]:
@@ -186,7 +209,9 @@ class GitHubForge(Forge):
         if pr is None:
             return []
         return self._list_review_comments(
-            owner=owner, repo=repo, pull_number=pr["number"],
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
         )
 
     def pr_review_status(self, *, source_branch: str) -> dict | None:
@@ -195,7 +220,9 @@ class GitHubForge(Forge):
         if pr is None:
             return None
         return self._pr_review_status(
-            owner=owner, repo=repo, pull_number=pr["number"],
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
         )
 
     def list_workflow_runs(
@@ -203,13 +230,18 @@ class GitHubForge(Forge):
     ) -> list[dict]:
         owner, repo = self._owner_repo
         return self._list_workflow_runs(
-            owner=owner, repo=repo, branch=branch, head_sha=head_sha,
+            owner=owner,
+            repo=repo,
+            branch=branch,
+            head_sha=head_sha,
         )
 
     def fetch_workflow_job_logs(self, *, run_id: int) -> str:
         owner, repo = self._owner_repo
         return self._fetch_workflow_job_logs(
-            owner=owner, repo=repo, run_id=run_id,
+            owner=owner,
+            repo=repo,
+            run_id=run_id,
         )
 
     # --- HTTP seamm (monkeypatched in tests) ---
@@ -232,9 +264,7 @@ class GitHubForge(Forge):
             if not items:
                 return None
             num = items[0]["number"]
-            d = c.get(
-                f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers
-            )
+            d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers)
             d.raise_for_status()
             pr = d.json()
         # GitHub computes mergeable asynchronously after every force-push.
@@ -259,7 +289,11 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _pr_files(
-        self, *, owner: str, repo: str, pull_number: int,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
     ) -> list[dict]:
         import httpx
 
@@ -268,13 +302,12 @@ class GitHubForge(Forge):
         s = self.settings
         api = s.github_api_url.rstrip("/")
         headers = _build_headers(github_token(s, repo_config=self._repo_config))
-        url = (
-            f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/files"
-        )
+        url = f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/files"
         try:
             with httpx.Client(timeout=30) as c:
                 r = c.get(
-                    url, headers=headers,
+                    url,
+                    headers=headers,
                     params={"per_page": 100},
                 )
                 r.raise_for_status()
@@ -293,7 +326,11 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _merge_pr(
-        self, *, owner: str, repo: str, pull_number: int,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
     ) -> dict:
         import httpx
 
@@ -324,7 +361,11 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_pr_comments(
-        self, *, owner: str, repo: str, pull_number: int,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
     ) -> list[dict]:
         import httpx
 
@@ -350,7 +391,11 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_pr_reviews(
-        self, *, owner: str, repo: str, pull_number: int,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
     ) -> list[dict]:
         import httpx
 
@@ -376,7 +421,11 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_review_comments(
-        self, *, owner: str, repo: str, pull_number: int,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
     ) -> list[dict]:
         import httpx
 
@@ -405,7 +454,11 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _pr_review_status(
-        self, *, owner: str, repo: str, pull_number: int,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
     ) -> dict:
         import httpx
 
@@ -436,7 +489,9 @@ class GitHubForge(Forge):
 
             # 3. Fetch changed files.
             files = self._pr_files(
-                owner=owner, repo=repo, pull_number=pull_number,
+                owner=owner,
+                repo=repo,
+                pull_number=pull_number,
             )
 
         # Determine aggregate review state from the latest non-dismissed
@@ -462,21 +517,25 @@ class GitHubForge(Forge):
         for rev in reviews_raw:
             body = rev.get("body")
             if body and body.strip():
-                comments.append({
-                    "body": body,
-                    "path": "",
-                    "line": None,
-                    "review_state": rev.get("state", "COMMENTED"),
-                })
+                comments.append(
+                    {
+                        "body": body,
+                        "path": "",
+                        "line": None,
+                        "review_state": rev.get("state", "COMMENTED"),
+                    }
+                )
         for c in comments_raw:
-            comments.append({
-                "body": c.get("body") or "",
-                "path": c.get("path", ""),
-                "line": c.get("line") or c.get("original_line"),
-                "review_state": review_state_map.get(
-                    c.get("pull_request_review_id"), "COMMENTED"
-                ),
-            })
+            comments.append(
+                {
+                    "body": c.get("body") or "",
+                    "path": c.get("path", ""),
+                    "line": c.get("line") or c.get("original_line"),
+                    "review_state": review_state_map.get(
+                        c.get("pull_request_review_id"), "COMMENTED"
+                    ),
+                }
+            )
 
         return {
             "state": state,
@@ -485,9 +544,7 @@ class GitHubForge(Forge):
         }
 
     # --- HTTP seam (monkeypatched in tests) ---
-    def _check_status(
-        self, *, owner: str, repo: str, head: str
-    ) -> dict | None:
+    def _check_status(self, *, owner: str, repo: str, head: str) -> dict | None:
         import httpx
 
         from .auth import github_token  # lazy: avoid import cycle
@@ -548,14 +605,16 @@ class GitHubForge(Forge):
             if not check_runs and not status_runs:
                 return {"conclusion": "success", "failing": []}
 
-            return _derive_check_conclusion(
-                c, api, owner, repo, headers, check_runs
-            )
+            return _derive_check_conclusion(c, api, owner, repo, headers, check_runs)
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _list_workflow_runs(
-        self, *, owner: str, repo: str,
-        branch: str | None, head_sha: str | None,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        branch: str | None,
+        head_sha: str | None,
     ) -> list[dict]:
         import httpx
 
@@ -573,7 +632,8 @@ class GitHubForge(Forge):
         with httpx.Client(timeout=30) as c:
             r = c.get(
                 f"{api}/repos/{owner}/{repo}/actions/runs",
-                headers=headers, params=params,
+                headers=headers,
+                params=params,
             )
             r.raise_for_status()
             raw = r.json().get("workflow_runs", [])
@@ -592,7 +652,11 @@ class GitHubForge(Forge):
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _fetch_workflow_job_logs(
-        self, *, owner: str, repo: str, run_id: int,
+        self,
+        *,
+        owner: str,
+        repo: str,
+        run_id: int,
     ) -> str:
         import httpx
 
@@ -613,13 +677,17 @@ class GitHubForge(Forge):
             jobs = jobs_resp.json().get("jobs", [])
 
         # 2. Filter to failed-like jobs.
-        failed_conclusions = frozenset({
-            "failure", "cancelled", "timed_out", "action_required",
-        })
-        failed_jobs = [
-            j for j in jobs
-            if j.get("conclusion") in failed_conclusions
-        ][:_MAX_FAILED_JOBS]
+        failed_conclusions = frozenset(
+            {
+                "failure",
+                "cancelled",
+                "timed_out",
+                "action_required",
+            }
+        )
+        failed_jobs = [j for j in jobs if j.get("conclusion") in failed_conclusions][
+            :_MAX_FAILED_JOBS
+        ]
 
         if not failed_jobs:
             return ""
@@ -679,17 +747,19 @@ def _statuses_to_check_runs(statuses_data: dict) -> list[dict]:
         # overall state: "success", "failure", "pending"
         state = statuses_data.get("state", "success")
         conclusion = state if state != "pending" else None
-        runs.append({
-            "id": None,  # no detail fetch for statuses
-            "name": ctx,
-            "status": "completed" if state != "pending" else "in_progress",
-            "conclusion": conclusion,
-            "output": {
-                "summary": None,
-                "text": None,
-                "annotations": [],
-            },
-        })
+        runs.append(
+            {
+                "id": None,  # no detail fetch for statuses
+                "name": ctx,
+                "status": "completed" if state != "pending" else "in_progress",
+                "conclusion": conclusion,
+                "output": {
+                    "summary": None,
+                    "text": None,
+                    "annotations": [],
+                },
+            }
+        )
     return runs
 
 
@@ -703,7 +773,12 @@ def _conclusion_for_check(cr: dict) -> str:
 
 
 def _extract_annotations(
-    client, api: str, owner: str, repo: str, headers: dict, cr: dict,
+    client,
+    api: str,
+    owner: str,
+    repo: str,
+    headers: dict,
+    cr: dict,
 ) -> dict:
     """Fetch and parse annotations for a failing check run (best-effort)."""
     cr_id = cr.get("id")
@@ -750,7 +825,11 @@ def _extract_annotations(
 
 
 def _derive_check_conclusion(
-    client, api: str, owner: str, repo: str, headers: dict,
+    client,
+    api: str,
+    owner: str,
+    repo: str,
+    headers: dict,
     check_runs: list[dict],
 ) -> dict:
     """Derive the overall conclusion and build the failing list."""
@@ -767,9 +846,7 @@ def _derive_check_conclusion(
             has_pending = True
         elif cat == "failure":
             has_failure = True
-            failing.append(
-                _extract_annotations(client, api, owner, repo, headers, cr)
-            )
+            failing.append(_extract_annotations(client, api, owner, repo, headers, cr))
 
     if has_failure:
         return {"conclusion": "failure", "failing": failing}

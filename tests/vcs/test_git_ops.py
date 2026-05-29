@@ -10,6 +10,7 @@ from robotsix_mill.vcs import git_ops
 # Helpers — copied verbatim from tests/stages/test_implement.py lines 18–35
 # ---------------------------------------------------------------------------
 
+
 def _git(cwd, *args):
     subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
 
@@ -39,6 +40,7 @@ def make_bare_repo(tmp_path: Path) -> str:
 # 1. _authed_url — pure unit tests (no shell-out)
 # ===========================================================================
 
+
 class TestAuthedUrl:
     def test_https_with_token(self):
         result = git_ops._authed_url("https://github.com/me/repo.git", "tok123")
@@ -65,6 +67,7 @@ class TestAuthedUrl:
 # 2. clone — integration (real git, file:// remote)
 # ===========================================================================
 
+
 class TestClone:
     def test_clone_bare_repo(self, tmp_path):
         remote = make_bare_repo(tmp_path)
@@ -80,11 +83,13 @@ class TestClone:
         git_ops.clone(remote, dest, "main")
         email = subprocess.run(
             ["git", "-C", str(dest), "config", "user.email"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         name = subprocess.run(
             ["git", "-C", str(dest), "config", "user.name"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         assert email == "mill@robotsix.local"
         assert name == "robotsix-mill"
@@ -139,6 +144,7 @@ class TestClone:
 # 3. has_changes — integration (real git)
 # ===========================================================================
 
+
 class TestHasChanges:
     def test_clean_repo(self, tmp_path):
         remote = make_bare_repo(tmp_path)
@@ -167,6 +173,7 @@ class TestHasChanges:
 # 4. branch_exists — integration (real git)
 # ===========================================================================
 
+
 class TestBranchExists:
     def test_existing_branch(self, tmp_path):
         remote = make_bare_repo(tmp_path)
@@ -185,6 +192,7 @@ class TestBranchExists:
 # 5. checkout — integration (real git)
 # ===========================================================================
 
+
 class TestCheckout:
     def test_checkout_existing_branch(self, tmp_path):
         remote = make_bare_repo(tmp_path)
@@ -195,7 +203,8 @@ class TestCheckout:
         git_ops.checkout(dest, "main")
         head = subprocess.run(
             ["git", "-C", str(dest), "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         assert head == "main"
 
@@ -211,6 +220,7 @@ class TestCheckout:
 # 6. create_branch — integration (real git)
 # ===========================================================================
 
+
 class TestCreateBranch:
     def test_create_new_branch(self, tmp_path):
         remote = make_bare_repo(tmp_path)
@@ -219,7 +229,8 @@ class TestCreateBranch:
         git_ops.create_branch(dest, "feature")
         out = subprocess.run(
             ["git", "-C", str(dest), "branch", "--list", "feature"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         assert "feature" in out
 
@@ -232,7 +243,8 @@ class TestCreateBranch:
         git_ops.create_branch(dest, "feature")
         out = subprocess.run(
             ["git", "-C", str(dest), "branch", "--list", "feature"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         assert "feature" in out
 
@@ -240,6 +252,7 @@ class TestCreateBranch:
 # ===========================================================================
 # 7. commit_all — integration (real git)
 # ===========================================================================
+
 
 class TestCommitAll:
     def test_stages_and_commits_changes(self, tmp_path):
@@ -251,7 +264,8 @@ class TestCommitAll:
         git_ops.commit_all(dest, "add a.txt")
         log = subprocess.run(
             ["git", "-C", str(dest), "log", "--oneline", "-1"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         assert "add a.txt" in log
 
@@ -259,6 +273,7 @@ class TestCommitAll:
 # ===========================================================================
 # 8. push + fetch — integration (real git, file:// remote)
 # ===========================================================================
+
 
 class TestPushFetch:
     def test_push_and_fetch_roundtrip(self, tmp_path):
@@ -284,6 +299,7 @@ class TestPushFetch:
 # 9. try_rebase_onto — integration (real git)
 # ===========================================================================
 
+
 class TestTryRebaseOnto:
     def test_success_path(self, tmp_path):
         """Clone, create branch, commit on branch, fetch main + rebase
@@ -299,7 +315,9 @@ class TestTryRebaseOnto:
         wd = tmp_path / "pusher"
         subprocess.run(
             ["git", "clone", "-q", remote, str(wd)],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         _git(wd, "config", "user.email", "op@t")
         _git(wd, "config", "user.name", "operator")
@@ -314,10 +332,15 @@ class TestTryRebaseOnto:
 
         # Verify the feature commit is on top: log should show feature
         # commit AFTER the operator edit.
-        log = subprocess.run(
-            ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
-            capture_output=True, text=True,
-        ).stdout.strip().split("\n")
+        log = (
+            subprocess.run(
+                ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
+                capture_output=True,
+                text=True,
+            )
+            .stdout.strip()
+            .split("\n")
+        )
         # "feature commit" should be above "operator edit"
         assert log[0] == "feature commit"
 
@@ -362,7 +385,9 @@ class TestTryRebaseOnto:
         wd = tmp_path / "pusher"
         subprocess.run(
             ["git", "clone", "-q", remote, str(wd)],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         _git(wd, "config", "user.email", "op@t")
         _git(wd, "config", "user.name", "operator")
@@ -382,6 +407,7 @@ class TestTryRebaseOnto:
 # 10. head_sha — integration (real git)
 # ===========================================================================
 
+
 class TestHeadSha:
     def test_returns_40_char_hex(self, tmp_path):
         remote = make_bare_repo(tmp_path)
@@ -395,6 +421,7 @@ class TestHeadSha:
 # ===========================================================================
 # 11. remote_branch_sha — integration (real git)
 # ===========================================================================
+
 
 class TestRemoteBranchSha:
     def test_existing_remote_branch_returns_sha(self, tmp_path):
@@ -417,6 +444,7 @@ class TestRemoteBranchSha:
 # ===========================================================================
 # 12. branch_is_ahead_of_main — integration (real git)
 # ===========================================================================
+
 
 class TestBranchIsAheadOfMain:
     def test_no_new_commits_returns_false(self, tmp_path):
@@ -464,6 +492,7 @@ class TestBranchIsAheadOfMain:
 # 13. changed_files — integration (real git)
 # ===========================================================================
 
+
 class TestChangedFiles:
     def test_modified_tracked_file_appears(self, tmp_path):
         remote = make_bare_repo(tmp_path)
@@ -506,6 +535,7 @@ class TestChangedFiles:
 # ===========================================================================
 # 14. diff_base — integration (real git)
 # ===========================================================================
+
 
 class TestDiffBase:
     def test_returns_diff_with_header_when_branch_has_commits(self, tmp_path):

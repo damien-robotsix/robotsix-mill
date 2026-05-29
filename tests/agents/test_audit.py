@@ -1,7 +1,6 @@
 """Tests for the audit agent and runner."""
 
 import json
-import pytest
 from pathlib import Path
 
 from robotsix_mill.agents import auditing
@@ -37,8 +36,13 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
     p = auditing.SYSTEM_PROMPT.lower()
     # Lens A: maintainability dimensions the user called out.
     for kw in (
-        "maintainability", "oversized", "root", "readability",
-        "docstring", "duplication", "list_dir",
+        "maintainability",
+        "oversized",
+        "root",
+        "readability",
+        "docstring",
+        "duplication",
+        "list_dir",
         "synchronization",
     ):
         assert kw in p, f"audit prompt missing maintainability cue: {kw}"
@@ -66,10 +70,11 @@ def test_mill_ships_an_audit_overlay():
 
     Guards against a future hand-edit that removes mill's own file
     and silently drops the mill-only meta-agent guidance."""
-    from pathlib import Path
     overlay_path = (
         Path(__file__).parent.parent.parent
-        / ".robotsix-mill" / "agent_overlays" / "audit.md"
+        / ".robotsix-mill"
+        / "agent_overlays"
+        / "audit.md"
     )
     assert overlay_path.exists(), (
         f"Expected mill's audit overlay at {overlay_path} — phase-2 of the "
@@ -196,7 +201,7 @@ def test_run_audit_pass_creates_draft_tickets(tmp_path, monkeypatch):
     # Each draft should have origin_session == the audit run's session_id.
     for t in audit_tickets:
         assert t.origin_session == result.session_id
-        assert t.origin_session== "test-sid"
+        assert t.origin_session == "test-sid"
 
 
 def test_run_audit_pass_no_drafts_when_empty(tmp_path, monkeypatch):
@@ -242,7 +247,7 @@ def test_run_audit_pass_missing_memory_file(tmp_path, monkeypatch):
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
     # Should not raise
-    result = run_audit_pass(session_id="test-sid")
+    run_audit_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -349,9 +354,7 @@ def test_run_audit_pass_opens_langfuse_session(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.audit_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
     res = run_audit_pass(session_id="test-sid")
 
@@ -362,14 +365,13 @@ def test_run_audit_pass_opens_langfuse_session(tmp_path, monkeypatch):
 def test_audit_session_ids_are_unique_per_run(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        auditing, "run_audit_agent",
+        auditing,
+        "run_audit_agent",
         lambda **k: auditing.AuditResult(
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         ),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.audit_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
     a = run_audit_pass(session_id="test-sid").session_id
     assert a == "test-sid"
 
@@ -381,7 +383,8 @@ def test_run_audit_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     from robotsix_mill.vcs import git_ops
 
     settings = _make_settings(
-        tmp_path, FORGE_REMOTE_URL="https://example.test/r.git",
+        tmp_path,
+        FORGE_REMOTE_URL="https://example.test/r.git",
         FORGE_TARGET_BRANCH="main",
     )
     seen = {"clone": 0, "repo_dir": "unset"}
@@ -398,30 +401,30 @@ def test_run_audit_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.audit_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
     run_audit_pass(session_id="test-sid")
     repo = settings.data_dir / "audit_workspace" / "repo"
     assert seen["clone"] == 1 and seen["repo_dir"] == repo
 
     seen["clone"] = 0
-    run_audit_pass(session_id="test-sid")                       # reuse existing clone
+    run_audit_pass(session_id="test-sid")  # reuse existing clone
     assert seen["clone"] == 0 and seen["repo_dir"] == repo
 
 
 def test_run_audit_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
-    settings = _make_settings(tmp_path)   # no FORGE_REMOTE_URL
+    settings = _make_settings(tmp_path)  # no FORGE_REMOTE_URL
     got = {}
     monkeypatch.setattr(
-        auditing, "run_audit_agent",
-        lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or
-        auditing.AuditResult(updated_memory="m", draft_titles=[],
-                             draft_bodies=[], gap_ids=[]),
+        auditing,
+        "run_audit_agent",
+        lambda **k: (
+            got.__setitem__("repo_dir", k.get("repo_dir"))
+            or auditing.AuditResult(
+                updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+            )
+        ),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.audit_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
     run_audit_pass(session_id="test-sid")
     assert got["repo_dir"] is None

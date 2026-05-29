@@ -85,7 +85,9 @@ def test_older_than_threshold_escalates(settings, service, monkeypatch):
     # Check the system comment was added.
     comments = service.list_comments(t.id)
     system_comments = [
-        c for c in comments if c.author == "system" and "escalated" in (c.body or "").lower()
+        c
+        for c in comments
+        if c.author == "system" and "escalated" in (c.body or "").lower()
     ]
     assert len(system_comments) >= 1
 
@@ -145,7 +147,9 @@ def test_operator_reply_unclosed_thread_skipped(settings, service, monkeypatch):
     t = _make_ticket(service, settings, updated_at_delta=timedelta(days=4))
     thread = _add_ask_user_thread(service, t.id)
     # Add a child reply — operator responded.
-    service.add_comment(t.id, "Here's the info you asked for", author="user", parent_id=thread.id)
+    service.add_comment(
+        t.id, "Here's the info you asked for", author="user", parent_id=thread.id
+    )
 
     result = run_timeout_escalation(settings)
     assert result["escaped"] == 0
@@ -205,16 +209,18 @@ def test_already_blocked_skipped_with_warning(settings, service, caplog, monkeyp
 
     # Monkeypatch TicketService.transition at the class level so the
     # runner's own service instance is affected.
-    orig_transition = TicketService.transition
 
     def racing_transition(self, ticket_id, dst, note=None):
-        raise __import__("robotsix_mill.core.service", fromlist=["TransitionError"]).TransitionError(
+        raise __import__(
+            "robotsix_mill.core.service", fromlist=["TransitionError"]
+        ).TransitionError(
             f"{ticket_id}: {State.AWAITING_USER_REPLY} -> {dst} not allowed"
         )
 
     monkeypatch.setattr(TicketService, "transition", racing_transition)
 
     import logging
+
     with caplog.at_level(logging.WARNING):
         result = run_timeout_escalation(settings)
 
@@ -256,7 +262,9 @@ def test_no_ask_thread_still_escalates(settings, service, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_timeout_escalation_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
+async def test_worker_timeout_escalation_task_created_when_periodic(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._timeout_escalation_task is created when timeout_escalation_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -289,7 +297,9 @@ async def test_worker_timeout_escalation_task_created_when_periodic(tmp_path, mo
 
 
 @pytest.mark.asyncio
-async def test_worker_timeout_escalation_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
+async def test_worker_timeout_escalation_task_not_created_when_periodic_false(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._timeout_escalation_task is NOT created when timeout_escalation_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker

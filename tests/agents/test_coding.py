@@ -26,6 +26,7 @@ from robotsix_mill.agents.coordinating import ImplementResult
 # UnexpectedModelBehavior`` inside ``run_implement_agent`` picks them up.
 # ------------------------------------------------------------------
 
+
 class _FakeUsageLimitExceeded(Exception):
     pass
 
@@ -47,13 +48,16 @@ def _install_fake_exceptions(monkeypatch):
 
     monkeypatch.setattr(_pexc, "UsageLimitExceeded", _FakeUsageLimitExceeded)
     monkeypatch.setattr(
-        _pexc, "UnexpectedModelBehavior", _FakeUnexpectedModelBehavior,
+        _pexc,
+        "UnexpectedModelBehavior",
+        _FakeUnexpectedModelBehavior,
     )
 
 
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
 
 def _make_result(
     summary="done",
@@ -90,6 +94,7 @@ def _call(settings, tmp_path, **kwargs):
 # 8. Exception class behaviour (no mocks needed)
 # ------------------------------------------------------------------
 
+
 def test_agent_budget_error_is_runtimeerror():
     assert issubclass(AgentBudgetError, RuntimeError)
 
@@ -114,12 +119,15 @@ def test_agent_run_error_messages_attribute():
 # 1. Happy path — parameter passthrough and return tuple
 # ------------------------------------------------------------------
 
+
 def test_happy_path_passthrough(settings, tmp_path, monkeypatch):
     """All kwargs pass through to run_coordinator; return tuple
     matches ImplementResult fields."""
     calls: list[dict] = []
     result = _make_result(
-        summary="s", updated_memory="um", reference_files=["f.py"],
+        summary="s",
+        updated_memory="um",
+        reference_files=["f.py"],
         conversation_state=b"cs",
     )
 
@@ -150,7 +158,7 @@ def test_happy_path_passthrough(settings, tmp_path, monkeypatch):
     assert kw["previous_attempt_summary"] == "prev"
     assert kw["board_id"] == "b"
 
-# Result tuple — first 4 fields match ImplementResult.
+    # Result tuple — first 4 fields match ImplementResult.
     # Note: origin/main still carries a 5th element (new_messages);
     # we assert on the common prefix only.
     assert out[:4] == ("s", ["f.py"], "um", b"cs")
@@ -160,8 +168,11 @@ def test_happy_path_passthrough(settings, tmp_path, monkeypatch):
 # 2. UsageLimitExceeded → AgentBudgetError
 # ------------------------------------------------------------------
 
+
 def test_usage_limit_exceeded_raises_agent_budget_error(
-    settings, tmp_path, monkeypatch,
+    settings,
+    tmp_path,
+    monkeypatch,
 ):
     _install_fake_exceptions(monkeypatch)
 
@@ -187,8 +198,11 @@ def test_usage_limit_exceeded_raises_agent_budget_error(
 # 3. UnexpectedModelBehavior → fallback → success
 # ------------------------------------------------------------------
 
+
 def test_unexpected_model_behavior_fallback_success(
-    settings, tmp_path, monkeypatch,
+    settings,
+    tmp_path,
+    monkeypatch,
 ):
     _install_fake_exceptions(monkeypatch)
 
@@ -226,8 +240,11 @@ def test_unexpected_model_behavior_fallback_success(
 # 4. UnexpectedModelBehavior → fallback also fails → AgentRunError
 # ------------------------------------------------------------------
 
+
 def test_unexpected_model_behavior_fallback_also_fails(
-    settings, tmp_path, monkeypatch,
+    settings,
+    tmp_path,
+    monkeypatch,
 ):
     _install_fake_exceptions(monkeypatch)
 
@@ -260,8 +277,11 @@ def test_unexpected_model_behavior_fallback_also_fails(
 # 5. AgentBudgetError / AgentRunError re-raised unchanged
 # ------------------------------------------------------------------
 
+
 def test_agent_budget_error_re_raised_unchanged(
-    settings, tmp_path, monkeypatch,
+    settings,
+    tmp_path,
+    monkeypatch,
 ):
     original = AgentBudgetError("budget", [{"info": 1}])
 
@@ -282,7 +302,9 @@ def test_agent_budget_error_re_raised_unchanged(
 
 
 def test_agent_run_error_re_raised_unchanged(
-    settings, tmp_path, monkeypatch,
+    settings,
+    tmp_path,
+    monkeypatch,
 ):
     original = AgentRunError("run err", ["detail"])
 
@@ -306,8 +328,11 @@ def test_agent_run_error_re_raised_unchanged(
 # 6. Generic Exception → AgentRunError
 # ------------------------------------------------------------------
 
+
 def test_generic_exception_wraps_to_agent_run_error(
-    settings, tmp_path, monkeypatch,
+    settings,
+    tmp_path,
+    monkeypatch,
 ):
     def _fake_run_coordinator(**kw):
         raise ValueError("something broke")
@@ -334,8 +359,11 @@ def test_generic_exception_wraps_to_agent_run_error(
 # 7. Explore budget exhausted after success
 # ------------------------------------------------------------------
 
+
 def test_explore_budget_exhausted_raises_agent_budget_error(
-    settings, tmp_path, monkeypatch,
+    settings,
+    tmp_path,
+    monkeypatch,
 ):
     result = _make_result(summary="done")
     reset_calls: list = []
@@ -376,7 +404,9 @@ def test_explore_budget_exhausted_raises_agent_budget_error(
 
 
 def test_explore_budget_exhausted_reset_not_called_on_error(
-    settings, tmp_path, monkeypatch,
+    settings,
+    tmp_path,
+    monkeypatch,
 ):
     """When the coordinator raises UsageLimitExceeded, the explore
     budget check is never reached — reset must NOT be called."""
@@ -408,6 +438,7 @@ def test_explore_budget_exhausted_reset_not_called_on_error(
 # ------------------------------------------------------------------
 # Edge: default parameters
 # ------------------------------------------------------------------
+
 
 def test_default_parameters_passthrough(settings, tmp_path, monkeypatch):
     """When optional parameters are omitted they pass through as their

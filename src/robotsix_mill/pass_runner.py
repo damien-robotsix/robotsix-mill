@@ -30,9 +30,7 @@ log = logging.getLogger("robotsix_mill.pass_runner")
 # scope; matching here is intentionally permissive to avoid silent drift as
 # new SourceKinds are added (was a hardcoded alternation of 11 labels that
 # left bespoke + 3 others silently unmatched).
-_GAP_ID_RE = re.compile(
-    r'<!--\s*([^\s:]+(?::[^\s]+)?)-gap-id:\s*(\S+)\s*-->'
-)
+_GAP_ID_RE = re.compile(r"<!--\s*([^\s:]+(?::[^\s]+)?)-gap-id:\s*(\S+)\s*-->")
 
 
 def _verify_prior_proposals(
@@ -54,8 +52,10 @@ def _verify_prior_proposals(
     try:
         all_tickets = service.list()
     except Exception:
-        log.debug("_verify_prior_proposals: service.list() failed — "
-                  "returning empty mapping (DB may not be initialised)")
+        log.debug(
+            "_verify_prior_proposals: service.list() failed — "
+            "returning empty mapping (DB may not be initialised)"
+        )
         return result
     for ticket in all_tickets:
         if ticket.source != source_label:
@@ -112,9 +112,7 @@ def _render_verified_table(verified: dict[str, dict]) -> str:
             resolution_str = "declined (closed directly)"
         else:
             resolution_str = "in-flight"
-        lines.append(
-            f"| {gap_id} | {tid} | {info['state']} | {resolution_str} |"
-        )
+        lines.append(f"| {gap_id} | {tid} | {info['state']} | {resolution_str} |")
     return "\n".join(lines)
 
 
@@ -154,14 +152,16 @@ def load_memory(memory_file: Path, max_chars: int | None = None) -> str:
                 cut_point = original_size - max_chars
                 nl_idx = text.find("\n", cut_point)
                 if nl_idx != -1:
-                    kept = text[nl_idx + 1:]  # start after the newline
+                    kept = text[nl_idx + 1 :]  # start after the newline
                 else:
                     kept = text[cut_point:]  # fallback (no newline found)
                 omitted = original_size - len(kept)
                 text = f"[... memory truncated: {omitted} chars omitted]\n\n{kept}"
                 log.warning(
                     "memory file %s truncated: %d → %d chars",
-                    memory_file, original_size, len(text),
+                    memory_file,
+                    original_size,
+                    len(text),
                 )
             return text
     except OSError:
@@ -239,7 +239,7 @@ def run_agent_pass(
         persist_memory(memory_file, res.updated_memory)
 
     # 6. Create draft tickets for each proposal.
-    gap_ids = getattr(res, 'gap_ids', [])
+    gap_ids = getattr(res, "gap_ids", [])
     created: list[dict] = []
     limit = min(len(res.draft_titles), len(res.draft_bodies))
     if max_drafts is not None:
@@ -261,7 +261,10 @@ def run_agent_pass(
             )
             created.append({"id": ticket.id, "title": ticket.title})
             log.info(
-                "%s spawned draft %s: %s", source_label, ticket.id, title,
+                "%s spawned draft %s: %s",
+                source_label,
+                ticket.id,
+                title,
             )
         except Exception:
             log.exception("failed to create draft ticket: %s", title)

@@ -19,9 +19,11 @@ from robotsix_mill.forge.gitlab import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _set_secrets(**kw):
     """Populate the Secrets singleton for tests."""
     import robotsix_mill.config as _cfg
+
     _reset_secrets()
     _cfg._secrets = Secrets(**kw)
 
@@ -45,22 +47,27 @@ def _forge(tmp_path, **kw):
 
 def _make_response(status_code, json_data, text=""):
     """Build a minimal httpx-like response object."""
-    resp = type("FakeResponse", (), {
-        "status_code": status_code,
-        "_json": json_data,
-        "text": text,
-        "json": lambda self: self._json,
-        "raise_for_status": lambda self: (
-            None if 200 <= self.status_code < 300
-            else (_ for _ in ()).throw(
-                real_httpx.HTTPStatusError(
-                    f"HTTP {self.status_code}",
-                    request=real_httpx.Request("GET", "http://x"),
-                    response=self,
+    resp = type(
+        "FakeResponse",
+        (),
+        {
+            "status_code": status_code,
+            "_json": json_data,
+            "text": text,
+            "json": lambda self: self._json,
+            "raise_for_status": lambda self: (
+                None
+                if 200 <= self.status_code < 300
+                else (_ for _ in ()).throw(
+                    real_httpx.HTTPStatusError(
+                        f"HTTP {self.status_code}",
+                        request=real_httpx.Request("GET", "http://x"),
+                        response=self,
+                    )
                 )
-            )
-        ),
-    })()
+            ),
+        },
+    )()
     return resp
 
 
@@ -106,6 +113,7 @@ def _mock_httpx(monkeypatch, *, get_map=None, post_response=None, put_response=N
 # _build_headers
 # ---------------------------------------------------------------------------
 
+
 def test_build_headers():
     h = _build_headers("glpat-mytoken")
     assert h["PRIVATE-TOKEN"] == "glpat-mytoken"
@@ -115,31 +123,44 @@ def test_build_headers():
 # _parse_gitlab_project_path
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("url,expected", [
-    ("https://gitlab.com/ns/project.git", "ns/project"),
-    ("https://gitlab.com/ns/project", "ns/project"),
-    ("git@gitlab.com:ns/project.git", "ns/project"),
-    ("git@gitlab.com:ns/project", "ns/project"),
-    ("https://gitlab.com/group/subgroup/proj.git", "group/subgroup/proj"),
-    ("git@gitlab.com:group/subgroup/proj.git", "group/subgroup/proj"),
-    # Self-hosted GitLab instances
-    ("https://gitlab.mycompany.com/ns/project.git", "ns/project"),
-    ("https://gitlab.mycompany.com/ns/project", "ns/project"),
-    ("git@gitlab.mycompany.com:ns/project.git", "ns/project"),
-    ("git@gitlab.mycompany.com:ns/project", "ns/project"),
-    ("https://gitlab.internal.example.com/group/subgroup/proj.git", "group/subgroup/proj"),
-    ("git@gitlab.internal.example.com:group/subgroup/proj.git", "group/subgroup/proj"),
-])
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("https://gitlab.com/ns/project.git", "ns/project"),
+        ("https://gitlab.com/ns/project", "ns/project"),
+        ("git@gitlab.com:ns/project.git", "ns/project"),
+        ("git@gitlab.com:ns/project", "ns/project"),
+        ("https://gitlab.com/group/subgroup/proj.git", "group/subgroup/proj"),
+        ("git@gitlab.com:group/subgroup/proj.git", "group/subgroup/proj"),
+        # Self-hosted GitLab instances
+        ("https://gitlab.mycompany.com/ns/project.git", "ns/project"),
+        ("https://gitlab.mycompany.com/ns/project", "ns/project"),
+        ("git@gitlab.mycompany.com:ns/project.git", "ns/project"),
+        ("git@gitlab.mycompany.com:ns/project", "ns/project"),
+        (
+            "https://gitlab.internal.example.com/group/subgroup/proj.git",
+            "group/subgroup/proj",
+        ),
+        (
+            "git@gitlab.internal.example.com:group/subgroup/proj.git",
+            "group/subgroup/proj",
+        ),
+    ],
+)
 def test_parse_gitlab_project_path_valid(url, expected):
     assert _parse_gitlab_project_path(url) == expected
 
 
-@pytest.mark.parametrize("url", [
-    "",
-    "not-a-url",
-    "/absolute/path/to/repo.git",
-    "git://invalid-protocol.example.com/ns/project.git",
-])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "",
+        "not-a-url",
+        "/absolute/path/to/repo.git",
+        "git://invalid-protocol.example.com/ns/project.git",
+    ],
+)
 def test_parse_gitlab_project_path_invalid_raises_runtimeerror(url):
     with pytest.raises(RuntimeError, match="cannot parse GitLab project path"):
         _parse_gitlab_project_path(url)
@@ -148,6 +169,7 @@ def test_parse_gitlab_project_path_invalid_raises_runtimeerror(url):
 # ---------------------------------------------------------------------------
 # open_merge_request
 # ---------------------------------------------------------------------------
+
 
 def test_create_mr_201_returns_web_url(tmp_path, monkeypatch):
     """201 from POST → return web_url."""
@@ -161,9 +183,7 @@ def test_create_mr_201_returns_web_url(tmp_path, monkeypatch):
     )
 
     forge = _forge(tmp_path)
-    url = forge.open_merge_request(
-        source_branch="feature/x", title="t", body="b"
-    )
+    url = forge.open_merge_request(source_branch="feature/x", title="t", body="b")
     assert url == "https://gitlab.com/ns/project/-/merge_requests/1"
     assert captured["post_payload"]["source_branch"] == "feature/x"
     assert captured["post_payload"]["target_branch"] == "main"
@@ -175,7 +195,13 @@ def test_create_mr_409_falls_back_to_existing_mr(tmp_path, monkeypatch):
     """409 → find MR by source_branch and return its web_url."""
     project_json = {"id": 42}
     post_409 = _make_response(409, {}, "already exists")
-    mr_list = [{"iid": 7, "web_url": "https://gitlab.com/ns/project/-/merge_requests/7", "state": "opened"}]
+    mr_list = [
+        {
+            "iid": 7,
+            "web_url": "https://gitlab.com/ns/project/-/merge_requests/7",
+            "state": "opened",
+        }
+    ]
     get_map = {
         "merge_requests/7/pipelines": _make_response(200, []),
         "merge_requests": _make_response(200, mr_list),
@@ -188,9 +214,7 @@ def test_create_mr_409_falls_back_to_existing_mr(tmp_path, monkeypatch):
     )
 
     forge = _forge(tmp_path)
-    url = forge.open_merge_request(
-        source_branch="feature/x", title="t", body="b"
-    )
+    url = forge.open_merge_request(source_branch="feature/x", title="t", body="b")
     assert url == "https://gitlab.com/ns/project/-/merge_requests/7"
 
 
@@ -210,9 +234,7 @@ def test_create_mr_409_no_existing_mr_raises(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     with pytest.raises(RuntimeError, match="GitLab MR create failed"):
-        forge.open_merge_request(
-            source_branch="feature/x", title="t", body="b"
-        )
+        forge.open_merge_request(source_branch="feature/x", title="t", body="b")
 
 
 def test_create_mr_409_find_mr_raises_propagates_as_runtimeerror(tmp_path, monkeypatch):
@@ -232,9 +254,7 @@ def test_create_mr_409_find_mr_raises_propagates_as_runtimeerror(tmp_path, monke
 
     forge = _forge(tmp_path)
     with pytest.raises(RuntimeError, match="GitLab MR create failed"):
-        forge.open_merge_request(
-            source_branch="feature/x", title="t", body="b"
-        )
+        forge.open_merge_request(source_branch="feature/x", title="t", body="b")
 
 
 def test_create_mr_unexpected_status_raises(tmp_path, monkeypatch):
@@ -249,14 +269,13 @@ def test_create_mr_unexpected_status_raises(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     with pytest.raises(RuntimeError, match="GitLab MR create failed"):
-        forge.open_merge_request(
-            source_branch="feature/x", title="t", body="b"
-        )
+        forge.open_merge_request(source_branch="feature/x", title="t", body="b")
 
 
 # ---------------------------------------------------------------------------
 # pr_status
 # ---------------------------------------------------------------------------
+
 
 def test_pr_status_mr_found_returns_expected_dict(tmp_path, monkeypatch):
     """MR found → return standard status dict."""
@@ -300,12 +319,15 @@ def test_pr_status_no_mr_returns_none(tmp_path, monkeypatch):
     assert forge.pr_status(source_branch="feature/x") is None
 
 
-@pytest.mark.parametrize("merge_status,expected", [
-    ("can_be_merged", True),
-    ("cannot_be_merged", False),
-    ("checking", None),
-    ("unchecked", None),
-])
+@pytest.mark.parametrize(
+    "merge_status,expected",
+    [
+        ("can_be_merged", True),
+        ("cannot_be_merged", False),
+        ("checking", None),
+        ("unchecked", None),
+    ],
+)
 def test_pr_status_mergeable_mapping(tmp_path, monkeypatch, merge_status, expected):
     """Verify merge_status → mergeable mapping."""
     project_json = {"id": 42}
@@ -354,6 +376,7 @@ def test_pr_status_merged_mr(tmp_path, monkeypatch):
 # check_status
 # ---------------------------------------------------------------------------
 
+
 def test_check_status_no_mr_returns_none(tmp_path, monkeypatch):
     """When _find_mr returns None, check_status returns None."""
     project_json = {"id": 42}
@@ -370,7 +393,14 @@ def test_check_status_no_mr_returns_none(tmp_path, monkeypatch):
 def test_check_status_pipeline_success(tmp_path, monkeypatch):
     """Pipeline status=success → conclusion=success."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     pipeline = {"id": 100, "status": "success"}
     get_map = {
         "merge_requests/7/pipelines": _make_response(200, [pipeline]),
@@ -387,7 +417,14 @@ def test_check_status_pipeline_success(tmp_path, monkeypatch):
 def test_check_status_pipeline_failure(tmp_path, monkeypatch):
     """Pipeline status=failed → conclusion=failure with failed jobs."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     pipeline = {"id": 100, "status": "failed"}
     failed_jobs = [
         {"name": "build", "stage": "test"},
@@ -412,7 +449,14 @@ def test_check_status_pipeline_failure(tmp_path, monkeypatch):
 def test_check_status_pipeline_pending(tmp_path, monkeypatch):
     """Pipeline status=running → conclusion=pending."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     pipeline = {"id": 100, "status": "running"}
     get_map = {
         "merge_requests/7/pipelines": _make_response(200, [pipeline]),
@@ -429,7 +473,14 @@ def test_check_status_pipeline_pending(tmp_path, monkeypatch):
 def test_check_status_no_pipeline(tmp_path, monkeypatch):
     """No pipeline at all → conclusion=None."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     get_map = {
         "merge_requests/7/pipelines": _make_response(200, []),
         "merge_requests": _make_response(200, [mr]),
@@ -442,11 +493,29 @@ def test_check_status_no_pipeline(tmp_path, monkeypatch):
     assert result == {"conclusion": None, "failing": []}
 
 
-@pytest.mark.parametrize("status", ["pending", "running", "created", "waiting_for_resource", "preparing", "manual", "scheduled"])
+@pytest.mark.parametrize(
+    "status",
+    [
+        "pending",
+        "running",
+        "created",
+        "waiting_for_resource",
+        "preparing",
+        "manual",
+        "scheduled",
+    ],
+)
 def test_check_status_pipeline_pending_variants(tmp_path, monkeypatch, status):
     """All non-terminal statuses → conclusion=pending."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     pipeline = {"id": 100, "status": status}
     get_map = {
         "merge_requests/7/pipelines": _make_response(200, [pipeline]),
@@ -463,7 +532,14 @@ def test_check_status_pipeline_pending_variants(tmp_path, monkeypatch, status):
 def test_check_status_pipeline_canceled_is_failure(tmp_path, monkeypatch):
     """Pipeline status=canceled → conclusion=failure."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     pipeline = {"id": 100, "status": "canceled"}
     get_map = {
         "merge_requests/7/pipelines": _make_response(200, [pipeline]),
@@ -482,6 +558,7 @@ def test_check_status_pipeline_canceled_is_failure(tmp_path, monkeypatch):
 # merge_pr
 # ---------------------------------------------------------------------------
 
+
 def test_merge_pr_mr_not_found(tmp_path, monkeypatch):
     """No MR → {"merged": False, "reason": "MR not found"}."""
     project_json = {"id": 42}
@@ -499,7 +576,14 @@ def test_merge_pr_mr_not_found(tmp_path, monkeypatch):
 def test_merge_pr_success_synchronous_merge(tmp_path, monkeypatch):
     """200 + state=merged → {"merged": True, "reason": "merged"}."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     merge_resp = {"state": "merged", "merge_commit_sha": "def456"}
     get_map = {
         "merge_requests": _make_response(200, [mr]),
@@ -523,7 +607,14 @@ def test_merge_pr_success_synchronous_merge(tmp_path, monkeypatch):
 def test_merge_pr_mwps_set_awaiting_pipeline(tmp_path, monkeypatch):
     """200 + state!=merged → MWPS deferred."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     merge_resp = {"state": "opened", "merge_when_pipeline_succeeds": True}
     get_map = {
         "merge_requests": _make_response(200, [mr]),
@@ -546,7 +637,14 @@ def test_merge_pr_mwps_set_awaiting_pipeline(tmp_path, monkeypatch):
 def test_merge_pr_405_not_allowed(tmp_path, monkeypatch):
     """405 → branch protection reason."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     get_map = {
         "merge_requests": _make_response(200, [mr]),
         "projects/ns%2Fproject": _make_response(200, project_json),
@@ -559,13 +657,23 @@ def test_merge_pr_405_not_allowed(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     result = forge.merge_pr(source_branch="feature/x")
-    assert result == {"merged": False, "reason": "merge not allowed (branch protection?)"}
+    assert result == {
+        "merged": False,
+        "reason": "merge not allowed (branch protection?)",
+    }
 
 
 def test_merge_pr_409_not_mergeable(tmp_path, monkeypatch):
     """409 → MR not mergeable."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     get_map = {
         "merge_requests": _make_response(200, [mr]),
         "projects/ns%2Fproject": _make_response(200, project_json),
@@ -584,20 +692,35 @@ def test_merge_pr_409_not_mergeable(tmp_path, monkeypatch):
 def test_merge_pr_network_error(tmp_path, monkeypatch):
     """Network error → {"merged": False} (no raise)."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     get_map = {
         "merge_requests": _make_response(200, [mr]),
         "projects/ns%2Fproject": _make_response(200, project_json),
     }
 
     class ErrorClient:
-        def __init__(self, **kw): pass
-        def __enter__(self): return self
-        def __exit__(self, *a): pass
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
         def post(self, url, headers=None, json=None, **kwargs):
             return _make_response(500, {}, "")
+
         def put(self, url, headers=None, json=None, **kwargs):
             raise ConnectionError("connection refused")
+
         def get(self, url, headers=None, params=None, **kwargs):
             for key, resp in get_map.items():
                 if key in url:
@@ -615,7 +738,14 @@ def test_merge_pr_network_error(tmp_path, monkeypatch):
 def test_merge_pr_unexpected_error_status(tmp_path, monkeypatch):
     """Unexpected HTTP error → {"merged": False, ...}."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     get_map = {
         "merge_requests": _make_response(200, [mr]),
         "projects/ns%2Fproject": _make_response(200, project_json),
@@ -635,6 +765,7 @@ def test_merge_pr_unexpected_error_status(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # merge_pr payload shape
 # ---------------------------------------------------------------------------
+
 
 def test_merge_pr_find_mr_raises_returns_graceful_dict(tmp_path, monkeypatch):
     """When _find_mr raises (e.g. project lookup 500), merge_pr returns
@@ -677,7 +808,14 @@ def test_check_status_api_error_returns_none(tmp_path, monkeypatch):
 def test_merge_pr_payload_includes_squash_and_mwps(tmp_path, monkeypatch):
     """Verify the PUT payload has merge_when_pipeline_succeeds, squash, should_remove_source_branch."""
     project_json = {"id": 42}
-    mr = {"iid": 7, "state": "opened", "web_url": "http://x", "merge_status": "can_be_merged", "sha": "abc", "diff_refs": {"head_sha": "abc"}}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "http://x",
+        "merge_status": "can_be_merged",
+        "sha": "abc",
+        "diff_refs": {"head_sha": "abc"},
+    }
     merge_resp = {"state": "merged"}
     get_map = {
         "merge_requests": _make_response(200, [mr]),
@@ -756,20 +894,28 @@ def test_mr_changes_happy_path(tmp_path, monkeypatch):
     files = forge._mr_changes(project_path="ns/project", mr_iid=7)
     assert len(files) == 4
     assert files[0] == {
-        "path": "src/main.py", "status": "modified",
-        "additions": 2, "deletions": 1,
+        "path": "src/main.py",
+        "status": "modified",
+        "additions": 2,
+        "deletions": 1,
     }
     assert files[1] == {
-        "path": "tests/test_main.py", "status": "added",
-        "additions": 3, "deletions": 0,
+        "path": "tests/test_main.py",
+        "status": "added",
+        "additions": 3,
+        "deletions": 0,
     }
     assert files[2] == {
-        "path": "/dev/null", "status": "removed",
-        "additions": 0, "deletions": 2,
+        "path": "/dev/null",
+        "status": "removed",
+        "additions": 0,
+        "deletions": 2,
     }
     assert files[3] == {
-        "path": "new_name.py", "status": "renamed",
-        "additions": 0, "deletions": 0,
+        "path": "new_name.py",
+        "status": "renamed",
+        "additions": 0,
+        "deletions": 0,
     }
 
 

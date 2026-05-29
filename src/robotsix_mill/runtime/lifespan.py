@@ -14,7 +14,7 @@ from typing import AsyncContextManager, Callable
 
 from fastapi import FastAPI
 
-from ..config import RepoConfig, ReposRegistry, Settings
+from ..config import ReposRegistry, Settings
 from ..core import db
 from ..core.service import TicketService
 from ..stages import StageContext
@@ -36,9 +36,7 @@ def setup_logging() -> None:
     if any(getattr(h, "_mill", False) for h in root.handlers):
         return
     h = logging.StreamHandler(sys.stdout)
-    h.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    )
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     h._mill = True  # marker for idempotency
     root.addHandler(h)
     root.setLevel(logging.INFO)
@@ -91,6 +89,7 @@ def create_lifespan(
             if stray.exists():
                 try:
                     import sqlite3
+
                     with sqlite3.connect(stray) as conn:
                         try:
                             row_count = conn.execute(
@@ -109,7 +108,8 @@ def create_lifespan(
                         )
                 except Exception:  # noqa: BLE001
                     logging.getLogger("robotsix_mill.lifespan").exception(
-                        "lifespan: failed to purge stray %s", stray,
+                        "lifespan: failed to purge stray %s",
+                        stray,
                     )
         # In single-repo mode use the specified repo; in multi-repo mode
         # pick the first repo as the initial repo_config for the worker.

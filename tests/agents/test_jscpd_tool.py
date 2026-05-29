@@ -9,6 +9,7 @@ from robotsix_mill.agents.tool_registry import ToolRegistry
 
 # ── helpers ────────────────────────────────────────────────────────────
 
+
 def _completed_process(
     args=None,
     returncode=0,
@@ -25,8 +26,10 @@ def _completed_process(
 
 # ── run_jscpd ──────────────────────────────────────────────────────────
 
+
 def test_run_jscpd_not_available(tmp_path, monkeypatch):
     """FileNotFoundError → 'ERROR: jscpd is not available'."""
+
     def fake_run(*args, **kwargs):
         raise FileNotFoundError("npx")
 
@@ -37,6 +40,7 @@ def test_run_jscpd_not_available(tmp_path, monkeypatch):
 
 def test_run_jscpd_timed_out(tmp_path, monkeypatch):
     """TimeoutExpired → 'ERROR: jscpd timed out'."""
+
     def fake_run(*args, **kwargs):
         raise subprocess.TimeoutExpired(cmd=["npx", "jscpd@4"], timeout=120)
 
@@ -48,6 +52,7 @@ def test_run_jscpd_timed_out(tmp_path, monkeypatch):
 def test_run_jscpd_os_error(tmp_path, monkeypatch):
     """OSError → error string containing both 'could not run jscpd'
     and the OS error message."""
+
     def fake_run(*args, **kwargs):
         raise OSError("disk full")
 
@@ -60,6 +65,7 @@ def test_run_jscpd_os_error(tmp_path, monkeypatch):
 def test_run_jscpd_nonzero_empty_stdout(tmp_path, monkeypatch):
     """Non-zero exit + empty stdout → formatted error with exit code
     and stderr text."""
+
     def fake_run(*args, **kwargs):
         return _completed_process(returncode=1, stdout="", stderr="some error")
 
@@ -71,17 +77,19 @@ def test_run_jscpd_nonzero_empty_stdout(tmp_path, monkeypatch):
 
 def test_run_jscpd_nonzero_with_stdout_delegates_to_parse(tmp_path, monkeypatch):
     """Non-zero exit + non-empty stdout → delegates to _parse_jscpd_output."""
-    clone_json = json.dumps({
-        "duplicates": [
-            {
-                "format": "javascript",
-                "lines": 12,
-                "tokens": 45,
-                "firstFile": {"name": "src/a.py", "start": 1, "end": 12},
-                "secondFile": {"name": "src/b.py", "start": 34, "end": 45},
-            }
-        ]
-    })
+    clone_json = json.dumps(
+        {
+            "duplicates": [
+                {
+                    "format": "javascript",
+                    "lines": 12,
+                    "tokens": 45,
+                    "firstFile": {"name": "src/a.py", "start": 1, "end": 12},
+                    "secondFile": {"name": "src/b.py", "start": 34, "end": 45},
+                }
+            ]
+        }
+    )
 
     def fake_run(*args, **kwargs):
         return _completed_process(returncode=1, stdout=clone_json, stderr="")
@@ -95,19 +103,22 @@ def test_run_jscpd_nonzero_with_stdout_delegates_to_parse(tmp_path, monkeypatch)
 
 # ── _parse_jscpd_output ────────────────────────────────────────────────
 
+
 def test_parse_jscpd_output_with_clones():
     """Valid JSON with clone pairs produces structured human-readable output."""
-    stdout = json.dumps({
-        "duplicates": [
-            {
-                "format": "javascript",
-                "lines": 12,
-                "tokens": 45,
-                "firstFile": {"name": "src/a.py", "start": 1, "end": 12},
-                "secondFile": {"name": "src/b.py", "start": 34, "end": 45},
-            }
-        ]
-    })
+    stdout = json.dumps(
+        {
+            "duplicates": [
+                {
+                    "format": "javascript",
+                    "lines": 12,
+                    "tokens": 45,
+                    "firstFile": {"name": "src/a.py", "start": 1, "end": 12},
+                    "secondFile": {"name": "src/b.py", "start": 34, "end": 45},
+                }
+            ]
+        }
+    )
     result = jscpd_tool._parse_jscpd_output(stdout)
     assert "1 clone pair(s) detected" in result
     assert "src/a.py:1-12" in result
@@ -131,10 +142,12 @@ def test_parse_jscpd_output_invalid_json():
 
 # ── make_jscpd_tool ────────────────────────────────────────────────────
 
+
 def test_make_jscpd_tool_returns_callable(tmp_path, monkeypatch):
     """The factory returns a callable that delegates to run_jscpd."""
     monkeypatch.setattr(
-        jscpd_tool.subprocess, "run",
+        jscpd_tool.subprocess,
+        "run",
         lambda *a, **k: _completed_process(
             stdout=json.dumps({"duplicates": []}),
         ),
@@ -150,7 +163,8 @@ def test_make_jscpd_tool_registers_in_registry(tmp_path, monkeypatch):
     ToolRegistry._tools.pop("detect_duplication", None)
 
     monkeypatch.setattr(
-        jscpd_tool.subprocess, "run",
+        jscpd_tool.subprocess,
+        "run",
         lambda *a, **k: _completed_process(),
     )
 
@@ -169,7 +183,8 @@ def test_make_jscpd_tool_no_double_registration(tmp_path, monkeypatch):
     ToolRegistry._tools.pop("detect_duplication", None)
 
     monkeypatch.setattr(
-        jscpd_tool.subprocess, "run",
+        jscpd_tool.subprocess,
+        "run",
         lambda *a, **k: _completed_process(),
     )
 

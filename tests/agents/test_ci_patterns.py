@@ -1,9 +1,7 @@
 """Tests for ci_patterns — structured CI pattern memory."""
 
 import json
-import textwrap
 
-import pytest
 
 from robotsix_mill.agents.ci_patterns import (
     CiPatternEntry,
@@ -89,8 +87,11 @@ def test_load_patterns_skips_invalid_entries(tmp_path):
 def test_save_patterns_trims_to_50(tmp_path):
     path = tmp_path / "many.json"
     entries = [
-        _entry(signature=f"E{i:03d}", ticket_id=f"t{i:03d}",
-               timestamp=f"2025-01-{(i % 28) + 1:02d}T00:00:00+00:00")
+        _entry(
+            signature=f"E{i:03d}",
+            ticket_id=f"t{i:03d}",
+            timestamp=f"2025-01-{(i % 28) + 1:02d}T00:00:00+00:00",
+        )
         for i in range(60)
     ]
     save_patterns(path, entries)
@@ -140,7 +141,8 @@ def test_find_relevant_patterns_category_filter():
         _entry(category="docker_build_error", signature="COPY"),
     ]
     result = find_relevant_patterns(
-        entries, "E501 line too long and COPY not found",
+        entries,
+        "E501 line too long and COPY not found",
         category="lint_error",
     )
     assert len(result) == 1
@@ -149,8 +151,11 @@ def test_find_relevant_patterns_category_filter():
 
 def test_find_relevant_patterns_limit():
     entries = [
-        _entry(signature="E501", ticket_id=f"t{i:03d}",
-               timestamp=f"2025-01-{(i % 28) + 1:02d}T00:00:00+00:00")
+        _entry(
+            signature="E501",
+            ticket_id=f"t{i:03d}",
+            timestamp=f"2025-01-{(i % 28) + 1:02d}T00:00:00+00:00",
+        )
         for i in range(5)
     ]
     result = find_relevant_patterns(entries, "E501", limit=2)
@@ -159,10 +164,12 @@ def test_find_relevant_patterns_limit():
 
 def test_find_relevant_patterns_most_recent_first():
     entries = [
-        _entry(signature="E501", ticket_id="old",
-               timestamp="2025-01-01T00:00:00+00:00"),
-        _entry(signature="E501", ticket_id="new",
-               timestamp="2025-02-01T00:00:00+00:00"),
+        _entry(
+            signature="E501", ticket_id="old", timestamp="2025-01-01T00:00:00+00:00"
+        ),
+        _entry(
+            signature="E501", ticket_id="new", timestamp="2025-02-01T00:00:00+00:00"
+        ),
     ]
     result = find_relevant_patterns(entries, "E501 line too long")
     assert len(result) == 2

@@ -9,7 +9,7 @@ from robotsix_mill.agents.refining import (
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core.states import State
-from robotsix_mill.stages import Outcome, StageContext
+from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import RefineStage
 
 
@@ -100,7 +100,9 @@ def review_service(review_settings):
 
 @pytest.fixture
 def review_ctx(review_settings, review_service, repo_config):
-    return StageContext(settings=review_settings, service=review_service, repo_config=repo_config)
+    return StageContext(
+        settings=review_settings, service=review_service, repo_config=repo_config
+    )
 
 
 # -----------------------------------------------------------------------
@@ -109,7 +111,9 @@ def review_ctx(review_settings, review_service, repo_config):
 
 
 def test_single_spec_review_saves_verbose_and_writes_concise(
-    review_ctx, review_service, monkeypatch,
+    review_ctx,
+    review_service,
+    monkeypatch,
 ):
     """Mock review_spec_for_conciseness; verify verbose original saved as
     refine-verbose.md and concise version written as description.md."""
@@ -169,7 +173,10 @@ def test_single_spec_review_saves_verbose_and_writes_concise(
 
 
 def test_flag_off_no_review_and_no_artifact(
-    ctx, service, monkeypatch, tmp_path,
+    ctx,
+    service,
+    monkeypatch,
+    tmp_path,
 ):
     """With spec_review_enabled=False (default), no review is applied and
     no refine-verbose.md artifact is saved."""
@@ -211,7 +218,9 @@ def test_flag_off_no_review_and_no_artifact(
 
 
 def test_reviewer_comments_bypasses_review(
-    review_ctx, review_service, monkeypatch,
+    review_ctx,
+    review_service,
+    monkeypatch,
 ):
     """When reviewer_comments are present, the review pass is NOT applied."""
     monkeypatch.setattr(
@@ -254,7 +263,9 @@ def test_reviewer_comments_bypasses_review(
 
 
 def test_split_path_reviews_each_child(
-    review_ctx, review_service, monkeypatch,
+    review_ctx,
+    review_service,
+    monkeypatch,
 ):
     """When the refine agent splits into children, each child's spec is
     reviewed and its verbose original saved as refine-verbose-child-N.md."""

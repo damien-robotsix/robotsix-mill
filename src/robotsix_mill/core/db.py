@@ -57,14 +57,17 @@ def get_engine(settings: Settings, board_id: str = ""):
         if not board_id and not path.exists():
             try:
                 from ..config import get_repos_config
+
                 if get_repos_config().repos:
                     import logging
                     import traceback
+
                     logging.getLogger("robotsix_mill.core.db").warning(
                         "db.get_engine: creating board-less mill.db at %s "
                         "in multi-repo mode — board_id should be threaded "
                         "through. Stack:\n%s",
-                        path, "".join(traceback.format_stack(limit=8)),
+                        path,
+                        "".join(traceback.format_stack(limit=8)),
                     )
             except Exception:  # noqa: BLE001
                 pass
@@ -108,17 +111,13 @@ def init_db(settings: Settings, board_id: str = "") -> None:
     # paused mid-stage to await a user reply (AWAITING_USER_REPLY).
     try:
         with engine.begin() as conn:
-            conn.exec_driver_sql(
-                "ALTER TABLE ticket ADD COLUMN paused_from TEXT"
-            )
+            conn.exec_driver_sql("ALTER TABLE ticket ADD COLUMN paused_from TEXT")
     except Exception:
         pass
     # Hash-chain integrity columns for TicketEvent.
     try:
         with engine.begin() as conn:
-            conn.exec_driver_sql(
-                "ALTER TABLE ticketevent ADD COLUMN prev_hash TEXT"
-            )
+            conn.exec_driver_sql("ALTER TABLE ticketevent ADD COLUMN prev_hash TEXT")
     except Exception:
         pass
     try:
@@ -148,5 +147,3 @@ def reset_engine() -> None:
     global _engines, _initialized
     _engines = {}
     _initialized = set()
-
-

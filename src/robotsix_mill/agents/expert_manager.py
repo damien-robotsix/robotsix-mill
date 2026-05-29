@@ -43,7 +43,8 @@ class ExpertManager:
     # -- definition loading ------------------------------------------------
 
     def load_definitions(
-        self, definitions_dir: Path | None = None,
+        self,
+        definitions_dir: Path | None = None,
     ) -> dict[str, ExpertDefinition]:
         """Scan *definitions_dir* for ``*.yaml`` files and return a dict
         of ``{domain: ExpertDefinition}``.
@@ -56,8 +57,7 @@ class ExpertManager:
 
         if definitions_dir is None:
             definitions_dir = (
-                Path(__file__).parent.parent.parent.parent
-                / "expert_definitions"
+                Path(__file__).parent.parent.parent.parent / "expert_definitions"
             )
 
         if not definitions_dir.is_dir():
@@ -140,9 +140,7 @@ class ExpertManager:
 
         system_prompt = definition.system_prompt
         if memory_text:
-            system_prompt = (
-                f"{system_prompt}\n\n<memory>\n{memory_text}\n</memory>"
-            )
+            system_prompt = f"{system_prompt}\n\n<memory>\n{memory_text}\n</memory>"
 
         build_kwargs: dict[str, Any] = dict(
             system_prompt=system_prompt,
@@ -208,7 +206,8 @@ class ExpertManager:
 
     @staticmethod
     def match_module_paths(
-        module_paths: list[str], file_path: str,
+        module_paths: list[str],
+        file_path: str,
     ) -> bool:
         """Return ``True`` when *file_path* matches ANY pattern in
         *module_paths*.

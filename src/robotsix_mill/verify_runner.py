@@ -52,6 +52,7 @@ def run_verify_pass(
     # Determine which boards to scan.
     try:
         from .config import get_repos_config
+
         repos = get_repos_config().repos
         boards = {rc.board_id for rc in repos.values()}
     except Exception:

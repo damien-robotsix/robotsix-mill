@@ -55,9 +55,8 @@ class Workspace:
         """Return the SHA-256 hex digest of ``description.md``, or an empty string if absent."""
         if not self.description_path.exists():
             return ""
-        return hashlib.sha256(
-            self.description_path.read_bytes()
-        ).hexdigest()
+        return hashlib.sha256(self.description_path.read_bytes()).hexdigest()
+
 
 def prune_clone(workspace: Workspace) -> None:
     """Delete the ``repo/`` subdirectory of *workspace*.
@@ -72,6 +71,4 @@ def prune_clone(workspace: Workspace) -> None:
     except FileNotFoundError:
         pass
     except OSError:
-        log.warning(
-            "prune_clone: could not remove %s – continuing", repo
-        )
+        log.warning("prune_clone: could not remove %s – continuing", repo)

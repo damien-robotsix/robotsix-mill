@@ -1,7 +1,5 @@
 """Tests for the cross-trace analyzer sub-agent."""
 
-import pytest
-
 from robotsix_mill.agents import cross_trace_analyzer as cta
 from robotsix_mill.agents.cross_trace_analyzer import (
     CrossTraceFinding,
@@ -29,7 +27,8 @@ def test_detects_redundant_exploration(monkeypatch):
     """Per-trace summaries showing review re-reading implement's files
     → redundant_exploration finding."""
     monkeypatch.setattr(
-        cta, "run_cross_trace_analyzer",
+        cta,
+        "run_cross_trace_analyzer",
         lambda **kwargs: CrossTraceResult(
             findings=[
                 CrossTraceFinding(
@@ -66,7 +65,8 @@ def test_detects_retry_cascade(monkeypatch):
     """Per-trace summaries showing a test gate failure amplifying into
     later-stage retries → retry_cascade finding."""
     monkeypatch.setattr(
-        cta, "run_cross_trace_analyzer",
+        cta,
+        "run_cross_trace_analyzer",
         lambda **kwargs: CrossTraceResult(
             findings=[
                 CrossTraceFinding(
@@ -92,7 +92,7 @@ def test_detects_retry_cascade(monkeypatch):
     result = cta.run_cross_trace_analyzer(
         settings=Settings(),
         per_trace_summaries="--- trace-1 (implement) ---\n3 retries\n\n"
-                           "--- trace-2 (review) ---\n2 retries",
+        "--- trace-2 (review) ---\n2 retries",
     )
     assert len(result.findings) == 1
     assert result.findings[0].category == "retry_cascade"
@@ -101,14 +101,14 @@ def test_detects_retry_cascade(monkeypatch):
 def test_clean_multitrace_returns_empty(monkeypatch):
     """No cross-cutting patterns → empty findings, no error."""
     monkeypatch.setattr(
-        cta, "run_cross_trace_analyzer",
+        cta,
+        "run_cross_trace_analyzer",
         lambda **kwargs: CrossTraceResult(findings=[]),
     )
     result = cta.run_cross_trace_analyzer(
         settings=Settings(),
         per_trace_summaries=(
-            "--- trace-1 (implement) ---\nclean\n\n"
-            "--- trace-2 (review) ---\nclean"
+            "--- trace-1 (implement) ---\nclean\n\n--- trace-2 (review) ---\nclean"
         ),
     )
     assert result.findings == []
@@ -118,7 +118,8 @@ def test_clean_multitrace_returns_empty(monkeypatch):
 def test_make_tool_formats_output(monkeypatch):
     """Tool wrapper produces grouped Markdown sections."""
     monkeypatch.setattr(
-        cta, "run_cross_trace_analyzer",
+        cta,
+        "run_cross_trace_analyzer",
         lambda **kwargs: CrossTraceResult(
             findings=[
                 CrossTraceFinding(
@@ -150,7 +151,8 @@ def test_make_tool_formats_output(monkeypatch):
 def test_make_tool_empty_findings(monkeypatch):
     """Tool wrapper renders a clean 'no patterns' message for empty findings."""
     monkeypatch.setattr(
-        cta, "run_cross_trace_analyzer",
+        cta,
+        "run_cross_trace_analyzer",
         lambda **kwargs: CrossTraceResult(findings=[]),
     )
     tool = make_cross_trace_analyze_tool(Settings())
@@ -162,7 +164,8 @@ def test_make_tool_degradation_on_error(monkeypatch):
     """When run_cross_trace_analyzer returns an error, the tool renders
     a degradation message."""
     monkeypatch.setattr(
-        cta, "run_cross_trace_analyzer",
+        cta,
+        "run_cross_trace_analyzer",
         lambda **kwargs: CrossTraceResult(error="context overflow: 500K chars"),
     )
     tool = make_cross_trace_analyze_tool(Settings())

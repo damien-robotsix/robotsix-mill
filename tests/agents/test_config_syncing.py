@@ -1,9 +1,7 @@
 """Tests for the config-sync agent."""
 
-from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 
 from robotsix_mill.agents import config_syncing
 
@@ -20,10 +18,14 @@ def test_config_sync_system_prompt_covers_key_dimensions():
     """The config-sync agent prompt must cover key inspection dimensions."""
     p = config_syncing.SYSTEM_PROMPT.lower()
     for kw in (
-        "config.py", "mill.defaults.yaml",
-        "secrets.example.yaml", "repos.example.yaml",
+        "config.py",
+        "mill.defaults.yaml",
+        "secrets.example.yaml",
+        "repos.example.yaml",
         "docs/configuration.md",
-        "missing-from-yaml", "stale-yaml-key", "default-mismatch",
+        "missing-from-yaml",
+        "stale-yaml-key",
+        "default-mismatch",
         "memory",
     ):
         assert kw in p, f"config-sync prompt missing dimension cue: {kw}"
@@ -82,6 +84,7 @@ def test_run_config_sync_agent_web_false(monkeypatch):
     def fake_build_agent(settings, **kwargs):
         build_calls.append(kwargs)
         from unittest.mock import MagicMock
+
         mock_agent = MagicMock()
         mock_agent.run_sync.return_value = config_syncing.ConfigSyncResult()
         return mock_agent
@@ -104,6 +107,7 @@ def test_run_config_sync_agent_max_gaps_clipping(monkeypatch):
 
     def fake_build_agent(settings, **kwargs):
         from unittest.mock import MagicMock
+
         result = config_syncing.ConfigSyncResult(
             draft_titles=[f"title{i}" for i in range(10)],
             draft_bodies=[f"body{i}" for i in range(10)],
@@ -133,6 +137,7 @@ def test_run_config_sync_agent_no_repo_dir_no_tools(monkeypatch):
     def fake_build_agent(settings, **kwargs):
         build_calls.append(kwargs)
         from unittest.mock import MagicMock
+
         mock_agent = MagicMock()
         mock_agent.run_sync.return_value = config_syncing.ConfigSyncResult()
         return mock_agent
@@ -156,6 +161,7 @@ def test_run_config_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
     def fake_build_agent(settings, **kwargs):
         build_calls.append(kwargs)
         from unittest.mock import MagicMock
+
         mock_agent = MagicMock()
         mock_agent.run_sync.return_value = config_syncing.ConfigSyncResult()
         return mock_agent
@@ -182,6 +188,7 @@ def test_run_config_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
 def test_config_sync_config_defaults():
     """Config-sync config has correct defaults."""
     from robotsix_mill.config import Settings
+
     s = Settings()
     assert s.config_sync_model == "deepseek/deepseek-v4-flash"
     assert s.config_sync_periodic is True
@@ -192,6 +199,7 @@ def test_config_sync_config_defaults():
 def test_config_sync_config_custom_model():
     """Config-sync model can be overridden via env."""
     from robotsix_mill.config import Settings
+
     s = Settings(config_sync_model="anthropic/claude-sonnet-4")
     assert s.config_sync_model == "anthropic/claude-sonnet-4"
 
@@ -200,6 +208,7 @@ def test_config_sync_memory_file_default(tmp_path):
     """When config_sync_memory_path is None, falls back to
     data_dir/config_sync_memory.md."""
     from robotsix_mill.config import Settings
+
     s = Settings(data_dir=str(tmp_path))
     expected = s.data_dir / "config_sync_memory.md"
     assert s.config_sync_memory_file == expected
@@ -208,6 +217,7 @@ def test_config_sync_memory_file_default(tmp_path):
 def test_config_sync_memory_file_override(tmp_path):
     """When config_sync_memory_path is set, uses that path."""
     from robotsix_mill.config import Settings
+
     custom_path = tmp_path / "custom_config_sync.md"
     s = Settings(data_dir=str(tmp_path), config_sync_memory_path=str(custom_path))
     assert s.config_sync_memory_file == custom_path
@@ -216,6 +226,7 @@ def test_config_sync_memory_file_override(tmp_path):
 def test_config_sync_periodic_config():
     """Config-sync periodic can be enabled."""
     from robotsix_mill.config import Settings
+
     s = Settings(config_sync_periodic="true", config_sync_interval_seconds="43200")
     assert s.config_sync_periodic is True
     assert s.config_sync_interval_seconds == 43200

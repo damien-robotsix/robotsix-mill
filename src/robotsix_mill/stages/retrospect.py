@@ -30,7 +30,9 @@ log = logging.getLogger("robotsix_mill.stages.retrospect")
 
 
 def _service_for_target(
-    target: str, default_service: TicketService, settings: Settings,
+    target: str,
+    default_service: TicketService,
+    settings: Settings,
 ) -> TicketService:
     """Return the :class:`TicketService` to file a retrospect draft on.
 
@@ -59,6 +61,7 @@ def _service_for_target(
         return default_service
     try:
         from ..config import get_repos_config
+
         rc = get_repos_config().repos.get(target_repo_id)
     except Exception:  # noqa: BLE001 — fallback must always work
         log.exception(
@@ -74,6 +77,7 @@ def _service_for_target(
         return default_service
     return TicketService(settings, board_id=rc.board_id)
 
+
 # States that count as "done with" for dedup purposes — ticket titles
 # that match an existing ticket in one of these states are considered
 # already resolved/filed and won't block re-filing.
@@ -81,35 +85,98 @@ _DONE_WITH = {"closed", "done"}
 
 # Word-to-number mapping for parsing count claims like "Eleven tickets".
 _WORD_TO_NUM: dict[str, int] = {
-    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
-    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
-    "nineteen": 19, "twenty": 20,
-    "twenty-one": 21, "twenty-two": 22, "twenty-three": 23,
-    "twenty-four": 24, "twenty-five": 25, "twenty-six": 26,
-    "twenty-seven": 27, "twenty-eight": 28, "twenty-nine": 29,
-    "thirty-one": 31, "thirty-two": 32, "thirty-three": 33,
-    "thirty-four": 34, "thirty-five": 35, "thirty-six": 36,
-    "thirty-seven": 37, "thirty-eight": 38, "thirty-nine": 39,
-    "forty-one": 41, "forty-two": 42, "forty-three": 43,
-    "forty-four": 44, "forty-five": 45, "forty-six": 46,
-    "forty-seven": 47, "forty-eight": 48, "forty-nine": 49,
-    "fifty-one": 51, "fifty-two": 52, "fifty-three": 53,
-    "fifty-four": 54, "fifty-five": 55, "fifty-six": 56,
-    "fifty-seven": 57, "fifty-eight": 58, "fifty-nine": 59,
-    "sixty-one": 61, "sixty-two": 62, "sixty-three": 63,
-    "sixty-four": 64, "sixty-five": 65, "sixty-six": 66,
-    "sixty-seven": 67, "sixty-eight": 68, "sixty-nine": 69,
-    "seventy-one": 71, "seventy-two": 72, "seventy-three": 73,
-    "seventy-four": 74, "seventy-five": 75, "seventy-six": 76,
-    "seventy-seven": 77, "seventy-eight": 78, "seventy-nine": 79,
-    "eighty-one": 81, "eighty-two": 82, "eighty-three": 83,
-    "eighty-four": 84, "eighty-five": 85, "eighty-six": 86,
-    "eighty-seven": 87, "eighty-eight": 88, "eighty-nine": 89,
-    "ninety-one": 91, "ninety-two": 92, "ninety-three": 93,
-    "ninety-four": 94, "ninety-five": 95, "ninety-six": 96,
-    "ninety-seven": 97, "ninety-eight": 98, "ninety-nine": 99,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+    "twenty": 20,
+    "twenty-one": 21,
+    "twenty-two": 22,
+    "twenty-three": 23,
+    "twenty-four": 24,
+    "twenty-five": 25,
+    "twenty-six": 26,
+    "twenty-seven": 27,
+    "twenty-eight": 28,
+    "twenty-nine": 29,
+    "thirty-one": 31,
+    "thirty-two": 32,
+    "thirty-three": 33,
+    "thirty-four": 34,
+    "thirty-five": 35,
+    "thirty-six": 36,
+    "thirty-seven": 37,
+    "thirty-eight": 38,
+    "thirty-nine": 39,
+    "forty-one": 41,
+    "forty-two": 42,
+    "forty-three": 43,
+    "forty-four": 44,
+    "forty-five": 45,
+    "forty-six": 46,
+    "forty-seven": 47,
+    "forty-eight": 48,
+    "forty-nine": 49,
+    "fifty-one": 51,
+    "fifty-two": 52,
+    "fifty-three": 53,
+    "fifty-four": 54,
+    "fifty-five": 55,
+    "fifty-six": 56,
+    "fifty-seven": 57,
+    "fifty-eight": 58,
+    "fifty-nine": 59,
+    "sixty-one": 61,
+    "sixty-two": 62,
+    "sixty-three": 63,
+    "sixty-four": 64,
+    "sixty-five": 65,
+    "sixty-six": 66,
+    "sixty-seven": 67,
+    "sixty-eight": 68,
+    "sixty-nine": 69,
+    "seventy-one": 71,
+    "seventy-two": 72,
+    "seventy-three": 73,
+    "seventy-four": 74,
+    "seventy-five": 75,
+    "seventy-six": 76,
+    "seventy-seven": 77,
+    "seventy-eight": 78,
+    "seventy-nine": 79,
+    "eighty-one": 81,
+    "eighty-two": 82,
+    "eighty-three": 83,
+    "eighty-four": 84,
+    "eighty-five": 85,
+    "eighty-six": 86,
+    "eighty-seven": 87,
+    "eighty-eight": 88,
+    "eighty-nine": 89,
+    "ninety-one": 91,
+    "ninety-two": 92,
+    "ninety-three": 93,
+    "ninety-four": 94,
+    "ninety-five": 95,
+    "ninety-six": 96,
+    "ninety-seven": 97,
+    "ninety-eight": 98,
+    "ninety-nine": 99,
 }
 
 
@@ -121,12 +188,12 @@ def _parse_numeric_count(text: str) -> int | None:
     *None* if no claim is found.
     """
     # Word numbers (case-insensitive): "Eleven tickets"
-    pattern_words = r'\b(' + '|'.join(_WORD_TO_NUM) + r')\b\s+tickets?\b'
+    pattern_words = r"\b(" + "|".join(_WORD_TO_NUM) + r")\b\s+tickets?\b"
     m = re.search(pattern_words, text, re.IGNORECASE)
     if m:
         return _WORD_TO_NUM[m.group(1).lower()]
     # Digit numbers: "3 tickets"
-    m = re.search(r'\b(\d+)\s+tickets?\b', text)
+    m = re.search(r"\b(\d+)\s+tickets?\b", text)
     if m:
         return int(m.group(1))
     return None
@@ -140,11 +207,11 @@ def _extract_ticket_ids(text: str) -> set[str]:
     """
     ids: set[str] = set()
     # Backtick-wrapped: - `TKT-001`
-    for m in re.finditer(r'^\s*[-*]\s+`([^`]+)`', text, re.MULTILINE):
+    for m in re.finditer(r"^\s*[-*]\s+`([^`]+)`", text, re.MULTILINE):
         ids.add(m.group(1))
     # Bare ID starting a bullet line (fallback): - TKT-001: note
     for m in re.finditer(
-        r'^\s*[-*]\s+([A-Za-z][A-Za-z0-9_.-]*\d+[A-Za-z0-9_.-]*)\b', text, re.MULTILINE
+        r"^\s*[-*]\s+([A-Za-z][A-Za-z0-9_.-]*\d+[A-Za-z0-9_.-]*)\b", text, re.MULTILINE
     ):
         ids.add(m.group(1))
     return ids
@@ -165,10 +232,10 @@ def _check_memory_count_consistency(memory_text: str) -> list[str]:
     warnings: list[str] = []
     # Split on "## " at line start — each issue section begins with a
     # level-2 Markdown heading.
-    sections = re.split(r'\n(?=## )', memory_text)
+    sections = re.split(r"\n(?=## )", memory_text)
 
     for section in sections:
-        heading_match = re.match(r'##\s+(.+)', section)
+        heading_match = re.match(r"##\s+(.+)", section)
         if not heading_match:
             continue
         issue_heading = heading_match.group(1).strip()
@@ -184,9 +251,9 @@ def _check_memory_count_consistency(memory_text: str) -> list[str]:
             preview_ids = sorted(ticket_ids)
             if len(preview_ids) > 5:
                 preview_ids = preview_ids[:5]
-                preview_str = ', '.join(preview_ids) + ', …'
+                preview_str = ", ".join(preview_ids) + ", …"
             else:
-                preview_str = ', '.join(preview_ids) if preview_ids else '(none)'
+                preview_str = ", ".join(preview_ids) if preview_ids else "(none)"
 
             warnings.append(
                 f"Memory count drift in issue '{issue_heading}': "
@@ -196,6 +263,7 @@ def _check_memory_count_consistency(memory_text: str) -> list[str]:
             )
 
     return warnings
+
 
 # No-op detection (markers + logic) lives in core.text_noop — a single
 # source of truth shared with the report_issue tool so the two can't
@@ -211,6 +279,7 @@ def _is_noop_draft(title: str | None, body: str | None = None) -> bool:
 
 class RetrospectStage(Stage):
     """Run a deep-analysis retrospective on completed tickets and optionally spawn follow-up draft tickets."""
+
     name = "retrospect"
     input_state = State.DONE
 
@@ -240,8 +309,11 @@ class RetrospectStage(Stage):
 
         # Second guard — model proposed a no-op / clean-run draft.
         if _is_noop_draft(res.draft_title, res.draft_body):
-            log.info("%s: retrospect proposed a no-op draft %r — skipped",
-                     ticket.id, res.draft_title)
+            log.info(
+                "%s: retrospect proposed a no-op draft %r — skipped",
+                ticket.id,
+                res.draft_title,
+            )
             return None
 
         # Happy path: build body, create ticket on the target board,
@@ -250,10 +322,13 @@ class RetrospectStage(Stage):
         if res.draft_gap_id:
             body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
         target_service = _service_for_target(
-            res.draft_target, ctx.service, settings,
+            res.draft_target,
+            ctx.service,
+            settings,
         )
         draft = target_service.create(
-            res.draft_title, body,
+            res.draft_title,
+            body,
             source=SourceKind.RETROSPECT,
             origin_session=current_session(),
         )
@@ -264,7 +339,8 @@ class RetrospectStage(Stage):
             ctx.service.set_parent(draft.id, ticket.id)
         log.info(
             "%s: retrospect spawned draft %s on %s",
-            ticket.id, draft.id,
+            ticket.id,
+            draft.id,
             target_service.board_id or "<default>",
         )
         return draft.id
@@ -287,7 +363,9 @@ class RetrospectStage(Stage):
         follow_up_body = res.follow_up_body
 
         target_service = _service_for_target(
-            res.follow_up_target, ctx.service, settings,
+            res.follow_up_target,
+            ctx.service,
+            settings,
         )
 
         # Dedup: skip if an open (non-closed, non-done) ticket with the
@@ -298,18 +376,18 @@ class RetrospectStage(Stage):
         # against mill's own backlog.
         norm = follow_up_title.casefold()
         for t in target_service.list():
-            if (
-                t.title.strip().casefold() == norm
-                and t.state.value not in _DONE_WITH
-            ):
+            if t.title.strip().casefold() == norm and t.state.value not in _DONE_WITH:
                 log.info(
                     "%s: retrospect follow-up already filed as %s (state=%s) — not duplicating",
-                    ticket.id, t.id, t.state.value,
+                    ticket.id,
+                    t.id,
+                    t.state.value,
                 )
                 return None
 
         draft = target_service.create(
-            follow_up_title, follow_up_body,
+            follow_up_title,
+            follow_up_body,
             source=SourceKind.RETROSPECT,
             origin_session=current_session(),
         )
@@ -317,7 +395,8 @@ class RetrospectStage(Stage):
             ctx.service.set_parent(draft.id, ticket.id)
         log.info(
             "%s: retrospect spawned follow-up %s on %s",
-            ticket.id, draft.id,
+            ticket.id,
+            draft.id,
             target_service.board_id or "<default>",
         )
         return draft.id
@@ -382,7 +461,9 @@ class RetrospectStage(Stage):
 
         log.info(
             "%s: wrote %d AGENT.md proposal(s) to %s",
-            ticket.id, len(proposals), candidates_path,
+            ticket.id,
+            len(proposals),
+            candidates_path,
         )
 
     # ------------------------------------------------------------------
@@ -393,15 +474,13 @@ class RetrospectStage(Stage):
 
         history = ctx.service.history(ticket.id)
         history_text = "\n".join(
-            f"{e.at:%Y-%m-%d %H:%M} {e.state} {e.note or ''}".rstrip()
-            for e in history
+            f"{e.at:%Y-%m-%d %H:%M} {e.state} {e.note or ''}".rstrip() for e in history
         )
         # Fetch comments
         comments = ctx.service.list_comments(ticket.id)
         if comments:
             comments_text = "\n".join(
-                f"{c.created_at:%Y-%m-%d %H:%M} | {c.body}".rstrip()
-                for c in comments
+                f"{c.created_at:%Y-%m-%d %H:%M} | {c.body}".rstrip() for c in comments
             )
         else:
             comments_text = ""
@@ -410,8 +489,7 @@ class RetrospectStage(Stage):
         if desc:
             desc = truncate_at_boundary(desc, 6000)
         ticket_summary = (
-            f"id: {ticket.id}\ntitle: {ticket.title}\n"
-            f"branch: {ticket.branch}\n\n{desc}"
+            f"id: {ticket.id}\ntitle: {ticket.title}\nbranch: {ticket.branch}\n\n{desc}"
         )
         # Per-trace deep inspection is now handled by the periodical
         # cost-evaluation pipeline (cost_reconciliation_runner +
@@ -433,9 +511,7 @@ class RetrospectStage(Stage):
                     title = sib.title.strip()
                     if len(title) > 80:
                         title = title[:77] + "..."
-                    lines.append(
-                        f"- `{sib.id}` [{sib.state.value}] {title}"
-                    )
+                    lines.append(f"- `{sib.id}` [{sib.state.value}] {title}")
                 lines.append("</epic_siblings>")
                 sibling_ctx = "\n".join(lines)
 
@@ -451,7 +527,11 @@ class RetrospectStage(Stage):
             log.warning("%s: could not read memory file %s", ticket.id, memory_file)
 
         # Verify prior proposals and prepend verified-state table.
-        from ..pass_runner import _verify_prior_proposals, _render_verified_table, _format_recent_proposals
+        from ..pass_runner import (
+            _verify_prior_proposals,
+            _render_verified_table,
+            _format_recent_proposals,
+        )
 
         verified = _verify_prior_proposals(ctx.service, s, SourceKind.RETROSPECT)
         if verified:
@@ -490,7 +570,9 @@ class RetrospectStage(Stage):
                 memory_file.parent.mkdir(parents=True, exist_ok=True)
                 memory_file.write_text(res.updated_memory, encoding="utf-8")
             except OSError:
-                log.warning("%s: could not write memory file %s", ticket.id, memory_file)
+                log.warning(
+                    "%s: could not write memory file %s", ticket.id, memory_file
+                )
 
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)

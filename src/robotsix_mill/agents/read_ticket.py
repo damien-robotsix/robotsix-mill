@@ -45,9 +45,7 @@ def make_read_ticket_tool(settings: Settings):
             ticket = service.get(ticket_id)
 
             if ticket is None:
-                return (
-                    f"read_ticket: no ticket found with id '{ticket_id}'"
-                )
+                return f"read_ticket: no ticket found with id '{ticket_id}'"
 
             # --- Build the Markdown output ---
             lines: list[str] = []
@@ -138,17 +136,17 @@ def make_read_ticket_tool(settings: Settings):
             return result
 
         except Exception as e:  # noqa: BLE001 — never abort the agent run
-            return (
-                f"read_ticket: error reading ticket '{ticket_id}' ({e!r})"
-            )
+            return f"read_ticket: error reading ticket '{ticket_id}' ({e!r})"
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="read_ticket",
-        description="Return the full details of a ticket: description, history, and comments.",
-        category="reporting",
-        parameters={"ticket_id": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_ticket",
+            description="Return the full details of a ticket: description, history, and comments.",
+            category="reporting",
+            parameters={"ticket_id": "str"},
+        )
+    )
 
     return read_ticket

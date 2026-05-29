@@ -19,6 +19,7 @@ log = logging.getLogger("robotsix_mill.agents.cost_reconciling")
 
 class CostReconciliationResult(BaseModel):
     """Structured output from the cost-reconciliation agent."""
+
     analysis: str = ""
     conclusion: str = ""
 
@@ -93,11 +94,15 @@ def run_cost_reconciliation_agent(
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
-        / "agent_definitions" / "periodic" / "cost_reconciliation.yaml"
+        / "agent_definitions"
+        / "periodic"
+        / "cost_reconciliation.yaml"
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=[],
+        settings,
+        definition,
+        tools=[],
         model_name=definition.model or settings.cost_reconciliation_model,
     )
     limits = UsageLimits(request_limit=4)

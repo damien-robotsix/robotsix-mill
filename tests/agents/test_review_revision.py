@@ -32,7 +32,9 @@ def _patch_agent(monkeypatch, status, summary, updated_memory=""):
         base_mod,
         "build_agent_from_definition",
         lambda *args, **kwargs: FakeAgent(
-            ReviewRevisionResult(status=status, summary=summary, updated_memory=updated_memory)
+            ReviewRevisionResult(
+                status=status, summary=summary, updated_memory=updated_memory
+            )
         ),
     )
 
@@ -40,6 +42,7 @@ def _patch_agent(monkeypatch, status, summary, updated_memory=""):
 # ---------------------------------------------------------------------------
 # Happy path — DONE
 # ---------------------------------------------------------------------------
+
 
 def test_happy_path_done(settings, tmp_path, monkeypatch, secrets_set):
     repo_dir = tmp_path / "repo"
@@ -64,6 +67,7 @@ def test_happy_path_done(settings, tmp_path, monkeypatch, secrets_set):
 # FAILED path
 # ---------------------------------------------------------------------------
 
+
 def test_failed_path(settings, tmp_path, monkeypatch, secrets_set):
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
@@ -87,6 +91,7 @@ def test_failed_path(settings, tmp_path, monkeypatch, secrets_set):
 # Memory passthrough
 # ---------------------------------------------------------------------------
 
+
 def test_memory_passthrough(settings, tmp_path, monkeypatch, secrets_set):
     """Verify memory flows into the user prompt and updated_memory flows back."""
     import robotsix_mill.agents.base as base_mod
@@ -100,7 +105,9 @@ def test_memory_passthrough(settings, tmp_path, monkeypatch, secrets_set):
     # Pre-seed the list with a slot so capturing_run_sync can assign to [0].
     captured_user_prompt.append("")
 
-    def fake_build_agent_from_definition(settings, definition, tools=None, system_prompt=None):
+    def fake_build_agent_from_definition(
+        settings, definition, tools=None, system_prompt=None
+    ):
         return FakeAgent(
             ReviewRevisionResult(
                 status="DONE",
@@ -109,7 +116,9 @@ def test_memory_passthrough(settings, tmp_path, monkeypatch, secrets_set):
             )
         )
 
-    monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent_from_definition)
+    monkeypatch.setattr(
+        base_mod, "build_agent_from_definition", fake_build_agent_from_definition
+    )
 
     # Capture the user prompt by wrapping agent.run_sync
     def capturing_run_sync(self, msg, message_history=None, board_id=""):
@@ -137,6 +146,7 @@ def test_memory_passthrough(settings, tmp_path, monkeypatch, secrets_set):
 # API key check
 # ---------------------------------------------------------------------------
 
+
 def test_missing_api_key_raises_runtime_error(settings, tmp_path):
     """The autouse _reset_secrets_each_test fixture clears the cached
     Secrets singleton, so get_secrets().openrouter_api_key is None by
@@ -158,6 +168,7 @@ def test_missing_api_key_raises_runtime_error(settings, tmp_path):
 # ---------------------------------------------------------------------------
 # ReviewRevisionResult model validation
 # ---------------------------------------------------------------------------
+
 
 def test_review_revision_result_validation():
     result = ReviewRevisionResult(status="DONE", summary="all changes applied")

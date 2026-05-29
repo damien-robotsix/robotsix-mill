@@ -11,6 +11,13 @@ from .periodic_runner import (
 )
 
 
-def run_audit_pass(session_id: str, repo_config: RepoConfig | None = None) -> AuditPassResult:
+def run_audit_pass(
+    session_id: str, repo_config: RepoConfig | None = None
+) -> AuditPassResult:
     settings = Settings()
-    return run_periodic_pass(session_id, repo_config, config=PERIODIC_PASS_CONFIGS["audit"], settings=settings)
+    return run_periodic_pass(
+        session_id,
+        repo_config,
+        config=PERIODIC_PASS_CONFIGS["audit"],
+        settings=settings,
+    )

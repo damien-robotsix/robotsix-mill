@@ -40,8 +40,9 @@ from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 from .pause import (
-    check_for_pause, save_conversation_state,
-    load_conversation_state, clear_conversation_state,
+    check_for_pause,
+    save_conversation_state,
+    load_conversation_state,
     build_resume_message_history,
     acknowledge_unanswered_threads,
 )
@@ -53,9 +54,11 @@ log = logging.getLogger("robotsix_mill.stages.implement")
 # Internal dataclasses for the refactored implement loop
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _ImplementContext:
     """Artifact bundle loaded once before the fix loop starts."""
+
     spec: str
     memory_text: str
     reference_files: list | None
@@ -68,6 +71,7 @@ class _ImplementContext:
 @dataclass
 class _ScopeGuardrailResult:
     """Returned by :meth:`_run_scope_guardrail`."""
+
     action: Literal["continue", "skip_iteration", "return"]
     outcome: Outcome | None = None
     file_map: set[str] | None = None
@@ -77,6 +81,7 @@ class _ScopeGuardrailResult:
 @dataclass
 class _SinglePassResult:
     """Returned by :meth:`_run_single_implement_pass`."""
+
     next_action: Literal["proceed", "retry", "escalate", "return", "pause", "skip"]
     outcome: Outcome | None = None
     feedback: str | None = None
@@ -87,8 +92,10 @@ class _SinglePassResult:
 # Stage
 # ---------------------------------------------------------------------------
 
+
 class ImplementStage(Stage):
     """Clone the repo, create a feature branch, and run the implementation agent loop to produce code changes."""
+
     name = "implement"
     input_state = State.READY
 
@@ -102,7 +109,8 @@ class ImplementStage(Stage):
         if unmet:
             log.debug(
                 "%s: unmet dependencies — deferring implement: %s",
-                ticket.id, unmet,
+                ticket.id,
+                unmet,
             )
             return Outcome(State.READY)
 
@@ -127,7 +135,9 @@ class ImplementStage(Stage):
 
     @staticmethod
     def _load_implement_context(
-        ctx: StageContext, ticket: Ticket, settings,
+        ctx: StageContext,
+        ticket: Ticket,
+        settings,
     ) -> _ImplementContext:
         """Load all workspace artifacts needed before the fix loop."""
         ws = ctx.service.workspace(ticket)
@@ -158,8 +168,7 @@ class ImplementStage(Stage):
 
         if file_map is None:
             log.warning(
-                "%s: file_map.json missing or empty — "
-                "skipping scope enforcement",
+                "%s: file_map.json missing or empty — skipping scope enforcement",
                 ticket.id,
             )
 
@@ -169,8 +178,7 @@ class ImplementStage(Stage):
             comments = ctx.service.list_comments(ticket.id)
             if comments:
                 open_threads = [
-                    c for c in comments
-                    if c.parent_id is None and c.closed_at is None
+                    c for c in comments if c.parent_id is None and c.closed_at is None
                 ]
                 if open_threads:
                     open_thread_ids = {c.id for c in open_threads}
@@ -189,7 +197,8 @@ class ImplementStage(Stage):
                 ).strip()
             except OSError:
                 log.warning(
-                    "%s: failed to read implement_summary.md", ticket.id,
+                    "%s: failed to read implement_summary.md",
+                    ticket.id,
                     exc_info=True,
                 )
 
@@ -225,7 +234,8 @@ class ImplementStage(Stage):
         """
         if not file_map:
             return _ScopeGuardrailResult(
-                action="skip_iteration", file_map=file_map,
+                action="skip_iteration",
+                file_map=file_map,
                 feedback=current_feedback,
             )
 
@@ -235,22 +245,31 @@ class ImplementStage(Stage):
             log.info(
                 "%s: scope check passed — %d file(s) changed, "
                 "all in file_map (%d allowed)",
-                ticket.id, len(changed), len(file_map),
+                ticket.id,
+                len(changed),
+                len(file_map),
             )
             return _ScopeGuardrailResult(
-                action="skip_iteration", file_map=file_map,
+                action="skip_iteration",
+                file_map=file_map,
                 feedback=current_feedback,
             )
 
         log.warning(
             "%s: scope violation — %d out-of-scope file(s): %s",
-            ticket.id, len(out_of_scope),
+            ticket.id,
+            len(out_of_scope),
             ", ".join(out_of_scope),
         )
 
         if not settings.scope_triage_enabled:
             ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, summary, ok=False,
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ok=False,
                 reference_files=ref_files,
             )
             return _ScopeGuardrailResult(
@@ -267,14 +286,23 @@ class ImplementStage(Stage):
         diff_summaries: dict[str, str] = {}
         for path in out_of_scope:
             raw = subprocess.run(
-                ["git", "-C", str(repo_dir), "diff",
-                 f"origin/{settings.forge_target_branch}", "--", path],
-                capture_output=True, text=True,
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "diff",
+                    f"origin/{settings.forge_target_branch}",
+                    "--",
+                    path,
+                ],
+                capture_output=True,
+                text=True,
             ).stdout
             lines = raw.split("\n")
             diff_summaries[path] = "\n".join(lines[:40])
 
         from robotsix_mill.agents import scope_triage as st
+
         try:
             verdict = st.run_scope_triage_agent(
                 settings=settings,
@@ -291,7 +319,8 @@ class ImplementStage(Stage):
             for f in verdict.expand_files:
                 file_map.add(f)
             log.info(
-                "%s: scope-triage EXPAND — %s", ticket.id,
+                "%s: scope-triage EXPAND — %s",
+                ticket.id,
                 verdict.justification,
             )
             # Pre-v1 this was an add_comment; agent conclusions now
@@ -315,12 +344,14 @@ class ImplementStage(Stage):
                     ticket.id,
                 )
                 return _ScopeGuardrailResult(
-                    action="skip_iteration", file_map=file_map,
+                    action="skip_iteration",
+                    file_map=file_map,
                     feedback=None,
                 )
             else:
                 return _ScopeGuardrailResult(
-                    action="continue", file_map=file_map,
+                    action="continue",
+                    file_map=file_map,
                     feedback=None,
                 )
 
@@ -335,38 +366,44 @@ class ImplementStage(Stage):
             # prior REJECT *history events* since scope-triage is no
             # longer a commenter.
             prior_rejects = [
-                ev for ev in ctx.service.history(ticket.id)
+                ev
+                for ev in ctx.service.history(ticket.id)
                 if ev.note and ev.note.startswith("scope-triage REJECT")
             ]
             already_rejected: set[str] = set()
             for ev in prior_rejects:
                 for m in _re.findall(r"`([^`]+)`", ev.note or ""):
                     already_rejected.add(m)
-            new_oos = [
-                f for f in out_of_scope
-                if f not in already_rejected
-            ]
+            new_oos = [f for f in out_of_scope if f not in already_rejected]
             if not new_oos:
                 log.warning(
                     "%s: suppressing duplicate scope-triage REJECT — "
                     "all %d out-of-scope file(s) already rejected in "
                     "prior run(s): %s",
-                    ticket.id, len(out_of_scope),
+                    ticket.id,
+                    len(out_of_scope),
                     ", ".join(out_of_scope),
                 )
                 for f in out_of_scope:
                     file_map.add(f)
                 return _ScopeGuardrailResult(
-                    action="skip_iteration", file_map=file_map,
+                    action="skip_iteration",
+                    file_map=file_map,
                     feedback=None,
                 )
 
             log.info(
-                "%s: scope-triage REJECT — %s", ticket.id,
+                "%s: scope-triage REJECT — %s",
+                ticket.id,
                 verdict.justification,
             )
             ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, summary, ok=False,
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ok=False,
                 reference_files=ref_files,
             )
             # Files listed in backticks so the same-pattern dedup
@@ -390,7 +427,12 @@ class ImplementStage(Stage):
         )
         log.warning("%s: %s", ticket.id, reason)
         ImplementStage._finalize(
-            ctx, ticket, repo_dir, branch, summary, ok=False,
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            summary,
+            ok=False,
             reference_files=ref_files,
         )
         file_list = ", ".join(f"`{f}`" for f in out_of_scope)
@@ -432,15 +474,20 @@ class ImplementStage(Stage):
                 log.info(
                     "%s: language '%s' configured but no snippet at %s — "
                     "skipping language instructions",
-                    ticket.id, lang, snippet_path,
+                    ticket.id,
+                    lang,
+                    snippet_path,
                 )
 
         # --- agent invocation ---
         try:
-            summary, ref_files, updated_memory, conv_state, new_msgs = \
+            summary, ref_files, updated_memory, conv_state, new_msgs = (
                 coding.run_implement_agent(
-                    settings=settings, repo_dir=repo_dir, spec=ic.spec,
-                    feedback=ic.feedback, memory=ic.memory_text,
+                    settings=settings,
+                    repo_dir=repo_dir,
+                    spec=ic.spec,
+                    feedback=ic.feedback,
+                    memory=ic.memory_text,
                     reference_files=ic.reference_files,
                     previous_attempt_summary=ic.previous_attempt_summary,
                     file_map=ic.file_map,
@@ -448,9 +495,14 @@ class ImplementStage(Stage):
                     message_history=resume_history,
                     language_instructions=language_instructions,
                 )
+            )
         except AgentBudgetError as e:
             ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                f"budget cap hit: {e}",
                 ok=False,
             )
             return _SinglePassResult(
@@ -462,7 +514,11 @@ class ImplementStage(Stage):
             )
         except AgentRunError as e:
             ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, f"agent error: {e}",
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                f"agent error: {e}",
                 ok=False,
             )
             # If the original cause is a transient infra failure
@@ -475,12 +531,14 @@ class ImplementStage(Stage):
             # ~hours of human attention to unstick).
             if e.cause is not None:
                 from ..runtime.transient_errors import classify_stage_error
+
                 if classify_stage_error(e.cause) == "transient":
                     raise e.cause
             return _SinglePassResult(
                 next_action="return",
                 outcome=Outcome(
-                    State.BLOCKED, f"agent error — resumable: {e}",
+                    State.BLOCKED,
+                    f"agent error — resumable: {e}",
                 ),
             )
 
@@ -488,11 +546,17 @@ class ImplementStage(Stage):
         if check_for_pause(new_msgs):
             save_conversation_state(ws, conv_state, "implement")
             ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, summary or "paused",
-                ok=False, reference_files=ref_files,
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary or "paused",
+                ok=False,
+                reference_files=ref_files,
             )
             ctx.service.transition(
-                ticket.id, State.AWAITING_USER_REPLY,
+                ticket.id,
+                State.AWAITING_USER_REPLY,
                 note="paused — agent asked a clarifying question",
             )
             log.info(
@@ -527,38 +591,48 @@ class ImplementStage(Stage):
             except OSError:
                 log.warning(
                     "%s: failed to write reference_files.json",
-                    ticket.id, exc_info=True,
+                    ticket.id,
+                    exc_info=True,
                 )
 
         # Persist summary for <previous_attempt> injection on retry.
         updated_prev_summary = ic.previous_attempt_summary
         try:
             (ws.artifacts_dir / "implement_summary.md").write_text(
-                summary, encoding="utf-8",
+                summary,
+                encoding="utf-8",
             )
             updated_prev_summary = summary
         except OSError:
             log.warning(
                 "%s: failed to write implement_summary.md",
-                ticket.id, exc_info=True,
+                ticket.id,
+                exc_info=True,
             )
 
         # --- scope guardrail ---
         guardrail = ImplementStage._run_scope_guardrail(
-            ctx, ticket, repo_dir, branch, summary, ref_files,
-            ic.file_map, settings, ic.spec, ic.feedback,
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            summary,
+            ref_files,
+            ic.file_map,
+            settings,
+            ic.spec,
+            ic.feedback,
         )
 
         if guardrail.action == "return":
             return _SinglePassResult(
-                next_action="return", outcome=guardrail.outcome,
+                next_action="return",
+                outcome=guardrail.outcome,
             )
 
         # Determine the updated file_map and feedback after the guardrail.
         new_file_map = (
-            guardrail.file_map
-            if guardrail.file_map is not None
-            else ic.file_map
+            guardrail.file_map if guardrail.file_map is not None else ic.file_map
         )
         new_feedback = (
             guardrail.feedback
@@ -579,19 +653,27 @@ class ImplementStage(Stage):
 
         if guardrail.action == "continue":
             return _SinglePassResult(
-                next_action="retry", feedback=None, ic=new_ic,
+                next_action="retry",
+                feedback=None,
+                ic=new_ic,
             )
 
         # guardrail.action == "skip_iteration" — fall through to test gate.
 
         # --- test gate ---
         passed, diag = run_test_agent(
-            settings=settings, repo_dir=repo_dir,
+            settings=settings,
+            repo_dir=repo_dir,
             repo_config=ctx.repo_config,
         )
         if not passed and diag.startswith("sandbox unavailable"):
             ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, summary, ok=False,
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ok=False,
                 reference_files=ref_files,
             )
             return _SinglePassResult(
@@ -600,7 +682,9 @@ class ImplementStage(Stage):
             )
 
         decision = ValidationResult.decide(
-            passed=passed, iterations=attempt, max_iters=max_iters,
+            passed=passed,
+            iterations=attempt,
+            max_iters=max_iters,
             feedback=diag,
         )
 
@@ -617,7 +701,10 @@ class ImplementStage(Stage):
                     "for the full transcript."
                 )
                 ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch,
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
                     f"{no_change_summary}\n\n"
                     "[Diagnostic] implement returned BLOCKED because "
                     "`git diff` was empty after the agent run. Common "
@@ -625,7 +712,8 @@ class ImplementStage(Stage):
                     "but didn't escalate via post_comment; (2) the agent "
                     "loaded a stale conversation_state from a sibling "
                     "stage and treated it as already-completed work.",
-                    ok=False, reference_files=ref_files,
+                    ok=False,
+                    reference_files=ref_files,
                 )
                 return _SinglePassResult(
                     next_action="return",
@@ -635,13 +723,16 @@ class ImplementStage(Stage):
             if ic.open_thread_ids and ic.feedback:
                 acknowledge_unanswered_threads(ctx, ticket, ic.open_thread_ids)
             ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, summary, ok=True,
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ok=True,
                 reference_files=ref_files,
             )
             next_state = (
-                State.CODE_REVIEW
-                if settings.review_enabled
-                else State.DOCUMENTING
+                State.CODE_REVIEW if settings.review_enabled else State.DOCUMENTING
             )
             # Same-state step event so implement gets its own visible
             # row in history. Without this, the ticket's history shows
@@ -653,7 +744,8 @@ class ImplementStage(Stage):
             # marker; the full summary lives on the step event (and
             # in artifacts/implement.md).
             ctx.service.add_step_event(
-                ticket.id, f"implement: {summary[:400]}",
+                ticket.id,
+                f"implement: {summary[:400]}",
             )
             next_note = (
                 "code review starting"
@@ -667,7 +759,12 @@ class ImplementStage(Stage):
 
         if decision.next_action == "escalate":
             ImplementStage._finalize(
-                ctx, ticket, repo_dir, branch, summary, ok=False,
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ok=False,
                 reference_files=ref_files,
             )
             return _SinglePassResult(
@@ -682,7 +779,9 @@ class ImplementStage(Stage):
         # retry → feed the diagnosis into the next edit pass.
         new_ic.feedback = diag
         return _SinglePassResult(
-            next_action="retry", feedback=diag, ic=new_ic,
+            next_action="retry",
+            feedback=diag,
+            ic=new_ic,
         )
 
     @staticmethod
@@ -711,20 +810,31 @@ class ImplementStage(Stage):
                     for ev in ctx.service.history(ticket.id)
                 ):
                     from .pause import _collect_ask_user_replies
+
                     reply_text = _collect_ask_user_replies(ctx, ticket)
                     resume_history = build_resume_message_history(
-                        saved_state, reply_text,
+                        saved_state,
+                        reply_text,
                     )
                     log.info(
                         "%s: resuming implement from pause — "
                         "loaded %d-byte conversation state",
-                        ticket.id, len(saved_state),
+                        ticket.id,
+                        len(saved_state),
                     )
                     ic.feedback = None
 
             result = ImplementStage._run_single_implement_pass(
-                ctx, ticket, repo_dir, branch, settings, ic,
-                attempt, max_iters, resume_history, resuming,
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                settings,
+                ic,
+                attempt,
+                max_iters,
+                resume_history,
+                resuming,
             )
 
             if result.next_action == "return":
@@ -740,11 +850,17 @@ class ImplementStage(Stage):
 
         # Defensive fallback — should be unreachable.
         ImplementStage._finalize(
-            ctx, ticket, repo_dir, branch, "", ok=False,
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            "",
+            ok=False,
             reference_files=ic.reference_files,
         )
         return Outcome(
-            State.BLOCKED, "implement loop exhausted — resumable",
+            State.BLOCKED,
+            "implement loop exhausted — resumable",
         )
 
     # ------------------------------------------------------------------
@@ -752,8 +868,16 @@ class ImplementStage(Stage):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _finalize(ctx, ticket, repo_dir, branch, summary, *,
-                  ok: bool, reference_files: list[str] | None = None) -> None:
+    def _finalize(
+        ctx,
+        ticket,
+        repo_dir,
+        branch,
+        summary,
+        *,
+        ok: bool,
+        reference_files: list[str] | None = None,
+    ) -> None:
         ws = ctx.service.workspace(ticket)
         (ws.artifacts_dir / "implement.md").write_text(
             f"# Implement ({'passed' if ok else 'BLOCKED — resumable'})\n"
@@ -773,25 +897,27 @@ class ImplementStage(Stage):
             )
         except OSError:
             log.warning(
-                "%s: failed to write reference_files.json", ticket.id,
+                "%s: failed to write reference_files.json",
+                ticket.id,
                 exc_info=True,
             )
         # Persist the summary as a standalone artifact for
         # `<previous_attempt>` injection on retry.
         try:
             (ws.artifacts_dir / "implement_summary.md").write_text(
-                summary, encoding="utf-8",
+                summary,
+                encoding="utf-8",
             )
         except OSError:
             log.warning(
-                "%s: failed to write implement_summary.md", ticket.id,
+                "%s: failed to write implement_summary.md",
+                ticket.id,
                 exc_info=True,
             )
         if git_ops.has_changes(repo_dir):
             git_ops.commit_all(
                 repo_dir,
-                f"mill: {ticket.title} ({ticket.id})"
-                + ("" if ok else " [WIP]"),
+                f"mill: {ticket.title} ({ticket.id})" + ("" if ok else " [WIP]"),
             )
 
     @staticmethod
@@ -822,9 +948,7 @@ class ImplementStage(Stage):
                     token,
                 )
             except subprocess.CalledProcessError as e:
-                return Outcome(
-                    State.BLOCKED, f"clone failed: {e.stderr[:300]}"
-                )
+                return Outcome(State.BLOCKED, f"clone failed: {e.stderr[:300]}")
             git_ops.create_branch(repo_dir, branch)
 
         # Refresh against current origin/<target> so the agent never
@@ -838,7 +962,8 @@ class ImplementStage(Stage):
         # and let try_rebase_onto use origin as-is.
         try:
             _rebase_token = github_token(
-                settings, repo_config=ctx.repo_config,
+                settings,
+                repo_config=ctx.repo_config,
             )
         except Exception:
             _rebase_token = None
@@ -869,8 +994,10 @@ class ImplementStage(Stage):
                 except RuntimeError:
                     token = None
                 git_ops.clone(
-                    remote_url, repo_dir,
-                    settings.forge_target_branch, token,
+                    remote_url,
+                    repo_dir,
+                    settings.forge_target_branch,
+                    token,
                 )
                 git_ops.create_branch(repo_dir, branch)
             except subprocess.CalledProcessError as e:

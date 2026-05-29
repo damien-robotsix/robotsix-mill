@@ -45,11 +45,13 @@ def make_reply_to_thread_tool(settings: Settings, agent_name: str):
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="reply_to_thread",
-        description="Reply to a comment thread on the current ticket.",
-        category="reporting",
-        parameters={"thread_id": "int", "body": "string"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="reply_to_thread",
+            description="Reply to a comment thread on the current ticket.",
+            category="reporting",
+            parameters={"thread_id": "int", "body": "string"},
+        )
+    )
 
     return reply_to_thread

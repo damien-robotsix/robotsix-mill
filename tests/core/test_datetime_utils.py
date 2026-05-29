@@ -12,6 +12,7 @@ from robotsix_mill.core.datetime_utils import TZDateTime, _as_utc
 # TZDateTime.process_bind_param
 # ---------------------------------------------------------------------------
 
+
 def test_bind_param_raises_on_naive():
     """Naive datetime → TypeError with "timezone-aware" message."""
     tz_dt = TZDateTime()
@@ -46,6 +47,7 @@ def test_bind_param_converts_non_utc_to_naive_utc():
 # TZDateTime.process_result_value
 # ---------------------------------------------------------------------------
 
+
 def test_result_value_reattaches_utc():
     """Naive DB value → aware UTC."""
     tz_dt = TZDateTime()
@@ -58,6 +60,7 @@ def test_result_value_reattaches_utc():
 # None passthrough (both methods)
 # ---------------------------------------------------------------------------
 
+
 def test_none_passthrough():
     """None passes through both process_bind_param and process_result_value."""
     tz_dt = TZDateTime()
@@ -68,6 +71,7 @@ def test_none_passthrough():
 # ---------------------------------------------------------------------------
 # _as_utc helper
 # ---------------------------------------------------------------------------
+
 
 def test_as_utc_identity_and_coercion():
     """_as_utc: aware passes through unchanged (identity); naive gets UTC."""

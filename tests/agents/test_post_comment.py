@@ -20,7 +20,6 @@ The tool contract this module guards:
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 
@@ -35,6 +34,7 @@ def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "k")
     _reset_secrets()
     import robotsix_mill.config as _cfg
+
     _cfg._secrets = Secrets(openrouter_api_key="k")
     s = Settings(data_dir=str(tmp_path))
     db.reset_engine()
@@ -88,7 +88,10 @@ class TestPostComment:
         assert svc.list_comments(ticket.id) == []
 
     def test_dedupes_same_body_in_one_run(
-        self, settings, ticket, monkeypatch,
+        self,
+        settings,
+        ticket,
+        monkeypatch,
     ):
         """A retried tool step that re-invokes ``post_comment`` with
         the SAME body returns a 'duplicate' status instead of posting
@@ -109,7 +112,10 @@ class TestPostComment:
         assert len(svc.list_comments(ticket.id)) == 1
 
     def test_different_bodies_post_separately(
-        self, settings, ticket, monkeypatch,
+        self,
+        settings,
+        ticket,
+        monkeypatch,
     ):
         """The dedupe is by exact body — different bodies post
         independently. Guards against an over-aggressive cache that
@@ -126,7 +132,9 @@ class TestPostComment:
         assert len(svc.list_comments(ticket.id)) == 2
 
     def test_no_active_session_returns_error_string(
-        self, settings, monkeypatch,
+        self,
+        settings,
+        monkeypatch,
     ):
         """When there's no current_session (e.g. the tool is invoked
         outside a stage's traced root span), the tool returns an
@@ -141,7 +149,10 @@ class TestPostComment:
         assert out.startswith("post_comment:") and "no active" in out
 
     def test_db_exception_returns_error_string(
-        self, settings, ticket, monkeypatch,
+        self,
+        settings,
+        ticket,
+        monkeypatch,
     ):
         """A DB / service exception MUST come back as a string the
         agent can read, never bubble up into the agent loop where it

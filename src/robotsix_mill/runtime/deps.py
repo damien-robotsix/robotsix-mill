@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Query, Request
 
-from ..config import RepoConfig, ReposRegistry, Settings, get_repo_config, get_secrets
+from ..config import RepoConfig, ReposRegistry, Settings, get_secrets
 from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE, State
@@ -32,7 +32,9 @@ def get_settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
-def get_run_registry(request: Request, repo_id: str | None = Query(None)) -> RunRegistry:
+def get_run_registry(
+    request: Request, repo_id: str | None = Query(None)
+) -> RunRegistry:
     """Return the per-repo ``RunRegistry`` (lifespan creates one per
     board). Routes that pass ``?repo_id=X`` get X's registry; routes
     without that query fall back to ``app.state.run_registry`` —
@@ -135,15 +137,17 @@ def with_cost(
     return ticket
 
 
-_REVIEW_STATES: frozenset[State] = frozenset({
-    State.IMPLEMENT_COMPLETE,
-    State.HUMAN_MR_APPROVAL,
-    State.HUMAN_ISSUE_APPROVAL,
-    State.FIXING_CI,
-    State.REBASING,
-    State.READY,
-    State.DONE,
-})
+_REVIEW_STATES: frozenset[State] = frozenset(
+    {
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.HUMAN_ISSUE_APPROVAL,
+        State.FIXING_CI,
+        State.REBASING,
+        State.READY,
+        State.DONE,
+    }
+)
 
 
 def _pr_url(
@@ -167,7 +171,9 @@ def _pr_url(
     if not branch:
         return None
     try:
-        pr = get_forge(settings, repo_config=repo_config).pr_status(source_branch=branch)
+        pr = get_forge(settings, repo_config=repo_config).pr_status(
+            source_branch=branch
+        )
     except RuntimeError:
         return None  # forge not configured
     except Exception:
@@ -211,7 +217,9 @@ def enrich_ticket_read(
     children = service.list_children(ticket.id)
     if children:
         cum = service.cumulative_cost(
-            ticket.id, settings, blocking=blocking_cost,
+            ticket.id,
+            settings,
+            blocking=blocking_cost,
             repo_config=repo_config,
         )
         # Only expose cumulative when it's meaningfully larger than direct.
@@ -233,12 +241,16 @@ def enrich_ticket_read(
         parent_title=parent_title,
         source=ticket.source,
         origin_session=ticket.origin_session,
-        origin_session_url=_origin_session_url(ticket, settings, repo_config=repo_config),
+        origin_session_url=_origin_session_url(
+            ticket, settings, repo_config=repo_config
+        ),
         cost_usd=ticket.cost_usd,
         cumulative_cost=cumulative,
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
-        pr_url=_pr_url(ticket, settings, repo_config=repo_config) if fetch_pr_url else None,
+        pr_url=_pr_url(ticket, settings, repo_config=repo_config)
+        if fetch_pr_url
+        else None,
         retry_attempt=ticket.retry_attempt,
         last_transient_error=ticket.last_transient_error,
         next_retry_at=ticket.next_retry_at,

@@ -16,9 +16,11 @@ from ..config import Settings
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "review.yaml"
-SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
+_SYSPROMPT_PATH = (
+    Path(__file__).parent.parent.parent.parent / "agent_definitions" / "review.yaml"
+)
+SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
 class ReviewAsk(BaseModel):
@@ -37,36 +39,36 @@ class ReviewAsk(BaseModel):
     title: str = Field(
         default="",
         description="Short, imperative title (≤80 chars) suitable as a "
-                    "ticket title if this ask becomes a dependency. "
-                    "Should name the *action*, e.g. 'add __pycache__ to "
-                    ".gitignore' — NOT the symptom ('remove "
-                    "__pycache__/foo.pyc'). When empty the review stage "
-                    "derives one from the description."
+        "ticket title if this ask becomes a dependency. "
+        "Should name the *action*, e.g. 'add __pycache__ to "
+        ".gitignore' — NOT the symptom ('remove "
+        "__pycache__/foo.pyc'). When empty the review stage "
+        "derives one from the description.",
     )
     description: str = Field(
         description="A self-contained work item, framed as the proper "
-                    "fix (NOT the observed symptom). Read your text "
-                    "imagining it will be the body of a brand-new "
-                    "ticket — describe the underlying problem AND the "
-                    "right way to address it. "
-                    "Bad: 'remove __pycache__/foo.pyc'. "
-                    "Good: '__pycache__ files are tracked because the "
-                    "repo has no .gitignore — add an entry for "
-                    "__pycache__/ to .gitignore to prevent it.' "
-                    "One ask = one logical issue; split unrelated "
-                    "issues across multiple ReviewAsk entries."
+        "fix (NOT the observed symptom). Read your text "
+        "imagining it will be the body of a brand-new "
+        "ticket — describe the underlying problem AND the "
+        "right way to address it. "
+        "Bad: 'remove __pycache__/foo.pyc'. "
+        "Good: '__pycache__ files are tracked because the "
+        "repo has no .gitignore — add an entry for "
+        "__pycache__/ to .gitignore to prevent it.' "
+        "One ask = one logical issue; split unrelated "
+        "issues across multiple ReviewAsk entries."
     )
     files_touched: list[str] = Field(
         default_factory=list,
         description="Repo-relative paths the *proper fix* you "
-                    "described above would touch — NOT the symptom "
-                    "files visible in the current diff. For the "
-                    ".gitignore example: ``['.gitignore']``, not "
-                    "``['__pycache__/foo.pyc']``. The review stage uses "
-                    "this list to decide if the ask is in-scope for "
-                    "the current ticket or needs a dependency ticket. "
-                    "Leave empty only when the ask is genuinely "
-                    "file-less (e.g. clarify a spec ambiguity)."
+        "described above would touch — NOT the symptom "
+        "files visible in the current diff. For the "
+        ".gitignore example: ``['.gitignore']``, not "
+        "``['__pycache__/foo.pyc']``. The review stage uses "
+        "this list to decide if the ask is in-scope for "
+        "the current ticket or needs a dependency ticket. "
+        "Leave empty only when the ask is genuinely "
+        "file-less (e.g. clarify a spec ambiguity).",
     )
 
 
@@ -76,19 +78,19 @@ class ReviewVerdict(BaseModel):
     verdict: Literal["APPROVE", "REQUEST_CHANGES", "NEEDS_DISCUSSION"]
     comments: str = Field(
         description="Detailed review feedback. For APPROVE, note any "
-                    "minor observations. For REQUEST_CHANGES, summarise "
-                    "the issues here AND populate ``request_changes`` "
-                    "with one entry per actionable ask. For "
-                    "NEEDS_DISCUSSION, explain what requires human "
-                    "judgment."
+        "minor observations. For REQUEST_CHANGES, summarise "
+        "the issues here AND populate ``request_changes`` "
+        "with one entry per actionable ask. For "
+        "NEEDS_DISCUSSION, explain what requires human "
+        "judgment."
     )
     request_changes: list[ReviewAsk] = Field(
         default_factory=list,
         description="Structured list of actionable change requests. "
-                    "REQUIRED on REQUEST_CHANGES verdicts (one entry per "
-                    "issue); leave empty for APPROVE / NEEDS_DISCUSSION. "
-                    "Each ask names the files it would touch so the "
-                    "stage can split in-scope vs out-of-scope work."
+        "REQUIRED on REQUEST_CHANGES verdicts (one entry per "
+        "issue); leave empty for APPROVE / NEEDS_DISCUSSION. "
+        "Each ask names the files it would touch so the "
+        "stage can split in-scope vs out-of-scope work.",
     )
     auto_merge_eligible: bool = Field(
         default=False,
@@ -168,18 +170,18 @@ def run_review_agent(
         overrides["model_name"] = settings.review_model
 
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         **overrides,
     )
     try:
         from .prompt_blocks import section
+
         user_prompt = ""
         if prior_context is not None:
             user_prompt += f"{prior_context}\n\n"
-        user_prompt += (
-            section("ticket-spec", spec) + "\n\n"
-            + section("git-diff", diff)
-        )
+        user_prompt += section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
         limits = UsageLimits(request_limit=settings.review_request_limit)
         run_kwargs: dict = {"usage_limits": limits}
         run_user_prompt: str | None = user_prompt
@@ -190,7 +192,8 @@ def run_review_agent(
             from .fs_tools import build_preseed_history
 
             preseed = build_preseed_history(
-                repo_dir, list(reference_files),
+                repo_dir,
+                list(reference_files),
                 user_prompt=user_prompt,
             )
             if preseed:
@@ -198,7 +201,8 @@ def run_review_agent(
                 run_user_prompt = None
         result = call_with_retry(
             lambda: agent.run_sync(run_user_prompt, **run_kwargs),
-            settings=settings, what="review",
+            settings=settings,
+            what="review",
         )
     finally:
         _safe_close(agent)

@@ -163,13 +163,20 @@ async def test_done_is_not_terminal_retrospect_runs(ctx, service, monkeypatch):
 
     monkeypatch.setitem(registry.STAGES, "retrospect", FakeRetrospect())
     t = service.create("x")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.DONE):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+    ):
         service.transition(t.id, st)
     await process_ticket(t.id, ctx)
     assert service.get(t.id).state is State.CLOSED
 
 
 # --- no-progress safety net (interrupted/churning model stage) ----------
+
 
 def test_no_progress_guard_blocks_traced_stage(ctx, service):
     """A ticket that keeps re-entering a model-driven (traced) stage
@@ -193,14 +200,21 @@ def test_no_progress_guard_exempts_poll_stage(ctx, service):
     across many poll cycles — it must NEVER be auto-blocked."""
     w = Worker(ctx)
     t = service.create("x")
-    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL):
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
         service.transition(t.id, st)
     for _ in range(ctx.settings.max_stuck_cycles + 3):
         w._check_progress(t.id, State.HUMAN_MR_APPROVAL, State.HUMAN_MR_APPROVAL)
     assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
 
 
-async def test_dep_gated_ticket_does_not_invoke_stage_or_trace(ctx, service, monkeypatch):
+async def test_dep_gated_ticket_does_not_invoke_stage_or_trace(
+    ctx, service, monkeypatch
+):
     """A ticket with unmet ``depends_on`` must short-circuit inside
     _process_ticket_inner BEFORE the stage runs and BEFORE the Langfuse
     'ticket' root span is opened. Otherwise every reconcile sweep
@@ -286,9 +300,12 @@ def test_no_progress_counter_resets_on_advance(ctx, service):
 
 # --- bounded-concurrency pool ------------------------------------------
 
+
 def test_enqueue_dedupes(ctx):
     w = Worker(ctx)
-    w.enqueue("a"); w.enqueue("a"); w.enqueue("b")
+    w.enqueue("a")
+    w.enqueue("a")
+    w.enqueue("b")
     assert w.queue_size() == 2
     assert w._pending == {"a", "b"}
 
@@ -306,11 +323,16 @@ def test_enqueue_orders_late_stage_before_draft(ctx, service):
     # state machine because we just want different queue ranks.
     from robotsix_mill.core.states import State as _S
     from robotsix_mill.core import db as _db
+
     with _db.session(ctx.settings, service.board_id) as s:
-        t_mid = s.get(__import__('robotsix_mill.core.models', fromlist=['Ticket']).Ticket, mid.id)
+        t_mid = s.get(
+            __import__("robotsix_mill.core.models", fromlist=["Ticket"]).Ticket, mid.id
+        )
         t_mid.state = _S.CODE_REVIEW
         s.add(t_mid)
-        t_late = s.get(__import__('robotsix_mill.core.models', fromlist=['Ticket']).Ticket, late.id)
+        t_late = s.get(
+            __import__("robotsix_mill.core.models", fromlist=["Ticket"]).Ticket, late.id
+        )
         t_late.state = _S.DONE
         s.add(t_late)
         s.commit()
@@ -334,20 +356,29 @@ async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
     single fallback consumer for the default (no-repo) queue."""
     from robotsix_mill.config import RepoConfig, ReposRegistry
 
-    fake_repos = ReposRegistry(repos={
-        "repo-a": RepoConfig(
-            repo_id="repo-a", board_id="ba",
-            langfuse_project_name="p", langfuse_public_key="pk", langfuse_secret_key="sk",
-            max_concurrency=2,
-        ),
-        "repo-b": RepoConfig(
-            repo_id="repo-b", board_id="bb",
-            langfuse_project_name="p", langfuse_public_key="pk", langfuse_secret_key="sk",
-            max_concurrency=1,
-        ),
-    })
+    fake_repos = ReposRegistry(
+        repos={
+            "repo-a": RepoConfig(
+                repo_id="repo-a",
+                board_id="ba",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=2,
+            ),
+            "repo-b": RepoConfig(
+                repo_id="repo-b",
+                board_id="bb",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=1,
+            ),
+        }
+    )
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.get_repos_config", lambda: fake_repos,
+        "robotsix_mill.runtime.worker.get_repos_config",
+        lambda: fake_repos,
     )
 
     w = Worker(ctx)
@@ -389,15 +420,21 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
     # the old global ctx.settings.max_concurrency is unused.)
     from robotsix_mill.config import RepoConfig, ReposRegistry
 
-    fake_repos = ReposRegistry(repos={
-        "test-repo": RepoConfig(
-            repo_id="test-repo", board_id=ctx.repo_config.board_id if ctx.repo_config else "",
-            langfuse_project_name="p", langfuse_public_key="pk", langfuse_secret_key="sk",
-            max_concurrency=4,
-        ),
-    })
+    fake_repos = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=4,
+            ),
+        }
+    )
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.get_repos_config", lambda: fake_repos,
+        "robotsix_mill.runtime.worker.get_repos_config",
+        lambda: fake_repos,
     )
 
     w = Worker(ctx)
@@ -411,16 +448,12 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
     finally:
         await w.stop()
 
-    assert live["done"] == 4              # each processed exactly once
-    assert live["max"] >= 2               # genuinely overlapped
-    assert all(
-        service.get(i).state is State.HUMAN_ISSUE_APPROVAL for i in ids
-    )
+    assert live["done"] == 4  # each processed exactly once
+    assert live["max"] >= 2  # genuinely overlapped
+    assert all(service.get(i).state is State.HUMAN_ISSUE_APPROVAL for i in ids)
 
 
-async def test_reconcile_sweep_enqueues_out_of_band_drafts(
-    ctx, service, monkeypatch
-):
+async def test_reconcile_sweep_enqueues_out_of_band_drafts(ctx, service, monkeypatch):
     """Regression: drafts created directly via service.create() (audit
     runner / retrospect / report_issue) — NOT via the API enqueue path —
     must still get picked up by the periodic reconcile sweep, not sit in
@@ -437,9 +470,7 @@ async def test_reconcile_sweep_enqueues_out_of_band_drafts(
         if calls[0] >= 2:
             raise asyncio.CancelledError
 
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.asyncio.sleep", fake_sleep
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.worker.asyncio.sleep", fake_sleep)
     with pytest.raises(asyncio.CancelledError):
         await w._poll_loop()
 
@@ -450,7 +481,10 @@ async def test_reconcile_sweep_enqueues_out_of_band_drafts(
 
 
 async def test_periodic_pass_fires_immediately_when_overdue(
-    ctx, service, monkeypatch, tmp_path,
+    ctx,
+    service,
+    monkeypatch,
+    tmp_path,
 ):
     """When the last completed run is older than the interval, the
     periodic pass must fire on startup (after ~1s settling delay),
@@ -464,15 +498,17 @@ async def test_periodic_pass_fires_immediately_when_overdue(
     db_path = tmp_path / "runs.json"
     old_dt = datetime.now(timezone.utc) - timedelta(hours=25)
     old_ts_str = old_dt.isoformat()
-    prior = [{
-        "id": "overdue-audit-1",
-        "kind": "audit",
-        "started_at": old_ts_str,
-        "finished_at": old_ts_str,
-        "status": "ok",
-        "summary": "old pass",
-        "error": None,
-    }]
+    prior = [
+        {
+            "id": "overdue-audit-1",
+            "kind": "audit",
+            "started_at": old_ts_str,
+            "finished_at": old_ts_str,
+            "status": "ok",
+            "summary": "old pass",
+            "error": None,
+        }
+    ]
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db_path.write_text(json.dumps(prior))
 
@@ -487,10 +523,12 @@ async def test_periodic_pass_fires_immediately_when_overdue(
     def fake_pass(session_id=None, repo_config=None):
         fired["count"] += 1
         from robotsix_mill.audit_runner import AuditPassResult
+
         return AuditPassResult(drafts_created=[], session_id=session_id or "")
 
     monkeypatch.setattr(
-        "robotsix_mill.audit_runner.run_audit_pass", fake_pass,
+        "robotsix_mill.audit_runner.run_audit_pass",
+        fake_pass,
     )
 
     w = Worker(ctx, run_registry=registry)
@@ -502,15 +540,16 @@ async def test_periodic_pass_fires_immediately_when_overdue(
             await asyncio.sleep(0.1)
             if fired["count"] > 0:
                 break
-        assert fired["count"] >= 1, (
-            "overdue pass did not fire within 3s of startup"
-        )
+        assert fired["count"] >= 1, "overdue pass did not fire within 3s of startup"
     finally:
         await w.stop()
 
 
 async def test_periodic_pass_waits_when_not_overdue(
-    ctx, service, monkeypatch, tmp_path,
+    ctx,
+    service,
+    monkeypatch,
+    tmp_path,
 ):
     """When the last completed run is recent (within the interval), the
     periodic pass must NOT fire on startup — it sleeps the remaining
@@ -522,15 +561,17 @@ async def test_periodic_pass_waits_when_not_overdue(
 
     db_path = tmp_path / "runs.json"
     recent_ts = datetime.now(timezone.utc).isoformat()
-    prior = [{
-        "id": "recent-audit-1",
-        "kind": "audit",
-        "started_at": recent_ts,
-        "finished_at": recent_ts,
-        "status": "ok",
-        "summary": "recent pass",
-        "error": None,
-    }]
+    prior = [
+        {
+            "id": "recent-audit-1",
+            "kind": "audit",
+            "started_at": recent_ts,
+            "finished_at": recent_ts,
+            "status": "ok",
+            "summary": "recent pass",
+            "error": None,
+        }
+    ]
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db_path.write_text(json.dumps(prior))
 
@@ -545,10 +586,12 @@ async def test_periodic_pass_waits_when_not_overdue(
     def fake_pass(session_id=None, repo_config=None):
         fired["count"] += 1
         from robotsix_mill.audit_runner import AuditPassResult
+
         return AuditPassResult(drafts_created=[], session_id=session_id or "")
 
     monkeypatch.setattr(
-        "robotsix_mill.audit_runner.run_audit_pass", fake_pass,
+        "robotsix_mill.audit_runner.run_audit_pass",
+        fake_pass,
     )
 
     w = Worker(ctx, run_registry=registry)
@@ -557,9 +600,7 @@ async def test_periodic_pass_waits_when_not_overdue(
         # The pass should sleep the remaining ~23h — after a short
         # wait, it must NOT have fired.
         await asyncio.sleep(0.5)
-        assert fired["count"] == 0, (
-            "recent pass fired prematurely — should have waited"
-        )
+        assert fired["count"] == 0, "recent pass fired prematurely — should have waited"
     finally:
         await w.stop()
 
@@ -619,6 +660,7 @@ async def test_transient_retry_succeeds(ctx, service, monkeypatch):
 async def test_non_transient_blocks_immediately(ctx, service, monkeypatch):
     """A non-transient ValueError must go straight to BLOCKED with no
     retry — retry_attempt stays 0 and note is prefixed 'Fatal:'."""
+
     class Boom(Stage):
         name = "refine"
         input_state = State.DRAFT
@@ -705,8 +747,10 @@ async def test_periodic_pass_opens_root_span_before_runner(ctx, monkeypatch):
         captured["session_id"] = session_id
         captured["root_was_opened"] = seen.get("root_opened", False)
         from robotsix_mill.audit_runner import AuditPassResult
+
         return AuditPassResult(
-            updated_memory="", drafts_created=[],
+            updated_memory="",
+            drafts_created=[],
             session_id=session_id or "",
         )
 
@@ -788,6 +832,7 @@ async def test_reconcile_sweep_skips_awaiting_user_reply(ctx, service, monkeypat
     # Transition directly via setter to the new state.
     from robotsix_mill.core import db as _db
     from robotsix_mill.core.models import Ticket
+
     with _db.session(ctx.settings, service.board_id) as s:
         row = s.get(Ticket, t.id)
         row.state = State.AWAITING_USER_REPLY
@@ -806,7 +851,8 @@ async def test_reconcile_sweep_skips_awaiting_user_reply(ctx, service, monkeypat
             raise asyncio.CancelledError
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.asyncio.sleep", fake_sleep,
+        "robotsix_mill.runtime.worker.asyncio.sleep",
+        fake_sleep,
     )
     with pytest.raises(asyncio.CancelledError):
         await w._poll_loop()
@@ -844,9 +890,7 @@ async def test_process_ticket_skips_awaiting_user_reply(ctx, service, monkeypatc
         s.commit()
 
     await process_ticket(t.id, ctx)
-    assert invocations == [], (
-        "no stage must be invoked for AWAITING_USER_REPLY ticket"
-    )
+    assert invocations == [], "no stage must be invoked for AWAITING_USER_REPLY ticket"
     # Ticket should still be in AWAITING_USER_REPLY (unchanged).
     assert service.get(t.id).state is State.AWAITING_USER_REPLY
 
@@ -892,8 +936,10 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
     def fake_runner(session_id=None, repo_config=None):
         captured_repo_config["value"] = repo_config
         from robotsix_mill.audit_runner import AuditPassResult
+
         return AuditPassResult(
-            updated_memory="", drafts_created=[],
+            updated_memory="",
+            drafts_created=[],
             session_id=session_id or "",
         )
 
@@ -912,7 +958,8 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
     w = Worker(ctx)
     with pytest.raises(asyncio.CancelledError):
         await w._run_periodic_pass_per_repo(
-            "audit", fake_runner,
+            "audit",
+            fake_runner,
             settings_interval_attr="audit_interval_seconds",
             settings_enabled_attr="audit_periodic",
         )

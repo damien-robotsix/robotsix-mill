@@ -26,14 +26,18 @@ from robotsix_mill.runtime.api import create_app
 
 # -- fixtures -----------------------------------------------------------
 
+
 @pytest.fixture
 def client(settings, repos_registry):
     """Reusable TestClient wired to the same lifespan as test_api.py."""
-    with TestClient(create_app(repos_registry, settings, single_repo_id="test-repo")) as c:
+    with TestClient(
+        create_app(repos_registry, settings, single_repo_id="test-repo")
+    ) as c:
         yield c
 
 
 # -- GET /tickets/{id}/history ------------------------------------------
+
 
 def test_get_history_happy_path(client, service):
     """GET /tickets/{id}/history returns list of events for a ticket
@@ -45,7 +49,9 @@ def test_get_history_happy_path(client, service):
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list), f"expected list, got {type(data)}"
-    assert len(data) >= 2, f"expected >=2 events (created + transition), got {len(data)}"
+    assert len(data) >= 2, (
+        f"expected >=2 events (created + transition), got {len(data)}"
+    )
     for evt in data:
         for key in ("id", "ticket_id", "state", "note", "at"):
             assert key in evt, f"event missing key '{key}': {evt}"
@@ -58,6 +64,7 @@ def test_get_history_404(client):
 
 
 # -- GET /tickets/{id}/comments -----------------------------------------
+
 
 def test_get_comments_happy_path(client, service):
     """GET /tickets/{id}/comments returns all comments for a ticket."""
@@ -94,6 +101,7 @@ def test_get_comments_404(client):
 
 # -- POST /comments/{id}/close and /reopen ------------------------------
 
+
 def test_close_thread_happy_path(client, service):
     """POST /comments/{id}/close on an open top-level comment returns 200
     with closed_at set."""
@@ -112,9 +120,7 @@ def test_close_thread_on_reply_returns_409(client, service):
     """POST /comments/{id}/close on a reply returns 409."""
     t = service.create("Close reply test")
     parent = service.add_comment(t.id, "Parent thread", author="alice")
-    reply = service.add_comment(
-        t.id, "A reply", author="bob", parent_id=parent.id
-    )
+    reply = service.add_comment(t.id, "A reply", author="bob", parent_id=parent.id)
 
     r = client.post(f"/comments/{reply.id}/close")
     assert r.status_code == 409
@@ -261,6 +267,7 @@ def test_add_comment_invalid_parent_returns_422(client, service):
 
 # -- GET /active --------------------------------------------------------
 
+
 def test_active_empty(client):
     """GET /active returns empty list when worker has no active items."""
     r = client.get("/active")
@@ -300,6 +307,7 @@ def test_active_with_items(client):
 
 
 # -- GET /costs/by-agent -------------------------------------------------
+
 
 def test_cost_by_agent_happy_path(client, monkeypatch):
     """GET /costs/by-agent returns aggregated cost data from Langfuse."""
@@ -404,12 +412,14 @@ def test_cost_by_agent_max_tickets_clamp(client, monkeypatch):
 
 # -- GET /costs/most-expensive-ticket -----------------------------------
 
+
 def test_most_expensive_ticket_happy_path(client, service, monkeypatch):
     """GET /costs/most-expensive-ticket returns ticket info from DB."""
     t = service.create("Most expensive ticket test")
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_ticket",
-        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {            "session_id": t.id,
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {
+            "session_id": t.id,
             "total_cost": 1.2345,
             "trace_count": 3,
         },
@@ -428,7 +438,8 @@ def test_most_expensive_ticket_null_when_disabled(client, monkeypatch):
     """GET /costs/most-expensive-ticket returns null when tracing disabled."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_ticket",
-        lambda settings, lookback_hours, repo_config=None, max_tickets=None: None,    )
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: None,
+    )
 
     r = client.get("/costs/most-expensive-ticket")
     assert r.status_code == 200
@@ -439,7 +450,8 @@ def test_most_expensive_ticket_null_when_no_matching_ticket(client, monkeypatch)
     """GET /costs/most-expensive-ticket returns null when session has no DB ticket."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_ticket",
-        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {            "session_id": "T-nonexistent",
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {
+            "session_id": "T-nonexistent",
             "total_cost": 0.5,
             "trace_count": 1,
         },
@@ -535,11 +547,13 @@ def test_most_expensive_ticket_max_tickets_clamp(client, monkeypatch):
 
 # -- GET /costs/most-expensive-trace ------------------------------------
 
+
 def test_most_expensive_trace_happy_path(client, monkeypatch):
     """GET /costs/most-expensive-trace returns the trace dict directly."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_trace",
-        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {            "id": "trace-abc",
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: {
+            "id": "trace-abc",
             "name": "implement",
             "total_cost": 0.9876,
             "timestamp": "2025-01-01T00:00:00Z",
@@ -562,7 +576,8 @@ def test_most_expensive_trace_null_when_disabled(client, monkeypatch):
     """GET /costs/most-expensive-trace returns null when tracing disabled."""
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_trace",
-        lambda settings, lookback_hours, repo_config=None, max_tickets=None: None,    )
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: None,
+    )
 
     r = client.get("/costs/most-expensive-trace")
     assert r.status_code == 200
@@ -613,7 +628,13 @@ def test_most_expensive_trace_max_tickets(client, monkeypatch):
 
     def fake(settings, lookback_hours=24, max_tickets=None, repo_config=None):
         captured.append(max_tickets)
-        return {"id": "abc", "name": "costly", "total_cost": 2.5, "timestamp": "x", "session_id": "s1"}
+        return {
+            "id": "abc",
+            "name": "costly",
+            "total_cost": 2.5,
+            "timestamp": "x",
+            "session_id": "s1",
+        }
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.most_expensive_trace",
@@ -652,6 +673,7 @@ def test_most_expensive_trace_max_tickets_clamp(client, monkeypatch):
 
 
 # -- GET /traces/recent --------------------------------------------------
+
 
 def test_traces_recent_happy_path(client, monkeypatch):
     """GET /traces/recent returns serialised trace dicts from Langfuse."""
@@ -725,6 +747,7 @@ def test_traces_recent_clamp_high(client, monkeypatch):
 
 # -- POST /survey -------------------------------------------------------
 
+
 def test_survey_fire_and_forget(client, monkeypatch):
     """POST /survey returns 202 immediately and runs the survey in a
     background thread — must not block on the LLM call."""
@@ -752,6 +775,7 @@ def test_survey_fire_and_forget(client, monkeypatch):
 
 # -- POST /tickets/{id}/transition (happy path) -------------------------
 
+
 def test_transition_happy_path_draft_to_ready(client, service):
     """POST /tickets/{id}/transition with {'state': 'ready'} transitions
     a draft ticket to ready and returns the updated ticket."""
@@ -771,6 +795,7 @@ def test_transition_happy_path_draft_to_ready(client, service):
 
 # -- GET /costs/trend ----------------------------------------------------
 
+
 def test_cost_trend_happy_path(client, monkeypatch):
     """GET /costs/trend returns bucketed trend data."""
     fake_buckets = [
@@ -779,7 +804,9 @@ def test_cost_trend_happy_path(client, monkeypatch):
     ]
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.aggregate_cost_trend",
-        lambda settings, lookback_hours, repo_config=None, max_tickets=None: fake_buckets,
+        lambda settings, lookback_hours, repo_config=None, max_tickets=None: (
+            fake_buckets
+        ),
     )
 
     r = client.get("/costs/trend")

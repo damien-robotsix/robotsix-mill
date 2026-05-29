@@ -58,6 +58,84 @@ extend-select = ["DTZ001", "DTZ002", "DTZ003", "C90"]
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
+[tool.ruff.lint.per-file-ignores]
+# test_datetime_utils.py exercises TZDateTime's handling of naive
+# datetime inputs on purpose — DTZ001 (no tzinfo) is the contract
+# under test, not a defect.
+"tests/core/test_datetime_utils.py" = ["DTZ001"]
+# Pre-existing test fixture factories that exceed C901's default
+# complexity threshold. Rewriting them is out of scope for the
+# lint-debt cleanup pass; revisit when the surrounding test files
+# get refactored.
+"tests/runtime/test_worker.py" = ["C901"]
+"tests/runtime/test_api.py" = ["C901"]
+"tests/runtime/test_cli.py" = ["C901"]
+# --- src/ legacy hot spots --------------------------------------------------
+# Cross-module re-exports of periodic_runner helpers. Each *_runner
+# stub re-exports ``_clone_token`` etc. so the worker can import them
+# from the stub; the names look "unused" to ruff but are public API.
+"src/robotsix_mill/agent_check_runner.py" = ["F401"]
+"src/robotsix_mill/audit_runner.py" = ["F401"]
+"src/robotsix_mill/bc_check_runner.py" = ["F401"]
+"src/robotsix_mill/module_curator_runner.py" = ["F401"]
+"src/robotsix_mill/survey_runner.py" = ["F401"]
+# F821 in these files: string-typed annotations referencing types
+# that are intentionally imported lazily inside the function body
+# (httpx, AgentDefinition, AgentHandle, RepoConfig, Path) — the
+# strings stay correct at runtime; ruff would only be appeased by
+# a TYPE_CHECKING block, which is out of scope for the cleanup pass.
+"src/robotsix_mill/agents/base.py" = ["F821"]
+"src/robotsix_mill/agents/expert_manager.py" = ["F821"]
+# C901 complexity: pre-existing legacy functions that exceed the
+# default threshold. Each refactor would touch its own ticket — list
+# the files here so the gate keeps holding new debt at bay without
+# blocking on a sweep.
+"src/robotsix_mill/agents/answering.py" = ["C901"]
+"src/robotsix_mill/agents/consult_expert.py" = ["C901"]
+"src/robotsix_mill/agents/coordinating.py" = ["C901"]
+"src/robotsix_mill/agents/fs_tools.py" = ["C901"]
+"src/robotsix_mill/agents/openrouter_cost.py" = ["C901"]
+"src/robotsix_mill/agents/read_ticket.py" = ["C901"]
+"src/robotsix_mill/agents/report_issue.py" = ["C901"]
+"src/robotsix_mill/agents/retry.py" = ["C901"]
+"src/robotsix_mill/agents/trace_inspector.py" = ["C901"]
+"src/robotsix_mill/cli.py" = ["C901"]
+"src/robotsix_mill/cost_reconciliation_runner.py" = ["C901"]
+"src/robotsix_mill/langfuse_client.py" = ["C901", "DTZ003", "E731"]
+"src/robotsix_mill/runtime/routes.py" = ["F821", "C901"]
+"src/robotsix_mill/runtime/worker.py" = ["C901"]
+"src/robotsix_mill/stages/implement.py" = ["C901"]
+"src/robotsix_mill/stages/refine.py" = ["C901"]
+"src/robotsix_mill/stages/retrospect.py" = ["F821", "C901"]
+"src/robotsix_mill/stages/review.py" = ["C901"]
+"src/robotsix_mill/stages/document.py" = ["C901"]
+"src/robotsix_mill/stages/deliver.py" = ["C901"]
+"src/robotsix_mill/stages/code_reviewing.py" = ["C901"]
+"src/robotsix_mill/forge/github.py" = ["C901"]
+"src/robotsix_mill/forge/gitlab.py" = ["C901"]
+"src/robotsix_mill/core/service.py" = ["F821", "C901"]
+"src/robotsix_mill/pass_runner.py" = ["C901"]
+"src/robotsix_mill/agents/coding.py" = ["C901"]
+"src/robotsix_mill/agents/bespoke.py" = ["C901"]
+"src/robotsix_mill/timeout_escalation_runner.py" = ["C901"]
+"src/robotsix_mill/agents/scope_triage.py" = ["C901"]
+"src/robotsix_mill/agents/dedup.py" = ["C901"]
+"src/robotsix_mill/agents/web_research.py" = ["C901"]
+"src/robotsix_mill/trace_review_runner.py" = ["C901"]
+"src/robotsix_mill/trace_health_runner.py" = ["C901"]
+"src/robotsix_mill/runtime/tracing.py" = ["C901"]
+"src/robotsix_mill/stages/merge.py" = ["C901"]
+"src/robotsix_mill/stages/pause.py" = ["C901"]
+# Migration / one-shot helper scripts — complexity is acceptable
+# because they're throwaway scripts, not library code.
+"dev/migrate-env-to-yaml.py" = ["C901", "E402"]
+"scripts/verify_repos_config.py" = ["C901"]
+# Langfuse trace fixtures pre-date the timezone-aware migration;
+# converting them to ``datetime.now(timezone.utc)`` triggers a much
+# wider refactor of the response-shape fixtures. Allow the legacy
+# call here while the rest of the codebase already moved off it.
+"tests/runtime/test_langfuse_client.py" = ["DTZ003"]
+
 [tool.mypy]
 strict = true
 python_version = "3.14"

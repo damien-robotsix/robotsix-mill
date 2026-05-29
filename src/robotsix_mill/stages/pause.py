@@ -47,7 +47,7 @@ def check_for_pause(new_messages: bytes | None) -> bool:
         return False
     try:
         messages = json.loads(new_messages)
-    except (json.JSONDecodeError, TypeError):
+    except json.JSONDecodeError, TypeError:
         log.warning("check_for_pause: invalid JSON, treating as no-pause")
         return False
     for msg in messages:
@@ -64,7 +64,9 @@ def _state_path(ws: Workspace, stage_name: str) -> Path:
 
 
 def save_conversation_state(
-    ws: Workspace, conversation_state: bytes, stage_name: str,
+    ws: Workspace,
+    conversation_state: bytes,
+    stage_name: str,
 ) -> None:
     """Persist the full agent conversation to
     ``artifacts/{stage_name}_conversation_state.json``.
@@ -78,7 +80,8 @@ def save_conversation_state(
 
 
 def load_conversation_state(
-    ws: Workspace, stage_name: str,
+    ws: Workspace,
+    stage_name: str,
 ) -> bytes | None:
     """Read and return ``{stage_name}_conversation_state.json`` if it
     exists; return ``None`` otherwise."""
@@ -102,7 +105,8 @@ def clear_conversation_state(ws: Workspace, stage_name: str) -> None:
 
 
 def build_resume_message_history(
-    conversation_state: bytes, reply_text: str,
+    conversation_state: bytes,
+    reply_text: str,
 ) -> list:
     """Deserialize the saved message history, append a synthetic user
     message containing the operator's reply, and return the reconstructed
@@ -114,14 +118,18 @@ def build_resume_message_history(
         reply_text: The operator's answer text.
     """
     from pydantic_ai.messages import (
-        ModelMessagesTypeAdapter, ModelRequest, UserPromptPart,
+        ModelMessagesTypeAdapter,
+        ModelRequest,
+        UserPromptPart,
     )
 
     messages = ModelMessagesTypeAdapter.validate_json(conversation_state)
     messages.append(
-        ModelRequest(parts=[
-            UserPromptPart(content=f"[Operator reply]: {reply_text}"),
-        ]),
+        ModelRequest(
+            parts=[
+                UserPromptPart(content=f"[Operator reply]: {reply_text}"),
+            ]
+        ),
     )
     return messages
 
@@ -191,18 +199,22 @@ def acknowledge_unanswered_threads(ctx, ticket, thread_ids: set[int]) -> None:
             except Exception:
                 log.warning(
                     "%s: close_thread(%d) failed during acknowledgment",
-                    ticket.id, tid,
+                    ticket.id,
+                    tid,
                 )
         else:
             # No reply → post "Addressed." and close.
             try:
                 ctx.service.add_comment(
-                    ticket.id, "Addressed.", parent_id=tid,
+                    ticket.id,
+                    "Addressed.",
+                    parent_id=tid,
                 )
             except Exception:
                 log.warning(
                     "%s: add_comment for thread %d failed during acknowledgment",
-                    ticket.id, tid,
+                    ticket.id,
+                    tid,
                 )
             try:
                 ctx.service.close_thread(tid)
@@ -210,14 +222,18 @@ def acknowledge_unanswered_threads(ctx, ticket, thread_ids: set[int]) -> None:
             except Exception:
                 log.warning(
                     "%s: close_thread(%d) failed during acknowledgment",
-                    ticket.id, tid,
+                    ticket.id,
+                    tid,
                 )
 
     if already_closed or closed_with_reply or default_ack:
         log.info(
             "%s: thread acknowledgment — %d already closed, "
             "%d closed (agent replied), %d auto-acknowledged",
-            ticket.id, already_closed, closed_with_reply, default_ack,
+            ticket.id,
+            already_closed,
+            closed_with_reply,
+            default_ack,
         )
     else:
         log.debug(
@@ -242,8 +258,7 @@ def _collect_ask_user_replies(ctx, ticket) -> str:
         comments = ctx.service.list_comments(ticket.id)
     except Exception:
         log.warning(
-            "%s: list_comments failed during resume, "
-            "proceeding without operator reply",
+            "%s: list_comments failed during resume, proceeding without operator reply",
             ticket.id,
         )
         return "(no operator reply found)"

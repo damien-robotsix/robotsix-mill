@@ -1,7 +1,6 @@
 """Tests for ExpertManager — expert lifecycle, caching, tool resolution."""
 
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -52,9 +51,7 @@ def _patch_build_agent(monkeypatch):
         state["handle"] = handle
         return handle
 
-    monkeypatch.setattr(
-        "robotsix_mill.agents.base.build_agent", fake_build_agent
-    )
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
     return state
 
 
@@ -77,8 +74,12 @@ def _patch_build_fs_tools(monkeypatch, tool_names=None):
     """
     if tool_names is None:
         tool_names = [
-            "read_file", "write_file", "edit_file",
-            "delete_file", "list_dir", "run_command",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "delete_file",
+            "list_dir",
+            "run_command",
         ]
     fake_tools = [_fake_fs_tool(n) for n in tool_names]
 
@@ -280,7 +281,7 @@ def test_get_expert_returns_cached(monkeypatch):
     """get_expert returns the cached handle after create_expert."""
     from robotsix_mill.agents.expert_manager import ExpertManager
 
-    state = _patch_build_agent(monkeypatch)
+    _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
     settings = Settings()
@@ -314,7 +315,7 @@ def test_remove_expert_closes_and_uncaches(monkeypatch):
     """remove_expert calls close() and removes from cache."""
     from robotsix_mill.agents.expert_manager import ExpertManager
 
-    state = _patch_build_agent(monkeypatch)
+    _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
     settings = Settings()
@@ -353,7 +354,7 @@ def test_close_all_closes_everything(monkeypatch):
     """close_all closes every cached agent and empties the cache."""
     from robotsix_mill.agents.expert_manager import ExpertManager
 
-    state = _patch_build_agent(monkeypatch)
+    _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
     settings = Settings()
@@ -538,7 +539,7 @@ def test_remove_expert_calls_safe_close(monkeypatch):
     """remove_expert closes the agent via _safe_close."""
     from robotsix_mill.agents.expert_manager import ExpertManager
 
-    state = _patch_build_agent(monkeypatch)
+    _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
     settings = Settings()
@@ -556,7 +557,7 @@ def test_close_all_calls_safe_close_on_each(monkeypatch):
     """close_all closes every cached agent."""
     from robotsix_mill.agents.expert_manager import ExpertManager
 
-    state = _patch_build_agent(monkeypatch)
+    _patch_build_agent(monkeypatch)
     _patch_build_fs_tools(monkeypatch)
 
     settings = Settings()

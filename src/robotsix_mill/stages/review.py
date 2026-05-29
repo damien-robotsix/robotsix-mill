@@ -57,7 +57,9 @@ def _load_file_map(ws) -> set[str] | None:
         return None
     if not isinstance(raw, list) or not raw:
         return None
-    paths = {entry["file"] for entry in raw if isinstance(entry, dict) and "file" in entry}
+    paths = {
+        entry["file"] for entry in raw if isinstance(entry, dict) and "file" in entry
+    }
     return paths or None
 
 
@@ -85,7 +87,8 @@ def _file_in_scope(ask_file: str, file_map: set[str]) -> bool:
 
 
 def _split_asks(
-    asks: list[ReviewAsk], file_map: set[str] | None,
+    asks: list[ReviewAsk],
+    file_map: set[str] | None,
 ) -> tuple[list[ReviewAsk], list[ReviewAsk]]:
     """Partition ``asks`` into ``(in_scope, out_of_scope)``.
 
@@ -113,7 +116,9 @@ def _split_asks(
 
 
 def _spawn_dependency_tickets(
-    parent: Ticket, asks: list[ReviewAsk], ctx,
+    parent: Ticket,
+    asks: list[ReviewAsk],
+    ctx,
 ) -> list[str]:
     """Materialise each out-of-scope ask as a fresh ticket on the same
     board, return their IDs.
@@ -127,9 +132,7 @@ def _spawn_dependency_tickets(
     ids: list[str] = []
     for ask in asks:
         title = (
-            ask.title.strip()
-            or ask.description.splitlines()[0]
-            or "review follow-up"
+            ask.title.strip() or ask.description.splitlines()[0] or "review follow-up"
         )[:120]
         body_lines = [ask.description.strip()]
         if ask.files_touched:
@@ -157,6 +160,7 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
 
     Returns ``None`` when neither source has content (first review round)."""
     from ..agents.prompt_blocks import section
+
     parts: list[str] = []
 
     prior_comments = ctx.service.list_comments(ticket.id)
@@ -173,10 +177,12 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
 
     implement_md = ws.artifacts_dir / "implement.md"
     if implement_md.exists():
-        parts.append(section(
-            "implement-rebuttal",
-            implement_md.read_text(encoding="utf-8"),
-        ))
+        parts.append(
+            section(
+                "implement-rebuttal",
+                implement_md.read_text(encoding="utf-8"),
+            )
+        )
 
     if not parts:
         return None
@@ -185,6 +191,7 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
 
 class ReviewStage(Stage):
     """Check out the target branch and perform automated code review on the ticket's implemented changes."""
+
     name = "review"
     input_state = State.CODE_REVIEW
     traced = True
@@ -219,8 +226,10 @@ class ReviewStage(Stage):
         # Compute diff of all commits on the current branch vs origin/<target>.
         try:
             diff = git_ops.diff_base(
-                repo_dir, target_branch,
-                remote_url=remote_url, token=token,
+                repo_dir,
+                target_branch,
+                remote_url=remote_url,
+                token=token,
             )
         except Exception as e:
             return Outcome(
@@ -297,16 +306,17 @@ class ReviewStage(Stage):
             # with the out-of-scope work already merged into main.
             file_map = _load_file_map(ws)
             in_scope, out_of_scope = _split_asks(
-                verdict.request_changes, file_map,
+                verdict.request_changes,
+                file_map,
             )
             if out_of_scope:
                 new_ids = _spawn_dependency_tickets(
-                    ticket, out_of_scope, ctx,
+                    ticket,
+                    out_of_scope,
+                    ctx,
                 )
                 existing = ticket.depends_on or ""
-                prior_ids = (
-                    json.loads(existing) if existing else []
-                )
+                prior_ids = json.loads(existing) if existing else []
                 merged = list(dict.fromkeys(prior_ids + new_ids))
                 ctx.service.set_depends_on(ticket.id, merged)
                 lines = [
@@ -319,7 +329,9 @@ class ReviewStage(Stage):
                     desc = ask.description.splitlines()[0][:120]
                     lines.append(f"- `{nid}` — {desc}")
                 ctx.service.add_comment(
-                    ticket.id, "\n".join(lines), author="review",
+                    ticket.id,
+                    "\n".join(lines),
+                    author="review",
                 )
             # Normal in-scope feedback (if any) still goes to the
             # implement agent as a single comment alongside the
@@ -332,12 +344,10 @@ class ReviewStage(Stage):
                     # out-of-scope work too. The narrative ``comments``
                     # field still covers everything for the operator.
                     body = (
-                        verdict.comments
-                        + "\n\nIn-scope items (the rest were spawned "
+                        verdict.comments + "\n\nIn-scope items (the rest were spawned "
                         "as deps and will be addressed first):\n"
                         + "\n".join(
-                            f"- {a.description.splitlines()[0][:200]}"
-                            for a in in_scope
+                            f"- {a.description.splitlines()[0][:200]}" for a in in_scope
                         )
                     )
                 ctx.service.add_comment(ticket.id, body, author="review")

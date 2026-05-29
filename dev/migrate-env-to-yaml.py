@@ -223,7 +223,7 @@ def main() -> None:
 
         try:
             coerced = _coerce(var_value, default_val)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             print(
                 f"Warning: could not coerce {var_name}={var_value!r} "
                 f"to {type(default_val).__name__} — skipping.",

@@ -139,17 +139,26 @@ class TestRunRegistry:
         path = tmp_path / "runs.json"
         # Simulate a prior process that started a run and never
         # finished (status="running", finished_at=None).
-        prior = [{
-            "id": "orphan-1", "kind": "health",
-            "started_at": "2026-05-20T21:17:14+00:00",
-            "finished_at": None, "status": "running",
-            "summary": "", "error": None,
-        }, {
-            "id": "completed-1", "kind": "audit",
-            "started_at": "2026-05-20T12:58:30+00:00",
-            "finished_at": "2026-05-20T13:00:00+00:00",
-            "status": "ok", "summary": "5 drafts", "error": None,
-        }]
+        prior = [
+            {
+                "id": "orphan-1",
+                "kind": "health",
+                "started_at": "2026-05-20T21:17:14+00:00",
+                "finished_at": None,
+                "status": "running",
+                "summary": "",
+                "error": None,
+            },
+            {
+                "id": "completed-1",
+                "kind": "audit",
+                "started_at": "2026-05-20T12:58:30+00:00",
+                "finished_at": "2026-05-20T13:00:00+00:00",
+                "status": "ok",
+                "summary": "5 drafts",
+                "error": None,
+            },
+        ]
         path.write_text(__import__("json").dumps(prior))
 
         registry = RunRegistry(path)
@@ -164,12 +173,14 @@ class TestRunRegistry:
         # Reconciliation persisted (next load sees them already-fixed,
         # not running anymore).
         registry2 = RunRegistry(path)
-        assert registry2.list_all()[1]["status"] == "error"  # newest-first, orphan is older
+        assert (
+            registry2.list_all()[1]["status"] == "error"
+        )  # newest-first, orphan is older
 
     def test_multiple_running_entries(self, tmp_path: Path):
         registry = RunRegistry(tmp_path / "runs.json")
         a = registry.start("audit")
-        b = registry.start("health")
+        registry.start("health")
         assert len(_running_ids(registry.list_all())) == 2
         registry.finish_ok(a, "ok")
         assert len(_running_ids(registry.list_all())) == 1
@@ -227,7 +238,7 @@ class TestMostRecent:
         registry = RunRegistry(tmp_path / "runs.json")
         a1 = registry.start("audit")
         registry.finish_ok(a1, "done")
-        a2 = registry.start("audit")  # still running — no finish call
+        registry.start("audit")  # still running — no finish call
         # also add another kind to make sure we don't match cross-kind
         registry.start("health")
 
@@ -301,7 +312,15 @@ class TestGetRunsEndpoint:
 
         r = client.get("/runs")
         entry = r.json()[0]
-        for key in ("id", "kind", "started_at", "finished_at", "status", "summary", "error"):
+        for key in (
+            "id",
+            "kind",
+            "started_at",
+            "finished_at",
+            "status",
+            "summary",
+            "error",
+        ):
             assert key in entry
 
 
@@ -320,7 +339,11 @@ class TestAuditTraceHealthEndpoints:
         class _R:
             drafts_created: list = [{"id": "abc", "title": "x"}]
 
-        monkeypatch.setattr(audit_runner, "run_audit_pass", lambda session_id=None, repo_config=None: _R())
+        monkeypatch.setattr(
+            audit_runner,
+            "run_audit_pass",
+            lambda session_id=None, repo_config=None: _R(),
+        )
 
         r = client.post("/audit")
         assert r.status_code == 202
@@ -328,6 +351,7 @@ class TestAuditTraceHealthEndpoints:
 
         # Wait for the daemon thread to finish
         import time
+
         time.sleep(0.1)
 
         runs = client.get("/runs").json()
@@ -356,6 +380,7 @@ class TestAuditTraceHealthEndpoints:
         assert r.json() == {"status": "started"}
 
         import time
+
         time.sleep(0.1)
 
         runs = client.get("/runs").json()
@@ -378,6 +403,7 @@ class TestAuditTraceHealthEndpoints:
         assert r.status_code == 202
 
         import time
+
         time.sleep(0.1)
 
         runs = client.get("/runs").json()

@@ -60,11 +60,13 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="ask_user",
-        description="Pause the current ticket and ask the operator a clarifying question. Returns a sentinel that stops the agent — the ticket will resume when the operator replies.",
-        category="reporting",
-        parameters={"question": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="ask_user",
+            description="Pause the current ticket and ask the operator a clarifying question. Returns a sentinel that stops the agent — the ticket will resume when the operator replies.",
+            category="reporting",
+            parameters={"question": "str"},
+        )
+    )
 
     return ask_user

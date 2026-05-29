@@ -63,7 +63,7 @@ class EpicSection:
     """
 
     title: str
-    body: str             # section content, marker stripped
+    body: str  # section content, marker stripped
     marker_id: str | None  # epic id from <!-- epic-id: ... --> or None
     raw_span: tuple[int, int]
 
@@ -96,12 +96,14 @@ def parse_roadmap(markdown: str) -> list[EpicSection]:
             cleaned = raw[:start] + raw[end:]
         else:
             cleaned = raw
-        sections.append(EpicSection(
-            title=title,
-            body=cleaned.strip(),
-            marker_id=marker_id,
-            raw_span=(m.start(), body_end),
-        ))
+        sections.append(
+            EpicSection(
+                title=title,
+                body=cleaned.strip(),
+                marker_id=marker_id,
+                raw_span=(m.start(), body_end),
+            )
+        )
     return sections
 
 
@@ -137,9 +139,9 @@ def insert_markers(markdown: str, new_ids: dict[int, str]) -> str:
 class RoadmapSyncPassResult:
     """Summary of one roadmap-sync pass."""
 
-    created: list[dict]   # [{id, title}]
-    updated: list[dict]   # [{id, title, fields: ["title", "body"]}]
-    skipped: list[dict]   # [{title, reason}]
+    created: list[dict]  # [{id, title}]
+    updated: list[dict]  # [{id, title, fields: ["title", "body"]}]
+    skipped: list[dict]  # [{title, reason}]
     pr_url: str | None = None
     summary: str = ""
     session_id: str = ""
@@ -187,12 +189,15 @@ def _create_or_update_epics(
                 log.warning(
                     "roadmap-sync: marker points to missing epic %s "
                     "(section %r) — skipping",
-                    section.marker_id, section.title,
+                    section.marker_id,
+                    section.title,
                 )
-                skipped.append({
-                    "title": section.title,
-                    "reason": f"marker {section.marker_id} not found on board",
-                })
+                skipped.append(
+                    {
+                        "title": section.title,
+                        "reason": f"marker {section.marker_id} not found on board",
+                    }
+                )
                 continue
             fields_changed: list[str] = []
             if epic.title.strip() != section.title:
@@ -206,11 +211,13 @@ def _create_or_update_epics(
                 service.set_content_hash(epic.id, content_hash)
                 fields_changed.append("body")
             if fields_changed:
-                updated.append({
-                    "id": epic.id,
-                    "title": section.title,
-                    "fields": fields_changed,
-                })
+                updated.append(
+                    {
+                        "id": epic.id,
+                        "title": section.title,
+                        "fields": fields_changed,
+                    }
+                )
         else:
             t = service.create(
                 title=section.title,
@@ -291,7 +298,9 @@ def _commit_and_open_pr(
     )
     try:
         return get_forge(settings, repo_config=repo_config).open_merge_request(
-            source_branch=branch, title=pr_title, body=pr_body,
+            source_branch=branch,
+            title=pr_title,
+            body=pr_body,
         )
     except Exception as e:  # noqa: BLE001
         log.warning("roadmap-sync: open PR failed (%s) — branch pushed but no PR", e)
@@ -304,7 +313,8 @@ def _commit_and_open_pr(
 
 
 def _clone_or_reuse(
-    settings: Settings, repo_config: RepoConfig | None,
+    settings: Settings,
+    repo_config: RepoConfig | None,
 ) -> Path | None:
     """Clone the repo into a roadmap-sync workspace, or refresh an
     existing clone to ``origin/<forge_target_branch>`` so this run
@@ -370,7 +380,9 @@ def run_roadmap_sync_pass(
     repo_dir = _clone_or_reuse(settings, repo_config)
     if repo_dir is None:
         return RoadmapSyncPassResult(
-            created=[], updated=[], skipped=[],
+            created=[],
+            updated=[],
+            skipped=[],
             summary="no remote configured / clone failed — see logs",
             session_id=session_id,
         )
@@ -378,7 +390,9 @@ def run_roadmap_sync_pass(
     roadmap = repo_dir / "ROADMAP.md"
     if not roadmap.exists():
         return RoadmapSyncPassResult(
-            created=[], updated=[], skipped=[],
+            created=[],
+            updated=[],
+            skipped=[],
             summary="ROADMAP.md not found in repo",
             session_id=session_id,
         )
@@ -387,13 +401,16 @@ def run_roadmap_sync_pass(
     sections = parse_roadmap(original)
     if not sections:
         return RoadmapSyncPassResult(
-            created=[], updated=[], skipped=[],
+            created=[],
+            updated=[],
+            skipped=[],
             summary="ROADMAP.md has no `## ...` epic sections",
             session_id=session_id,
         )
 
     created, updated, skipped, new_ids = _create_or_update_epics(
-        service, sections,
+        service,
+        sections,
     )
 
     pr_url: str | None = None
@@ -403,7 +420,8 @@ def run_roadmap_sync_pass(
         pr_url = _commit_and_open_pr(settings, repo_config, repo_dir, created)
 
     summary_parts = [
-        f"created={len(created)}", f"updated={len(updated)}",
+        f"created={len(created)}",
+        f"updated={len(updated)}",
         f"skipped={len(skipped)}",
     ]
     if pr_url:
@@ -412,7 +430,9 @@ def run_roadmap_sync_pass(
         summary_parts.append("markers left in local clone (no PR)")
 
     return RoadmapSyncPassResult(
-        created=created, updated=updated, skipped=skipped,
+        created=created,
+        updated=updated,
+        skipped=skipped,
         pr_url=pr_url,
         summary="; ".join(summary_parts),
         session_id=session_id,

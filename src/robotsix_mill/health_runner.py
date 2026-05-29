@@ -10,6 +10,13 @@ from .periodic_runner import (
 )
 
 
-def run_health_pass(session_id: str, repo_config: RepoConfig | None = None) -> HealthPassResult:
+def run_health_pass(
+    session_id: str, repo_config: RepoConfig | None = None
+) -> HealthPassResult:
     settings = Settings()
-    return run_periodic_pass(session_id, repo_config, config=PERIODIC_PASS_CONFIGS["health"], settings=settings)
+    return run_periodic_pass(
+        session_id,
+        repo_config,
+        config=PERIODIC_PASS_CONFIGS["health"],
+        settings=settings,
+    )

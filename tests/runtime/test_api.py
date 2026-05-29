@@ -10,7 +10,9 @@ from robotsix_mill.runtime.api import create_app
 @pytest.fixture
 def client(settings, repos_registry):
     # TestClient runs the lifespan: init_db, worker start/stop.
-    with TestClient(create_app(repos_registry, settings, single_repo_id="test-repo")) as c:
+    with TestClient(
+        create_app(repos_registry, settings, single_repo_id="test-repo")
+    ) as c:
         yield c
 
 
@@ -165,17 +167,17 @@ def test_board_renders_source_badge(client):
     assert "src-retrospect" in css
     assert "src-survey" in css
     js = client.get("/static/board.js").text
-    assert '"survey"' in js   # mapped in srcClass()
+    assert '"survey"' in js  # mapped in srcClass()
 
 
 def test_board_renders_cost_snippet(client):
     """The board JS includes the JS snippet that renders cost on each
     card: $(t.cost_usd||0).toFixed(4), and the CSS has .cost class."""
     js = client.get("/static/board.js").text
-    assert "cost_usd" in js   # JS references the field
+    assert "cost_usd" in js  # JS references the field
     assert "toFixed(4)" in js  # 4 decimal places
     css = client.get("/static/board.css").text
-    assert ".cost" in css      # CSS class for cost display
+    assert ".cost" in css  # CSS class for cost display
 
 
 def test_board_renders_gate_pill_wiring(client):
@@ -211,9 +213,7 @@ def test_board_no_langfuse_calls(client, monkeypatch):
     class NoNetworkClient(httpx.Client):
         def __init__(self, *args, **kwargs):
             captured.append("Client()")
-            raise AssertionError(
-                "Board rendering must not make HTTP requests"
-            )
+            raise AssertionError("Board rendering must not make HTTP requests")
 
     monkeypatch.setattr(httpx, "Client", NoNetworkClient)
 
@@ -451,14 +451,12 @@ def test_board_script_is_well_formed():
     import robotsix_mill.runtime.board_html
 
     js_path = (
-        Path(robotsix_mill.runtime.board_html.__file__).parent
-        / "static"
-        / "board.js"
+        Path(robotsix_mill.runtime.board_html.__file__).parent / "static" / "board.js"
     )
     js = js_path.read_text()
     assert js.count("`") % 2 == 0, "unbalanced template-literal backticks"
     assert '</button>":' not in js  # the exact past defect
-    assert '</button>`:' in js      # correctly-closed literal
+    assert "</button>`:" in js  # correctly-closed literal
 
 
 def test_board_js_includes_origin_session_rendering(client):
@@ -482,7 +480,9 @@ def test_origin_session_url_computed_when_config_set(service, settings, secrets_
     from robotsix_mill.runtime.deps import enrich_ticket_read
 
     t = service.create("URL test", origin_session="sess-abc")
-    secrets_set(langfuse_base_url="https://cloud.langfuse.com", langfuse_project_id="proj-xyz")
+    secrets_set(
+        langfuse_base_url="https://cloud.langfuse.com", langfuse_project_id="proj-xyz"
+    )
 
     tr = enrich_ticket_read(t, settings, service)
     assert tr.origin_session == "sess-abc"
@@ -549,8 +549,8 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
     r = client.post("/audit")  # must NOT block on slow_audit
     assert r.status_code == 202
     assert r.json() == {"status": "started"}
-    assert ran.wait(5)         # audit really started in the background
-    release.set()              # let the daemon thread finish
+    assert ran.wait(5)  # audit really started in the background
+    release.set()  # let the daemon thread finish
 
 
 def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
@@ -572,9 +572,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
         release.wait(5)
         return _R()
 
-    monkeypatch.setattr(
-        agent_check_runner, "run_agent_check_pass", slow_agent_check
-    )
+    monkeypatch.setattr(agent_check_runner, "run_agent_check_pass", slow_agent_check)
 
     r = client.post("/agent-check")
     assert r.status_code == 202
@@ -597,7 +595,9 @@ def test_deep_review_session_id_format(client, monkeypatch):
     # The default test settings don't have Langfuse keys, so the
     # endpoint's tracing_enabled check would short-circuit.
     monkeypatch.setattr(
-        Settings, "tracing_enabled", property(lambda self: True),
+        Settings,
+        "tracing_enabled",
+        property(lambda self: True),
     )
 
     seen = {}
@@ -618,9 +618,12 @@ def test_deep_review_session_id_format(client, monkeypatch):
     )
     # Make the inspector return success.
     monkeypatch.setattr(
-        trace_inspector, "run_trace_inspector",
+        trace_inspector,
+        "run_trace_inspector",
         lambda **kw: trace_inspector.TraceInspectResult(
-            updated_memory="", findings=[], error="",
+            updated_memory="",
+            findings=[],
+            error="",
         ),
     )
 
@@ -634,10 +637,12 @@ def test_deep_review_session_id_format(client, monkeypatch):
         time.sleep(0.02)
 
     assert "ticket_id" in seen, "start_ticket_root_span was never called"
-    assert seen["ticket_id"].startswith("deep-review-"), \
+    assert seen["ticket_id"].startswith("deep-review-"), (
         f"ticket_id={seen['ticket_id']!r} should start with 'deep-review-'"
-    assert trace_id not in seen["ticket_id"], \
+    )
+    assert trace_id not in seen["ticket_id"], (
         f"source trace_id must not appear in session id: {seen['ticket_id']!r}"
+    )
     assert seen["stage_name"] == "deep-review"
     assert seen["extra_attributes"] == {"source_trace_id": trace_id}
 
@@ -662,8 +667,8 @@ def test_board_has_last_reviews_panel(client):
         "'Last reviews' literal must appear in board.js — "
         "the UI panel for replaying past deep-review results"
     )
-    assert 'renderLastReviewsList' in js
-    assert 'viewStoredReview' in js
+    assert "renderLastReviewsList" in js
+    assert "viewStoredReview" in js
     assert 'jget("/deep-review")' in js or 'jget("/deep-review"' in js, (
         "board.js must call GET /deep-review to fetch stored reviews"
     )
@@ -736,13 +741,13 @@ def test_board_has_manual_child_ticket_affordance(client):
     js = client.get("/static/board.js").text
     assert "newChildTicket" in js, "board.js must define newChildTicket()"
     assert "Add Ticket" in js, "board.js must render an Add Ticket button"
-    assert 'parent_id:epicId' in js, (
+    assert "parent_id:epicId" in js, (
         "newChildTicket() must pass parent_id to POST /tickets"
     )
     assert 'kind:"task"' in js, (
         "newChildTicket() must create child tickets as kind='task'"
     )
-    assert 'open_(epicId)' in js, (
+    assert "open_(epicId)" in js, (
         "newChildTicket() must re-render the epic drawer on success, not refresh()"
     )
 
@@ -763,7 +768,11 @@ def test_post_tickets_with_kind_inquiry_creates_asked_inquiry(client):
     """
     r = client.post(
         "/tickets",
-        json={"title": "Why does X happen?", "description": "context", "kind": "inquiry"},
+        json={
+            "title": "Why does X happen?",
+            "description": "context",
+            "kind": "inquiry",
+        },
     )
     assert r.status_code == 201
     d = r.json()
@@ -774,12 +783,16 @@ def test_post_tickets_with_kind_inquiry_creates_asked_inquiry(client):
 
 # --- depends_on API ----------------------------------------------------
 
+
 def test_create_ticket_with_depends_on(client):
     """POST /tickets accepts depends_on and the field is present in the response."""
-    r = client.post("/tickets", json={
-        "title": "Dep ticket API",
-        "depends_on": '["ticket-aaa", "ticket-bbb"]',
-    })
+    r = client.post(
+        "/tickets",
+        json={
+            "title": "Dep ticket API",
+            "depends_on": '["ticket-aaa", "ticket-bbb"]',
+        },
+    )
     assert r.status_code == 201
     data = r.json()
     assert data["depends_on"] == '["ticket-aaa", "ticket-bbb"]'
@@ -788,10 +801,13 @@ def test_create_ticket_with_depends_on(client):
 
 def test_get_ticket_includes_depends_on_and_unmet_deps(client):
     """GET /tickets/{id} includes depends_on and unmet_deps fields."""
-    r = client.post("/tickets", json={
-        "title": "With dep",
-        "depends_on": '["some-other-ticket"]',
-    })
+    r = client.post(
+        "/tickets",
+        json={
+            "title": "With dep",
+            "depends_on": '["some-other-ticket"]',
+        },
+    )
     assert r.status_code == 201
     tid = r.json()["id"]
 
@@ -807,10 +823,13 @@ def test_get_ticket_includes_depends_on_and_unmet_deps(client):
 
 def test_list_tickets_includes_depends_on_and_unmet_deps(client):
     """GET /tickets includes depends_on and unmet_deps for all tickets."""
-    r = client.post("/tickets", json={
-        "title": "List dep test",
-        "depends_on": '["x", "y"]',
-    })
+    r = client.post(
+        "/tickets",
+        json={
+            "title": "List dep test",
+            "depends_on": '["x", "y"]',
+        },
+    )
     assert r.status_code == 201
 
     ts = client.get("/tickets").json()
@@ -847,7 +866,9 @@ def test_create_inquiry_with_depends_on_is_rejected(client):
     )
 
 
-def test_list_tickets_include_closed_hides_closed_and_epic_closed_keeps_done(client, service):
+def test_list_tickets_include_closed_hides_closed_and_epic_closed_keeps_done(
+    client, service
+):
     """include_closed=false must hide CLOSED and EPIC_CLOSED but ALWAYS
     return DONE — DONE is the transient retrospect-in-flight window and
     needs to stay visible so the board can show retrospect work without
@@ -941,7 +962,9 @@ def test_deep_review_store_cap_enforcement(tmp_path):
 
     store = DeepReviewStore(tmp_path / "reviews.json")
     for i in range(25):
-        store.put(f"trace-{i:03d}", {"status": "ok", "trace_id": f"trace-{i:03d}", "idx": i})
+        store.put(
+            f"trace-{i:03d}", {"status": "ok", "trace_id": f"trace-{i:03d}", "idx": i}
+        )
 
     entries = store.list_all()
     assert len(entries) == 20
@@ -987,6 +1010,7 @@ def test_deep_review_store_corrupt_file_recovery(tmp_path):
 
     # File on disk should now be valid JSON.
     import json
+
     raw = (tmp_path / "reviews.json").read_text(encoding="utf-8")
     assert json.loads(raw) == entries
 
@@ -1023,7 +1047,9 @@ def test_list_deep_reviews_ordering(client):
     """GET /deep-review returns entries newest-first."""
     from robotsix_mill.runtime.deep_review_store import DeepReviewStore
 
-    store = DeepReviewStore(client.app.state.settings.data_dir / "deep_review_results.json")
+    store = DeepReviewStore(
+        client.app.state.settings.data_dir / "deep_review_results.json"
+    )
     store.put("a", {"status": "ok", "trace_id": "a", "source_trace_name": "test"})
     store.put("b", {"status": "ok", "trace_id": "b", "source_trace_name": "test"})
     store.put("c", {"status": "ok", "trace_id": "c", "source_trace_name": "test"})
@@ -1040,14 +1066,19 @@ def test_get_deep_review_falls_back_to_store(client):
     """GET /deep-review/{trace_id} returns 200 for a store-only entry."""
     from robotsix_mill.runtime.deep_review_store import DeepReviewStore
 
-    store = DeepReviewStore(client.app.state.settings.data_dir / "deep_review_results.json")
-    store.put("stored-trace", {
-        "status": "ok",
-        "trace_id": "stored-trace",
-        "source_trace_name": "test",
-        "error": "",
-        "findings": [],
-    })
+    store = DeepReviewStore(
+        client.app.state.settings.data_dir / "deep_review_results.json"
+    )
+    store.put(
+        "stored-trace",
+        {
+            "status": "ok",
+            "trace_id": "stored-trace",
+            "source_trace_name": "test",
+            "error": "",
+            "findings": [],
+        },
+    )
 
     # Entry is NOT in in-memory results.
     assert "stored-trace" not in client.app.state.deep_review_results
@@ -1062,12 +1093,19 @@ def test_get_deep_review_prefers_in_memory(client):
     """GET /deep-review/{trace_id} prefers in-memory over store."""
     from robotsix_mill.runtime.deep_review_store import DeepReviewStore
 
-    store = DeepReviewStore(client.app.state.settings.data_dir / "deep_review_results.json")
-    store.put("dual-trace", {
-        "status": "ok", "trace_id": "dual-trace",
-        "source_trace_name": "store_version",
-        "error": "", "findings": [],
-    })
+    store = DeepReviewStore(
+        client.app.state.settings.data_dir / "deep_review_results.json"
+    )
+    store.put(
+        "dual-trace",
+        {
+            "status": "ok",
+            "trace_id": "dual-trace",
+            "source_trace_name": "store_version",
+            "error": "",
+            "findings": [],
+        },
+    )
 
     # Put a different version in memory.
     client.app.state.deep_review_results["dual-trace"] = {
@@ -1093,6 +1131,7 @@ def test_get_deep_review_404_when_not_found(client):
 # Epic API tests
 # ---------------------------------------------------------------------------
 
+
 def test_create_epic_via_api(client):
     """POST /epics returns 201 with state='epic_open', kind='epic'."""
     r = client.post("/epics", json={"title": "My Epic", "description": "Big picture"})
@@ -1105,11 +1144,14 @@ def test_create_epic_via_api(client):
 def test_create_ticket_with_parent(client, service):
     """POST /tickets with parent_id set links child to epic."""
     epic = service.create("Epic", kind="epic")
-    r = client.post("/tickets", json={
-        "title": "Child Task",
-        "description": "detail",
-        "parent_id": epic.id,
-    })
+    r = client.post(
+        "/tickets",
+        json={
+            "title": "Child Task",
+            "description": "detail",
+            "parent_id": epic.id,
+        },
+    )
     assert r.status_code == 201
     data = r.json()
     assert data["parent_id"] == epic.id
@@ -1312,7 +1354,9 @@ def test_add_comment_on_epic_triggers_reprocess(client, service, monkeypatch):
 
 
 def test_add_comment_on_non_epic_does_not_trigger_reprocess(
-    client, service, monkeypatch,
+    client,
+    service,
+    monkeypatch,
 ):
     """Comment on a task ticket does NOT invoke the breakdown agent."""
     import threading
@@ -1322,6 +1366,7 @@ def test_add_comment_on_non_epic_does_not_trigger_reprocess(
     def fake_agent(**kw):
         agent_called.set()
         from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
         return EpicBreakdownResult()
 
     monkeypatch.setattr(
@@ -1338,13 +1383,13 @@ def test_add_comment_on_non_epic_does_not_trigger_reprocess(
     assert r.json()["body"] == "This should not trigger anything"
 
     # The agent must NOT have been called.
-    assert not agent_called.wait(1), (
-        "breakdown agent was called for a non-epic ticket"
-    )
+    assert not agent_called.wait(1), "breakdown agent was called for a non-epic ticket"
 
 
 def test_add_comment_on_epic_skips_duplicate_children(
-    client, service, monkeypatch,
+    client,
+    service,
+    monkeypatch,
 ):
     """When the agent proposes a child whose title already exists
     (case-insensitive), it is skipped — no duplicate created."""
@@ -1518,7 +1563,9 @@ def test_epic_list_cost_is_cache_only(client, service, monkeypatch):
     assert epic_entry[0]["cumulative_cost"] is None
     # session_cost must NOT have been called for any child id.
     child_calls = [x for x in called if x in (c1.id, c2.id)]
-    assert child_calls == [], f"blocking session_cost called for children: {child_calls}"
+    assert child_calls == [], (
+        f"blocking session_cost called for children: {child_calls}"
+    )
 
 
 def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
@@ -1530,7 +1577,9 @@ def test_nested_epic_cost_is_recursive(client, service, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost",
-        lambda settings, sid, **kw: {e1.id: 0.01, e2.id: 0.02, t.id: 0.30}.get(sid, 0.0),
+        lambda settings, sid, **kw: {e1.id: 0.01, e2.id: 0.02, t.id: 0.30}.get(
+            sid, 0.0
+        ),
     )
 
     r1 = client.get(f"/tickets/{e1.id}").json()

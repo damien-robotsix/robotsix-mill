@@ -22,7 +22,7 @@ from pathlib import Path
 
 from ..config import RepoConfig, get_repos_config
 from ..langfuse_client import session_cost
-from ..stages import StageContext, get_stage, stage_context_for
+from ..stages import StageContext, get_stage
 from ..core.states import STAGE_FOR_STATE, State
 from ..core.models import SourceKind
 from ..notify import send_notification, _TRIGGER_STATES
@@ -36,13 +36,17 @@ log = logging.getLogger("robotsix_mill.worker")
 _TERMINAL = {State.CLOSED, State.ERRORED, State.BLOCKED}
 
 
-async def process_ticket(ticket_id: str, ctx: StageContext, active_map: dict | None = None) -> None:
+async def process_ticket(
+    ticket_id: str, ctx: StageContext, active_map: dict | None = None
+) -> None:
     """Drive one ticket through as many stages as possible, in order,
     until it reaches a terminal/waiting state or a stub stops the chain."""
     await _process_ticket_inner(ticket_id, ctx, active_map=active_map)
 
 
-async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: dict | None = None) -> None:
+async def _process_ticket_inner(
+    ticket_id: str, ctx: StageContext, active_map: dict | None = None
+) -> None:
     while True:
         ticket = ctx.service.get(ticket_id)
         if ticket is None:
@@ -56,12 +60,15 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
         if ticket.state == State.AWAITING_USER_REPLY:
             log.debug(
                 "pausing %s — awaiting user reply (paused_from=%s)",
-                ticket_id, getattr(ticket, "paused_from", None),
+                ticket_id,
+                getattr(ticket, "paused_from", None),
             )
             return
         # Retrying ticket still in backoff — don't open a trace or
         # run any stage; the poll loop re-enqueues later.
-        if ticket.next_retry_at is not None and ticket.next_retry_at.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
+        if ticket.next_retry_at is not None and ticket.next_retry_at.replace(
+            tzinfo=timezone.utc
+        ) > datetime.now(timezone.utc):
             return
         stage_name = STAGE_FOR_STATE.get(ticket.state)
         if stage_name is None:
@@ -95,20 +102,24 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
                     # session.id attribute still groups all of a ticket's
                     # stage traces together via Langfuse's session view.
                     root_io = es.enter_context(
-                        tracing.start_ticket_root_span(ticket_id, stage_name, repo_config=ctx.repo_config)
+                        tracing.start_ticket_root_span(
+                            ticket_id, stage_name, repo_config=ctx.repo_config
+                        )
                     )
                     # Attach a top-level "input" summary to the root span
                     # so Langfuse's trace view shows what was processed
                     # without drilling into children. Output is set
                     # below, once the stage returns.
-                    root_io.set_input({
-                        "ticket_id": ticket_id,
-                        "title": ticket.title,
-                        "state": ticket.state.value,
-                        "stage": stage_name,
-                        "source": ticket.source,
-                        "priority": bool(getattr(ticket, "priority", False)),
-                    })
+                    root_io.set_input(
+                        {
+                            "ticket_id": ticket_id,
+                            "title": ticket.title,
+                            "state": ticket.state.value,
+                            "stage": stage_name,
+                            "source": ticket.source,
+                            "priority": bool(getattr(ticket, "priority", False)),
+                        }
+                    )
                 # stage.run is sync (LLM/tool) — keep the loop responsive
                 if active_map is not None:
                     active_map[ticket_id] = {
@@ -130,18 +141,26 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
                 # Attach the outcome to the root span — visible at the
                 # top of the trace in Langfuse alongside the input.
                 if root_io is not None:
-                    root_io.set_output({
-                        "next_state": outcome.next_state.value if outcome and outcome.next_state else None,
-                        "note": (outcome.note or "") if outcome else "",
-                        "no_op": bool(outcome and outcome.next_state == ticket.state),
-                    })
+                    root_io.set_output(
+                        {
+                            "next_state": outcome.next_state.value
+                            if outcome and outcome.next_state
+                            else None,
+                            "note": (outcome.note or "") if outcome else "",
+                            "no_op": bool(
+                                outcome and outcome.next_state == ticket.state
+                            ),
+                        }
+                    )
         except asyncio.TimeoutError:
             timeout = ctx.settings.stage_timeout_overrides.get(
                 stage_name, ctx.settings.stage_timeout_seconds
             )
             log.error(
                 "%s: %s timed out after %ds — escalating to BLOCKED",
-                stage_name, ticket_id, timeout,
+                stage_name,
+                ticket_id,
+                timeout,
             )
             note = f"stage {stage_name} timed out after {timeout}s"[:200]
             ctx.service.transition(ticket_id, State.BLOCKED, note=note)
@@ -152,7 +171,10 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
         except NotImplementedError as e:
             log.warning(
                 "%s: stub (%s) — chain paused at %s for %s",
-                stage_name, e, ticket.state, ticket_id,
+                stage_name,
+                e,
+                ticket.state,
+                ticket_id,
             )
             return
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
@@ -183,7 +205,11 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
                     )
                     log.warning(
                         "%s: %s transient error (attempt %d/%d) — retry in %.0fs",
-                        stage_name, ticket_id, attempt, max_attempts, delay,
+                        stage_name,
+                        ticket_id,
+                        attempt,
+                        max_attempts,
+                        delay,
                     )
                     return
                 # Retries exhausted — block.
@@ -209,14 +235,19 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
         # leaving the chip stuck on the board).
         if ticket.retry_attempt > 0:
             ctx.service.set_retry_state(
-                ticket_id, retry_attempt=0, last_transient_error=None, next_retry_at=None,
+                ticket_id,
+                retry_attempt=0,
+                last_transient_error=None,
+                next_retry_at=None,
             )
         if outcome.next_state == ticket.state:
             # no-op (e.g. merge: PR still open) — leave it; the poll
             # re-enqueues later. No transition, no trace, no spam.
             log.debug(
                 "%s: %s no-op at %s (awaiting external event)",
-                stage_name, ticket_id, ticket.state,
+                stage_name,
+                ticket_id,
+                ticket.state,
             )
             return
         ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
@@ -225,7 +256,9 @@ async def _process_ticket_inner(ticket_id: str, ctx: StageContext, active_map: d
         if outcome.next_state in _TRIGGER_STATES:
             ticket = ctx.service.get(ticket_id)
             if ticket is not None:
-                send_notification(ticket, outcome.next_state, outcome.note, ctx.settings)
+                send_notification(
+                    ticket, outcome.next_state, outcome.note, ctx.settings
+                )
 
         # After a ticket reaches a terminal state, re-evaluate its parent epic if any.
         if outcome.next_state in (State.DONE, State.CLOSED, State.ANSWERED):
@@ -292,13 +325,15 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
             child_desc = svc.workspace(child).read_description()
             if len(child_desc) > 2000:
                 child_desc = child_desc[:2000] + "\n...(truncated)"
-            child_summaries.append({
-                "id": child.id,
-                "title": child.title,
-                "state": child.state.value,
-                "description": child_desc,
-                "depends_on": TicketService._parse_depends_on(child),
-            })
+            child_summaries.append(
+                {
+                    "id": child.id,
+                    "title": child.title,
+                    "state": child.state.value,
+                    "description": child_desc,
+                    "depends_on": TicketService._parse_depends_on(child),
+                }
+            )
 
         with tracing.start_ticket_root_span(epic_id, "epic-status"):
             result = run_epic_status_agent(
@@ -318,13 +353,18 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
             log.warning(
                 "epic %s: agent returned close + %d new_children — "
                 "downgrading to keep_open until follow-up work lands",
-                epic_id, len(result.new_children),
+                epic_id,
+                len(result.new_children),
             )
             result.decision = "keep_open"
 
         if result.decision == "close":
-            svc.transition(epic_id, State.EPIC_CLOSED, note="[auto-closed] " + (result.note or ""))
-            log.info("epic %s: agent decided close — transitioned to EPIC_CLOSED", epic_id)
+            svc.transition(
+                epic_id, State.EPIC_CLOSED, note="[auto-closed] " + (result.note or "")
+            )
+            log.info(
+                "epic %s: agent decided close — transitioned to EPIC_CLOSED", epic_id
+            )
         elif result.decision == "keep_open":
             log.debug("epic %s: agent decided keep_open — no change", epic_id)
         elif result.decision == "update_description":
@@ -335,7 +375,8 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
             if result.dep_updates is not None:
                 log.info(
                     "epic %s: agent requested dependency updates for %d children",
-                    epic_id, len(result.dep_updates),
+                    epic_id,
+                    len(result.dep_updates),
                 )
                 for child_id, new_deps in result.dep_updates.items():
                     if new_deps is None:
@@ -363,13 +404,18 @@ def _fetch_draft_child(svc, child_id: str, operation: str, epic_id: str):
     if child is None:
         log.warning(
             "epic %s: %s — child %s not found, skipping",
-            epic_id, operation, child_id,
+            epic_id,
+            operation,
+            child_id,
         )
         return None
     if child.state != S.DRAFT:
         log.warning(
             "epic %s: %s — child %s is in state %s (not DRAFT), skipping",
-            epic_id, operation, child_id, child.state.value,
+            epic_id,
+            operation,
+            child_id,
+            child.state.value,
         )
         return None
     return child
@@ -392,7 +438,8 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
             if not isinstance(child_spec, dict):
                 log.warning(
                     "epic %s: new_children[%d] is not a dict, skipping",
-                    epic_id, i,
+                    epic_id,
+                    i,
                 )
                 continue
             title = child_spec.get("title", "")
@@ -400,13 +447,15 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
             if not isinstance(title, str) or not title.strip():
                 log.warning(
                     "epic %s: new_children[%d] missing non-empty 'title', skipping",
-                    epic_id, i,
+                    epic_id,
+                    i,
                 )
                 continue
             if not isinstance(body, str) or not body.strip():
                 log.warning(
                     "epic %s: new_children[%d] missing non-empty 'body', skipping",
-                    epic_id, i,
+                    epic_id,
+                    i,
                 )
                 continue
             try:
@@ -418,12 +467,15 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                 )
                 log.info(
                     "epic %s: created new child %s ('%s')",
-                    epic_id, child.id, title,
+                    epic_id,
+                    child.id,
+                    title,
                 )
             except Exception:
                 log.exception(
                     "epic %s: failed to create new child '%s'",
-                    epic_id, title,
+                    epic_id,
+                    title,
                 )
 
     # --- child_rescopes ------------------------------------------------
@@ -432,7 +484,8 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
             if not isinstance(updates, dict):
                 log.warning(
                     "epic %s: child_rescopes[%s] is not a dict, skipping",
-                    epic_id, child_id,
+                    epic_id,
+                    child_id,
                 )
                 continue
             new_title = updates.get("title")
@@ -442,7 +495,8 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
             if not has_title and not has_body:
                 log.warning(
                     "epic %s: child_rescopes[%s] has no non-empty 'title' or 'body', skipping",
-                    epic_id, child_id,
+                    epic_id,
+                    child_id,
                 )
                 continue
 
@@ -455,17 +509,23 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                     svc.set_title(child_id, new_title.strip())
                     log.info(
                         "epic %s: rescoped child %s title -> '%s'",
-                        epic_id, child_id, new_title.strip(),
+                        epic_id,
+                        child_id,
+                        new_title.strip(),
                     )
                 if has_body:
                     new_hash = svc.workspace(child).write_description(new_body.strip())
                     svc.set_content_hash(child_id, new_hash)
                     log.info(
-                        "epic %s: rescoped child %s body", epic_id, child_id,
+                        "epic %s: rescoped child %s body",
+                        epic_id,
+                        child_id,
                     )
             except Exception:
                 log.exception(
-                    "epic %s: failed to rescope child %s", epic_id, child_id,
+                    "epic %s: failed to rescope child %s",
+                    epic_id,
+                    child_id,
                 )
 
     # --- child_closures ------------------------------------------------
@@ -474,7 +534,8 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
             if not isinstance(child_id, str) or not child_id.strip():
                 log.warning(
                     "epic %s: child_closures entry %r is not a non-empty string, skipping",
-                    epic_id, child_id,
+                    epic_id,
+                    child_id,
                 )
                 continue
             child = _fetch_draft_child(svc, child_id, "closure", epic_id)
@@ -482,16 +543,20 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                 continue
             try:
                 svc.transition(
-                    child_id, S.CLOSED,
+                    child_id,
+                    S.CLOSED,
                     note="Obsoleted by epic re-evaluation after sibling merge",
                 )
                 log.info(
                     "epic %s: closed child %s (obsoleted by sibling merge)",
-                    epic_id, child_id,
+                    epic_id,
+                    child_id,
                 )
             except Exception:
                 log.exception(
-                    "epic %s: failed to close child %s", epic_id, child_id,
+                    "epic %s: failed to close child %s",
+                    epic_id,
+                    child_id,
                 )
 
 
@@ -533,7 +598,11 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
         all_comments = svc.list_comments(epic_id)
         comment_lines: list[str] = []
         for c in all_comments:
-            ts = c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "unknown"
+            ts = (
+                c.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                if c.created_at
+                else "unknown"
+            )
             if c.parent_id is None:
                 comment_lines.append(f"[{ts}] {c.author}: {c.body}")
             else:
@@ -549,17 +618,13 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
 
         # Reconcile: compare proposed titles against existing children.
         existing = svc.list_children(epic_id)
-        existing_titles_lower = {
-            child.title.strip().lower() for child in existing
-        }
+        existing_titles_lower = {child.title.strip().lower() for child in existing}
 
         new_titles: list[str] = []
         new_bodies: list[str] = []
         for title, body in zip(result.child_titles, result.child_bodies):
             if title.strip().lower() in existing_titles_lower:
-                log.debug(
-                    "epic %s: skipping duplicate child '%s'", epic_id, title
-                )
+                log.debug("epic %s: skipping duplicate child '%s'", epic_id, title)
                 continue
             new_titles.append(title)
             new_bodies.append(body)
@@ -567,7 +632,9 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
         if not new_titles:
             log.info(
                 "epic %s: re-processed — no new children (all %d proposed "
-                "were duplicates)", epic_id, len(result.child_titles),
+                "were duplicates)",
+                epic_id,
+                len(result.child_titles),
             )
             return
 
@@ -592,7 +659,9 @@ def _run_epic_reprocess(epic_id: str, comment_body: str, settings) -> None:
 
         log.info(
             "epic %s: re-processed — created %d new children: %s",
-            epic_id, len(created_ids), ", ".join(created_ids),
+            epic_id,
+            len(created_ids),
+            ", ".join(created_ids),
         )
     except Exception:
         log.exception("epic %s: re-processing failed", epic_id)
@@ -615,19 +684,19 @@ class Worker:
     # on any drift. _DEFAULT_STAGE_RANK applies to unknown states.
     _DEFAULT_STAGE_RANK: int = 99
     _STAGE_RANK: dict = {
-        State.DONE: 0,                    # retrospect → CLOSED
-        State.DELIVERABLE: 1,             # deliver opens the PR
-        State.DOCUMENTING: 2,             # document → DELIVERABLE
-        State.CODE_REVIEW: 3,             # review
-        State.ADDRESSING_REVIEW: 4,       # merge stage replying to reviewer
-        State.FIXING_CI: 5,               # ci_fix retries CI
-        State.REBASING: 6,                # merge stage, rebase substep
-        State.HUMAN_MR_APPROVAL: 7,       # merge polling (no-LLM)
-        State.WAITING_AUTO_MERGE: 8,      # merge polling (no-LLM)
-        State.IMPLEMENT_COMPLETE: 9,      # merge polling (no-LLM)
-        State.READY: 10,                  # implement — fresh code work
-        State.DRAFT: 11,                  # refine — earliest stage
-        State.ASKED: 12,                  # answer — inquiry side-channel
+        State.DONE: 0,  # retrospect → CLOSED
+        State.DELIVERABLE: 1,  # deliver opens the PR
+        State.DOCUMENTING: 2,  # document → DELIVERABLE
+        State.CODE_REVIEW: 3,  # review
+        State.ADDRESSING_REVIEW: 4,  # merge stage replying to reviewer
+        State.FIXING_CI: 5,  # ci_fix retries CI
+        State.REBASING: 6,  # merge stage, rebase substep
+        State.HUMAN_MR_APPROVAL: 7,  # merge polling (no-LLM)
+        State.WAITING_AUTO_MERGE: 8,  # merge polling (no-LLM)
+        State.IMPLEMENT_COMPLETE: 9,  # merge polling (no-LLM)
+        State.READY: 10,  # implement — fresh code work
+        State.DRAFT: 11,  # refine — earliest stage
+        State.ASKED: 12,  # answer — inquiry side-channel
     }
 
     @classmethod
@@ -636,7 +705,9 @@ class Worker:
             return cls._DEFAULT_STAGE_RANK
         return cls._STAGE_RANK.get(ticket.state, cls._DEFAULT_STAGE_RANK)
 
-    def __init__(self, ctx: StageContext, run_registry: "RunRegistry | None" = None) -> None:
+    def __init__(
+        self, ctx: StageContext, run_registry: "RunRegistry | None" = None
+    ) -> None:
         self.ctx = ctx
         self.run_registry = run_registry
         # Per-repo (board_id) PriorityQueue topology — one queue per
@@ -690,6 +761,7 @@ class Worker:
     async def queue_join(self) -> None:
         """Wait for every per-repo queue to drain."""
         import asyncio as _asyncio
+
         await _asyncio.gather(*(q.join() for q in self.queues.values()))
 
     def _queue_for(self, board_id: str) -> asyncio.PriorityQueue:
@@ -732,9 +804,15 @@ class Worker:
         self._pending.add(ticket_id)
         self._enqueue_seq += 1
         ticket = self.ctx.service.get(ticket_id)
-        prio_rank = 0 if (ticket is not None and getattr(ticket, "priority", False)) else 1
+        prio_rank = (
+            0 if (ticket is not None and getattr(ticket, "priority", False)) else 1
+        )
         stage_rank = self._stage_rank(ticket)
-        board_id = ticket.board_id if (ticket is not None and ticket.board_id) else self._DEFAULT_BOARD
+        board_id = (
+            ticket.board_id
+            if (ticket is not None and ticket.board_id)
+            else self._DEFAULT_BOARD
+        )
         self._queue_for(board_id).put_nowait(
             (prio_rank, stage_rank, self._enqueue_seq, ticket_id)
         )
@@ -815,8 +893,11 @@ class Worker:
                         log.debug(
                             "%s: popped (prio=%d, stage=%d) but current "
                             "(prio=%d, stage=%d); re-enqueuing at correct rank",
-                            ticket_id, popped_prio, popped_stage,
-                            cur_prio, cur_stage,
+                            ticket_id,
+                            popped_prio,
+                            popped_stage,
+                            cur_prio,
+                            cur_stage,
                         )
                         # Drop from _pending so requeue isn't deduped away.
                         self._pending.discard(ticket_id)
@@ -835,7 +916,8 @@ class Worker:
                 await process_ticket(ticket_id, per_ticket_ctx, active_map=self._active)
                 after = board_service.get(ticket_id)
                 self._check_progress(
-                    ticket_id, before_state,
+                    ticket_id,
+                    before_state,
                     after.state if after else None,
                     repo_config=ticket_repo_config,
                 )
@@ -848,7 +930,9 @@ class Worker:
                 self._active.pop(ticket_id, None)
                 queue.task_done()
 
-    def _check_progress(self, ticket_id: str, before, after, repo_config: RepoConfig | None = None) -> None:
+    def _check_progress(
+        self, ticket_id: str, before, after, repo_config: RepoConfig | None = None
+    ) -> None:
         """No-progress safety net. A ticket that keeps re-entering the
         same *model-driven* (traced) stage without ever advancing —
         runs interrupted before any checkpoint, or a churning stage —
@@ -879,15 +963,11 @@ class Worker:
                     "Use resume-blocked to override and continue."
                 )
                 log.error("%s: %s", ticket_id, note)
-                self.ctx.service.transition(
-                    ticket_id, State.BLOCKED, note=note[:200]
-                )
+                self.ctx.service.transition(ticket_id, State.BLOCKED, note=note[:200])
                 self._stuck.pop(ticket_id, None)
                 t = self.ctx.service.get(ticket_id)
                 if t is not None:
-                    send_notification(
-                        t, State.BLOCKED, note[:200], self.ctx.settings
-                    )
+                    send_notification(t, State.BLOCKED, note[:200], self.ctx.settings)
                 return
 
         if after is None or after != before:
@@ -1017,6 +1097,7 @@ class Worker:
             return 1.0
         try:
             from datetime import datetime, timezone
+
             last_ts = datetime.fromisoformat(entry["started_at"])
             elapsed = (datetime.now(timezone.utc) - last_ts).total_seconds()
         except Exception:
@@ -1061,7 +1142,9 @@ class Worker:
         return None
 
     def _resolve_periodic_schedule(
-        self, label: str, repo_config,
+        self,
+        label: str,
+        repo_config,
         settings_interval_attr: str,
         settings_enabled_attr: str | None = None,
     ) -> tuple[bool, int]:
@@ -1101,7 +1184,9 @@ class Worker:
         return enabled, interval
 
     async def _run_periodic_pass_per_repo(
-        self, label: str, runner_fn,
+        self,
+        label: str,
+        runner_fn,
         settings_interval_attr: str,
         per_repo_flag: str | None = None,
         settings_enabled_attr: str | None = None,
@@ -1163,9 +1248,7 @@ class Worker:
             # second of startup (matches the legacy ``_initial_delay``
             # behaviour for overdue passes). Subsequent ticks use the
             # poll cadence.
-            await asyncio.sleep(
-                1.0 if first_tick else self._PERIODIC_POLL_TICK_SECONDS
-            )
+            await asyncio.sleep(1.0 if first_tick else self._PERIODIC_POLL_TICK_SECONDS)
             first_tick = False
             try:
                 repos = get_repos_config()
@@ -1175,16 +1258,16 @@ class Worker:
                     repo_configs = [None]  # type: ignore[list-item]
                 if per_repo_flag:
                     repo_configs = [
-                        rc for rc in repo_configs
+                        rc
+                        for rc in repo_configs
                         if rc is None or getattr(rc, per_repo_flag, True)
                     ]
 
                 for repo_config in repo_configs:
-                    board_id = (
-                        repo_config.repo_id if repo_config else ""
-                    )
+                    board_id = repo_config.repo_id if repo_config else ""
                     enabled, interval = self._resolve_periodic_schedule(
-                        label, repo_config,
+                        label,
+                        repo_config,
                         settings_interval_attr,
                         settings_enabled_attr,
                     )
@@ -1199,14 +1282,19 @@ class Worker:
                         continue
 
                     await self._fire_periodic_pass(
-                        label, runner_fn, repo_config,
+                        label,
+                        runner_fn,
+                        repo_config,
                     )
                     last_run_by_board[board_id] = datetime.now(timezone.utc)
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("%s scheduler tick failed", label)
 
     async def _fire_periodic_pass(
-        self, label: str, runner_fn, repo_config,
+        self,
+        label: str,
+        runner_fn,
+        repo_config,
     ) -> None:
         """Run one periodic pass for *repo_config* (or ``None``).
 
@@ -1221,7 +1309,8 @@ class Worker:
         try:
             log.info(
                 "Starting periodic %s pass for repo %s",
-                label, repo_label,
+                label,
+                repo_label,
             )
             if self.run_registry:
                 run_id = self.run_registry.start(
@@ -1229,7 +1318,9 @@ class Worker:
                     repo_id=repo_config.repo_id if repo_config else "",
                 )
             with tracing.start_ticket_root_span(
-                session_id, label, repo_config=repo_config,
+                session_id,
+                label,
+                repo_config=repo_config,
             ):
                 result = await asyncio.to_thread(
                     runner_fn,
@@ -1238,19 +1329,16 @@ class Worker:
                 )
             log.info(
                 "%s pass (%s) completed, created %d draft(s)",
-                label.capitalize(), repo_label,
+                label.capitalize(),
+                repo_label,
                 len(result.drafts_created),
             )
             if self.run_registry and run_id:
-                runner_summary = (
-                    getattr(result, "summary", "") or ""
-                ).strip()
+                runner_summary = (getattr(result, "summary", "") or "").strip()
                 if runner_summary:
                     summary = runner_summary
                 else:
-                    draft_ids = [
-                        d["id"] for d in result.drafts_created[:5]
-                    ]
+                    draft_ids = [d["id"] for d in result.drafts_created[:5]]
                     summary = (
                         f"Created {len(result.drafts_created)} drafts: "
                         f"{', '.join(draft_ids)}"
@@ -1259,13 +1347,18 @@ class Worker:
                 self.run_registry.finish_ok(run_id, summary)
         except Exception as e:  # noqa: BLE001 — periodic must survive
             log.exception(
-                "%s poll failed for repo %s", label, repo_label,
+                "%s poll failed for repo %s",
+                label,
+                repo_label,
             )
             if self.run_registry and run_id:
                 self.run_registry.finish_error(run_id, str(e))
 
     async def _run_periodic_pass(
-        self, label: str, runner_fn, interval: int,
+        self,
+        label: str,
+        runner_fn,
+        interval: int,
     ) -> None:
         """Shared periodic pass loop for audit, agent-check, etc.
 
@@ -1289,22 +1382,24 @@ class Worker:
                 # ("this event loop is already running") when invoked
                 # from inside an async task. Offload to a worker thread
                 # — same pattern stage handlers use.
-                with tracing.start_ticket_root_span(session_id, label, repo_config=None):
+                with tracing.start_ticket_root_span(
+                    session_id, label, repo_config=None
+                ):
                     result = await asyncio.to_thread(
-                        runner_fn, session_id=session_id,
+                        runner_fn,
+                        session_id=session_id,
                     )
                 log.info(
                     "%s pass completed, created %d draft(s)",
-                    label.capitalize(), len(result.drafts_created),
+                    label.capitalize(),
+                    len(result.drafts_created),
                 )
                 if self.run_registry and run_id:
                     runner_summary = (getattr(result, "summary", "") or "").strip()
                     if runner_summary:
                         summary = runner_summary
                     else:
-                        draft_ids = [
-                            d["id"] for d in result.drafts_created[:5]
-                        ]
+                        draft_ids = [d["id"] for d in result.drafts_created[:5]]
                         summary = (
                             f"Created {len(result.drafts_created)} drafts: "
                             f"{', '.join(draft_ids)}"
@@ -1336,7 +1431,8 @@ class Worker:
                 repo_configs = [None]  # type: ignore[list-item]
             else:
                 repo_configs = [
-                    rc for rc in repo_configs
+                    rc
+                    for rc in repo_configs
                     if getattr(rc, "trace_health_periodic", True)
                 ]
             for repo_config in repo_configs:
@@ -1347,6 +1443,7 @@ class Worker:
                         repo_label,
                     )
                     from ..trace_health_runner import run_trace_health_check
+
                     run_id = None
                     if self.run_registry:
                         run_id = self.run_registry.start(
@@ -1354,7 +1451,8 @@ class Worker:
                             repo_id=repo_config.repo_id if repo_config else "",
                         )
                     result = await asyncio.to_thread(
-                        run_trace_health_check, repo_config=repo_config,
+                        run_trace_health_check,
+                        repo_config=repo_config,
                     )
                     if result.draft_created:
                         log.info(
@@ -1432,7 +1530,8 @@ class Worker:
                 repo_configs = [None]  # type: ignore[list-item]
             else:
                 repo_configs = [
-                    rc for rc in repo_configs
+                    rc
+                    for rc in repo_configs
                     if getattr(rc, "cost_warmer_periodic", True)
                 ]
             warmed_count = 0
@@ -1440,9 +1539,7 @@ class Worker:
                 try:
                     svc = TicketService(
                         settings,
-                        board_id=(
-                            repo_config.board_id if repo_config else ""
-                        ),
+                        board_id=(repo_config.board_id if repo_config else ""),
                     )
                     tickets: list[Ticket] = svc.list()
                 except Exception:  # noqa: BLE001 — survive per-repo errors
@@ -1467,20 +1564,24 @@ class Worker:
                     try:
                         await asyncio.to_thread(
                             session_cost,
-                            settings, ticket.id, repo_config=repo_config,
+                            settings,
+                            ticket.id,
+                            repo_config=repo_config,
                         )
                         warmed_count += 1
                     except Exception:  # noqa: BLE001 — never break the loop
                         log.debug(
                             "cost-warmer: lookup failed for %s",
-                            ticket.id, exc_info=True,
+                            ticket.id,
+                            exc_info=True,
                         )
                     await asyncio.sleep(pace)
 
             cycle_secs = time.monotonic() - cycle_start
             log.debug(
                 "cost-warmer cycle: %d tickets warmed in %.1fs",
-                warmed_count, cycle_secs,
+                warmed_count,
+                cycle_secs,
             )
             # Sleep the remainder of the interval if we finished early.
             await asyncio.sleep(max(0.0, interval - cycle_secs))
@@ -1504,7 +1605,8 @@ class Worker:
         spawned — that's the worker.stop() contract.
         """
         from ..agents.bespoke_loader import (
-            BespokeAgentDefinition, load_bespoke_definitions,
+            BespokeAgentDefinition,
+            load_bespoke_definitions,
         )
         from ..audit_runner import _clone_token
         from ..vcs import git_ops
@@ -1512,12 +1614,9 @@ class Worker:
         settings = self.ctx.settings
         interval = max(60, settings.bespoke_discovery_interval_seconds)
         board_id = repo_config.board_id
-        forge_url = (
-            repo_config.forge_remote_url or settings.forge_remote_url
-        )
+        forge_url = repo_config.forge_remote_url or settings.forge_remote_url
         clone_dir = (
-            settings.data_dir / repo_config.repo_id
-            / "bespoke_workspace" / "repo"
+            settings.data_dir / repo_config.repo_id / "bespoke_workspace" / "repo"
         )
 
         # name -> (task, definition)
@@ -1537,10 +1636,12 @@ class Worker:
                     if forge_url and not (clone_dir / ".git").exists():
                         try:
                             clone_dir.parent.mkdir(
-                                parents=True, exist_ok=True,
+                                parents=True,
+                                exist_ok=True,
                             )
                             git_ops.clone(
-                                forge_url, clone_dir,
+                                forge_url,
+                                clone_dir,
                                 settings.forge_target_branch,
                                 _clone_token(settings, repo_config),
                             )
@@ -1560,11 +1661,18 @@ class Worker:
                             # Hard-reset to the remote so newly committed
                             # .robotsix-mill/ YAMLs land immediately.
                             import subprocess
+
                             subprocess.run(
-                                ["git", "-C", str(clone_dir), "reset",
-                                 "--hard",
-                                 f"origin/{settings.forge_target_branch}"],
-                                check=False, capture_output=True,
+                                [
+                                    "git",
+                                    "-C",
+                                    str(clone_dir),
+                                    "reset",
+                                    "--hard",
+                                    f"origin/{settings.forge_target_branch}",
+                                ],
+                                check=False,
+                                capture_output=True,
                             )
                         except Exception:  # noqa: BLE001
                             log.exception(
@@ -1573,8 +1681,7 @@ class Worker:
                             )
 
                     definitions = {
-                        d.name: d
-                        for d in load_bespoke_definitions(clone_dir)
+                        d.name: d for d in load_bespoke_definitions(clone_dir)
                     }
 
                     # Drop tasks whose YAML disappeared.
@@ -1584,7 +1691,8 @@ class Worker:
                             task.cancel()
                             log.info(
                                 "bespoke %s/%s: YAML removed — cancelled",
-                                board_id, name,
+                                board_id,
+                                name,
                             )
 
                     # Spawn / respawn tasks for current YAMLs.
@@ -1596,21 +1704,27 @@ class Worker:
                             existing[0].cancel()
                             log.info(
                                 "bespoke %s/%s: YAML changed — respawning",
-                                board_id, name,
+                                board_id,
+                                name,
                             )
                         task = asyncio.create_task(
                             self._run_bespoke_loop(
-                                repo_config, defn, clone_dir,
+                                repo_config,
+                                defn,
+                                clone_dir,
                             )
                         )
                         running[name] = (task, defn)
                         log.info(
                             "bespoke %s/%s: scheduled (interval=%ds)",
-                            board_id, name, defn.interval_seconds,
+                            board_id,
+                            name,
+                            defn.interval_seconds,
                         )
                 except Exception:  # noqa: BLE001
                     log.exception(
-                        "bespoke supervisor (%s) cycle failed", board_id,
+                        "bespoke supervisor (%s) cycle failed",
+                        board_id,
                     )
 
                 await asyncio.sleep(interval)
@@ -1647,14 +1761,18 @@ class Worker:
             try:
                 log.info(
                     "Starting bespoke pass %r for repo %s",
-                    definition.name, repo_config.repo_id,
+                    definition.name,
+                    repo_config.repo_id,
                 )
                 if self.run_registry:
                     run_id = self.run_registry.start(
-                        label, repo_id=repo_config.repo_id,
+                        label,
+                        repo_id=repo_config.repo_id,
                     )
                 with tracing.start_ticket_root_span(
-                    session_id, label, repo_config=repo_config,
+                    session_id,
+                    label,
+                    repo_config=repo_config,
                 ):
                     result = await asyncio.to_thread(
                         bespoke_runner.run_bespoke_pass,
@@ -1665,20 +1783,20 @@ class Worker:
                     )
                 log.info(
                     "Bespoke %s/%s completed, created %d draft(s)",
-                    repo_config.repo_id, definition.name,
+                    repo_config.repo_id,
+                    definition.name,
                     len(result.drafts_created),
                 )
                 if self.run_registry and run_id:
-                    summary = (
-                        f"Created {len(result.drafts_created)} drafts"
-                    )
+                    summary = f"Created {len(result.drafts_created)} drafts"
                     self.run_registry.finish_ok(run_id, summary)
             except asyncio.CancelledError:
                 raise
             except Exception as e:  # noqa: BLE001 — loop must survive
                 log.exception(
                     "bespoke %s/%s pass failed",
-                    repo_config.repo_id, definition.name,
+                    repo_config.repo_id,
+                    definition.name,
                 )
                 if self.run_registry and run_id:
                     self.run_registry.finish_error(run_id, str(e))
@@ -1704,13 +1822,15 @@ class Worker:
                 repo_configs = [None]  # type: ignore[list-item]
             else:
                 repo_configs = [
-                    rc for rc in repo_configs
+                    rc
+                    for rc in repo_configs
                     if getattr(rc, "langfuse_cleanup_periodic", True)
                 ]
             for repo_config in repo_configs:
                 label = repo_config.repo_id if repo_config else "default"
                 try:
                     from ..langfuse_cleanup_runner import run_langfuse_cleanup_pass
+
                     result = await asyncio.to_thread(
                         run_langfuse_cleanup_pass,
                         settings=settings,
@@ -1719,9 +1839,10 @@ class Worker:
                     )
                     if result.traces_deleted > 0:
                         log.info(
-                            "langfuse-cleanup: %s — deleted %d of %d traces "
-                            "(cap %d)",
-                            label, result.traces_deleted, result.traces_before,
+                            "langfuse-cleanup: %s — deleted %d of %d traces (cap %d)",
+                            label,
+                            result.traces_deleted,
+                            result.traces_before,
                             settings.langfuse_cleanup_max_traces,
                         )
                 except Exception:  # noqa: BLE001 — periodic sweep must not die
@@ -1743,12 +1864,15 @@ class Worker:
         while True:
             try:
                 from ..timeout_escalation_runner import run_timeout_escalation
+
                 result = await asyncio.to_thread(
-                    run_timeout_escalation, settings,
+                    run_timeout_escalation,
+                    settings,
                 )
                 log.info(
                     "timeout-escalation: pass complete — escalated=%d skipped=%d",
-                    result.get("escaped", 0), result.get("skipped", 0),
+                    result.get("escaped", 0),
+                    result.get("skipped", 0),
                 )
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("timeout-escalation poll failed")
@@ -1783,7 +1907,9 @@ class Worker:
 
         min_interval = 60
         if repo_configs:
-            min_interval = max(60, min(rc.ci_monitor_interval_seconds for rc in repo_configs))
+            min_interval = max(
+                60, min(rc.ci_monitor_interval_seconds for rc in repo_configs)
+            )
 
         await asyncio.sleep(self._initial_delay("ci_monitor", min_interval))
         while True:
@@ -1793,7 +1919,10 @@ class Worker:
 
                 # Honour per-repo interval.
                 now = time.time()
-                if repo_label in last_polled and (now - last_polled[repo_label]) < interval:
+                if (
+                    repo_label in last_polled
+                    and (now - last_polled[repo_label]) < interval
+                ):
                     continue
 
                 try:
@@ -1809,13 +1938,14 @@ class Worker:
                     if state_path.exists():
                         try:
                             state = json.loads(state_path.read_text("utf-8"))
-                        except (json.JSONDecodeError, OSError):
+                        except json.JSONDecodeError, OSError:
                             state = {"seen": {}}
                     seen = state.setdefault("seen", {})
 
                     # 2. Prune entries older than TTL.
                     stale = [
-                        key for key, val in seen.items()
+                        key
+                        for key, val in seen.items()
                         if isinstance(val, (int, float)) and (now - val) > ttl_seconds
                     ]
                     for key in stale:
@@ -1846,8 +1976,7 @@ class Worker:
                         wf_name = run.get("name", "unknown")
                         run_id_val = run.get("id")
                         title = (
-                            f"CI failure: {wf_name} on "
-                            f"{settings.forge_target_branch}"
+                            f"CI failure: {wf_name} on {settings.forge_target_branch}"
                         )
 
                         # One OPEN ci ticket per workflow: if a non-terminal
@@ -1869,15 +1998,15 @@ class Worker:
                         log.info(
                             "CI monitor (%s): new failure — %s (run %s) on %s",
                             repo_label,
-                            wf_name, run_id_val, settings.forge_target_branch,
+                            wf_name,
+                            run_id_val,
+                            settings.forge_target_branch,
                         )
 
                         # Fetch job logs.
                         logs = ""
                         try:
-                            logs = forge.fetch_workflow_job_logs(
-                                run_id=run_id_val
-                            )
+                            logs = forge.fetch_workflow_job_logs(run_id=run_id_val)
                         except Exception:
                             log.warning(
                                 "CI monitor: failed to fetch logs for run %s",
@@ -1905,7 +2034,9 @@ class Worker:
 
                         try:
                             service.create(
-                                title=title, description=body, source=SourceKind.CI,
+                                title=title,
+                                description=body,
+                                source=SourceKind.CI,
                             )
                         except Exception:
                             log.exception(
@@ -1943,23 +2074,21 @@ class Worker:
             pool_sizes.append((self._DEFAULT_BOARD, 1))
             for board_id, n in pool_sizes:
                 for _ in range(n):
-                    self._tasks.append(
-                        asyncio.create_task(self._run(board_id))
-                    )
+                    self._tasks.append(asyncio.create_task(self._run(board_id)))
             log.info(
                 "worker pool started: %s",
-                ", ".join(
-                    f"{bid or '<default>'}={n}" for bid, n in pool_sizes
-                ),
+                ", ".join(f"{bid or '<default>'}={n}" for bid, n in pool_sizes),
             )
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
         # Opt-in periodic audit
         if self.ctx.settings.audit_periodic and self._audit_task is None:
             from ..audit_runner import run_audit_pass
+
             self._audit_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "audit", run_audit_pass,
+                    "audit",
+                    run_audit_pass,
                     settings_interval_attr="audit_interval_seconds",
                     settings_enabled_attr="audit_periodic",
                     per_repo_flag="audit_periodic",
@@ -1978,9 +2107,11 @@ class Worker:
         # Opt-in periodic health
         if self.ctx.settings.health_periodic and self._health_task is None:
             from ..health_runner import run_health_pass
+
             self._health_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "health", run_health_pass,
+                    "health",
+                    run_health_pass,
                     settings_interval_attr="health_interval_seconds",
                     settings_enabled_attr="health_periodic",
                     per_repo_flag="health_periodic",
@@ -1988,14 +2119,13 @@ class Worker:
             )
             log.info("Periodic health enabled (per-repo schedule)")
         # Opt-in periodic agent-check
-        if (
-            self.ctx.settings.agent_check_periodic
-            and self._agent_check_task is None
-        ):
+        if self.ctx.settings.agent_check_periodic and self._agent_check_task is None:
             from ..agent_check_runner import run_agent_check_pass
+
             self._agent_check_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "agent_check", run_agent_check_pass,
+                    "agent_check",
+                    run_agent_check_pass,
                     settings_interval_attr="agent_check_interval_seconds",
                     settings_enabled_attr="agent_check_periodic",
                     per_repo_flag="agent_check_periodic",
@@ -2005,9 +2135,11 @@ class Worker:
         # Opt-in periodic bc-check
         if self.ctx.settings.bc_check_periodic and self._bc_check_task is None:
             from ..bc_check_runner import run_bc_check_pass
+
             self._bc_check_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "bc_check", run_bc_check_pass,
+                    "bc_check",
+                    run_bc_check_pass,
                     settings_interval_attr="bc_check_interval_seconds",
                     settings_enabled_attr="bc_check_periodic",
                     per_repo_flag="bc_check_periodic",
@@ -2016,14 +2148,13 @@ class Worker:
             log.info("Periodic bc-check enabled (per-repo schedule)")
         # Opt-in periodic trace-review (deterministic outlier classifier
         # + cheap flash inspector on flagged subset → draft tickets).
-        if (
-            self.ctx.settings.trace_review_periodic
-            and self._trace_review_task is None
-        ):
+        if self.ctx.settings.trace_review_periodic and self._trace_review_task is None:
             from ..trace_review_runner import run_trace_review_pass
+
             self._trace_review_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "trace_review", run_trace_review_pass,
+                    "trace_review",
+                    run_trace_review_pass,
                     settings_interval_attr="trace_review_interval_seconds",
                     settings_enabled_attr="trace_review_periodic",
                     per_repo_flag="trace_review_periodic",
@@ -2033,27 +2164,25 @@ class Worker:
         # Background cost warmer (pre-fills the Langfuse cost cache so
         # the board's per-ticket price column doesn't show $0 until the
         # operator opens the drawer).
-        if (
-            self.ctx.settings.cost_warmer_periodic
-            and self._cost_warmer_task is None
-        ):
-            self._cost_warmer_task = asyncio.create_task(
-                self._cost_warmer_loop()
-            )
+        if self.ctx.settings.cost_warmer_periodic and self._cost_warmer_task is None:
+            self._cost_warmer_task = asyncio.create_task(self._cost_warmer_loop())
             log.info(
                 "Cost warmer enabled: cycle %ds, pace %dms",
                 self.ctx.settings.cost_warmer_interval_seconds,
                 self.ctx.settings.cost_warmer_pace_ms,
             )
         # Opt-in periodic completeness-check
-        if self.ctx.settings.completeness_check_periodic and self._completeness_check_task is None:
+        if (
+            self.ctx.settings.completeness_check_periodic
+            and self._completeness_check_task is None
+        ):
             from ..completeness_check_runner import run_completeness_check_pass
+
             self._completeness_check_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "completeness_check", run_completeness_check_pass,
-                    settings_interval_attr=(
-                        "completeness_check_interval_seconds"
-                    ),
+                    "completeness_check",
+                    run_completeness_check_pass,
+                    settings_interval_attr=("completeness_check_interval_seconds"),
                     settings_enabled_attr="completeness_check_periodic",
                     per_repo_flag="completeness_check_periodic",
                 )
@@ -2062,9 +2191,11 @@ class Worker:
         # Opt-in periodic copy-paste
         if self.ctx.settings.copy_paste_periodic and self._copy_paste_task is None:
             from ..copy_paste_runner import run_copy_paste_pass
+
             self._copy_paste_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "copy-paste", run_copy_paste_pass,
+                    "copy-paste",
+                    run_copy_paste_pass,
                     settings_interval_attr="copy_paste_interval_seconds",
                     settings_enabled_attr="copy_paste_periodic",
                     per_repo_flag="copy_paste_periodic",
@@ -2072,11 +2203,16 @@ class Worker:
             )
             log.info("Periodic copy-paste enabled (per-repo schedule)")
         # Opt-in periodic module-curator
-        if self.ctx.settings.module_curator_periodic and self._module_curator_task is None:
+        if (
+            self.ctx.settings.module_curator_periodic
+            and self._module_curator_task is None
+        ):
             from ..module_curator_runner import run_module_curator_pass
+
             self._module_curator_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "module_curator", run_module_curator_pass,
+                    "module_curator",
+                    run_module_curator_pass,
                     settings_interval_attr="module_curator_interval_seconds",
                     settings_enabled_attr="module_curator_periodic",
                     per_repo_flag="module_curator_periodic",
@@ -2120,9 +2256,11 @@ class Worker:
         # Opt-in periodic test-gap
         if self.ctx.settings.test_gap_periodic and self._test_gap_task is None:
             from ..test_gap_runner import run_test_gap_pass
+
             self._test_gap_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "test-gap", run_test_gap_pass,
+                    "test-gap",
+                    run_test_gap_pass,
                     settings_interval_attr="test_gap_interval_seconds",
                     settings_enabled_attr="test_gap_periodic",
                     per_repo_flag="test_gap_periodic",
@@ -2132,9 +2270,11 @@ class Worker:
         # Opt-in periodic survey
         if self.ctx.settings.survey_periodic and self._survey_task is None:
             from ..survey_runner import run_survey_pass
+
             self._survey_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "survey", run_survey_pass,
+                    "survey",
+                    run_survey_pass,
                     settings_interval_attr="survey_interval_seconds",
                     settings_enabled_attr="survey_periodic",
                     per_repo_flag="survey_periodic",
@@ -2144,9 +2284,11 @@ class Worker:
         # Opt-in periodic config-sync
         if self.ctx.settings.config_sync_periodic and self._config_sync_task is None:
             from ..config_sync_runner import run_config_sync_pass
+
             self._config_sync_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "config-sync", run_config_sync_pass,
+                    "config-sync",
+                    run_config_sync_pass,
                     settings_interval_attr="config_sync_interval_seconds",
                     settings_enabled_attr="config_sync_periodic",
                     per_repo_flag="config_sync_periodic",
@@ -2159,19 +2301,17 @@ class Worker:
             and self._cost_reconciliation_task is None
         ):
             from ..cost_reconciliation_runner import run_cost_reconciliation_pass
+
             self._cost_reconciliation_task = asyncio.create_task(
                 self._run_periodic_pass_per_repo(
-                    "cost-reconciliation", run_cost_reconciliation_pass,
-                    settings_interval_attr=(
-                        "cost_reconciliation_interval_seconds"
-                    ),
+                    "cost-reconciliation",
+                    run_cost_reconciliation_pass,
+                    settings_interval_attr=("cost_reconciliation_interval_seconds"),
                     settings_enabled_attr="cost_reconciliation_periodic",
                     per_repo_flag="cost_reconciliation_periodic",
                 )
             )
-            log.info(
-                "Periodic cost-reconciliation enabled (per-repo schedule)"
-            )
+            log.info("Periodic cost-reconciliation enabled (per-repo schedule)")
         # Opt-in bespoke per-repo supervisors. One supervisor per repo
         # whose RepoConfig.bespoke_periodic is True; the supervisor
         # owns the per-bespoke loop tasks for that repo.
@@ -2181,12 +2321,11 @@ class Worker:
                     continue
                 if rc.board_id in self._bespoke_supervisor_tasks:
                     continue
-                self._bespoke_supervisor_tasks[rc.board_id] = (
-                    asyncio.create_task(self._bespoke_supervisor(rc))
+                self._bespoke_supervisor_tasks[rc.board_id] = asyncio.create_task(
+                    self._bespoke_supervisor(rc)
                 )
                 log.info(
-                    "Bespoke supervisor enabled for repo %s "
-                    "(discovery interval %ds)",
+                    "Bespoke supervisor enabled for repo %s (discovery interval %ds)",
                     rc.repo_id,
                     self.ctx.settings.bespoke_discovery_interval_seconds,
                 )
@@ -2194,13 +2333,24 @@ class Worker:
     async def stop(self) -> None:
         tasks = list(self._tasks)
         for attr in (
-            "_poll_task", "_audit_task",
-            "_trace_health_task", "_trace_review_task",
+            "_poll_task",
+            "_audit_task",
+            "_trace_health_task",
+            "_trace_review_task",
             "_cost_warmer_task",
-            "_health_task", "_ci_monitor_task",
-            "_agent_check_task", "_bc_check_task", "_completeness_check_task", "_copy_paste_task", "_module_curator_task", "_test_gap_task", "_survey_task",
-            "_config_sync_task", "_cost_reconciliation_task",
-            "_langfuse_cleanup_task", "_timeout_escalation_task",
+            "_health_task",
+            "_ci_monitor_task",
+            "_agent_check_task",
+            "_bc_check_task",
+            "_completeness_check_task",
+            "_copy_paste_task",
+            "_module_curator_task",
+            "_test_gap_task",
+            "_survey_task",
+            "_config_sync_task",
+            "_cost_reconciliation_task",
+            "_langfuse_cleanup_task",
+            "_timeout_escalation_task",
         ):
             t = getattr(self, attr)
             if t is not None:

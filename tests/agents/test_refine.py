@@ -40,7 +40,8 @@ def _dedup_clean(monkeypatch):
     """All pre-existing tests expect the dedup guard to be a no-op
     (novel draft).  Dedup-specific tests override this fixture."""
     monkeypatch.setattr(
-        dedup, "run_dedup_check",
+        dedup,
+        "run_dedup_check",
         lambda **_: {"duplicate_of": None, "already_done": None, "reason": "no match"},
     )
 
@@ -67,7 +68,19 @@ def test_dep_gated_ticket_is_not_refined(ctx, service, monkeypatch):
 
     refine_called = False
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nx\n")
@@ -97,7 +110,19 @@ def test_dep_satisfied_ticket_is_refined(ctx, service, monkeypatch):
 
     refine_called = False
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nx\n")
@@ -111,7 +136,19 @@ def test_dep_satisfied_ticket_is_refined(ctx, service, monkeypatch):
 
 
 def test_no_api_key_blocks(ctx, service, monkeypatch):
-    def boom(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def boom(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     monkeypatch.setattr(refining, "run_refine_agent", boom)
@@ -126,7 +163,17 @@ def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
     refine_called = False
 
     def fake_refine(
-        *, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
     ):
         nonlocal refine_called
         refine_called = True
@@ -148,9 +195,7 @@ def test_title_only_proceeds_to_refine(ctx, service, monkeypatch):
 
 def test_success_rewrites_description(ctx, service, monkeypatch):
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: _single(spec)
-    )
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     t = service.create("Add X", "make x happen")
 
     out = RefineStage().run(t, ctx)
@@ -172,16 +217,20 @@ def test_empty_spec_proceeds_to_ready(ctx, service, monkeypatch):
     assert out.next_state is State.READY
     # Original draft preserved as description.md
     assert service.workspace(t).read_description() == "draft"
-    assert (service.workspace(t).artifacts_dir / "draft-original.md").read_text() == "draft"
+    assert (
+        service.workspace(t).artifacts_dir / "draft-original.md"
+    ).read_text() == "draft"
 
 
-def test_empty_spec_proceeds_to_human_issue_approval_when_gated(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_empty_spec_proceeds_to_human_issue_approval_when_gated(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """Whitespace-only spec + gated → HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
-    gated_settings = Settings(
-        data_dir=str(tmp_path), require_approval="true"
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
     t = service.create("x", "draft")
     out = RefineStage().run(t, gated_ctx)
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
@@ -209,14 +258,16 @@ async def test_chains_draft_to_implement(ctx, service, monkeypatch):
 # --- approval gate tests ---
 
 
-def test_refine_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_refine_goes_to_human_issue_approval_when_gated(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """When require_approval=true, refine transitions to human_issue_approval."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
-    gated_settings = Settings(
-        data_dir=str(tmp_path), require_approval="true"
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
     t = service.create("Add X", "make x happen")
 
     out = RefineStage().run(t, gated_ctx)
@@ -236,7 +287,9 @@ def test_refine_goes_to_ready_when_autonomous(ctx, service, monkeypatch, repo_co
     assert out.next_state is State.READY
 
 
-async def test_human_issue_approval_pauses_chain(ctx, service, monkeypatch, repo_config):
+async def test_human_issue_approval_pauses_chain(
+    ctx, service, monkeypatch, repo_config
+):
     """When require_approval=true, the worker pauses at human_issue_approval
     (no stage owns it), so the ticket is not picked up by implement."""
     monkeypatch.setattr(
@@ -245,6 +298,7 @@ async def test_human_issue_approval_pauses_chain(ctx, service, monkeypatch, repo
     t = service.create("Add X", "rough idea")
     # apply refine outcome with gated settings
     from robotsix_mill.config import Settings as S
+
     gated = S(data_dir=str(ctx.settings.data_dir), require_approval="true")
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
     outcome = RefineStage().run(t, gated_ctx)
@@ -274,7 +328,19 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
         seen["clone"] += 1
         (dest / ".git").mkdir(parents=True)
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def fake_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         seen["repo_dir"] = repo_dir
         return _single("## Problem\nx\n## Scope\n- y\n")
 
@@ -285,7 +351,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
     RefineStage().run(t, ctx)
     repo = service.workspace(t).dir / "repo"
     assert seen["clone"] == 1
-    assert seen["repo_dir"] == repo            # agent got the local clone
+    assert seen["repo_dir"] == repo  # agent got the local clone
 
     # second run: clone already present -> reused, not re-cloned
     service.create  # noqa - keep ref
@@ -311,7 +377,19 @@ def test_refine_clone_failure_blocks_with_history_note(ctx, service, monkeypatch
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def fake_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         refine_called.append(True)
         return _single("## Problem\nx\n")
 
@@ -333,12 +411,12 @@ def test_web_fetch_confined_to_web_research_subagent():
     """Invariant lock: raw web_fetch is wired ONLY inside the
     web_research sub-agent (which summarises); no other agent exposes
     it. (web_tools.py is the definition module.)"""
-    from pathlib import Path
 
     import robotsix_mill.agents as ap
 
     offenders = [
-        f.name for f in Path(ap.__file__).parent.glob("*.py")
+        f.name
+        for f in Path(ap.__file__).parent.glob("*.py")
         if "make_web_fetch" in f.read_text()
         and f.name not in ("web_research.py", "web_tools.py")
     ]
@@ -379,8 +457,9 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     t_a = service.create("Add dark mode toggle", _DEDUP_BODY)
     t_b = service.create("Add dark mode toggle", _DEDUP_BODY)
 
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json):
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
         return {
             "duplicate_of": t_a.id,
             "already_done": None,
@@ -392,10 +471,24 @@ def test_dedup_duplicate_ticket_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
-        return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
+        return orig_refine(
+            settings=settings, title=title, draft=draft, repo_dir=repo_dir
+        )
 
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
@@ -415,8 +508,9 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
 
     t = service.create("Add X", _DEDUP_BODY)
 
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json):
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
         return {
             "duplicate_of": None,
             "already_done": "abc1234",
@@ -428,10 +522,24 @@ def test_dedup_already_committed_closes(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
-        return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
+        return orig_refine(
+            settings=settings, title=title, draft=draft, repo_dir=repo_dir
+        )
 
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
@@ -451,8 +559,9 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
 
     t = service.create("Add X", "make x happen")
 
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json):
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
         return {
             "duplicate_of": None,
             "already_done": None,
@@ -464,10 +573,24 @@ def test_dedup_novel_draft_proceeds_normally(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
-        return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
+        return orig_refine(
+            settings=settings, title=title, draft=draft, repo_dir=repo_dir
+        )
 
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
@@ -481,8 +604,9 @@ def test_dedup_skipped_for_empty_title_and_draft(ctx, service, monkeypatch):
     """When both title and draft are empty, blocks BEFORE dedup check."""
     dedup_called = False
 
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json):
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
         nonlocal dedup_called
         dedup_called = True
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
@@ -504,8 +628,9 @@ def test_dedup_skipped_for_trivial_draft(ctx, service, monkeypatch):
 
     dedup_called = False
 
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json):
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
         nonlocal dedup_called
         dedup_called = True
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
@@ -530,8 +655,9 @@ def test_dedup_never_flags_self(ctx, service, monkeypatch):
 
     seen_block = None
 
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json):
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
         nonlocal seen_block
         seen_block = candidates_json
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
@@ -561,8 +687,9 @@ def test_dedup_candidate_bodies_included(ctx, service, monkeypatch):
 
     seen_block = None
 
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json):
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
         nonlocal seen_block
         seen_block = candidates_json
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
@@ -593,8 +720,7 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
 
     t = service.create("Add X", "make x happen")
 
-    def boom_dedup(*, settings, draft_title, draft_body,
-                   candidates_json):
+    def boom_dedup(*, settings, draft_title, draft_body, candidates_json):
         raise RuntimeError("dedup model down")
 
     monkeypatch.setattr(dedup, "run_dedup_check", boom_dedup)
@@ -602,10 +728,24 @@ def test_dedup_failure_degrades_gracefully(ctx, service, monkeypatch):
     refine_called = False
     orig_refine = refining.run_refine_agent
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
-        return orig_refine(settings=settings, title=title, draft=draft, repo_dir=repo_dir)
+        return orig_refine(
+            settings=settings, title=title, draft=draft, repo_dir=repo_dir
+        )
 
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
@@ -631,8 +771,9 @@ def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
     def boom_clone(url, dest, branch, token):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
-    def fake_dedup(*, settings, draft_title, draft_body, repo_dir=None,
-                   candidates_json):
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
         nonlocal dedup_called
         dedup_called = True
         return {"duplicate_of": None, "already_done": None, "reason": "no match"}
@@ -656,9 +797,7 @@ def test_draft_to_closed_transition_is_legal():
     assert can_transition(S.DRAFT, S.CLOSED) is True
 
 
-def test_dedup_guard_survives_preexisting_closed_ticket(
-    ctx, service, monkeypatch
-):
+def test_dedup_guard_survives_preexisting_closed_ticket(ctx, service, monkeypatch):
     """Regression: SQLite used to return updated_at tz-naive; the dedup
     guard compared it to a tz-aware cutoff and raised TypeError, ERRORing
     every draft once any CLOSED ticket existed. After the model fix,
@@ -726,9 +865,7 @@ def test_aware_vs_aware_comparison_no_typeerror(service):
 
     # Also test fromtimestamp path used by the dedup lookback:
     now = datetime.now(tz.utc)
-    cutoff = datetime.fromtimestamp(
-        now.timestamp() - 30 * 86400, tz=tz.utc
-    )
+    cutoff = datetime.fromtimestamp(now.timestamp() - 30 * 86400, tz=tz.utc)
     assert ticket.updated_at >= cutoff  # must not raise TypeError
     assert ticket.created_at >= cutoff
 
@@ -748,9 +885,11 @@ def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
+
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -780,16 +919,21 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_tools.extend(t.__name__ for t in tools)
+
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
     s = Settings(data_dir=str(tmp_path))
     result = refining.run_refine_agent(
-        settings=s, title="Test", draft="draft", repo_dir=repo,
+        settings=s,
+        title="Test",
+        draft="draft",
+        repo_dir=repo,
     )
 
     assert result.split is False
@@ -812,16 +956,21 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_tools.extend(t.__name__ for t in tools)
+
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
     s = Settings(data_dir=str(tmp_path))
     result = refining.run_refine_agent(
-        settings=s, title="Test", draft="draft", repo_dir=None,
+        settings=s,
+        title="Test",
+        draft="draft",
+        repo_dir=None,
     )
 
     assert result.split is False
@@ -834,14 +983,25 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
 
 def test_split_creates_children_and_closes_parent(ctx, service, monkeypatch):
     """Multi-scope draft → N child tickets created, parent CLOSED, umbrella epic created."""
-    child_a_spec = "## Problem\nAdd checksum verification\n## Scope\n- verify checksums\n"
+    child_a_spec = (
+        "## Problem\nAdd checksum verification\n## Scope\n- verify checksums\n"
+    )
     child_b_spec = "## Problem\nAdd HEALTHCHECK\n## Scope\n- add HEALTHCHECK\n"
 
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _split(
-            {"title": "Add checksum verification", "spec_markdown": child_a_spec, "depends_on": []},
-            {"title": "Add HEALTHCHECK", "spec_markdown": child_b_spec, "depends_on": [0]},
+            {
+                "title": "Add checksum verification",
+                "spec_markdown": child_a_spec,
+                "depends_on": [],
+            },
+            {
+                "title": "Add HEALTHCHECK",
+                "spec_markdown": child_b_spec,
+                "depends_on": [0],
+            },
         ),
     )
 
@@ -884,11 +1044,16 @@ def test_split_creates_children_and_closes_parent(ctx, service, monkeypatch):
     assert child_b.state is State.READY
 
     # Children have the refined spec in their workspace.
-    assert service.workspace(child_a).read_description().rstrip("\n") == child_a_spec.rstrip("\n")
-    assert service.workspace(child_b).read_description().rstrip("\n") == child_b_spec.rstrip("\n")
+    assert service.workspace(child_a).read_description().rstrip(
+        "\n"
+    ) == child_a_spec.rstrip("\n")
+    assert service.workspace(child_b).read_description().rstrip(
+        "\n"
+    ) == child_b_spec.rstrip("\n")
 
     # Child B depends on child A.
     from robotsix_mill.core.service import _parse_depends_on_str
+
     assert _parse_depends_on_str(child_b.depends_on) == [child_a.id]
 
     # Child A has no dependencies.
@@ -898,11 +1063,24 @@ def test_split_creates_children_and_closes_parent(ctx, service, monkeypatch):
 def test_split_depends_on_indices_map_correctly(ctx, service, monkeypatch):
     """depends_on zero-based indices resolve to real child ticket IDs."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _split(
-            {"title": "Task 1", "spec_markdown": "## Problem\n1\n## Scope\n- one\n", "depends_on": []},
-            {"title": "Task 2", "spec_markdown": "## Problem\n2\n## Scope\n- two\n", "depends_on": [0]},
-            {"title": "Task 3", "spec_markdown": "## Problem\n3\n## Scope\n- three\n", "depends_on": [0, 1]},
+            {
+                "title": "Task 1",
+                "spec_markdown": "## Problem\n1\n## Scope\n- one\n",
+                "depends_on": [],
+            },
+            {
+                "title": "Task 2",
+                "spec_markdown": "## Problem\n2\n## Scope\n- two\n",
+                "depends_on": [0],
+            },
+            {
+                "title": "Task 3",
+                "spec_markdown": "## Problem\n3\n## Scope\n- three\n",
+                "depends_on": [0, 1],
+            },
         ),
     )
 
@@ -916,6 +1094,7 @@ def test_split_depends_on_indices_map_correctly(ctx, service, monkeypatch):
     c0, c1, c2 = [service.get(cid) for cid in ids_in_note]
 
     from robotsix_mill.core.service import _parse_depends_on_str
+
     assert _parse_depends_on_str(c0.depends_on) == []
     assert _parse_depends_on_str(c1.depends_on) == [c0.id]
     assert _parse_depends_on_str(c2.depends_on) == [c0.id, c1.id]
@@ -925,7 +1104,8 @@ def test_split_single_child_falls_back_to_normal(ctx, service, monkeypatch):
     """Only one valid child in split → fall back to single-spec path (no new tickets)."""
     child_spec = "## Problem\nSingle change\n## Scope\n- one thing\n"
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _split(
             {"title": "The only change", "spec_markdown": child_spec, "depends_on": []},
         ),
@@ -939,7 +1119,9 @@ def test_split_single_child_falls_back_to_normal(ctx, service, monkeypatch):
     assert "single child" in out.note
 
     # Description should be the child's spec (not the original draft).
-    assert service.workspace(t).read_description().rstrip("\n") == child_spec.rstrip("\n")
+    assert service.workspace(t).read_description().rstrip("\n") == child_spec.rstrip(
+        "\n"
+    )
     # Title should be updated to child's title.
     assert service.get(t.id).title == "The only change"
 
@@ -950,7 +1132,8 @@ def test_split_single_child_falls_back_to_normal(ctx, service, monkeypatch):
 def test_split_empty_children_proceeds(ctx, service, monkeypatch):
     """No children in split → proceed with original draft (not BLOCKED)."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(split=True, children=[]),
     )
 
@@ -966,14 +1149,15 @@ def test_split_empty_children_proceeds_to_human_issue_approval_when_gated(
 ):
     """No children in split + gated → HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(split=True, children=[]),
     )
 
-    gated_settings = Settings(
-        data_dir=str(tmp_path), require_approval="true"
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     t = service.create("Empty split gated", "draft")
     out = RefineStage().run(t, gated_ctx)
@@ -986,11 +1170,14 @@ def test_split_malformed_children_skipped(ctx, service, monkeypatch):
     if only one survives, fall back to single-spec."""
     good_spec = "## Problem\nGood\n## Scope\n- good\n"
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(
             split=True,
             children=[
-                ChildSpec(title="", spec_markdown="## Problem\nBad\n", depends_on=[]),  # no title
+                ChildSpec(
+                    title="", spec_markdown="## Problem\nBad\n", depends_on=[]
+                ),  # no title
                 ChildSpec(title="Good", spec_markdown=good_spec, depends_on=[]),
                 ChildSpec(title="Bad", spec_markdown="", depends_on=[]),  # no spec
             ],
@@ -1003,23 +1190,36 @@ def test_split_malformed_children_skipped(ctx, service, monkeypatch):
     # Only "Good" survives → fallback to single-spec.
     assert out.next_state is State.READY
     assert "single child" in out.note
-    assert service.workspace(t).read_description().rstrip("\n") == good_spec.rstrip("\n")
+    assert service.workspace(t).read_description().rstrip("\n") == good_spec.rstrip(
+        "\n"
+    )
 
 
-def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_split_require_approval_honoured_per_child(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """When require_approval=true, children go to HUMAN_ISSUE_APPROVAL."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _split(
-            {"title": "Child A", "spec_markdown": "## Problem\nA\n## Scope\n- a\n", "depends_on": []},
-            {"title": "Child B", "spec_markdown": "## Problem\nB\n## Scope\n- b\n", "depends_on": []},
+            {
+                "title": "Child A",
+                "spec_markdown": "## Problem\nA\n## Scope\n- a\n",
+                "depends_on": [],
+            },
+            {
+                "title": "Child B",
+                "spec_markdown": "## Problem\nB\n## Scope\n- b\n",
+                "depends_on": [],
+            },
         ),
     )
 
-    gated_settings = Settings(
-        data_dir=str(tmp_path), require_approval="true"
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     parent = service.create("Gated split", "draft")
     out = RefineStage().run(parent, gated_ctx)
@@ -1030,7 +1230,9 @@ def test_split_require_approval_honoured_per_child(ctx, service, monkeypatch, tm
 
     for cid in ids_in_note:
         child = service.get(cid)
-        assert child.state is State.HUMAN_ISSUE_APPROVAL, f"{cid} should be human_issue_approval"
+        assert child.state is State.HUMAN_ISSUE_APPROVAL, (
+            f"{cid} should be human_issue_approval"
+        )
 
 
 def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
@@ -1040,7 +1242,8 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
 
     # Step 1: Create a parent and split it into TWO children (need 2+ to trigger actual split).
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _split(
             {"title": "Child A", "spec_markdown": child_a_spec, "depends_on": []},
             {"title": "Child B", "spec_markdown": child_b_spec, "depends_on": []},
@@ -1061,6 +1264,7 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     service.transition(child_a_id, State.BLOCKED, "test: back to draft")
     from robotsix_mill.core import db as core_db
     from robotsix_mill.core.models import Ticket as TicketModel
+
     with core_db.session(service.settings, service.board_id) as s:
         t = s.get(TicketModel, child_a_id)
         t.state = State.DRAFT
@@ -1071,7 +1275,19 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     # Step 3: Now run RefineStage on child A — it should skip the agent.
     refine_called = False
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         return _single(draft)
@@ -1095,7 +1311,9 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     assert "split child" in out2.note
 
     # The description should still be the original refined spec.
-    assert service.workspace(child).read_description().rstrip("\n") == child_a_spec.rstrip("\n")
+    assert service.workspace(child).read_description().rstrip(
+        "\n"
+    ) == child_a_spec.rstrip("\n")
 
 
 def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
@@ -1108,7 +1326,8 @@ def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
     # (as retrospect does), then create a child with parent_id set.
     parent = service.create("Reviewed ticket", "original work")
     service.transition(
-        parent.id, State.CLOSED,
+        parent.id,
+        State.CLOSED,
         "all good — improvement draft <child_id>",
     )
 
@@ -1123,7 +1342,19 @@ def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
     refine_called = False
     expected_spec = "## Problem\nrefined improvement\n## Scope\n- do it\n"
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         assert draft == raw_draft
@@ -1136,16 +1367,27 @@ def test_retrospect_spawned_child_not_skipped(ctx, service, monkeypatch):
     # Must NOT short-circuit: agent should have been called.
     assert refine_called
     assert out.next_state is State.READY
-    assert service.workspace(child).read_description().rstrip("\n") == expected_spec.rstrip("\n")
+    assert service.workspace(child).read_description().rstrip(
+        "\n"
+    ) == expected_spec.rstrip("\n")
 
 
 def test_split_preserves_parent_draft_original(ctx, service, monkeypatch):
     """Parent's draft-original.md is preserved when splitting."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _split(
-            {"title": "Child 1", "spec_markdown": "## Problem\n1\n## Scope\n- one\n", "depends_on": []},
-            {"title": "Child 2", "spec_markdown": "## Problem\n2\n## Scope\n- two\n", "depends_on": []},
+            {
+                "title": "Child 1",
+                "spec_markdown": "## Problem\n1\n## Scope\n- one\n",
+                "depends_on": [],
+            },
+            {
+                "title": "Child 2",
+                "spec_markdown": "## Problem\n2\n## Scope\n- two\n",
+                "depends_on": [],
+            },
         ),
     )
 
@@ -1160,11 +1402,24 @@ def test_split_preserves_parent_draft_original(ctx, service, monkeypatch):
 def test_split_with_invalid_depends_on_indices_handled(ctx, service, monkeypatch):
     """depends_on indices that are out of range or point to future children are ignored."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _split(
-            {"title": "Task A", "spec_markdown": "## Problem\nA\n## Scope\n- a\n", "depends_on": [5]},  # out of range
-            {"title": "Task B", "spec_markdown": "## Problem\nB\n## Scope\n- b\n", "depends_on": [0]},  # valid
-            {"title": "Task C", "spec_markdown": "## Problem\nC\n## Scope\n- c\n", "depends_on": [-1, 0]},  # negative ignored, 0 valid
+            {
+                "title": "Task A",
+                "spec_markdown": "## Problem\nA\n## Scope\n- a\n",
+                "depends_on": [5],
+            },  # out of range
+            {
+                "title": "Task B",
+                "spec_markdown": "## Problem\nB\n## Scope\n- b\n",
+                "depends_on": [0],
+            },  # valid
+            {
+                "title": "Task C",
+                "spec_markdown": "## Problem\nC\n## Scope\n- c\n",
+                "depends_on": [-1, 0],
+            },  # negative ignored, 0 valid
         ),
     )
 
@@ -1177,6 +1432,7 @@ def test_split_with_invalid_depends_on_indices_handled(ctx, service, monkeypatch
     c0, c1, c2 = [service.get(cid) for cid in ids_in_note]
 
     from robotsix_mill.core.service import _parse_depends_on_str
+
     # Task A: [5] is out of range → ignored.
     assert _parse_depends_on_str(c0.depends_on) == []
     # Task B: [0] valid → depends on Task A.
@@ -1188,9 +1444,7 @@ def test_split_with_invalid_depends_on_indices_handled(ctx, service, monkeypatch
 def test_no_split_single_scope_unchanged(ctx, service, monkeypatch):
     """Single-scope draft behaviour is byte-for-byte identical to before."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
-    monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: _single(spec)
-    )
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     t = service.create("Add X", "make x happen")
 
     out = RefineStage().run(t, ctx)
@@ -1214,13 +1468,16 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single(raw_md)})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
     s = Settings(data_dir=str(tmp_path))
     result = refining.run_refine_agent(
-        settings=s, title="Test", draft="draft",
+        settings=s,
+        title="Test",
+        draft="draft",
     )
 
     assert result.split is False
@@ -1242,13 +1499,16 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
             def run_sync(self, msg, message_history=None, board_id=""):
                 # Simulate PromptedOutput parsing — returns a RefineResult.
                 return type("R", (), {"output": _single(raw)})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
     s = Settings(data_dir=str(tmp_path))
     result = refining.run_refine_agent(
-        settings=s, title="Test", draft="draft",
+        settings=s,
+        title="Test",
+        draft="draft",
     )
 
     # Falls back to raw-as-spec.
@@ -1265,9 +1525,11 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
+
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -1294,9 +1556,11 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
+
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -1320,9 +1584,7 @@ def test_borderline_draft_not_split(ctx, service, monkeypatch):
     must NOT be split — the new prompt must not trigger aggressive
     splitting. This is a pin test for the escape clause."""
     spec = "## Problem\nAdd a user avatar field\n## Scope\n- Add `avatar_url` to User model\n- Update GET /users route\n## Acceptance criteria\n- [ ] avatar field returned\n## Out of scope / constraints\n- No frontend changes\n"
-    monkeypatch.setattr(
-        refining, "run_refine_agent", lambda **_: _single(spec)
-    )
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
 
     t = service.create("Add user avatar field", "add avatar_url to user")
     out = RefineStage().run(t, ctx)
@@ -1346,10 +1608,12 @@ def test_refine_result_absorbs_spec_markmark_typo():
     the bare ``spec`` near-miss) into ``spec_markdown`` so the typo
     can't block tickets anymore."""
     # The exact production typo.
-    r = RefineResult.model_validate({
-        "split": False,
-        "spec_markmark": "## Problem\n\nThe spec content.\n",
-    })
+    r = RefineResult.model_validate(
+        {
+            "split": False,
+            "spec_markmark": "## Problem\n\nThe spec content.\n",
+        }
+    )
     assert r.spec_markdown == "## Problem\n\nThe spec content.\n"
     assert r.split is False
 
@@ -1369,10 +1633,12 @@ def test_refine_result_absorbs_spec_md_short_typo():
 
 def test_refine_result_canonical_spec_markdown_passes_through():
     """The validator must not interfere with correctly-keyed output."""
-    r = RefineResult.model_validate({
-        "split": False,
-        "spec_markdown": "canonical content",
-    })
+    r = RefineResult.model_validate(
+        {
+            "split": False,
+            "spec_markdown": "canonical content",
+        }
+    )
     assert r.spec_markdown == "canonical content"
 
 
@@ -1380,10 +1646,12 @@ def test_refine_result_empty_typo_value_not_absorbed():
     """If the typo key has an empty / whitespace-only value, do NOT
     absorb it — that would mask a genuinely-empty refine output as
     'present', producing a downstream confusion."""
-    r = RefineResult.model_validate({
-        "split": False,
-        "spec_markmark": "",
-    })
+    r = RefineResult.model_validate(
+        {
+            "split": False,
+            "spec_markmark": "",
+        }
+    )
     assert r.spec_markdown is None  # genuinely empty → blocks downstream
 
 
@@ -1403,16 +1671,20 @@ def test_sendback_uses_short_prompt(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
+
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
 
     s = Settings(data_dir=str(tmp_path))
     refining.run_refine_agent(
-        settings=s, title="Test", draft="draft",
+        settings=s,
+        title="Test",
+        draft="draft",
         reviewer_comments="fix this",
     )
 
@@ -1430,9 +1702,11 @@ def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
 
     def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
+
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single("## Problem\nok\n")})()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -1461,21 +1735,31 @@ def test_sendback_prompt_includes_reviewer_feedback_reference():
 
 # --- epic context -------------------------------------------------------
 
+
 def test_epic_context_passed_to_refine_agent(ctx, service, monkeypatch):
     """When a ticket has an epic parent, epic_context is passed to
     run_refine_agent and contains the epic description."""
     epic = service.create("Global Epic", "High-level: unify UX", kind="epic")
     child = service.create(
-        "Add dark mode", "Please add dark mode toggle",
+        "Add dark mode",
+        "Please add dark mode toggle",
         parent_id=epic.id,
     )
 
     seen_epic_context: list[str] = []
 
     def fake_refine(
-        *, settings, title, draft, repo_dir=None,
-        reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None, message_history=None, board_id="",
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -1493,16 +1777,25 @@ def test_epic_context_empty_for_non_epic_parent_in_refine(ctx, service, monkeypa
     """Refine: ticket with non-epic parent → epic_context is empty."""
     parent = service.create("Parent task", "Ordinary task", kind="task")
     child = service.create(
-        "Child of task", "Do a sub-thing",
+        "Child of task",
+        "Do a sub-thing",
         parent_id=parent.id,
     )
 
     seen_epic_context: list[str] = []
 
     def fake_refine(
-        *, settings, title, draft, repo_dir=None,
-        reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None, message_history=None, board_id="",
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -1521,9 +1814,17 @@ def test_epic_context_empty_for_no_parent_in_refine(ctx, service, monkeypatch):
     seen_epic_context: list[str] = []
 
     def fake_refine(
-        *, settings, title, draft, repo_dir=None,
-        reviewer_comments=None, memory="", epic_context="",
-        extra_roots=None, message_history=None, board_id="",
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
     ):
         seen_epic_context.append(epic_context)
         return _single("## Problem\nspec\n")
@@ -1542,7 +1843,8 @@ def test_refine_updates_title_when_agent_provides_one(ctx, service, monkeypatch)
     """Agent returns a title → set_title is called with it."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(split=False, spec_markdown=spec, title="Better Title"),
     )
 
@@ -1557,7 +1859,8 @@ def test_refine_keeps_original_title_when_agent_returns_none(ctx, service, monke
     """Agent returns no title → set_title is NOT called."""
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(split=False, spec_markdown=spec),
     )
 
@@ -1568,12 +1871,17 @@ def test_refine_keeps_original_title_when_agent_returns_none(ctx, service, monke
     assert service.get(t.id).title == "Fix the thing"
 
 
-def test_refine_keeps_original_title_when_agent_returns_empty(ctx, service, monkeypatch):
+def test_refine_keeps_original_title_when_agent_returns_empty(
+    ctx, service, monkeypatch
+):
     """Agent returns empty/whitespace title → set_title is NOT called."""
     for empty_title in ("", "   "):
         monkeypatch.setattr(
-            refining, "run_refine_agent",
-            lambda **_: RefineResult(split=False, spec_markdown="## Problem\nx\n", title=empty_title),
+            refining,
+            "run_refine_agent",
+            lambda **_: RefineResult(
+                split=False, spec_markdown="## Problem\nx\n", title=empty_title
+            ),
         )
 
         t = service.create("Fix the thing", "make x happen")
@@ -1586,13 +1894,18 @@ def test_refine_keeps_original_title_when_agent_returns_empty(ctx, service, monk
 def test_refine_split_applies_title_to_parent(ctx, service, monkeypatch):
     """Split with agent title → set_title called on parent before close."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(
             split=True,
             title="Better Epic Name",
             children=[
-                ChildSpec(title="Child A", spec_markdown="## Problem\nA\n## Scope\n- a\n"),
-                ChildSpec(title="Child B", spec_markdown="## Problem\nB\n## Scope\n- b\n"),
+                ChildSpec(
+                    title="Child A", spec_markdown="## Problem\nA\n## Scope\n- a\n"
+                ),
+                ChildSpec(
+                    title="Child B", spec_markdown="## Problem\nB\n## Scope\n- b\n"
+                ),
             ],
         ),
     )
@@ -1609,7 +1922,8 @@ def test_refine_split_single_child_prefers_agent_title(ctx, service, monkeypatch
     """Single-child fallback: agent title beats child title."""
     child_spec = "## Problem\nSingle change\n## Scope\n- one thing\n"
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(
             split=True,
             title="Agent Title",
@@ -1640,14 +1954,31 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
 
     seen_kwargs: dict = {}
 
-    def fake_build_agent(settings, system_prompt, output_type, tools, web, report_issue, model_name, name, **kwargs):
+    def fake_build_agent(
+        settings,
+        system_prompt,
+        output_type,
+        tools,
+        web,
+        report_issue,
+        model_name,
+        name,
+        **kwargs,
+    ):
         seen_kwargs.update(
-            tools=tools, web=web, report_issue=report_issue,
-            model_name=model_name, name=name,
+            tools=tools,
+            web=web,
+            report_issue=report_issue,
+            model_name=model_name,
+            name=name,
         )
+
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
-                return type("R", (), {"output": TriageResult(decision="REFINE", reason="test")})()
+                return type(
+                    "R", (), {"output": TriageResult(decision="REFINE", reason="test")}
+                )()
+
         return FakeAgent()
 
     monkeypatch.setattr(base_mod, "build_agent", fake_build_agent)
@@ -1671,9 +2002,23 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     refine_called = False
 
     def fake_triage(*, settings, title, draft):
-        return TriageResult(decision="SKIP", reason="doc-only change, no exploration needed")
+        return TriageResult(
+            decision="SKIP", reason="doc-only change, no exploration needed"
+        )
 
-    def fake_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def fake_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         return _single("should not be called")
@@ -1681,7 +2026,9 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     monkeypatch.setattr(refining, "triage_refine", fake_triage)
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
 
-    t = service.create("Update README", "Change the version badge in `docs/README.md` line 5.")
+    t = service.create(
+        "Update README", "Change the version badge in `docs/README.md` line 5."
+    )
     out = RefineStage().run(t, ctx)
 
     assert not refine_called
@@ -1690,13 +2037,16 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     assert "doc-only change" in out.note
 
 
-def test_triage_skip_goes_to_human_issue_approval_when_gated(ctx, service, monkeypatch, repo_config):
+def test_triage_skip_goes_to_human_issue_approval_when_gated(
+    ctx, service, monkeypatch, repo_config
+):
     """When triage returns SKIP and require_approval=True, the ticket
     transitions to HUMAN_ISSUE_APPROVAL."""
     from robotsix_mill.agents.refining import TriageResult
 
     monkeypatch.setattr(
-        refining, "triage_refine",
+        refining,
+        "triage_refine",
         lambda **_: TriageResult(decision="SKIP", reason="config-only"),
     )
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("unused"))
@@ -1704,6 +2054,7 @@ def test_triage_skip_goes_to_human_issue_approval_when_gated(ctx, service, monke
     t = service.create("Add env var", "Add FOO=bar to `src/config.py` line 42.")
 
     from robotsix_mill.config import Settings as S
+
     gated = S(data_dir=str(ctx.settings.data_dir), require_approval="true")
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
     out = RefineStage().run(t, gated_ctx)
@@ -1719,9 +2070,23 @@ def test_triage_refine_calls_full_refine(ctx, service, monkeypatch):
     refine_called = False
 
     def fake_triage(*, settings, title, draft):
-        return TriageResult(decision="REFINE", reason="ambiguous scope, needs exploration")
+        return TriageResult(
+            decision="REFINE", reason="ambiguous scope, needs exploration"
+        )
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nrefined\n")
@@ -1737,7 +2102,9 @@ def test_triage_refine_calls_full_refine(ctx, service, monkeypatch):
     assert out.note == "refined"
 
 
-def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch, repo_config):
+def test_triage_feature_flag_off_calls_full_refine(
+    ctx, service, monkeypatch, repo_config
+):
     """When refine_triage_enabled=False, triage_refine is never called
     and full refine runs."""
     refine_called = False
@@ -1747,9 +2114,22 @@ def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch, re
         nonlocal triage_called
         triage_called = True
         from robotsix_mill.agents.refining import TriageResult
+
         return TriageResult(decision="SKIP", reason="should not be reached")
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nrefined\n")
@@ -1760,8 +2140,15 @@ def test_triage_feature_flag_off_calls_full_refine(ctx, service, monkeypatch, re
     t = service.create("Update README", "Change the version badge in README.md line 5.")
 
     from robotsix_mill.config import Settings as S
-    disabled = S(data_dir=str(ctx.settings.data_dir), refine_triage_enabled="false", require_approval="false")
-    disabled_ctx = StageContext(settings=disabled, service=service, repo_config=repo_config)
+
+    disabled = S(
+        data_dir=str(ctx.settings.data_dir),
+        refine_triage_enabled="false",
+        require_approval="false",
+    )
+    disabled_ctx = StageContext(
+        settings=disabled, service=service, repo_config=repo_config
+    )
     out = RefineStage().run(t, disabled_ctx)
 
     assert not triage_called
@@ -1782,7 +2169,19 @@ def test_triage_sendback_always_refines(ctx, service, monkeypatch):
         triage_called = True
         return TriageResult(decision="SKIP", reason="should not be reached")
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         # Verify reviewer comments were passed through.
@@ -1812,7 +2211,19 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
     def boom_triage(*, settings, title, draft):
         raise RuntimeError("triage model down")
 
-    def spy_refine(*, settings, title, draft, repo_dir=None, reviewer_comments=None, memory="", epic_context="", extra_roots=None, message_history=None, board_id=""):
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nrefined\n")
@@ -1833,7 +2244,9 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_auto_approve_approve_skips_human_gate(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """When triage_auto_approve returns APPROVE, the ticket goes straight
     to READY even when require_approval=true.  Uses a precise multi-file
     feature spec to demonstrate the relaxed criteria."""
@@ -1850,9 +2263,11 @@ def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_pa
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(
-        refining, "triage_auto_approve",
+        refining,
+        "triage_auto_approve",
         lambda **_: refining.AutoApproveResult(
-            decision="APPROVE", reason="precise multi-file feature, no design decisions",
+            decision="APPROVE",
+            reason="precise multi-file feature, no design decisions",
         ),
     )
 
@@ -1867,10 +2282,15 @@ def test_auto_approve_approve_skips_human_gate(ctx, service, monkeypatch, tmp_pa
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.READY
-    assert "auto-approve: APPROVE — precise multi-file feature, no design decisions" in out.note
+    assert (
+        "auto-approve: APPROVE — precise multi-file feature, no design decisions"
+        in out.note
+    )
 
 
-def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_auto_approve_needs_approval_goes_to_human(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """When triage_auto_approve returns NEEDS_APPROVAL, the ticket goes to
     HUMAN_ISSUE_APPROVAL when gated.  The spec here is ambiguous about scope
     — the implementer would have to guess where to make changes."""
@@ -1882,9 +2302,11 @@ def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tm
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(
-        refining, "triage_auto_approve",
+        refining,
+        "triage_auto_approve",
         lambda **_: refining.AutoApproveResult(
-            decision="NEEDS_APPROVAL", reason="ambiguous scope, unclear acceptance criteria",
+            decision="NEEDS_APPROVAL",
+            reason="ambiguous scope, unclear acceptance criteria",
         ),
     )
 
@@ -1899,17 +2321,23 @@ def test_auto_approve_needs_approval_goes_to_human(ctx, service, monkeypatch, tm
     out = RefineStage().run(t, gated_ctx)
 
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert "auto-approve: NEEDS_APPROVAL — ambiguous scope, unclear acceptance criteria" in out.note
+    assert (
+        "auto-approve: NEEDS_APPROVAL — ambiguous scope, unclear acceptance criteria"
+        in out.note
+    )
 
 
-def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_auto_approve_failure_falls_back_to_human(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """When triage_auto_approve raises, the ticket falls back to
     HUMAN_ISSUE_APPROVAL when gated."""
     spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(
-        refining, "triage_auto_approve",
+        refining,
+        "triage_auto_approve",
         lambda **_: (_ for _ in ()).throw(RuntimeError("auto-approve model down")),
     )
 
@@ -1927,7 +2355,9 @@ def test_auto_approve_failure_falls_back_to_human(ctx, service, monkeypatch, tmp
     assert "auto-approve: triage failed — falling back to human approval" in out.note
 
 
-def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_auto_approve_flag_off_never_called(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """When auto_approve_enabled=false, triage_auto_approve is never called
     and the ticket follows normal gated behaviour."""
     spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
@@ -1937,7 +2367,9 @@ def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path,
     def fake_auto_approve(*, settings, spec):
         nonlocal auto_approve_called
         auto_approve_called = True
-        return refining.AutoApproveResult(decision="APPROVE", reason="should not be reached")
+        return refining.AutoApproveResult(
+            decision="APPROVE", reason="should not be reached"
+        )
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(refining, "triage_auto_approve", fake_auto_approve)
@@ -1956,7 +2388,9 @@ def test_auto_approve_flag_off_never_called(ctx, service, monkeypatch, tmp_path,
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
 
 
-def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_auto_approve_precise_multifile_feature_approved(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """A precise, well-specified multi-file feature spec with clear
     acceptance criteria → APPROVE, ticket goes to READY."""
     spec = (
@@ -1973,9 +2407,11 @@ def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypat
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(
-        refining, "triage_auto_approve",
+        refining,
+        "triage_auto_approve",
         lambda **_: refining.AutoApproveResult(
-            decision="APPROVE", reason="precise multi-file feature, no design decisions",
+            decision="APPROVE",
+            reason="precise multi-file feature, no design decisions",
         ),
     )
 
@@ -1992,7 +2428,9 @@ def test_auto_approve_precise_multifile_feature_approved(ctx, service, monkeypat
     assert out.next_state is State.READY
 
 
-def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_auto_approve_ambiguous_spec_needs_approval(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """A spec with ambiguous scope where the implementer would have to
     guess → NEEDS_APPROVAL, ticket goes to HUMAN_ISSUE_APPROVAL."""
     spec = (
@@ -2003,9 +2441,11 @@ def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, t
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(
-        refining, "triage_auto_approve",
+        refining,
+        "triage_auto_approve",
         lambda **_: refining.AutoApproveResult(
-            decision="NEEDS_APPROVAL", reason="ambiguous scope, implementer must guess",
+            decision="NEEDS_APPROVAL",
+            reason="ambiguous scope, implementer must guess",
         ),
     )
 
@@ -2022,7 +2462,9 @@ def test_auto_approve_ambiguous_spec_needs_approval(ctx, service, monkeypatch, t
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
 
 
-def test_auto_approve_architecture_decision_needs_approval(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_auto_approve_architecture_decision_needs_approval(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """A spec introducing a new abstraction/module boundary →
     NEEDS_APPROVAL, ticket goes to HUMAN_ISSUE_APPROVAL."""
     spec = (
@@ -2040,9 +2482,11 @@ def test_auto_approve_architecture_decision_needs_approval(ctx, service, monkeyp
 
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
     monkeypatch.setattr(
-        refining, "triage_auto_approve",
+        refining,
+        "triage_auto_approve",
         lambda **_: refining.AutoApproveResult(
-            decision="NEEDS_APPROVAL", reason="new plugin abstraction, public API change",
+            decision="NEEDS_APPROVAL",
+            reason="new plugin abstraction, public API change",
         ),
     )
 
@@ -2069,7 +2513,8 @@ def test_epic_body_applied_immediately_in_autonomous_mode(ctx, service, monkeypa
     child = service.create("Add login", "draft", parent_id=epic.id)
 
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(
             split=False,
             spec_markdown="## Problem\nAdd login\n## Scope\n- login form\n",
@@ -2086,14 +2531,17 @@ def test_epic_body_applied_immediately_in_autonomous_mode(ctx, service, monkeypa
     assert "login first, then roles" in epic_desc
 
 
-def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_epic_body_stored_as_artifact_in_gated_mode(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """When require_approval=true, epic_body is stored as an artifact
     in the child's workspace, NOT written to the epic yet."""
     epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
     child = service.create("Add login", "draft", parent_id=epic.id)
 
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(
             split=False,
             spec_markdown="## Problem\nAdd login\n## Scope\n- login form\n",
@@ -2101,10 +2549,10 @@ def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, t
         ),
     )
 
-    gated_settings = Settings(
-        data_dir=str(tmp_path), require_approval="true"
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     out = RefineStage().run(child, gated_ctx)
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
@@ -2120,14 +2568,17 @@ def test_epic_body_stored_as_artifact_in_gated_mode(ctx, service, monkeypatch, t
     assert artifact.read_text(encoding="utf-8") == "Revised epic strategy: login first."
 
 
-def test_epic_body_applied_on_approval_in_gated_mode(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_epic_body_applied_on_approval_in_gated_mode(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """When require_approval=true, the epic body is applied to the
     epic only when the child ticket is approved."""
     epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
     child = service.create("Add login", "draft", parent_id=epic.id)
 
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(
             split=False,
             spec_markdown="## Problem\nAdd login\n## Scope\n- login form\n",
@@ -2135,10 +2586,10 @@ def test_epic_body_applied_on_approval_in_gated_mode(ctx, service, monkeypatch, 
         ),
     )
 
-    gated_settings = Settings(
-        data_dir=str(tmp_path), require_approval="true"
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     out = RefineStage().run(child, gated_ctx)
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
@@ -2151,7 +2602,7 @@ def test_epic_body_applied_on_approval_in_gated_mode(ctx, service, monkeypatch, 
     assert epic_desc == "Add authentication"
 
     # Simulate approval: transition + apply epic body artifact.
-    ticket = service.transition(child.id, State.READY, note="approved by human")
+    service.transition(child.id, State.READY, note="approved by human")
 
     # Now apply the epic body artifact (mimicking the approve route logic).
     artifact = service.workspace(child).artifacts_dir / "epic-body-proposed.md"
@@ -2172,7 +2623,8 @@ def test_epic_body_not_applied_when_no_epic_parent(ctx, service, monkeypatch):
     t = service.create("Standalone ticket", "draft")
 
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(
             split=False,
             spec_markdown="## Problem\nStandalone\n## Scope\n- thing\n",
@@ -2184,35 +2636,49 @@ def test_epic_body_not_applied_when_no_epic_parent(ctx, service, monkeypatch):
     assert out.next_state is State.READY
 
     # No crash, spec written as normal.
-    assert service.workspace(t).read_description() == "## Problem\nStandalone\n## Scope\n- thing\n"
+    assert (
+        service.workspace(t).read_description()
+        == "## Problem\nStandalone\n## Scope\n- thing\n"
+    )
 
     # No artifact created.
     artifact = service.workspace(t).artifacts_dir / "epic-body-proposed.md"
     assert not artifact.exists()
 
 
-def test_epic_body_applied_immediately_in_split_path(ctx, service, monkeypatch, tmp_path, repo_config):
+def test_epic_body_applied_immediately_in_split_path(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
     """In the split path, epic_body is applied immediately even when
     require_approval=true, because the original ticket is closed."""
     epic = service.create("Epic: Auth System", "Add authentication", kind="epic")
-    child = service.create("Multi-change", "draft with multiple changes", parent_id=epic.id)
+    child = service.create(
+        "Multi-change", "draft with multiple changes", parent_id=epic.id
+    )
 
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: RefineResult(
             split=True,
             children=[
-                ChildSpec(title="Add login", spec_markdown="## Problem\nlogin\n## Scope\n- login\n"),
-                ChildSpec(title="Add roles", spec_markdown="## Problem\nroles\n## Scope\n- roles\n"),
+                ChildSpec(
+                    title="Add login",
+                    spec_markdown="## Problem\nlogin\n## Scope\n- login\n",
+                ),
+                ChildSpec(
+                    title="Add roles",
+                    spec_markdown="## Problem\nroles\n## Scope\n- roles\n",
+                ),
             ],
             epic_body="Revised epic strategy: login then roles, each independent.",
         ),
     )
 
-    gated_settings = Settings(
-        data_dir=str(tmp_path), require_approval="true"
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
     )
-    gated_ctx = StageContext(settings=gated_settings, service=service, repo_config=repo_config)
 
     out = RefineStage().run(child, gated_ctx)
     assert out.next_state is State.CLOSED
@@ -2240,7 +2706,8 @@ def test_file_map_written_to_artifacts(ctx, service, monkeypatch):
         FileMapEntry(file="src/bar.py", note="helper utilities"),
     ]
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _single("## Problem\nx\n## Scope\n- y\n", file_map=entries),
     )
 
@@ -2261,7 +2728,8 @@ def test_file_map_written_to_artifacts(ctx, service, monkeypatch):
 def test_file_map_none_not_written(ctx, service, monkeypatch):
     """file_map=None (default) → no file_map.json artifact."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _single("## Problem\nx\n", file_map=None),
     )
 
@@ -2276,7 +2744,8 @@ def test_file_map_none_not_written(ctx, service, monkeypatch):
 def test_file_map_empty_list_not_written(ctx, service, monkeypatch):
     """file_map=[] → no file_map.json artifact (empty list is falsy)."""
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _single("## Problem\nx\n", file_map=[]),
     )
 
@@ -2296,7 +2765,8 @@ def test_file_map_written_in_split_path(ctx, service, monkeypatch):
         FileMapEntry(file="src/routes.py", note="API routes"),
     ]
     monkeypatch.setattr(
-        refining, "run_refine_agent",
+        refining,
+        "run_refine_agent",
         lambda **_: _split(
             {"title": "Child A", "spec_markdown": "## Problem\nA\n## Scope\n- a\n"},
             {"title": "Child B", "spec_markdown": "## Problem\nB\n## Scope\n- b\n"},
@@ -2322,7 +2792,10 @@ def test_file_map_present_in_system_prompt():
     from robotsix_mill.agents.refining import SYSTEM_PROMPT
 
     assert "Always produce a ``file_map``" in SYSTEM_PROMPT
-    assert '``file_map=[{"file": "path/to/file.py", "note": "reason this file matters"}, ...]``' in SYSTEM_PROMPT
+    assert (
+        '``file_map=[{"file": "path/to/file.py", "note": "reason this file matters"}, ...]``'
+        in SYSTEM_PROMPT
+    )
     assert "Keep it to ≤ 20 files" in SYSTEM_PROMPT
     assert "do not guess" in SYSTEM_PROMPT
     assert "``file_map=[]``" in SYSTEM_PROMPT

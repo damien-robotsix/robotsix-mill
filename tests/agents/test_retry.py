@@ -34,20 +34,24 @@ def _httpx_status(code):
 
 # --- classification -----------------------------------------------------
 
-@pytest.mark.parametrize("exc,transient", [
-    (ModelHTTPError(429, "m"), True),
-    (ModelHTTPError(503, "m"), True),
-    (ModelHTTPError(404, "m"), False),
-    (ModelHTTPError(400, "m"), False),
-    (httpx.ReadTimeout("t"), True),
-    (httpx.ConnectError("c"), True),
-    (_httpx_status(429), True),
-    (_httpx_status(502), True),
-    (_httpx_status(403), False),
-    (_FakeUsageLimitExceeded("cap"), False),
-    (ValueError("bug"), False),
-    (json.JSONDecodeError("Expecting value", "x", 0), True),  # bad model JSON
-])
+
+@pytest.mark.parametrize(
+    "exc,transient",
+    [
+        (ModelHTTPError(429, "m"), True),
+        (ModelHTTPError(503, "m"), True),
+        (ModelHTTPError(404, "m"), False),
+        (ModelHTTPError(400, "m"), False),
+        (httpx.ReadTimeout("t"), True),
+        (httpx.ConnectError("c"), True),
+        (_httpx_status(429), True),
+        (_httpx_status(502), True),
+        (_httpx_status(403), False),
+        (_FakeUsageLimitExceeded("cap"), False),
+        (ValueError("bug"), False),
+        (json.JSONDecodeError("Expecting value", "x", 0), True),  # bad model JSON
+    ],
+)
 def test_is_transient(exc, transient):
     assert is_transient(exc) is transient
 
@@ -88,6 +92,7 @@ def test_timeout_http_client_uses_configured_timeout(tmp_path):
 
 # --- retry behaviour (injected sleep, no real waiting) ------------------
 
+
 def test_transient_then_success(tmp_path):
     s = _settings(tmp_path)
     slept, calls = [], {"n": 0}
@@ -113,14 +118,18 @@ def test_persistent_transient_exhausts_then_raises(tmp_path):
 
     with pytest.raises(ModelHTTPError):
         call_with_retry(fn, settings=s, sleep=slept.append)
-    assert calls["n"] == 4          # 1 try + 3 retries
+    assert calls["n"] == 4  # 1 try + 3 retries
     assert len(slept) == 3
     assert all(d <= s.transient_backoff_cap * 1.5 for d in slept)  # capped+jitter
 
 
-@pytest.mark.parametrize("exc", [
-    ModelHTTPError(404, "m"), ValueError("x"),
-])
+@pytest.mark.parametrize(
+    "exc",
+    [
+        ModelHTTPError(404, "m"),
+        ValueError("x"),
+    ],
+)
 def test_non_transient_not_retried(tmp_path, exc):
     s = _settings(tmp_path)
     calls = {"n": 0}
@@ -149,17 +158,21 @@ def test_zero_retries_means_single_attempt(tmp_path):
 
 # --- is_rate_limited classification -------------------------------------
 
-@pytest.mark.parametrize("exc,expected", [
-    (_FakeUsageLimitExceeded("cap"), True),
-    (ModelHTTPError(429, "m"), False),
-    (ModelHTTPError(503, "m"), False),
-    (ModelHTTPError(404, "m"), False),
-    (httpx.ReadTimeout("t"), False),
-    (httpx.ConnectError("c"), False),
-    (_httpx_status(429), False),
-    (ValueError("bug"), False),
-    (json.JSONDecodeError("Expecting value", "x", 0), False),
-])
+
+@pytest.mark.parametrize(
+    "exc,expected",
+    [
+        (_FakeUsageLimitExceeded("cap"), True),
+        (ModelHTTPError(429, "m"), False),
+        (ModelHTTPError(503, "m"), False),
+        (ModelHTTPError(404, "m"), False),
+        (httpx.ReadTimeout("t"), False),
+        (httpx.ConnectError("c"), False),
+        (_httpx_status(429), False),
+        (ValueError("bug"), False),
+        (json.JSONDecodeError("Expecting value", "x", 0), False),
+    ],
+)
 def test_is_rate_limited(exc, expected):
     assert is_rate_limited(exc) is expected
 
@@ -175,6 +188,7 @@ def test_is_rate_limited_walks_chain():
 
 # --- rate-limit retry behaviour ------------------------------------------
 
+
 def test_rate_limit_raises_immediately_without_fallback(tmp_path):
     """UsageLimitExceeded without a fallback_fn must re-raise
     immediately — no backoff, no retries."""
@@ -188,7 +202,7 @@ def test_rate_limit_raises_immediately_without_fallback(tmp_path):
     with pytest.raises(_FakeUsageLimitExceeded):
         call_with_retry(fn, settings=s, sleep=slept.append)
     assert calls["n"] == 1  # exactly one call, no retries
-    assert len(slept) == 0   # no backoff delay
+    assert len(slept) == 0  # no backoff delay
 
 
 def test_rate_limit_exhausts_then_raises(tmp_path):
@@ -204,7 +218,7 @@ def test_rate_limit_exhausts_then_raises(tmp_path):
     with pytest.raises(_FakeUsageLimitExceeded):
         call_with_retry(fn, settings=s, sleep=slept.append)
     assert calls["n"] == 1  # exactly one call, no retries
-    assert len(slept) == 0   # no backoff
+    assert len(slept) == 0  # no backoff
 
 
 def test_rate_limit_fallback_activates(tmp_path):
@@ -227,10 +241,13 @@ def test_rate_limit_fallback_activates(tmp_path):
         return "fallback-ok"
 
     out = call_with_retry(
-        primary, settings=s, sleep=lambda _: None, fallback_fn=fallback,
+        primary,
+        settings=s,
+        sleep=lambda _: None,
+        fallback_fn=fallback,
     )
     assert out == "fallback-ok"
-    assert primary_calls["n"] == 1   # fallback activates on first failure
+    assert primary_calls["n"] == 1  # fallback activates on first failure
     assert fallback_calls["n"] == 1  # fallback succeeds on first try
 
 
@@ -255,7 +272,10 @@ def test_rate_limit_fallback_exhausts_then_raises(tmp_path):
 
     with pytest.raises(_FakeUsageLimitExceeded):
         call_with_retry(
-            primary, settings=s, sleep=lambda _: None, fallback_fn=fallback,
+            primary,
+            settings=s,
+            sleep=lambda _: None,
+            fallback_fn=fallback,
         )
     assert primary_calls["n"] == 1  # fallback activates on first failure
     assert fallback_calls["n"] == 1  # fallback also fails immediately
@@ -288,6 +308,7 @@ def test_rate_limit_fallback_not_called_for_transient(tmp_path):
 
 # --- flush_tracing on failure / retry -----------------------------------
 
+
 def test_non_retryable_flushes_before_raise(tmp_path, monkeypatch):
     """Non-retryable error: flush_tracing must be called before the
     exception propagates."""
@@ -297,7 +318,8 @@ def test_non_retryable_flushes_before_raise(tmp_path, monkeypatch):
         flush_calls.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.flush_tracing", fake_flush,
+        "robotsix_mill.runtime.tracing.flush_tracing",
+        fake_flush,
     )
     s = _settings(tmp_path)
 
@@ -318,7 +340,8 @@ def test_persistent_transient_flushes_per_attempt(tmp_path, monkeypatch):
         flush_calls.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.flush_tracing", fake_flush,
+        "robotsix_mill.runtime.tracing.flush_tracing",
+        fake_flush,
     )
     s = _settings(tmp_path, transient_retries="3")
     calls = {"n": 0}
@@ -329,8 +352,8 @@ def test_persistent_transient_flushes_per_attempt(tmp_path, monkeypatch):
 
     with pytest.raises(ModelHTTPError):
         call_with_retry(fn, settings=s, sleep=lambda _: None)
-    assert calls["n"] == 4          # 1 try + 3 retries
-    assert len(flush_calls) == 4    # flush after each of the 4 failed attempts
+    assert calls["n"] == 4  # 1 try + 3 retries
+    assert len(flush_calls) == 4  # flush after each of the 4 failed attempts
 
 
 def test_success_does_not_flush(tmp_path, monkeypatch):
@@ -341,7 +364,8 @@ def test_success_does_not_flush(tmp_path, monkeypatch):
         flush_calls.append(1)
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.flush_tracing", fake_flush,
+        "robotsix_mill.runtime.tracing.flush_tracing",
+        fake_flush,
     )
     s = _settings(tmp_path)
 
@@ -354,7 +378,8 @@ def test_success_does_not_flush(tmp_path, monkeypatch):
 
 
 def test_flush_tracing_error_does_not_swallow_agent_exception(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """If flush_tracing itself raises, the original agent exception
     must still propagate (not be swallowed by the flush guard)."""
@@ -363,7 +388,8 @@ def test_flush_tracing_error_does_not_swallow_agent_exception(
         raise RuntimeError("trace export failed")
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.flush_tracing", fake_flush,
+        "robotsix_mill.runtime.tracing.flush_tracing",
+        fake_flush,
     )
     s = _settings(tmp_path)
 

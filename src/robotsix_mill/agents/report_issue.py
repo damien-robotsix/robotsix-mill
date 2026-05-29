@@ -25,8 +25,12 @@ from ..core.models import SourceKind
 _DONE_WITH = {"closed", "done"}
 
 _CATEGORIES = (
-    "missing-tool", "error", "workflow-improvement",
-    "missing-input", "code-quality", "other",
+    "missing-tool",
+    "error",
+    "workflow-improvement",
+    "missing-input",
+    "code-quality",
+    "other",
 )
 
 
@@ -78,8 +82,7 @@ def make_report_issue_tool(
 
             if is_noop_report(title):
                 return (
-                    "report_issue: no actionable issue — not filed "
-                    "(clean/no-op report)"
+                    "report_issue: no actionable issue — not filed (clean/no-op report)"
                 )
             cat = category if category in _CATEGORIES else "other"
 
@@ -131,8 +134,12 @@ def make_report_issue_tool(
                 else:
                     evidence = evidence_bytes.decode("utf-8")
 
-            ticket = service.create(title, full_body, source=SourceKind.AGENT,
-                                     origin_session=current_session())
+            ticket = service.create(
+                title,
+                full_body,
+                source=SourceKind.AGENT,
+                origin_session=current_session(),
+            )
 
             if evidence:
                 workspace = service.workspace(ticket)
@@ -150,11 +157,18 @@ def make_report_issue_tool(
 
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="report_issue",
-        description="File a draft only for blocking issues preventing task completion.",
-        category="reporting",
-        parameters={"title": "str", "body": "str = \"\"", "category": "str = \"other\"", "evidence": "str = \"\""},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="report_issue",
+            description="File a draft only for blocking issues preventing task completion.",
+            category="reporting",
+            parameters={
+                "title": "str",
+                "body": 'str = ""',
+                "category": 'str = "other"',
+                "evidence": 'str = ""',
+            },
+        )
+    )
 
     return report_issue

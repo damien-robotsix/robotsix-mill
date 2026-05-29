@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from robotsix_mill.core.states import State
-from robotsix_mill.notify import send_notification, _TRIGGER_STATES
+from robotsix_mill.notify import send_notification
 from robotsix_mill.runtime.worker import process_ticket
 from robotsix_mill.stages import Outcome, StageContext
 from robotsix_mill.stages import registry
@@ -23,7 +23,9 @@ class _RecordingPost:
         self._exc = exc
 
     def __call__(self, url, *, headers=None, content=None, timeout=None):
-        self.calls.append({"url": url, "headers": headers, "content": content, "timeout": timeout})
+        self.calls.append(
+            {"url": url, "headers": headers, "content": content, "timeout": timeout}
+        )
         if self._exc is not None:
             raise self._exc
         return _FakeResponse(self._status)
@@ -36,7 +38,9 @@ class _FakeResponse:
     def raise_for_status(self):
         if self.status_code >= 400:
             raise httpx.HTTPStatusError(
-                "error", request=None, response=self  # type: ignore[arg-type]
+                "error",
+                request=None,
+                response=self,  # type: ignore[arg-type]
             )
 
 
@@ -95,12 +99,14 @@ def test_xtitle_header_is_ascii_safe(settings, service, monkeypatch, secrets_set
     monkeypatch.setattr(httpx, "post", rec)
 
     t = service.create("Café — naïve ☕ build")  # non-ASCII title
-    send_notification(t, State.HUMAN_MR_APPROVAL, "PR opened", settings)  # must not raise
+    send_notification(
+        t, State.HUMAN_MR_APPROVAL, "PR opened", settings
+    )  # must not raise
 
     assert len(rec.calls) == 1
     xt = rec.calls[0]["headers"]["X-Title"]
-    xt.encode("ascii")          # the actual failure mode — must not raise
-    assert "—" not in xt        # em-dash gone
+    xt.encode("ascii")  # the actual failure mode — must not raise
+    assert "—" not in xt  # em-dash gone
     assert xt.startswith("mill: human_mr_approval - ")
 
 
@@ -171,8 +177,11 @@ def _notify_settings(secrets_set):
     return None
 
 
-async def test_notifies_on_human_issue_approval(ctx, service, monkeypatch, _notify_settings, _recording):
+async def test_notifies_on_human_issue_approval(
+    ctx, service, monkeypatch, _notify_settings, _recording
+):
     """Worker-driven transition into human_issue_approval fires a notification."""
+
     class TriggerStage(Stage):
         name = "refine"
         input_state = State.DRAFT
@@ -188,8 +197,11 @@ async def test_notifies_on_human_issue_approval(ctx, service, monkeypatch, _noti
     assert len(_recording.calls) == 1
 
 
-async def test_notifies_on_blocked(ctx, service, monkeypatch, _notify_settings, _recording):
+async def test_notifies_on_blocked(
+    ctx, service, monkeypatch, _notify_settings, _recording
+):
     """Worker-driven transition into blocked fires a notification."""
+
     class TriggerStage(Stage):
         name = "refine"
         input_state = State.DRAFT
@@ -205,10 +217,13 @@ async def test_notifies_on_blocked(ctx, service, monkeypatch, _notify_settings, 
     assert len(_recording.calls) == 1
 
 
-async def test_notifies_on_human_mr_approval(ctx, service, monkeypatch, _notify_settings, _recording):
+async def test_notifies_on_human_mr_approval(
+    ctx, service, monkeypatch, _notify_settings, _recording
+):
     """Worker-driven transition into human_mr_approval fires a notification.
     The valid path is deliverable -> implement_complete -> human_mr_approval;
     mock the deliver and merge stages and pre-transition through draft -> ready -> deliverable."""
+
     # Mock refine and implement as no-ops so they don't interfere.
     class NoOp(Stage):
         def run(self, t, _c):
@@ -246,9 +261,12 @@ async def test_notifies_on_human_mr_approval(ctx, service, monkeypatch, _notify_
     assert len(_recording.calls) == 1
 
 
-async def test_notifies_on_errored_from_stage(ctx, service, monkeypatch, _notify_settings, _recording):
+async def test_notifies_on_errored_from_stage(
+    ctx, service, monkeypatch, _notify_settings, _recording
+):
     """Worker-driven fatal stage exception transitions to BLOCKED and
     fires a notification."""
+
     class BoomStage(Stage):
         name = "refine"
         input_state = State.DRAFT
@@ -264,7 +282,9 @@ async def test_notifies_on_errored_from_stage(ctx, service, monkeypatch, _notify
     assert len(_recording.calls) == 1
 
 
-async def test_does_not_notify_on_ready(ctx, service, monkeypatch, _notify_settings, _recording):
+async def test_does_not_notify_on_ready(
+    ctx, service, monkeypatch, _notify_settings, _recording
+):
     """Worker-driven transition into ready must NOT fire a notification.
     Mock all downstream stages as no-ops so the chain stops immediately."""
     all_stages = list(registry.STAGES.keys())
@@ -297,6 +317,7 @@ async def test_no_notification_on_noop(
     ctx, service, monkeypatch, _notify_settings, _recording
 ):
     """Poll-driven no-op (same-state Outcome) must NOT fire a notification."""
+
     class NoOpStage(Stage):
         name = "refine"
         input_state = State.DRAFT

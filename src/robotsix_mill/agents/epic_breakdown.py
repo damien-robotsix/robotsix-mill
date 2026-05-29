@@ -16,7 +16,12 @@ from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "epic_breakdown.yaml"
+
+_SYSPROMPT_PATH = (
+    Path(__file__).parent.parent.parent.parent
+    / "agent_definitions"
+    / "epic_breakdown.yaml"
+)
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -56,15 +61,20 @@ def run_epic_breakdown_agent(
     from .retry import call_with_retry
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "epic_breakdown.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "epic_breakdown.yaml"
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=[],
+        settings,
+        definition,
+        tools=[],
         model_name=definition.model or settings.audit_model,
     )
     prompt = (
-        section("epic-title", epic_title) + "\n\n"
+        section("epic-title", epic_title)
+        + "\n\n"
         + section("epic-description", epic_description)
     )
     if comments:

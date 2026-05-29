@@ -75,7 +75,10 @@ def build_preseed_history(
         return []
 
     from pydantic_ai.messages import (
-        ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart,
+        ModelRequest,
+        ModelResponse,
+        ToolCallPart,
+        ToolReturnPart,
         UserPromptPart,
     )
 
@@ -87,13 +90,15 @@ def build_preseed_history(
             log.warning(
                 "build_preseed_history: max_files=%d reached, dropping "
                 "remaining paths: %s",
-                max_files, paths[paths.index(path):],
+                max_files,
+                paths[paths.index(path) :],
             )
             break
         file_path = repo_dir / path
         try:
             content = file_path.read_text(
-                encoding="utf-8", errors="replace",
+                encoding="utf-8",
+                errors="replace",
             )
         except OSError:
             log.warning(
@@ -106,27 +111,38 @@ def build_preseed_history(
                 "build_preseed_history: max_total_bytes=%d would be "
                 "exceeded by %s (size %d, cumulative %d) — dropping "
                 "this and remaining paths",
-                max_total_bytes, path, len(content), total_bytes,
+                max_total_bytes,
+                path,
+                len(content),
+                total_bytes,
             )
             break
         total_bytes += len(content)
         tc_id = f"preload_{path}"
-        calls.append(ToolCallPart(
-            tool_name="read_file",
-            args={"path": path, "offset": 1, "limit": None},
-            tool_call_id=tc_id,
-        ))
-        returns.append(ToolReturnPart(
-            tool_name="read_file",
-            content=content,
-            tool_call_id=tc_id,
-        ))
+        calls.append(
+            ToolCallPart(
+                tool_name="read_file",
+                args={"path": path, "offset": 1, "limit": None},
+                tool_call_id=tc_id,
+            )
+        )
+        returns.append(
+            ToolReturnPart(
+                tool_name="read_file",
+                content=content,
+                tool_call_id=tc_id,
+            )
+        )
 
     history: list = []
     if user_prompt is not None:
-        history.append(ModelRequest(parts=[
-            UserPromptPart(content=user_prompt),
-        ]))
+        history.append(
+            ModelRequest(
+                parts=[
+                    UserPromptPart(content=user_prompt),
+                ]
+            )
+        )
     if calls:
         history.append(ModelResponse(parts=calls))
         history.append(ModelRequest(parts=returns))
@@ -151,7 +167,13 @@ def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Pat
     return p
 
 
-def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str] | None = None, extra_roots: list[Path] | None = None) -> list:
+def build_fs_tools(
+    root: Path,
+    settings: Settings,
+    *,
+    pre_seeded: dict[Path, str] | None = None,
+    extra_roots: list[Path] | None = None,
+) -> list:
     root = Path(root).resolve()
 
     # In-memory file-content cache shared by all closures in this
@@ -173,9 +195,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
         _file_cache[key] = text
         return text
 
-    def _prune_stale_file_content(
-        ctx: RunContext[None], current_path: Path
-    ) -> None:
+    def _prune_stale_file_content(ctx: RunContext[None], current_path: Path) -> None:
         """Replace earlier ``read_file`` results for *current_path* in the
         live pydantic-ai message history with a short placeholder.
 
@@ -231,9 +251,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
                     if getattr(part, "tool_call_id", None) in stale_ids:
                         part.content = _PRUNED_PLACEHOLDER
         except Exception:
-            log.debug(
-                "read_file: message-history pruning skipped", exc_info=True
-            )
+            log.debug("read_file: message-history pruning skipped", exc_info=True)
 
     def _file_already_in_history(ctx, target: Path) -> bool:
         """Return True if *target* is already in the live message
@@ -274,9 +292,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
                         continue
                     offset = args.get("offset", 1) or 1
                     limit = args.get("limit")
-                    if tc_id.startswith("preload_") or (
-                        offset == 1 and limit is None
-                    ):
+                    if tc_id.startswith("preload_") or (offset == 1 and limit is None):
                         full_read_ids.add(tc_id)
 
             if not full_read_ids:
@@ -298,7 +314,8 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
             return False
         except Exception:
             log.debug(
-                "read_file: history scan skipped", exc_info=True,
+                "read_file: history scan skipped",
+                exc_info=True,
             )
             return False
 
@@ -460,10 +477,7 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
         try:
             d = _safe(root, path, extra_roots=extra_roots)
             return "\n".join(
-                sorted(
-                    f"{e.name}/" if e.is_dir() else e.name
-                    for e in d.iterdir()
-                )
+                sorted(f"{e.name}/" if e.is_dir() else e.name for e in d.iterdir())
             )
         except (ValueError, OSError) as e:
             return f"error: {e}"
@@ -495,41 +509,57 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
     # Register every fs/shell tool in the system-wide capability catalog.
     from .tool_registry import ToolInfo, ToolRegistry
 
-    ToolRegistry.register(ToolInfo(
-        name="read_file",
-        description="Return the text content of a file in the repository.",
-        category="fs",
-        parameters={"path": "str", "offset": "int = 1", "limit": "int | None = None"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="write_file",
-        description="Create or overwrite a file in the repository with ``content``.",
-        category="fs",
-        parameters={"path": "str", "content": "str"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="edit_file",
-        description="Replace a unique string in a file.",
-        category="fs",
-        parameters={"path": "str", "old_string": "str", "new_string": "str"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="delete_file",
-        description="Delete a file from the repository.",
-        category="fs",
-        parameters={"path": "str"},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="list_dir",
-        description="List entries of a directory in the repository (dirs end '/').",
-        category="fs",
-        parameters={"path": "str = \".\""},
-    ))
-    ToolRegistry.register(ToolInfo(
-        name="run_command",
-        description=f"Run a shell command against the repository (tests, linters, build steps, generators, ...). Commands already execute in the repository root ({root}) — do NOT prefix with ``cd /home/user/repo``, ``cd /root/workspace``, or any other absolute cd to a repo root. Use ``cd <subdir> && …`` to work in a subdirectory.",
-        category="shell",
-        parameters={"command": "str"},
-    ))
+    ToolRegistry.register(
+        ToolInfo(
+            name="read_file",
+            description="Return the text content of a file in the repository.",
+            category="fs",
+            parameters={
+                "path": "str",
+                "offset": "int = 1",
+                "limit": "int | None = None",
+            },
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="write_file",
+            description="Create or overwrite a file in the repository with ``content``.",
+            category="fs",
+            parameters={"path": "str", "content": "str"},
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="edit_file",
+            description="Replace a unique string in a file.",
+            category="fs",
+            parameters={"path": "str", "old_string": "str", "new_string": "str"},
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="delete_file",
+            description="Delete a file from the repository.",
+            category="fs",
+            parameters={"path": "str"},
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="list_dir",
+            description="List entries of a directory in the repository (dirs end '/').",
+            category="fs",
+            parameters={"path": 'str = "."'},
+        )
+    )
+    ToolRegistry.register(
+        ToolInfo(
+            name="run_command",
+            description=f"Run a shell command against the repository (tests, linters, build steps, generators, ...). Commands already execute in the repository root ({root}) — do NOT prefix with ``cd /home/user/repo``, ``cd /root/workspace``, or any other absolute cd to a repo root. Use ``cd <subdir> && …`` to work in a subdirectory.",
+            category="shell",
+            parameters={"command": "str"},
+        )
+    )
 
     return [read_file, write_file, edit_file, delete_file, list_dir, run_command]

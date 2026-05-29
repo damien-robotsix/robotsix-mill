@@ -55,9 +55,12 @@ def run_scope_triage_agent(
         f"--- {path} ---\n{summary}" for path, summary in diff_summaries.items()
     )
     user_prompt = (
-        section("ticket-spec", ticket_spec) + "\n\n"
-        + section("file-map", file_map_body) + "\n\n"
-        + section("out-of-scope-files", out_of_scope_body) + "\n\n"
+        section("ticket-spec", ticket_spec)
+        + "\n\n"
+        + section("file-map", file_map_body)
+        + "\n\n"
+        + section("out-of-scope-files", out_of_scope_body)
+        + "\n\n"
         + section("diff-summaries", diff_body)
     )
 

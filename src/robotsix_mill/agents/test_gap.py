@@ -19,7 +19,13 @@ from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "test_gap.yaml"
+
+_SYSPROMPT_PATH = (
+    Path(__file__).parent.parent.parent.parent
+    / "agent_definitions"
+    / "periodic"
+    / "test_gap.yaml"
+)
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -82,7 +88,10 @@ def run_test_gap_agent(
     from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "test_gap.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "periodic"
+        / "test_gap.yaml"
     )
 
     tools: list = []
@@ -91,25 +100,32 @@ def run_test_gap_agent(
         from .fs_tools import build_fs_tools
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t
+            for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
     from .overlays import apply_overlay, load_overlay
+
     system_prompt = apply_overlay(
-        definition.system_prompt, load_overlay(repo_dir, "test_gap"),
+        definition.system_prompt,
+        load_overlay(repo_dir, "test_gap"),
     )
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         model_name=definition.model or settings.test_gap_model,
         system_prompt=system_prompt,
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
         f"{recent_proposals}"
-        + section("forge-remote-url", forge_url) + "\n\n"
-        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + section("forge-remote-url", forge_url)
+        + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Perform the test-gap inspection and return your result."
     )
     from .retry import call_with_retry

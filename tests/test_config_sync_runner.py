@@ -1,7 +1,5 @@
 """Tests for the config-sync runner."""
 
-import pytest
-
 from robotsix_mill.config_sync_runner import run_config_sync_pass, ConfigSyncPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -38,9 +36,7 @@ def test_run_config_sync_pass_empty_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.config_sync_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
     run_config_sync_pass(session_id="test-sid")
     assert captured_memory == [""]
@@ -67,9 +63,7 @@ def test_run_config_sync_pass_reads_existing_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.config_sync_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
     run_config_sync_pass(session_id="test-sid")
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
@@ -91,9 +85,7 @@ def test_run_config_sync_pass_writes_memory_verbatim(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.config_sync_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
     run_config_sync_pass(session_id="test-sid")
     memory_file = settings.config_sync_memory_file
@@ -114,16 +106,16 @@ def test_run_config_sync_pass_creates_draft_tickets(tmp_path, monkeypatch):
     def mock_agent(**kwargs):
         return config_syncing.ConfigSyncResult(
             updated_memory="# Memory\n",
-            draft_titles=["config drift: FOO missing from .env",
-                           "config drift: BAR missing from docs/configuration.md"],
+            draft_titles=[
+                "config drift: FOO missing from .env",
+                "config drift: BAR missing from docs/configuration.md",
+            ],
             draft_bodies=["Body1", "Body2"],
             gap_ids=["foo_missing_env", "bar_missing_docs"],
         )
 
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.config_sync_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
     result = run_config_sync_pass(session_id="test-sid")
     assert len(result.drafts_created) == 2
@@ -151,9 +143,7 @@ def test_run_config_sync_pass_no_drafts_when_empty(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.config_sync_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
     result = run_config_sync_pass(session_id="test-sid")
     assert len(result.drafts_created) == 0
@@ -180,11 +170,9 @@ def test_run_config_sync_pass_missing_memory_file(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.config_sync_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    result = run_config_sync_pass(session_id="test-sid")
+    run_config_sync_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -203,9 +191,7 @@ def test_config_sync_pass_result_structure(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.config_sync_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
     result = run_config_sync_pass(session_id="test-sid")
     assert isinstance(result, ConfigSyncPassResult)
@@ -232,9 +218,7 @@ def test_run_config_sync_pass_session_id_passed_through(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.config_sync_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
     res = run_config_sync_pass(session_id="test-sid")
 

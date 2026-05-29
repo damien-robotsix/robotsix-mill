@@ -9,7 +9,6 @@ from unittest.mock import Mock
 
 import httpx
 import openai
-import pytest
 
 from robotsix_mill.runtime.transient_errors import (
     _is_transient_called_process_error,
@@ -100,27 +99,20 @@ def test_openai_transient_api_connection_error():
 def test_openai_transient_rate_limit_error():
     assert (
         _is_transient_openai(
-            openai.RateLimitError(
-                "rate", response=_httpx_response_500, body=None
-            )
+            openai.RateLimitError("rate", response=_httpx_response_500, body=None)
         )
         is True
     )
 
 
 def test_openai_transient_api_timeout_error():
-    assert (
-        _is_transient_openai(openai.APITimeoutError(request=_httpx_request))
-        is True
-    )
+    assert _is_transient_openai(openai.APITimeoutError(request=_httpx_request)) is True
 
 
 def test_openai_transient_internal_server_error():
     assert (
         _is_transient_openai(
-            openai.InternalServerError(
-                "500", response=_httpx_response_500, body=None
-            )
+            openai.InternalServerError("500", response=_httpx_response_500, body=None)
         )
         is True
     )
@@ -160,9 +152,7 @@ def test_cpe_transient_git_503():
 
 
 def test_cpe_transient_git_connection_refused():
-    exc = subprocess.CalledProcessError(
-        1, "git", stderr="Connection refused"
-    )
+    exc = subprocess.CalledProcessError(1, "git", stderr="Connection refused")
     assert _is_transient_called_process_error(exc) is True
 
 
@@ -200,9 +190,7 @@ def test_cpe_fatal_stderr_bytes():
 
 
 def test_cpe_fatal_git_permission_denied():
-    exc = subprocess.CalledProcessError(
-        1, "git", stderr="fatal: Permission denied"
-    )
+    exc = subprocess.CalledProcessError(1, "git", stderr="fatal: Permission denied")
     assert _is_transient_called_process_error(exc) is False
 
 

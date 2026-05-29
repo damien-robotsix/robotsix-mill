@@ -96,8 +96,7 @@ def _compute_baselines(
         return _Baselines(None, None, None, None)
     costs = [float(t.get("totalCost") or 0.0) for t in traces]
     obs_counts = [
-        len(observations_per_trace.get(t.get("id") or "", []))
-        for t in traces
+        len(observations_per_trace.get(t.get("id") or "", [])) for t in traces
     ]
     cost_med = _median(costs)
     obs_med = _median(obs_counts)
@@ -106,12 +105,10 @@ def _compute_baselines(
     # threshold; suppress the relative flag.
     return _Baselines(
         cost_threshold=(
-            cost_med * settings.trace_review_cost_multiplier
-            if cost_med > 0 else None
+            cost_med * settings.trace_review_cost_multiplier if cost_med > 0 else None
         ),
         obs_threshold=(
-            obs_med * settings.trace_review_obs_multiplier
-            if obs_med > 0 else None
+            obs_med * settings.trace_review_obs_multiplier if obs_med > 0 else None
         ),
         cost_median=cost_med,
         obs_median=obs_med,
@@ -203,14 +200,15 @@ def _classify_trace(
 
         # Tool errors — check the tool's output / status for a marker.
         out = o.get("output")
-        out_s = out if isinstance(out, str) else (
-            json.dumps(out, default=str) if out is not None else ""
+        out_s = (
+            out
+            if isinstance(out, str)
+            else (json.dumps(out, default=str) if out is not None else "")
         )
-        status_msg = (o.get("statusMessage") or "")
+        status_msg = o.get("statusMessage") or ""
         if name and not name.startswith("chat "):
-            if (
-                _TOOL_ERR_PATTERNS.search(out_s)
-                or _TOOL_ERR_PATTERNS.search(status_msg)
+            if _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
+                status_msg
             ):
                 tool_errors += 1
 
@@ -344,6 +342,7 @@ def run_trace_review_pass(
     if settings.trace_review_target_repo_id:
         try:
             from .config import get_repos_config
+
             registry = get_repos_config().repos
             target_rc = registry.get(settings.trace_review_target_repo_id)
             if target_rc is not None:
@@ -357,8 +356,7 @@ def run_trace_review_pass(
                 )
         except Exception:  # noqa: BLE001
             log.exception(
-                "trace-review: target-repo lookup failed; "
-                "using source board",
+                "trace-review: target-repo lookup failed; using source board",
             )
     service = TicketService(settings, board_id=target_board_id)
     from .langfuse_client import list_all_traces_since, fetch_trace_detail
@@ -377,11 +375,15 @@ def run_trace_review_pass(
     window_end = now.isoformat()
 
     traces = list_all_traces_since(
-        settings, watermark.isoformat(), repo_config=repo_config,
+        settings,
+        watermark.isoformat(),
+        repo_config=repo_config,
     )
     log.info(
         "trace-review: %d traces in window %s → %s for %s",
-        len(traces), window_start, window_end,
+        len(traces),
+        window_start,
+        window_end,
         repo_config.repo_id if repo_config else "(default)",
     )
 
@@ -404,7 +406,9 @@ def run_trace_review_pass(
         if not trace_id:
             continue
         detail = fetch_trace_detail(
-            settings, trace_id, repo_config=repo_config,
+            settings,
+            trace_id,
+            repo_config=repo_config,
         )
         if detail is None:
             continue
@@ -415,7 +419,8 @@ def run_trace_review_pass(
     if baselines.cost_threshold is not None:
         log.info(
             "trace-review: cost baseline = $%.4f (median $%.4f × %.1f)",
-            baselines.cost_threshold, baselines.cost_median,
+            baselines.cost_threshold,
+            baselines.cost_median,
             settings.trace_review_cost_multiplier,
         )
     else:
@@ -432,7 +437,8 @@ def run_trace_review_pass(
         detail = details_by_id.get(trace_id)
         observations = observations_by_id.get(trace_id)
         flags = _classify_trace(
-            trace, settings,
+            trace,
+            settings,
             observations=observations,
             baselines=baselines,
         )
@@ -441,7 +447,8 @@ def run_trace_review_pass(
         flagged_count += 1
         log.info(
             "trace-review: trace %s flagged (%s) — sending to inspector",
-            trace_id[:8], ", ".join(flags.flags),
+            trace_id[:8],
+            ", ".join(flags.flags),
         )
 
         # Phase 2: LLM inspection on the cheap model.
@@ -455,7 +462,8 @@ def run_trace_review_pass(
         if result.error:
             log.warning(
                 "trace-review: inspector errored on %s: %s",
-                trace_id[:8], result.error,
+                trace_id[:8],
+                result.error,
             )
             continue
 
@@ -474,13 +482,12 @@ def run_trace_review_pass(
                     max_drafts,
                 )
                 break
-            title = (
-                f"trace-review: {finding.category} — {finding.symptom[:90]}"
-            )
+            title = f"trace-review: {finding.category} — {finding.symptom[:90]}"
             norm = _normalize(title)
             if norm in seen_titles:
                 log.debug(
-                    "trace-review: skipping duplicate finding %r", title,
+                    "trace-review: skipping duplicate finding %r",
+                    title,
                 )
                 continue
             seen_titles.add(norm)
@@ -502,14 +509,16 @@ def run_trace_review_pass(
             )
             try:
                 ticket = service.create(
-                    title=title, description=body,
+                    title=title,
+                    description=body,
                     source=SourceKind.TRACE_REVIEW,
                     origin_session=session_id or None,
                 )
                 drafts.append({"id": ticket.id, "title": ticket.title})
             except Exception:  # noqa: BLE001
                 log.exception(
-                    "trace-review: failed to create draft for %r", title,
+                    "trace-review: failed to create draft for %r",
+                    title,
                 )
         # Also break out of the per-trace loop when the run-wide cap hit.
         if (
@@ -526,10 +535,7 @@ def run_trace_review_pass(
     except Exception:  # noqa: BLE001
         log.exception("trace-review: failed to persist watermark")
 
-    summary = (
-        f"scanned={len(traces)} flagged={flagged_count} "
-        f"drafts={len(drafts)}"
-    )
+    summary = f"scanned={len(traces)} flagged={flagged_count} drafts={len(drafts)}"
     log.info("trace-review pass done: %s", summary)
     return TraceReviewPassResult(
         drafts_created=drafts,

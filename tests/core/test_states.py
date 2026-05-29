@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from robotsix_mill.core.states import (
     STAGE_FOR_STATE,
@@ -12,10 +11,29 @@ from robotsix_mill.core.states import (
 )
 
 # Known stage names that STAGE_FOR_STATE values must belong to.
-VALID_STAGE_NAMES = {"refine", "implement", "document", "review", "deliver", "merge", "ci_fix", "retrospect", "answer"}
+VALID_STAGE_NAMES = {
+    "refine",
+    "implement",
+    "document",
+    "review",
+    "deliver",
+    "merge",
+    "ci_fix",
+    "retrospect",
+    "answer",
+}
 
 # States that should NOT appear as keys in STAGE_FOR_STATE.
-NON_STAGE_STATES = {State.CLOSED, State.ERRORED, State.BLOCKED, State.HUMAN_ISSUE_APPROVAL, State.ANSWERED, State.EPIC_OPEN, State.EPIC_CLOSED, State.AWAITING_USER_REPLY}
+NON_STAGE_STATES = {
+    State.CLOSED,
+    State.ERRORED,
+    State.BLOCKED,
+    State.HUMAN_ISSUE_APPROVAL,
+    State.ANSWERED,
+    State.EPIC_OPEN,
+    State.EPIC_CLOSED,
+    State.AWAITING_USER_REPLY,
+}
 
 # All states for iteration.
 ALL_STATES = list(State)
@@ -24,6 +42,7 @@ ALL_STATES = list(State)
 # ---------------------------------------------------------------------------
 # Every valid transition
 # ---------------------------------------------------------------------------
+
 
 def test_every_declared_transition_is_valid():
     """For every (src, dst) in TRANSITIONS: can_transition returns True."""
@@ -38,6 +57,7 @@ def test_every_declared_transition_is_valid():
 # ---------------------------------------------------------------------------
 # Every invalid transition
 # ---------------------------------------------------------------------------
+
 
 def test_every_undeclared_transition_is_invalid():
     """For every (src, dst) NOT in TRANSITIONS (excluding BLOCKED dynamic
@@ -63,6 +83,7 @@ def test_every_undeclared_transition_is_invalid():
 # BLOCKED dynamic resume
 # ---------------------------------------------------------------------------
 
+
 def test_blocked_resume_to_blocked_from():
     """can_transition(BLOCKED, dst, blocked_from=dst) is True for every
     non-terminal state dst."""
@@ -71,8 +92,7 @@ def test_blocked_resume_to_blocked_from():
         if dst in terminal:
             continue
         assert can_transition(State.BLOCKED, dst, blocked_from=dst) is True, (
-            f"BLOCKED → {dst.value} with blocked_from={dst.value} "
-            f"should be allowed"
+            f"BLOCKED → {dst.value} with blocked_from={dst.value} should be allowed"
         )
 
 
@@ -91,6 +111,7 @@ def test_blocked_without_blocked_from_fails_for_non_declared():
 # CLOSED is terminal
 # ---------------------------------------------------------------------------
 
+
 def test_closed_is_terminal():
     """From CLOSED or ANSWERED, no transition to any state is allowed."""
     for dst in ALL_STATES:
@@ -105,6 +126,7 @@ def test_closed_is_terminal():
 # ---------------------------------------------------------------------------
 # STAGE_FOR_STATE completeness
 # ---------------------------------------------------------------------------
+
 
 def test_stage_for_state_keys():
     """Every State that is NOT CLOSED/ERRORED/BLOCKED/HUMAN_ISSUE_APPROVAL
@@ -124,14 +146,14 @@ def test_stage_for_state_values():
     """Each mapping value must be one of the known stage names."""
     for state, stage_name in STAGE_FOR_STATE.items():
         assert stage_name in VALID_STAGE_NAMES, (
-            f"STAGE_FOR_STATE[{state.value}] = {stage_name!r} "
-            f"is not a valid stage name"
+            f"STAGE_FOR_STATE[{state.value}] = {stage_name!r} is not a valid stage name"
         )
 
 
 # ---------------------------------------------------------------------------
 # Inquiry edge-case spot-checks
 # ---------------------------------------------------------------------------
+
 
 def test_asked_to_answered():
     assert can_transition(State.ASKED, State.ANSWERED) is True
@@ -156,11 +178,13 @@ def test_stage_for_state_asked():
 def test_answered_not_in_stage_for_state():
     assert State.ANSWERED not in STAGE_FOR_STATE
 
+
 def test_draft_to_human_issue_approval():
     assert can_transition(State.DRAFT, State.HUMAN_ISSUE_APPROVAL) is True
 
 
 # --- IMPLEMENT_COMPLETE gate-check state ---
+
 
 def test_implement_complete_to_human_mr_approval():
     """IMPLEMENT_COMPLETE → HUMAN_MR_APPROVAL is valid (gates passed)."""
@@ -204,6 +228,7 @@ def test_implement_complete_stage_for_state():
 
 # --- HUMAN_MR_APPROVAL transitions (updated for silent fallback) ---
 
+
 def test_human_mr_approval_to_implement_complete():
     """HUMAN_MR_APPROVAL → IMPLEMENT_COMPLETE is valid (silent fallback)."""
     assert can_transition(State.HUMAN_MR_APPROVAL, State.IMPLEMENT_COMPLETE) is True
@@ -221,6 +246,7 @@ def test_human_mr_approval_to_fixing_ci_removed():
 
 # --- REBASING transitions (now go to IMPLEMENT_COMPLETE) ---
 
+
 def test_rebasing_to_implement_complete():
     """REBASING → IMPLEMENT_COMPLETE is valid (rebase success → re-verify gates)."""
     assert can_transition(State.REBASING, State.IMPLEMENT_COMPLETE) is True
@@ -232,6 +258,7 @@ def test_rebasing_to_human_mr_approval_removed():
 
 
 # --- FIXING_CI transitions (now go to IMPLEMENT_COMPLETE) ---
+
 
 def test_fixing_ci_to_implement_complete():
     """FIXING_CI → IMPLEMENT_COMPLETE is valid (ci fix success → re-verify gates)."""
@@ -249,6 +276,7 @@ def test_fixing_ci_to_blocked():
 
 # --- DELIVERABLE transitions (now go to IMPLEMENT_COMPLETE) ---
 
+
 def test_deliverable_to_implement_complete():
     """DELIVERABLE → IMPLEMENT_COMPLETE is valid (PR opened, gates not yet checked)."""
     assert can_transition(State.DELIVERABLE, State.IMPLEMENT_COMPLETE) is True
@@ -260,6 +288,7 @@ def test_deliverable_to_human_mr_approval_removed():
 
 
 # --- WAITING_AUTO_MERGE transitions (now use IMPLEMENT_COMPLETE fallback) ---
+
 
 def test_waiting_auto_merge_to_implement_complete():
     """WAITING_AUTO_MERGE → IMPLEMENT_COMPLETE is valid (CI failure or conflict → gate-check)."""
@@ -278,10 +307,18 @@ def test_waiting_auto_merge_to_rebasing_removed():
 
 def test_errored_as_destination():
     """States that declare ERRORED in TRANSITIONS can reach it."""
-    for src in (State.DRAFT, State.HUMAN_ISSUE_APPROVAL, State.READY,
-                State.DELIVERABLE, State.IMPLEMENT_COMPLETE,
-                State.HUMAN_MR_APPROVAL, State.REBASING,
-                State.FIXING_CI, State.DONE, State.ASKED):
+    for src in (
+        State.DRAFT,
+        State.HUMAN_ISSUE_APPROVAL,
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.REBASING,
+        State.FIXING_CI,
+        State.DONE,
+        State.ASKED,
+    ):
         assert can_transition(src, State.ERRORED) is True, (
             f"{src.value} → ERRORED should be valid"
         )
@@ -290,6 +327,7 @@ def test_errored_as_destination():
 # ---------------------------------------------------------------------------
 # DOCUMENTING + CODE_REVIEW spot-checks
 # ---------------------------------------------------------------------------
+
 
 def test_ready_to_documenting():
     assert can_transition(State.READY, State.DOCUMENTING) is True
@@ -340,19 +378,28 @@ def test_stage_for_state_code_review():
 
 def test_code_review_not_undeclared_source():
     """Transitions FROM CODE_REVIEW to undeclared states are False."""
-    for dst in (State.HUMAN_MR_APPROVAL, State.DONE, State.HUMAN_ISSUE_APPROVAL, State.DRAFT):
+    for dst in (
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+        State.HUMAN_ISSUE_APPROVAL,
+        State.DRAFT,
+    ):
         assert can_transition(State.CODE_REVIEW, dst) is False, (
             f"CODE_REVIEW → {dst.value} should be invalid"
         )
 
 
 def test_blocked_resume_to_code_review():
-    assert can_transition(State.BLOCKED, State.CODE_REVIEW, blocked_from=State.CODE_REVIEW) is True
+    assert (
+        can_transition(State.BLOCKED, State.CODE_REVIEW, blocked_from=State.CODE_REVIEW)
+        is True
+    )
 
 
 # ---------------------------------------------------------------------------
 # AWAITING_USER_REPLY
 # ---------------------------------------------------------------------------
+
 
 def test_awaiting_user_reply_not_in_stage_for_state():
     """AWAITING_USER_REPLY must NOT be a key in STAGE_FOR_STATE — there
@@ -371,9 +418,14 @@ def test_awaiting_user_reply_to_blocked():
 def test_awaiting_user_reply_resume_via_paused_from():
     """Resume path: AWAITING_USER_REPLY → originating state when
     paused_from matches."""
-    assert can_transition(
-        State.AWAITING_USER_REPLY, State.READY, paused_from=State.READY,
-    ) is True
+    assert (
+        can_transition(
+            State.AWAITING_USER_REPLY,
+            State.READY,
+            paused_from=State.READY,
+        )
+        is True
+    )
 
 
 def test_awaiting_user_reply_no_paused_from_rejects():
@@ -384,9 +436,14 @@ def test_awaiting_user_reply_no_paused_from_rejects():
 
 def test_awaiting_user_reply_wrong_paused_from_rejects():
     """paused_from must match dst EXACTLY."""
-    assert can_transition(
-        State.AWAITING_USER_REPLY, State.DELIVERABLE, paused_from=State.READY,
-    ) is False
+    assert (
+        can_transition(
+            State.AWAITING_USER_REPLY,
+            State.DELIVERABLE,
+            paused_from=State.READY,
+        )
+        is False
+    )
 
 
 def test_every_stage_for_state_key_can_reach_awaiting_user_reply():
@@ -410,6 +467,7 @@ def test_awaiting_user_reply_not_reachable_from_non_stage_states():
 # ---------------------------------------------------------------------------
 # Epic transition spot-checks
 # ---------------------------------------------------------------------------
+
 
 def test_epic_open_to_epic_closed():
     assert can_transition(State.EPIC_OPEN, State.EPIC_CLOSED) is True

@@ -5,11 +5,10 @@ import pytest
 from robotsix_mill.core.service import (
     TransitionError,
     _event_hash,
-    _make_event,
     _prev_hash_for,
 )
 from robotsix_mill.core.states import State, can_transition
-from robotsix_mill.core.models import SourceKind, TicketEvent
+from robotsix_mill.core.models import SourceKind
 
 
 def test_create_writes_db_and_workspace(service):
@@ -64,17 +63,23 @@ def test_state_machine_edges():
     assert can_transition(State.DRAFT, State.READY)
     assert can_transition(State.READY, State.DELIVERABLE)
     assert can_transition(State.DELIVERABLE, State.IMPLEMENT_COMPLETE)
-    assert can_transition(State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL)  # gates passed
-    assert can_transition(State.HUMAN_MR_APPROVAL, State.DONE)      # merged
-    assert can_transition(State.HUMAN_MR_APPROVAL, State.BLOCKED)   # closed unmerged
-    assert can_transition(State.HUMAN_MR_APPROVAL, State.IMPLEMENT_COMPLETE)  # silent fallback
+    assert can_transition(
+        State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL
+    )  # gates passed
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.DONE)  # merged
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.BLOCKED)  # closed unmerged
+    assert can_transition(
+        State.HUMAN_MR_APPROVAL, State.IMPLEMENT_COMPLETE
+    )  # silent fallback
     assert can_transition(State.IMPLEMENT_COMPLETE, State.REBASING)  # conflicting PR
     assert can_transition(State.REBASING, State.IMPLEMENT_COMPLETE)  # rebase success
-    assert can_transition(State.REBASING, State.BLOCKED)    # rebase exhausted
-    assert can_transition(State.REBASING, State.ERRORED)    # rebase crash
-    assert can_transition(State.DONE, State.CLOSED)       # retrospected
-    assert not can_transition(State.CLOSED, State.DONE)   # terminal
-    assert not can_transition(State.DELIVERABLE, State.DONE)  # via implement_complete + human_mr_approval
+    assert can_transition(State.REBASING, State.BLOCKED)  # rebase exhausted
+    assert can_transition(State.REBASING, State.ERRORED)  # rebase crash
+    assert can_transition(State.DONE, State.CLOSED)  # retrospected
+    assert not can_transition(State.CLOSED, State.DONE)  # terminal
+    assert not can_transition(
+        State.DELIVERABLE, State.DONE
+    )  # via implement_complete + human_mr_approval
     assert not can_transition(State.READY, State.DONE)
 
 
@@ -118,12 +123,11 @@ def test_blocked_from_refine_can_resume_to_draft():
 
 def test_blocked_resume_wrong_state_rejected():
     """BLOCKED from DONE cannot resume to a non-matching state via resume-only path."""
-    assert not can_transition(
-        State.BLOCKED, State.DELIVERABLE, blocked_from=State.DONE
-    )
+    assert not can_transition(State.BLOCKED, State.DELIVERABLE, blocked_from=State.DONE)
 
 
 # --- REBASING-specific can_transition tests ---
+
 
 def test_can_transition_covers_rebasing():
     """Verify all new edges involving REBASING."""
@@ -138,9 +142,7 @@ def test_can_transition_covers_rebasing():
     # REBASING → HUMAN_MR_APPROVAL is NOT allowed (must go through IMPLEMENT_COMPLETE)
     assert not can_transition(State.REBASING, State.HUMAN_MR_APPROVAL)
     # BLOCKED → REBASING with blocked_from=REBASING (resume)
-    assert can_transition(
-        State.BLOCKED, State.REBASING, blocked_from=State.REBASING
-    )
+    assert can_transition(State.BLOCKED, State.REBASING, blocked_from=State.REBASING)
     # BLOCKED → REBASING without blocked_from → False
     assert not can_transition(State.BLOCKED, State.REBASING)
     # REBASING → DONE is NOT allowed (must go through IMPLEMENT_COMPLETE → HUMAN_MR_APPROVAL)
@@ -274,9 +276,14 @@ def test_transition_table_consistency():
 
     # Every active state must be able to reach BLOCKED and ERRORED
     for src in [
-        State.DRAFT, State.HUMAN_ISSUE_APPROVAL, State.READY,
-        State.DELIVERABLE, State.IMPLEMENT_COMPLETE,
-        State.HUMAN_MR_APPROVAL, State.REBASING, State.DONE,
+        State.DRAFT,
+        State.HUMAN_ISSUE_APPROVAL,
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.REBASING,
+        State.DONE,
     ]:
         assert State.BLOCKED in TRANSITIONS[src], (
             f"{src} missing BLOCKED escalation edge"
@@ -287,6 +294,7 @@ def test_transition_table_consistency():
 
 
 # --- cost_usd (Langfuse-synced, absolute) -----------------------------
+
 
 def test_initial_cost_is_zero(service):
     t = service.create("cost test")
@@ -308,7 +316,6 @@ def test_origin_session_is_none_by_default(service):
     assert reloaded.origin_session is None
 
 
-
 def test_delete_removes_row_events_and_workspace(service, settings):
     t = service.create("junk: no notable issues clean run", "noise")
     service.transition(t.id, State.READY)  # creates a TicketEvent too
@@ -319,7 +326,7 @@ def test_delete_removes_row_events_and_workspace(service, settings):
     conv_dir = settings.data_dir / "conversations"
     conv_dir.mkdir(parents=True, exist_ok=True)
     conv_file = conv_dir / f"{t.id}.json"
-    conv_file.write_text('[]', encoding="utf-8")
+    conv_file.write_text("[]", encoding="utf-8")
     assert conv_file.exists()
 
     assert service.get(t.id) is not None
@@ -327,9 +334,9 @@ def test_delete_removes_row_events_and_workspace(service, settings):
 
     assert service.delete(t.id) is True
     assert service.get(t.id) is None
-    assert service.history(t.id) == []   # events gone
-    assert not ws_dir.exists()           # workspace dir gone
-    assert not conv_file.exists()        # conversation file gone
+    assert service.history(t.id) == []  # events gone
+    assert not ws_dir.exists()  # workspace dir gone
+    assert not conv_file.exists()  # conversation file gone
 
 
 def test_delete_missing_ticket_returns_false(service):
@@ -337,6 +344,7 @@ def test_delete_missing_ticket_returns_false(service):
 
 
 # --- depends_on --------------------------------------------------------
+
 
 def test_create_stores_depends_on(service):
     t = service.create("Dep test", depends_on='["abc123", "def456"]')
@@ -358,10 +366,14 @@ def test_self_dependency_rejected_deterministic(service, monkeypatch):
     fake_now = dt.datetime(2025, 1, 1, 0, 0, 0, tzinfo=dt.timezone.utc)
     monkeypatch.setattr(
         "robotsix_mill.core.service.datetime",
-        type("m", (), {
-            "now": classmethod(lambda cls, tz=None: fake_now),
-            "timezone": dt.timezone,
-        })(),
+        type(
+            "m",
+            (),
+            {
+                "now": classmethod(lambda cls, tz=None: fake_now),
+                "timezone": dt.timezone,
+            },
+        )(),
     )
     monkeypatch.setattr(
         "robotsix_mill.core.service.token_hex",
@@ -438,6 +450,7 @@ def test_unmet_dependencies_direct_cycle_satisfied(service, caplog):
     # Manually set mutual deps via DB (no update API)
     from robotsix_mill.core import db as core_db
     from robotsix_mill.core.models import Ticket as TicketModel
+
     with core_db.session(service.settings, service.board_id) as s:
         ta = s.get(TicketModel, a.id)
         tb = s.get(TicketModel, b.id)
@@ -464,6 +477,7 @@ def test_unmet_dependencies_no_deps_returns_empty(service):
 # ---------------------------------------------------------------------------
 # Epic tests
 # ---------------------------------------------------------------------------
+
 
 def test_create_epic(service):
     """Creating with kind='epic' sets state to EPIC_OPEN."""
@@ -493,7 +507,9 @@ def test_get_epic_context_returns_description(service):
     epic = service.create("Epic", "Big picture description", kind="epic")
     child = service.create("Child", "detail", kind="task", parent_id=epic.id)
     ctx = service.get_epic_context(child)
-    assert ctx == "````epic-context\nBig picture description\n````\n<!-- /epic-context -->"
+    assert (
+        ctx == "````epic-context\nBig picture description\n````\n<!-- /epic-context -->"
+    )
 
 
 def test_get_epic_context_no_parent(service):
@@ -542,12 +558,15 @@ def _close_epic(service, ticket):
 
 def _terminal_count(service):
     """Return the number of terminal-state tickets in the DB."""
-    return len(service.list(
-        exclude_states=[
-            s for s in State
-            if s not in {State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
-        ]
-    ))
+    return len(
+        service.list(
+            exclude_states=[
+                s
+                for s in State
+                if s not in {State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
+            ]
+        )
+    )
 
 
 class TestArchivedPurge:
@@ -665,7 +684,9 @@ def test_all_descendants_is_cycle_safe(service):
 
     with db.session(service.settings, service.board_id) as s:
         ta = Ticket(id="cyc-A", title="A", kind="task", workspace_path="")
-        tb = Ticket(id="cyc-B", title="B", kind="task", parent_id="cyc-A", workspace_path="")
+        tb = Ticket(
+            id="cyc-B", title="B", kind="task", parent_id="cyc-A", workspace_path=""
+        )
         s.add_all([ta, tb])
         s.commit()
 
@@ -749,7 +770,6 @@ def test_mark_done_rejects_epic_open(service):
         service.mark_done(t.id)
 
 
-
 # --- Epic-priority propagation ----------------------------------------
 
 
@@ -821,6 +841,7 @@ def test_no_inheritance_when_no_priority_ancestor(service):
 
 
 # --- ask_user close-thread → auto-resume --------------------------------
+
 
 def test_close_thread_resumes_when_all_ask_user_closed(service):
     """AC1: Closing the last open [ASK_USER] thread on a paused ticket
@@ -999,6 +1020,7 @@ def test_close_thread_no_ask_user_threads_on_paused_no_resume(service):
 
 # --- _collect_ask_user_replies -----------------------------------------
 
+
 def test_collect_ask_user_replies_single_thread(service, settings):
     """AC2: Single [ASK_USER] thread with one reply."""
     from robotsix_mill.stages.pause import _collect_ask_user_replies
@@ -1008,7 +1030,9 @@ def test_collect_ask_user_replies_single_thread(service, settings):
     service.transition(t.id, State.READY)
     service.transition(t.id, State.AWAITING_USER_REPLY)
 
-    ask = service.add_comment(t.id, "[ASK_USER]\n\nWhat is the answer?", author="refine")
+    ask = service.add_comment(
+        t.id, "[ASK_USER]\n\nWhat is the answer?", author="refine"
+    )
     service.add_comment(t.id, "The answer is 42.", author="operator", parent_id=ask.id)
     service.close_thread(ask.id)
 
@@ -1073,7 +1097,7 @@ def test_collect_ask_user_replies_skips_open_ask_threads(service, settings):
     service.transition(t.id, State.AWAITING_USER_REPLY)
 
     ask1 = service.add_comment(t.id, "[ASK_USER]\n\nClosed Q?", author="refine")
-    ask2 = service.add_comment(t.id, "[ASK_USER]\n\nOpen Q?", author="implement")
+    service.add_comment(t.id, "[ASK_USER]\n\nOpen Q?", author="implement")
     service.add_comment(t.id, "Reply", author="op", parent_id=ask1.id)
     service.close_thread(ask1.id)
     # ask2 stays open
@@ -1118,11 +1142,21 @@ def test_event_hash_is_deterministic():
 def test_event_hash_is_sensitive_to_every_field():
     """Changing any payload field changes the hash."""
     base = _event_hash("t1", "draft", "note", "2025-01-01T00:00:00+00:00", "prev")
-    assert base != _event_hash("t2", "draft", "note", "2025-01-01T00:00:00+00:00", "prev")
-    assert base != _event_hash("t1", "ready", "note", "2025-01-01T00:00:00+00:00", "prev")
-    assert base != _event_hash("t1", "draft", "other", "2025-01-01T00:00:00+00:00", "prev")
-    assert base != _event_hash("t1", "draft", "note", "2025-01-02T00:00:00+00:00", "prev")
-    assert base != _event_hash("t1", "draft", "note", "2025-01-01T00:00:00+00:00", "prev2")
+    assert base != _event_hash(
+        "t2", "draft", "note", "2025-01-01T00:00:00+00:00", "prev"
+    )
+    assert base != _event_hash(
+        "t1", "ready", "note", "2025-01-01T00:00:00+00:00", "prev"
+    )
+    assert base != _event_hash(
+        "t1", "draft", "other", "2025-01-01T00:00:00+00:00", "prev"
+    )
+    assert base != _event_hash(
+        "t1", "draft", "note", "2025-01-02T00:00:00+00:00", "prev"
+    )
+    assert base != _event_hash(
+        "t1", "draft", "note", "2025-01-01T00:00:00+00:00", "prev2"
+    )
 
 
 def test_event_hash_none_note_and_prev_hash():
@@ -1131,7 +1165,9 @@ def test_event_hash_none_note_and_prev_hash():
     h2 = _event_hash("t1", "draft", None, "2025-01-01T00:00:00+00:00", None)
     assert h1 == h2
     # None note vs non-None produce different hashes
-    assert h1 != _event_hash("t1", "draft", "something", "2025-01-01T00:00:00+00:00", None)
+    assert h1 != _event_hash(
+        "t1", "draft", "something", "2025-01-01T00:00:00+00:00", None
+    )
 
 
 def test_event_hash_format_is_hex():
@@ -1206,6 +1242,7 @@ def test_make_event_hash_differs_per_ticket(service):
 def test_prev_hash_for_returns_none_for_new_ticket(service):
     """_prev_hash_for returns None when a ticket has no events."""
     from robotsix_mill.core import db
+
     with db.session(service.settings, service.board_id) as s:
         assert _prev_hash_for(s, "nonexistent-ticket") is None
 

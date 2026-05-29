@@ -9,7 +9,13 @@ from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "module_curator.yaml"
+
+_SYSPROMPT_PATH = (
+    Path(__file__).parent.parent.parent.parent
+    / "agent_definitions"
+    / "periodic"
+    / "module_curator.yaml"
+)
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -58,7 +64,10 @@ def run_module_curator_agent(
     from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic" / "module_curator.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "periodic"
+        / "module_curator.yaml"
     )
 
     tools: list = []
@@ -67,23 +76,29 @@ def run_module_curator_agent(
         from .fs_tools import build_fs_tools
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t
+            for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
     from .overlays import apply_overlay, load_overlay
+
     system_prompt = apply_overlay(
-        definition.system_prompt, load_overlay(repo_dir, "module_curator"),
+        definition.system_prompt,
+        load_overlay(repo_dir, "module_curator"),
     )
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         model_name=definition.model or settings.module_curator_model,
         system_prompt=system_prompt,
     )
     prompt = (
         f"{recent_proposals}"
-        + section("memory", memory or '(empty — start a new ledger)') + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Read docs/modules.yaml, walk the repo tree, and file draft tickets for any detected drift."
     )
     from .retry import call_with_retry

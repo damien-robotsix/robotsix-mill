@@ -22,6 +22,7 @@ from .states import State
 
 class SourceKind(StrEnum):
     """Enumeration of ticket origin sources (user, retrospect, audit, etc.)."""
+
     USER = "user"
     RETROSPECT = "retrospect"
     AUDIT = "audit"
@@ -48,6 +49,7 @@ def _now() -> datetime:
 
 class Ticket(SQLModel, table=True):
     """Database row for a ticket — tracks state, branch, cost, retries, and parent/child relationships."""
+
     id: str = Field(primary_key=True)
     title: str
     state: State = Field(default=State.DRAFT, index=True)
@@ -83,7 +85,9 @@ class Ticket(SQLModel, table=True):
     # transient-error retry state (stage-runner level, not LLM-call level)
     retry_attempt: int = Field(default=0)
     last_transient_error: str | None = Field(default=None)
-    next_retry_at: datetime | None = Field(default=None, sa_column=Column(TZDateTime(), nullable=True))
+    next_retry_at: datetime | None = Field(
+        default=None, sa_column=Column(TZDateTime(), nullable=True)
+    )
     # optional JSON list of ticket IDs that must reach CLOSED/DONE before
     # this ticket can leave READY (implement-stage gate).
     depends_on: str | None = Field(default=None)
@@ -128,7 +132,9 @@ class Comment(SQLModel, table=True):
     body: str
     author: str = Field(default="user")
     parent_id: int | None = Field(default=None, foreign_key="comment.id", nullable=True)
-    closed_at: datetime | None = Field(default=None, sa_column=Column(TZDateTime(), nullable=True))
+    closed_at: datetime | None = Field(
+        default=None, sa_column=Column(TZDateTime(), nullable=True)
+    )
     created_at: datetime = Field(
         default_factory=_now,
         sa_column=Column(TZDateTime()),
@@ -140,6 +146,7 @@ class Comment(SQLModel, table=True):
 
 class TicketCreate(SQLModel):
     """API request shape for creating a new ticket."""
+
     title: str
     description: str = ""
     depends_on: str | None = None
@@ -151,12 +158,14 @@ class TicketCreate(SQLModel):
 
 class TicketTransition(SQLModel):
     """API request shape for transitioning a ticket to a new state."""
+
     state: State
     note: str | None = None
 
 
 class TicketRead(SQLModel):
     """API response shape for reading a ticket, including computed fields like unmet_deps and PR URL."""
+
     id: str
     title: str
     state: State
@@ -183,6 +192,7 @@ class TicketRead(SQLModel):
 
 class CommentCreate(SQLModel):
     """API request shape for creating a comment (optionally threaded via parent_id)."""
+
     body: str
     author: str = "user"
     parent_id: int | None = None
@@ -190,6 +200,7 @@ class CommentCreate(SQLModel):
 
 class CommentRead(SQLModel):
     """API response shape for reading a comment."""
+
     id: int
     ticket_id: str
     body: str

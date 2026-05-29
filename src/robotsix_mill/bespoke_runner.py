@@ -43,7 +43,9 @@ class BespokePassResult:
 
 
 def _memory_file_for(
-    settings: Settings, board_id: str, name: str,
+    settings: Settings,
+    board_id: str,
+    name: str,
 ) -> Path:
     """Return the bespoke memory-ledger path for *name* on *board_id*.
 
@@ -96,7 +98,9 @@ def run_bespoke_pass(
 
     log.info(
         "bespoke pass %r starting (session %s, repo %s)",
-        definition.name, session_id, board_id or "<default>",
+        definition.name,
+        session_id,
+        board_id or "<default>",
     )
     agent_fn = partial(
         _bespoke_agent.run_bespoke_agent,

@@ -84,7 +84,8 @@ def run_bespoke_agent(
         from .fs_tools import build_fs_tools
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings)
+            t
+            for t in build_fs_tools(repo_dir, settings)
             if t.__name__ in ("read_file", "list_dir")
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
@@ -111,8 +112,10 @@ def run_bespoke_agent(
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (
         f"{recent_proposals}"
-        + section("forge-remote-url", forge_url) + "\n\n"
-        + section("memory", memory or "(empty — start a new ledger)") + "\n\n"
+        + section("forge-remote-url", forge_url)
+        + "\n\n"
+        + section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
         + "Perform the inspection and return your result."
     )
 

@@ -1,15 +1,12 @@
 """Tests for the bc-check agent and runner."""
 
 import json
-import threading
-import time
 
 import pytest
-from pathlib import Path
 
 from robotsix_mill.agents import bc_check as bc_check_agent
 from robotsix_mill.bc_check_runner import run_bc_check_pass, BcCheckPassResult
-from robotsix_mill.config import RepoConfig, Settings
+from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
@@ -31,8 +28,12 @@ def test_bc_check_system_prompt_covers_all_six_patterns():
     """The bc-check agent prompt must cover all six detection patterns."""
     p = bc_check_agent.SYSTEM_PROMPT.lower()
     for kw in (
-        "no-op compat", "legacy property", "alias assignments",
-        "default-arg compat", "legacy shape fallbacks", "shim functions",
+        "no-op compat",
+        "legacy property",
+        "alias assignments",
+        "default-arg compat",
+        "legacy shape fallbacks",
+        "shim functions",
     ):
         assert kw in p, f"bc_check prompt missing pattern cue: {kw}"
     # Must exercise judgement, not just regex.
@@ -102,9 +103,7 @@ def test_run_bc_check_pass_empty_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     run_bc_check_pass(session_id="test-sid")
     assert captured_memory == [""]
@@ -129,9 +128,7 @@ def test_run_bc_check_pass_reads_existing_memory(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     run_bc_check_pass(session_id="test-sid")
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
@@ -151,9 +148,7 @@ def test_run_bc_check_pass_writes_memory_verbatim(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     run_bc_check_pass(session_id="test-sid")
     memory_file = settings.bc_check_memory_file
@@ -178,9 +173,7 @@ def test_run_bc_check_pass_creates_draft_tickets(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     result = run_bc_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 2
@@ -206,9 +199,7 @@ def test_run_bc_check_pass_no_drafts_when_empty(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     result = run_bc_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 0
@@ -233,11 +224,9 @@ def test_run_bc_check_pass_missing_memory_file(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
-    result = run_bc_check_pass(session_id="test-sid")
+    run_bc_check_pass(session_id="test-sid")
     assert captured_memory == [""]
 
 
@@ -254,9 +243,7 @@ def test_bc_check_pass_result_structure(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     result = run_bc_check_pass(session_id="test-sid")
     assert isinstance(result, BcCheckPassResult)
@@ -280,9 +267,7 @@ def test_run_bc_check_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     result = run_bc_check_pass(session_id="test-sid")
     assert len(result.drafts_created) == 1  # only first has both title + body
@@ -341,9 +326,7 @@ def test_bc_check_cli_command(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Remove no-op init()"}],
         )
 
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.run_bc_check_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.run_bc_check_pass", mock_run)
 
     result = main(["bc-check"])
     assert result == 0
@@ -362,9 +345,7 @@ def test_bc_check_cli_json_output(capsys, tmp_path, monkeypatch):
             drafts_created=[{"id": "123", "title": "Remove no-op init()"}],
         )
 
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.run_bc_check_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.run_bc_check_pass", mock_run)
 
     result = main(["bc-check", "--json"])
     assert result == 0
@@ -385,9 +366,7 @@ def test_bc_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
             drafts_created=[],
         )
 
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.run_bc_check_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.run_bc_check_pass", mock_run)
 
     result = main(["bc-check"])
     assert result == 0
@@ -402,9 +381,7 @@ def test_bc_check_cli_failure(capsys, monkeypatch):
     def mock_run(session_id=None):
         raise RuntimeError("agent exploded")
 
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.run_bc_check_pass", mock_run
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.run_bc_check_pass", mock_run)
 
     result = main(["bc-check"])
     assert result == 1
@@ -429,9 +406,7 @@ def test_run_bc_check_pass_opens_langfuse_session(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     res = run_bc_check_pass(session_id="test-sid")
 
@@ -442,14 +417,13 @@ def test_run_bc_check_pass_opens_langfuse_session(tmp_path, monkeypatch):
 def test_bc_check_session_ids_are_unique_per_run(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     monkeypatch.setattr(
-        bc_check_agent, "run_bc_check_agent",
+        bc_check_agent,
+        "run_bc_check_agent",
         lambda **k: bc_check_agent.BcCheckResult(
             updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
         ),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
     a = run_bc_check_pass(session_id="test-sid").session_id
     assert a == "test-sid"
 
@@ -463,7 +437,8 @@ def test_run_bc_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     from robotsix_mill.vcs import git_ops
 
     settings = _make_settings(
-        tmp_path, FORGE_REMOTE_URL="https://example.test/r.git",
+        tmp_path,
+        FORGE_REMOTE_URL="https://example.test/r.git",
         FORGE_TARGET_BRANCH="main",
     )
     seen = {"clone": 0, "repo_dir": "unset"}
@@ -480,9 +455,7 @@ def test_run_bc_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(bc_check_agent, "run_bc_check_agent", mock_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
 
     run_bc_check_pass(session_id="test-sid")
     repo = settings.data_dir / "bc_check_workspace" / "repo"
@@ -494,17 +467,19 @@ def test_run_bc_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
 
 def test_run_bc_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
-    settings = _make_settings(tmp_path)   # no FORGE_REMOTE_URL
+    settings = _make_settings(tmp_path)  # no FORGE_REMOTE_URL
     got = {}
     monkeypatch.setattr(
-        bc_check_agent, "run_bc_check_agent",
-        lambda **k: got.__setitem__("repo_dir", k.get("repo_dir")) or
-        bc_check_agent.BcCheckResult(updated_memory="m", draft_titles=[],
-                                     draft_bodies=[], gap_ids=[]),
+        bc_check_agent,
+        "run_bc_check_agent",
+        lambda **k: (
+            got.__setitem__("repo_dir", k.get("repo_dir"))
+            or bc_check_agent.BcCheckResult(
+                updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+            )
+        ),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.bc_check_runner.Settings", lambda: settings
-    )
+    monkeypatch.setattr("robotsix_mill.bc_check_runner.Settings", lambda: settings)
     run_bc_check_pass(session_id="test-sid")
     assert got["repo_dir"] is None
 
@@ -513,7 +488,9 @@ def test_run_bc_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_bc_check_task_created_when_periodic(tmp_path, monkeypatch, repo_config):
+async def test_worker_bc_check_task_created_when_periodic(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._bc_check_task is created when bc_check_periodic=true."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker
@@ -531,6 +508,7 @@ async def test_worker_bc_check_task_created_when_periodic(tmp_path, monkeypatch,
     # Patch _run_periodic_pass to be a no-op (avoid running immediately)
     async def noop_periodic(self, label, runner_fn, interval):
         import asyncio as asyncio_mod
+
         await asyncio_mod.sleep(3600)
 
     monkeypatch.setattr(Worker, "_run_periodic_pass", noop_periodic)
@@ -545,7 +523,9 @@ async def test_worker_bc_check_task_created_when_periodic(tmp_path, monkeypatch,
 
 
 @pytest.mark.asyncio
-async def test_worker_bc_check_task_not_created_when_periodic_false(tmp_path, monkeypatch, repo_config):
+async def test_worker_bc_check_task_not_created_when_periodic_false(
+    tmp_path, monkeypatch, repo_config
+):
     """Worker._bc_check_task is NOT created when bc_check_periodic=false."""
     from robotsix_mill.stages import StageContext
     from robotsix_mill.runtime.worker import Worker

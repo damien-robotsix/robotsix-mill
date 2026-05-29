@@ -37,6 +37,4 @@ def get_stage(name: str) -> Stage:
     try:
         return STAGES[name]
     except KeyError:
-        raise KeyError(
-            f"unknown stage {name!r}; known: {sorted(STAGES)}"
-        ) from None
+        raise KeyError(f"unknown stage {name!r}; known: {sorted(STAGES)}") from None

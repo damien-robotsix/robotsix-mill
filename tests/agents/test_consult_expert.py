@@ -1,7 +1,5 @@
 """The domain expert consultation sub-agent."""
 
-from pathlib import Path
-
 from robotsix_mill.agents import consult_expert
 from robotsix_mill.agents.consult_expert import (
     make_consult_expert_tool,
@@ -15,6 +13,7 @@ def _settings(tmp_path, **env):
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**env)
@@ -23,7 +22,9 @@ def _settings(tmp_path, **env):
 def test_no_key_degrades_not_raises(tmp_path):
     s = _settings(tmp_path, OPENROUTER_API_KEY="")
     out = run_consult_expert(
-        settings=s, repo_dir=tmp_path, domain="python-backend",
+        settings=s,
+        repo_dir=tmp_path,
+        domain="python-backend",
         question="where is X?",
     )
     assert "unavailable" in out and "OPENROUTER_API_KEY" in out
@@ -33,7 +34,9 @@ def test_missing_repo_degrades_not_raises(tmp_path):
     missing = tmp_path / "nonexistent"
     s = _settings(tmp_path, OPENROUTER_API_KEY="valid-key")
     out = run_consult_expert(
-        settings=s, repo_dir=missing, domain="python-backend",
+        settings=s,
+        repo_dir=missing,
+        domain="python-backend",
         question="where is X?",
     )
     assert "unavailable" in out
@@ -64,7 +67,8 @@ def test_missing_expert_definition_degrades_not_raises(tmp_path, monkeypatch):
     run_consult_expert returns a failure string without raising."""
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig, ExpertDefinition,
+        ExpertMemoryConfig,
+        ExpertDefinition,
     )
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="valid-key")
@@ -84,11 +88,15 @@ def test_missing_expert_definition_degrades_not_raises(tmp_path, monkeypatch):
         }
 
     monkeypatch.setattr(
-        expert_manager.ExpertManager, "load_definitions", fake_load_defs,
+        expert_manager.ExpertManager,
+        "load_definitions",
+        fake_load_defs,
     )
 
     out = run_consult_expert(
-        settings=s, repo_dir=tmp_path, domain="nonexistent",
+        settings=s,
+        repo_dir=tmp_path,
+        domain="nonexistent",
         question="where is X?",
     )
     assert "nonexistent" in out
@@ -101,12 +109,15 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
     run_command, delete_file."""
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig, ExpertDefinition,
+        ExpertMemoryConfig,
+        ExpertDefinition,
     )
 
     s = _settings(
-        tmp_path, OPENROUTER_API_KEY="k",
-        model="coordinator/big", consult_request_limit="5",
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        model="coordinator/big",
+        consult_request_limit="5",
     )
     cap = {}
 
@@ -123,6 +134,7 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
         def run_sync(self, prompt, **kw):
             class R:
                 output = "expert answer"
+
             return R()
 
     def fake_load_defs(self, definitions_dir=None):
@@ -138,7 +150,9 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
         }
 
     monkeypatch.setattr(
-        expert_manager.ExpertManager, "load_definitions", fake_load_defs,
+        expert_manager.ExpertManager,
+        "load_definitions",
+        fake_load_defs,
     )
     import pydantic_ai
     import pydantic_ai.providers.openrouter as orp
@@ -149,13 +163,17 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
     # Prevent the fs_tools build from trying to access a real repo
     from robotsix_mill.agents import fs_tools as ft
+
     monkeypatch.setattr(ft, "build_fs_tools", lambda root, settings, **kw: [])
     # Prevent timeout_http_client from opening a real client
     from robotsix_mill.agents import base as bmod
+
     monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
 
     out = run_consult_expert(
-        settings=s, repo_dir=tmp_path, domain="python-backend",
+        settings=s,
+        repo_dir=tmp_path,
+        domain="python-backend",
         question="where is X?",
     )
     assert out == "expert answer"
@@ -167,6 +185,7 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
     # an updated memory ledger; the wrapper unwraps .answer to a string.
     from pydantic_ai import PromptedOutput
     from robotsix_mill.agents.consult_expert import ExpertConsultResult
+
     assert isinstance(cap["output_type"], PromptedOutput)
     # Underlying type must be ExpertConsultResult.
     assert ExpertConsultResult in (
@@ -182,7 +201,8 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.consult_expert import ExpertConsultResult
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig, ExpertDefinition,
+        ExpertMemoryConfig,
+        ExpertDefinition,
     )
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
@@ -201,6 +221,7 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
                     answer="here is the answer",
                     updated_memory="## What I learned\n- ticket-42: X uses Y\n",
                 )
+
             return R()
 
     def fake_load_defs(self, definitions_dir=None):
@@ -215,7 +236,9 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
             ),
         }
 
-    monkeypatch.setattr(expert_manager.ExpertManager, "load_definitions", fake_load_defs)
+    monkeypatch.setattr(
+        expert_manager.ExpertManager, "load_definitions", fake_load_defs
+    )
     import pydantic_ai
     import pydantic_ai.providers.openrouter as orp
     from robotsix_mill.agents import openrouter_cost as oc
@@ -229,7 +252,9 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
     monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
 
     out = run_consult_expert(
-        settings=s, repo_dir=tmp_path, domain="python-backend",
+        settings=s,
+        repo_dir=tmp_path,
+        domain="python-backend",
         question="where is X?",
         board_id="myboard",
     )
@@ -247,32 +272,44 @@ def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.consult_expert import ExpertConsultResult
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig, ExpertDefinition,
+        ExpertMemoryConfig,
+        ExpertDefinition,
     )
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
     class FakeModel:
-        def __init__(self, name, **kw): pass
+        def __init__(self, name, **kw):
+            pass
 
     class FakeAgent:
-        def __init__(self, **kw): pass
+        def __init__(self, **kw):
+            pass
 
         def run_sync(self, prompt, **kw):
             class R:
                 output = ExpertConsultResult(answer="ok", updated_memory="")
+
             return R()
 
-    monkeypatch.setattr(expert_manager.ExpertManager, "load_definitions", lambda self, definitions_dir=None: {
-        "python-backend": ExpertDefinition(
-            domain="python-backend", module_paths=["src/**/*.py"],
-            system_prompt="P", model="",
-            memory=ExpertMemoryConfig(max_memory_chars=8000),
-            tools=["explore", "read_file", "list_dir"],
-        ),
-    })
-    import pydantic_ai, pydantic_ai.providers.openrouter as orp
+    monkeypatch.setattr(
+        expert_manager.ExpertManager,
+        "load_definitions",
+        lambda self, definitions_dir=None: {
+            "python-backend": ExpertDefinition(
+                domain="python-backend",
+                module_paths=["src/**/*.py"],
+                system_prompt="P",
+                model="",
+                memory=ExpertMemoryConfig(max_memory_chars=8000),
+                tools=["explore", "read_file", "list_dir"],
+            ),
+        },
+    )
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
     from robotsix_mill.agents import openrouter_cost as oc, fs_tools as ft, base as bmod
+
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
@@ -280,8 +317,11 @@ def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(bmod, "timeout_http_client", lambda s: None)
 
     out = run_consult_expert(
-        settings=s, repo_dir=tmp_path, domain="python-backend",
-        question="?", board_id="b",
+        settings=s,
+        repo_dir=tmp_path,
+        domain="python-backend",
+        question="?",
+        board_id="b",
     )
     assert out == "ok"
     memory_file = s.memory_file_for("expert_python-backend", "b")
@@ -293,7 +333,7 @@ def test_tool_registry_registration(tmp_path):
     from robotsix_mill.agents.tool_registry import ToolRegistry
 
     s = _settings(tmp_path)
-    tool = make_consult_expert_tool(s, tmp_path)
+    make_consult_expert_tool(s, tmp_path)
     tools = ToolRegistry.list_tools()
     consult = [t for t in tools if t.name == "consult_expert"]
     assert len(consult) == 1

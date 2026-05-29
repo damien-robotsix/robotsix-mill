@@ -1,6 +1,5 @@
 import subprocess
 
-import pytest
 
 from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
@@ -16,6 +15,7 @@ def _settings(tmp_path, **env):
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
         import robotsix_mill.config as _cfg
+
         _reset_secrets()
         _cfg._secrets = Secrets(openrouter_api_key=key)
     return Settings(**env)
@@ -23,11 +23,13 @@ def _settings(tmp_path, **env):
 
 # --- agent_references/ folder shipped with the repo ---------------------
 
+
 def test_repo_ships_agent_references():
     """The real agent_references/ dir is committed and discoverable, so
     the implement agent can read entries when AGENT.md points it there.
     No auto-loading — agents pull on demand."""
     from pathlib import Path
+
     p = Path("agent_references")
     assert p.is_dir(), "agent_references/ folder is missing from the repo"
     files = sorted(x.name for x in p.glob("*.md"))
@@ -35,6 +37,7 @@ def test_repo_ships_agent_references():
 
 
 # --- model id / prompt composition (no key, no pydantic_ai needed) ------
+
 
 def test_main_model_never_online(tmp_path):
     # The expensive main agent must never carry ":online" — web search
@@ -49,6 +52,7 @@ def test_main_model_never_online(tmp_path):
 
 
 # --- web research sub-agent (the cost fix) ------------------------------
+
 
 def test_web_research_tool_delegates_to_seam(tmp_path, monkeypatch):
     """The tool exposed to the main agent must return EXACTLY the
@@ -119,7 +123,7 @@ def test_compose_prompt_does_not_inject_tool_table(tmp_path):
     already forwards each tool's signature + docstring as the structured
     ``tools`` array on every API call. The system prompt is the YAML
     body verbatim (plus optional ``## Skills`` when skills are passed)."""
-    from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
+    from robotsix_mill.agents.tool_registry import ToolRegistry
 
     s = _settings(tmp_path)
     ToolRegistry._tools.clear()
@@ -133,11 +137,10 @@ def test_compose_prompt_does_not_inject_tool_table(tmp_path):
 
 # --- web_fetch tool -----------------------------------------------------
 
+
 def test_web_fetch_tool_uses_sandbox_fetch(tmp_path, monkeypatch):
     s = _settings(tmp_path)
-    monkeypatch.setattr(
-        sandbox, "fetch", lambda url, *, settings: (0, f"BODY:{url}")
-    )
+    monkeypatch.setattr(sandbox, "fetch", lambda url, *, settings: (0, f"BODY:{url}"))
     wf = make_web_fetch(s)
     assert wf("https://x.test/doc") == "BODY:https://x.test/doc"
 
@@ -153,6 +156,7 @@ def test_web_fetch_tool_reports_errors(tmp_path, monkeypatch):
 
 
 # --- sandbox.fetch container argv (no daemon needed) --------------------
+
 
 def test_fetch_rejects_non_http(tmp_path):
     s = _settings(tmp_path)
@@ -189,6 +193,7 @@ def test_fetch_image_config_default():
 
 # --- web_fetch: html-to-text extraction --------------------------------------
 
+
 def test_web_fetch_strips_html_to_prose(tmp_path, monkeypatch):
     """A typical docs-page response (HTML markup wrapping prose) MUST
     come back as whitespace-collapsed text — that's how we shrink a
@@ -198,6 +203,7 @@ def test_web_fetch_strips_html_to_prose(tmp_path, monkeypatch):
     markup is dead weight.
     """
     from robotsix_mill.agents.web_tools import make_web_fetch, _cache
+
     _cache.clear()
 
     html_body = (
@@ -211,9 +217,7 @@ def test_web_fetch_strips_html_to_prose(tmp_path, monkeypatch):
         "</body></html>"
     )
     s = _settings(tmp_path)
-    monkeypatch.setattr(
-        sandbox, "fetch", lambda url, *, settings: (0, html_body)
-    )
+    monkeypatch.setattr(sandbox, "fetch", lambda url, *, settings: (0, html_body))
     out = make_web_fetch(s)("https://docs.example/sqlite")
 
     # The markup is gone — no opening angle brackets remain.
@@ -232,12 +236,11 @@ def test_web_fetch_passes_non_html_unchanged(tmp_path, monkeypatch):
     have no HTML markers — the extractor leaves them alone so an
     agent fetching a raw .py or .json gets bytes for bytes."""
     from robotsix_mill.agents.web_tools import _cache
+
     _cache.clear()
     s = _settings(tmp_path)
     raw = '{"name": "blake3", "version": "1.0.5"}'
-    monkeypatch.setattr(
-        sandbox, "fetch", lambda url, *, settings: (0, raw)
-    )
+    monkeypatch.setattr(sandbox, "fetch", lambda url, *, settings: (0, raw))
     out = make_web_fetch(s)("https://pypi.example/blake3/json")
     assert out == raw
 
@@ -247,12 +250,11 @@ def test_web_fetch_raw_mode_disables_extraction(tmp_path, monkeypatch):
     operators who really need markup or are debugging the extractor
     bypass it cleanly."""
     from robotsix_mill.agents.web_tools import _cache
+
     _cache.clear()
     s = _settings(tmp_path, web_fetch_raw=True)
     body = "<html><body><p>raw</p></body></html>"
-    monkeypatch.setattr(
-        sandbox, "fetch", lambda url, *, settings: (0, body)
-    )
+    monkeypatch.setattr(sandbox, "fetch", lambda url, *, settings: (0, body))
     assert make_web_fetch(s)("https://x.test/raw") == body
 
 
@@ -262,12 +264,11 @@ def test_web_fetch_applies_text_cap(tmp_path, monkeypatch):
     cap is what protects context-token cost when a fetched plain
     file is large but the agent only needs a snippet."""
     from robotsix_mill.agents.web_tools import _cache
+
     _cache.clear()
     s = _settings(tmp_path, web_fetch_max_text_bytes=100)
     body = "x" * 500
-    monkeypatch.setattr(
-        sandbox, "fetch", lambda url, *, settings: (0, body)
-    )
+    monkeypatch.setattr(sandbox, "fetch", lambda url, *, settings: (0, body))
     out = make_web_fetch(s)("https://x.test/big")
     # First 100 chars present, then the marker.
     assert out.startswith("x" * 100)
@@ -276,6 +277,7 @@ def test_web_fetch_applies_text_cap(tmp_path, monkeypatch):
 
 # --- web_fetch: per-run URL dedupe -------------------------------------------
 
+
 def test_web_fetch_dedupes_fragment_only_variants(tmp_path, monkeypatch):
     """Two URLs differing only in ``#fragment`` are the SAME page —
     the cache MUST return the prior result without a second sandbox
@@ -283,6 +285,7 @@ def test_web_fetch_dedupes_fragment_only_variants(tmp_path, monkeypatch):
     the agent fetched the Python sqlite3 docs page twice for two
     different anchors. This guards the fix."""
     from robotsix_mill.agents.web_tools import _cache
+
     _cache.clear()
     s = _settings(tmp_path)
 
@@ -296,8 +299,7 @@ def test_web_fetch_dedupes_fragment_only_variants(tmp_path, monkeypatch):
     wf = make_web_fetch(s)
     a = wf("https://docs.python.org/3/library/sqlite3.html#transaction-control")
     b = wf(
-        "https://docs.python.org/3/library/sqlite3.html"
-        "#sqlite3-connection-autocommit"
+        "https://docs.python.org/3/library/sqlite3.html#sqlite3-connection-autocommit"
     )
     # ONE underlying fetch — the second was served from the cache.
     assert len(calls) == 1
@@ -309,12 +311,14 @@ def test_web_fetch_does_not_dedupe_different_paths(tmp_path, monkeypatch):
     """The dedupe key includes path + query, so genuinely different
     URLs still go through to the sandbox."""
     from robotsix_mill.agents.web_tools import _cache
+
     _cache.clear()
     s = _settings(tmp_path)
     calls: list[str] = []
     monkeypatch.setattr(
-        sandbox, "fetch",
-        lambda url, *, settings: (calls.append(url) or (0, "body")),
+        sandbox,
+        "fetch",
+        lambda url, *, settings: calls.append(url) or (0, "body"),
     )
     wf = make_web_fetch(s)
     wf("https://docs.example/a")
@@ -327,12 +331,14 @@ def test_web_fetch_raw_mode_bypasses_cache(tmp_path, monkeypatch):
     escape hatch must NOT silently serve an extracted prior result.
     Operator opted in to verbatim bytes; that's what they get."""
     from robotsix_mill.agents.web_tools import _cache
+
     _cache.clear()
     s = _settings(tmp_path, web_fetch_raw=True)
     calls = []
     monkeypatch.setattr(
-        sandbox, "fetch",
-        lambda url, *, settings: (calls.append(url) or (0, "<html>x</html>")),
+        sandbox,
+        "fetch",
+        lambda url, *, settings: calls.append(url) or (0, "<html>x</html>"),
     )
     wf = make_web_fetch(s)
     wf("https://x.test/raw#a")
@@ -342,11 +348,13 @@ def test_web_fetch_raw_mode_bypasses_cache(tmp_path, monkeypatch):
 
 # --- web_fetch: html_to_text helper ------------------------------------------
 
+
 def test_html_to_text_drops_scripts_and_styles():
     """Scripts and styles are removed wholesale (content + tags) so
     an LLM doesn't have to read JavaScript or CSS. They're dead
     weight in every doc page we fetch."""
     from robotsix_mill.agents.web_tools import html_to_text
+
     body = (
         "<html><body>"
         "<script>alert('x'); var leaked = 'data';</script>"
@@ -365,6 +373,7 @@ def test_html_to_text_unescapes_entities():
     """``&amp;`` → ``&`` and ``&nbsp;`` → space — the agent reads the
     rendered text, not the source-level entity references."""
     from robotsix_mill.agents.web_tools import html_to_text
+
     out = html_to_text("<p>foo &amp; bar&nbsp;baz</p>")
     assert "&" in out
     # &nbsp; came through as a real space; the result has no
@@ -378,6 +387,7 @@ def test_html_to_text_collapses_whitespace():
     collapses them so the agent doesn't see paragraphs of newlines
     between every word."""
     from robotsix_mill.agents.web_tools import html_to_text
+
     body = "<div><p>one</p>\n\n\n<p>two</p></div>"
     out = html_to_text(body)
     # At most one blank line between paragraphs.

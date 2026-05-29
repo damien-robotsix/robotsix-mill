@@ -65,7 +65,7 @@ _REV_REV_COUNTER = "review_revision_attempts.txt"
 def _read_counter(path) -> int:
     try:
         return int(path.read_text(encoding="utf-8").strip())
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError, ValueError:
         return 0
 
 
@@ -97,6 +97,7 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
 
 class MergeStage(Stage):
     """Orchestrate the merge pipeline: poll CI, rebase, address review feedback, and auto-merge when green."""
+
     name = "merge"
     input_state = State.HUMAN_MR_APPROVAL
     traced = False
@@ -129,7 +130,9 @@ class MergeStage(Stage):
         # HUMAN_MR_APPROVAL path: poll PR status.
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         try:
-            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(source_branch=branch)
+            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
+                source_branch=branch
+            )
         except Exception as e:  # noqa: BLE001 — transient: retry next poll
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.HUMAN_MR_APPROVAL)  # no-op
@@ -138,9 +141,9 @@ class MergeStage(Stage):
             return Outcome(State.HUMAN_MR_APPROVAL)  # not visible yet — re-poll
 
         if pr.get("merged"):
-            ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                "merge.md"
-            ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
+            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
+                f"merged: {pr.get('url', '')}\n", encoding="utf-8"
+            )
             log.info("%s: PR merged → done", ticket.id)
             return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
         if pr.get("state") == "closed":
@@ -152,12 +155,17 @@ class MergeStage(Stage):
         # --- Review feedback check (opt-in, gated by config flag) ---
         if s.review_feedback_enabled:
             try:
-                review_status = get_forge(s, repo_config=ctx.repo_config).pr_review_status(source_branch=branch)
+                review_status = get_forge(
+                    s, repo_config=ctx.repo_config
+                ).pr_review_status(source_branch=branch)
             except Exception as e:  # noqa: BLE001 — transient
                 log.warning("%s: pr_review_status failed (retry): %s", ticket.id, e)
                 review_status = None
 
-            if review_status is not None and review_status.get("state") == "CHANGES_REQUESTED":
+            if (
+                review_status is not None
+                and review_status.get("state") == "CHANGES_REQUESTED"
+            ):
                 # Persist the review comments as an artifact so the agent can
                 # read them even if the forge becomes unreachable on the next poll.
                 comments = review_status.get("comments", [])
@@ -169,7 +177,8 @@ class MergeStage(Stage):
                     )
                     log.info(
                         "%s: human requested changes (%d comments) → ADDRESSING_REVIEW",
-                        ticket.id, len(comments),
+                        ticket.id,
+                        len(comments),
                     )
                     return Outcome(
                         State.ADDRESSING_REVIEW,
@@ -208,11 +217,11 @@ class MergeStage(Stage):
 
         # Check remote CI before returning no-op.
         try:
-            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(source_branch=branch)
-        except Exception as e:  # noqa: BLE001 — transient
-            log.warning(
-                "%s: check_status failed (retry): %s", ticket.id, e
+            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
+                source_branch=branch
             )
+        except Exception as e:  # noqa: BLE001 — transient
+            log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.HUMAN_MR_APPROVAL)
 
         if ci_status is None:
@@ -221,8 +230,13 @@ class MergeStage(Stage):
 
         conclusion = ci_status.get("conclusion")
         if conclusion == "failure":
-            log.info("%s: mergeable PR has failing CI → falling back to IMPLEMENT_COMPLETE", ticket.id)
-            return Outcome(State.IMPLEMENT_COMPLETE, "CI is failing; gates no longer pass")
+            log.info(
+                "%s: mergeable PR has failing CI → falling back to IMPLEMENT_COMPLETE",
+                ticket.id,
+            )
+            return Outcome(
+                State.IMPLEMENT_COMPLETE, "CI is failing; gates no longer pass"
+            )
 
         # success, pending, or None — evaluate auto-merge eligibility.
         eligible, eligibility_reason = self._auto_merge_eligible(ticket, ctx)
@@ -230,7 +244,9 @@ class MergeStage(Stage):
         if conclusion == "success":
             if eligible:
                 # CI green + eligible → auto-merge now.
-                result = get_forge(s, repo_config=ctx.repo_config).merge_pr(source_branch=branch)
+                result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
+                    source_branch=branch
+                )
                 if result.get("merged"):
                     ctx.service.workspace(ticket).artifacts_dir.joinpath(
                         "merge.md"
@@ -244,13 +260,12 @@ class MergeStage(Stage):
                         f"auto-merged: {pr.get('url', '')}",
                     )
                 # Forge rejected the merge.
-                reason_text = (
-                    f"forge merge failed: {result.get('reason', 'unknown')}"
-                )
+                reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
                 self._maybe_comment(ticket, ctx, reason_text)
                 log.warning(
                     "%s: auto-merge failed: %s — falling back to human",
-                    ticket.id, result.get("reason", "unknown"),
+                    ticket.id,
+                    result.get("reason", "unknown"),
                 )
                 return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
             else:
@@ -267,7 +282,9 @@ class MergeStage(Stage):
         self._maybe_comment(ticket, ctx, eligibility_reason)
         return Outcome(State.HUMAN_MR_APPROVAL)
 
-    def _auto_merge_eligible(self, ticket: Ticket, ctx: StageContext) -> tuple[bool, str]:
+    def _auto_merge_eligible(
+        self, ticket: Ticket, ctx: StageContext
+    ) -> tuple[bool, str]:
         """Return ``(eligible, reason)`` for auto-merge.
 
         *eligible* is True when ALL of the following hold:
@@ -284,9 +301,7 @@ class MergeStage(Stage):
         if not s.review_enabled:
             return False, "review gate disabled — human approval required"
 
-        review_artifact = (
-            ctx.service.workspace(ticket).artifacts_dir / "review.md"
-        )
+        review_artifact = ctx.service.workspace(ticket).artifacts_dir / "review.md"
         if not review_artifact.exists():
             return False, "no review artifact — human approval required"
 
@@ -296,7 +311,7 @@ class MergeStage(Stage):
             verdict_note = ""
             for line in review_text.splitlines():
                 if line.startswith("verdict:"):
-                    verdict_note = " (" + line[len("verdict:"):].strip()[:200] + ")"
+                    verdict_note = " (" + line[len("verdict:") :].strip()[:200] + ")"
                     break
             return False, "reviewer marked not auto-merge eligible" + verdict_note
 
@@ -314,9 +329,7 @@ class MergeStage(Stage):
         agent conclusions. The reason now lands in history alongside
         every other agent step.
         """
-        reason_path = (
-            ctx.service.workspace(ticket).artifacts_dir / _MERGE_REASON
-        )
+        reason_path = ctx.service.workspace(ticket).artifacts_dir / _MERGE_REASON
         stored = _read_reason(reason_path)
         if stored == reason:
             return  # already emitted — de-dupe
@@ -344,7 +357,9 @@ class MergeStage(Stage):
 
         # Re-check PR status (could have become conflicting).
         try:
-            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(source_branch=branch)
+            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
+                source_branch=branch
+            )
         except Exception as e:  # noqa: BLE001 — transient
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.WAITING_AUTO_MERGE)
@@ -352,9 +367,9 @@ class MergeStage(Stage):
         if pr is None:
             return Outcome(State.WAITING_AUTO_MERGE)
         if pr.get("merged"):
-            ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                "merge.md"
-            ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
+            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
+                f"merged: {pr.get('url', '')}\n", encoding="utf-8"
+            )
             log.info("%s: PR merged → done", ticket.id)
             return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
         if pr.get("state") == "closed":
@@ -368,11 +383,15 @@ class MergeStage(Stage):
                 "%s: PR became conflicting while waiting for CI → IMPLEMENT_COMPLETE",
                 ticket.id,
             )
-            return Outcome(State.IMPLEMENT_COMPLETE, "PR is now conflicting; gates no longer pass")
+            return Outcome(
+                State.IMPLEMENT_COMPLETE, "PR is now conflicting; gates no longer pass"
+            )
 
         # Check CI.
         try:
-            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(source_branch=branch)
+            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
+                source_branch=branch
+            )
         except Exception as e:  # noqa: BLE001 — transient
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.WAITING_AUTO_MERGE)
@@ -384,13 +403,18 @@ class MergeStage(Stage):
 
         conclusion = ci_status.get("conclusion")
         if conclusion == "failure":
-            log.info("%s: CI failed while waiting for auto-merge → IMPLEMENT_COMPLETE", ticket.id)
+            log.info(
+                "%s: CI failed while waiting for auto-merge → IMPLEMENT_COMPLETE",
+                ticket.id,
+            )
             self._maybe_comment(ticket, ctx, "CI failed — falling back to gate check")
             return Outcome(State.IMPLEMENT_COMPLETE, "CI failed; gates no longer pass")
 
         if conclusion == "success":
             # CI is green — attempt auto-merge.
-            result = get_forge(s, repo_config=ctx.repo_config).merge_pr(source_branch=branch)
+            result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
+                source_branch=branch
+            )
             if result.get("merged"):
                 ctx.service.workspace(ticket).artifacts_dir.joinpath(
                     "merge.md"
@@ -408,7 +432,8 @@ class MergeStage(Stage):
             self._maybe_comment(ticket, ctx, reason_text)
             log.warning(
                 "%s: auto-merge failed: %s — falling back to human",
-                ticket.id, result.get("reason", "unknown"),
+                ticket.id,
+                result.get("reason", "unknown"),
             )
             return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
 
@@ -434,7 +459,9 @@ class MergeStage(Stage):
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
 
         try:
-            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(source_branch=branch)
+            pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
+                source_branch=branch
+            )
         except Exception as e:  # noqa: BLE001 — transient: retry next poll
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
@@ -442,9 +469,9 @@ class MergeStage(Stage):
         if pr is None:
             return Outcome(State.IMPLEMENT_COMPLETE)  # not visible yet — re-poll
         if pr.get("merged"):
-            ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                "merge.md"
-            ).write_text(f"merged: {pr.get('url', '')}\n", encoding="utf-8")
+            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
+                f"merged: {pr.get('url', '')}\n", encoding="utf-8"
+            )
             log.info("%s: PR merged → done", ticket.id)
             return Outcome(State.DONE, f"merged: {pr.get('url', '')}")
         if pr.get("state") == "closed":
@@ -474,11 +501,11 @@ class MergeStage(Stage):
 
         # Check remote CI.
         try:
-            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(source_branch=branch)
-        except Exception as e:  # noqa: BLE001 — transient
-            log.warning(
-                "%s: check_status failed (retry): %s", ticket.id, e
+            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
+                source_branch=branch
             )
+        except Exception as e:  # noqa: BLE001 — transient
+            log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if ci_status is None:
@@ -528,7 +555,7 @@ class MergeStage(Stage):
 
         try:
             feedback = json.loads(feedback_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             return Outcome(
                 State.HUMAN_MR_APPROVAL,
                 "review_feedback.json corrupted — re-polling from human_mr_approval",
@@ -549,9 +576,7 @@ class MergeStage(Stage):
                 if c.get("line"):
                     loc += f":{c['line']}"
                 loc += ")"
-            parts.append(
-                f"## Comment #{i + 1}{loc}\n\n{c.get('body', '')}"
-            )
+            parts.append(f"## Comment #{i + 1}{loc}\n\n{c.get('body', '')}")
         review_comments_text = "\n\n".join(parts)
 
         # Counter for attempt budgeting.
@@ -561,7 +586,9 @@ class MergeStage(Stage):
 
         log.info(
             "%s: addressing review feedback — attempt %d/%d",
-            ticket.id, attempt, max_attempts,
+            ticket.id,
+            attempt,
+            max_attempts,
         )
 
         try:
@@ -603,7 +630,9 @@ class MergeStage(Stage):
                     log.info(
                         "%s: review-revision no-op (remote already current) — "
                         "retry %d/%d",
-                        ticket.id, attempt, max_attempts,
+                        ticket.id,
+                        attempt,
+                        max_attempts,
                     )
                     return Outcome(State.ADDRESSING_REVIEW)
                 _write_counter(counter_path, 0)
@@ -639,7 +668,9 @@ class MergeStage(Stage):
             _write_counter(counter_path, attempt)
             log.warning(
                 "%s: review-revision attempt %d/%d failed — retrying next poll",
-                ticket.id, attempt, max_attempts,
+                ticket.id,
+                attempt,
+                max_attempts,
             )
             return Outcome(State.ADDRESSING_REVIEW)
 
@@ -664,16 +695,17 @@ class MergeStage(Stage):
                 "cannot rebase. Re-run implement to recreate the clone.",
             )
 
-        counter_path = (
-            ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER
-        )
+        counter_path = ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER
         attempt = _read_counter(counter_path) + 1
         max_attempts = s.rebase_max_attempts
 
         target = s.forge_target_branch
         log.info(
             "%s: PR conflicting — rebase attempt %d/%d onto %s",
-            ticket.id, attempt, max_attempts, target,
+            ticket.id,
+            attempt,
+            max_attempts,
+            target,
         )
 
         try:
@@ -758,13 +790,17 @@ class MergeStage(Stage):
                     log.info(
                         "%s: rebase no-op (remote already current) — "
                         "GitHub still flags conflict; re-poll %d/%d",
-                        ticket.id, attempt, max_attempts,
+                        ticket.id,
+                        attempt,
+                        max_attempts,
                     )
                     return Outcome(State.REBASING)  # silent re-poll
                 _write_counter(counter_path, 0)
                 log.warning(
                     "%s: rebase keeps being a no-op but the PR is still "
-                    "conflicting after %d attempts", ticket.id, max_attempts,
+                    "conflicting after %d attempts",
+                    ticket.id,
+                    max_attempts,
                 )
                 return Outcome(
                     State.BLOCKED,
@@ -800,7 +836,9 @@ class MergeStage(Stage):
                 _write_counter(counter_path, attempt)
                 # Route by context: no PR yet → back to implement; PR exists → re-check gates.
                 try:
-                    pr = get_forge(s, repo_config=ctx.repo_config).pr_status(source_branch=branch)
+                    pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
+                        source_branch=branch
+                    )
                 except Exception:
                     pr = None
                 next_state = State.READY if pr is None else State.IMPLEMENT_COMPLETE
@@ -819,7 +857,9 @@ class MergeStage(Stage):
             _write_counter(counter_path, attempt)
             log.warning(
                 "%s: rebase attempt %d/%d failed — retrying next poll",
-                ticket.id, attempt, max_attempts,
+                ticket.id,
+                attempt,
+                max_attempts,
             )
             return Outcome(State.REBASING)  # no-op; retry next poll
 

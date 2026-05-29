@@ -24,7 +24,10 @@ from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
-_SYSPROMPT_PATH = Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
+
+_SYSPROMPT_PATH = (
+    Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
+)
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -169,9 +172,8 @@ class RefineResult(BaseModel):
                 continue
             kl = k.lower()
             if kl == "spec" or (
-                kl.startswith("spec_") and any(
-                    fragment in kl for fragment in ("mark", "md", "down")
-                )
+                kl.startswith("spec_")
+                and any(fragment in kl for fragment in ("mark", "md", "down"))
             ):
                 v = data.pop(k)
                 if isinstance(v, str) and v.strip():
@@ -192,7 +194,6 @@ def triage_refine(
     structured classification.  Conservative bias: when uncertain,
     choose REFINE (the only real risk is a wrong SKIP).
     """
-    from pydantic_ai import PromptedOutput
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -203,14 +204,13 @@ def triage_refine(
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=[],
+        settings,
+        definition,
+        tools=[],
         model_name=definition.model or settings.triage_model,
     )
 
-    user_prompt = (
-        section("title", title) + "\n"
-        + section("draft", draft)
-    )
+    user_prompt = section("title", title) + "\n" + section("draft", draft)
 
     try:
         result = call_with_retry(
@@ -240,18 +240,21 @@ def triage_auto_approve(
     NO tools, NO web, NO explore — just a tiny prompt and a
     structured classification.
     """
-    from pydantic_ai import PromptedOutput
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
     from .retry import call_with_retry
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "auto-approve.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "auto-approve.yaml"
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=[],
+        settings,
+        definition,
+        tools=[],
         model_name=definition.model or settings.auto_approve_model,
     )
 
@@ -282,18 +285,21 @@ def review_spec_for_conciseness(
 
     NO tools, NO web, NO explore — classification/transformation only.
     """
-    from pydantic_ai import PromptedOutput
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
     from .retry import call_with_retry
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "spec-review.yaml"
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "spec-review.yaml"
     )
 
     agent = build_agent_from_definition(
-        settings, definition, tools=[],
+        settings,
+        definition,
+        tools=[],
         model_name=definition.model or settings.triage_model,
     )
 
@@ -432,7 +438,6 @@ def run_refine_agent(
         was provided, otherwise ``None``
       - ``conversation_state``: raw conversation JSON for pause/resume
     """
-    from pydantic_ai import PromptedOutput
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -448,7 +453,8 @@ def run_refine_agent(
         from .fs_tools import build_fs_tools
 
         ro = [
-            t for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
+            t
+            for t in build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
             if t.__name__ in ("read_file", "list_dir", "run_command")
         ]
         tools = [make_explore_tool(settings, repo_dir, extra_roots=extra_roots), *ro]
@@ -460,7 +466,9 @@ def run_refine_agent(
         overrides["model_name"] = settings.refine_model
 
     agent = build_agent_from_definition(
-        settings, definition, tools=tools,
+        settings,
+        definition,
+        tools=tools,
         board_id=board_id,
         **overrides,
     )
@@ -470,18 +478,18 @@ def run_refine_agent(
     if epic_context:
         user_prompt += f"{epic_context}\n\n"
     user_prompt += (
-        section("title", title) + "\n"
-        + section("draft", draft) + "\n\n"
+        section("title", title)
+        + "\n"
+        + section("draft", draft)
+        + "\n\n"
         + section("memory", memory or "(empty — start a new ledger)")
     )
     if reviewer_comments:
-        user_prompt += (
-            "\n\n" + section(
-                "reviewer-feedback",
-                "The reviewer sent this spec back with the following "
-                "comments. Address each one in the revised spec:\n\n"
-                f"{reviewer_comments}",
-            )
+        user_prompt += "\n\n" + section(
+            "reviewer-feedback",
+            "The reviewer sent this spec back with the following "
+            "comments. Address each one in the revised spec:\n\n"
+            f"{reviewer_comments}",
         )
 
     try:
@@ -490,7 +498,8 @@ def run_refine_agent(
                 user_prompt,
                 message_history=message_history,
             ),
-            settings=settings, what="refine",
+            settings=settings,
+            what="refine",
         )
         output: RefineResult = result.output
         try:
