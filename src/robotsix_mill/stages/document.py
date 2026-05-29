@@ -18,6 +18,7 @@ from pathlib import Path
 
 from ..agents.documenting import DocClassifierResult, DocResult
 from ..core.models import Ticket
+from ..notify import send_notification
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
 from ..vcs import git_ops
@@ -151,6 +152,11 @@ class DocumentStage(Stage):
                 "%s: doc agent failed — passing through",
                 ticket.id,
                 exc_info=True,
+            )
+            send_notification(
+                ticket, State.ERRORED,
+                "doc agent failed (non-blocking)",
+                ctx.settings,
             )
             return Outcome(
                 State.DELIVERABLE,
