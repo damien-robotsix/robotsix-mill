@@ -347,6 +347,52 @@ class TestWriteFile:
         assert isinstance(result, str)
         assert "not been cloned yet" in result.lower()
 
+    def test_write_file_python_syntax_error_refused(self, tmp_path, settings):
+        """write_file must refuse a .py with a SyntaxError so the agent
+        retries the edit instead of wasting a test cycle on broken code."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        bad = "def f(:\n    pass\n"  # missing parameter list
+        result = tools["write_file"]("mod.py", bad)
+        assert "syntax error" in result.lower()
+        assert "mod.py" in result
+        assert not (root / "mod.py").exists()
+
+    def test_write_file_python_syntax_ok_writes(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        good = "def f():\n    return 1\n"
+        result = tools["write_file"]("mod.py", good)
+        assert "wrote" in result
+        assert (root / "mod.py").read_text() == good
+
+    def test_write_file_non_python_skips_syntax_check(self, tmp_path, settings):
+        """A `.md` or `.yaml` file with text that LOOKS like broken Python
+        must still be written — the guard is .py-only."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        body = "def broken(:\n  no\n"
+        result = tools["write_file"]("notes.md", body)
+        assert "wrote" in result
+        assert (root / "notes.md").read_text() == body
+
+    def test_write_file_lint_on_edit_off_allows_syntax_error(
+        self, tmp_path,
+    ):
+        """When lint_on_edit is False the guard is fully bypassed."""
+        from robotsix_mill.config import Settings
+        s = Settings(data_dir=str(tmp_path / "data"), lint_on_edit=False)
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, s)
+        bad = "def f(:\n"
+        result = tools["write_file"]("mod.py", bad)
+        assert "wrote" in result
+        assert (root / "mod.py").read_text() == bad
+
 
 # ===================================================================
 # edit_file
@@ -356,11 +402,13 @@ class TestEditFile:
     def test_unique_match_replaces(self, tmp_path, settings):
         root = tmp_path / "repo"
         root.mkdir()
-        _make_file(root, "f.py", "alpha beta gamma\n")
+        # Non-.py so the pre-write syntax guard doesn't reject the
+        # textual placeholder content.
+        _make_file(root, "f.txt", "alpha beta gamma\n")
         tools = _build(root, settings)
-        result = tools["edit_file"]("f.py", "beta", "BETA")
-        assert "replaced 1 occurrence in f.py" in result
-        assert (root / "f.py").read_text() == "alpha BETA gamma\n"
+        result = tools["edit_file"]("f.txt", "beta", "BETA")
+        assert "replaced 1 occurrence in f.txt" in result
+        assert (root / "f.txt").read_text() == "alpha BETA gamma\n"
 
     def test_not_found(self, tmp_path, settings):
         root = tmp_path / "repo"
@@ -406,6 +454,23 @@ class TestEditFile:
         result = tools["edit_file"]("any.txt", "a", "b")
         assert isinstance(result, str)
         assert "not been cloned yet" in result.lower()
+
+    def test_edit_file_python_syntax_error_refused(self, tmp_path, settings):
+        """An edit that would leave the .py file with a SyntaxError must
+        be refused without writing — agent gets the diagnostic and can
+        retry without burning a test cycle."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        original = "def f():\n    return 1\n"
+        _make_file(root, "mod.py", original)
+        tools = _build(root, settings)
+        # Replace the body with malformed Python.
+        result = tools["edit_file"](
+            "mod.py", "    return 1", "    return (",
+        )
+        assert "syntax error" in result.lower()
+        # File on disk unchanged.
+        assert (root / "mod.py").read_text() == original
 
 
 # ===================================================================

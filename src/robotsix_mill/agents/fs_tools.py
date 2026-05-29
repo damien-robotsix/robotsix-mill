@@ -379,10 +379,35 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
         end = start + limit if limit is not None else None
         return "".join(lines[start:end])
 
+    def _check_python_syntax(path: str, content: str) -> str | None:
+        """Return a short error string if *path* is .py and *content* has
+        a syntax error; ``None`` otherwise. Skipped when
+        ``settings.lint_on_edit`` is False so an operator can disable
+        the guard for a misbehaving repo.
+
+        Only ``compile`` is used — not ruff/pylint — because a real
+        linter requires the full module graph and false-positives on
+        work-in-progress edits. ``compile`` catches the kind of error
+        that would otherwise waste a full test cycle (missing colon,
+        unmatched paren, stray indent)."""
+        if not path.endswith(".py"):
+            return None
+        if not settings.lint_on_edit:
+            return None
+        try:
+            compile(content, path, "exec")
+        except SyntaxError as e:
+            line = e.lineno or "?"
+            return f"syntax error in {path} line {line}: {e.msg}"
+        return None
+
     def write_file(path: str, content: str) -> str:
         """Create or overwrite a file in the repository with ``content``."""
         try:
             p = _safe(root, path, extra_roots=extra_roots)
+            err = _check_python_syntax(path, content)
+            if err is not None:
+                return f"write_file refused: {err}"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
         except (ValueError, OSError) as e:
@@ -410,10 +435,11 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
                     f"in {path} (must be unique) — read the file and "
                     f"retry, or use write_file"
                 )
-            p.write_text(
-                content.replace(old_string, new_string, 1),
-                encoding="utf-8",
-            )
+            new_content = content.replace(old_string, new_string, 1)
+            err = _check_python_syntax(path, new_content)
+            if err is not None:
+                return f"edit_file refused: {err}"
+            p.write_text(new_content, encoding="utf-8")
             _file_cache.pop(p.resolve(), None)
             return f"edit_file: replaced 1 occurrence in {path}"
         except (ValueError, OSError) as e:

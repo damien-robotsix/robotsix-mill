@@ -324,6 +324,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # growing while existing settings can migrate over time.
     "web.fetch_max_text_bytes": "web_fetch_max_text_bytes",
     "web.fetch_raw": "web_fetch_raw",
+    "core.lint_on_edit": "lint_on_edit",
     # -- gates --
     "gates.require_approval": "require_approval",
     "gates.auto_approve_enabled": "auto_approve_enabled",

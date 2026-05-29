@@ -487,6 +487,12 @@ class Settings(BaseSettings):
     # False — every agent we ship is a prose consumer.
     # Configured via ``web.fetch_raw`` in the YAML config.
     web_fetch_raw: bool = False
+    # Pre-write Python syntax check on `write_file` / `edit_file`. When
+    # True (default) a SyntaxError aborts the edit and the agent gets
+    # an actionable error string instead of writing broken code that
+    # would only be caught one expensive test cycle later.
+    # Configured via ``core.lint_on_edit`` in the YAML config.
+    lint_on_edit: bool = True
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
     # refine + implement agents' system prompt. Relative to CWD (/app in
     # the container, repo root locally).
