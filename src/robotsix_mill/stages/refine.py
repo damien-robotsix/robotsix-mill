@@ -35,7 +35,8 @@ from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .pause import (
     check_for_pause, save_conversation_state,
-    load_conversation_state, build_resume_message_history,
+    load_conversation_state, clear_conversation_state,
+    build_resume_message_history,
     _collect_ask_user_replies, acknowledge_unanswered_threads,
 )
 from .base import Outcome, Stage, StageContext
@@ -452,7 +453,7 @@ class RefineStage(Stage):
 
         # --- resume awareness: detect if returning from a pause ---
         resume_history: list | None = None
-        saved_state = load_conversation_state(ws)
+        saved_state = load_conversation_state(ws, "refine")
         if saved_state is not None:
             # Check whether the ticket is resuming from a pause by
             # looking for a prior AWAITING_USER_REPLY event in the
@@ -498,7 +499,7 @@ class RefineStage(Stage):
         # (``conversation_state``) is still what gets persisted for
         # resume.
         if check_for_pause(result.new_messages):
-            save_conversation_state(ws, result.conversation_state)
+            save_conversation_state(ws, result.conversation_state, "refine")
             ctx.service.transition(
                 ticket.id, State.AWAITING_USER_REPLY,
                 note="paused — agent asked a clarifying question",
@@ -508,6 +509,11 @@ class RefineStage(Stage):
                 ticket.id,
             )
             return Outcome(State.AWAITING_USER_REPLY)
+
+        # Refine produced a normal output (no pause) — clear any stale
+        # saved state from earlier pause/resume cycles so it cannot leak
+        # into downstream stages as a phantom resume context.
+        clear_conversation_state(ws, "refine")
 
         if result.updated_memory:
             persist_memory(refine_memory_path, result.updated_memory)

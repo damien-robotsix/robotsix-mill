@@ -19,8 +19,11 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.stages.pause import (
     _SENTINEL, acknowledge_unanswered_threads, check_for_pause,
+    clear_conversation_state, load_conversation_state,
+    save_conversation_state,
 )
 
 
@@ -235,6 +238,39 @@ def test_acknowledge_thread_not_in_list_comments_skipped():
 
     ctx.service.close_thread.assert_not_called()
     ctx.service.add_comment.assert_not_called()
+
+
+def test_save_load_namespaced_per_stage(tmp_path):
+    """Refine's saved state must NOT be visible under the implement
+    namespace and vice versa — the cross-stage contamination is the
+    bug this namespace exists to prevent."""
+    ws = Workspace(tmp_path / "workspaces", "t-state")
+    save_conversation_state(ws, b"refine-bytes", "refine")
+    assert load_conversation_state(ws, "refine") == b"refine-bytes"
+    assert load_conversation_state(ws, "implement") is None
+
+    save_conversation_state(ws, b"implement-bytes", "implement")
+    assert load_conversation_state(ws, "implement") == b"implement-bytes"
+    assert load_conversation_state(ws, "refine") == b"refine-bytes"
+
+
+def test_clear_conversation_state_removes_file(tmp_path):
+    ws = Workspace(tmp_path / "workspaces", "t-clear")
+    save_conversation_state(ws, b"x", "refine")
+    assert (ws.artifacts_dir / "refine_conversation_state.json").exists()
+    clear_conversation_state(ws, "refine")
+    assert not (ws.artifacts_dir / "refine_conversation_state.json").exists()
+    # Clearing again is a no-op.
+    clear_conversation_state(ws, "refine")
+
+
+def test_clear_does_not_touch_other_stage(tmp_path):
+    ws = Workspace(tmp_path / "workspaces", "t-clear-iso")
+    save_conversation_state(ws, b"r", "refine")
+    save_conversation_state(ws, b"i", "implement")
+    clear_conversation_state(ws, "refine")
+    assert load_conversation_state(ws, "refine") is None
+    assert load_conversation_state(ws, "implement") == b"i"
 
 
 def test_acknowledge_thread_ids_subset_only_touches_specified():

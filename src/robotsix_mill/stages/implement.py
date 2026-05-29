@@ -41,7 +41,8 @@ from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
 from .pause import (
     check_for_pause, save_conversation_state,
-    load_conversation_state, build_resume_message_history,
+    load_conversation_state, clear_conversation_state,
+    build_resume_message_history,
     acknowledge_unanswered_threads,
 )
 
@@ -468,7 +469,7 @@ class ImplementStage(Stage):
 
         # --- pause detection ---
         if check_for_pause(new_msgs):
-            save_conversation_state(ws, conv_state)
+            save_conversation_state(ws, conv_state, "implement")
             ImplementStage._finalize(
                 ctx, ticket, repo_dir, branch, summary or "paused",
                 ok=False, reference_files=ref_files,
@@ -588,6 +589,27 @@ class ImplementStage(Stage):
 
         if decision.next_action == "proceed":
             if not git_ops.has_changes(repo_dir) and not resuming:
+                # Capture the agent's own narrative so the operator has
+                # something to inspect — otherwise the ticket lands in
+                # BLOCKED with only a one-line reason and the previous
+                # iteration's artifacts (which may not exist on a
+                # fresh implement run).
+                no_change_summary = summary or (
+                    "Agent finished without producing any file edits and "
+                    "without explanation. Check artifacts/implement_messages.json "
+                    "for the full transcript."
+                )
+                ImplementStage._finalize(
+                    ctx, ticket, repo_dir, branch,
+                    f"{no_change_summary}\n\n"
+                    "[Diagnostic] implement returned BLOCKED because "
+                    "`git diff` was empty after the agent run. Common "
+                    "causes: (1) agent decided no edits were necessary "
+                    "but didn't escalate via post_comment; (2) the agent "
+                    "loaded a stale conversation_state from a sibling "
+                    "stage and treated it as already-completed work.",
+                    ok=False, reference_files=ref_files,
+                )
                 return _SinglePassResult(
                     next_action="return",
                     outcome=Outcome(State.BLOCKED, "no changes produced"),
@@ -651,7 +673,7 @@ class ImplementStage(Stage):
             resume_history: list | None = None
             if attempt == 1:
                 ws = ctx.service.workspace(ticket)
-                saved_state = load_conversation_state(ws)
+                saved_state = load_conversation_state(ws, "implement")
                 if saved_state is not None and any(
                     ev.state == State.AWAITING_USER_REPLY
                     for ev in ctx.service.history(ticket.id)

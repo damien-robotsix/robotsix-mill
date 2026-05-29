@@ -59,20 +59,46 @@ def check_for_pause(new_messages: bytes | None) -> bool:
     return False
 
 
-def save_conversation_state(ws: Workspace, conversation_state: bytes) -> None:
+def _state_path(ws: Workspace, stage_name: str) -> Path:
+    return ws.artifacts_dir / f"{stage_name}_conversation_state.json"
+
+
+def save_conversation_state(
+    ws: Workspace, conversation_state: bytes, stage_name: str,
+) -> None:
     """Persist the full agent conversation to
-    ``artifacts/conversation_state.json``."""
-    path = ws.artifacts_dir / "conversation_state.json"
-    path.write_bytes(conversation_state)
+    ``artifacts/{stage_name}_conversation_state.json``.
+
+    *stage_name* (``"refine"`` / ``"implement"``) namespaces the file so
+    a refine pause never gets loaded as an implement resume context — a
+    cross-stage contamination that masqueraded as "implement BLOCKED
+    with no changes produced" before 6f7f-2026-05-29.
+    """
+    _state_path(ws, stage_name).write_bytes(conversation_state)
 
 
-def load_conversation_state(ws: Workspace) -> bytes | None:
-    """Read and return ``conversation_state.json`` if it exists;
-    return ``None`` otherwise."""
-    path = ws.artifacts_dir / "conversation_state.json"
+def load_conversation_state(
+    ws: Workspace, stage_name: str,
+) -> bytes | None:
+    """Read and return ``{stage_name}_conversation_state.json`` if it
+    exists; return ``None`` otherwise."""
+    path = _state_path(ws, stage_name)
     if not path.exists():
         return None
     return path.read_bytes()
+
+
+def clear_conversation_state(ws: Workspace, stage_name: str) -> None:
+    """Remove the saved state file for *stage_name* if present.
+
+    Called when a stage exits the AWAITING_USER_REPLY loop in a way that
+    won't lead to a resume — e.g. when the operator's reply has been
+    consumed and the run completed normally, so the next stage shouldn't
+    pick up the stale file.
+    """
+    path = _state_path(ws, stage_name)
+    if path.exists():
+        path.unlink()
 
 
 def build_resume_message_history(
