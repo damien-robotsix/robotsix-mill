@@ -1,4 +1,4 @@
-"""Ticket CRUD and lifecycle route handlers."""
+"""Core ticket lifecycle routes."""
 
 from __future__ import annotations
 
@@ -6,23 +6,23 @@ import logging
 import threading
 from datetime import datetime, timezone
 
-from fastapi import Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
-from . import router
 from ...core.models import (
-    Comment,
     CommentCreate,
     TicketCreate,
     TicketEvent,
     TicketRead,
     TicketTransition,
 )
+from ...config import get_repo_config, get_secrets
 from ...core.service import TransitionError
 from ...core.states import STAGE_FOR_STATE, State
 from ...forge import get_forge
 from ..deps import (
     enrich_ticket_read,
-    get_run_registry,
+    get_repo_config_for,
+    get_repos_registry,
     get_service,
     get_settings,
     get_worker,
@@ -30,6 +30,8 @@ from ..deps import (
 )
 
 log = logging.getLogger(__name__)
+
+router = APIRouter()
 
 
 def _repo_config_for_ticket(ticket, repos):
@@ -154,7 +156,9 @@ def list_tickets(
             log.exception("list_tickets: failed to query board %r", s.board_id)
 
     return [
-        enrich_ticket_read(t, settings, svc, blocking_cost=False, fetch_pr_url=False)
+        enrich_ticket_read(
+            t, settings, svc, blocking_cost=False, fetch_pr_url=False
+        )
         for t in tickets
     ]
 
@@ -219,13 +223,10 @@ def get_retrospect(
 # "details" button that fetches that file via the route below.
 # Listed once here so the UI and the listing endpoint stay in sync.
 _STAGE_ARTIFACTS: dict[str, list[str]] = {
-    "refine": [
-        "draft-original.md",
-        "file_map.json",
-        "refine-verbose.md",
-        "epic-body-proposed.md",
-    ],
-    "implement": ["implement.md", "implement_summary.md", "reference_files.json"],
+    "refine": ["draft-original.md", "file_map.json", "refine-verbose.md",
+               "epic-body-proposed.md"],
+    "implement": ["implement.md", "implement_summary.md",
+                  "reference_files.json"],
     "review": ["review.md"],
     "document": [],
     "deliver": ["deliver.md"],
@@ -260,18 +261,13 @@ def list_artifacts(
                 stat = p.stat()
             except OSError:
                 continue
-            items.append(
-                {
-                    "name": p.name,
-                    "size": stat.st_size,
-                    "mtime": datetime.fromtimestamp(
-                        stat.st_mtime,
-                        tz=timezone.utc,
-                    )
-                    .isoformat()
-                    .replace("+00:00", "Z"),
-                }
-            )
+            items.append({
+                "name": p.name,
+                "size": stat.st_size,
+                "mtime": datetime.fromtimestamp(
+                    stat.st_mtime, tz=timezone.utc,
+                ).isoformat().replace("+00:00", "Z"),
+            })
     items.sort(key=lambda x: x["mtime"])
     return {"artifacts": items}
 
@@ -301,35 +297,6 @@ def get_artifact(
     except OSError as e:
         raise HTTPException(500, f"read failed: {e}") from None
     return {"name": name, "content": content}
-
-
-@router.get("/tickets/{ticket_id}/cost-breakdown")
-def cost_breakdown(
-    ticket_id: str,
-    request: Request = None,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
-) -> dict:
-    """Per-trace cost breakdown for a ticket, used by the drawer to
-    overlay agent-step costs on history rows.
-
-    The Langfuse sessionId equals the ticket id, so a single
-    `/api/public/traces?sessionId=<ticket>` query returns every agent
-    invocation tied to the ticket. Each entry carries
-    ``{name, cost, at, trace_id}`` ordered by timestamp; the drawer's
-    renderHistoryHtml matches the entries to history events by inferred
-    agent name + nearest-in-time-≤ pairing.
-    """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    from ...langfuse_client import session_traces
-
-    rows = session_traces(settings, ticket_id, repo_config=repo_config)
-    if rows is None:
-        return {"available": False, "traces": []}
-    return {"available": True, "traces": rows}
 
 
 @router.delete("/tickets/{ticket_id}", status_code=204)
@@ -372,7 +339,9 @@ def approve_ticket(
     settings=Depends(get_settings),
 ) -> TicketRead:
     try:
-        ticket = svc.transition(ticket_id, State.READY, note="approved by human")
+        ticket = svc.transition(
+            ticket_id, State.READY, note="approved by human"
+        )
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
@@ -384,11 +353,16 @@ def approve_ticket(
         if ticket.parent_id:
             parent = svc.get(ticket.parent_id)
             if parent is not None and parent.kind == "epic":
-                artifact = svc.workspace(ticket).artifacts_dir / "epic-body-proposed.md"
+                artifact = (
+                    svc.workspace(ticket).artifacts_dir
+                    / "epic-body-proposed.md"
+                )
                 if artifact.exists():
                     epic_body = artifact.read_text(encoding="utf-8").strip()
                     if epic_body:
-                        new_hash = svc.workspace(parent).write_description(epic_body)
+                        new_hash = svc.workspace(parent).write_description(
+                            epic_body
+                        )
                         svc.set_content_hash(parent.id, new_hash)
     except Exception:
         pass  # best-effort: approval always succeeds
@@ -418,13 +392,17 @@ def merge_now(
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     if ticket.state is not State.HUMAN_MR_APPROVAL:
-        raise HTTPException(409, "ticket is not in human_mr_approval")
+        raise HTTPException(
+            409, "ticket is not in human_mr_approval"
+        )
 
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     forge = get_forge(settings, repo_config=repo_config)
     pr = forge.pr_status(source_branch=ticket.branch)
     if pr is None:
-        raise HTTPException(409, "no PR found for branch — nothing to merge")
+        raise HTTPException(
+            409, "no PR found for branch — nothing to merge"
+        )
     pr_url = pr.get("url", ticket.branch)
 
     result = forge.merge_pr(source_branch=ticket.branch)
@@ -488,10 +466,8 @@ def get_merge_info(
                 ci_conclusion = cs.get("conclusion")
                 if ci_conclusion == "failure":
                     ci_failing = [
-                        {
-                            "name": f.get("name", ""),
-                            "summary": (f.get("summary") or "")[:200],
-                        }
+                        {"name": f.get("name", ""),
+                         "summary": (f.get("summary") or "")[:200]}
                         for f in (cs.get("failing") or [])
                     ]
         except Exception:
@@ -503,10 +479,8 @@ def get_merge_info(
         try:
             raw = forge.pr_files(source_branch=branch)
             # Sort by total changes desc, cap at 50.
-            raw.sort(
-                key=lambda f: f.get("additions", 0) + f.get("deletions", 0),
-                reverse=True,
-            )
+            raw.sort(key=lambda f: f.get("additions", 0) + f.get("deletions", 0),
+                     reverse=True)
             files = raw[:50]
         except Exception:
             pass
@@ -529,7 +503,9 @@ def get_merge_reason(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    reason_path = svc.workspace(ticket).artifacts_dir / "merge_reason.txt"
+    reason_path = (
+        svc.workspace(ticket).artifacts_dir / "merge_reason.txt"
+    )
     if not reason_path.exists():
         return {"reason": ""}
     return {"reason": reason_path.read_text(encoding="utf-8").strip()}
@@ -557,11 +533,7 @@ def get_merge_status(
 
     # Only relevant for merge-ready states.  Everything else gets a
     # clean "no" so the drawer doesn't bother rendering a button.
-    if ticket.state not in (
-        State.HUMAN_MR_APPROVAL,
-        State.WAITING_AUTO_MERGE,
-        State.IMPLEMENT_COMPLETE,
-    ):
+    if ticket.state not in (State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE, State.IMPLEMENT_COMPLETE):
         return {
             "mergeable": None,
             "ci_conclusion": None,
@@ -635,106 +607,6 @@ def get_merge_status(
     }
 
 
-@router.post(
-    "/tickets/{ticket_id}/comments",
-    response_model=Comment,
-    status_code=201,
-)
-def add_comment(
-    ticket_id: str,
-    body: CommentCreate,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
-) -> Comment:
-    """Add a comment to a ticket (any state).
-
-    Set *parent_id* to reply to an existing comment, forming a
-    threaded discussion.  Omit it (or pass ``null``) to start a new
-    top-level thread.
-
-    For epic tickets, the comment triggers a background re-processing:
-    the epic is re-broken-down by the breakdown agent with the full
-    comment history as operator direction, and net-new children are
-    created.  Non-epic tickets are unaffected — the comment is simply
-    persisted.
-    """
-    try:
-        comment = svc.add_comment(
-            ticket_id, body.body, author=body.author, parent_id=body.parent_id
-        )
-    except KeyError:
-        raise HTTPException(404, "ticket not found") from None
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from None
-
-    # Fire-and-forget: re-process the epic in a daemon thread.
-    ticket = svc.get(ticket_id)
-    if ticket is not None and ticket.kind == "epic":
-        from ..worker import _run_epic_reprocess
-
-        threading.Thread(
-            target=_run_epic_reprocess,
-            args=(ticket_id, body.body, settings),
-            daemon=True,
-        ).start()
-
-    return comment
-
-
-@router.get(
-    "/tickets/{ticket_id}/comments",
-    response_model=list[Comment],
-)
-def list_comments(
-    ticket_id: str,
-    svc=Depends(get_service),
-) -> list[Comment]:
-    """List all comments for a ticket, ordered oldest-first."""
-    try:
-        return svc.list_comments(ticket_id)
-    except KeyError:
-        raise HTTPException(404, "ticket not found") from None
-
-
-@router.post("/comments/{comment_id}/close", response_model=Comment)
-def close_thread(
-    comment_id: int,
-    ticket_id: str | None = None,
-    svc=Depends(get_service),
-) -> Comment:
-    """Close a top-level comment thread to mark it as resolved.
-
-    Pass ``ticket_id`` so the service resolves the correct per-board
-    DB — Comment.id is per-board (not globally unique), so a bare
-    ``comment_id`` lookup is ambiguous across repos.
-    """
-    try:
-        return svc.close_thread(comment_id, ticket_id=ticket_id)
-    except KeyError:
-        raise HTTPException(404, "comment not found") from None
-    except ValueError as e:
-        raise HTTPException(409, str(e)) from None
-
-
-@router.post("/comments/{comment_id}/reopen", response_model=Comment)
-def reopen_thread(
-    comment_id: int,
-    ticket_id: str | None = None,
-    svc=Depends(get_service),
-) -> Comment:
-    """Reopen a previously-closed comment thread.
-
-    Pass ``ticket_id`` so the service resolves the correct per-board
-    DB — Comment.id is per-board (not globally unique).
-    """
-    try:
-        return svc.reopen_thread(comment_id, ticket_id=ticket_id)
-    except KeyError:
-        raise HTTPException(404, "comment not found") from None
-    except ValueError as e:
-        raise HTTPException(409, str(e)) from None
-
-
 @router.post("/tickets/{ticket_id}/request-changes")
 def request_changes(
     ticket_id: str,
@@ -754,10 +626,7 @@ def request_changes(
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return {
-        "comment": comment,
-        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
-    }
+    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
 
 
 @router.post("/tickets/{ticket_id}/priority", response_model=TicketRead)
@@ -808,19 +677,14 @@ def redraft(
     """Redraft a ticket from any active state back to DRAFT with an
     optional comment."""
     try:
-        comment, ticket = svc.redraft(
-            ticket_id, body.body or "", author=body.author or "user"
-        )
+        comment, ticket = svc.redraft(ticket_id, body.body or "", author=body.author or "user")
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return {
-        "comment": comment,
-        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
-    }
+    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
 
 
 @router.post("/tickets/{ticket_id}/mark-done")
@@ -848,229 +712,6 @@ def mark_done(
         raise HTTPException(409, str(e)) from None
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
-
-
-@router.post("/epics", response_model=TicketRead, status_code=201)
-def create_epic(
-    body: dict,
-    request: Request,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
-) -> TicketRead:
-    """Create a new epic — accepts ``{"title": str, "description": str}``.
-
-    An optional ``repo_id`` field scopes the epic to a specific repo's
-    board.  When omitted in single-repo mode the sole repo is used;
-    in multi-repo mode ``repo_id`` is required and a 400 is returned
-    if it is missing.
-    """
-    title = body.get("title", "")
-    if not title:
-        raise HTTPException(status_code=400, detail="title is required")
-    description = body.get("description", "")
-    repo_id = body.get("repo_id")
-    repos = request.app.state.repos
-    board_id = ""
-    if repo_id:
-        if repo_id not in repos.repos:
-            sorted_keys = sorted(repos.repos.keys())
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}",
-            )
-        board_id = repos.repos[repo_id].board_id
-    elif len(repos.repos) == 1:
-        board_id = next(iter(repos.repos.values())).board_id
-    else:
-        # Multi-repo mode with no repo_id: require it.
-        sorted_keys = sorted(repos.repos.keys())
-        raise HTTPException(
-            status_code=400,
-            detail=f"repo_id is required when multiple repos are configured. "
-            f"Available repos: {sorted_keys}",
-        )
-
-    try:
-        ticket = svc.create(
-            title=title,
-            description=description,
-            kind="epic",
-            board_id=board_id or None,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return enrich_ticket_read(ticket, settings, svc)
-
-
-@router.get(
-    "/tickets/{ticket_id}/children",
-    response_model=list[TicketRead],
-)
-def list_children(
-    ticket_id: str,
-    request: Request,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
-) -> list[TicketRead]:
-    """Return all tickets whose ``parent_id`` equals *ticket_id*."""
-    parent = svc.get(ticket_id)
-    if parent is None:
-        raise HTTPException(404, "ticket not found")
-    repo_config = _repo_config_for_ticket(parent, request.app.state.repos)
-    return [
-        enrich_ticket_read(
-            t,
-            settings,
-            svc,
-            blocking_cost=False,
-            fetch_pr_url=False,
-            repo_config=repo_config,
-        )
-        for t in svc.list_children(ticket_id)
-    ]
-
-
-@router.post("/tickets/{ticket_id}/generate-children", status_code=202)
-def generate_children(
-    ticket_id: str,
-    request: Request,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
-    registry=Depends(get_run_registry),
-) -> dict:
-    """Generate child tickets from an epic description using the LLM
-    epic-breakdown agent.  Returns ``202 Accepted`` immediately — the
-    agent runs in a background thread.
-
-    Returns ``400`` if the ticket is not an epic.  Returns ``404`` if
-    the ticket does not exist.
-    """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
-    if ticket.kind != "epic":
-        raise HTTPException(400, "ticket is not an epic")
-
-    # In multi-repo mode the default svc is bound to the first repo's
-    # board. ``svc.get`` finds the epic via the cross-board fanout and
-    # resolves ``ticket.board_id``, but subsequent writes (``create``,
-    # ``set_depends_on``, ``set_content_hash``) default to the bound
-    # service's board — so an auto-mail epic would silently spawn its
-    # children on the mill board. Use a service pinned to the epic's
-    # actual board for every mutation in the background runner.
-    from ...core.service import TicketService as _TicketService
-
-    epic_board_id = ticket.board_id or svc.board_id
-    epic_svc = _TicketService(settings, board_id=epic_board_id)
-
-    # Resolve the RepoConfig for the epic's board so the background
-    # run emits Langfuse traces under the right project — without
-    # this the agent call runs outside any ``start_ticket_root_span``
-    # context, every span lacks the ``langfuse.public_key`` attribute
-    # the filtered exporter routes on, and the trace is dropped.
-    repos = request.app.state.repos
-    epic_repo_config = _repo_config_for_ticket(ticket, repos)
-
-    run_id = registry.start("epic-breakdown", repo_id=epic_board_id)
-
-    def _run() -> None:
-        try:
-            from ...runtime import tracing
-            from ...agents.epic_breakdown import run_epic_breakdown_agent
-
-            # Use the epic ticket id as the Langfuse sessionId so the
-            # breakdown's cost rolls up to the epic's session view +
-            # the drawer's /cost-breakdown endpoint picks it up. The
-            # old `make_session_id("epic-breakdown")` synthetic id
-            # made the trace invisible to the epic's per-ticket cost
-            # surface — the operator saw $0 on an epic that just
-            # spent money breaking itself down.
-            session_id = ticket_id
-            with tracing.start_ticket_root_span(
-                session_id,
-                "epic-breakdown",
-                repo_config=epic_repo_config,
-                extra_attributes={"ticket_id": ticket_id},
-            ) as root:
-                root.set_input(
-                    {
-                        "ticket_id": ticket_id,
-                        "epic_title": ticket.title,
-                    }
-                )
-                description = epic_svc.workspace(ticket).read_description()
-                result = run_epic_breakdown_agent(
-                    settings=settings,
-                    epic_title=ticket.title,
-                    epic_description=description,
-                )
-                created_ids: list[str] = []
-                for title, body in zip(result.child_titles, result.child_bodies):
-                    child = epic_svc.create(
-                        title=title,
-                        description=body,
-                        kind="task",
-                        parent_id=ticket_id,
-                    )
-                    created_ids.append(child.id)
-
-                # Build linear dependency chain: C0 ← C1 ← C2 ← ...
-                for i in range(1, len(created_ids)):
-                    epic_svc.set_depends_on(created_ids[i], [created_ids[i - 1]])
-
-                # Apply the revised epic body to the epic immediately
-                # (generate-children is a one-shot manual trigger).
-                if result.epic_body and result.epic_body.strip():
-                    new_hash = epic_svc.workspace(ticket).write_description(
-                        result.epic_body.strip()
-                    )
-                    epic_svc.set_content_hash(ticket_id, new_hash)
-
-                summary = (
-                    f"Created {len(created_ids)} children: "
-                    f"{', '.join(created_ids[:5])}"
-                    f"{'…' if len(created_ids) > 5 else ''}"
-                )
-                root.set_output(
-                    {
-                        "children_created": len(created_ids),
-                        "child_ids": created_ids,
-                        "epic_body_updated": bool(
-                            result.epic_body and result.epic_body.strip()
-                        ),
-                    }
-                )
-                # Record the breakdown in the epic's own history so the
-                # drawer shows what happened (and how much it cost).
-                # add_step_event uses the current state, so this stays
-                # in EPIC_OPEN — no state machine churn.
-                try:
-                    body_changed = bool(result.epic_body and result.epic_body.strip())
-                    epic_svc.add_step_event(
-                        ticket_id,
-                        "epic-breakdown: spawned "
-                        f"{len(created_ids)} child(ren)"
-                        + (" + revised epic body" if body_changed else ""),
-                    )
-                except Exception:
-                    log.exception(
-                        "epic-breakdown: add_step_event failed for %s",
-                        ticket_id,
-                    )
-            registry.finish_ok(run_id, summary)
-            log.info(
-                "epic-breakdown done: %d children for %s",
-                len(created_ids),
-                ticket_id,
-            )
-        except Exception as e:  # noqa: BLE001 — background; just log
-            log.exception("epic-breakdown failed for %s", ticket_id)
-            registry.finish_error(run_id, str(e))
-
-    threading.Thread(
-        target=_run, name=f"epic-breakdown-{ticket_id}", daemon=True
-    ).start()
-    return {"status": "started"}
 
 
 @router.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)
