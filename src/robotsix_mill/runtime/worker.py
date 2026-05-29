@@ -2059,276 +2059,147 @@ class Worker:
 
             await asyncio.sleep(min_interval)
 
+    # ------------------------------------------------------------------
+    # Periodic-pass start helpers
+    # ------------------------------------------------------------------
+
+    def _start_periodic_pass(
+        self,
+        label: str,
+        import_path: str,
+        settings_interval_attr: str,
+        per_repo_flag: str,
+        task_attr: str,
+        settings_enabled_attr: str | None = None,
+    ) -> None:
+        """Start a per-repo periodic pass if its settings flag is on and
+        the corresponding task attribute is still ``None``.
+
+        *import_path* is a ``"module.path:attr_name"`` string resolved
+        lazily via ``importlib`` so monkeypatching in tests still works.
+        """
+        import importlib
+
+        if settings_enabled_attr is None:
+            settings_enabled_attr = per_repo_flag
+        if getattr(self.ctx.settings, settings_enabled_attr) and getattr(self, task_attr) is None:
+            mod_path, attr_name = import_path.rsplit(":", 1)
+            mod = importlib.import_module(mod_path)
+            runner_fn = getattr(mod, attr_name)
+            setattr(
+                self,
+                task_attr,
+                asyncio.create_task(
+                    self._run_periodic_pass_per_repo(
+                        label,
+                        runner_fn,
+                        settings_interval_attr=settings_interval_attr,
+                        settings_enabled_attr=settings_enabled_attr,
+                        per_repo_flag=per_repo_flag,
+                    )
+                ),
+            )
+            log.info("Periodic %s enabled (per-repo schedule)", label)
+
+    def _start_poll_loop_pass(
+        self,
+        label: str,
+        poll_loop_fn,
+        task_attr: str,
+        log_msg: str | None = None,
+        log_args: tuple = (),
+    ) -> None:
+        """Start a dedicated poll-loop periodic pass if its settings flag
+        (derived from *label*) is on and the task attribute is still ``None``.
+
+        ``poll_loop_fn`` is a zero-argument async callable (typically a
+        bound method like ``self._trace_health_poll_loop``).
+        """
+        flag = label.replace("-", "_") + "_periodic"
+        if getattr(self.ctx.settings, flag) and getattr(self, task_attr) is None:
+            setattr(
+                self,
+                task_attr,
+                asyncio.create_task(poll_loop_fn()),
+            )
+            if log_msg is not None:
+                log.info(log_msg, *log_args)
+
     def start(self) -> None:
         if not self._tasks:
-            # One consumer pool per repo, sized by repo.max_concurrency.
-            # Each pool pulls only from its own per-board queue, so a
-            # busy repo can't block another. The fallback "" queue
-            # (tickets without a board_id) gets a single consumer.
             repos = get_repos_config()
-            pool_sizes: list[tuple[str, int]] = []
-            for rc in repos.repos.values():
-                pool_sizes.append((rc.board_id, max(1, rc.max_concurrency)))
-            # Always have a single default-queue consumer for legacy /
-            # repo-less tickets — cheap insurance against drift.
+            pool_sizes = [(rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()]
             pool_sizes.append((self._DEFAULT_BOARD, 1))
             for board_id, n in pool_sizes:
                 for _ in range(n):
                     self._tasks.append(asyncio.create_task(self._run(board_id)))
-            log.info(
-                "worker pool started: %s",
-                ", ".join(f"{bid or '<default>'}={n}" for bid, n in pool_sizes),
-            )
+            log.info("worker pool started: %s",
+                     ", ".join(f"{bid or '<default>'}={n}" for bid, n in pool_sizes))
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
-        # Opt-in periodic audit
-        if self.ctx.settings.audit_periodic and self._audit_task is None:
-            from ..audit_runner import run_audit_pass
 
-            self._audit_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "audit",
-                    run_audit_pass,
-                    settings_interval_attr="audit_interval_seconds",
-                    settings_enabled_attr="audit_periodic",
-                    per_repo_flag="audit_periodic",
-                )
-            )
-            log.info("Periodic audit enabled (per-repo schedule)")
-        # Opt-in periodic trace-health
-        if self.ctx.settings.trace_health_periodic and self._trace_health_task is None:
-            self._trace_health_task = asyncio.create_task(
-                self._trace_health_poll_loop()
-            )
-            log.info(
-                "Periodic trace-health enabled: interval %ds",
-                self.ctx.settings.trace_health_interval_seconds,
-            )
-        # Opt-in periodic health
-        if self.ctx.settings.health_periodic and self._health_task is None:
-            from ..health_runner import run_health_pass
+        # --- Pattern A: per-repo periodic passes ---
+        self._start_periodic_pass("audit", "robotsix_mill.audit_runner:run_audit_pass",
+                                  "audit_interval_seconds", "audit_periodic", "_audit_task")
+        self._start_periodic_pass("health", "robotsix_mill.health_runner:run_health_pass",
+                                  "health_interval_seconds", "health_periodic", "_health_task")
+        self._start_periodic_pass("agent_check", "robotsix_mill.agent_check_runner:run_agent_check_pass",
+                                  "agent_check_interval_seconds", "agent_check_periodic", "_agent_check_task")
+        self._start_periodic_pass("bc_check", "robotsix_mill.bc_check_runner:run_bc_check_pass",
+                                  "bc_check_interval_seconds", "bc_check_periodic", "_bc_check_task")
+        self._start_periodic_pass("trace_review", "robotsix_mill.trace_review_runner:run_trace_review_pass",
+                                  "trace_review_interval_seconds", "trace_review_periodic", "_trace_review_task")
+        self._start_periodic_pass("completeness_check", "robotsix_mill.completeness_check_runner:run_completeness_check_pass",
+                                  "completeness_check_interval_seconds",
+                                  "completeness_check_periodic", "_completeness_check_task")
+        self._start_periodic_pass("copy-paste", "robotsix_mill.copy_paste_runner:run_copy_paste_pass",
+                                  "copy_paste_interval_seconds", "copy_paste_periodic", "_copy_paste_task")
+        self._start_periodic_pass("module_curator", "robotsix_mill.module_curator_runner:run_module_curator_pass",
+                                  "module_curator_interval_seconds", "module_curator_periodic", "_module_curator_task")
+        self._start_periodic_pass("test-gap", "robotsix_mill.test_gap_runner:run_test_gap_pass",
+                                  "test_gap_interval_seconds", "test_gap_periodic", "_test_gap_task")
+        self._start_periodic_pass("survey", "robotsix_mill.survey_runner:run_survey_pass",
+                                  "survey_interval_seconds", "survey_periodic", "_survey_task")
+        self._start_periodic_pass("config-sync", "robotsix_mill.config_sync_runner:run_config_sync_pass",
+                                  "config_sync_interval_seconds", "config_sync_periodic", "_config_sync_task")
+        self._start_periodic_pass("cost-reconciliation", "robotsix_mill.cost_reconciliation_runner:run_cost_reconciliation_pass",
+                                  "cost_reconciliation_interval_seconds",
+                                  "cost_reconciliation_periodic", "_cost_reconciliation_task")
 
-            self._health_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "health",
-                    run_health_pass,
-                    settings_interval_attr="health_interval_seconds",
-                    settings_enabled_attr="health_periodic",
-                    per_repo_flag="health_periodic",
-                )
-            )
-            log.info("Periodic health enabled (per-repo schedule)")
-        # Opt-in periodic agent-check
-        if self.ctx.settings.agent_check_periodic and self._agent_check_task is None:
-            from ..agent_check_runner import run_agent_check_pass
+        # --- Pattern B: dedicated poll-loop tasks ---
+        self._start_poll_loop_pass("trace-health", self._trace_health_poll_loop, "_trace_health_task",
+                                   log_msg="Periodic trace-health enabled: interval %ds",
+                                   log_args=(self.ctx.settings.trace_health_interval_seconds,))
+        self._start_poll_loop_pass("cost-warmer", self._cost_warmer_loop, "_cost_warmer_task",
+                                   log_msg="Cost warmer enabled: cycle %ds, pace %dms",
+                                   log_args=(self.ctx.settings.cost_warmer_interval_seconds,
+                                             self.ctx.settings.cost_warmer_pace_ms))
+        self._start_poll_loop_pass("langfuse-cleanup", self._langfuse_cleanup_poll_loop, "_langfuse_cleanup_task",
+                                   log_msg="Periodic Langfuse cleanup enabled: interval %ds, cap %d traces/project",
+                                   log_args=(self.ctx.settings.langfuse_cleanup_interval_seconds,
+                                             self.ctx.settings.langfuse_cleanup_max_traces))
+        self._start_poll_loop_pass("timeout-escalation", self._timeout_escalation_poll_loop,
+                                   "_timeout_escalation_task",
+                                   log_msg="Periodic timeout escalation enabled: interval %ds, threshold %ds",
+                                   log_args=(self.ctx.settings.timeout_escalation_interval_seconds,
+                                             self.ctx.settings.timeout_escalation_threshold_seconds))
 
-            self._agent_check_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "agent_check",
-                    run_agent_check_pass,
-                    settings_interval_attr="agent_check_interval_seconds",
-                    settings_enabled_attr="agent_check_periodic",
-                    per_repo_flag="agent_check_periodic",
-                )
-            )
-            log.info("Periodic agent-check enabled (per-repo schedule)")
-        # Opt-in periodic bc-check
-        if self.ctx.settings.bc_check_periodic and self._bc_check_task is None:
-            from ..bc_check_runner import run_bc_check_pass
-
-            self._bc_check_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "bc_check",
-                    run_bc_check_pass,
-                    settings_interval_attr="bc_check_interval_seconds",
-                    settings_enabled_attr="bc_check_periodic",
-                    per_repo_flag="bc_check_periodic",
-                )
-            )
-            log.info("Periodic bc-check enabled (per-repo schedule)")
-        # Opt-in periodic trace-review (deterministic outlier classifier
-        # + cheap flash inspector on flagged subset → draft tickets).
-        if self.ctx.settings.trace_review_periodic and self._trace_review_task is None:
-            from ..trace_review_runner import run_trace_review_pass
-
-            self._trace_review_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "trace_review",
-                    run_trace_review_pass,
-                    settings_interval_attr="trace_review_interval_seconds",
-                    settings_enabled_attr="trace_review_periodic",
-                    per_repo_flag="trace_review_periodic",
-                )
-            )
-            log.info("Periodic trace-review enabled (per-repo schedule)")
-        # Background cost warmer (pre-fills the Langfuse cost cache so
-        # the board's per-ticket price column doesn't show $0 until the
-        # operator opens the drawer).
-        if self.ctx.settings.cost_warmer_periodic and self._cost_warmer_task is None:
-            self._cost_warmer_task = asyncio.create_task(self._cost_warmer_loop())
-            log.info(
-                "Cost warmer enabled: cycle %ds, pace %dms",
-                self.ctx.settings.cost_warmer_interval_seconds,
-                self.ctx.settings.cost_warmer_pace_ms,
-            )
-        # Opt-in periodic completeness-check
-        if (
-            self.ctx.settings.completeness_check_periodic
-            and self._completeness_check_task is None
-        ):
-            from ..completeness_check_runner import run_completeness_check_pass
-
-            self._completeness_check_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "completeness_check",
-                    run_completeness_check_pass,
-                    settings_interval_attr=("completeness_check_interval_seconds"),
-                    settings_enabled_attr="completeness_check_periodic",
-                    per_repo_flag="completeness_check_periodic",
-                )
-            )
-            log.info("Periodic completeness-check enabled (per-repo schedule)")
-        # Opt-in periodic copy-paste
-        if self.ctx.settings.copy_paste_periodic and self._copy_paste_task is None:
-            from ..copy_paste_runner import run_copy_paste_pass
-
-            self._copy_paste_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "copy-paste",
-                    run_copy_paste_pass,
-                    settings_interval_attr="copy_paste_interval_seconds",
-                    settings_enabled_attr="copy_paste_periodic",
-                    per_repo_flag="copy_paste_periodic",
-                )
-            )
-            log.info("Periodic copy-paste enabled (per-repo schedule)")
-        # Opt-in periodic module-curator
-        if (
-            self.ctx.settings.module_curator_periodic
-            and self._module_curator_task is None
-        ):
-            from ..module_curator_runner import run_module_curator_pass
-
-            self._module_curator_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "module_curator",
-                    run_module_curator_pass,
-                    settings_interval_attr="module_curator_interval_seconds",
-                    settings_enabled_attr="module_curator_periodic",
-                    per_repo_flag="module_curator_periodic",
-                )
-            )
-            log.info("Periodic module-curator enabled (per-repo schedule)")
-        # Opt-in periodic Langfuse trace cleanup
-        if (
-            self.ctx.settings.langfuse_cleanup_periodic
-            and self._langfuse_cleanup_task is None
-        ):
-            self._langfuse_cleanup_task = asyncio.create_task(
-                self._langfuse_cleanup_poll_loop()
-            )
-            log.info(
-                "Periodic Langfuse cleanup enabled: interval %ds, cap %d traces/project",
-                self.ctx.settings.langfuse_cleanup_interval_seconds,
-                self.ctx.settings.langfuse_cleanup_max_traces,
-            )
-        # Opt-in periodic timeout escalation
-        if (
-            self.ctx.settings.timeout_escalation_periodic
-            and self._timeout_escalation_task is None
-        ):
-            self._timeout_escalation_task = asyncio.create_task(
-                self._timeout_escalation_poll_loop()
-            )
-            log.info(
-                "Periodic timeout escalation enabled: interval %ds, threshold %ds",
-                self.ctx.settings.timeout_escalation_interval_seconds,
-                self.ctx.settings.timeout_escalation_threshold_seconds,
-            )
-        # CI monitor: enabled when any registered repo has ci_monitor_enabled=True.
+        # --- CI monitor (unique: checks repo config, not just settings) ---
         if self._ci_monitor_task is None:
             repos = get_repos_config()
             if any(rc.ci_monitor_enabled for rc in repos.repos.values()):
-                self._ci_monitor_task = asyncio.create_task(
-                    self._ci_monitor_poll_loop()
-                )
+                self._ci_monitor_task = asyncio.create_task(self._ci_monitor_poll_loop())
                 log.info("CI monitor enabled (per-repo config)")
-        # Opt-in periodic test-gap
-        if self.ctx.settings.test_gap_periodic and self._test_gap_task is None:
-            from ..test_gap_runner import run_test_gap_pass
 
-            self._test_gap_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "test-gap",
-                    run_test_gap_pass,
-                    settings_interval_attr="test_gap_interval_seconds",
-                    settings_enabled_attr="test_gap_periodic",
-                    per_repo_flag="test_gap_periodic",
-                )
-            )
-            log.info("Periodic test-gap enabled (per-repo schedule)")
-        # Opt-in periodic survey
-        if self.ctx.settings.survey_periodic and self._survey_task is None:
-            from ..survey_runner import run_survey_pass
-
-            self._survey_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "survey",
-                    run_survey_pass,
-                    settings_interval_attr="survey_interval_seconds",
-                    settings_enabled_attr="survey_periodic",
-                    per_repo_flag="survey_periodic",
-                )
-            )
-            log.info("Periodic survey enabled (per-repo schedule)")
-        # Opt-in periodic config-sync
-        if self.ctx.settings.config_sync_periodic and self._config_sync_task is None:
-            from ..config_sync_runner import run_config_sync_pass
-
-            self._config_sync_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "config-sync",
-                    run_config_sync_pass,
-                    settings_interval_attr="config_sync_interval_seconds",
-                    settings_enabled_attr="config_sync_periodic",
-                    per_repo_flag="config_sync_periodic",
-                )
-            )
-            log.info("Periodic config-sync enabled (per-repo schedule)")
-        # Opt-in periodic cost-reconciliation
-        if (
-            self.ctx.settings.cost_reconciliation_periodic
-            and self._cost_reconciliation_task is None
-        ):
-            from ..cost_reconciliation_runner import run_cost_reconciliation_pass
-
-            self._cost_reconciliation_task = asyncio.create_task(
-                self._run_periodic_pass_per_repo(
-                    "cost-reconciliation",
-                    run_cost_reconciliation_pass,
-                    settings_interval_attr=("cost_reconciliation_interval_seconds"),
-                    settings_enabled_attr="cost_reconciliation_periodic",
-                    per_repo_flag="cost_reconciliation_periodic",
-                )
-            )
-            log.info("Periodic cost-reconciliation enabled (per-repo schedule)")
-        # Opt-in bespoke per-repo supervisors. One supervisor per repo
-        # whose RepoConfig.bespoke_periodic is True; the supervisor
-        # owns the per-bespoke loop tasks for that repo.
+        # --- Bespoke supervisors (unique: iterates repos + guards board_id) ---
         if self.ctx.settings.bespoke_periodic:
             for rc in get_repos_config().repos.values():
-                if not rc.bespoke_periodic:
-                    continue
-                if rc.board_id in self._bespoke_supervisor_tasks:
+                if not rc.bespoke_periodic or rc.board_id in self._bespoke_supervisor_tasks:
                     continue
                 self._bespoke_supervisor_tasks[rc.board_id] = asyncio.create_task(
-                    self._bespoke_supervisor(rc)
-                )
-                log.info(
-                    "Bespoke supervisor enabled for repo %s (discovery interval %ds)",
-                    rc.repo_id,
-                    self.ctx.settings.bespoke_discovery_interval_seconds,
-                )
+                    self._bespoke_supervisor(rc))
+                log.info("Bespoke supervisor enabled for repo %s (discovery interval %ds)",
+                         rc.repo_id, self.ctx.settings.bespoke_discovery_interval_seconds)
 
     async def stop(self) -> None:
         tasks = list(self._tasks)
