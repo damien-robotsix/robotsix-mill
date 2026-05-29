@@ -14,7 +14,10 @@ import email.message
 import email.policy
 import email.utils
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from robotsix_auto_mail.db import MailRecord
 
 
 class ParseError(Exception):
@@ -59,7 +62,7 @@ def parse_message(
     raw_bytes: bytes,
     *,
     imap_uid: int | None = None,
-) -> Any:  # MailRecord — forward ref resolved at import time
+) -> MailRecord:
     """Parse raw MIME bytes into a ``MailRecord``.
 
     Parameters
