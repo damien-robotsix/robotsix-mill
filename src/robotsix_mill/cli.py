@@ -92,6 +92,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Cost-reconciliation pass",
         "format": "memory_drafts",
     },
+    "survey": {
+        "module": "survey_runner",
+        "function": "run_survey_pass",
+        "label": "Survey pass",
+        "format": "memory_drafts",
+    },
     "verify": {
         "module": "verify_runner",
         "function": "run_verify_pass",
@@ -418,6 +424,16 @@ def main(argv: list[str] | None = None) -> int:
     p_cost_reconciliation.add_argument(
         "--repo-id",
         help="scope to a specific repo (default: all)",
+    )
+
+    # --- survey command ---
+    p_survey = sub.add_parser(
+        "survey", help="run an OSS project discovery survey pass"
+    )
+    p_survey.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
     )
 
     # --- inquire command ---
