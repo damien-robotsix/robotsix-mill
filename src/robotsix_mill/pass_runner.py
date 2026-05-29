@@ -30,7 +30,7 @@ log = logging.getLogger("robotsix_mill.pass_runner")
 # scope; matching here is intentionally permissive to avoid silent drift as
 # new SourceKinds are added (was a hardcoded alternation of 11 labels that
 # left bespoke + 3 others silently unmatched).
-_GAP_ID_RE = re.compile(r"<!--\s*([^\s:]+(?::[^\s]+)?)-gap-id:\s*(\S+)\s*-->")
+_GAP_ID_RE = re.compile(r"<!--\s*(\S+)-gap-id:\s*(\S+)\s*-->")
 
 
 def _verify_prior_proposals(

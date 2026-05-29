@@ -3,6 +3,7 @@
 from robotsix_mill.pass_runner import (
     run_agent_pass,
     _verify_prior_proposals,
+    _GAP_ID_RE,
     load_memory,
 )
 from robotsix_mill.config import Settings
@@ -569,3 +570,26 @@ def test_load_memory_max_chars_none_no_truncation(tmp_path):
 def test_max_memory_chars_default():
     """Bare Settings() has max_memory_chars == 8000."""
     assert Settings().max_memory_chars == 8000
+
+
+# --- gap-id regex tests for previously-unmatched labels ---
+
+
+def test_gap_id_re_matches_bespoke_marker():
+    """The _GAP_ID_RE must match bespoke:<name> markers so de-duplication works."""
+    marker = "<!-- bespoke:my_agent-gap-id: abc123 -->"
+    matches = _GAP_ID_RE.findall(marker)
+    assert len(matches) == 1
+    label, gap_id = matches[0]
+    assert label == "bespoke:my_agent"
+    assert gap_id == "abc123"
+
+
+def test_gap_id_re_matches_cost_reconciliation_marker():
+    """The _GAP_ID_RE must match cost_reconciliation markers."""
+    marker = "<!-- cost_reconciliation-gap-id: 2025-03-15 -->"
+    matches = _GAP_ID_RE.findall(marker)
+    assert len(matches) == 1
+    label, gap_id = matches[0]
+    assert label == "cost_reconciliation"
+    assert gap_id == "2025-03-15"
