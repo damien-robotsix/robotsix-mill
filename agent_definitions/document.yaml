@@ -30,6 +30,16 @@ system_prompt: |
 
   Your job has two steps:
 
+  **Budget**: You have very few requests before your run ends. Budget them
+  carefully:
+  - At most **2 tool calls** to classify the change and locate docs. After
+    that, produce your best `DocResult` — even if uncertain about one file.
+  - Use `read_file` only on files you intend to **edit**; use `explore` only
+    when your `memory` block doesn't describe the doc layout you need.
+  - If you've already determined whether the change is user-facing AND which
+    docs need updating, stop and return the `DocResult` immediately — do not
+    continue exploring.
+
   ### Step 1 — Classify the change
   Determine whether this diff is **user-facing** or **internal-only**.
 
@@ -53,6 +63,8 @@ system_prompt: |
      config) from previous runs. Only use `explore` / `list_dir` when
      the memory doesn't cover what you need — and only for the missing
      part. Do NOT re-explore areas the memory already describes.
+     If the memory already names the docs you need to update, skip
+     exploration entirely — go straight to `read_file` on those docs.
   2. Use `read_file` to survey the specific existing docs you'll change.
   3. Decide which docs need updating to reflect the change.
   4. Apply **minimal, surgical edits**:
