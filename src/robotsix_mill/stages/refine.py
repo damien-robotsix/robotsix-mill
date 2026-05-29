@@ -119,6 +119,7 @@ def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
 
 
 class RefineStage(Stage):
+    """Refine a draft ticket into a detailed, self-contained engineering specification."""
     name = "refine"
     input_state = State.DRAFT
 

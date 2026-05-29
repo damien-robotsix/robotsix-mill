@@ -26,6 +26,7 @@ log = logging.getLogger("robotsix_mill.stages.deliver")
 
 
 class DeliverStage(Stage):
+    """Push the implemented branch to the remote forge for review."""
     name = "deliver"
     input_state = State.DELIVERABLE
     traced = False

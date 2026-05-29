@@ -85,6 +85,7 @@ class _SinglePassResult:
 # ---------------------------------------------------------------------------
 
 class ImplementStage(Stage):
+    """Clone the repo, create a feature branch, and run the implementation agent loop to produce code changes."""
     name = "implement"
     input_state = State.READY
 
