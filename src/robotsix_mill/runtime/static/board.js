@@ -43,6 +43,27 @@ const STATE_ARTIFACT={
  closed:"retrospect.md",
  answered:"question-original.md",
 };
+// Step-event note prefixes → (chip label, artifact). Step events are
+// same-state TicketEvents emitted between transitions so the agent
+// that produced them gets its own visible row (e.g. implement comes
+// between ready and code_review). Recognised prefixes get a labelled
+// chip + artifact mapping that override the state defaults.
+const STEP_LABEL=[
+ ["implement:",          "implement",          "implement.md"],
+ ["scope-triage EXPAND", "scope-triage",       ""],
+ ["scope-triage REJECT", "scope-triage",       ""],
+ ["scope-triage ESCAL",  "scope-triage",       ""],
+ ["doc_classifier:",     "doc_classifier",     ""],
+ ["merge:",              "merge",              "merge.md"],
+ ["review:",             "review",             "review.md"],
+];
+function matchStep(note){
+ if(!note)return null;
+ for(const [pfx,label,art] of STEP_LABEL){
+  if(note.startsWith(pfx))return {label,art};
+ }
+ return null;
+}
 async function toggleEvent(summaryEl){
  const wrap=summaryEl.parentElement;
  const detail=wrap.querySelector(".ev-detail");
@@ -81,14 +102,25 @@ async function toggleEvent(summaryEl){
 // this shared helper the poll re-emitted the legacy single-line
 // format and erased per-event expansion state.
 function renderHistoryHtml(history, ticketId){
- return `<h3>History</h3>`+(history||[]).map(e=>{
-  const art=STATE_ARTIFACT[e.state]||"";
+ const events=history||[];
+ // Detect step events: a same-state event whose previous event had
+ // the same state too (i.e. no transition between them). Those rows
+ // get their chip + artifact derived from the note prefix instead
+ // of the parent state — that's how implement gets its own visible
+ // row between ready and code_review.
+ return `<h3>History</h3>`+events.map((e,i)=>{
+  const prev=events[i-1];
+  const isStep=prev && prev.state===e.state;
+  const step=isStep?matchStep(e.note):null;
+  const chipLabel=step?step.label:e.state;
+  const chipClass=step?"ev-step":"s-"+e.state;
+  const art=(step&&step.art)?step.art:(STATE_ARTIFACT[e.state]||"");
   const hasDetail=!!(e.note||art);
-  return `<div class="ev" data-tid="${esc(ticketId)}" data-art="${esc(art)}" data-open="0">`+
+  return `<div class="ev${isStep?" ev-is-step":""}" data-tid="${esc(ticketId)}" data-art="${esc(art)}" data-open="0">`+
    `<div class="ev-summary" onclick="toggleEvent(this)">`+
     `<span class="ev-arrow">${hasDetail?"▶":"·"}</span>`+
     `<span class="ev-at muted">${e.at}</span>`+
-    `<b class="ev-state s-${e.state}">${e.state}</b>`+
+    `<b class="ev-state ${chipClass}">${esc(chipLabel)}</b>`+
    `</div>`+
    `<div class="ev-detail" style="display:none">`+
     (e.note?`<div class="ev-note">${renderMD(e.note)}</div>`:"")+

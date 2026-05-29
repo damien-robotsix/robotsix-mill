@@ -1104,12 +1104,19 @@ def test_scope_triage_expand_retroactive_short_circuit(ctx_factory, tmp_path, mo
         f"expected DOCUMENTING, got {out.next_state}"
     )
     # The EXPAND decision lands in history (v1 — no more comments).
+    # The agent summary also lands in history (as a same-state
+    # `implement:` step event, post the implement-step-event change).
+    # The transition note is now a short stage-name marker, not the
+    # summary.
     history = ctx.service.history(t.id)
     assert any(
         (ev.note or "").startswith("scope-triage EXPAND") for ev in history
     )
-    # Outcome message is the agent's summary, not a scope-violation message.
-    assert "agent summary text" in out.note
+    assert any(
+        (ev.note or "").startswith("implement:")
+        and "agent summary text" in (ev.note or "")
+        for ev in history
+    )
 
 
 def test_scope_triage_reject_to_ready(ctx_factory, tmp_path, monkeypatch):

@@ -643,11 +643,26 @@ class ImplementStage(Stage):
                 if settings.review_enabled
                 else State.DOCUMENTING
             )
+            # Same-state step event so implement gets its own visible
+            # row in history. Without this, the ticket's history shows
+            # `ready -> code_review` (or `ready -> documenting`) and
+            # the implement summary lives on the code_review/documenting
+            # row — fine on inspection, but the row reads as the
+            # downstream stage rather than what implement just did.
+            # The downstream Outcome's note is a short stage-name
+            # marker; the full summary lives on the step event (and
+            # in artifacts/implement.md).
+            ctx.service.add_step_event(
+                ticket.id, f"implement: {summary[:400]}",
+            )
+            next_note = (
+                "code review starting"
+                if next_state is State.CODE_REVIEW
+                else "documenting starting"
+            )
             return _SinglePassResult(
                 next_action="proceed",
-                outcome=Outcome(
-                    next_state, summary[:200] or "implemented",
-                ),
+                outcome=Outcome(next_state, next_note),
             )
 
         if decision.next_action == "escalate":
