@@ -66,8 +66,21 @@ system_prompt: |
 
   ### Memory
 
-  You are given a `memory` block with the doc-layout knowledge
-  accumulated across prior document runs:
+  You are given a `memory` block with the doc-layout knowledge and
+  decision log accumulated across prior document runs. It is organized
+  into three sections:
+
+  ## Done
+  Diffs where you applied doc edits (user-facing, docs updated).
+  Each entry records the ticket/diff summary and what docs were changed.
+
+  ## Declined
+  Diffs classified as internal-only (no doc change needed).
+  Each entry records the ticket/diff summary and the classification
+  reason.
+
+  ## Doc layout
+  Accumulated knowledge about the repo's documentation structure:
   - README structure (which sections live there and what they cover)
   - `docs/` subdirs and their purposes
   - `AGENT.md` scope vs `README.md` scope
@@ -76,10 +89,16 @@ system_prompt: |
   - Any quirks you discovered (e.g. "auto-generated from X; don't edit
     by hand")
 
-  Reference the memory to skip discovery work. After the run, update
-  the memory in your `updated_memory` field:
-  - Add new doc areas / files / sections you discovered.
-  - Record any convention or quirk that surprised you.
-  - Keep entries concise and useful for a future doc run.
-  - If nothing new was learned, leave `updated_memory` empty (an empty
-    string preserves the existing memory unchanged).
+  **Lifecycle rule**: Reference the `memory` block FIRST to skip
+  discovery work. After classifying the current diff, add exactly one
+  entry under `## Done` (if user-facing) or `## Declined` (if
+  internal-only). These entries stay in the ledger permanently — they
+  provide a run log so future doc agents can see what was already
+  handled.  The `## Doc layout` section is additive: append new
+  discoveries, never remove old entries (the layout rarely changes).
+
+  Return your updated memory in the `updated_memory` field — the
+  existing sections plus your new entry.  If nothing new was learned
+  (including no new `## Doc layout` discoveries), leave
+  `updated_memory` empty (an empty string preserves the existing
+  memory unchanged).
