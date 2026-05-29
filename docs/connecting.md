@@ -186,18 +186,29 @@ schema, idempotency guarantees, configuration, and CLI usage.
 
 ## The `board` command
 
-Once mail has been ingested, view it with the read-only board:
+Once mail has been ingested (see [The `ingest` command](#the-ingest-command)),
+view it with the read-only board:
 
 ```sh
 $ robotsix-auto-mail board
 ```
 
-`board` opens the local SQLite datastore and prints an "Inbox" header with a
-count of stored messages.  When the inbox is empty it prints `(no mail)`.
+`board` opens the local SQLite datastore and prints an "Inbox" header followed
+by a rendered card for each stored message.  Each card shows:
+
+- `From:` — the sender's address
+- `Subject:` — the message subject (or `(no subject)` when blank)
+- `Date:` — formatted as `YYYY-MM-DD HH:MM` (UTC)
+- a body preview — the first 150 characters of the plain-text body, truncated
+  with `…` when longer (or `(no body)` when no plain-text body is available)
+
+Cards are separated by a 60-character `-` rule.  A message count line follows
+the last card.
+
+When the inbox is empty the command prints `Your inbox is empty.`.
 
 The command is read-only — it never modifies the database or contacts a mail
-server.  Mail-card rendering (subject lines, sender info, body previews)
-arrives in a follow-up release.
+server.
 
 ### Representative output
 
@@ -205,7 +216,28 @@ arrives in a follow-up release.
 
 Inbox
 ------------------------------------------------------------
-7 message(s)
+From:    alice@example.com
+Subject: Hello
+Date:    2025-06-01 14:30
+
+Just checking in!
+------------------------------------------------------------
+From:    bob@example.com
+Subject: Meeting notes
+Date:    2025-06-02 09:15
+
+Here are the notes from this morning's standup.  We agreed to
+move the deadline to Friday and Alice will follow up on the…
+2 message(s)
+```
+
+### Empty inbox
+
+```text
+
+Inbox
+------------------------------------------------------------
+Your inbox is empty.
 ```
 
 Exit code is `0` on success, `1` when configuration cannot be loaded.
