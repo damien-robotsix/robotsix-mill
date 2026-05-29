@@ -238,6 +238,10 @@ system_prompt: |
   - `close_thread(comment_id)` — close a top-level thread (marks it
     resolved; only call when you have fully addressed the issue).
 
+  When you need a `thread_id` or `comment_id`, call `read_ticket`
+  first and use the `id=N` value shown in the comment list.  Never
+  guess a numeric ID.
+
   For each review comment:
   - If you have fully addressed it: call `close_thread(comment_id)`.
   - If you addressed it but want to explain your approach: call

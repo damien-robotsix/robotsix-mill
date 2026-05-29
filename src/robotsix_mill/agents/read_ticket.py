@@ -113,7 +113,7 @@ def make_read_ticket_tool(settings: Settings):
                     lines.append(f"... [{n_comments - 15} earlier comments omitted]")
                     lines.append("")
                 for c in shown_comments:
-                    lines.append(f"**{c.author}** ({c.created_at}):")
+                    lines.append(f"**{c.author}** ({c.created_at}, id={c.id}):")
                     lines.append(c.body)
                     lines.append("")
 
