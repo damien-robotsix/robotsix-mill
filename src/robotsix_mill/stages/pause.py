@@ -100,6 +100,106 @@ def build_resume_message_history(
     return messages
 
 
+def acknowledge_unanswered_threads(ctx, ticket, thread_ids: set[int]) -> None:
+    """Post-agent verification: ensure every reviewer comment thread is
+    either replied to or closed.
+
+    This is a deterministic safety net — the refine/implement agent
+    system prompts instruct them to reply-to and close threads, but if
+    the LLM forgets, this function catches it so no comment thread
+    remains open indefinitely.
+
+    For each *thread_id*:
+
+    - Already closed → no-op.
+    - Open with child replies → ``close_thread`` (agent replied but
+      forgot to close).
+    - Open with no child replies → ``add_comment("Addressed.", parent_id=...)``
+      then ``close_thread`` (agent neither replied nor closed).
+
+    Only threads in *thread_ids* are touched — threads already closed
+    before the agent ran or created by the agent during its run are
+    never auto-closed.
+
+    If ``list_comments`` raises, logs a warning and returns (defensive
+    fallback — never block the pipeline).
+    """
+    if not thread_ids:
+        return
+
+    try:
+        comments = ctx.service.list_comments(ticket.id)
+    except Exception:
+        log.warning(
+            "%s: list_comments failed during thread acknowledgment, "
+            "skipping — threads may remain open",
+            ticket.id,
+        )
+        return
+
+    # Index by id for O(1) lookups.
+    comments_by_id: dict[int, object] = {c.id: c for c in comments}
+
+    # Index children by parent_id.
+    children_by_parent: dict[int, list] = {}
+    for c in comments:
+        if c.parent_id is not None:
+            children_by_parent.setdefault(c.parent_id, []).append(c)
+
+    already_closed = 0
+    closed_with_reply = 0
+    default_ack = 0
+
+    for tid in thread_ids:
+        top = comments_by_id.get(tid)
+        if top is None:
+            continue  # vanished — shouldn't happen, but safe
+        if top.closed_at is not None:
+            already_closed += 1
+            continue
+        if children_by_parent.get(tid):
+            # Agent replied → just close.
+            try:
+                ctx.service.close_thread(tid)
+                closed_with_reply += 1
+            except Exception:
+                log.warning(
+                    "%s: close_thread(%d) failed during acknowledgment",
+                    ticket.id, tid,
+                )
+        else:
+            # No reply → post "Addressed." and close.
+            try:
+                ctx.service.add_comment(
+                    ticket.id, "Addressed.", parent_id=tid,
+                )
+            except Exception:
+                log.warning(
+                    "%s: add_comment for thread %d failed during acknowledgment",
+                    ticket.id, tid,
+                )
+            try:
+                ctx.service.close_thread(tid)
+                default_ack += 1
+            except Exception:
+                log.warning(
+                    "%s: close_thread(%d) failed during acknowledgment",
+                    ticket.id, tid,
+                )
+
+    if already_closed or closed_with_reply or default_ack:
+        log.info(
+            "%s: thread acknowledgment — %d already closed, "
+            "%d closed (agent replied), %d auto-acknowledged",
+            ticket.id, already_closed, closed_with_reply, default_ack,
+        )
+    else:
+        log.debug(
+            "%s: thread acknowledgment — no threads to handle",
+            ticket.id,
+        )
+
+
 def _collect_ask_user_replies(ctx, ticket) -> str:
     """Collect operator replies from every closed ``[ASK_USER]`` thread
     on *ticket*.
