@@ -126,11 +126,16 @@ def session_traces(
 
     out: list[dict] = []
     for t in data.get("data") or []:
+        # latency > 0 means Langfuse has the trace's end time. While
+        # the trace is still running it'll be 0/null — the drawer uses
+        # this to keep an in-flight trace from being labelled
+        # `interrupted` (it isn't — it just hasn't finished yet).
         out.append({
             "name": t.get("name") or "?",
             "cost": _num(t.get("totalCost")),
             "at": t.get("timestamp") or "",
             "trace_id": t.get("id") or "",
+            "latency": _num(t.get("latency")),
         })
     out.sort(key=lambda r: r["at"])
     return out

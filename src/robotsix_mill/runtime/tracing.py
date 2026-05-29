@@ -100,6 +100,18 @@ def get_export_failures() -> list[dict]:
         return list(_export_failures)
 
 
+def clear_export_failures_for(project: str) -> None:
+    """Drop failure entries for *project*. Called from the exporter
+    when a SUCCESS comes back so the UI's red badge clears on its
+    own as soon as Langfuse recovers — without this the badge sticks
+    until an operator hits POST /langfuse-status/clear and they end
+    up seeing stale errors long after the export path is healthy."""
+    with _export_lock:
+        _export_failures[:] = [
+            e for e in _export_failures if e.get("project") != project
+        ]
+
+
 def clear_export_failures() -> None:
     """Reset the failure log (e.g. after the operator acknowledges)."""
     with _export_lock:
@@ -294,6 +306,11 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
                         "Langfuse export FAILURE for %s",
                         self._project_label,
                     )
+                else:
+                    # Auto-clear stale errors for this project once a
+                    # batch lands successfully — Langfuse outages are
+                    # transient and the badge should self-heal.
+                    clear_export_failures_for(self._project_label)
                 return result
 
         endpoint = f"{base_url}/api/public/otel/v1/traces"

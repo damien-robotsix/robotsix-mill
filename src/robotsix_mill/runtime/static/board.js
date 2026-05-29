@@ -177,10 +177,16 @@ function renderHistoryHtml(history, ticketId, traces){
  // them as synthetic "interrupted: <agent>" rows so the operator
  // can see that work happened (and what it cost) instead of the
  // run silently disappearing.
+ //
+ // Skip traces with latency == 0 — those are still running. Without
+ // this guard the drawer mis-labels an in-flight stage as
+ // "interrupted" the moment Langfuse ingests its first observation.
  const claimed=new Set(Object.values(costByIndex).map(t=>t.trace_id));
- const orphanRows=(traces||[]).filter(t=>!claimed.has(t.trace_id)).map(t=>({
-  __orphan:true, at:t.at, name:t.name, cost:t.cost, trace_id:t.trace_id,
- }));
+ const orphanRows=(traces||[])
+  .filter(t=>!claimed.has(t.trace_id) && (t.latency===undefined || t.latency>0))
+  .map(t=>({
+   __orphan:true, at:t.at, name:t.name, cost:t.cost, trace_id:t.trace_id,
+  }));
  // Merge events + orphans, sort by `at` ascending. Real events keep
  // their array index; orphan rows are tagged with __orphan.
  const merged=[];
