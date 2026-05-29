@@ -330,9 +330,7 @@ class RefineStage(Stage):
         # Epics are never duplicates of task/inquiry tickets.
         # Keep the parent epic (already handled above) but drop all others.
         candidates = [
-            t
-            for t in candidates
-            if t.kind != "epic" or t.id == ticket.parent_id
+            t for t in candidates if t.kind != "epic" or t.id == ticket.parent_id
         ]
 
         candidates_json = _build_candidates_block(candidates, ctx)

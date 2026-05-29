@@ -823,9 +823,7 @@ def test_dedup_parent_filter_narrows_candidates(ctx, service, monkeypatch):
     # Epic A — the draft's parent
     epic_a = service.create("Epic A: Agent Memory", "memory system", kind="epic")
     # Epic B — unrelated
-    epic_b = service.create(
-        "Epic B: Deploy Config", "deployment things", kind="epic"
-    )
+    epic_b = service.create("Epic B: Deploy Config", "deployment things", kind="epic")
 
     # Draft ticket — child of epic A
     draft_ticket = service.create(
@@ -860,9 +858,7 @@ def test_dedup_parent_filter_narrows_candidates(ctx, service, monkeypatch):
     service.transition(cross_epic_closed.id, State.CLOSED)
 
     # Another epic that is NOT the draft's parent — should NOT appear
-    unrelated_epic = service.create(
-        "Epic C: Observability", "metrics", kind="epic"
-    )
+    unrelated_epic = service.create("Epic C: Observability", "metrics", kind="epic")
 
     # Non-sibling open ticket in same epic is the only non-CLOSED,
     # non-orphan, non-parent candidate that SHOULD appear (sibling).
