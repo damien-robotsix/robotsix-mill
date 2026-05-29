@@ -7,7 +7,10 @@ description: >-
 
 category: periodic
 
-model: "${MILL_SURVEY_MODEL}"
+interval_seconds: 86400
+enabled: true
+
+model: deepseek/deepseek-v4-pro
 
 tools:
   - explore

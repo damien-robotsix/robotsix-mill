@@ -9,7 +9,10 @@ description: >-
 
 category: periodic
 
-model: "${MILL_COPY_PASTE_MODEL}"
+interval_seconds: 604800
+enabled: true
+
+model: deepseek/deepseek-v4-pro
 
 tools:
   - explore

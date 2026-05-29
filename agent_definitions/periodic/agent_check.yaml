@@ -8,7 +8,10 @@ description: >-
 
 category: periodic
 
-model: "${MILL_AGENT_CHECK_MODEL}"
+interval_seconds: 86400
+enabled: true
+
+model: deepseek/deepseek-v4-flash
 
 tools:
   - explore
