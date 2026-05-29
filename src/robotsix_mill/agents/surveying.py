@@ -101,9 +101,12 @@ def run_survey_agent(
     )
     from .retry import call_with_retry
 
+    from pydantic_ai.usage import UsageLimits
+    limits = UsageLimits(request_limit=settings.survey_request_limit)
     try:
         result = call_with_retry(
-            lambda: agent.run_sync(prompt), settings=settings, what="survey"
+            lambda: agent.run_sync(prompt, usage_limits=limits),
+            settings=settings, what="survey",
         )
     finally:
         _safe_close(agent)

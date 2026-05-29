@@ -913,11 +913,24 @@ class Settings(BaseSettings):
     )
 
     # --- survey agent (OSS project discovery) ---
-    # Model for the survey agent. Defaults to the same capable model as
-    # audit. Override with MILL_SURVEY_MODEL.
+    # Survey is a discovery + structured-output agent: read README,
+    # do a few web_research calls, propose draft tickets. It does NOT
+    # do deep reasoning over code — flash is plenty. v4-pro was the
+    # historical default and burned $15.32 on a single survey trace
+    # (1bfa36ab7c5abc838d3934..., 2026-05-29) by accumulating ~3M
+    # prompt tokens across 22 chat calls at v4-pro pricing. Flipping
+    # to flash drops that to ~$1.50–$2 worst-case; the operator can
+    # override via `core.models.survey` in YAML if a specific repo
+    # needs deeper reasoning.
     survey_model: str = Field(
-        default="deepseek/deepseek-v4-pro"
+        default="deepseek/deepseek-v4-flash"
     )
+    # Cap the survey main agent's tool-call request budget. The
+    # $15.32 trace had 22 chat calls and 25 web_fetch calls — well
+    # past the point of diminishing returns. 12 caps the worst case
+    # at ~12 × per-call cost while still allowing room for repo
+    # exploration + 3-4 web_research dispatches.
+    survey_request_limit: int = Field(default=12)
     # Path to the survey agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/survey_memory.md.
     survey_memory_path: Path | None = Field(
