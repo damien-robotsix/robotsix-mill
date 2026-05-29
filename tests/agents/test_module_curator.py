@@ -84,3 +84,47 @@ def test_gap_id_re_matches_module_curator():
     label, gap_id = matches[0]
     assert label == "module_curator"
     assert gap_id == "unclassified_src_foo"
+
+
+def test_gap_id_re_matches_bespoke():
+    """Regression: bespoke:<name> labels used to be silently skipped by the
+    hardcoded alternation regex, breaking dedup for every bespoke agent."""
+    marker = "<!-- bespoke:my_agent-gap-id: abc123 -->"
+    matches = _GAP_ID_RE.findall(marker)
+    assert matches == [("bespoke:my_agent", "abc123")]
+
+
+def test_gap_id_re_matches_trace_dash_health():
+    marker = "<!-- trace-health-gap-id: xyz -->"
+    matches = _GAP_ID_RE.findall(marker)
+    assert matches == [("trace-health", "xyz")]
+
+
+def test_gap_id_re_matches_trace_dash_review():
+    marker = "<!-- trace-review-gap-id: pq -->"
+    matches = _GAP_ID_RE.findall(marker)
+    assert matches == [("trace-review", "pq")]
+
+
+def test_gap_id_re_matches_cost_reconciliation():
+    marker = "<!-- cost_reconciliation-gap-id: 2025-03-15 -->"
+    matches = _GAP_ID_RE.findall(marker)
+    assert matches == [("cost_reconciliation", "2025-03-15")]
+
+
+def test_gap_id_re_matches_all_legacy_labels():
+    """All 11 labels the old alternation captured must still match."""
+    for label in (
+        "audit", "health", "agent_check", "retrospect", "survey",
+        "test_gap", "bc_check", "config_sync", "completeness_check",
+        "copy_paste", "module_curator",
+    ):
+        marker = f"<!-- {label}-gap-id: anchor -->"
+        matches = _GAP_ID_RE.findall(marker)
+        assert matches == [(label, "anchor")], f"failed for {label!r}"
+
+
+def test_gap_id_re_rejects_malformed():
+    """No leading label part → no match."""
+    assert _GAP_ID_RE.findall("<!-- -gap-id: foo -->") == []
+    assert _GAP_ID_RE.findall("<!-- gap-id: foo -->") == []

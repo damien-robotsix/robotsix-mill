@@ -23,10 +23,15 @@ from .core.workspace import Workspace
 log = logging.getLogger("robotsix_mill.pass_runner")
 
 # Matches <!-- {label}-gap-id: foo_bar --> style markers in ticket descriptions.
-# The label alternation group is kept here for regex performance; the canonical
-# list of periodic-pass labels lives in ``periodic_runner.PERIODIC_PASS_CONFIGS``.
+# Label is a non-whitespace run with the optional `bespoke:<name>` shape that
+# bespoke agents emit, plus `trace-health` / `trace-review` /
+# `cost_reconciliation` and any future SourceKind that writes a marker. The
+# label-vs-source_kind comparison below filters the matches to the caller's
+# scope; matching here is intentionally permissive to avoid silent drift as
+# new SourceKinds are added (was a hardcoded alternation of 11 labels that
+# left bespoke + 3 others silently unmatched).
 _GAP_ID_RE = re.compile(
-    r'<!--\s*(audit|health|agent_check|retrospect|survey|test_gap|bc_check|config_sync|completeness_check|copy_paste|module_curator)-gap-id:\s*(\S+)\s*-->'
+    r'<!--\s*([^\s:]+(?::[^\s]+)?)-gap-id:\s*(\S+)\s*-->'
 )
 
 
