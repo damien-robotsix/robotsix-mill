@@ -304,6 +304,35 @@ class RefineStage(Stage):
                 )
             )
         ]
+        # Pre-filter by parent/epic: when the ticket belongs to an epic,
+        # only keep candidates that share the same parent, are the parent
+        # itself, are orphans (no parent), or are recently-closed
+        # cross-epic tickets.  This avoids feeding the LLM dozens of
+        # tickets from unrelated areas.
+        if ticket.parent_id is not None:
+            before = len(candidates)
+            candidates = [
+                t
+                for t in candidates
+                if t.parent_id == ticket.parent_id  # sibling
+                or t.id == ticket.parent_id  # parent epic
+                or t.parent_id is None  # orphan
+                or t.state == State.CLOSED  # recently-closed (any area)
+            ]
+            if len(candidates) < before:
+                log.debug(
+                    "%s: parent filter reduced dedup candidates from %d to %d",
+                    ticket.id,
+                    before,
+                    len(candidates),
+                )
+
+        # Epics are never duplicates of task/inquiry tickets.
+        # Keep the parent epic (already handled above) but drop all others.
+        candidates = [
+            t for t in candidates if t.kind != "epic" or t.id == ticket.parent_id
+        ]
+
         candidates_json = _build_candidates_block(candidates, ctx)
 
         try:

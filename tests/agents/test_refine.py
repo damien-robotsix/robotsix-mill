@@ -816,6 +816,122 @@ def test_dedup_guard_survives_preexisting_closed_ticket(ctx, service, monkeypatc
     assert out.next_state is not State.ERRORED
 
 
+def test_dedup_parent_filter_narrows_candidates(ctx, service, monkeypatch):
+    """When the draft ticket belongs to an epic (has parent_id),
+    the candidates passed to dedup are filtered to only siblings,
+    the parent epic itself, orphans, and recently-closed tickets."""
+    # Epic A — the draft's parent
+    epic_a = service.create("Epic A: Agent Memory", "memory system", kind="epic")
+    # Epic B — unrelated
+    epic_b = service.create("Epic B: Deploy Config", "deployment things", kind="epic")
+
+    # Draft ticket — child of epic A
+    draft_ticket = service.create(
+        "Add LRU eviction",
+        _DEDUP_BODY,
+        parent_id=epic_a.id,
+    )
+
+    # Sibling — same epic, should appear
+    sibling = service.create(
+        "Add TTL-based expiry",
+        _DEDUP_BODY,
+        parent_id=epic_a.id,
+    )
+
+    # Open ticket in unrelated epic — should NOT appear
+    unrelated_open = service.create(
+        "Switch to k3s",
+        _DEDUP_BODY,
+        parent_id=epic_b.id,
+    )
+
+    # Orphan (no parent) — should appear
+    orphan = service.create("Upgrade CI runner", _DEDUP_BODY)
+
+    # Recently-closed cross-epic ticket — should appear
+    cross_epic_closed = service.create(
+        "Old deploy fix",
+        _DEDUP_BODY,
+        parent_id=epic_b.id,
+    )
+    service.transition(cross_epic_closed.id, State.CLOSED)
+
+    # Another epic that is NOT the draft's parent — should NOT appear
+    unrelated_epic = service.create("Epic C: Observability", "metrics", kind="epic")
+
+    # Non-sibling open ticket in same epic is the only non-CLOSED,
+    # non-orphan, non-parent candidate that SHOULD appear (sibling).
+    # All the others from epic B should be excluded.
+
+    seen_candidates: list[str] = []
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        seen_candidates.append(candidates_json)
+        return {"duplicate_of": None, "already_done": None, "reason": "no match"}
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+    monkeypatch.setattr(
+        refining, "run_refine_agent", lambda **_: _single("## Problem\nspec\n")
+    )
+
+    out = RefineStage().run(draft_ticket, ctx)
+    assert out.next_state is State.READY
+    assert len(seen_candidates) == 1
+
+    candidates_text = seen_candidates[0]
+
+    # Should appear: sibling, parent epic, orphan, recently-closed cross-epic
+    assert f"## {sibling.id}" in candidates_text
+    assert f"## {epic_a.id}" in candidates_text  # parent epic
+    assert f"## {orphan.id}" in candidates_text
+    assert f"## {cross_epic_closed.id}" in candidates_text
+
+    # Should NOT appear: unrelated open, unrelated epic
+    assert f"## {unrelated_open.id}" not in candidates_text
+    assert f"## {unrelated_epic.id}" not in candidates_text
+
+    # Draft itself should never be a candidate
+    assert f"## {draft_ticket.id}" not in candidates_text
+
+
+def test_dedup_no_parent_fallback_unchanged(ctx, service, monkeypatch):
+    """When the draft ticket has no parent_id, the full candidate set
+    is passed through — behaviour is identical to before."""
+    t = service.create("Standalone ticket", _DEDUP_BODY)
+    # Create several tickets with various parents — all should appear.
+    epic = service.create("Some epic", "stuff", kind="epic")
+    child = service.create("Epic child", _DEDUP_BODY, parent_id=epic.id)
+    orphan = service.create("Another orphan", _DEDUP_BODY)
+
+    seen_candidates: list[str] = []
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        seen_candidates.append(candidates_json)
+        return {"duplicate_of": None, "already_done": None, "reason": "no match"}
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+    monkeypatch.setattr(
+        refining, "run_refine_agent", lambda **_: _single("## Problem\nspec\n")
+    )
+
+    out = RefineStage().run(t, ctx)
+    assert out.next_state is State.READY
+    assert len(seen_candidates) == 1
+
+    candidates_text = seen_candidates[0]
+
+    # All non-epic tickets should appear (epics are always excluded
+    # unless they're the draft's own parent, which doesn't apply here).
+    assert f"## {child.id}" in candidates_text
+    assert f"## {orphan.id}" in candidates_text
+    assert f"## {epic.id}" not in candidates_text  # epics excluded
+
+
 # --- datetime timezone-awareness round-trip tests ---
 
 
