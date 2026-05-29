@@ -486,6 +486,10 @@ def build_fs_tools(root: Path, settings: Settings, *, pre_seeded: dict[Path, str
             rc, out = sandbox.run(command, repo_dir=root, settings=settings)
         except sandbox.SandboxError as e:
             return f"sandbox error: {e}"
+        if not out.strip():
+            if rc == 0:
+                return "Your command ran successfully and did not produce any output."
+            return f"The command failed with exit code {rc} and produced no output."
         return f"exit={rc}\n{out}"
 
     # Register every fs/shell tool in the system-wide capability catalog.
