@@ -8,6 +8,8 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,6 +29,17 @@ jobs:
 
       - name: Run jscpd (report-only)
         run: npx jscpd@4 --config .jscpd.json . || true
+
+      - name: Ruff (lint + format check)
+        run: |
+          ruff check --output-format=github .
+          ruff format --check --diff .
+
+      - name: Mypy (static type check)
+        run: mypy src/ --strict
+
+      - name: Bandit (security SAST)
+        run: bandit -c pyproject.toml -r src/
 
       - name: Run tests
         env:
