@@ -61,15 +61,41 @@ def _load_file_map(ws) -> set[str] | None:
     return paths or None
 
 
+def _file_in_scope(ask_file: str, file_map: set[str]) -> bool:
+    """True when *ask_file* refers to the same path as some file_map entry.
+
+    Tolerant of refine vs review path-format mismatches: refine often
+    writes short suffixes (``static/board.js``) into file_map while the
+    review agent uses canonical repo-relative paths
+    (``src/robotsix_mill/runtime/static/board.js``). Exact string
+    comparison would mis-classify the latter as out-of-scope and force
+    every review ask on that file into a dependency ticket — which is
+    how the board ended up with a pile of spurious review-source drafts.
+
+    Match rule:
+      1. exact equality, or
+      2. one path is a path-suffix of the other (sharing a ``/`` boundary).
+    """
+    if ask_file in file_map:
+        return True
+    for m in file_map:
+        if ask_file.endswith("/" + m) or m.endswith("/" + ask_file):
+            return True
+    return False
+
+
 def _split_asks(
     asks: list[ReviewAsk], file_map: set[str] | None,
 ) -> tuple[list[ReviewAsk], list[ReviewAsk]]:
     """Partition ``asks`` into ``(in_scope, out_of_scope)``.
 
     An ask is out-of-scope when it touches at least one file NOT in
-    ``file_map``. Asks with empty ``files_touched`` are treated as
-    in-scope (file-less clarifications stay with the parent). When
-    ``file_map`` is None (legacy / scope-free), every ask is in-scope.
+    ``file_map`` (under :func:`_file_in_scope` semantics — path-suffix
+    tolerant, so a refine-side ``static/board.js`` matches a review-side
+    ``src/robotsix_mill/runtime/static/board.js``). Asks with empty
+    ``files_touched`` are treated as in-scope (file-less clarifications
+    stay with the parent). When ``file_map`` is None (legacy /
+    scope-free), every ask is in-scope.
     """
     if file_map is None:
         return list(asks), []
@@ -79,7 +105,7 @@ def _split_asks(
         if not ask.files_touched:
             in_scope.append(ask)
             continue
-        if any(f not in file_map for f in ask.files_touched):
+        if any(not _file_in_scope(f, file_map) for f in ask.files_touched):
             out_of_scope.append(ask)
         else:
             in_scope.append(ask)

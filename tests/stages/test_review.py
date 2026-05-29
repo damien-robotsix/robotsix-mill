@@ -407,6 +407,41 @@ import json
 from robotsix_mill.agents.reviewing import ReviewAsk
 
 
+def test_file_in_scope_matches_path_suffix():
+    """``_file_in_scope`` matches when refine stored a short suffix
+    (``static/board.js``) and review used the canonical repo-relative
+    path (``src/robotsix_mill/runtime/static/board.js``) — the
+    regression that caused most pre-fix review-source dependency
+    tickets to be spurious."""
+    from robotsix_mill.stages.review import _file_in_scope
+    fm = {"static/board.js", "core/service.py"}
+    assert _file_in_scope(
+        "src/robotsix_mill/runtime/static/board.js", fm
+    )
+    assert _file_in_scope(
+        "src/robotsix_mill/core/service.py", fm
+    )
+    # Exact match still works.
+    assert _file_in_scope("static/board.js", fm)
+    # Reverse direction (review short, file_map long) also works.
+    fm2 = {"src/robotsix_mill/runtime/static/board.js"}
+    assert _file_in_scope("static/board.js", fm2)
+    # Unrelated file is genuinely out of scope.
+    assert not _file_in_scope("other/file.py", fm)
+
+
+def test_file_in_scope_rejects_substring_collision():
+    """A non-slash-boundary substring must NOT match — e.g. file_map
+    entry ``board.js`` should not legitimise an ask on
+    ``other/dashboard.js`` just because the suffix overlaps."""
+    from robotsix_mill.stages.review import _file_in_scope
+    fm = {"board.js"}
+    assert not _file_in_scope("dashboard.js", fm)
+    assert not _file_in_scope("static/dashboard.js", fm)
+    # Real slash-boundary suffix is still accepted.
+    assert _file_in_scope("static/board.js", fm)
+
+
 def _write_file_map(ctx, ticket, files: list[str]) -> None:
     """Stamp the workspace's file_map.json — the same artifact refine
     writes. Each entry is ``{"file": <path>}``."""
