@@ -59,6 +59,8 @@ def ingest_mail(
     db_conn: sqlite3.Connection,
     imap_client: ImapClient,
     config: MailConfig,
+    *,
+    dry_run: bool = False,
 ) -> IngestResult:
     """Run the full ingestion pipeline: fetch → parse → store → watermark.
 
@@ -70,6 +72,11 @@ def ingest_mail(
         A connected ``ImapClient`` (already entered via context manager).
     config:
         Mail configuration (used by ``fetch_new_messages``).
+    dry_run:
+        When ``True``, messages are fetched and parsed but
+        ``insert_record`` and ``update_watermark`` are skipped.
+        The ``stored`` count reflects messages that *would have been*
+        inserted (i.e. ``record_exists`` returned ``False``).
 
     Returns
     -------
@@ -114,7 +121,11 @@ def ingest_mail(
             skipped += 1
             continue
 
-        # -- Store -----------------------------------------------------------
+        # -- Store (skip in dry-run) -----------------------------------------
+        if dry_run:
+            stored += 1
+            continue
+
         try:
             rowid = insert_record(db_conn, record)
         except Exception as exc:
@@ -135,8 +146,8 @@ def ingest_mail(
             # skipped.
             skipped += 1
 
-    # 3. Advance watermark to the highest UID seen.
-    if max_uid > 0:
+    # 3. Advance watermark to the highest UID seen (skip in dry-run).
+    if max_uid > 0 and not dry_run:
         update_watermark(db_conn, max_uid)
 
     return IngestResult(

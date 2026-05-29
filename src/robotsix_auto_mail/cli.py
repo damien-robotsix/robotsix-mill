@@ -33,7 +33,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "probe", help="Probe IMAP and SMTP servers for diagnostics"
     )
-    sub.add_parser("ingest", help="Fetch new mail and store it locally")
+    ingest_parser = sub.add_parser(
+        "ingest", help="Fetch new mail and store it locally"
+    )
+    ingest_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Fetch and parse messages without storing or advancing watermark",
+    )
 
     return parser
 
@@ -113,16 +121,20 @@ def _cmd_probe(config: MailConfig) -> int:
     return 0 if failures == 0 else 1
 
 
-def _cmd_ingest(config: MailConfig) -> int:
+def _cmd_ingest(config: MailConfig, *, dry_run: bool = False) -> int:
     """Run the ingest subcommand: fetch, parse, store, and update watermark.
 
-    Returns 0 on success, 1 if any errors occurred.
+    Returns 0 when the pipeline runs (including per-message errors),
+    or 1 for a fatal connection failure (ImapClient raise).
     """
     result: IngestResult | None = None
     conn = init_db(config.db_path)
     try:
         with ImapClient(config) as imap_client:
-            result = ingest_mail(conn, imap_client, config)
+            result = ingest_mail(conn, imap_client, config, dry_run=dry_run)
+    except Exception:
+        # Fatal connection failure — ImapClient(config) raised.
+        result = None
     finally:
         conn.close()
 
@@ -131,6 +143,9 @@ def _cmd_ingest(config: MailConfig) -> int:
         return 1
 
     # -- Print summary -------------------------------------------------------
+    if dry_run:
+        sys.stdout.write("DRY RUN — nothing stored\n")
+
     sys.stdout.write(f"Fetched: {result.total_fetched:>2} messages\n")
     sys.stdout.write(f"Stored:  {result.stored:>2} new\n")
     sys.stdout.write(f"Skipped: {result.skipped:>2} duplicate\n")
@@ -142,7 +157,7 @@ def _cmd_ingest(config: MailConfig) -> int:
             mid = f" ({err_obj.message_id})" if err_obj.message_id else ""
             sys.stdout.write(f"  UID {err_obj.uid}{mid}: {err_obj.error}\n")
 
-    return 1 if result.errors else 0
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -167,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             sys.stderr.write(f"Error loading configuration: {exc}\n")
             return 1
-        return _cmd_ingest(config)
+        return _cmd_ingest(config, dry_run=args.dry_run)
 
     # No command given — print help and exit 1.
     parser.print_help(sys.stderr)

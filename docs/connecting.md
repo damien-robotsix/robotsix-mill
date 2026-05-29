@@ -187,6 +187,22 @@ from the IMAP server and store it in the local datastore:
 $ robotsix-auto-mail ingest
 ```
 
+### Dry-run mode
+
+Use `--dry-run` to test connectivity and parsing without actually storing
+messages or advancing the watermark:
+
+```sh
+$ robotsix-auto-mail ingest --dry-run
+```
+
+When `--dry-run` is active the pipeline still fetches messages from IMAP,
+parses them, and runs the duplicate check — but it **skips** inserting records
+and updating the watermark.  The `Stored` count in the output reflects messages
+that *would have been* inserted (i.e. whose `Message-ID` was not already in the
+database).  A `DRY RUN — nothing stored` banner is printed so the operator
+cannot mistake the run for a real ingest.
+
 ### What it does
 
 `ingest` loads the mail configuration, then:
@@ -221,8 +237,12 @@ Errors:   1
   UID 42 (<msg-id@example.com>): failed to parse raw bytes as MIME message
 ```
 
-Exit code is `0` when no errors occurred, `1` when any errors were collected
-(including configuration-load failures).
+Exit code is `0` whenever the pipeline runs to completion, **even when
+per-message errors are present**.  The only exit code `1` conditions are
+configuration-load failures (missing or invalid config) and fatal connection
+failures (e.g. IMAP server unreachable).  This makes the exit code suitable
+for cron and automation — a single malformed message will not cause a non-zero
+exit.
 
 ### Idempotency
 

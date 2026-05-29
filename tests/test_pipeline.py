@@ -555,6 +555,134 @@ def test_pipeline_imports_from_expected_modules() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ingest_mail – dry_run mode
+# ---------------------------------------------------------------------------
+
+
+@mock.patch("robotsix_auto_mail.pipeline.fetch_new_messages")
+def test_ingest_dry_run_does_not_store_or_update_watermark(
+    mock_fetch: mock.MagicMock,
+    conn: sqlite3.Connection,
+    cfg: MailConfig,
+) -> None:
+    """dry_run=True fetches and parses but never calls insert_record or update_watermark."""
+    mock_fetch.return_value = [
+        (1, _make_raw_message(message_id="<a@x>", subject="One")),
+        (2, _make_raw_message(message_id="<b@x>", subject="Two")),
+        (3, _make_raw_message(message_id="<c@x>", subject="Three")),
+    ]
+    imap = _mock_imap_client()
+
+    result = ingest_mail(conn, imap, cfg, dry_run=True)
+
+    # All three would have been stored (record_exists returns False).
+    assert result.total_fetched == 3
+    assert result.stored == 3
+    assert result.skipped == 0
+    assert result.errors == []
+
+    # Watermark must NOT be updated.
+    assert get_watermark(conn, "imap_uid") is None
+
+    # No rows in DB.
+    cur = conn.execute("SELECT COUNT(*) FROM mail_records")
+    assert cur.fetchone()[0] == 0
+
+
+@mock.patch("robotsix_auto_mail.pipeline.fetch_new_messages")
+def test_ingest_dry_run_skips_duplicates(
+    mock_fetch: mock.MagicMock,
+    conn: sqlite3.Connection,
+    cfg: MailConfig,
+) -> None:
+    """dry_run=True still calls record_exists and counts duplicates as skipped."""
+    # Pre-populate one message.
+    from robotsix_auto_mail.db import insert_record
+
+    rec = MailRecord(
+        message_id="<existing@x>",
+        sender="alice@x.com",
+        subject="Old",
+        date="2025-01-01",
+    )
+    insert_record(conn, rec)
+
+    mock_fetch.return_value = [
+        (1, _make_raw_message(message_id="<existing@x>")),
+        (2, _make_raw_message(message_id="<new@x>")),
+    ]
+    imap = _mock_imap_client()
+
+    result = ingest_mail(conn, imap, cfg, dry_run=True)
+
+    assert result.total_fetched == 2
+    assert result.stored == 1  # <new@x> would have been stored
+    assert result.skipped == 1  # <existing@x> was already there
+    assert result.errors == []
+
+    # Still only 1 row (the pre-populated one).
+    cur = conn.execute("SELECT COUNT(*) FROM mail_records")
+    assert cur.fetchone()[0] == 1
+
+    # Watermark untouched.
+    assert get_watermark(conn, "imap_uid") is None
+
+
+@mock.patch("robotsix_auto_mail.pipeline.fetch_new_messages")
+@mock.patch("robotsix_auto_mail.pipeline.parse_message")
+def test_ingest_dry_run_parses_messages(
+    mock_parse: mock.MagicMock,
+    mock_fetch: mock.MagicMock,
+    conn: sqlite3.Connection,
+    cfg: MailConfig,
+) -> None:
+    """dry_run=True still parses messages; parse errors are collected."""
+    r1 = _make_raw_message(message_id="<good@x>")
+    r2 = b"invalid mime message"
+
+    mock_fetch.return_value = [(1, r1), (2, r2)]
+    imap = _mock_imap_client()
+
+    # Let the real parser handle r1; fail on r2.
+    from robotsix_auto_mail.parser import parse_message as real_parse
+
+    def side_effect(raw_bytes: bytes, *, imap_uid: int | None = None) -> MailRecord:
+        if raw_bytes == r2:
+            raise ParseError("failed to parse raw bytes as MIME message")
+        return real_parse(raw_bytes, imap_uid=imap_uid)
+
+    mock_parse.side_effect = side_effect
+
+    result = ingest_mail(conn, imap, cfg, dry_run=True)
+
+    assert result.total_fetched == 2
+    assert result.stored == 1  # <good@x> would have been stored
+    assert result.skipped == 0
+    assert len(result.errors) == 1
+    assert result.errors[0].uid == 2
+    assert "failed to parse" in result.errors[0].error
+
+
+@mock.patch("robotsix_auto_mail.pipeline.fetch_new_messages")
+def test_ingest_dry_run_empty_batch(
+    mock_fetch: mock.MagicMock,
+    conn: sqlite3.Connection,
+    cfg: MailConfig,
+) -> None:
+    """dry_run=True with empty batch returns all zeros."""
+    mock_fetch.return_value = []
+    imap = _mock_imap_client()
+
+    result = ingest_mail(conn, imap, cfg, dry_run=True)
+
+    assert result.total_fetched == 0
+    assert result.stored == 0
+    assert result.skipped == 0
+    assert result.errors == []
+    assert get_watermark(conn, "imap_uid") is None
+
+
+# ---------------------------------------------------------------------------
 # CLI ingest subcommand tests
 # ---------------------------------------------------------------------------
 
@@ -597,14 +725,14 @@ def env_cfg_ingest() -> MailConfig:
 @mock.patch(
     "robotsix_auto_mail.config.MailConfig.from_env",
 )
-def test_cli_ingest_success(
+def test_cli_ingest_with_errors_exits_zero(
     mock_from_env: mock.MagicMock,
     mock_init_db: mock.MagicMock,
     mock_imap_cls: mock.MagicMock,
     env_cfg_ingest: MailConfig,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """ingest subcommand prints summary and exits 1 when errors are present."""
+    """ingest subcommand exits 0 even when per-message errors are present."""
     mock_from_env.return_value = env_cfg_ingest
 
     # Set up an in-memory DB for init_db.
@@ -638,7 +766,8 @@ def test_cli_ingest_success(
 
     db.close()
 
-    assert rc == 1  # errors present → exit 1
+    # Per-message errors are non-fatal; pipeline ran fine.
+    assert rc == 0
 
     captured = capsys.readouterr()
     out = captured.out
@@ -694,6 +823,99 @@ def test_cli_ingest_success_no_errors(
     assert "Fetched:  5 messages" in out
     assert "Stored:   5 new" in out
     assert "Errors:   0" in out
+
+
+@mock.patch("robotsix_auto_mail.cli.ImapClient")
+@mock.patch("robotsix_auto_mail.cli.init_db")
+@mock.patch(
+    "robotsix_auto_mail.config.MailConfig.from_env",
+)
+def test_cli_ingest_imap_client_raises_exits_one(
+    mock_from_env: mock.MagicMock,
+    mock_init_db: mock.MagicMock,
+    mock_imap_cls: mock.MagicMock,
+    env_cfg_ingest: MailConfig,
+) -> None:
+    """ingest returns 1 when ImapClient raises (fatal connection failure)."""
+    from robotsix_auto_mail.imap import ImapError
+
+    mock_from_env.return_value = env_cfg_ingest
+
+    db = init_db(":memory:")
+    mock_init_db.return_value = db
+
+    mock_imap_cls.side_effect = ImapError("connection refused")
+
+    from robotsix_auto_mail.cli import main
+
+    rc = main(["ingest"])
+
+    db.close()
+
+    assert rc == 1
+
+
+@mock.patch("robotsix_auto_mail.cli.ImapClient")
+@mock.patch("robotsix_auto_mail.cli.init_db")
+@mock.patch(
+    "robotsix_auto_mail.config.MailConfig.from_env",
+)
+def test_cli_ingest_dry_run_passes_flag(
+    mock_from_env: mock.MagicMock,
+    mock_init_db: mock.MagicMock,
+    mock_imap_cls: mock.MagicMock,
+    env_cfg_ingest: MailConfig,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """ingest --dry-run passes dry_run=True to ingest_mail and prints banner."""
+    mock_from_env.return_value = env_cfg_ingest
+
+    db = init_db(":memory:")
+    mock_init_db.return_value = db
+
+    mock_imap = mock.MagicMock(spec=ImapClient)
+    mock_imap_cls.return_value.__enter__.return_value = mock_imap
+
+    with mock.patch(
+        "robotsix_auto_mail.cli.ingest_mail"
+    ) as mock_ingest:
+        mock_ingest.return_value = IngestResult(
+            total_fetched=3,
+            stored=3,
+            skipped=0,
+            errors=[],
+        )
+
+        from robotsix_auto_mail.cli import main
+
+        rc = main(["ingest", "--dry-run"])
+
+    db.close()
+
+    # Verify ingest_mail was called with dry_run=True.
+    assert mock_ingest.call_count == 1
+    call_kwargs = mock_ingest.call_args.kwargs
+    assert call_kwargs.get("dry_run") is True
+
+    assert rc == 0
+
+    captured = capsys.readouterr()
+    out = captured.out
+    assert "DRY RUN — nothing stored" in out
+    assert "Fetched:  3 messages" in out
+    assert "Stored:   3 new" in out
+
+
+def test_parser_ingest_has_dry_run_flag() -> None:
+    """--dry-run is accepted on the ingest subparser."""
+    from robotsix_auto_mail.cli import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(["ingest", "--dry-run"])
+    assert args.dry_run is True
+
+    args2 = parser.parse_args(["ingest"])
+    assert args2.dry_run is False
 
 
 @mock.patch("robotsix_auto_mail.config.MailConfig.from_env")
