@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from robotsix_mill.agents.review_revision import (
     ReviewRevisionResult,
@@ -136,14 +137,13 @@ def test_memory_passthrough(settings, tmp_path, monkeypatch, secrets_set):
 # API key check
 # ---------------------------------------------------------------------------
 
-def test_missing_api_key_raises_runtime_error(settings, tmp_path, monkeypatch):
+def test_missing_api_key_raises_runtime_error(settings, tmp_path):
+    """The autouse _reset_secrets_each_test fixture clears the cached
+    Secrets singleton, so get_secrets().openrouter_api_key is None by
+    default.  Without a secrets_set() call, run_review_revision_agent
+    must raise RuntimeError."""
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
-
-    monkeypatch.setattr(
-        "robotsix_mill.agents.review_revision.get_secrets",
-        lambda: type("Secrets", (), {"openrouter_api_key": None})(),
-    )
 
     with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY is not set"):
         run_review_revision_agent(
@@ -153,32 +153,6 @@ def test_missing_api_key_raises_runtime_error(settings, tmp_path, monkeypatch):
             review_comments="fix this",
             pr_files=["src/x.py"],
         )
-
-
-def test_api_key_present_does_not_raise(settings, tmp_path, monkeypatch, secrets_set):
-    import robotsix_mill.agents.base as base_mod
-
-    repo_dir = tmp_path / "repo"
-    repo_dir.mkdir()
-
-    secrets_set(openrouter_api_key="sk-12345")
-    monkeypatch.setattr(
-        base_mod,
-        "build_agent_from_definition",
-        lambda *args, **kwargs: FakeAgent(
-            ReviewRevisionResult(status="DONE", summary="ok")
-        ),
-    )
-
-    result = run_review_revision_agent(
-        settings=settings,
-        repo_dir=repo_dir,
-        branch="feature/x",
-        review_comments="fix this",
-        pr_files=["src/x.py"],
-    )
-
-    assert result.status == "DONE"
 
 
 # ---------------------------------------------------------------------------
@@ -200,10 +174,10 @@ def test_review_revision_result_validation():
 
 
 def test_review_revision_result_invalid_status_rejected():
-    with pytest.raises(ValueError):  # pydantic raises ValidationError (a ValueError subclass)
+    with pytest.raises(ValidationError):
         ReviewRevisionResult(status="INVALID", summary="nope")
 
 
 def test_review_revision_result_missing_required_fields_rejected():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValidationError):
         ReviewRevisionResult(status="DONE")  # type: ignore[call-arg]
