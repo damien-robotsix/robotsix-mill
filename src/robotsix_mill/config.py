@@ -469,6 +469,22 @@ class Settings(BaseSettings):
     web_fetch_timeout: int = Field(
         default=30, alias="MILL_WEB_FETCH_TIMEOUT"
     )
+    # Post-extraction cap, applied AFTER HTML→text stripping. The
+    # network-level ``web_fetch_max_bytes`` bounds raw bytes; this
+    # bounds what the agent ACTUALLY sees in its context. Default
+    # 200 KB ≈ 50K tokens — enough for one doc page worth of prose,
+    # not enough to nuke a refine context with a 315 KB markup dump.
+    web_fetch_max_text_bytes: int = Field(
+        default=200_000, alias="MILL_WEB_FETCH_MAX_TEXT_BYTES",
+    )
+    # When True, web_fetch returns the raw response body verbatim
+    # (no HTML→text stripping, no per-run URL dedupe). Operator
+    # escape hatch for the rare case the agent needs the markup
+    # itself (parsing structure, inspecting attributes). Default
+    # False — every agent we ship is a prose consumer.
+    web_fetch_raw: bool = Field(
+        default=False, alias="MILL_WEB_FETCH_RAW",
+    )
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
     # refine + implement agents' system prompt. Relative to CWD (/app in
     # the container, repo root locally).

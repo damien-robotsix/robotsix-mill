@@ -185,3 +185,202 @@ def test_fetch_image_config_default():
     """fetch_image defaults to a pinned version, not a mutable tag."""
     s = Settings()
     assert s.fetch_image == "curlimages/curl:8.17.0"
+
+
+# --- web_fetch: html-to-text extraction --------------------------------------
+
+def test_web_fetch_strips_html_to_prose(tmp_path, monkeypatch):
+    """A typical docs-page response (HTML markup wrapping prose) MUST
+    come back as whitespace-collapsed text — that's how we shrink a
+    315 KB page to ~80 KB so the agent's context doesn't balloon.
+
+    The exact prose content + ordering is what the LLM reads; the
+    markup is dead weight.
+    """
+    from robotsix_mill.agents.web_tools import make_web_fetch, _cache
+    _cache.clear()
+
+    html_body = (
+        "<!DOCTYPE html><html><head><title>Doc</title>"
+        "<style>.x{color:red}</style>"
+        "<script>var hidden = 1;</script>"
+        "</head><body>"
+        "<h1>SQLite transaction control</h1>"
+        "<p>The <code>isolation_level</code> attribute controls "
+        "transaction behaviour.</p>"
+        "</body></html>"
+    )
+    s = _settings(tmp_path)
+    monkeypatch.setattr(
+        sandbox, "fetch", lambda url, *, settings: (0, html_body)
+    )
+    out = make_web_fetch(s)("https://docs.example/sqlite")
+
+    # The markup is gone — no opening angle brackets remain.
+    assert "<" not in out
+    # The script payload was dropped wholesale (not just its tags).
+    assert "var hidden" not in out
+    # The style payload was dropped too.
+    assert "color:red" not in out
+    # The actual prose is preserved (markdown-ish but readable).
+    assert "SQLite transaction control" in out
+    assert "isolation_level" in out
+
+
+def test_web_fetch_passes_non_html_unchanged(tmp_path, monkeypatch):
+    """Plain-text bodies (JSON, source files, package metadata)
+    have no HTML markers — the extractor leaves them alone so an
+    agent fetching a raw .py or .json gets bytes for bytes."""
+    from robotsix_mill.agents.web_tools import _cache
+    _cache.clear()
+    s = _settings(tmp_path)
+    raw = '{"name": "blake3", "version": "1.0.5"}'
+    monkeypatch.setattr(
+        sandbox, "fetch", lambda url, *, settings: (0, raw)
+    )
+    out = make_web_fetch(s)("https://pypi.example/blake3/json")
+    assert out == raw
+
+
+def test_web_fetch_raw_mode_disables_extraction(tmp_path, monkeypatch):
+    """``MILL_WEB_FETCH_RAW=true`` returns the verbatim curl body —
+    operators who really need markup or are debugging the extractor
+    bypass it cleanly."""
+    from robotsix_mill.agents.web_tools import _cache
+    _cache.clear()
+    s = _settings(tmp_path, MILL_WEB_FETCH_RAW="true")
+    body = "<html><body><p>raw</p></body></html>"
+    monkeypatch.setattr(
+        sandbox, "fetch", lambda url, *, settings: (0, body)
+    )
+    assert make_web_fetch(s)("https://x.test/raw") == body
+
+
+def test_web_fetch_applies_text_cap(tmp_path, monkeypatch):
+    """The post-extraction cap bounds what the AGENT sees. The
+    network-level ``web_fetch_max_bytes`` is a separate floor; this
+    cap is what protects context-token cost when a fetched plain
+    file is large but the agent only needs a snippet."""
+    from robotsix_mill.agents.web_tools import _cache
+    _cache.clear()
+    s = _settings(tmp_path, MILL_WEB_FETCH_MAX_TEXT_BYTES="100")
+    body = "x" * 500
+    monkeypatch.setattr(
+        sandbox, "fetch", lambda url, *, settings: (0, body)
+    )
+    out = make_web_fetch(s)("https://x.test/big")
+    # First 100 chars present, then the marker.
+    assert out.startswith("x" * 100)
+    assert "[truncated, fetched 500 chars total" in out
+
+
+# --- web_fetch: per-run URL dedupe -------------------------------------------
+
+def test_web_fetch_dedupes_fragment_only_variants(tmp_path, monkeypatch):
+    """Two URLs differing only in ``#fragment`` are the SAME page —
+    the cache MUST return the prior result without a second sandbox
+    spawn. Trace d40e3c9 (refine f6e2) cost an extra $0.25 because
+    the agent fetched the Python sqlite3 docs page twice for two
+    different anchors. This guards the fix."""
+    from robotsix_mill.agents.web_tools import _cache
+    _cache.clear()
+    s = _settings(tmp_path)
+
+    calls: list[str] = []
+
+    def fake_fetch(url, *, settings):
+        calls.append(url)
+        return 0, f"plain body for {url}"
+
+    monkeypatch.setattr(sandbox, "fetch", fake_fetch)
+    wf = make_web_fetch(s)
+    a = wf("https://docs.python.org/3/library/sqlite3.html#transaction-control")
+    b = wf(
+        "https://docs.python.org/3/library/sqlite3.html"
+        "#sqlite3-connection-autocommit"
+    )
+    # ONE underlying fetch — the second was served from the cache.
+    assert len(calls) == 1
+    # Both calls return the same processed body.
+    assert a == b
+
+
+def test_web_fetch_does_not_dedupe_different_paths(tmp_path, monkeypatch):
+    """The dedupe key includes path + query, so genuinely different
+    URLs still go through to the sandbox."""
+    from robotsix_mill.agents.web_tools import _cache
+    _cache.clear()
+    s = _settings(tmp_path)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        sandbox, "fetch",
+        lambda url, *, settings: (calls.append(url) or (0, "body")),
+    )
+    wf = make_web_fetch(s)
+    wf("https://docs.example/a")
+    wf("https://docs.example/b")
+    assert len(calls) == 2
+
+
+def test_web_fetch_raw_mode_bypasses_cache(tmp_path, monkeypatch):
+    """When raw-mode is on, every call hits the sandbox — the
+    escape hatch must NOT silently serve an extracted prior result.
+    Operator opted in to verbatim bytes; that's what they get."""
+    from robotsix_mill.agents.web_tools import _cache
+    _cache.clear()
+    s = _settings(tmp_path, MILL_WEB_FETCH_RAW="true")
+    calls = []
+    monkeypatch.setattr(
+        sandbox, "fetch",
+        lambda url, *, settings: (calls.append(url) or (0, "<html>x</html>")),
+    )
+    wf = make_web_fetch(s)
+    wf("https://x.test/raw#a")
+    wf("https://x.test/raw#b")
+    assert len(calls) == 2
+
+
+# --- web_fetch: html_to_text helper ------------------------------------------
+
+def test_html_to_text_drops_scripts_and_styles():
+    """Scripts and styles are removed wholesale (content + tags) so
+    an LLM doesn't have to read JavaScript or CSS. They're dead
+    weight in every doc page we fetch."""
+    from robotsix_mill.agents.web_tools import html_to_text
+    body = (
+        "<html><body>"
+        "<script>alert('x'); var leaked = 'data';</script>"
+        "<style>body { color: red; }</style>"
+        "<p>Hello world</p>"
+        "</body></html>"
+    )
+    out = html_to_text(body)
+    assert "alert" not in out
+    assert "leaked" not in out
+    assert "color: red" not in out
+    assert "Hello world" in out
+
+
+def test_html_to_text_unescapes_entities():
+    """``&amp;`` → ``&`` and ``&nbsp;`` → space — the agent reads the
+    rendered text, not the source-level entity references."""
+    from robotsix_mill.agents.web_tools import html_to_text
+    out = html_to_text("<p>foo &amp; bar&nbsp;baz</p>")
+    assert "&" in out
+    # &nbsp; came through as a real space; the result has no
+    # entity reference text.
+    assert "&nbsp;" not in out
+    assert "foo & bar" in out
+
+
+def test_html_to_text_collapses_whitespace():
+    """Removing tags inserts runs of whitespace. The extractor
+    collapses them so the agent doesn't see paragraphs of newlines
+    between every word."""
+    from robotsix_mill.agents.web_tools import html_to_text
+    body = "<div><p>one</p>\n\n\n<p>two</p></div>"
+    out = html_to_text(body)
+    # At most one blank line between paragraphs.
+    assert "\n\n\n" not in out
+    assert "one" in out
+    assert "two" in out
