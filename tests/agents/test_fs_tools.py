@@ -308,7 +308,7 @@ class TestReadFileOffsetLimit:
         assert "limit" in rf.__doc__
 
     def test_splitlines_keepends_preserves_lf(self, tmp_path, settings):
-        """splitlines(keepends=True) preserves \\n endings — no
+        """splitlines(keepends=True) preserves \n endings — no
         regressions from the offset/limit logic."""
         root = tmp_path / "repo"
         root.mkdir()

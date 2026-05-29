@@ -423,6 +423,9 @@ def build_fs_tools(
 
     def write_file(path: str, content: str) -> str:
         """Create or overwrite a file in the repository with ``content``."""
+        syntax_error = _check_python_syntax(path, content)
+        if syntax_error is not None:
+            return syntax_error
         try:
             p = _safe(root, path, extra_roots=extra_roots)
             err = _check_python_syntax(path, content)
@@ -456,9 +459,9 @@ def build_fs_tools(
                     f"retry, or use write_file"
                 )
             new_content = content.replace(old_string, new_string, 1)
-            err = _check_python_syntax(path, new_content)
-            if err is not None:
-                return f"edit_file refused: {err}"
+            syntax_error = _check_python_syntax(path, new_content)
+            if syntax_error is not None:
+                return syntax_error
             p.write_text(new_content, encoding="utf-8")
             _file_cache.pop(p.resolve(), None)
             return f"edit_file: replaced 1 occurrence in {path}"
