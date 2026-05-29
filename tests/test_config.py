@@ -1,3 +1,10 @@
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from robotsix_mill.config import Settings, load_settings
+
 
 def test_extra_kwargs_forbidden():
     """``extra='forbid'`` in model_config: passing an unknown kwarg
@@ -25,16 +32,22 @@ def test_extra_kwargs_forbidden():
     assert s.review_enabled is False
 
 
-def test_default_paths(monkeypatch):
-    """data_dir default and a couple of Path-typed fields.
+def test_default_paths():
+    """``data_dir`` and ``skills_dir`` Field defaults, read from the
+    committed YAML defaults.
 
-    The container may have MILL_DATA_DIR set in its environment;
-    explicitly clear it so we get the real default."""
-    monkeypatch.delenv("MILL_DATA_DIR", raising=False)
-    monkeypatch.delenv("MILL_SKILLS_DIR", raising=False)
-    s = Settings()
-    assert s.data_dir == Path(".data")
-    assert s.skills_dir == Path("skills")
+    We read directly from ``load_yaml_config()`` rather than
+    constructing ``Settings()`` because the session-scoped
+    ``_isolate_default_data_dir`` fixture monkey-patches the YAML
+    source to redirect ``data_dir`` into a sandbox for every test
+    that constructs a bare ``Settings()``.  ``load_yaml_config()``
+    is not patched by that fixture and returns the real committed
+    defaults."""
+    from robotsix_mill.config_loader import load_yaml_config
+
+    cfg = load_yaml_config()
+    assert cfg["service"]["data_dir"] == ".data"
+    assert cfg["sandbox"]["skills_dir"] == "skills"
 
 
 def test_default_empty_and_none():
@@ -288,15 +301,17 @@ class TestComputedProperties:
     # -- data-directory derivations --
 
     def test_db_path(self, tmp_path):
-        s = Settings(MILL_DATA_DIR=str(tmp_path))
+        s = Settings(data_dir=str(tmp_path))
         assert s.db_path == tmp_path / "mill.db"
 
     def test_workspaces_dir(self, tmp_path):
-        s = Settings(MILL_DATA_DIR=str(tmp_path))
-        assert s.workspaces_dir == tmp_path / "workspaces"
+        s = Settings(data_dir=str(tmp_path))
+        # ``workspaces_dir`` was renamed to ``workspaces_dir_for(board_id)``;
+        # passing an empty board_id falls back to <data_dir>/workspaces.
+        assert s.workspaces_dir_for("") == tmp_path / "workspaces"
 
     def test_db_url(self, tmp_path):
-        s = Settings(MILL_DATA_DIR=str(tmp_path))
+        s = Settings(data_dir=str(tmp_path))
         assert s.db_url == f"sqlite:///{tmp_path / 'mill.db'}"
 
     # -- tracing_enabled --
@@ -356,7 +371,7 @@ class TestComputedProperties:
     )
     def test_memory_file_fallback(self, tmp_path, prop_name, override_field, fallback_filename):
         """When the override path is None, the property derives from data_dir."""
-        s = Settings(MILL_DATA_DIR=str(tmp_path))
+        s = Settings(data_dir=str(tmp_path))
         assert getattr(s, prop_name) == tmp_path / fallback_filename
 
     # Map Python field name → env-var alias for the memory_path override fields
@@ -382,7 +397,7 @@ class TestComputedProperties:
         custom = Path("/custom/memory.md")
         alias = self.MEMORY_PATH_ALIASES[override_field]
         monkeypatch.setenv(alias, str(custom))
-        s = Settings(MILL_DATA_DIR=str(tmp_path))
+        s = Settings(data_dir=str(tmp_path))
         assert getattr(s, prop_name) == custom
 
     def test_memory_file_edge_case_empty_override(self, monkeypatch, tmp_path):
@@ -390,7 +405,7 @@ class TestComputedProperties:
         should still return the explicit value (empty Path), not the
         fallback."""
         monkeypatch.setenv("MILL_RETROSPECT_MEMORY_PATH", "")
-        s = Settings(MILL_DATA_DIR=str(tmp_path))
+        s = Settings(data_dir=str(tmp_path))
         # An empty string is not None, so the property returns it as-is
         # (Path("") which equals Path(".")).
         assert s.retrospect_memory_file == Path("")
@@ -1116,7 +1131,7 @@ class TestValidationValid:
 
     def test_max_concurrency_boundary_passes(self):
         """``max_concurrency=1`` (lower bound) passes."""
-        s = Settings(MILL_MAX_CONCURRENCY=1)
+        s = Settings(max_concurrency=1)
         assert s.max_concurrency == 1
 
     def test_forge_auth_app_with_github_app_id_passes(self):
@@ -1139,34 +1154,34 @@ class TestValidationInvalid:
     def test_max_concurrency_zero_raises(self):
         """``max_concurrency=0`` raises ValidationError."""
         with pytest.raises(ValidationError, match="max_concurrency must be ≥ 1"):
-            Settings(MILL_MAX_CONCURRENCY=0)
+            Settings(max_concurrency=0)
 
     def test_model_request_timeout_zero_raises(self):
         """``model_request_timeout=0`` raises ValidationError."""
         with pytest.raises(ValidationError, match="model_request_timeout must be > 0"):
-            Settings(MILL_MODEL_REQUEST_TIMEOUT=0)
+            Settings(model_request_timeout=0)
 
     def test_api_url_invalid_format_raises(self):
         """``api_url`` not starting with http(s) raises ValidationError."""
         with pytest.raises(ValidationError, match="api_url must be an HTTP"):
-            Settings(MILL_API_URL="not-a-url")
+            Settings(api_url="not-a-url")
 
     def test_github_api_url_invalid_format_raises(self):
         """``github_api_url`` not starting with http(s) raises."""
         with pytest.raises(ValidationError, match="github_api_url must be an HTTP"):
-            Settings(MILL_GITHUB_API_URL="ftp://bad")
+            Settings(github_api_url="ftp://bad")
 
     def test_gitlab_api_url_invalid_format_raises(self):
         """``gitlab_api_url`` not starting with http(s) raises."""
         with pytest.raises(ValidationError, match="gitlab_api_url must be an HTTP"):
-            Settings(MILL_GITLAB_API_URL="ftp://bad")
+            Settings(gitlab_api_url="ftp://bad")
 
     def test_trace_health_interval_too_low_raises(self):
         """``trace_health_interval_seconds=60`` raises ValidationError."""
         with pytest.raises(
             ValidationError, match="trace_health_interval_seconds must be ≥ 3600"
         ):
-            Settings(MILL_TRACE_HEALTH_INTERVAL_SECONDS=60)
+            Settings(trace_health_interval_seconds=60)
 
     def test_forge_auth_app_without_credentials_raises(self):
         """``forge_auth=app`` without credentials raises."""
@@ -1187,8 +1202,8 @@ class TestValidationInvalid:
             match="rate_limit_fallback_retries must be ≥ 1",
         ):
             Settings(
-                MILL_RATE_LIMIT_FALLBACK_MODEL="gpt-4o",
-                MILL_RATE_LIMIT_FALLBACK_RETRIES=0,
+                rate_limit_fallback_model="gpt-4o",
+                rate_limit_fallback_retries=0,
             )
 
     def test_review_enabled_without_review_model_raises(self):
@@ -1196,14 +1211,14 @@ class TestValidationInvalid:
         with pytest.raises(
             ValidationError, match="review_model must be non-empty"
         ):
-            Settings(MILL_REVIEW_ENABLED="true", MILL_REVIEW_MODEL="")
+            Settings(review_enabled="true", review_model="")
 
     def test_explore_request_limit_zero_raises(self):
         """``explore_request_limit=0`` raises ValidationError."""
         with pytest.raises(
             ValidationError, match="explore_request_limit must be ≥ 1"
         ):
-            Settings(MILL_EXPLORE_REQUEST_LIMIT=0)
+            Settings(explore_request_limit=0)
 
 
 # ---------------------------------------------------------------------------
@@ -1293,11 +1308,11 @@ class TestFactories:
         from robotsix_mill.config import Settings
 
         # No kwargs → YAML value is used (Field default is 4, YAML says 42)
-        s1 = Settings(MILL_DATA_DIR=str(tmp_path))
+        s1 = Settings(data_dir=str(tmp_path))
         assert s1.max_concurrency == 42
 
         # Constructor kwarg overrides YAML
-        s2 = Settings(MILL_DATA_DIR=str(tmp_path), MILL_MAX_CONCURRENCY="99")
+        s2 = Settings(data_dir=str(tmp_path), max_concurrency=99)
         assert s2.max_concurrency == 99
 
 
@@ -1316,9 +1331,9 @@ class TestFlattenYamlConfig:
             "service": {"data_dir": "/tmp/data"},
         }
         result = flatten_yaml_config(yaml_config)
-        assert result["MILL_MAX_CONCURRENCY"] == 8
-        assert result["MILL_MODEL"] == "test/model"
-        assert result["MILL_DATA_DIR"] == "/tmp/data"
+        assert result["max_concurrency"] == 8
+        assert result["model"] == "test/model"
+        assert result["data_dir"] == "/tmp/data"
 
     def test_flatten_unknown_paths_ignored(self):
         """YAML paths without a mapping are silently ignored."""
@@ -1343,6 +1358,6 @@ class TestFlattenYamlConfig:
         }
         result = flatten_yaml_config(yaml_config)
         # Both core.models.web_research and web.research_model
-        # map to MILL_WEB_RESEARCH_MODEL; web.research_model is
+        # map to web_research_model; web.research_model is
         # traversed second because 'web' > 'core' alphabetically
-        assert result["MILL_WEB_RESEARCH_MODEL"] == "model-b"
+        assert result["web_research_model"] == "model-b"

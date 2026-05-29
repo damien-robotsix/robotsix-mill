@@ -76,6 +76,14 @@ class Settings(BaseSettings):
         # exactly the failure mode that BLOCKED ticket ad2f's PR.
         # Forbidding the unknown kwarg surfaces the typo at the call
         # site, where the implement agent can see and fix it.
+        #
+        # ``env_prefix="MILL_"``: fields without an explicit
+        # ``Field(alias=...)`` derive their env-var name as
+        # ``MILL_<field_name>`` (e.g. ``model`` → ``MILL_MODEL``).
+        # Fields WITH an explicit alias (e.g. ``FORGE_KIND``,
+        # ``OPENROUTER_API_KEY``) use that alias verbatim — the
+        # prefix is NOT applied.
+        env_prefix="MILL_",
         env_file_encoding="utf-8", extra="forbid", populate_by_name=True,
     )
 
