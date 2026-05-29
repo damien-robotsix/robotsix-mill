@@ -294,7 +294,7 @@ def test_run_bc_check_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 def test_bc_check_config_defaults():
     """BC-check config has correct defaults."""
     s = Settings()
-    assert s.bc_check_model == "deepseek/deepseek-v4-pro"
+    assert s.bc_check_model == "deepseek/deepseek-v4-flash"
     assert s.bc_check_periodic is True
     assert s.bc_check_interval_seconds == 86400
     assert s.bc_check_memory_path is None

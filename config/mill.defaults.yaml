@@ -28,14 +28,14 @@ core:
     refine: *default_model                                # authors engineering specs from drafts
     answer: *default_model                                # investigative Q&A via repo + web + traces
     retrospect: *default_model                            # audits finished tickets; proposes improvements
-    audit: *default_model                                 # meta-audit for quality/security coverage
+    audit: deepseek/deepseek-v4-flash                     # periodic quality/security scan; flash is enough — read-only proposer, no code-writing risk
     dedup: *default_model                                 # pre-refine duplicate/already-done check
     web_research: *default_model                          # web lookups — conclusion only
-    review: *default_model                                # blind dual-model diff audit
+    review: *default_model                                # blind dual-model diff audit — KEEP on pro (gates merges)
     trace_inspector: deepseek/deepseek-v4-flash           # inspects Langfuse observation tree — flash is plenty for summarisation
-    test_gap: *default_model                              # identifies modules with zero dedicated tests
-    agent_check: *default_model                           # audits agent definitions for coherence
-    health: *default_model                                # codebase-health across 6 dimensions
+    test_gap: deepseek/deepseek-v4-flash                  # periodic "untested modules" finder — read-only, flash sufficient
+    agent_check: deepseek/deepseek-v4-flash               # periodic agent-yaml audit — read-only structural check
+    health: deepseek/deepseek-v4-flash                    # periodic codebase-health 6-dim scan — read-only summariser
     survey: deepseek/deepseek-v4-flash                    # discovers OSS projects; proposes improvements — flash is plenty (cf $15.32 trace 1bfa36ab)
     doc: *default_model                                   # documentation agent
     triage: &cheap_model deepseek/deepseek-v4-flash       # pre-refine triage — fast/cheap classification
@@ -168,7 +168,7 @@ periodic:
 
   # -- audit agent — meta-audit for quality/security coverage gaps ---------
   audit:
-    model: *default_model           # audit agent model
+    model: deepseek/deepseek-v4-flash  # read-only proposer, flash sufficient
     enabled: true                   # enable periodic audit passes
     interval_seconds: 86400         # seconds between passes (86400 = 1 day)
     memory_path: null               # defaults to <data_dir>/audit_memory.md
@@ -180,35 +180,35 @@ periodic:
 
   # -- health agent — codebase-health across 6 dimensions ------------------
   health:
-    model: *default_model           # health agent model
+    model: deepseek/deepseek-v4-flash  # read-only 6-dim summariser, flash sufficient
     enabled: true                   # enable periodic health passes
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/health_memory.md
 
   # -- test-gap agent — identifies modules with zero dedicated tests -------
   test_gap:
-    model: *default_model           # test-gap agent model
+    model: deepseek/deepseek-v4-flash  # read-only "untested modules" finder, flash sufficient
     enabled: true                   # enable periodic test-gap passes
     interval_seconds: 86400         # seconds between passes
     memory_path: null               # defaults to <data_dir>/test_gap_memory.md
 
   # -- agent-check — audits agent definitions for coherence ----------------
   agent_check:
-    model: *default_model           # agent-check model
+    model: deepseek/deepseek-v4-flash  # read-only yaml audit, flash sufficient
     enabled: true                   # enable periodic agent-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/agent_check_memory.md
 
   # -- bc-check — detects backward-compat shims/dead code ripe for removal -
   bc_check:
-    model: *default_model           # bc-check agent model
+    model: deepseek/deepseek-v4-flash  # bc-check agent — flash is enough for shim-detection scans
     enabled: true                   # enable periodic bc-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/bc_check_memory.md
 
   # -- completeness-check — detects half-wired features --------------
   completeness_check:
-    model: *default_model           # completeness-check agent model
+    model: deepseek/deepseek-v4-flash  # completeness-check — read-only finder, flash sufficient
     enabled: true                   # enable periodic completeness-check passes
     interval_seconds: 86400         # seconds between checks (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/completeness_check_memory.md
@@ -243,7 +243,7 @@ periodic:
 
   # -- module_curator agent — detects drift in the module taxonomy ---------
   module_curator:
-    model: *default_model           # module-curator agent model
+    model: deepseek/deepseek-v4-flash  # module-curator — taxonomy proposer, flash sufficient
     enabled: true                   # enable periodic module-curator passes
     interval_seconds: 86400         # seconds between passes (min 60 enforced in worker)
     memory_path: null               # defaults to <data_dir>/module_curator_memory.md

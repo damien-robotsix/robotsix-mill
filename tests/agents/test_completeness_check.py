@@ -298,7 +298,7 @@ def test_run_completeness_check_pass_skips_empty_title_or_body(tmp_path, monkeyp
 def test_completeness_check_config_defaults():
     """Completeness-check config has correct defaults."""
     s = Settings()
-    assert s.completeness_check_model == "deepseek/deepseek-v4-pro"
+    assert s.completeness_check_model == "deepseek/deepseek-v4-flash"
     assert s.completeness_check_periodic is True
     assert s.completeness_check_interval_seconds == 86400
     assert s.completeness_check_memory_path is None

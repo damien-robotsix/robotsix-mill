@@ -324,7 +324,7 @@ def test_run_agent_check_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 def test_agent_check_config_defaults():
     """Agent-check config has correct defaults."""
     s = Settings()
-    assert s.agent_check_model == "deepseek/deepseek-v4-pro"
+    assert s.agent_check_model == "deepseek/deepseek-v4-flash"
 
 
 def test_agent_check_config_custom_model():

@@ -332,7 +332,7 @@ def test_run_health_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 def test_health_config_defaults():
     """Health config has correct defaults."""
     s = Settings()
-    assert s.health_model == "deepseek/deepseek-v4-pro"
+    assert s.health_model == "deepseek/deepseek-v4-flash"
     assert s.health_periodic is True
     assert s.health_interval_seconds == 86400
     assert s.health_memory_path is None

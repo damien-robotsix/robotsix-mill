@@ -145,7 +145,7 @@ class Settings(BaseSettings):
         default="deepseek/deepseek-v4-pro"
     )
     audit_model: str = Field(
-        default="deepseek/deepseek-v4-pro"
+        default="deepseek/deepseek-v4-flash"
     )
     # Default model for bespoke per-repo periodic agents loaded from
     # ``<clone>/.robotsix-mill/agents/<name>.yaml``. Each bespoke YAML
@@ -861,7 +861,7 @@ class Settings(BaseSettings):
     # Model for the test-gap agent. Defaults to the same capable model
     # as audit/health. Override with MILL_TEST_GAP_MODEL.
     test_gap_model: str = Field(
-        default="deepseek/deepseek-v4-pro"
+        default="deepseek/deepseek-v4-flash"
     )
     # When True, the worker runs periodic test-gap passes at the
     # configured interval. Default False (opt-in).
@@ -885,7 +885,7 @@ class Settings(BaseSettings):
     # model as other read-only periodic agents. Override with
     # MILL_AGENT_CHECK_MODEL.
     agent_check_model: str = Field(
-        default="deepseek/deepseek-v4-pro"
+        default="deepseek/deepseek-v4-flash"
     )
     # Path to the agent-check agent's Markdown memory ledger. Override
     # to pin a specific path; unset (default) derives
@@ -910,7 +910,7 @@ class Settings(BaseSettings):
     # Model for the health agent. Defaults to the same capable model as
     # audit. Override with MILL_HEALTH_MODEL.
     health_model: str = Field(
-        default="deepseek/deepseek-v4-pro"
+        default="deepseek/deepseek-v4-flash"
     )
     # When True, the worker runs periodic health passes at the
     # configured interval. Default False (opt-in).
@@ -971,7 +971,7 @@ class Settings(BaseSettings):
     # as other read-only periodic agents. Override with
     # MILL_BC_CHECK_MODEL.
     bc_check_model: str = Field(
-        default="deepseek/deepseek-v4-pro"
+        default="deepseek/deepseek-v4-flash"
     )
     # Path to the bc-check agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives
@@ -997,7 +997,7 @@ class Settings(BaseSettings):
     # model as other read-only periodic agents. Override with
     # MILL_MODULE_CURATOR_MODEL.
     module_curator_model: str = Field(
-        default="deepseek/deepseek-v4-pro"
+        default="deepseek/deepseek-v4-flash"
     )
     # Path to the module-curator agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
@@ -1049,7 +1049,7 @@ class Settings(BaseSettings):
     # capable model as other read-only periodic agents. Override with
     # MILL_COMPLETENESS_CHECK_MODEL.
     completeness_check_model: str = Field(
-        default="deepseek/deepseek-v4-pro"
+        default="deepseek/deepseek-v4-flash"
     )
     # Path to the completeness-check agent's Markdown memory ledger.
     # Override to pin a specific path; unset (default) derives
