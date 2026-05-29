@@ -22,9 +22,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re as _re
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from ..agents import coding
 from ..agents.coding import AgentBudgetError, AgentRunError
@@ -43,6 +46,43 @@ from .pause import (
 
 log = logging.getLogger("robotsix_mill.stages.implement")
 
+
+# ---------------------------------------------------------------------------
+# Internal dataclasses for the refactored implement loop
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _ImplementContext:
+    """Artifact bundle loaded once before the fix loop starts."""
+    spec: str
+    memory_text: str
+    reference_files: list | None
+    file_map: set[str] | None
+    feedback: str | None
+    previous_attempt_summary: str | None
+
+
+@dataclass
+class _ScopeGuardrailResult:
+    """Returned by :meth:`_run_scope_guardrail`."""
+    action: Literal["continue", "skip_iteration", "return"]
+    outcome: Outcome | None = None
+    file_map: set[str] | None = None
+    feedback: str | None = None
+
+
+@dataclass
+class _SinglePassResult:
+    """Returned by :meth:`_run_single_implement_pass`."""
+    next_action: Literal["proceed", "retry", "escalate", "return", "pause", "skip"]
+    outcome: Outcome | None = None
+    feedback: str | None = None
+    ic: _ImplementContext | None = None
+
+
+# ---------------------------------------------------------------------------
+# Stage
+# ---------------------------------------------------------------------------
 
 class ImplementStage(Stage):
     name = "implement"
@@ -77,41 +117,34 @@ class ImplementStage(Stage):
             ctx, ticket, repo_dir, branch, resuming, s
         )
 
-    # --- helpers ---
-    @staticmethod
-    def _implement_loop(ctx, ticket, repo_dir, branch, resuming, settings):
-        """Run the bounded fix loop: edit pass → test gate → route.
+    # ------------------------------------------------------------------
+    # Private helpers (refactored)
+    # ------------------------------------------------------------------
 
-        The implement agent does ONE edit pass per iteration; the test
-        gate runs the suite once and produces a distilled diagnosis;
-        :meth:`ValidationResult.decide` routes deterministically. On
-        ``retry`` the diagnosis is fed back into the next pass; on
-        ``escalate`` (suite still failing after ``max_fix_iterations``)
-        the ticket is BLOCKED-resumable. No LLM owns the loop or the
-        bound — both are enforced here.
-        """
+    @staticmethod
+    def _load_implement_context(
+        ctx: StageContext, ticket: Ticket, settings,
+    ) -> _ImplementContext:
+        """Load all workspace artifacts needed before the fix loop."""
         ws = ctx.service.workspace(ticket)
+
         spec = ws.read_description()
         epic_ctx = ctx.service.get_epic_context(ticket)
         if epic_ctx:
             spec = epic_ctx + "\n\n" + spec
 
-        memory_text = load_memory(settings.memory_file_for("implement", ctx.repo_config.board_id if ctx.repo_config else ""))
-        max_iters = max(1, settings.max_fix_iterations)
+        memory_text = load_memory(
+            settings.memory_file_for(
+                "implement",
+                ctx.repo_config.board_id if ctx.repo_config else "",
+            ),
+        )
 
-        # Load pre-loaded file content from the refine stage (if available).
         reference_files = None
         ref_files_path = ws.artifacts_dir / "reference_files.json"
         if ref_files_path.exists():
             reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
 
-        # Load the ticket's file scope map (which files are in-scope).
-        # Three cases:
-        #   - file_map.json missing entirely → refine never ran or
-        #     crashed mid-write; warn and proceed scope-free.
-        #   - file_map.json contains [] → scope-free mode (split child
-        #     or triage-SKIP path); warn and proceed scope-free.
-        #   - file_map.json contains [{file: …}, …] → enforce scope.
         file_map: set[str] | None = None
         file_map_path = ws.artifacts_dir / "file_map.json"
         if file_map_path.exists():
@@ -119,10 +152,6 @@ class ImplementStage(Stage):
             if raw:  # non-empty list → extract paths
                 file_map = {entry["file"] for entry in raw}
 
-        # file_map is a scope-enforcement guardrail, not a correctness
-        # prerequisite.  When it's missing or empty we log a warning
-        # and skip the scope check; the agent can still produce valid
-        # changes and the test gate still runs.
         if file_map is None:
             log.warning(
                 "%s: file_map.json missing or empty — "
@@ -131,11 +160,6 @@ class ImplementStage(Stage):
             )
 
         feedback: str | None = None
-        summary = ""
-
-        # If we're re-entering after a code review REQUEST_CHANGES, feed the
-        # review comments as feedback so the coordinator can address them.
-        review_feedback: str | None = None
         if ticket.blocked_from is None:  # not a BLOCKED resume
             comments = ctx.service.list_comments(ticket.id)
             if comments:
@@ -145,7 +169,6 @@ class ImplementStage(Stage):
                 )
                 feedback = review_feedback
 
-        # Load prior summary for <previous_attempt> injection on retries.
         previous_attempt_summary: str | None = None
         summary_path = ws.artifacts_dir / "implement_summary.md"
         if summary_path.exists():
@@ -159,346 +182,505 @@ class ImplementStage(Stage):
                     exc_info=True,
                 )
 
-        for attempt in range(1, max_iters + 1):
-            # --- resume awareness: detect if returning from a pause ---
-            resume_history: list | None = None
-            if attempt == 1:
-                saved_state = load_conversation_state(ws)
-                if saved_state is not None:
-                    own_history = ctx.service.history(ticket.id)
-                    was_paused = any(
-                        ev.state == State.AWAITING_USER_REPLY
-                        for ev in own_history
-                    )
-                    if was_paused:
-                        # Collect operator replies from every closed
-                        # [ASK_USER] thread (the agent may have asked
-                        # multiple questions across cycles).
-                        from .pause import _collect_ask_user_replies
-                        reply_text = _collect_ask_user_replies(ctx, ticket)
-                        resume_history = build_resume_message_history(
-                            saved_state, reply_text,
-                        )
-                        log.info(
-                            "%s: resuming implement from pause — "
-                            "loaded %d-byte conversation state",
-                            ticket.id, len(saved_state),
-                        )
-                        # Skip review-feedback injection on resume —
-                        # the operator's reply is the feedback.
-                        feedback = None
-                        review_feedback = None
+        return _ImplementContext(
+            spec=spec,
+            memory_text=memory_text,
+            reference_files=reference_files,
+            file_map=file_map,
+            feedback=feedback,
+            previous_attempt_summary=previous_attempt_summary,
+        )
 
-            # Resolve per-repo language instructions for the implement agent.
-            language_instructions = ""
-            if ctx.repo_config and ctx.repo_config.language:
-                lang = ctx.repo_config.language
-                snippet_path = settings.language_instructions_dir / f"{lang}.md"
-                try:
-                    language_instructions = snippet_path.read_text(encoding="utf-8")
-                except OSError:
-                    log.info(
-                        "%s: language '%s' configured but no snippet at %s — "
-                        "skipping language instructions",
-                        ticket.id, lang, snippet_path,
-                    )
+    @staticmethod
+    def _run_scope_guardrail(
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        summary: str,
+        ref_files: list[str] | None,
+        file_map: set[str] | None,
+        settings,
+        spec: str,
+        current_feedback: str | None,
+    ) -> _ScopeGuardrailResult:
+        """Check every changed file against the ticket's file_map.
 
-            try:
-                summary, ref_files, updated_memory, conv_state, new_msgs = \
-                    coding.run_implement_agent(
-                        settings=settings, repo_dir=repo_dir, spec=spec,
-                        feedback=feedback, memory=memory_text,
-                        reference_files=reference_files,
-                        previous_attempt_summary=previous_attempt_summary,
-                        file_map=file_map,
-                        board_id=ctx.repo_config.board_id if ctx.repo_config else "",
-                        message_history=resume_history,
-                        language_instructions=language_instructions,
-                    )
-            except AgentBudgetError as e:
-                ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
-                    ok=False,
-                )
-                return Outcome(
+        When ``scope_triage_enabled`` is True an LLM classifier
+        decides whether out-of-scope changes are legitimate expansions,
+        scope creep (REJECT), or ambiguous (ESCALATE).  Otherwise any
+        out-of-scope file immediately blocks the ticket.
+        """
+        if not file_map:
+            return _ScopeGuardrailResult(
+                action="skip_iteration", file_map=file_map,
+                feedback=current_feedback,
+            )
+
+        changed = git_ops.changed_files(repo_dir, settings.forge_target_branch)
+        out_of_scope = [f for f in changed if f not in file_map]
+        if not out_of_scope:
+            log.info(
+                "%s: scope check passed — %d file(s) changed, "
+                "all in file_map (%d allowed)",
+                ticket.id, len(changed), len(file_map),
+            )
+            return _ScopeGuardrailResult(
+                action="skip_iteration", file_map=file_map,
+                feedback=current_feedback,
+            )
+
+        log.warning(
+            "%s: scope violation — %d out-of-scope file(s): %s",
+            ticket.id, len(out_of_scope),
+            ", ".join(out_of_scope),
+        )
+
+        if not settings.scope_triage_enabled:
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, summary, ok=False,
+                reference_files=ref_files,
+            )
+            return _ScopeGuardrailResult(
+                action="return",
+                outcome=Outcome(
                     State.BLOCKED,
-                    f"agent budget cap — resumable (move to READY): {e}",
-                )
-            except AgentRunError as e:
-                ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, f"agent error: {e}",
-                    ok=False,
-                )
-                return Outcome(
-                    State.BLOCKED, f"agent error — resumable: {e}"
-                )
+                    f"scope violation: {len(out_of_scope)} file(s) "
+                    f"outside ticket scope — "
+                    f"{', '.join(out_of_scope)}",
+                ),
+            )
 
-            # --- pause detection ---
-            # Inspect THIS run's new messages so the prior turn's
-            # ask_user sentinel (still present in the saved transcript
-            # after resume) doesn't re-trigger. Full transcript still
-            # goes to the resume artifact.
-            if check_for_pause(new_msgs):
-                save_conversation_state(ws, conv_state)
-                ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, summary or "paused",
-                    ok=False, reference_files=ref_files,
-                )
-                ctx.service.transition(
-                    ticket.id, State.AWAITING_USER_REPLY,
-                    note="paused — agent asked a clarifying question",
-                )
+        # --- scope-triage enabled path ---
+        diff_summaries: dict[str, str] = {}
+        for path in out_of_scope:
+            raw = subprocess.run(
+                ["git", "-C", str(repo_dir), "diff",
+                 f"origin/{settings.forge_target_branch}", "--", path],
+                capture_output=True, text=True,
+            ).stdout
+            lines = raw.split("\n")
+            diff_summaries[path] = "\n".join(lines[:40])
+
+        from robotsix_mill.agents import scope_triage as st
+        try:
+            verdict = st.run_scope_triage_agent(
+                settings=settings,
+                ticket_spec=spec,
+                file_map=sorted(file_map),
+                out_of_scope_files=out_of_scope,
+                diff_summaries=diff_summaries,
+            )
+        except Exception as exc:
+            log.error("%s: scope-triage agent failed: %s", ticket.id, exc)
+            verdict = None  # fall through to ESCALATE
+
+        if verdict is not None and verdict.action == "EXPAND":
+            for f in verdict.expand_files:
+                file_map.add(f)
+            log.info(
+                "%s: scope-triage EXPAND — %s", ticket.id,
+                verdict.justification,
+            )
+            ctx.service.add_comment(
+                ticket.id,
+                f"[scope-triage] EXPAND: {verdict.justification}\n\n"
+                f"Added to scope: {', '.join(verdict.expand_files)}",
+                author="scope-triage",
+            )
+            # Retroactive short-circuit: when every expand-file was
+            # already modified in this pass, fall through to the test
+            # gate instead of re-running the agent.
+            if set(verdict.expand_files).issubset(set(changed)):
                 log.info(
-                    "%s: paused implement — agent invoked ask_user",
+                    "%s: scope-triage EXPAND retroactive — "
+                    "all expanded files already modified; "
+                    "skipping agent re-run",
                     ticket.id,
                 )
-                return Outcome(State.AWAITING_USER_REPLY)
-
-            # Persist the agent's updated memory as soon as it's produced
-            # so a later-iteration failure can't lose the learning.
-            if updated_memory:
-                persist_memory(settings.memory_file_for("implement", ctx.repo_config.board_id if ctx.repo_config else ""), updated_memory)
-
-            # Update reference_files from the agent's curated list for
-            # the next retry iteration (and persist to disk for
-            # BLOCKED-resume). Overwrites refine's artifact.
-            if ref_files:
-                reference_files = [{"path": p} for p in ref_files]
-                try:
-                    ref_path = ws.artifacts_dir / "reference_files.json"
-                    ref_path.write_text(
-                        json.dumps(reference_files, indent=2),
-                        encoding="utf-8",
-                    )
-                except OSError:
-                    log.warning(
-                        "%s: failed to write reference_files.json",
-                        ticket.id, exc_info=True,
-                    )
-            # Persist summary for <previous_attempt> injection on retry.
-            try:
-                (ws.artifacts_dir / "implement_summary.md").write_text(
-                    summary, encoding="utf-8",
+                return _ScopeGuardrailResult(
+                    action="skip_iteration", file_map=file_map,
+                    feedback=None,
                 )
-                previous_attempt_summary = summary
-            except OSError:
+            else:
+                return _ScopeGuardrailResult(
+                    action="continue", file_map=file_map,
+                    feedback=None,
+                )
+
+        if verdict is not None and verdict.action == "REJECT":
+            # Dedup guard: if ALL current out-of-scope files were
+            # already REJECTed in a prior scope-triage comment on this
+            # ticket, the agent has seen this diff before and the
+            # operator already has the signal.  Don't post another
+            # comment / bounce back to READY — treat as implicit
+            # EXPAND so the implement loop can make actual progress.
+            prior_rejects = [
+                c for c in ctx.service.list_comments(ticket.id)
+                if c.author == "scope-triage"
+                and (c.body or "").find("REJECT") >= 0
+            ]
+            already_rejected: set[str] = set()
+            for c in prior_rejects:
+                for m in _re.findall(r"`([^`]+)`", c.body or ""):
+                    already_rejected.add(m)
+            new_oos = [
+                f for f in out_of_scope
+                if f not in already_rejected
+            ]
+            if not new_oos:
                 log.warning(
-                    "%s: failed to write implement_summary.md",
-                    ticket.id, exc_info=True,
+                    "%s: suppressing duplicate scope-triage REJECT — "
+                    "all %d out-of-scope file(s) already rejected in "
+                    "prior run(s): %s",
+                    ticket.id, len(out_of_scope),
+                    ", ".join(out_of_scope),
+                )
+                for f in out_of_scope:
+                    file_map.add(f)
+                return _ScopeGuardrailResult(
+                    action="skip_iteration", file_map=file_map,
+                    feedback=None,
                 )
 
-            # Scope guardrail: verify every changed file is listed in the
-            # ticket's file_map.  file_map may be None; scope check is
-            # simply skipped in that case.
-            if file_map:
-                changed = git_ops.changed_files(
-                    repo_dir, settings.forge_target_branch
-                )
-                out_of_scope = [
-                    f for f in changed
-                    if f not in file_map
-                ]
-                if out_of_scope:
-                    log.warning(
-                        "%s: scope violation — %d out-of-scope file(s): %s",
-                        ticket.id, len(out_of_scope),
-                        ", ".join(out_of_scope),
-                    )
-
-                    if settings.scope_triage_enabled:
-                        # Build diff summaries for out-of-scope files only.
-                        diff_summaries: dict[str, str] = {}
-                        for path in out_of_scope:
-                            raw = subprocess.run(
-                                ["git", "-C", str(repo_dir), "diff",
-                                 f"origin/{settings.forge_target_branch}", "--", path],
-                                capture_output=True, text=True,
-                            ).stdout
-                            lines = raw.split("\n")
-                            diff_summaries[path] = "\n".join(lines[:40])
-
-                        from robotsix_mill.agents import scope_triage as st
-                        try:
-                            verdict = st.run_scope_triage_agent(
-                                settings=settings,
-                                ticket_spec=spec,
-                                file_map=sorted(file_map),
-                                out_of_scope_files=out_of_scope,
-                                diff_summaries=diff_summaries,
-                            )
-                        except Exception as exc:
-                            log.error("%s: scope-triage agent failed: %s", ticket.id, exc)
-                            verdict = None  # fall through to ESCALATE
-
-                        if verdict is not None and verdict.action == "EXPAND":
-                            for f in verdict.expand_files:
-                                file_map.add(f)
-                            log.info("%s: scope-triage EXPAND — %s", ticket.id, verdict.justification)
-                            ctx.service.add_comment(
-                                ticket.id,
-                                f"[scope-triage] EXPAND: {verdict.justification}\n\n"
-                                f"Added to scope: {', '.join(verdict.expand_files)}",
-                                author="scope-triage",
-                            )
-                            feedback = None
-                            # Retroactive short-circuit: when every
-                            # expand-file was already modified in this
-                            # pass, fall through to the test gate
-                            # instead of re-running the agent.
-                            if set(verdict.expand_files).issubset(set(changed)):
-                                log.info(
-                                    "%s: scope-triage EXPAND retroactive — "
-                                    "all expanded files already modified; "
-                                    "skipping agent re-run",
-                                    ticket.id,
-                                )
-                            else:
-                                continue
-
-                        if verdict is not None and verdict.action == "REJECT":
-                            # Dedup guard: if ALL current out-of-scope files
-                            # were already REJECTed in a prior scope-triage
-                            # comment on this ticket, the agent has seen this
-                            # diff before and the operator already has the
-                            # signal. Don't post another comment / bounce
-                            # back to READY — treat as implicit EXPAND so
-                            # the implement loop can make actual progress.
-                            import re as _re
-                            prior_rejects = [
-                                c for c in ctx.service.list_comments(ticket.id)
-                                if c.author == "scope-triage"
-                                and (c.body or "").find("REJECT") >= 0
-                            ]
-                            already_rejected: set[str] = set()
-                            for c in prior_rejects:
-                                for m in _re.findall(r"`([^`]+)`", c.body or ""):
-                                    already_rejected.add(m)
-                            new_oos = [
-                                f for f in out_of_scope
-                                if f not in already_rejected
-                            ]
-                            if not new_oos:
-                                log.warning(
-                                    "%s: suppressing duplicate scope-triage REJECT — "
-                                    "all %d out-of-scope file(s) already rejected in "
-                                    "prior run(s): %s",
-                                    ticket.id, len(out_of_scope),
-                                    ", ".join(out_of_scope),
-                                )
-                                # Implicit EXPAND — the prior REJECT serves as
-                                # the public record; let implement proceed.
-                                for f in out_of_scope:
-                                    file_map.add(f)
-                                feedback = None
-                                continue
-
-                            log.info("%s: scope-triage REJECT — %s", ticket.id, verdict.justification)
-                            ctx.service.add_comment(
-                                ticket.id,
-                                f"[scope-triage] REJECT: {verdict.justification}\n\n"
-                                f"Out-of-scope files:\n" +
-                                "\n".join(f"- `{f}`" for f in out_of_scope),
-                                author="scope-triage",
-                            )
-                            ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False, reference_files=ref_files)
-                            return Outcome(State.READY,
-                                f"scope-triage REJECT: {verdict.justification[:120]}")
-
-                        if verdict is None or verdict.action not in ("EXPAND", "REJECT"):
-                            # ESCALATE (or agent error fall-through).
-                            reason = (
-                                f"scope-triage ESCALATE: {verdict.justification}"
-                                if verdict is not None
-                                else "scope-triage agent error — escalated for human review"
-                            )
-                            log.warning("%s: %s", ticket.id, reason)
-                            ctx.service.add_comment(
-                                ticket.id,
-                                f"[scope-triage] {reason}\n\nOut-of-scope files:\n" +
-                                "\n".join(f"- `{f}`" for f in out_of_scope),
-                                author="scope-triage",
-                            )
-                            ImplementStage._finalize(ctx, ticket, repo_dir, branch, summary, ok=False, reference_files=ref_files)
-                            return Outcome(State.BLOCKED, reason)
-
-                    else:
-                        # scope_triage_enabled is False — existing behaviour.
-                        ImplementStage._finalize(
-                            ctx, ticket, repo_dir, branch, summary, ok=False,
-                            reference_files=ref_files,
-                        )
-                        return Outcome(
-                            State.BLOCKED,
-                            f"scope violation: {len(out_of_scope)} file(s) "
-                            f"outside ticket scope — "
-                            f"{', '.join(out_of_scope)}",
-                        )
-                log.info(
-                    "%s: scope check passed — %d file(s) changed, "
-                    "all in file_map (%d allowed)",
-                    ticket.id, len(changed), len(file_map),
-                )
-
-            # Stage-owned test gate: one sandbox run; on failure a cheap
-            # model distills an actionable diagnosis. `passed` is the
-            # deterministic process exit code — the authoritative word.
-            passed, diag = run_test_agent(
-                settings=settings, repo_dir=repo_dir,
-                repo_config=ctx.repo_config,
+            log.info(
+                "%s: scope-triage REJECT — %s", ticket.id,
+                verdict.justification,
             )
-            if not passed and diag.startswith("sandbox unavailable"):
-                # Infra failure — not the code's fault; don't burn
-                # iterations retrying against a broken sandbox.
-                ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, summary, ok=False,
-                    reference_files=ref_files,
-                )
-                return Outcome(State.BLOCKED, diag)
-
-            decision = ValidationResult.decide(
-                passed=passed, iterations=attempt, max_iters=max_iters,
-                feedback=diag,
+            ctx.service.add_comment(
+                ticket.id,
+                f"[scope-triage] REJECT: {verdict.justification}\n\n"
+                f"Out-of-scope files:\n" +
+                "\n".join(f"- `{f}`" for f in out_of_scope),
+                author="scope-triage",
+            )
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, summary, ok=False,
+                reference_files=ref_files,
+            )
+            return _ScopeGuardrailResult(
+                action="return",
+                outcome=Outcome(
+                    State.READY,
+                    f"scope-triage REJECT: {verdict.justification[:120]}",
+                ),
             )
 
-            if decision.next_action == "proceed":
-                if not git_ops.has_changes(repo_dir) and not resuming:
-                    return Outcome(State.BLOCKED, "no changes produced")
-                ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, summary, ok=True,
-                    reference_files=ref_files,
-                )
-                next_state = (
-                    State.CODE_REVIEW
-                    if settings.review_enabled
-                    else State.DOCUMENTING
-                )
-                return Outcome(
-                    next_state, summary[:200] or "implemented"
-                )
-
-            if decision.next_action == "escalate":
-                ImplementStage._finalize(
-                    ctx, ticket, repo_dir, branch, summary, ok=False,
-                    reference_files=ref_files,
-                )
-                return Outcome(
-                    State.BLOCKED,
-                    f"tests still failing after {max_iters} fix "
-                    "attempt(s) — resumable (move to READY)",
-                )
-
-            # retry → feed the diagnosis into the next edit pass.
-            feedback = diag
-
-        # The escalate branch fires on the final attempt, so the loop
-        # always returns above. This is a defensive fallback.
+        # ESCALATE (or agent error fall-through).
+        reason = (
+            f"scope-triage ESCALATE: {verdict.justification}"
+            if verdict is not None
+            else "scope-triage agent error — escalated for human review"
+        )
+        log.warning("%s: %s", ticket.id, reason)
+        ctx.service.add_comment(
+            ticket.id,
+            f"[scope-triage] {reason}\n\nOut-of-scope files:\n" +
+            "\n".join(f"- `{f}`" for f in out_of_scope),
+            author="scope-triage",
+        )
         ImplementStage._finalize(
             ctx, ticket, repo_dir, branch, summary, ok=False,
             reference_files=ref_files,
         )
-        return Outcome(
-            State.BLOCKED, "implement loop exhausted — resumable"
+        return _ScopeGuardrailResult(
+            action="return",
+            outcome=Outcome(State.BLOCKED, reason),
         )
+
+    @staticmethod
+    def _run_single_implement_pass(
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings,
+        ic: _ImplementContext,
+        attempt: int,
+        max_iters: int,
+        resume_history: list | None,
+        resuming: bool,
+    ) -> _SinglePassResult:
+        """Run one iteration of the fix loop: agent → guardrail → test gate."""
+        ws = ctx.service.workspace(ticket)
+
+        # Resolve per-repo language instructions for the implement agent.
+        language_instructions = ""
+        if ctx.repo_config and ctx.repo_config.language:
+            lang = ctx.repo_config.language
+            snippet_path = settings.language_instructions_dir / f"{lang}.md"
+            try:
+                language_instructions = snippet_path.read_text(encoding="utf-8")
+            except OSError:
+                log.info(
+                    "%s: language '%s' configured but no snippet at %s — "
+                    "skipping language instructions",
+                    ticket.id, lang, snippet_path,
+                )
+
+        # --- agent invocation ---
+        try:
+            summary, ref_files, updated_memory, conv_state, new_msgs = \
+                coding.run_implement_agent(
+                    settings=settings, repo_dir=repo_dir, spec=ic.spec,
+                    feedback=ic.feedback, memory=ic.memory_text,
+                    reference_files=ic.reference_files,
+                    previous_attempt_summary=ic.previous_attempt_summary,
+                    file_map=ic.file_map,
+                    board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                    message_history=resume_history,
+                    language_instructions=language_instructions,
+                )
+        except AgentBudgetError as e:
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, f"budget cap hit: {e}",
+                ok=False,
+            )
+            return _SinglePassResult(
+                next_action="return",
+                outcome=Outcome(
+                    State.BLOCKED,
+                    f"agent budget cap — resumable (move to READY): {e}",
+                ),
+            )
+        except AgentRunError as e:
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, f"agent error: {e}",
+                ok=False,
+            )
+            return _SinglePassResult(
+                next_action="return",
+                outcome=Outcome(
+                    State.BLOCKED, f"agent error — resumable: {e}",
+                ),
+            )
+
+        # --- pause detection ---
+        if check_for_pause(new_msgs):
+            save_conversation_state(ws, conv_state)
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, summary or "paused",
+                ok=False, reference_files=ref_files,
+            )
+            ctx.service.transition(
+                ticket.id, State.AWAITING_USER_REPLY,
+                note="paused — agent asked a clarifying question",
+            )
+            log.info(
+                "%s: paused implement — agent invoked ask_user",
+                ticket.id,
+            )
+            return _SinglePassResult(
+                next_action="pause",
+                outcome=Outcome(State.AWAITING_USER_REPLY),
+            )
+
+        # --- persistence ---
+        if updated_memory:
+            persist_memory(
+                settings.memory_file_for(
+                    "implement",
+                    ctx.repo_config.board_id if ctx.repo_config else "",
+                ),
+                updated_memory,
+            )
+
+        # Build updated reference_files for the context.
+        updated_ref_files = ic.reference_files
+        if ref_files:
+            updated_ref_files = [{"path": p} for p in ref_files]
+            try:
+                ref_path = ws.artifacts_dir / "reference_files.json"
+                ref_path.write_text(
+                    json.dumps(updated_ref_files, indent=2),
+                    encoding="utf-8",
+                )
+            except OSError:
+                log.warning(
+                    "%s: failed to write reference_files.json",
+                    ticket.id, exc_info=True,
+                )
+
+        # Persist summary for <previous_attempt> injection on retry.
+        updated_prev_summary = ic.previous_attempt_summary
+        try:
+            (ws.artifacts_dir / "implement_summary.md").write_text(
+                summary, encoding="utf-8",
+            )
+            updated_prev_summary = summary
+        except OSError:
+            log.warning(
+                "%s: failed to write implement_summary.md",
+                ticket.id, exc_info=True,
+            )
+
+        # --- scope guardrail ---
+        guardrail = ImplementStage._run_scope_guardrail(
+            ctx, ticket, repo_dir, branch, summary, ref_files,
+            ic.file_map, settings, ic.spec, ic.feedback,
+        )
+
+        if guardrail.action == "return":
+            return _SinglePassResult(
+                next_action="return", outcome=guardrail.outcome,
+            )
+
+        # Determine the updated file_map and feedback after the guardrail.
+        new_file_map = (
+            guardrail.file_map
+            if guardrail.file_map is not None
+            else ic.file_map
+        )
+        new_feedback = (
+            guardrail.feedback
+            if guardrail.action in ("continue", "skip_iteration")
+            else ic.feedback
+        )
+
+        # Build updated context for potential retry.
+        new_ic = _ImplementContext(
+            spec=ic.spec,
+            memory_text=ic.memory_text,
+            reference_files=updated_ref_files,
+            file_map=new_file_map,
+            feedback=new_feedback,
+            previous_attempt_summary=updated_prev_summary,
+        )
+
+        if guardrail.action == "continue":
+            return _SinglePassResult(
+                next_action="retry", feedback=None, ic=new_ic,
+            )
+
+        # guardrail.action == "skip_iteration" — fall through to test gate.
+
+        # --- test gate ---
+        passed, diag = run_test_agent(
+            settings=settings, repo_dir=repo_dir,
+            repo_config=ctx.repo_config,
+        )
+        if not passed and diag.startswith("sandbox unavailable"):
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, summary, ok=False,
+                reference_files=ref_files,
+            )
+            return _SinglePassResult(
+                next_action="return",
+                outcome=Outcome(State.BLOCKED, diag),
+            )
+
+        decision = ValidationResult.decide(
+            passed=passed, iterations=attempt, max_iters=max_iters,
+            feedback=diag,
+        )
+
+        if decision.next_action == "proceed":
+            if not git_ops.has_changes(repo_dir) and not resuming:
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(State.BLOCKED, "no changes produced"),
+                )
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, summary, ok=True,
+                reference_files=ref_files,
+            )
+            next_state = (
+                State.CODE_REVIEW
+                if settings.review_enabled
+                else State.DOCUMENTING
+            )
+            return _SinglePassResult(
+                next_action="proceed",
+                outcome=Outcome(
+                    next_state, summary[:200] or "implemented",
+                ),
+            )
+
+        if decision.next_action == "escalate":
+            ImplementStage._finalize(
+                ctx, ticket, repo_dir, branch, summary, ok=False,
+                reference_files=ref_files,
+            )
+            return _SinglePassResult(
+                next_action="escalate",
+                outcome=Outcome(
+                    State.BLOCKED,
+                    f"tests still failing after {max_iters} fix "
+                    "attempt(s) — resumable (move to READY)",
+                ),
+            )
+
+        # retry → feed the diagnosis into the next edit pass.
+        new_ic.feedback = diag
+        return _SinglePassResult(
+            next_action="retry", feedback=diag, ic=new_ic,
+        )
+
+    @staticmethod
+    def _implement_loop(ctx, ticket, repo_dir, branch, resuming, settings):
+        """Run the bounded fix loop: edit pass → test gate → route.
+
+        The implement agent does ONE edit pass per iteration; the test
+        gate runs the suite once and produces a distilled diagnosis;
+        :meth:`ValidationResult.decide` routes deterministically. On
+        ``retry`` the diagnosis is fed back into the next pass; on
+        ``escalate`` (suite still failing after ``max_fix_iterations``)
+        the ticket is BLOCKED-resumable. No LLM owns the loop or the
+        bound — both are enforced here.
+        """
+        max_iters = max(1, settings.max_fix_iterations)
+        ic = ImplementStage._load_implement_context(ctx, ticket, settings)
+
+        for attempt in range(1, max_iters + 1):
+            # --- resume awareness: detect if returning from a pause ---
+            resume_history: list | None = None
+            if attempt == 1:
+                ws = ctx.service.workspace(ticket)
+                saved_state = load_conversation_state(ws)
+                if saved_state is not None and any(
+                    ev.state == State.AWAITING_USER_REPLY
+                    for ev in ctx.service.history(ticket.id)
+                ):
+                    from .pause import _collect_ask_user_replies
+                    reply_text = _collect_ask_user_replies(ctx, ticket)
+                    resume_history = build_resume_message_history(
+                        saved_state, reply_text,
+                    )
+                    log.info(
+                        "%s: resuming implement from pause — "
+                        "loaded %d-byte conversation state",
+                        ticket.id, len(saved_state),
+                    )
+                    ic.feedback = None
+
+            result = ImplementStage._run_single_implement_pass(
+                ctx, ticket, repo_dir, branch, settings, ic,
+                attempt, max_iters, resume_history, resuming,
+            )
+
+            if result.next_action == "return":
+                return result.outcome
+            if result.next_action == "pause":
+                return result.outcome
+            if result.next_action in ("proceed", "escalate"):
+                return result.outcome
+
+            # next_action == "retry" — update for next iteration.
+            if result.ic is not None:
+                ic = result.ic
+
+        # Defensive fallback — should be unreachable.
+        ImplementStage._finalize(
+            ctx, ticket, repo_dir, branch, "", ok=False,
+            reference_files=ic.reference_files,
+        )
+        return Outcome(
+            State.BLOCKED, "implement loop exhausted — resumable",
+        )
+
+    # ------------------------------------------------------------------
+    # Existing helpers (NOT refactored)
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _finalize(ctx, ticket, repo_dir, branch, summary, *,
