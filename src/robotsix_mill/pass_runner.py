@@ -71,7 +71,7 @@ def _verify_prior_proposals(
                 continue
 
             # 3. Determine resolution.
-            state_str = ticket.state.name if hasattr(ticket.state, 'name') else str(ticket.state)
+            state_str = ticket.state.name
             if ticket.state == State.CLOSED:
                 history = service.history(ticket.id)
                 if any(ev.state == State.DONE for ev in history):

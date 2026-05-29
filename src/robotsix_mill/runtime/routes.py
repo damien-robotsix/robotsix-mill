@@ -1683,8 +1683,6 @@ def deep_review_trace(
         return {"status": "unavailable"}
 
     state = request.app.state
-    if not hasattr(state, "deep_review_results"):
-        state.deep_review_results = {}
 
     from ..langfuse_client import fetch_trace_detail
     from ..agents.trace_inspector import run_trace_inspector

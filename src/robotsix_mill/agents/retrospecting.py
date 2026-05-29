@@ -74,7 +74,7 @@ class RetrospectResult(BaseModel):
                 if isinstance(item, dict):
                     cat = item.get("category", "")
                     conf = item.get("confidence", "")
-                    sym = item.get("symptom", "") or item.get("text", "")
+                    sym = item.get("symptom", "")
                     sol = item.get("proposed_solution", "")
                     prefix = f"[{cat}/{conf}] " if cat else ""
                     line = f"{prefix}{sym}"
