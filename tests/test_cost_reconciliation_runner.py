@@ -325,6 +325,92 @@ def test_langfuse_error_runs_comparison(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Dedup against prior cost-reconciliation drafts
+# ---------------------------------------------------------------------------
+
+
+def _patch_dirty_pass(monkeypatch, settings, delta=5.00):
+    """Wire fake OpenRouter/Langfuse responses that yield *delta* > $1.00
+    so the dedup gate is exercised after the clean-pass early-return."""
+    monkeypatch.setattr(
+        "robotsix_mill.cost_reconciliation_runner.Settings",
+        lambda: settings,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.cost_reconciliation_runner._fetch_openrouter_daily",
+        lambda settings, date_str: (10.00 + delta, "gpt-4: $15"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.cost_reconciliation_runner._fetch_langfuse_daily",
+        lambda settings, from_ts, to_ts, repo_config=None: (10.00, "implement: $10"),
+    )
+
+    from robotsix_mill.agents.cost_reconciling import CostReconciliationResult
+    agent_calls: list = []
+
+    def fake_agent(**kwargs):
+        agent_calls.append(kwargs)
+        return CostReconciliationResult(
+            analysis="x", conclusion="y",
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.cost_reconciling.run_cost_reconciliation_agent",
+        fake_agent,
+    )
+    return agent_calls
+
+
+def test_duplicate_date_suppressed(tmp_path, monkeypatch):
+    """When a prior cost_reconciliation draft for the same date already
+    exists, the runner must NOT invoke the agent and must NOT create a
+    second ticket. Without dedup, every cron run on a $1+ delta day
+    would clone the existing draft."""
+    settings = _make_settings(tmp_path)
+    agent_calls = _patch_dirty_pass(monkeypatch, settings)
+
+    # Pre-seed a prior cost-reconciliation ticket for yesterday's date
+    # with the marker that the runner would have written.
+    service = TicketService(settings)
+    date_str = _yesterday_date_str()
+    body = f"old\n<!-- cost_reconciliation-gap-id: {date_str} -->\n"
+    prior = service.create(
+        "Cost reconciliation: prior draft",
+        body,
+        source=SourceKind.COST_RECONCILIATION,
+    )
+
+    result = run_cost_reconciliation_pass()
+
+    assert result.drafts_created == []
+    assert "already filed" in result.summary
+    assert prior.id in result.summary
+    assert agent_calls == []  # agent never invoked
+
+
+def test_new_date_creates_draft_when_prior_exists_for_other_date(
+    tmp_path, monkeypatch,
+):
+    """A prior draft for a DIFFERENT date must not block today's draft."""
+    settings = _make_settings(tmp_path)
+    agent_calls = _patch_dirty_pass(monkeypatch, settings)
+
+    service = TicketService(settings)
+    other_date = "2025-01-01"  # any non-yesterday date
+    body = f"old\n<!-- cost_reconciliation-gap-id: {other_date} -->\n"
+    service.create(
+        "Cost reconciliation: stale draft",
+        body,
+        source=SourceKind.COST_RECONCILIATION,
+    )
+
+    result = run_cost_reconciliation_pass()
+
+    assert len(result.drafts_created) == 1
+    assert len(agent_calls) == 1  # agent invoked for the new date
+
+
+# ---------------------------------------------------------------------------
 # Date helpers
 # ---------------------------------------------------------------------------
 

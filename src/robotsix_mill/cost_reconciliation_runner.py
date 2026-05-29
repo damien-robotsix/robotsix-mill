@@ -305,6 +305,23 @@ def run_cost_reconciliation_pass(
             drafts_created=[], summary=summary, updated_memory="", session_id=session_id,
         )
 
+    # --- Prior-proposal dedup -----------------------------------------
+    # Same date already filed? Skip — repeated $1+ deltas on the same
+    # day would otherwise produce a duplicate draft per run.
+    from .pass_runner import _verify_prior_proposals
+
+    prior = _verify_prior_proposals(
+        service, settings, SourceKind.COST_RECONCILIATION,
+    )
+    if date_str in prior:
+        ticket_id = prior[date_str].get("ticket_id", "?")
+        summary = f"already filed: {ticket_id} (date={date_str})"
+        log.info("cost_reconciliation: %s", summary)
+        return CostReconciliationPassResult(
+            drafts_created=[], summary=summary, updated_memory="",
+            session_id=session_id,
+        )
+
     # --- Agent ---------------------------------------------------------
     from .agents.cost_reconciling import run_cost_reconciliation_agent
 
