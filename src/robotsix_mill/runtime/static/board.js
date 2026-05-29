@@ -123,21 +123,40 @@ const STATE_TRACE={
  closed:"retrospect",
  answered:"answer",
 };
-// Match a history event to its trace cost. Pick the trace whose name
-// matches AND whose timestamp is the latest one ≤ the event time
-// (so iterative loops — implement → review → implement again —
-// each map to the right trace pass).
-function findTraceCost(event, agentName, traces){
- if(!traces||!traces.length||!agentName)return null;
- const evTs=new Date(event.at).getTime();
- let best=null;
- for(const t of traces){
-  if(t.name!==agentName)continue;
-  const tt=new Date(t.at).getTime();
-  if(tt>evTs+5000)continue; // 5s grace for clock skew
-  if(!best||tt>new Date(best.at).getTime())best=t;
+// Infer which Langfuse trace name an event corresponds to.
+function eventAgentName(event, isStep, step){
+ return isStep ? (step ? step.label : null) : STATE_TRACE[event.state];
+}
+// Build an event-index → trace map. Each Langfuse trace is claimed by
+// AT MOST ONE event: the earliest event after the trace started whose
+// inferred agent name matches. Without this dedup pass, a refine
+// trace whose result was `human_issue_approval` would show its cost
+// twice — once on the `human_issue_approval` transition (refine
+// produced it) and again on the later `ready` transition (after the
+// operator approves), because both rows have STATE_TRACE→"refine".
+function buildEventTraceMap(events, traces){
+ const map={}; // event index → trace
+ // Stable sort by timestamp ascending so "first match" is well-defined.
+ const sortedTraces=(traces||[]).slice().sort(
+  (a,b)=>new Date(a.at).getTime()-new Date(b.at).getTime(),
+ );
+ for(const trace of sortedTraces){
+  const tts=new Date(trace.at).getTime();
+  for(let i=0;i<events.length;i++){
+   if(map[i])continue; // already claimed by another trace
+   const e=events[i];
+   const prev=events[i-1];
+   const isStep=!!prev && prev.state===e.state;
+   const step=isStep?matchStep(e.note):null;
+   const name=eventAgentName(e, isStep, step);
+   if(name!==trace.name)continue;
+   const ets=new Date(e.at).getTime();
+   if(ets<tts-5000)continue; // 5s grace for clock skew
+   map[i]=trace;
+   break;
+  }
  }
- return best;
+ return map;
 }
 function renderHistoryHtml(history, ticketId, traces){
  const events=history||[];
@@ -146,7 +165,44 @@ function renderHistoryHtml(history, ticketId, traces){
  // get their chip + artifact derived from the note prefix instead
  // of the parent state — that's how implement gets its own visible
  // row between ready and code_review.
- return `<h3>History</h3>`+events.map((e,i)=>{
+ const costByIndex=buildEventTraceMap(events, traces||[]);
+ // Unclaimed traces = work that ran on Langfuse but has no matching
+ // history event. Most often this is an interrupted run (server
+ // restart, container kill, OOM) where the agent did N calls,
+ // billed cost, then never reached the state-transition write. Show
+ // them as synthetic "interrupted: <agent>" rows so the operator
+ // can see that work happened (and what it cost) instead of the
+ // run silently disappearing.
+ const claimed=new Set(Object.values(costByIndex).map(t=>t.trace_id));
+ const orphanRows=(traces||[]).filter(t=>!claimed.has(t.trace_id)).map(t=>({
+  __orphan:true, at:t.at, name:t.name, cost:t.cost, trace_id:t.trace_id,
+ }));
+ // Merge events + orphans, sort by `at` ascending. Real events keep
+ // their array index; orphan rows are tagged with __orphan.
+ const merged=[];
+ events.forEach((e,i)=>merged.push({...e, __idx:i}));
+ orphanRows.forEach(o=>merged.push(o));
+ merged.sort((a,b)=>{
+  const ta=new Date(a.at).getTime();
+  const tb=new Date(b.at).getTime();
+  return ta-tb;
+ });
+ return `<h3>History</h3>`+merged.map(item=>{
+  if(item.__orphan){
+   return `<div class="ev ev-is-step ev-orphan" data-tid="${esc(ticketId)}" data-art="" data-open="0">`+
+    `<div class="ev-summary" onclick="toggleEvent(this)">`+
+     `<span class="ev-arrow">·</span>`+
+     `<span class="ev-at muted">${item.at}</span>`+
+     `<b class="ev-state ev-step" title="No history event matched this trace — probably an interrupted run">interrupted: ${esc(item.name)}</b>`+
+     `<span class="ev-cost" title="Langfuse trace ${esc(item.trace_id)}">$${item.cost.toFixed(4)}</span>`+
+    `</div>`+
+    `<div class="ev-detail" style="display:none">`+
+     `<div class="muted" style="font-size:11px">Langfuse trace ${esc(item.trace_id)} ran at ${item.at} (${esc(item.name)}, $${item.cost.toFixed(4)}) but no history event was written — the stage was interrupted before its transition committed.</div>`+
+    `</div>`+
+   `</div>`;
+  }
+  const e=item;
+  const i=item.__idx;
   const prev=events[i-1];
   const isStep=prev && prev.state===e.state;
   const step=isStep?matchStep(e.note):null;
@@ -154,8 +210,7 @@ function renderHistoryHtml(history, ticketId, traces){
   const chipClass=step?"ev-step":"s-"+e.state;
   const art=(step&&step.art)?step.art:(STATE_ARTIFACT[e.state]||"");
   const hasDetail=!!(e.note||art);
-  const agentName=step?step.label:STATE_TRACE[e.state];
-  const trace=findTraceCost(e, agentName, traces||[]);
+  const trace=costByIndex[i];
   const cost=trace?`<span class="ev-cost" title="Langfuse trace ${esc(trace.trace_id)}">$${trace.cost.toFixed(4)}</span>`:"";
   return `<div class="ev${isStep?" ev-is-step":""}" data-tid="${esc(ticketId)}" data-art="${esc(art)}" data-open="0">`+
    `<div class="ev-summary" onclick="toggleEvent(this)">`+

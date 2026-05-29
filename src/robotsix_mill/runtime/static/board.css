@@ -105,6 +105,11 @@ border-radius:6px;padding:10px;overflow-x:auto}
 .ev-is-step{border-left-color:#444c5c}
 .ev-step{--c:#8b5cf6;color:#c4b5fd}
 .ev-cost{font-size:10px;color:#a3e635;font-family:monospace;margin-left:6px;font-weight:600}
+/* Orphan rows are Langfuse traces with no matching history event —
+   most often an interrupted stage run. Dim the row + use an amber
+   chip to read as "we billed for this but the work didn't land". */
+.ev-orphan{opacity:0.75;border-left-color:#7c2d12}
+.ev-orphan .ev-state{color:#fbbf24;border-left-color:#f59e0b}
 .ev-detail{margin:6px 0 6px 18px;padding:6px 9px;background:#15191f;border-radius:4px}
 .ev-note{font-size:12px}
 .ev-artifact{margin-top:8px;padding-top:8px;border-top:1px solid #262b36}
