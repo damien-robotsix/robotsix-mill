@@ -370,6 +370,48 @@ def test_auto_approve_approve_routes_to_ready(ctx_factory, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 11b. auto-approve: test-gap source short-circuits to READY without LLM
+# ---------------------------------------------------------------------------
+
+def test_auto_approve_test_gap_source_short_circuits_to_ready(
+    ctx_factory, monkeypatch,
+):
+    """test_gap-sourced tickets must auto-approve deterministically and
+    must NOT invoke the LLM triage. Test-gap tickets only add coverage
+    so there's no design risk a human reviewer can meaningfully veto;
+    three triage runs on 2026-05-28 all fell back to human and were
+    rubber-stamped."""
+    ctx = ctx_factory(require_approval="true", auto_approve_enabled="true",
+                      refine_triage_enabled="false")
+    t = ctx.service.create(
+        "Add unit tests for foo.py",
+        "Add unit tests for foo.py covering the bar branch — substantive "
+        "body padded past the trivial-draft threshold so refine actually "
+        "runs the auto-approve gate.",
+        source="test_gap",
+    )
+
+    triage_calls: list = []
+
+    def fail_if_called(**_):
+        triage_calls.append(True)
+        raise AssertionError("triage_auto_approve must not be called for test_gap")
+
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_ok(spec_markdown="## Problem\nAdd tests"),
+        triage_auto_approve=fail_if_called,
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert "auto-approve: APPROVE" in out.note
+    assert "test-gap" in out.note
+    assert triage_calls == []
+
+
+# ---------------------------------------------------------------------------
 # 12. auto-approve: NEEDS_APPROVAL → HUMAN_ISSUE_APPROVAL
 # ---------------------------------------------------------------------------
 

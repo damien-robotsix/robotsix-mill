@@ -402,13 +402,13 @@ class TestEditFile:
     def test_unique_match_replaces(self, tmp_path, settings):
         root = tmp_path / "repo"
         root.mkdir()
-        # Non-.py so the pre-write syntax guard doesn't reject the
-        # textual placeholder content.
-        _make_file(root, "f.txt", "alpha beta gamma\n")
+        # .py with VALID Python: doubles as syntax-check pass-through
+        # coverage — edit must succeed and the result must still parse.
+        _make_file(root, "f.py", "x = 1\ny = 2\n")
         tools = _build(root, settings)
-        result = tools["edit_file"]("f.txt", "beta", "BETA")
-        assert "replaced 1 occurrence in f.txt" in result
-        assert (root / "f.txt").read_text() == "alpha BETA gamma\n"
+        result = tools["edit_file"]("f.py", "y = 2", "y = 3")
+        assert "replaced 1 occurrence in f.py" in result
+        assert (root / "f.py").read_text() == "x = 1\ny = 3\n"
 
     def test_not_found(self, tmp_path, settings):
         root = tmp_path / "repo"

@@ -46,6 +46,7 @@ log = logging.getLogger("robotsix_mill.stages.refine")
 
 def _resolve_next_state(
     ctx: StageContext, spec: str, ticket_id: str,
+    source: str | None = None,
 ) -> tuple[State, str | None]:
     """Return (next_state, auto_approve_note_or_None).
 
@@ -55,6 +56,14 @@ def _resolve_next_state(
     decision found), HUMAN_ISSUE_APPROVAL otherwise (or on error).
     Empty/whitespace specs skip the triage entirely and go to
     HUMAN_ISSUE_APPROVAL when gated, mirroring the original behaviour.
+
+    Test-gap tickets (``source == "test_gap"``) auto-approve
+    deterministically — they only add test coverage with no
+    production-code change, so there's no design decision a human
+    could meaningfully veto. Three triage runs on test-gap tickets
+    on 2026-05-28 all fell back to human approval and were
+    rubber-stamped, so the LLM hop was pure toil + cost. Short-
+    circuit before the LLM call.
 
     Every triage outcome carries a structured note so the auto-approve
     decision is visible in ticket history.  Triage failures or
@@ -68,6 +77,11 @@ def _resolve_next_state(
         return State.HUMAN_ISSUE_APPROVAL, None
     if not ctx.settings.auto_approve_enabled:
         return State.HUMAN_ISSUE_APPROVAL, None
+    if source == "test_gap":
+        return State.READY, (
+            "auto-approve: APPROVE — test-gap (deterministic rule: "
+            "test-only tickets carry no design risk)"
+        )
     try:
         result = refining.triage_auto_approve(
             settings=ctx.settings, spec=spec,
@@ -348,7 +362,7 @@ class RefineStage(Stage):
             file_map_path = ws.artifacts_dir / "file_map.json"
             if not file_map_path.exists():
                 file_map_path.write_text("[]", encoding="utf-8")
-            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id)
+            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id, source=ticket.source)
             note = "split child — spec already refined"
             if auto_note:
                 note += f" | {auto_note}"
@@ -419,7 +433,7 @@ class RefineStage(Stage):
                                 encoding="utf-8",
                             )
                         next_state, auto_note = _resolve_next_state(
-                            ctx, draft, ticket.id,
+                            ctx, draft, ticket.id, source=ticket.source,
                         )
                         note = f"triage SKIP: {triage.reason}"
                         if auto_note:
@@ -685,7 +699,7 @@ class RefineStage(Stage):
                     "proceeding with original draft",
                     ticket.id,
                 )
-                next_state, _auto_reason = _resolve_next_state(ctx, "", ticket.id)
+                next_state, _auto_reason = _resolve_next_state(ctx, "", ticket.id, source=ticket.source)
                 return Outcome(next_state, "refined (empty spec — kept original draft)")
 
             # --- spec review (conciseness pass) ---
@@ -723,7 +737,7 @@ class RefineStage(Stage):
             if reviewer_comments and open_thread_ids:
                 acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
 
-            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id)
+            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id, source=ticket.source)
             note = "refined"
             if auto_note:
                 note += f" | {auto_note}"
@@ -741,7 +755,7 @@ class RefineStage(Stage):
                     "proceeding with original draft",
                     ticket.id,
                 )
-                next_state, _auto_reason = _resolve_next_state(ctx, "", ticket.id)
+                next_state, _auto_reason = _resolve_next_state(ctx, "", ticket.id, source=ticket.source)
                 # --- post-agent thread acknowledgment ---
                 if reviewer_comments and open_thread_ids:
                     acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
@@ -756,7 +770,7 @@ class RefineStage(Stage):
             if reviewer_comments and open_thread_ids:
                 acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
 
-            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id)
+            next_state, auto_note = _resolve_next_state(ctx, spec, ticket.id, source=ticket.source)
             note = "refined (split degraded — no valid children)"
             if auto_note:
                 note += f" | {auto_note}"
@@ -829,7 +843,7 @@ class RefineStage(Stage):
             if reviewer_comments and open_thread_ids:
                 acknowledge_unanswered_threads(ctx, ticket, open_thread_ids)
 
-            next_state, auto_note = _resolve_next_state(ctx, child["spec_markdown"], ticket.id)
+            next_state, auto_note = _resolve_next_state(ctx, child["spec_markdown"], ticket.id, source=ticket.source)
             note = "refined (single child, no split)"
             if auto_note:
                 note += f" | {auto_note}"
