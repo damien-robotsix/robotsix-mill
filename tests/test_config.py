@@ -325,9 +325,9 @@ class TestComputedProperties:
         s = Settings(MILL_DATA_DIR=str(tmp_path))
         assert s.db_path == tmp_path / "mill.db"
 
-    def test_workspaces_dir(self, tmp_path):
+    def test_workspaces_dir_for_empty_board_id_fallback(self, tmp_path):
         s = Settings(MILL_DATA_DIR=str(tmp_path))
-        assert s.workspaces_dir == tmp_path / "workspaces"
+        assert s.workspaces_dir_for("") == tmp_path / "workspaces"
 
     def test_db_url(self, tmp_path):
         s = Settings(MILL_DATA_DIR=str(tmp_path))

@@ -1131,17 +1131,6 @@ class Settings(BaseSettings):
         """Resolved path to the SQLite database file."""
         return self.data_dir / "mill.db"
 
-    @property
-    def workspaces_dir(self) -> Path:
-        """Legacy default-workspaces dir at ``<data_dir>/workspaces``.
-
-        Prefer :meth:`workspaces_dir_for` which routes to the per-repo
-        location ``<data_dir>/<board_id>/workspaces`` — the default is
-        retained only for the rare repo-less ticket and for
-        migration code that needs to know where legacy clones lived.
-        """
-        return self.data_dir / "workspaces"
-
     def workspaces_dir_for(self, board_id: str) -> Path:
         """Per-repo workspaces directory. Empty *board_id* falls back
         to the legacy default at ``<data_dir>/workspaces``."""

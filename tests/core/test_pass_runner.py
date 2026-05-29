@@ -401,7 +401,7 @@ def test_marker_round_trip(tmp_path):
     tickets = service.list()
     assert len(tickets) == 1
     tid = tickets[0].id
-    desc = Workspace(settings.workspaces_dir, tid).read_description()
+    desc = Workspace(settings.workspaces_dir_for(""), tid).read_description()
     assert "<!-- health-gap-id: fix_z -->" in desc
 
     # Now call _verify_prior_proposals directly
@@ -463,7 +463,7 @@ def test_missing_gap_ids_no_crash(tmp_path):
     assert len(result.drafts_created) == 1
     tickets = service.list()
     assert len(tickets) == 1
-    desc = Workspace(settings.workspaces_dir, tickets[0].id).read_description()
+    desc = Workspace(settings.workspaces_dir_for(""), tickets[0].id).read_description()
     # No marker appended
     assert "gap-id:" not in desc
 

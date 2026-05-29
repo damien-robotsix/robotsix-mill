@@ -260,7 +260,6 @@ other code depends on.
 | Property | Derivation | Type | Consumers | Notes |
 |---|---|---|---|---|
 | `db_path` | `data_dir / "mill.db"` | `Path` | `core/db.py`, all DB access | |
-| `workspaces_dir` | `data_dir / "workspaces"` | `Path` | `core/service.py` | |
 | `epic_workspaces_dir` | `data_dir / "epic_workspaces"` | `Path` | `sandbox.py` | Bind-mount target for epic workspace in sandbox containers |
 | `db_url` | `f"sqlite:///{db_path}"` | `str` | `core/db.py` | |
 | `tracing_enabled` | `bool(get_secrets().langfuse_base_url and get_secrets().langfuse_public_key and get_secrets().langfuse_secret_key)` | `bool` | `runtime/tracing.py`, `runtime/api.py` | Gate: all 3 must be truthy; populated from `RepoConfig` at startup |
