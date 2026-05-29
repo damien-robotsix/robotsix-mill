@@ -45,6 +45,7 @@ class AgentDefinition(BaseModel):
     retries: int = 2
     module: str | None = None
     skills: list[str] = []
+    modules: bool = False
     inject_agent_md: bool = True
 
 
