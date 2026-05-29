@@ -555,7 +555,9 @@ def test_board_empty_inbox(
     assert "Your inbox is empty." in captured.out
     # No card-like content should appear
     assert "From:" not in captured.out
-    assert "-" * 60 + "\n" not in captured.out
+    # The header emits one 60-dash line; there should be no second one
+    # (no card separator).
+    assert captured.out.count("-" * 60) == 1
 
 
 def test_board_with_records(
@@ -622,8 +624,8 @@ VALUES
     assert "Date:    2025-06-02 09:15" in out
     assert "See you at 10." in out
 
-    # Separator between cards (dashed line)
-    assert out.count("-" * 60) == 1  # one separator between the two cards
+    # Separator between cards (dashed line) — plus one from the header = 2
+    assert out.count("-" * 60) == 2
 
     # No empty-inbox message
     assert "Your inbox is empty." not in out
