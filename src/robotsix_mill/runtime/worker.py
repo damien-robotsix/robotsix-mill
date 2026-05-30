@@ -62,6 +62,7 @@ def _post_trace_comment(
             exc_info=True,
         )
 
+
 # DONE is NOT terminal — retrospect owns it (done -> closed). Only
 # closed/errored/blocked stop the chain.
 _TERMINAL = {State.CLOSED, State.ERRORED, State.BLOCKED}
