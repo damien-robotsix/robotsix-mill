@@ -1667,3 +1667,78 @@ def test_no_change_needed_empty_rationale_falls_back_to_spec(
     assert out.next_state is not State.DONE
     # No rationale comment was filed.
     assert ctx.service.list_comments(t.id) == []
+
+
+# ---------------------------------------------------------------------------
+# Mill/system author comments are NOT reviewer feedback
+# ---------------------------------------------------------------------------
+
+
+def test_mill_author_comments_excluded_from_reviewer_feedback(
+    ctx_factory,
+    monkeypatch,
+):
+    """Auto-posted trace-link comments (author='mill') and timeout-
+    escalation pings (author='system') are diagnostic notes, not human
+    feedback. They must NOT be forwarded to refine as
+    ``reviewer_comments`` — doing so taught the agent to ask_user
+    'what did the reviewer say?' about an inaccessible Langfuse URL."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+
+    # Two open top-level comments: one feedback (user), one mill-auto.
+    ctx.service.add_comment(
+        t.id, "Real reviewer ask: please tighten the spec.", author="user"
+    )
+    ctx.service.add_comment(
+        t.id,
+        "🔍 [Trace: refine](https://langfuse.example/traces/xyz)",
+        author="mill",
+    )
+
+    captured: dict = {}
+
+    def _capture(*, settings, title, draft, reviewer_comments=None, **kw):
+        captured["reviewer_comments"] = reviewer_comments
+        return RefineResult(spec_markdown="## Problem\nok")
+
+    _apply_default_mocks(monkeypatch, run_refine_agent=_capture)
+
+    RefineStage().run(t, ctx)
+
+    rc = captured["reviewer_comments"]
+    assert rc is not None, "user-authored open thread should be forwarded"
+    assert "Real reviewer ask" in rc
+    assert "Trace: refine" not in rc
+    assert "langfuse" not in rc
+
+
+def test_only_mill_comments_means_no_reviewer_feedback(
+    ctx_factory,
+    monkeypatch,
+):
+    """When the ONLY open top-level comments are mill-author trace
+    links, refine sees no reviewer_comments at all — and the triage
+    short-circuit (skipped only when reviewer_comments is None) stays
+    available."""
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    t = _ticket(ctx)
+
+    ctx.service.add_comment(
+        t.id,
+        "🔍 [Trace: refine](https://langfuse.example/traces/xyz)",
+        author="mill",
+    )
+    ctx.service.add_comment(t.id, "timeout escalation ping", author="system")
+
+    captured: dict = {}
+
+    def _capture(*, settings, title, draft, reviewer_comments=None, **kw):
+        captured["reviewer_comments"] = reviewer_comments
+        return RefineResult(spec_markdown="## Problem\nok")
+
+    _apply_default_mocks(monkeypatch, run_refine_agent=_capture)
+
+    RefineStage().run(t, ctx)
+
+    assert captured["reviewer_comments"] is None

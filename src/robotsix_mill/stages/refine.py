@@ -448,14 +448,25 @@ class RefineStage(Stage):
             return Outcome(next_state, note)
 
         # --- gather reviewer comments (sendback guard) ---
+        # ``mill`` and ``system`` author comments (trace-link auto-posts
+        # from runtime.worker._post_trace_comment; timeout-escalation
+        # pings) are diagnostic notes, not human feedback. Including
+        # them taught refine to treat an inaccessible Langfuse URL as
+        # reviewer comments and ask_user what the reviewer said.
+        _NON_FEEDBACK_AUTHORS = {"mill", "system"}
         reviewer_comments: str | None = None
         open_thread_ids: set[int] = set()
         try:
             comments = ctx.service.list_comments(ticket.id)
             if comments:
-                # Only count non-closed top-level threads for sendback detection.
+                # Only count non-closed, non-system top-level threads
+                # for sendback detection.
                 open_threads = [
-                    c for c in comments if c.parent_id is None and c.closed_at is None
+                    c
+                    for c in comments
+                    if c.parent_id is None
+                    and c.closed_at is None
+                    and c.author not in _NON_FEEDBACK_AUTHORS
                 ]
                 if open_threads:
                     open_thread_ids = {c.id for c in open_threads}
@@ -463,8 +474,12 @@ class RefineStage(Stage):
                     reviewer_comments = "\n".join(
                         f"[id={c.id} @ {c.created_at.isoformat()}] {c.body}"
                         for c in comments
-                        if c.id not in closed_ids and c.parent_id not in closed_ids
+                        if c.id not in closed_ids
+                        and c.parent_id not in closed_ids
+                        and c.author not in _NON_FEEDBACK_AUTHORS
                     )
+                    if not reviewer_comments:
+                        reviewer_comments = None
         except Exception:
             log.warning("%s: list_comments failed, proceeding without", ticket.id)
 
