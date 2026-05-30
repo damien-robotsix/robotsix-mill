@@ -42,9 +42,11 @@ jobs:
         run: npx jscpd@4 --config .jscpd.json . || true
 
       - name: Ruff (lint + format check)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
         run: |
-          ruff check --output-format=github .
-          ruff format --check --diff .
+          uv run ruff check --output-format=github .
+          uv run ruff format --check --diff .
 
       - name: Mypy (static type check, advisory)
         # Codebase carries pre-existing strict-mode debt (~700 errors
@@ -52,9 +54,11 @@ jobs:
         # surfaces a summary as a CI annotation but does NOT block CI
         # until the backlog is worked off in dedicated tickets. Remove
         # the ``|| true`` once mypy --strict is clean.
+        env:
+          UV_PROJECT_ENVIRONMENT: system
         run: |
           set +e
-          mypy src/ --strict 2>&1 | tee mypy.log
+          uv run mypy src/ --strict 2>&1 | tee mypy.log
           err_count=$(grep -cE '^src/.*: error:' mypy.log || echo 0)
           echo "::warning::mypy --strict reported ${err_count} pre-existing errors (advisory; not blocking CI)"
           exit 0
@@ -65,9 +69,12 @@ jobs:
         # to LOW, which surfaces pre-existing LOWs that are tracked
         # but not currently blocking — same deal as the mypy advisory
         # gate above).
-        run: bandit -c pyproject.toml -r src/ --severity-level medium
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run bandit -c pyproject.toml -r src/ --severity-level medium
 
       - name: Run tests
         env:
+          UV_PROJECT_ENVIRONMENT: system
           GIT_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
-        run: pytest tests/ -x --tb=long
+        run: uv run pytest tests/ -x --tb=long
