@@ -1,12 +1,36 @@
-"""Elide older ToolReturnPart content when estimated token count
+"""Drop oldest messages from the front when estimated token count
 exceeds a configurable threshold.
 
-Only tool outputs are touched — user messages, system prompts, and
-model responses are never modified.  Token estimation uses the
-chars/4 heuristic to avoid a tiktoken dependency.
+Only the message list is shortened — individual messages are never
+mutated.  Token estimation uses the chars/4 heuristic, preferring
+``msg.json()`` when available (as in pydantic-ai runtime objects).
 """
 
 from __future__ import annotations
+
+import json
+
+
+def _estimate_tokens(msg) -> int:
+    """Token estimate for a single message (chars // 4).
+
+    Prefers ``msg.json()`` when available (pydantic-ai runtime objects
+    carry it); falls back to summing part content and args for plain
+    dataclass instances.
+    """
+    if hasattr(msg, "json"):
+        return len(msg.json()) // 4
+    total = 0
+    for part in getattr(msg, "parts", []):
+        content = getattr(part, "content", None)
+        if isinstance(content, str):
+            total += len(content)
+        args = getattr(part, "args", None)
+        if isinstance(args, str):
+            total += len(args)
+        elif isinstance(args, dict):
+            total += len(json.dumps(args))
+    return total // 4
 
 
 def compress_history(
@@ -15,35 +39,29 @@ def compress_history(
     max_tokens: int = 100_000,
     keep_last: int = 5,
 ) -> list:
-    """Elide older ToolReturnPart content when estimated tokens exceed
-    ``max_tokens``.
+    """Drop oldest messages from the front until the remaining ones
+    fit within ``max_tokens``, preserving the last ``keep_last``
+    messages unconditionally.
 
-    Returns the same list (mutated in place) — callers that need the
-    original should pass a copy.  Under-budget lists are returned
-    unchanged.
+    Returns a slice of the original list — message objects themselves
+    are never modified.  Under-budget lists (and lists where
+    ``max_tokens <= 0``) are returned unchanged.
     """
-    total_chars = 0
-    for m in messages:
-        for part in getattr(m, "parts", []):
-            content = getattr(part, "content", None)
-            if content is not None and isinstance(content, str):
-                total_chars += len(content)
-            elif hasattr(part, "args") and isinstance(part.args, str):
-                total_chars += len(part.args)
-    if total_chars / 4 < max_tokens:
-        return messages  # under budget, no compression needed
+    # Non-positive max_tokens means "no limit" — never compress.
+    if max_tokens <= 0:
+        return messages
 
-    from pydantic_ai.messages import ToolReturnPart
+    total = sum(_estimate_tokens(m) for m in messages)
+    if total <= max_tokens:
+        return messages  # under budget — same list object
 
-    tool_return_count = 0
-    for i in range(len(messages) - 1, -1, -1):
-        msg = messages[i]
-        for part in getattr(msg, "parts", []):
-            if isinstance(part, ToolReturnPart):
-                tool_return_count += 1
-                if tool_return_count > keep_last:
-                    part.content = (
-                        f"[earlier output elided — "
-                        f"{len(part.content)} chars]"
-                    )
-    return messages
+    n = len(messages)
+    # Try dropping from the front, one message at a time, but never
+    # drop into the protected tail of size *keep_last*.
+    for i in range(n - keep_last):
+        remaining = messages[i + 1 :]
+        if sum(_estimate_tokens(m) for m in remaining) <= max_tokens:
+            return remaining
+
+    # Still over budget — fall back to just the protected tail.
+    return messages[max(0, n - keep_last) :]
