@@ -143,7 +143,9 @@ class _FakeResponse:
         self.choices = [_FakeChoice(msg)]
 
 
-_RD = [{"type": "reasoning.text", "text": "step 1...", "format": "deepseek", "index": 0}]
+_RD = [
+    {"type": "reasoning.text", "text": "step 1...", "format": "deepseek", "index": 0}
+]
 
 
 def test_extract_reasoning_details_typed_field():
@@ -151,7 +153,9 @@ def test_extract_reasoning_details_typed_field():
 
 
 def test_extract_reasoning_details_from_model_extra():
-    assert _extract_reasoning_details(_FakeResponse(_FakeMsg(_RD, in_extra=True))) == _RD
+    assert (
+        _extract_reasoning_details(_FakeResponse(_FakeMsg(_RD, in_extra=True))) == _RD
+    )
 
 
 def test_extract_reasoning_details_absent_or_str_response():
