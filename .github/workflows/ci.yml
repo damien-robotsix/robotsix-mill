@@ -33,6 +33,11 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
 
+      - name: deptry (dependency hygiene)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run deptry .
+
       - name: Validate module taxonomy
         run: |
           pip install check-jsonschema
@@ -72,11 +77,6 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run bandit -c pyproject.toml -r src/ --severity-level medium
-
-      - name: Deptry (dependency import check)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run deptry .
 
       - name: Run tests
         env:
