@@ -47,11 +47,11 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
 
         # Resolve the ticket's board BEFORE constructing the service,
         # otherwise the unbound service falls through to an empty
-        # board_id and ``db.session(settings, "")`` materialises a
-        # stray ``<data_dir>/mill.db`` at the data-dir root in
-        # multi-repo deployments. ``current_session()`` returns either
-        # the ticket id (ticket-driven flows) or a periodic-session
-        # id like ``audit-...``; only the former resolves to a row.
+        # board_id and ``db.session(settings, "")`` raises ValueError
+        # (empty board_id is no longer accepted). ``current_session()``
+        # returns either the ticket id (ticket-driven flows) or a
+        # periodic-session id like ``audit-...``; only the former
+        # resolves to a row.
         #
         # When no repos.yaml is configured (single-repo dev / tests /
         # bespoke setups), fall back to the unbound service whose

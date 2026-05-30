@@ -138,11 +138,6 @@ def list_tickets(
             _TicketService(settings, board_id=rc.board_id)
             for rc in repos.repos.values()
         ]
-        # Include the default DB only when it already exists. Lazy-
-        # init from .list() would otherwise create an empty
-        # <data_dir>/mill.db on every poll.
-        if (settings.data_dir / "mill.db").exists():
-            services.append(_TicketService(settings, board_id=""))
 
     tickets: list = []
     for s in services:

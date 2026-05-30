@@ -1085,11 +1085,6 @@ class Worker:
                 # may not return it.
                 if self.ctx.service.board_id not in boards:
                     boards.append(self.ctx.service.board_id)
-                if (
-                    "" not in boards
-                    and (self.ctx.settings.data_dir / "mill.db").exists()
-                ):
-                    boards.append("")
                 try:
                     for rc in get_repos_config().repos.values():
                         if rc.board_id and rc.board_id not in boards:
@@ -2375,18 +2370,13 @@ class Worker:
         """On startup, re-enqueue any ticket left mid-pipeline so a
         restart resumes work (idempotent: stages are re-entrant).
 
-        With per-repo DBs, fan out across every registered repo plus
-        the default (legacy / repo-less) DB so nothing is missed.
+        With per-repo DBs, fan out across every registered repo
+        so nothing is missed.
         """
         from ..config import get_repos_config
         from ..core.service import TicketService
 
         boards: list[str] = []
-        # Only enumerate the default-board DB when it already exists —
-        # otherwise the lazy init_db("") via svc.list() creates an
-        # empty stub at <data_dir>/mill.db that nothing ever writes to.
-        if (self.ctx.settings.data_dir / "mill.db").exists():
-            boards.append("")
         try:
             for rc in get_repos_config().repos.values():
                 if rc.board_id and rc.board_id not in boards:

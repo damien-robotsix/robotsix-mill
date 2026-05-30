@@ -68,50 +68,11 @@ def create_lifespan(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Initialize each registered repo's DB so per-board services
-        # have schema available without lazy-init races. The
-        # default-board DB at <data_dir>/mill.db is never created
-        # eagerly — every ticket lives in a per-repo DB.
+        # have schema available without lazy-init races.
+        # Every ticket lives in a per-repo DB.
         for rc in repos.repos.values():
             db.init_db(settings, rc.board_id)
 
-        # Purge a stray <data_dir>/mill.db that some legacy code path
-        # may have lazily materialised on a previous run. Only safe
-        # when (a) multi-repo is configured (per-repo DBs are the
-        # source of truth), (b) the file has zero ticket rows (no
-        # real data to lose), AND (c) no engine has been opened on
-        # board_id="" yet — an engine already in the cache means
-        # some caller is actively using the file (typical in test
-        # setups that call init_db(settings) directly), and deleting
-        # underneath it would silently break that caller. Logs the
-        # action so the operator can correlate it with the warning
-        # emitted by get_engine when the file was created.
-        if repos.repos and "" not in db._engines:
-            stray = settings.data_dir / "mill.db"
-            if stray.exists():
-                try:
-                    import sqlite3
-
-                    with sqlite3.connect(stray) as conn:
-                        try:
-                            row_count = conn.execute(
-                                "SELECT count(*) FROM ticket"
-                            ).fetchone()[0]
-                        except sqlite3.OperationalError:
-                            # No ticket table → file has only the
-                            # empty schema; safe to nuke.
-                            row_count = 0
-                    if row_count == 0:
-                        stray.unlink()
-                        logging.getLogger("robotsix_mill.lifespan").info(
-                            "lifespan: purged empty stray %s "
-                            "(multi-repo mode; per-repo DBs are authoritative)",
-                            stray,
-                        )
-                except Exception:  # noqa: BLE001
-                    logging.getLogger("robotsix_mill.lifespan").exception(
-                        "lifespan: failed to purge stray %s",
-                        stray,
-                    )
         # In single-repo mode use the specified repo; in multi-repo mode
         # pick the first repo as the initial repo_config for the worker.
         if single_repo_id is not None:
