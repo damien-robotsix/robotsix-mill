@@ -702,8 +702,17 @@ class ImplementStage(Stage):
             # "remove-dead-X" flavour where a human unblocked the
             # ticket precisely because they suspect the work was
             # already landed by a sibling.
+            #
+            # Guard against a resume-case false positive: when the
+            # branch carries commits ahead of ``origin/main`` (the
+            # agent's previous iterations already produced the diff),
+            # routing to DONE silently strands that work in the
+            # workspace — it never reaches deliver, no PR is opened.
+            # Treat that as a normal proceed instead of a no-change
+            # bypass; deliver will pick it up.
             if (
                 not git_ops.has_changes(repo_dir)
+                and not git_ops.branch_is_ahead_of_main(repo_dir)
                 and no_change_needed
                 and no_change_rationale.strip()
             ):

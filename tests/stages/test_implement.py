@@ -2159,6 +2159,47 @@ def test_no_change_needed_empty_rationale_still_blocks(
     assert "no changes produced" in out.note
 
 
+def test_no_change_needed_ignored_when_branch_ahead_of_main(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Regression: if the workspace branch already carries commits
+    ahead of ``origin/main`` (the agent's previous iterations produced
+    the diff), the ``no_change_needed`` bypass must NOT fire — routing
+    to DONE here strands the work in the workspace forever. Proceed
+    normally so deliver picks up the existing commits."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+
+    def _run(*, repo_dir, **_kwargs):
+        # Pre-commit a "previous-iteration" change on the workspace
+        # branch so it is ahead of origin/main, but no further changes
+        # in this iteration. The agent (wrongly) reports
+        # no_change_needed.
+        from robotsix_mill.vcs import git_ops
+
+        (repo_dir / "prior_iteration.txt").write_text("from a prior pass")
+        git_ops.commit_all(repo_dir, "prior pass content")
+        return (
+            "Looked around; spec already satisfied by prior commits.",
+            [],
+            "",
+            None,
+            None,
+            True,
+            "(False positive: ignoring this rationale because the "
+            "branch has commits ahead of origin/main that haven't "
+            "been delivered yet.)",
+        )
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    t = _ticket(ctx)
+    out = ImplementStage().run(t, ctx)
+
+    # MUST NOT be DONE — the prior commits still need to be delivered.
+    assert out.next_state is not State.DONE
+
+
 def test_no_change_needed_on_resume_still_routes_to_done(
     ctx_factory, tmp_path, monkeypatch
 ):
