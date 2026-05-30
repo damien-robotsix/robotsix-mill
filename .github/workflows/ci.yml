@@ -33,6 +33,9 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
 
+      - name: deptry (dependency hygiene)
+        run: deptry .
+
       - name: Validate module taxonomy
         run: |
           pip install check-jsonschema
