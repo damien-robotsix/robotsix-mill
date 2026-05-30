@@ -284,6 +284,123 @@ class TestClassifier:
         assert any("cost_outlier" in f for f in flags.flags)
         assert not any("tool_errors" in f for f in flags.flags)
 
+    # -- incomplete_trace / restart_correlated --------------------------------
+
+    def test_incomplete_trace_when_output_is_null(self, settings):
+        """observations=None + output=None → incomplete_trace fires."""
+        flags = _classify_trace(
+            _trace(output=None),
+            settings,
+            observations=None,
+        )
+        assert "incomplete_trace" in flags.flags
+
+    def test_incomplete_trace_when_output_is_empty_string(self, settings):
+        """observations=None + output='' → incomplete_trace fires."""
+        flags = _classify_trace(
+            _trace(output="   "),
+            settings,
+            observations=None,
+        )
+        assert "incomplete_trace" in flags.flags
+
+    def test_incomplete_trace_when_output_present_suppresses_flag(self, settings):
+        """observations=None but output is non-empty → no incomplete_trace."""
+        flags = _classify_trace(
+            _trace(output="All done."),
+            settings,
+            observations=None,
+        )
+        assert "incomplete_trace" not in flags.flags
+
+    def test_incomplete_trace_when_last_obs_is_tool_call(self, settings):
+        """Last observation is a tool call (not chat) → incomplete_trace."""
+        obs = [
+            _obs("chat deepseek-v4"),
+            _obs("read_file"),
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert "incomplete_trace" in flags.flags
+
+    def test_no_incomplete_trace_when_last_obs_is_chat(self, settings):
+        """Last observation is a chat generation → no incomplete_trace."""
+        obs = [
+            _obs("read_file"),
+            _obs("chat deepseek-v4"),
+        ]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert "incomplete_trace" not in flags.flags
+
+    def test_restart_correlated_within_window(self, settings):
+        """Trace ends within the correlation window → restart_correlated."""
+        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+        trace_end = datetime(2026, 5, 30, 12, 0, 30, tzinfo=timezone.utc)
+        trace = _trace(
+            output=None,
+            endTime=trace_end.isoformat(),
+        )
+        flags = _classify_trace(
+            trace,
+            settings,
+            observations=None,
+            started_at=started,
+        )
+        assert "incomplete_trace" in flags.flags
+        assert "restart_correlated" in flags.flags
+
+    def test_restart_correlated_outside_window(self, settings):
+        """Trace ends outside the correlation window → no restart_correlated."""
+        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+        trace_end = datetime(2026, 5, 30, 12, 5, 0, tzinfo=timezone.utc)
+        trace = _trace(
+            output=None,
+            endTime=trace_end.isoformat(),
+        )
+        flags = _classify_trace(
+            trace,
+            settings,
+            observations=None,
+            started_at=started,
+        )
+        assert "incomplete_trace" in flags.flags
+        assert "restart_correlated" not in flags.flags
+
+    def test_restart_correlated_with_observations_and_last_tool_call(self, settings):
+        """restart_correlated fires via observation path when last obs is a
+        tool call and timestamps align."""
+        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+        obs_end = datetime(2026, 5, 30, 12, 0, 45, tzinfo=timezone.utc)
+        obs = [
+            _obs("chat deepseek-v4", endTime="2026-05-30T12:00:10+00:00"),
+            _obs("run_command", endTime=obs_end.isoformat()),
+        ]
+        flags = _classify_trace(
+            _trace(),
+            settings,
+            observations=obs,
+            started_at=started,
+        )
+        assert "incomplete_trace" in flags.flags
+        assert "restart_correlated" in flags.flags
+
+    def test_restart_correlated_not_fired_without_incomplete_trace(self, settings):
+        """restart_correlated should not fire on its own — it's a sub-flag
+        of incomplete_trace only."""
+        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+        trace_end = datetime(2026, 5, 30, 12, 0, 30, tzinfo=timezone.utc)
+        # Last obs is a chat → no incomplete_trace → no restart_correlated.
+        obs = [
+            _obs("chat deepseek-v4", endTime=trace_end.isoformat()),
+        ]
+        flags = _classify_trace(
+            _trace(),
+            settings,
+            observations=obs,
+            started_at=started,
+        )
+        assert "incomplete_trace" not in flags.flags
+        assert "restart_correlated" not in flags.flags
+
 
 # ---------------------------------------------------------------------------
 # Watermark

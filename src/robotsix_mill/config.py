@@ -601,6 +601,15 @@ class Settings(BaseSettings):
     trace_review_target_repo_id: str = Field(
         default="",
     )
+    # Window (seconds) for correlating an incomplete trace with a
+    # process restart. When an ``incomplete_trace`` flag fires AND
+    # the trace's latest timestamp falls within this many seconds of
+    # ``_process_started_at``, the ``restart_correlated`` flag is
+    # appended — signalling the Phase 2 inspector that the root cause
+    # is likely a restart kill, not an agent-loop bug.
+    trace_review_restart_correlation_window_seconds: int = Field(
+        default=60,
+    )
     # Memory ledger for the trace inspector. Used only by the manual
     # Deep Review surface (the route path) — retrospect's deep-analysis
     # `trace_inspect` tool calls run_trace_inspector without a memory

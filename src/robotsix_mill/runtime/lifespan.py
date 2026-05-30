@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import AsyncContextManager, Callable
 
 from fastapi import FastAPI
@@ -49,6 +50,11 @@ def setup_logging() -> None:
 # route code logs — the idempotency guard makes this safe to repeat.
 setup_logging()
 
+# Module-level process start time, set at the beginning of the lifespan
+# startup phase. Accessible without an ``app`` reference so the
+# trace-review runner can import it directly for restart correlation.
+_process_started_at: datetime | None = None
+
 
 def create_lifespan(
     settings: Settings,
@@ -72,6 +78,13 @@ def create_lifespan(
         # Every ticket lives in a per-repo DB.
         for rc in repos.repos.values():
             db.init_db(settings, rc.board_id)
+
+        # Record process start time for health endpoint and restart
+        # correlation in trace-review (incomplete traces ending near
+        # this time are likely restart kills, not agent-loop bugs).
+        global _process_started_at
+        _process_started_at = datetime.now(timezone.utc)
+        app.state.started_at = _process_started_at
 
         # In single-repo mode use the specified repo; in multi-repo mode
         # pick the first repo as the initial repo_config for the worker.

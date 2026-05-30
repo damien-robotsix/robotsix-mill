@@ -44,6 +44,7 @@ from .core.db import session as db_session
 from .core.models import SourceKind, Ticket
 from .core.service import TicketService
 from .core.states import State
+from .runtime.lifespan import _process_started_at
 
 log = logging.getLogger("robotsix_mill.trace_review")
 
@@ -130,11 +131,41 @@ class _TraceFlags:
         return bool(self.flags)
 
 
+def _extract_trace_end_time(
+    trace: dict,
+    observations: list[dict] | None,
+) -> datetime | None:
+    """Extract the latest timestamp from a trace for restart correlation.
+
+    Priority: trace summary ``endTime`` → last observation ``endTime``
+    → trace summary ``timestamp``.  Returns a timezone-aware datetime
+    or ``None`` if no usable timestamp is found.
+    """
+    raw = trace.get("endTime") or ""
+    if observations:
+        sorted_obs = sorted(
+            observations,
+            key=lambda o: o.get("endTime") or o.get("startTime") or "",
+        )
+        raw = sorted_obs[-1].get("endTime") or raw
+    raw = raw or trace.get("timestamp") or ""
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError, TypeError:
+        return None
+
+
 def _classify_trace(
     trace: dict,
     settings: Settings,
     observations: list[dict] | None = None,
     baselines: _Baselines | None = None,
+    started_at: datetime | None = None,
 ) -> _TraceFlags:
     """Compute phase-1 flags from *trace* + its *observations*.
 
@@ -143,6 +174,7 @@ def _classify_trace(
     tree from ``/api/public/traces/<id>``. *baselines* is the
     per-batch median thresholds — when omitted, relative flags are
     suppressed (used by unit tests that don't construct a baseline).
+    *started_at* is the process start time for restart correlation.
     """
     flags: list[str] = []
     total_cost = float(trace.get("totalCost") or 0.0)
@@ -159,6 +191,23 @@ def _classify_trace(
         )
 
     if observations is None:
+        # No detail fetch — check the summary output field for
+        # incomplete traces (root span output is null when the agent
+        # exited without a final synthesis step).
+        output = trace.get("output")
+        if output is None or (isinstance(output, str) and not output.strip()):
+            flags.append("incomplete_trace")
+            # Restart correlation: compare trace end timestamp against
+            # process start time within the configured window.
+            if started_at is not None:
+                trace_end = _extract_trace_end_time(trace, None)
+                if trace_end is not None:
+                    delta = abs((trace_end - started_at).total_seconds())
+                    if (
+                        delta
+                        <= settings.trace_review_restart_correlation_window_seconds
+                    ):
+                        flags.append("restart_correlated")
         return _TraceFlags(
             trace_id=trace.get("id", ""),
             trace_name=trace.get("name") or "(unnamed)",
@@ -231,6 +280,31 @@ def _classify_trace(
         if count > settings.trace_review_max_repeated_tool:
             flags.append(f"repeated_tool {tool_name} ({count})")
             break  # one is enough to trigger
+
+    # Incomplete trace detection: when the last observation is a tool
+    # call (name doesn't start with "chat "), the trace ended before
+    # the model could synthesise a final answer. Sort by endTime so
+    # ordering is deterministic even when Langfuse reorders.
+    if observations:
+        sorted_obs = sorted(
+            observations,
+            key=lambda o: o.get("endTime") or o.get("startTime") or "",
+        )
+        last_obs = sorted_obs[-1]
+        last_name = last_obs.get("name") or ""
+        if last_name and not last_name.startswith("chat "):
+            flags.append("incomplete_trace")
+
+    # Restart correlation: when incomplete_trace fires AND the trace's
+    # latest timestamp falls within the correlation window of process
+    # start, the trace was likely killed by a container restart rather
+    # than an agent-loop bug.
+    if "incomplete_trace" in flags and started_at is not None:
+        trace_end = _extract_trace_end_time(trace, observations)
+        if trace_end is not None:
+            delta = abs((trace_end - started_at).total_seconds())
+            if delta <= settings.trace_review_restart_correlation_window_seconds:
+                flags.append("restart_correlated")
 
     return _TraceFlags(
         trace_id=trace.get("id", ""),
@@ -448,6 +522,7 @@ def run_trace_review_pass(
             settings,
             observations=observations,
             baselines=baselines,
+            started_at=_process_started_at,
         )
         if not flags.flagged:
             continue
@@ -465,6 +540,7 @@ def run_trace_review_pass(
             repo_dir=None,
             memory="",
             model_name=settings.trace_review_model,
+            started_at=_process_started_at,
         )
         if result.error:
             log.warning(
