@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re as _re
 import shutil
 import subprocess
@@ -48,6 +49,65 @@ from .pause import (
 )
 
 log = logging.getLogger("robotsix_mill.stages.implement")
+
+# --- binary-artifact detection --------------------------------------------
+
+BINARY_ARTIFACT_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".db",
+        ".sqlite",
+        ".sqlite3",
+        ".pyc",
+        ".so",
+        ".dylib",
+        ".dll",
+        ".o",
+        ".a",
+        ".bin",
+        ".exe",
+    }
+)
+
+
+def _is_binary_artifact(repo_dir: Path, path: str, target_branch: str) -> bool:
+    """Return True if *path* is a binary artifact.
+
+    Uses two orthogonal signals; either is sufficient:
+
+    1. **Extension-based**: the path suffix matches a known binary
+       extension (``.db``, ``.pyc``, ``.so``, …).
+    2. **Git-based**: ``git diff --numstat origin/<target> -- <path>``
+       returns ``-\t-\t<path>`` — the canonical binary marker.
+    """
+    # Extension-based check (fast path).
+    suffix = Path(path).suffix.lower()
+    if suffix in BINARY_ARTIFACT_EXTENSIONS:
+        return True
+
+    # Git-based check for misnamed binaries.
+    try:
+        numstat = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                "--numstat",
+                f"origin/{target_branch}",
+                "--",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if numstat:
+            parts = numstat.split("\t")
+            if len(parts) >= 2 and parts[0] == "-" and parts[1] == "-":
+                return True
+    except subprocess.CalledProcessError:
+        pass
+
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +321,67 @@ class ImplementStage(Stage):
             len(out_of_scope),
             ", ".join(out_of_scope),
         )
+
+        # --- binary-artifact auto-cleanup ---
+        binary_artifacts: list[str] = []
+        text_out_of_scope: list[str] = []
+        for f in out_of_scope:
+            (binary_artifacts if _is_binary_artifact(repo_dir, f, settings.forge_target_branch)
+             else text_out_of_scope).append(f)
+
+        if binary_artifacts:
+            cleaned: list[str] = []
+            for path in binary_artifacts:
+                # Restore tracked version first (no-op for untracked).
+                try:
+                    subprocess.run(
+                        ["git", "-C", str(repo_dir), "checkout", "--", path],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
+                except subprocess.CalledProcessError:
+                    pass
+                # If the file still exists on disk, it was untracked
+                # — remove it.
+                file_path = repo_dir / path
+                try:
+                    if file_path.exists():
+                        file_path.unlink()
+                except OSError:
+                    log.warning(
+                        "%s: failed to unlink binary artifact: %s",
+                        ticket.id,
+                        path,
+                        exc_info=True,
+                    )
+                log.warning(
+                    "%s: auto-cleaned binary artifact: %s",
+                    ticket.id,
+                    path,
+                )
+                cleaned.append(path)
+
+            ctx.service.add_step_event(
+                ticket.id,
+                "scope-triage auto-REJECT (binary artifacts): removed "
+                + ", ".join(f"`{f}`" for f in cleaned)
+                + " — runtime artifacts, not real work",
+            )
+
+        if not text_out_of_scope:
+            log.info(
+                "%s: all out-of-scope files were binary artifacts — "
+                "skipping scope-triage LLM call",
+                ticket.id,
+            )
+            return _ScopeGuardrailResult(
+                action="skip_iteration",
+                file_map=file_map,
+                feedback=current_feedback,
+            )
+
+        out_of_scope = text_out_of_scope
 
         if not settings.scope_triage_enabled:
             ImplementStage._finalize(
