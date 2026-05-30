@@ -169,8 +169,7 @@ def run_meta_agent(
     from .prompt_blocks import section
 
     clone_lines = [
-        f"- `{repo_id}` → `{clone_path}`"
-        for repo_id, clone_path in repo_clones.items()
+        f"- `{repo_id}` → `{clone_path}`" for repo_id, clone_path in repo_clones.items()
     ]
     clone_listing = "\n".join(clone_lines)
 
