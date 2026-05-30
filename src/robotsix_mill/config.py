@@ -504,7 +504,7 @@ class Settings(BaseSettings):
     # Model for the PR-summary generation call — must be cheap and
     # fast (one-shot, small diff, structured output).
     pr_summary_model: str = Field(
-        default="openai/gpt-4o-mini", alias="MILL_PR_SUMMARY_MODEL"
+        default="deepseek/deepseek-v4-flash", alias="MILL_PR_SUMMARY_MODEL"
     )
     # When True, Forge.create_repo() is permitted to create repositories
     # via the forge API. Default False (opt-in) — the operator must
