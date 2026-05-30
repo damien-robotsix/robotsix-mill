@@ -65,6 +65,7 @@ def test_sourcekind_member_count():
         "TRACE_REVIEW",
         "MODULE_CURATOR",
         "ROADMAP_SYNC",
+        "META",
     }
     assert set(SourceKind.__members__) == expected
 
