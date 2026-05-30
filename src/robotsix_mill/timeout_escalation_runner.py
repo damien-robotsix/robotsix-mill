@@ -28,21 +28,13 @@ log = logging.getLogger("robotsix_mill.timeout_escalation")
 def _boards_to_scan(settings: Settings) -> list[str]:
     """Return the list of board_ids to scan for stale tickets.
 
-    Enumerates: registered repos, settings' own ``board_id``, the
-    default (legacy) DB when it exists, and any subdirectory under
+    Enumerates: registered repos, and any subdirectory under
     ``data_dir`` that contains a ``mill.db`` (catches per-repo DBs
     even when repos.yaml is absent).
     """
     from .config import get_repos_config
 
     boards: list[str] = []
-    # Include settings.board_id when configured.
-    if settings.board_id and settings.board_id not in boards:
-        boards.append(settings.board_id)
-    # Always include the default (legacy) DB when it exists.
-    if (settings.data_dir / "mill.db").exists():
-        if "" not in boards:
-            boards.append("")
     # Registered repos from repos.yaml.
     try:
         for rc in get_repos_config().repos.values():
