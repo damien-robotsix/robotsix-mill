@@ -34,7 +34,9 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
 
       - name: deptry (dependency hygiene)
-        run: deptry .
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run deptry .
 
       - name: Validate module taxonomy
         run: |
