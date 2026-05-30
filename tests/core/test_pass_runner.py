@@ -862,3 +862,69 @@ def test_full_path_module_stripping(tmp_path, monkeypatch):
     assert len(tickets) == 0
 
     db.reset_engine()
+
+
+
+
+def test_output_emit_failure_degrades_to_noop(tmp_path):
+    """A periodic agent that fails to emit a parseable structured Result
+    (pydantic-ai UnexpectedModelBehavior, "Exceeded maximum output
+    retries") must NOT hard-error the pass. run_agent_pass degrades to a
+    clean no-op: 0 drafts, memory preserved untouched, no ticket created."""
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("# Prior memory — must survive\n", encoding="utf-8")
+
+    def agent_fn(*, settings, memory, recent_proposals=""):
+        raise UnexpectedModelBehavior("Exceeded maximum output retries (4)")
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.HEALTH,
+        service=service,
+        settings=settings,
+        origin_session="degrade-session",
+    )
+
+    # No drafts, no tickets, memory left exactly as it was.
+    assert result.drafts_created == []
+    assert result.updated_memory == "# Prior memory — must survive\n"
+    assert memory_file.read_text(encoding="utf-8") == "# Prior memory — must survive\n"
+    assert service.list() == []
+
+    db.reset_engine()
+
+
+def test_non_output_exception_still_propagates(tmp_path):
+    """The degradation is narrow: a non-output exception (e.g. a bug or a
+    forge/clone failure surfacing through the agent) must still raise, not
+    be silently swallowed as a no-op."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("m", encoding="utf-8")
+
+    def agent_fn(*, settings, memory, recent_proposals=""):
+        raise RuntimeError("genuine bug, not an output-emit failure")
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="genuine bug"):
+        run_agent_pass(
+            agent_fn,
+            memory_file=memory_file,
+            source_label=SourceKind.HEALTH,
+            service=service,
+            settings=settings,
+        )
+
+    db.reset_engine()

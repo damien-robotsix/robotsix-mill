@@ -270,7 +270,40 @@ def run_agent_pass(
     rp_block = _format_recent_proposals(recent)
 
     # 4. Invoke the agent callable.
-    res = agent_fn(settings=settings, memory=memory_text, recent_proposals=rp_block)
+    #
+    # Resilience: periodic agents emit a structured Result via
+    # PromptedOutput (the providers reject forced tool_choice, so the
+    # model must produce schema-valid JSON in free text). A
+    # flash-class model occasionally finishes its analysis but never
+    # emits a parseable Result — pydantic-ai then raises
+    # UnexpectedModelBehavior ("Exceeded maximum output retries")
+    # even after the agent's own ``retries`` budget. A periodic pass
+    # is BEST-EFFORT: a malformed final emit must NOT hard-error the
+    # whole run (which discards the work AND shows up as a scary error
+    # on the board). Degrade to a clean no-op instead — zero drafts,
+    # memory preserved untouched — and let the next scheduled tick try
+    # again. We catch ONLY the output-emit failure class, not arbitrary
+    # exceptions (clone/forge/etc. failures happen earlier in
+    # run_periodic_pass and must still surface).
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    try:
+        res = agent_fn(
+            settings=settings, memory=memory_text, recent_proposals=rp_block
+        )
+    except UnexpectedModelBehavior as e:
+        log.warning(
+            "%s: agent did not emit a parseable structured Result "
+            "(%s) — degrading this pass to a no-op (0 drafts, memory "
+            "preserved); will retry next tick",
+            source_label,
+            e,
+        )
+        return AgentPassResult(
+            updated_memory=memory_text,
+            drafts_created=[],
+            session_id=origin_session or "",
+        )
 
     # 5. Persist the agent's updated memory verbatim.
     if res.updated_memory:
