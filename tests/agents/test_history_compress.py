@@ -239,7 +239,9 @@ class TestCompressHistory:
         msgs = [
             _mk_request(_mk_user_prompt("drop " + "X" * 300)),
             _mk_response(_mk_tool_call(args={"path": "important.py", "offset": 1})),
-            _mk_request(_mk_tool_return(content="result contents", tool_call_id="call_z")),
+            _mk_request(
+                _mk_tool_return(content="result contents", tool_call_id="call_z")
+            ),
         ]
         budget = _total_est(msgs[1], msgs[2])
         result = compress_history(msgs, history_max_tokens=budget, history_keep_last=2)
@@ -260,7 +262,9 @@ class TestCompressHistory:
         history = [small, large]
         # Budget: just enough for the large message.
         budget = _est(large)
-        result = compress_history(history, history_max_tokens=budget, history_keep_last=0)
+        result = compress_history(
+            history, history_max_tokens=budget, history_keep_last=0
+        )
         assert len(result) == 1
         assert result[0] is large
 
@@ -273,7 +277,9 @@ class TestCompressHistory:
         # Put small first, large second; tight budget drops only small.
         history = [small, large]
         budget = _est(large)
-        result = compress_history(history, history_max_tokens=budget, history_keep_last=0)
+        result = compress_history(
+            history, history_max_tokens=budget, history_keep_last=0
+        )
         assert len(result) == 1
         assert result[0] is large
 
@@ -288,10 +294,14 @@ class TestCompressHistory:
         combined = _total_est(req, resp)
         assert combined > 0
         # Budget = combined → no drop.
-        result = compress_history(history, history_max_tokens=combined, history_keep_last=2)
+        result = compress_history(
+            history, history_max_tokens=combined, history_keep_last=2
+        )
         assert result is history
 
         # Budget = combined - 1 → one message dropped from front.
-        result = compress_history(history, history_max_tokens=combined - 1, history_keep_last=0)
+        result = compress_history(
+            history, history_max_tokens=combined - 1, history_keep_last=0
+        )
         assert len(result) == 1
         assert result[0] is resp
