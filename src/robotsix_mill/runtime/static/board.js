@@ -1332,8 +1332,13 @@ function _runRowHtml(r,elapsed){
  const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':r.kind==='survey'?'#f59e0b':'#6b7280';
  const sc=r.status==='running'?'#eab308':r.status==='ok'?'#22c55e':'#ef4444';
  const st=r.status==='running'?'running…':r.status;
+ // Repo badge: only meaningful when the user is viewing All repos
+ // and the run carries a repo_id tag. Otherwise the active filter
+ // already implies which repo the run belongs to.
+ const repoTag=(getRepoId()==='all'&&r.repo_id)?
+   `<span class="repo-badge" style="margin-right:6px">${esc(r.repo_id)}</span>`:'';
  return `<div data-run-id="${esc(r.id||'')}" data-run-status="${esc(r.status||'')}" style="padding:8px 0;border-bottom:1px solid #262b36">
-  <span style="display:inline-block;padding:1px 6px;border-radius:4px;
+  ${repoTag}<span style="display:inline-block;padding:1px 6px;border-radius:4px;
    background:${kc};color:#fff;font-size:10px;margin-right:6px">${r.kind}</span>
   <span style="display:inline-block;padding:1px 6px;border-radius:4px;
    background:${sc};color:#fff;font-size:10px">${st}</span>
