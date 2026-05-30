@@ -61,11 +61,6 @@ WORKDIR /build
 # source tree into the production image).
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-# `uv pip install --system` targets the system interpreter (/usr/local),
-# so the `robotsix-mill` console script lands at /usr/local/bin where the
-# base stage copies it from. (`uv sync` would create a project venv at
-# ./system — UV_PROJECT_ENVIRONMENT is a path, not a mode — putting the
-# script at /build/system/bin out of the COPY's reach; that broke the build.)
 RUN pip install uv --no-cache-dir \
     && uv lock --extra ${INSTALL_EXTRAS//,/ --extra } \
     && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --no-dev --extra ${INSTALL_EXTRAS}
