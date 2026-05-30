@@ -355,7 +355,7 @@ def build_agent(
     if web_knowledge:
         # The SINGLE gateway to the internet. A multi-turn flash
         # agent that owns a mill-global Markdown knowledge base
-        # (``<data_dir>/library_knowledge/*.md`` + ``_general.md``)
+        # (``<data_dir>/web_knowledge/*.md`` + ``_general.md``)
         # AND a web-search tool, and decides autonomously which to
         # use. The previous ``web`` flag (direct ``web_research``)
         # and ``library_knowledge`` flag (deterministic cache) are

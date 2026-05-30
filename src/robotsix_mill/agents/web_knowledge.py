@@ -3,11 +3,11 @@
 A multi-turn flash agent that answers focused library / API / framework
 questions. It owns a small mill-global knowledge base on disk:
 
-  - ``<data_dir>/library_knowledge/<lib>.md`` — one Markdown file per
+  - ``<data_dir>/web_knowledge/<lib>.md`` — one Markdown file per
     library, frontmatter-stamped with ``last_updated:``.
-  - ``<data_dir>/library_knowledge/_general.md`` — cross-library
-    memory for cross-cutting notes that don't fit a single library
-    (e.g. "OpenRouter caches prompts with N-minute TTL").
+  - ``<data_dir>/web_knowledge/_general.md`` — cross-library memory
+    for cross-cutting notes that don't fit a single library (e.g.
+    "OpenRouter caches prompts with N-minute TTL").
 
 The cache is centralized (NOT per-board): library facts like
 "imaplib.login raises this exception on Gmail" don't change between
@@ -82,7 +82,7 @@ def _knowledge_dir(settings: Settings) -> Path:
     """Mill-global cache directory. NOT per-board: library facts
     don't change between repos, so partitioning would just fragment
     identical knowledge across boards."""
-    return settings.data_dir / "library_knowledge"
+    return settings.data_dir / "web_knowledge"
 
 
 def _library_path(settings: Settings, library: str) -> Path:

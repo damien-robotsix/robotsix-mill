@@ -28,16 +28,13 @@ tools:
   - list_dir
   - run_command
 
-# Cheap web_research sub-agent for genuinely external lookups only
-# (library docs, API references, best practices). The agent is told
-# NOT to web-fetch the project's own files.
-
-# Cached library knowledge sub-agent. Preferred over raw web_research
-# for library API questions — the first lookup per library does ONE
-# web_research and persists the answer to
-# <data_dir>/<board>/library_knowledge/<lib>.md, so subsequent
-# consults of the same library across any future ticket answer
-# directly from the cache.
+# Single internet gateway: the web_knowledge sub-agent owns the
+# mill-global Markdown knowledge base at <data_dir>/web_knowledge/
+# (one <lib>.md per library + a cross-library _general.md). It
+# decides per question whether the cached file covers it or a
+# web_search is needed, then writes back what it learned. Refine
+# calls it via the ask_web_knowledge tool; raw web_research is no
+# longer injected on this agent.
 
 # Refine does not emit draft tickets through structured output —
 # it produces a RefineResult. Let it self-report blocking issues.
