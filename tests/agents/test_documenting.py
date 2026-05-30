@@ -15,6 +15,8 @@ Does NOT test:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -845,6 +847,99 @@ class TestRunDocAgent:
         limits = kwargs["usage_limits"]
         assert isinstance(limits, UsageLimits)
         assert limits.request_limit == settings.doc_request_limit
+
+    # -- extra_roots propagation ---------------------------------------
+
+    def test_extra_roots_propagates_to_build_fs_tools(
+        self, settings, repo_dir, monkeypatch
+    ):
+        """extra_roots is forwarded to build_fs_tools."""
+        captured: list = []
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
+
+        self._patch_dependencies(monkeypatch, fake_agent)
+        monkeypatch.setattr(
+            "robotsix_mill.agents.fs_tools.build_fs_tools",
+            lambda repo_dir, settings, extra_roots=None: (
+                captured.append(extra_roots) or []
+            ),
+        )
+
+        extra = [Path("/extra/root")]
+        run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            extra_roots=extra,
+        )
+        assert captured == [extra]
+
+    def test_extra_roots_propagates_to_make_explore_tool(
+        self, settings, repo_dir, monkeypatch
+    ):
+        """extra_roots is forwarded to make_explore_tool."""
+        captured: list = []
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="no changes"))
+
+        self._patch_dependencies(monkeypatch, fake_agent)
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_explore_tool",
+            lambda settings, repo_dir, extra_roots=None: (
+                captured.append(extra_roots) or _dummy_fs_tool("explore")
+            ),
+        )
+
+        extra = [Path("/another/extra")]
+        run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            extra_roots=extra,
+        )
+        assert captured == [extra]
+
+    # -- board_id propagation ------------------------------------------
+
+    def test_board_id_flows_to_memory_file_for(
+        self, settings, repo_dir, monkeypatch
+    ):
+        """board_id is forwarded to settings.memory_file_for for both
+        load and persist paths."""
+        load_paths: list = []
+        persist_paths: list = []
+        fake_agent = _FakeAgent(
+            DocResult(
+                user_facing=True,
+                summary="docs updated",
+                updated_memory="new layout",
+            )
+        )
+
+        self._patch_dependencies(monkeypatch, fake_agent)
+        monkeypatch.setattr(
+            "robotsix_mill.pass_runner.load_memory",
+            lambda path, max_chars=None: load_paths.append(path) or "",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.pass_runner.persist_memory",
+            lambda path, text: persist_paths.append(path),
+        )
+
+        run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            board_id="bespoke-board-42",
+        )
+
+        expected_path = settings.memory_file_for("doc", "bespoke-board-42")
+        assert len(load_paths) == 1
+        assert load_paths[0] == expected_path
+        assert len(persist_paths) == 1
+        assert persist_paths[0] == expected_path
 
     # -- persist_memory -------------------------------------------------
 
