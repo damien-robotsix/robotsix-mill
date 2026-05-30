@@ -60,20 +60,40 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
 
     async def _completions_create(self, *args: Any, **kwargs: Any) -> Any:
         _inject_usage_include(args, kwargs)
+        _inject_provider_pin(args, kwargs, getattr(self, "model_name", "") or "")
         response = await super()._completions_create(*args, **kwargs)
         record_openrouter_cost(response)
         return response
 
 
+# OpenRouter load-balances each model across many upstream providers
+# (deepseek-v4-pro alone has ~14: DeepSeek, Novita, Fireworks, …). Prompt
+# caches are PER-PROVIDER, so when routing bounces between providers the
+# ~80k-token prefix is a cold miss every time it switches — and a miss
+# costs ~13x a hit (full input price vs cache-read price). Pinning every
+# DeepSeek call to DeepSeek's own endpoint keeps the cache warm across the
+# many tool-call turns of a single stage. Hard pin (no fallbacks) by
+# operator choice: maximise cache hits; a DeepSeek outage fails the call
+# (the worker's transient-retry then backs off) rather than silently
+# routing to an uncached provider.
+_PINNED_PROVIDER = "DeepSeek"
+_PIN_MODEL_PREFIX = "deepseek/"
+
+
+def _resolve_model_settings(args: tuple, kwargs: dict) -> Any:
+    """Return the mutable ``model_settings`` dict from the parent call.
+    Parent signature: ``(messages, stream, model_settings, params)``."""
+    if "model_settings" in kwargs:
+        return kwargs["model_settings"]
+    if len(args) >= 3:
+        return args[2]
+    return None
+
+
 def _inject_usage_include(args: tuple, kwargs: dict) -> None:
     """Merge ``extra_body.usage.include = True`` onto ``model_settings``
-    without trampling a caller-supplied ``extra_body`` (e.g. web plugin).
-    Parent signature: ``(messages, stream, model_settings, params)``."""
-    settings: Any = None
-    if "model_settings" in kwargs:
-        settings = kwargs["model_settings"]
-    elif len(args) >= 3:
-        settings = args[2]
+    without trampling a caller-supplied ``extra_body`` (e.g. web plugin)."""
+    settings = _resolve_model_settings(args, kwargs)
     if settings is None:
         return
 
@@ -81,6 +101,23 @@ def _inject_usage_include(args: tuple, kwargs: dict) -> None:
     usage_opt = dict(extra_body.get("usage") or {})
     usage_opt.setdefault("include", True)
     extra_body["usage"] = usage_opt
+    settings["extra_body"] = extra_body
+
+
+def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
+    """Pin DeepSeek-model calls to the DeepSeek upstream provider so the
+    prompt cache stays warm across turns (see module note). No-op for
+    non-DeepSeek models and when a caller already set ``provider`` (don't
+    trample an explicit override)."""
+    if not model_name.startswith(_PIN_MODEL_PREFIX):
+        return
+    settings = _resolve_model_settings(args, kwargs)
+    if settings is None:
+        return
+    extra_body = dict(settings.get("extra_body") or {})
+    if "provider" in extra_body:
+        return  # caller set an explicit routing preference — respect it
+    extra_body["provider"] = {"only": [_PINNED_PROVIDER], "allow_fallbacks": False}
     settings["extra_body"] = extra_body
 
 

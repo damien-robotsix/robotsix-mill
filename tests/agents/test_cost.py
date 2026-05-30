@@ -9,6 +9,8 @@ real-time path has been REMOVED — it leaked across concurrent tickets.
 import pytest
 
 from robotsix_mill.agents.openrouter_cost import (
+    _PINNED_PROVIDER,
+    _inject_provider_pin,
     _inject_usage_include,
     record_openrouter_cost,
 )
@@ -39,6 +41,47 @@ def test_inject_positional_model_settings():
 
 def test_inject_noop_when_no_settings():
     _inject_usage_include((), {})  # must not raise
+
+
+# --- _inject_provider_pin (keep DeepSeek prompt cache warm) -------------
+
+
+def test_provider_pin_set_for_deepseek():
+    ms: dict = {}
+    _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-pro")
+    assert ms["extra_body"]["provider"] == {
+        "only": [_PINNED_PROVIDER],
+        "allow_fallbacks": False,
+    }
+
+
+def test_provider_pin_skipped_for_non_deepseek():
+    ms: dict = {}
+    _inject_provider_pin((), {"model_settings": ms}, "openai/gpt-4o-mini")
+    assert "provider" not in ms.get("extra_body", {})
+
+
+def test_provider_pin_preserves_existing_extra_body():
+    ms = {"extra_body": {"usage": {"include": True}}}
+    _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-flash")
+    assert ms["extra_body"]["usage"] == {"include": True}  # not trampled
+    assert ms["extra_body"]["provider"]["only"] == [_PINNED_PROVIDER]
+
+
+def test_provider_pin_respects_caller_override():
+    ms = {"extra_body": {"provider": {"order": ["Novita"]}}}
+    _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-pro")
+    assert ms["extra_body"]["provider"] == {"order": ["Novita"]}  # untouched
+
+
+def test_provider_pin_positional_model_settings():
+    ms: dict = {}
+    _inject_provider_pin(("msgs", False, ms, "params"), {}, "deepseek/deepseek-v4-pro")
+    assert ms["extra_body"]["provider"]["only"] == [_PINNED_PROVIDER]
+
+
+def test_provider_pin_noop_when_no_settings():
+    _inject_provider_pin((), {}, "deepseek/deepseek-v4-pro")  # must not raise
 
 
 # --- record_openrouter_cost guards (hermetic) --------------------------
