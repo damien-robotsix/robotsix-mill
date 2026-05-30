@@ -320,6 +320,7 @@ def run_periodic_pass(
         settings=settings,
         origin_session=session_id,
         max_drafts=max_drafts,
+        repo_dir=repo_dir,
     )
 
     return config.result_dataclass(
