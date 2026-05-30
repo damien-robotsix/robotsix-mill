@@ -822,18 +822,18 @@ class Settings(BaseSettings):
     # calls — well past diminishing returns; this is what motivated
     # any cap at all.
     #
-    # The one-subject-per-run prompt (agent_definitions/periodic/
-    # survey.yaml) targets ≤7 requests, but pydantic-ai retries on
-    # validation failures + read_ticket lookups for the
-    # recent-proposals dedup + the final structured-output round
-    # routinely push real runs to 10-15. The 12 cap killed
-    # well-behaved runs mid-conclusion.
+    # The "keep trying subjects until one yields a draft" prompt
+    # (agent_definitions/periodic/survey.yaml) targets ≤10 requests
+    # per subject attempt, up to 3 attempts per run if the first
+    # subjects don't reveal a citable gap. Worst case: 3 × ~10 =
+    # 30 requests, plus pydantic-ai validation retries + the final
+    # structured-output round → 40 is the safe ceiling.
     #
-    # 25 caps the worst case at ~$0.50-1.25 per run (per-call ~
-    # $0.02-0.05 on the survey model) — same order of magnitude as
-    # the previous 12 cap, but with headroom for the natural
-    # request budget of a one-subject run.
-    survey_request_limit: int = Field(default=25)
+    # Per-call cost on the survey model is ~$0.02-0.05, so 40
+    # caps worst-case spend at ~$0.80-2.00 per run. Significantly
+    # below the historical $15 runaway and a reasonable price for
+    # the guarantee that every run produces a draft.
+    survey_request_limit: int = Field(default=40)
     # Path to the survey agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/survey_memory.md.
     survey_memory_path: Path | None = Field(default=None)

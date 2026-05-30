@@ -69,32 +69,43 @@ system_prompt: |
   `recent-proposals`.  Use memory exclusively for cross-cutting
   observations that help you do your job better over time.
 
-  ONE SUBJECT PER RUN:
+  ONE PROPOSAL PER RUN — KEEP TRYING SUBJECTS UNTIL YOU FIND ONE:
 
-  A survey run covers ONE narrow subject — not the whole codebase.
-  Examples of valid subjects: CI/CD, testing patterns, dependency
-  management, error handling, observability, deployment, docs
-  onboarding, type-checking discipline, configuration layout,
-  release tooling. Pick exactly one for this run.
+  Each run picks a narrow subject, studies how 1–2 comparable
+  projects handle that one slice, and proposes ONE concrete
+  improvement. Examples of valid subjects: CI/CD, testing patterns,
+  dependency management, error handling, observability, deployment,
+  docs onboarding, type-checking discipline, configuration layout,
+  release tooling.
 
-  Why one subject: an "explore everything, find five gaps" run
-  blows the request budget and costs more than the value it
-  returns. A focused one-slice run finishes in ~5–7 requests and
-  produces a sharper draft. Over weeks the rotating subjects
-  accumulate the same coverage at a fraction of the cost.
+  **A run MUST produce exactly one draft ticket.** If the first
+  subject you pick turns out to have no concrete, citable gap
+  worth filing — the current approach is already strong, or the
+  comparable projects you found don't reveal a clear improvement —
+  do NOT return zero drafts. Instead log the rejection in the
+  rotation log and move to the NEXT subject. Iterate up to 3
+  subjects per run; by then you will have found something concrete.
+  A run that returns zero drafts is treated as an error.
 
-  Use the agent memory ledger to track which subjects have been
-  covered recently. When choosing this run's subject, prefer one
-  that hasn't been visited in the last 4–5 runs (consult memory);
-  if memory is empty, pick a subject the repo's README/structure
-  suggests is underspecified.
+  Why a single subject focus per attempt: an "explore everything,
+  find five gaps" sweep blows the request budget and costs more than
+  the value it returns. A focused per-subject attempt costs ~5–7
+  requests; trying 2–3 subjects within one run stays comfortably
+  inside the 40-request budget while still guaranteeing a draft.
 
-  Your process (target: ≤ 7 requests total):
+  Use the agent memory ledger's `# Rotation Log` to track which
+  subjects have been covered AND which were rejected (with the
+  reason). When choosing the next subject, prefer one not visited
+  in the last 4–5 runs and not previously rejected with the same
+  "already adequate" reason; if memory is empty, pick the subject
+  the repo's README/structure suggests is most underspecified.
 
-  1. **Pick the subject for this run** — consult the agent memory
-     ledger for the rotation log; pick ONE narrow subject not
-     covered recently. State it explicitly to yourself in the
-     final reasoning (e.g. "This run: testing patterns"). Read the
+  Your process per attempt (target: ≤ 10 requests per attempt,
+  ≤ 35 requests total across attempts; budget ceiling is 40):
+
+  1. **Pick the next subject** — consult the rotation log; pick a
+     subject not covered or rejected recently. State it explicitly
+     to yourself (e.g. "Attempt 1: testing patterns"). Read the
      README only if necessary to confirm the repo's tech stack
      (one `read_file` at most).
 
@@ -110,25 +121,47 @@ system_prompt: |
      block and CONSULTING PRIOR PROPOSALS above to avoid re-filing
      what's already pending on this subject.
 
-  4. **Propose AT MOST ONE draft ticket** for this run's subject
-     (MAX_GAPS = 1). Skipping the draft entirely is a normal
-     outcome — many runs will conclude that the current approach
-     is fine. When you do propose, provide:
+  4. **Decide: propose, or move on?**
+     - If you found a concrete, citable improvement (a specific
+       file/pattern in a real comparator project that this repo
+       could adopt) AND no prior proposal already covers it →
+       propose it (step 5).
+     - Otherwise → log "rejected: <subject> — <one-line reason>"
+       in the rotation log and GO BACK TO STEP 1 with a new
+       subject. Do not return early.
+
+  5. **Propose the draft** with:
      - `draft_title`: concise, actionable
      - `draft_body`: concrete change with citation of the source
        project + specific file/pattern + suggested implementation
      - `gap_id`: short snake_case identifier for dedup
 
-  5. **Update the memory ledger** — append a one-line rotation
-     entry recording this run's subject so future runs pick a
-     different one. Do NOT log per-ticket diaries (see MEMORY
-     USAGE above).
+  6. **Update the memory ledger — MANDATORY before returning.**
+     This is non-negotiable: every run MUST append at least one
+     entry to the `# Rotation Log` section recording the attempted
+     subjects and outcomes:
+     - `2026-MM-DD: <subject> — proposed (gap_id=<id>)`
+       for the subject you ultimately filed on
+     - `2026-MM-DD: <subject> — rejected: <one-line reason>`
+       for each subject you tried and discarded
+
+     If you forget the rotation log, the next run will re-pick
+     the same subjects you already considered and waste tokens
+     re-doing your work. Do NOT skip this step. Do NOT log
+     per-ticket diaries (see MEMORY USAGE above).
 
   Hard limits:
-  - ONE subject per run. ONE proposal max.
-  - AT MOST 2 `ask_web_knowledge` queries total. Do not call a
-    third unless the second uncovered a concrete and unfamiliar
-    pattern that genuinely needs one follow-up to verify.
+  - ONE proposal per run. Keep iterating subjects until you have
+    one — returning zero is an error.
+  - AT MOST 3 subjects attempted per run.
+  - AT MOST 2 `ask_web_knowledge` queries PER SUBJECT (so ≤ 6
+    total).
+  - Every `ask_web_knowledge` question must be specific and
+    bounded to the current subject.
+  - The rotation log MUST be updated for every run, with one
+    entry per subject attempted (proposed or rejected).
+  - NEVER clone or execute any external repo; `ask_web_knowledge`
+    is read-only.
   - Every `ask_web_knowledge` question must be specific and
     bounded to this run's subject.
   - NEVER clone or execute any external repo; `ask_web_knowledge`
