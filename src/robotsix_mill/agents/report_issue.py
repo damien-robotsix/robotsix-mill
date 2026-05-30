@@ -18,6 +18,9 @@ from __future__ import annotations
 
 from ..config import Settings
 from ..core.models import SourceKind
+from ..core.service import TicketService
+from ..core.text_noop import is_noop_report
+from ..runtime import tracing as _tracing
 
 # Tickets in these states are "done with"; an identical title may be
 # filed again (e.g. a regression of a previously-fixed issue). Any
@@ -32,6 +35,68 @@ _CATEGORIES = (
     "code-quality",
     "other",
 )
+
+_EVIDENCE_MAX = 64 * 1024
+
+
+def _validate_title(title: str) -> str | None:
+    """Validate *title*; return an error string or ``None`` to proceed."""
+    title = title.strip()
+    if not title:
+        return "report_issue: a non-empty title is required"
+    if is_noop_report(title):
+        return "report_issue: no actionable issue — not filed (clean/no-op report)"
+    return None
+
+
+def _check_duplicate(title: str, service: TicketService) -> str | None:
+    """Return a duplicate notice if *title* matches a non-terminal ticket."""
+    norm = title.casefold()
+    for t in service.list():
+        if t.title.strip().casefold() == norm and t.state.value not in _DONE_WITH:
+            return (
+                f"report_issue: already filed as {t.id} "
+                f"(state={t.state.value}) — not duplicating"
+            )
+    return None
+
+
+def _build_body(body: str, category: str, agent_name: str | None) -> str:
+    """Build the final ticket description body."""
+    if agent_name:
+        return (
+            f"**Reported by the `{agent_name}` agent** "
+            f"(category: {category})\n\n"
+            f"{(body or '').strip()}\n"
+        )
+    return (
+        f"**Reported by an agent** (category: {category})\n\n"
+        f"{(body or '').strip()}\n"
+    )
+
+
+def _attach_evidence(
+    service: TicketService, ticket, full_body: str, evidence: str
+) -> str:
+    """Truncate and persist *evidence*, append pointer line to *full_body*."""
+    evidence = evidence.strip()
+    if not evidence:
+        return full_body
+
+    evidence_bytes = evidence.encode("utf-8")
+    if len(evidence_bytes) > _EVIDENCE_MAX:
+        evidence_bytes = evidence_bytes[:_EVIDENCE_MAX]
+        evidence = evidence_bytes.decode("utf-8", errors="ignore")
+    else:
+        evidence = evidence_bytes.decode("utf-8")
+
+    workspace = service.workspace(ticket)
+    artifacts = workspace.artifacts_dir
+    (artifacts / "evidence.txt").write_text(evidence, encoding="utf-8")
+
+    full_body += "\n> Raw evidence attached at artifacts/evidence.txt\n"
+    workspace.write_description(full_body)
+    return full_body
 
 
 def make_report_issue_tool(
@@ -71,85 +136,34 @@ def make_report_issue_tool(
         category: missing-tool|error|workflow-improvement|missing-input|other.
         Never raises."""
         try:
-            title = (title or "").strip()
-            if not title:
-                return "report_issue: a non-empty title is required"
+            # Step 1: validate title
+            err = _validate_title(title)
+            if err:
+                return err
 
-            # No-op guard: agents (esp. on a clean run) sometimes call
-            # this to say "nothing to report" — that is noise, not a
-            # ticket. Same shared detector the retrospect stage uses.
-            from ..core.text_noop import is_noop_report
-
-            if is_noop_report(title):
-                return (
-                    "report_issue: no actionable issue — not filed (clean/no-op report)"
-                )
+            # Step 2: coerce category
             cat = category if category in _CATEGORIES else "other"
 
-            from ..core.service import TicketService
-            from ..runtime.tracing import current_session
-
+            # Step 3: dedup
             service = TicketService(settings, board_id=board_id)
+            dup = _check_duplicate(title, service)
+            if dup:
+                return dup
 
-            # Dedup: skip if a non-terminal ticket with this title is
-            # already open (prevents loop spam).
-            norm = title.casefold()
-            for t in service.list():
-                if (
-                    t.title.strip().casefold() == norm
-                    and t.state.value not in _DONE_WITH
-                ):
-                    return (
-                        f"report_issue: already filed as {t.id} "
-                        f"(state={t.state.value}) — not duplicating"
-                    )
+            # Step 4: build body
+            full_body = _build_body(body, cat, agent_name)
 
-            if agent_name:
-                full_body = (
-                    f"**Reported by the `{agent_name}` agent** "
-                    f"(category: {cat})\n\n"
-                    f"{(body or '').strip()}\n"
-                )
-            else:
-                full_body = (
-                    f"**Reported by an agent** (category: {cat})\n\n"
-                    f"{(body or '').strip()}\n"
-                )
-
-            evidence = (evidence or "").strip()
-            if evidence:
-                # Truncate at 64 KB. The old 8 KB cap dated to smaller
-                # context windows; modern models digest 10× that
-                # easily and a CI log / stack trace often runs longer
-                # than 8 KB, forcing the agent to drop diagnostic
-                # signal. The workspace has no practical size
-                # constraint either. 64 KB is a soft sanity cap, not
-                # a context-window guard.
-                _EVIDENCE_MAX = 64 * 1024
-                evidence_bytes = evidence.encode("utf-8")
-                if len(evidence_bytes) > _EVIDENCE_MAX:
-                    evidence_bytes = evidence_bytes[:_EVIDENCE_MAX]
-                    # Decode back, replacing any trailing partial multi-byte char.
-                    evidence = evidence_bytes.decode("utf-8", errors="ignore")
-                else:
-                    evidence = evidence_bytes.decode("utf-8")
-
+            # Step 5: create ticket
             ticket = service.create(
                 title,
                 full_body,
                 source=SourceKind.AGENT,
-                origin_session=current_session(),
+                origin_session=_tracing.current_session(),
             )
 
-            if evidence:
-                workspace = service.workspace(ticket)
-                artifacts = workspace.artifacts_dir
-                (artifacts / "evidence.txt").write_text(evidence, encoding="utf-8")
-
-                # Append a pointer line to the description so anyone
-                # reading description.md knows to check the evidence file.
-                full_body += "\n> Raw evidence attached at artifacts/evidence.txt\n"
-                workspace.write_description(full_body)
+            # Step 6: attach evidence (if any)
+            if evidence and evidence.strip():
+                full_body = _attach_evidence(service, ticket, full_body, evidence)
 
             return f"report_issue: filed draft {ticket.id}"
         except Exception as e:  # noqa: BLE001 — never abort the agent run
