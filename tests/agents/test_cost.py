@@ -10,6 +10,7 @@ import pytest
 
 from robotsix_mill.agents.openrouter_cost import (
     _PINNED_PROVIDER,
+    _extract_reasoning_details,
     _inject_provider_pin,
     _inject_usage_include,
     record_openrouter_cost,
@@ -102,18 +103,46 @@ def test_other_400_stays_non_transient():
     assert is_transient(ModelHTTPError()) is False
 
 
-# --- _map_messages renames reasoning -> reasoning_content for deepseek ---
+# --- reasoning_details round-trip backport (pydantic-ai #2701) ----------
 
 
-def _run_map(model, messages):
-    import asyncio
+class _FakeMsg:
+    def __init__(self, reasoning_details=None, in_extra=False):
+        self.model_extra = {}
+        if reasoning_details is not None:
+            if in_extra:
+                self.model_extra["reasoning_details"] = reasoning_details
+            else:
+                self.reasoning_details = reasoning_details
 
-    from pydantic_ai.models import ModelRequestParameters
 
-    return asyncio.run(model._map_messages(messages, ModelRequestParameters()))
+class _FakeChoice:
+    def __init__(self, msg):
+        self.message = msg
 
 
-def test_deepseek_renames_reasoning_to_reasoning_content():
+class _FakeResponse:
+    def __init__(self, msg):
+        self.choices = [_FakeChoice(msg)]
+
+
+_RD = [{"type": "reasoning.text", "text": "step 1...", "format": "deepseek", "index": 0}]
+
+
+def test_extract_reasoning_details_typed_field():
+    assert _extract_reasoning_details(_FakeResponse(_FakeMsg(_RD))) == _RD
+
+
+def test_extract_reasoning_details_from_model_extra():
+    assert _extract_reasoning_details(_FakeResponse(_FakeMsg(_RD, in_extra=True))) == _RD
+
+
+def test_extract_reasoning_details_absent_or_str_response():
+    assert _extract_reasoning_details(_FakeResponse(_FakeMsg(None))) is None
+    assert _extract_reasoning_details("plain string response") is None
+
+
+def test_map_model_response_echoes_reasoning_details_and_drops_bare():
     pytest.importorskip("pydantic_ai.providers.openrouter")
     from pydantic_ai.messages import ModelResponse, TextPart, ThinkingPart
     from pydantic_ai.providers.openrouter import OpenRouterProvider
@@ -125,33 +154,30 @@ def test_deepseek_renames_reasoning_to_reasoning_content():
     )
     resp = ModelResponse(
         parts=[
-            ThinkingPart(id="reasoning", content="thoughts", provider_name=m.system),
+            ThinkingPart(id="reasoning", content="step 1...", provider_name=m.system),
             TextPart(content="answer"),
-        ]
+        ],
+        provider_details={"reasoning_details": _RD},
     )
-    asst = next(x for x in _run_map(m, [resp]) if x.get("role") == "assistant")
-    assert asst.get("reasoning_content") == "thoughts"
-    assert "reasoning" not in asst
+    param = m._map_model_response(resp)
+    assert param["reasoning_details"] == _RD
+    assert "reasoning" not in param  # bare text dropped so it can't disagree
+    assert "reasoning_content" not in param
 
 
-def test_non_deepseek_keeps_reasoning_field():
+def test_map_model_response_noop_without_reasoning_details():
     pytest.importorskip("pydantic_ai.providers.openrouter")
-    from pydantic_ai.messages import ModelResponse, TextPart, ThinkingPart
+    from pydantic_ai.messages import ModelResponse, TextPart
     from pydantic_ai.providers.openrouter import OpenRouterProvider
 
     from robotsix_mill.agents.openrouter_cost import CostInstrumentedOpenRouterModel
 
     m = CostInstrumentedOpenRouterModel(
-        "openai/gpt-4o-mini", provider=OpenRouterProvider(api_key="x")
+        "deepseek/deepseek-v4-pro", provider=OpenRouterProvider(api_key="x")
     )
-    resp = ModelResponse(
-        parts=[
-            ThinkingPart(id="reasoning", content="t", provider_name=m.system),
-            TextPart(content="a"),
-        ]
-    )
-    asst = next(x for x in _run_map(m, [resp]) if x.get("role") == "assistant")
-    assert "reasoning_content" not in asst
+    resp = ModelResponse(parts=[TextPart(content="answer")])
+    param = m._map_model_response(resp)
+    assert "reasoning_details" not in param
 
 
 # --- record_openrouter_cost guards (hermetic) --------------------------
