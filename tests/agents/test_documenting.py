@@ -902,9 +902,7 @@ class TestRunDocAgent:
 
     # -- board_id propagation ------------------------------------------
 
-    def test_board_id_flows_to_memory_file_for(
-        self, settings, repo_dir, monkeypatch
-    ):
+    def test_board_id_flows_to_memory_file_for(self, settings, repo_dir, monkeypatch):
         """board_id is forwarded to settings.memory_file_for for both
         load and persist paths."""
         load_paths: list = []
