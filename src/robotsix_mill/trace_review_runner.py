@@ -156,7 +156,7 @@ def _extract_trace_end_time(
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -203,7 +203,10 @@ def _classify_trace(
                 trace_end = _extract_trace_end_time(trace, None)
                 if trace_end is not None:
                     delta = abs((trace_end - started_at).total_seconds())
-                    if delta <= settings.trace_review_restart_correlation_window_seconds:
+                    if (
+                        delta
+                        <= settings.trace_review_restart_correlation_window_seconds
+                    ):
                         flags.append("restart_correlated")
         return _TraceFlags(
             trace_id=trace.get("id", ""),
