@@ -10,12 +10,11 @@ from unittest import mock
 import pytest
 
 from robotsix_auto_mail.config import (
+    DEFAULT_LLM_MODEL,
     ConfigurationError,
     MailConfig,
-    Secrets,
-    get_secrets,
     load,
-    load_secrets,
+    load_llm,
 )
 
 # ---------------------------------------------------------------------------
@@ -229,153 +228,6 @@ def test_from_env_invalid_smtp_tls_mode() -> None:
 
 
 # ---------------------------------------------------------------------------
-# from_toml
-# ---------------------------------------------------------------------------
-
-
-def test_from_toml_example_file() -> None:
-    """The bundled example TOML file is valid and parses correctly."""
-    cfg = MailConfig.from_toml("config/mail.example.toml")
-    assert cfg.imap_host == "imap.example.com"
-    assert cfg.imap_port == 993
-    assert cfg.imap_tls_mode == "direct-tls"
-    assert cfg.smtp_host == "smtp.example.com"
-    assert cfg.smtp_port == 587
-    assert cfg.smtp_tls_mode == "starttls"
-    assert cfg.username == "user@example.com"
-    assert cfg.password == "s3cret"
-    assert cfg.imap_folder == "INBOX"
-
-
-def test_from_toml_defaults_for_missing_fields(tmp_path: Path) -> None:
-    """Fields missing from TOML fall back to defaults."""
-    toml_file = tmp_path / "minimal.toml"
-    toml_file.write_text(
-        """\
-[imap]
-host = "imap.example.com"
-
-[smtp]
-host = "smtp.example.com"
-
-[auth]
-username = "u"
-password = "p"
-"""
-    )
-    cfg = MailConfig.from_toml(toml_file)
-    assert cfg.imap_port == 993
-    assert cfg.imap_tls_mode == "direct-tls"
-    assert cfg.smtp_port == 587
-    assert cfg.smtp_tls_mode == "starttls"
-    assert cfg.imap_folder == "INBOX"
-
-
-def test_from_toml_custom_imap_folder(tmp_path: Path) -> None:
-    """imap_folder can be set via TOML [imap] folder key."""
-    toml_file = tmp_path / "folder.toml"
-    toml_file.write_text(
-        """\
-[imap]
-host = "imap.example.com"
-folder = "Archive"
-
-[smtp]
-host = "smtp.example.com"
-
-[auth]
-username = "u"
-password = "p"
-"""
-    )
-    cfg = MailConfig.from_toml(toml_file)
-    assert cfg.imap_folder == "Archive"
-
-
-def test_from_toml_missing_required_fields(tmp_path: Path) -> None:
-    """Missing required TOML fields → ConfigurationError with all names."""
-    toml_file = tmp_path / "bad.toml"
-    toml_file.write_text(
-        """\
-[imap]
-port = 993
-
-[smtp]
-tls_mode = "none"
-"""
-    )
-    with pytest.raises(ConfigurationError) as exc:
-        MailConfig.from_toml(toml_file)
-    msg = str(exc.value)
-    assert "imap.host" in msg
-    assert "smtp.host" in msg
-    assert "auth.username" in msg
-    # auth.password is no longer required — it can come from secrets.yaml
-
-
-def test_from_toml_invalid_tls_mode(tmp_path: Path) -> None:
-    """Invalid TLS mode in TOML → ConfigurationError."""
-    toml_file = tmp_path / "bad_tls.toml"
-    toml_file.write_text(
-        """\
-[imap]
-host = "imap.example.com"
-tls_mode = "bad-mode"
-
-[smtp]
-host = "smtp.example.com"
-
-[auth]
-username = "u"
-password = "p"
-"""
-    )
-    with pytest.raises(ConfigurationError) as exc:
-        MailConfig.from_toml(toml_file)
-    msg = str(exc.value)
-    assert "imap.tls_mode" in msg
-    assert "bad-mode" in msg
-
-
-def test_from_toml_malformed_file(tmp_path: Path) -> None:
-    """Malformed TOML → ConfigurationError."""
-    toml_file = tmp_path / "malformed.toml"
-    toml_file.write_text("this is not valid TOML {{{")
-    with pytest.raises(ConfigurationError) as exc:
-        MailConfig.from_toml(toml_file)
-    assert "Invalid TOML" in str(exc.value)
-
-
-def test_from_toml_file_not_found(tmp_path: Path) -> None:
-    """Missing file → FileNotFoundError (not swallowed)."""
-    missing = tmp_path / "does_not_exist.toml"
-    with pytest.raises(FileNotFoundError):
-        MailConfig.from_toml(missing)
-
-
-def test_from_toml_wrong_type_for_field(tmp_path: Path) -> None:
-    """Field with wrong type (e.g. port as string) → ConfigurationError."""
-    toml_file = tmp_path / "bad_port.toml"
-    toml_file.write_text(
-        """\
-[imap]
-host = "imap.example.com"
-port = "not-a-number"
-
-[smtp]
-host = "smtp.example.com"
-
-[auth]
-username = "u"
-password = "p"
-"""
-    )
-    with pytest.raises(ConfigurationError) as exc:
-        MailConfig.from_toml(toml_file)
-    assert "port" in str(exc.value)
-
-
-# ---------------------------------------------------------------------------
 # from_yaml
 # ---------------------------------------------------------------------------
 
@@ -457,7 +309,7 @@ smtp:
     assert "imap.host" in msg
     assert "smtp.host" in msg
     assert "auth.username" in msg
-    # auth.password is no longer required — it can come from secrets.yaml
+    # auth.password is not required — it can come from the MAIL_PASSWORD env var
 
 
 def test_from_yaml_invalid_tls_mode(tmp_path: Path) -> None:
@@ -600,79 +452,79 @@ def test_load_env_only() -> None:
         assert cfg.password == "env_pass"
 
 
-def test_load_fallback_to_toml(tmp_path: Path) -> None:
-    """No env vars → load() falls back to TOML at given path."""
-    toml_file = tmp_path / "test.toml"
-    toml_file.write_text(
+def test_load_fallback_to_yaml(tmp_path: Path) -> None:
+    """No env vars → load() falls back to the YAML file at given path."""
+    yaml_file = tmp_path / "test.yaml"
+    yaml_file.write_text(
         """\
-[imap]
-host = "imap.toml.com"
+imap:
+  host: imap.file.com
 
-[smtp]
-host = "smtp.toml.com"
+smtp:
+  host: smtp.file.com
 
-[auth]
-username = "toml_user"
-password = "toml_pass"
+auth:
+  username: file_user
+  password: file_pass
 """
     )
-    env: dict[str, str] = {"MAIL_CONFIG_PATH": str(toml_file)}
+    env: dict[str, str] = {"MAIL_CONFIG_PATH": str(yaml_file)}
     with mock.patch.dict(os.environ, env, clear=True):
         cfg = load()
-        assert cfg.imap_host == "imap.toml.com"
-        assert cfg.smtp_host == "smtp.toml.com"
-        assert cfg.username == "toml_user"
-        assert cfg.password == "toml_pass"
+        assert cfg.imap_host == "imap.file.com"
+        assert cfg.smtp_host == "smtp.file.com"
+        assert cfg.username == "file_user"
+        assert cfg.password == "file_pass"
 
 
-def test_load_env_overrides_toml(tmp_path: Path) -> None:
-    """Single env var overrides the corresponding TOML field."""
-    toml_file = tmp_path / "test.toml"
-    toml_file.write_text(
+def test_load_env_overrides_file(tmp_path: Path) -> None:
+    """Single env var overrides the corresponding YAML field."""
+    yaml_file = tmp_path / "test.yaml"
+    yaml_file.write_text(
         """\
-[imap]
-host = "imap.toml.com"
+imap:
+  host: imap.file.com
 
-[smtp]
-host = "smtp.toml.com"
+smtp:
+  host: smtp.file.com
 
-[auth]
-username = "toml_user"
-password = "toml_pass"
+auth:
+  username: file_user
+  password: file_pass
 """
     )
     env: dict[str, str] = {
-        "MAIL_CONFIG_PATH": str(toml_file),
+        "MAIL_CONFIG_PATH": str(yaml_file),
         "MAIL_IMAP_HOST": "imap.env.com",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         cfg = load()
         # env wins for IMAP host
         assert cfg.imap_host == "imap.env.com"
-        # SMTP still from TOML
-        assert cfg.smtp_host == "smtp.toml.com"
-        assert cfg.username == "toml_user"
+        # SMTP still from file
+        assert cfg.smtp_host == "smtp.file.com"
+        assert cfg.username == "file_user"
 
 
-def test_load_env_overrides_toml_folder(tmp_path: Path) -> None:
-    """MAIL_IMAP_FOLDER env var overrides TOML folder."""
-    toml_file = tmp_path / "test.toml"
-    toml_file.write_text(
+def test_load_env_overrides_file_folder(tmp_path: Path) -> None:
+    """MAIL_IMAP_FOLDER env var overrides the YAML folder."""
+    yaml_file = tmp_path / "test.yaml"
+    yaml_file.write_text(
         """\
-[imap]
-host = "imap.toml.com"
-folder = "INBOX"
+imap:
+  host: imap.file.com
+  folder: INBOX
 
-[smtp]
-host = "smtp.toml.com"
+smtp:
+  host: smtp.file.com
 
-[auth]
-username = "toml_user"
-password = "toml_pass"
+auth:
+  username: file_user
+  password: file_pass
 """
     )
     env: dict[str, str] = {
-        "MAIL_CONFIG_PATH": str(toml_file),
+        "MAIL_CONFIG_PATH": str(yaml_file),
         "MAIL_IMAP_FOLDER": "Archive",
     }
     with mock.patch.dict(os.environ, env, clear=True):
@@ -683,76 +535,56 @@ password = "toml_pass"
 def test_load_missing_config_file() -> None:
     """No env vars AND no config file → ConfigurationError."""
     env: dict[str, str] = {
-        "MAIL_CONFIG_PATH": "/nonexistent/path/mail.toml",
+        "MAIL_CONFIG_PATH": "/nonexistent/path/mail.yaml",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ConfigurationError):
             load()
 
 
-def test_load_yaml_with_defaults(tmp_path: Path) -> None:
-    """load() deep-merges YAML defaults + local overrides + env reapply."""
-    defaults_file = tmp_path / "mail.defaults.yaml"
-    defaults_file.write_text(
-        """\
-imap:
-  host: ""
-  port: 993
-  tls_mode: direct-tls
-  folder: INBOX
-
-smtp:
-  host: ""
-  port: 587
-  tls_mode: starttls
-
-auth:
-  username: ""
-  password: ""
-
-store:
-  path: /default/path/mail.db
-"""
-    )
-
+def test_load_file_supplies_defaults_env_overrides(tmp_path: Path) -> None:
+    """load() takes file values, with env winning field-by-field and
+    dataclass defaults filling the rest."""
     local_file = tmp_path / "mail.local.yaml"
     local_file.write_text(
         """\
 imap:
-  host: imap.overrides.com
+  host: imap.file.com
 
 smtp:
   host: smtp.from.local.com
 
 auth:
-  username: override_user
-  password: override_pass
+  username: file_user
+  password: file_pass
+
+store:
+  path: /file/path/mail.db
 """
     )
 
     env: dict[str, str] = {
         "MAIL_CONFIG_PATH": str(local_file),
-        "MAIL_DEFAULTS_PATH": str(defaults_file),
         "MAIL_SMTP_HOST": "smtp.from.env.com",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         cfg = load()
 
-    # YAML local overrides the defaults for imap.host.
-    assert cfg.imap_host == "imap.overrides.com"
-    # SMTP from local, overridden by env.
-    assert cfg.smtp_host == "smtp.from.env.com"  # env overrides local
-    # Auth from local.
-    assert cfg.username == "override_user"
-    assert cfg.password == "override_pass"
-    # port / tls_mode from defaults (not in local, not in env).
+    # imap.host from the file.
+    assert cfg.imap_host == "imap.file.com"
+    # SMTP from file, overridden by env.
+    assert cfg.smtp_host == "smtp.from.env.com"
+    # Auth from file.
+    assert cfg.username == "file_user"
+    assert cfg.password == "file_pass"
+    # port / tls_mode fall back to dataclass defaults (not in file/env).
     assert cfg.imap_port == 993
     assert cfg.imap_tls_mode == "direct-tls"
     assert cfg.smtp_port == 587
     assert cfg.smtp_tls_mode == "starttls"
-    # db_path from defaults.
-    assert cfg.db_path == "/default/path/mail.db"
-    # imap_folder from defaults.
+    # db_path from file.
+    assert cfg.db_path == "/file/path/mail.db"
+    # imap_folder falls back to the default.
     assert cfg.imap_folder == "INBOX"
 
 
@@ -762,28 +594,28 @@ auth:
 
 
 def test_load_re_raises_on_invalid_value_not_missing(tmp_path: Path) -> None:
-    """load() must NOT fall back to TOML when env has an invalid value.
+    """load() must NOT fall back to the file when env has an invalid value.
 
     If from_env() fails because of an invalid value (e.g. a non-integer
-    port), the user explicitly set the env var — falling back to TOML
-    would silently swallow their typo.
+    port), the user explicitly set the env var — falling back to the
+    file would silently swallow their typo.
     """
-    toml_file = tmp_path / "test.toml"
-    toml_file.write_text(
+    yaml_file = tmp_path / "test.yaml"
+    yaml_file.write_text(
         """\
-[imap]
-host = "imap.toml.com"
+imap:
+  host: imap.file.com
 
-[smtp]
-host = "smtp.toml.com"
+smtp:
+  host: smtp.file.com
 
-[auth]
-username = "toml_user"
-password = "toml_pass"
+auth:
+  username: file_user
+  password: file_pass
 """
     )
     env: dict[str, str] = {
-        "MAIL_CONFIG_PATH": str(toml_file),
+        "MAIL_CONFIG_PATH": str(yaml_file),
         "MAIL_IMAP_HOST": "imap.env.com",
         "MAIL_SMTP_HOST": "smtp.env.com",
         "MAIL_USERNAME": "env_user",
@@ -801,22 +633,22 @@ password = "toml_pass"
 def test_load_re_raises_on_invalid_tls_not_missing(tmp_path: Path) -> None:
     """load() must re-raise when TLS mode is invalid, even if all
     required fields are present."""
-    toml_file = tmp_path / "test.toml"
-    toml_file.write_text(
+    yaml_file = tmp_path / "test.yaml"
+    yaml_file.write_text(
         """\
-[imap]
-host = "imap.toml.com"
+imap:
+  host: imap.file.com
 
-[smtp]
-host = "smtp.toml.com"
+smtp:
+  host: smtp.file.com
 
-[auth]
-username = "toml_user"
-password = "toml_pass"
+auth:
+  username: file_user
+  password: file_pass
 """
     )
     env: dict[str, str] = {
-        "MAIL_CONFIG_PATH": str(toml_file),
+        "MAIL_CONFIG_PATH": str(yaml_file),
         "MAIL_IMAP_HOST": "imap.env.com",
         "MAIL_SMTP_HOST": "smtp.env.com",
         "MAIL_USERNAME": "env_user",
@@ -852,176 +684,8 @@ def test_configuration_error_missing_only_true() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Secrets
+# from_yaml: password not required (it can be supplied via MAIL_PASSWORD)
 # ---------------------------------------------------------------------------
-
-
-def test_secrets_repr_redaction_with_password() -> None:
-    """repr(Secrets) redacts the password value."""
-    s = Secrets(mail_password="s3cret")
-    r = repr(s)
-    assert "s3cret" not in r
-    assert "<redacted>" in r
-
-
-def test_secrets_repr_redaction_default() -> None:
-    """Default Secrets() repr still shows <redacted>."""
-    s = Secrets()
-    r = repr(s)
-    assert "<redacted>" in r
-
-
-def test_secrets_str_redaction() -> None:
-    """str(Secrets) does NOT contain the actual password."""
-    s = Secrets(mail_password="s3cret")
-    r = str(s)
-    assert "s3cret" not in r
-
-
-# -- load_secrets ----------------------------------------------------------
-
-
-def test_load_secrets_happy_path(tmp_path: Path) -> None:
-    """load_secrets reads mail_password from a valid YAML file."""
-    secrets_file = tmp_path / "secrets.yaml"
-    secrets_file.write_text("mail_password: my-pass\n")
-    result = load_secrets(secrets_file)
-    assert result.mail_password == "my-pass"
-
-
-def test_load_secrets_missing_file(tmp_path: Path) -> None:
-    """load_secrets returns empty Secrets when file does not exist."""
-    missing = tmp_path / "nonexistent.yaml"
-    result = load_secrets(missing)
-    assert result.mail_password == ""
-    assert isinstance(result, Secrets)
-
-
-def test_load_secrets_empty_file(tmp_path: Path) -> None:
-    """load_secrets returns empty Secrets for an empty YAML file."""
-    secrets_file = tmp_path / "empty.yaml"
-    secrets_file.write_text("")
-    result = load_secrets(secrets_file)
-    assert result.mail_password == ""
-
-
-def test_load_secrets_missing_key(tmp_path: Path) -> None:
-    """load_secrets returns empty password when mail_password key is absent."""
-    secrets_file = tmp_path / "other.yaml"
-    secrets_file.write_text("other: value\n")
-    result = load_secrets(secrets_file)
-    assert result.mail_password == ""
-
-
-def test_load_secrets_bad_yaml(tmp_path: Path) -> None:
-    """load_secrets raises ConfigurationError for malformed YAML."""
-    secrets_file = tmp_path / "bad.yaml"
-    secrets_file.write_text("{this is: not: valid: yaml")
-    with pytest.raises(ConfigurationError) as exc:
-        load_secrets(secrets_file)
-    assert "Invalid YAML" in str(exc.value)
-
-
-# -- get_secrets caching ---------------------------------------------------
-
-
-def test_get_secrets_caching() -> None:
-    """get_secrets() caches the result and only calls load_secrets once."""
-    import robotsix_auto_mail.config as config_mod
-
-    # Reset cache before test
-    config_mod._secrets_cache = None
-
-    with mock.patch(
-        "robotsix_auto_mail.config.load_secrets",
-        return_value=Secrets(mail_password="first"),
-    ) as mock_load:
-        s1 = get_secrets()
-        s2 = get_secrets()
-        assert s1 is s2
-        assert mock_load.call_count == 1
-
-    # Clean up
-    config_mod._secrets_cache = None
-
-
-# -- load() with secrets ---------------------------------------------------
-
-
-def test_load_with_secrets(tmp_path: Path) -> None:
-    """load() applies secrets.mail_password on top of file config."""
-    import robotsix_auto_mail.config as config_mod
-
-    # Reset cache
-    config_mod._secrets_cache = None
-
-    local_yaml = tmp_path / "mail.local.yaml"
-    local_yaml.write_text(
-        """\
-imap:
-  host: imap.example.com
-
-smtp:
-  host: smtp.example.com
-
-auth:
-  username: user@example.com
-  password: ""
-"""
-    )
-
-    secrets_yaml = tmp_path / "secrets.yaml"
-    secrets_yaml.write_text("mail_password: secret-pass\n")
-
-    env: dict[str, str] = {
-        "MAIL_CONFIG_PATH": str(local_yaml),
-        "MAIL_SECRETS_FILE": str(secrets_yaml),
-    }
-    with mock.patch.dict(os.environ, env, clear=True):
-        cfg = load()
-        assert cfg.password == "secret-pass"
-        assert cfg.imap_host == "imap.example.com"
-        assert cfg.smtp_host == "smtp.example.com"
-        assert cfg.username == "user@example.com"
-
-    # Clean up
-    config_mod._secrets_cache = None
-
-
-def test_load_without_secrets_file(tmp_path: Path) -> None:
-    """load() preserves file password when no secrets file exists."""
-    import robotsix_auto_mail.config as config_mod
-
-    # Reset cache
-    config_mod._secrets_cache = None
-
-    local_yaml = tmp_path / "mail.local.yaml"
-    local_yaml.write_text(
-        """\
-imap:
-  host: imap.example.com
-
-smtp:
-  host: smtp.example.com
-
-auth:
-  username: user@example.com
-  password: "file-pass"
-"""
-    )
-
-    env: dict[str, str] = {
-        "MAIL_CONFIG_PATH": str(local_yaml),
-    }
-    with mock.patch.dict(os.environ, env, clear=True):
-        cfg = load()
-        assert cfg.password == "file-pass"
-
-    # Clean up
-    config_mod._secrets_cache = None
-
-
-# -- from_yaml / from_toml: password not required -------------------------
 
 
 def test_from_yaml_missing_auth_password_ok(tmp_path: Path) -> None:
@@ -1044,25 +708,6 @@ auth:
     assert cfg.username == "user@example.com"
 
 
-def test_from_toml_missing_auth_password_ok(tmp_path: Path) -> None:
-    """from_toml does NOT require auth.password."""
-    toml_file = tmp_path / "no_pass.toml"
-    toml_file.write_text(
-        """\
-[imap]
-host = "imap.example.com"
-
-[smtp]
-host = "smtp.example.com"
-
-[auth]
-username = "user@example.com"
-"""
-    )
-    cfg = MailConfig.from_toml(toml_file)
-    assert cfg.password == ""
-
-
 # -- from_env still requires MAIL_PASSWORD --------------------------------
 
 
@@ -1079,3 +724,118 @@ def test_from_env_still_requires_mail_password() -> None:
             MailConfig.from_env()
         msg = str(exc.value)
         assert "MAIL_PASSWORD" in msg
+
+
+# ---------------------------------------------------------------------------
+# LLM settings (llm: section + LLM_* env vars)
+# ---------------------------------------------------------------------------
+
+
+def test_llm_defaults_when_absent() -> None:
+    """llm fields default to empty key + the default model."""
+    cfg = MailConfig(
+        imap_host="i", smtp_host="s", username="u", password="p"
+    )
+    assert cfg.llm_api_key == ""
+    assert cfg.llm_model == DEFAULT_LLM_MODEL
+
+
+def test_llm_api_key_redacted_in_repr() -> None:
+    """repr()/str() must NOT leak the LLM API key."""
+    cfg = MailConfig(
+        imap_host="i",
+        smtp_host="s",
+        username="u",
+        password="p",
+        llm_api_key="sk-or-secret",
+    )
+    assert "sk-or-secret" not in repr(cfg)
+    assert "sk-or-secret" not in str(cfg)
+    assert "<redacted>" in repr(cfg)
+
+
+def test_from_yaml_reads_llm_section(tmp_path: Path) -> None:
+    """from_yaml parses the optional llm: section."""
+    yaml_file = tmp_path / "with_llm.yaml"
+    yaml_file.write_text(
+        """\
+imap:
+  host: imap.example.com
+
+smtp:
+  host: smtp.example.com
+
+auth:
+  username: u
+  password: p
+
+llm:
+  api_key: sk-or-from-file
+  model: anthropic/claude-3-haiku
+"""
+    )
+    cfg = MailConfig.from_yaml(yaml_file)
+    assert cfg.llm_api_key == "sk-or-from-file"
+    assert cfg.llm_model == "anthropic/claude-3-haiku"
+
+
+def test_from_env_reads_llm_vars() -> None:
+    """from_env picks up LLM_API_KEY / LLM_MODEL."""
+    env: dict[str, str] = {
+        "MAIL_IMAP_HOST": "i",
+        "MAIL_SMTP_HOST": "s",
+        "MAIL_USERNAME": "u",
+        "MAIL_PASSWORD": "p",
+        "LLM_API_KEY": "sk-env",
+        "LLM_MODEL": "env/model",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        cfg = MailConfig.from_env()
+        assert cfg.llm_api_key == "sk-env"
+        assert cfg.llm_model == "env/model"
+
+
+def test_load_llm_env_wins() -> None:
+    """load_llm prefers the environment variables."""
+    env: dict[str, str] = {
+        "LLM_API_KEY": "sk-env",
+        "LLM_MODEL": "env/model",
+        # point at a path that does not exist so the file branch is skipped
+        "MAIL_CONFIG_PATH": "/nonexistent/mail.yaml",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        assert load_llm() == ("sk-env", "env/model")
+
+
+def test_load_llm_falls_back_to_file(tmp_path: Path) -> None:
+    """load_llm reads the llm: section when env vars are absent."""
+    yaml_file = tmp_path / "mail.local.yaml"
+    yaml_file.write_text(
+        """\
+llm:
+  api_key: sk-from-file
+  model: file/model
+"""
+    )
+    env: dict[str, str] = {"MAIL_CONFIG_PATH": str(yaml_file)}
+    with mock.patch.dict(os.environ, env, clear=True):
+        assert load_llm() == ("sk-from-file", "file/model")
+
+
+def test_load_llm_env_key_file_model(tmp_path: Path) -> None:
+    """load_llm mixes sources: env key + file model."""
+    yaml_file = tmp_path / "mail.local.yaml"
+    yaml_file.write_text("llm:\n  model: file/model\n")
+    env: dict[str, str] = {
+        "MAIL_CONFIG_PATH": str(yaml_file),
+        "LLM_API_KEY": "sk-env",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        assert load_llm() == ("sk-env", "file/model")
+
+
+def test_load_llm_default_model_when_nothing_set() -> None:
+    """load_llm returns an empty key and the default model when unset."""
+    env: dict[str, str] = {"MAIL_CONFIG_PATH": "/nonexistent/mail.yaml"}
+    with mock.patch.dict(os.environ, env, clear=True):
+        assert load_llm() == ("", DEFAULT_LLM_MODEL)

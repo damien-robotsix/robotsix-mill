@@ -6,6 +6,7 @@ Entry point: ``main()``, exposed via console_scripts in pyproject.toml.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import errno
 import getpass
 import sys
@@ -15,9 +16,13 @@ from typing import TextIO
 from robotsix_auto_mail import __version__
 from robotsix_auto_mail.config import MailConfig, load
 from robotsix_auto_mail.db import MailRecord, init_db, list_records
-from robotsix_auto_mail.imap import ImapClient, ImapError
+from robotsix_auto_mail.imap import ImapAuthError, ImapClient, ImapError
 from robotsix_auto_mail.pipeline import IngestResult, ingest_mail
-from robotsix_auto_mail.smtp_client import SmtpClient, SmtpError
+from robotsix_auto_mail.smtp_client import (
+    SmtpAuthError,
+    SmtpClient,
+    SmtpError,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--password",
         default=None,
         help=(
-            "Password to write to secrets.yaml. "
+            "Password to write into the config file. "
             "When omitted, prompts interactively."
         ),
     )
@@ -84,6 +89,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Print mail config to stdout instead of writing to file",
+    )
+    detect_parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the post-write IMAP/SMTP connection check. "
+            "By default detect verifies the settings once a password is known."
+        ),
     )
 
     return parser
@@ -274,8 +288,138 @@ def _cmd_board(config: MailConfig) -> int:
     return 0
 
 
+@dataclasses.dataclass(frozen=True)
+class _VerifyResult:
+    """Outcome of a quiet IMAP + SMTP connection check.
+
+    ``*_auth`` is True when the server was reachable but authentication
+    failed (i.e. the host is right but the password is wrong).
+    """
+
+    imap_ok: bool
+    smtp_ok: bool
+    imap_error: str = ""
+    smtp_error: str = ""
+    imap_auth: bool = False
+    smtp_auth: bool = False
+
+    @property
+    def ok(self) -> bool:
+        return self.imap_ok and self.smtp_ok
+
+    @property
+    def host_problem(self) -> bool:
+        """A failure that is NOT an auth failure (wrong host/port/TLS)."""
+        imap_host_bad = not self.imap_ok and not self.imap_auth
+        smtp_host_bad = not self.smtp_ok and not self.smtp_auth
+        return imap_host_bad or smtp_host_bad
+
+    @property
+    def only_auth_problem(self) -> bool:
+        """Reachable everywhere, but at least one authentication failed."""
+        return not self.ok and not self.host_problem
+
+
+def _verify_config(config: MailConfig) -> _VerifyResult:
+    """Attempt authenticated IMAP and SMTP connections, quietly.
+
+    Returns a :class:`_VerifyResult` categorising each side as ok, an auth
+    failure, or a connection/TLS failure.  Prints nothing.
+    """
+    imap_ok = smtp_ok = False
+    imap_error = smtp_error = ""
+    imap_auth = smtp_auth = False
+
+    try:
+        with ImapClient(config) as imap:
+            imap.list_folders()
+        imap_ok = True
+    except ImapAuthError as exc:
+        imap_error, imap_auth = str(exc), True
+    except ImapError as exc:
+        imap_error = str(exc)
+
+    try:
+        with SmtpClient(config):
+            pass
+        smtp_ok = True
+    except SmtpAuthError as exc:
+        smtp_error, smtp_auth = str(exc), True
+    except SmtpError as exc:
+        smtp_error = str(exc)
+
+    return _VerifyResult(
+        imap_ok=imap_ok,
+        smtp_ok=smtp_ok,
+        imap_error=imap_error,
+        smtp_error=smtp_error,
+        imap_auth=imap_auth,
+        smtp_auth=smtp_auth,
+    )
+
+
+def _report_verify_result(result: _VerifyResult) -> None:
+    """Print a one-line-per-server summary of a verification attempt."""
+    for label, ok, auth, err in (
+        ("IMAP", result.imap_ok, result.imap_auth, result.imap_error),
+        ("SMTP", result.smtp_ok, result.smtp_auth, result.smtp_error),
+    ):
+        if ok:
+            sys.stderr.write(f"  {label}: ok\n")
+        else:
+            kind = "auth" if auth else "connection"
+            sys.stderr.write(f"  {label}: {kind} failed — {err}\n")
+
+
+def _verify_feedback(config: MailConfig, result: _VerifyResult) -> str:
+    """Describe the connection failures for the LLM refinement prompt."""
+    parts: list[str] = []
+    if not result.imap_ok and not result.imap_auth:
+        parts.append(
+            f"IMAP host {config.imap_host!r} (port {config.imap_port}, "
+            f"{config.imap_tls_mode}) could not be reached: {result.imap_error}"
+        )
+    if not result.smtp_ok and not result.smtp_auth:
+        parts.append(
+            f"SMTP host {config.smtp_host!r} (port {config.smtp_port}, "
+            f"{config.smtp_tls_mode}) could not be reached: {result.smtp_error}"
+        )
+    return "\n".join(parts)
+
+
+def _prompt_hosts(
+    config: MailConfig, result: _VerifyResult
+) -> MailConfig | None:
+    """Prompt the user for the host(s) that failed to connect.
+
+    Returns an updated config, or ``None`` if the user supplied nothing new
+    (or input is unavailable), so the caller can stop instead of looping.
+    """
+    imap_host = config.imap_host
+    smtp_host = config.smtp_host
+    changed = False
+    try:
+        if not result.imap_ok and not result.imap_auth:
+            ans = input(f"Enter IMAP host [{config.imap_host}]: ").strip()
+            if ans:
+                imap_host, changed = ans, True
+        if not result.smtp_ok and not result.smtp_auth:
+            ans = input(f"Enter SMTP host [{config.smtp_host}]: ").strip()
+            if ans:
+                smtp_host, changed = ans, True
+    except (EOFError, KeyboardInterrupt):
+        return None
+    if not changed:
+        return None
+    return dataclasses.replace(
+        config, imap_host=imap_host, smtp_host=smtp_host
+    )
+
+
 def _cmd_detect(args: argparse.Namespace) -> int:
-    """Run the detect subcommand: auto-detect provider settings via LLM.
+    """Run the detect subcommand: auto-detect provider settings, write the
+    config, and verify it by connecting — refining with autoconfig, the LLM,
+    and finally a manual prompt when the servers cannot be reached.
 
     Returns 0 on success, 1 on any error.
     """
@@ -283,10 +427,10 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     try:
         from robotsix_auto_mail.detect import (
             DetectionError,
+            autoconfig_lookup,
             detect_provider,
             provider_to_config,
             render_config,
-            render_secrets,
         )
     except ImportError:
         sys.stderr.write(
@@ -295,29 +439,36 @@ def _cmd_detect(args: argparse.Namespace) -> int:
         )
         return 1
 
-    import os
+    from pathlib import Path
 
-    # -- resolve model from env --
-    model = os.environ.get("LLM_MODEL", "deepseek/deepseek-v4-flash")
+    from robotsix_auto_mail.config import ConfigurationError, load_llm
 
-    # -- detect provider --
-    try:
-        provider = detect_provider(
-            args.email,
-            model=model,
+    api_key, model = load_llm()
+
+    # -- initial detection: published autoconfig first, LLM fallback --
+    sys.stderr.write(f"Detecting settings for {args.email}…\n")
+    provider = autoconfig_lookup(args.email)
+    if provider is not None:
+        sys.stderr.write(
+            f"  autoconfig: imap={provider.imap_host} "
+            f"smtp={provider.smtp_host}\n"
         )
-    except DetectionError as exc:
-        sys.stderr.write(f"Error: {exc}\n")
-        return 1
-
-    # -- convert to config --
-    config = provider_to_config(provider, args.email)
-    yaml_text = render_config(config, fmt="yaml")
+    else:
+        sys.stderr.write("  autoconfig: no match — asking the LLM…\n")
+        try:
+            provider = detect_provider(
+                args.email, model=model, api_key=api_key
+            )
+        except DetectionError as exc:
+            sys.stderr.write(f"Error: {exc}\n")
+            return 1
+        sys.stderr.write(
+            f"  LLM: imap={provider.imap_host} smtp={provider.smtp_host}\n"
+        )
 
     # -- password handling --
     password: str | None = args.password
     if password is None and not args.stdout:
-        # Interactive prompt
         try:
             password = getpass.getpass("Email password: ")
         except (EOFError, KeyboardInterrupt):
@@ -326,43 +477,129 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     elif password is None and args.stdout:
         password = ""  # no prompt in stdout mode
 
-    # -- output --
-    if args.stdout:
-        # Banner to stderr
-        sys.stderr.write(
-            f"# LLM-detected settings for {args.email} — verify before using.\n"
-            "# Save this as config/mail.local.yaml and put your password "
-            "in config/secrets.yaml.\n"
-        )
-        sys.stdout.write(yaml_text)
-        if password:
-            sys.stderr.write(
-                "Password was provided but not written to file. "
-                "Use --output (without --stdout) to save both config "
-                "and secrets.yaml.\n"
+    # -- preserve settings detect doesn't generate (LLM credentials, a custom
+    #    store path, an existing password) from an existing config file --
+    output_path = Path(args.output)
+    prev: MailConfig | None = None
+    if not args.stdout and output_path.exists():
+        try:
+            prev = MailConfig.from_yaml(output_path, validate=False)
+        except (ConfigurationError, OSError):
+            prev = None
+
+    def _build(prov: object, pw: str | None) -> MailConfig:
+        cfg = provider_to_config(prov, args.email, password=pw or "")  # type: ignore[arg-type]
+        if prev is not None:
+            cfg = dataclasses.replace(
+                cfg,
+                llm_api_key=prev.llm_api_key,
+                llm_model=prev.llm_model,
+                db_path=prev.db_path,
+                password=pw or prev.password,
             )
+        return cfg
+
+    config = _build(provider, password)
+
+    # -- stdout mode: print and return (no write, no verify) --
+    if args.stdout:
+        sys.stderr.write(
+            f"# Detected settings for {args.email} — verify before using.\n"
+            "# Save this as config/mail.local.yaml.\n"
+        )
+        sys.stdout.write(render_config(config))
         return 0
 
-    # -- file output --
-    from pathlib import Path
+    def _write(cfg: MailConfig) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(render_config(cfg))
 
-    output_path = Path(args.output)
-    # Ensure parent directory exists
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(yaml_text)
+    _write(config)
     sys.stderr.write(f"Config written to {output_path}\n")
 
-    if password:
-        secrets_path = output_path.parent / "secrets.yaml"
-        secrets_path.write_text(render_secrets(password))
-        sys.stderr.write(f"Secrets written to {secrets_path}\n")
-    else:
+    if not config.password:
         sys.stderr.write(
-            "No password provided — add it to config/secrets.yaml "
-            "before running probe\n"
+            f"No password provided — add it to {output_path} "
+            "(or set MAIL_PASSWORD), then run `probe` to verify.\n"
         )
+        return 0
+    if args.no_verify:
+        return 0
 
-    return 0
+    # -- verify + refine loop --
+    #   connection/TLS failure → refine host via the LLM (bounded), then a
+    #   manual prompt;  auth failure → re-prompt the password.
+    llm_budget = 2
+    # only re-prompt the password when it was entered interactively
+    pw_budget = 2 if args.password is None else 0
+    manual_used = False
+
+    while True:
+        sys.stderr.write("\nVerifying connection (IMAP + SMTP)…\n")
+        result = _verify_config(config)
+        if result.ok:
+            sys.stderr.write("Verification succeeded — settings work.\n")
+            return 0
+        _report_verify_result(result)
+
+        if result.only_auth_problem and pw_budget > 0:
+            pw_budget -= 1
+            sys.stderr.write(
+                "The server is reachable but the password was rejected.\n"
+            )
+            try:
+                new_pw = getpass.getpass("Re-enter email password: ")
+            except (EOFError, KeyboardInterrupt):
+                break
+            if not new_pw:
+                break
+            config = _build(provider, new_pw)
+            _write(config)
+            continue
+
+        if result.host_problem and llm_budget > 0:
+            llm_budget -= 1
+            sys.stderr.write("Refining the host with the LLM…\n")
+            try:
+                refined = detect_provider(
+                    args.email,
+                    model=model,
+                    api_key=api_key,
+                    feedback=_verify_feedback(config, result),
+                )
+            except DetectionError as exc:
+                sys.stderr.write(f"  LLM refinement error: {exc}\n")
+                refined = None
+            if refined is not None:
+                provider = refined
+                sys.stderr.write(
+                    f"  LLM: imap={provider.imap_host} "
+                    f"smtp={provider.smtp_host}\n"
+                )
+                config = _build(provider, config.password)
+                _write(config)
+                continue
+
+        if result.host_problem and not manual_used:
+            manual_used = True
+            sys.stderr.write(
+                "Could not auto-detect a working host — "
+                "please enter it manually.\n"
+            )
+            updated = _prompt_hosts(config, result)
+            if updated is None:
+                break
+            config = updated
+            _write(config)
+            continue
+
+        break
+
+    sys.stderr.write(
+        f"\nVerification FAILED — could not confirm the settings. "
+        f"Edit {output_path} and re-run `probe`.\n"
+    )
+    return 1
 
 
 def _cmd_serve(config: MailConfig, *, port: int) -> int:

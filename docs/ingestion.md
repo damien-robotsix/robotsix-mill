@@ -61,7 +61,7 @@ automation — a single malformed message will not cause a non-zero exit.
 
 ## Datastore schema
 
-The local SQLite database (default: `mail.db`) contains two tables, created
+The local SQLite database (default: `.data/mail.db`) contains two tables, created
 automatically on first run (`CREATE TABLE IF NOT EXISTS`).
 
 ### `mail_records` — parsed messages
@@ -124,9 +124,9 @@ settings as the rest of `robotsix-auto-mail` (see
 [docs/connecting.md](connecting.md)).  Two additional keys control the local
 datastore:
 
-| Variable | TOML key | Default | Purpose |
+| Variable | YAML key | Default | Purpose |
 |---|---|---|---|
-| `MAIL_DB_PATH` | `store.path` | `mail.db` | Filesystem path to the SQLite database |
+| `MAIL_DB_PATH` | `store.path` | `.data/mail.db` | Filesystem path to the SQLite database |
 | `MAIL_IMAP_FOLDER` | `imap.folder` | `INBOX` | IMAP mailbox folder to fetch from |
 
 The database is created automatically on first use — no manual setup is needed.

@@ -37,7 +37,7 @@ cd robotsix-auto-mail
 
 ### 2. Create your local configuration
 
-The recommended path is the YAML defaults + local overrides pattern:
+The recommended path is a single YAML config file:
 
 ```sh
 cp config/mail.local.example.yaml config/mail.local.yaml
@@ -59,9 +59,9 @@ export LLM_API_KEY=sk-or-v1-…
 docker compose run robotsix-auto-mail detect user@gmail.com
 ```
 
-This calls an LLM to look up the correct IMAP/SMTP settings, writes
-`config/mail.local.yaml`, and optionally prompts for your password (stored in
-`config/secrets.yaml`).  See [docs/connecting.md](connecting.md#auto-detection-with-detect)
+This calls an LLM to look up the correct IMAP/SMTP settings and writes
+`config/mail.local.yaml`, prompting for your password and including it in
+that file.  See [docs/connecting.md](connecting.md#auto-detection-with-detect)
 for full details.
 
 The file `config/mail.local.yaml` is **git-ignored** (`config/mail.local.yaml`
@@ -175,13 +175,13 @@ docker volume ls | grep mail_data
 
 ## Configuration quick-reference
 
-Three config paths are available.  They compose with defined precedence:
+Configuration resolves through one cascade: built-in defaults → YAML file →
+environment variables (which win field-by-field).
 
 | Path | Mechanism | How to use |
 |---|---|---|
-| **YAML merge** | `config/mail.defaults.yaml` + `config/mail.local.yaml` deep-merged | Recommended. Copy `config/mail.local.example.yaml` → `config/mail.local.yaml` and edit. |
-| **TOML** | Single `config/mail.toml` file | Alternative to YAML. Template at `config/mail.example.toml`. |
-| **Env vars** | `MAIL_IMAP_HOST`, `MAIL_SMTP_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD` (and optional `MAIL_IMAP_PORT`, …) | Set in shell or via `docker compose run -e …`. All four required vars must be set or the entrypoint will refuse to start. |
+| **YAML file** | A single `config/mail.local.yaml` | Recommended. Copy `config/mail.local.example.yaml` → `config/mail.local.yaml` and edit. |
+| **Env vars** | `MAIL_IMAP_HOST`, `MAIL_SMTP_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD` (and optional `MAIL_IMAP_PORT`, …) | Set in shell or via `docker compose run -e …`. Either set all four required vars or supply a config file, or the entrypoint will refuse to start. |
 
 Full precedence rules and every config key are documented in
 **[docs/connecting.md](connecting.md)**.  Do not duplicate that reference
@@ -366,7 +366,7 @@ Missing required configuration.
 Provide either:
   • All four MAIL_* environment variables:
       MAIL_IMAP_HOST, MAIL_SMTP_HOST, MAIL_USERNAME, MAIL_PASSWORD
-  • A config file via MAIL_CONFIG_PATH (YAML or TOML)
+  • A YAML config file via MAIL_CONFIG_PATH
 ```
 
 The entrypoint validated config before launching Python and found neither

@@ -50,7 +50,7 @@ Missing required configuration.
 Provide either:
   • All four MAIL_* environment variables:
       MAIL_IMAP_HOST, MAIL_SMTP_HOST, MAIL_USERNAME, MAIL_PASSWORD
-  • A config file via MAIL_CONFIG_PATH (YAML or TOML)
+  • A YAML config file via MAIL_CONFIG_PATH
 
 Examples:
   docker compose run -e MAIL_IMAP_HOST=… -e MAIL_SMTP_HOST=… \\

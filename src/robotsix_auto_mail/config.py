@@ -1,18 +1,18 @@
 """Mail configuration subsystem.
 
 Provides ``MailConfig``, a frozen dataclass that holds IMAP and SMTP
-connection parameters, and several classmethods / convenience functions
-for loading it from environment variables, TOML files, or YAML files.
+connection parameters, with two loaders: ``from_env()`` (environment
+variables) and ``from_yaml()`` (a YAML file).
 
-Also provides ``Secrets`` for loading credentials from a separate
-``config/secrets.yaml`` file, keeping secrets out of the main config.
+Configuration resolves through a single, predictable cascade — see
+``load()``: code defaults → YAML file → environment variables (which
+win field-by-field).
 """
 
 from __future__ import annotations
 
 import dataclasses
 import os
-import tomllib
 from pathlib import Path
 
 import yaml
@@ -29,7 +29,7 @@ class ConfigurationError(Exception):
         message: Human-readable error description.
         missing_only: True when the *only* problem is missing required
             fields (no invalid values).  Used by ``load()`` to decide
-            whether TOML fallback is appropriate.
+            whether falling back to the YAML config file is appropriate.
     """
 
     def __init__(
@@ -44,90 +44,20 @@ class ConfigurationError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Secrets
-# ---------------------------------------------------------------------------
-
-
-@dataclasses.dataclass(frozen=True)
-class Secrets:
-    """Credentials loaded from ``config/secrets.yaml``.
-
-    Never merged into MailConfig — credentials stay in this separate object.
-    """
-
-    mail_password: str = ""
-
-    def __repr__(self) -> str:
-        return "Secrets(mail_password=<redacted>)"
-
-    def __str__(self) -> str:
-        return self.__repr__()
-
-
-_secrets_cache: Secrets | None = None
-
-
-def load_secrets(path: str | Path | None = None) -> Secrets:
-    """Load secrets from a YAML file.
-
-    Args:
-        path: Filesystem path to the secrets YAML file.  When ``None``,
-            the ``MAIL_SECRETS_FILE`` env var is checked, falling back to
-            ``config/secrets.yaml``.
-
-    Returns:
-        A ``Secrets`` instance.  Returns ``Secrets()`` (empty password)
-        if the file does not exist.
-
-    Raises:
-        ConfigurationError: If the file exists but cannot be parsed.
-    """
-    if path is None:
-        path = os.environ.get("MAIL_SECRETS_FILE", "config/secrets.yaml")
-    path = Path(path)
-
-    try:
-        raw = path.read_text()
-    except FileNotFoundError:
-        return Secrets()
-    except OSError as exc:
-        raise ConfigurationError(
-            f"Cannot read secrets file {path}: {exc}"
-        ) from exc
-
-    try:
-        data: object = yaml.safe_load(raw)
-    except yaml.YAMLError as exc:
-        raise ConfigurationError(
-            f"Invalid YAML in secrets file {path}: {exc}"
-        ) from exc
-
-    if data is None:
-        data = {}
-    if not isinstance(data, dict):
-        raise ConfigurationError(
-            f"Secrets YAML root must be a mapping, got {type(data).__name__}"
-        )
-
-    password = data.get("mail_password", "")
-    if not isinstance(password, str):
-        password = str(password)
-    return Secrets(mail_password=password)
-
-
-def get_secrets() -> Secrets:
-    """Return the cached ``Secrets`` instance, loading it on first call."""
-    global _secrets_cache
-    if _secrets_cache is None:
-        _secrets_cache = load_secrets()
-    return _secrets_cache
-
-
-# ---------------------------------------------------------------------------
 # Valid TLS modes
 # ---------------------------------------------------------------------------
 
 _VALID_TLS_MODES = frozenset({"starttls", "direct-tls", "none"})
+
+# Default location for the SQLite store: a ``.data/`` directory next to the
+# current working directory (git-ignored), keeping the repo root clean.
+DEFAULT_DB_PATH = ".data/mail.db"
+
+# Default YAML config file path (used by ``load()`` and ``load_llm()``).
+DEFAULT_CONFIG_PATH = "config/mail.local.yaml"
+
+# Default LLM model for the ``detect`` command (and future mail processing).
+DEFAULT_LLM_MODEL = "deepseek/deepseek-v4-flash"
 
 
 def _check_tls_mode(label: str, value: str) -> None:
@@ -154,10 +84,12 @@ def _parse_int(label: str, raw: str) -> int:
 
 @dataclasses.dataclass(frozen=True)
 class MailConfig:
-    """Immutable mail server connection parameters.
+    """Immutable application settings: mail server connection parameters
+    plus optional LLM credentials used by ``detect`` (and future mail
+    processing).
 
     Credentials are stored in memory as plain ``str`` values but the
-    ``password`` field is masked in ``repr`` / ``str``.
+    ``password`` and ``llm_api_key`` fields are masked in ``repr`` / ``str``.
     """
 
     imap_host: str
@@ -170,10 +102,17 @@ class MailConfig:
     smtp_port: int = 587
     smtp_tls_mode: str = "starttls"
 
-    db_path: str = "mail.db"
+    db_path: str = DEFAULT_DB_PATH
     imap_folder: str = "INBOX"
 
+    # LLM provider settings — optional; only needed for the `detect`
+    # subcommand and future LLM-assisted mail processing.
+    llm_api_key: str = ""
+    llm_model: str = DEFAULT_LLM_MODEL
+
     # -- masking -----------------------------------------------------------
+
+    _SECRET_FIELDS = ("password", "llm_api_key")
 
     def __repr__(self) -> str:
         cls = type(self).__name__
@@ -181,7 +120,7 @@ class MailConfig:
         parts = []
         for f in fields:
             val = getattr(self, f.name)
-            if f.name == "password":
+            if f.name in self._SECRET_FIELDS:
                 parts.append(f"{f.name}=<redacted>")
             else:
                 parts.append(f"{f.name}={val!r}")
@@ -262,8 +201,11 @@ class MailConfig:
             "MAIL_SMTP_TLS_MODE", "smtp_tls_mode", "starttls"
         )
 
-        db_path = os.environ.get("MAIL_DB_PATH", "mail.db")
+        db_path = os.environ.get("MAIL_DB_PATH", DEFAULT_DB_PATH)
         imap_folder = os.environ.get("MAIL_IMAP_FOLDER", "INBOX")
+
+        llm_api_key = os.environ.get("LLM_API_KEY", "")
+        llm_model = os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL)
 
         # -- final validation ----------------------------------------------
 
@@ -276,9 +218,9 @@ class MailConfig:
         msgs.extend(errors)
         if msgs:
             # If *only* missing-required-field errors (no invalid
-            # values), flag the error so load() can safely fall back
-            # to TOML.  Invalid values mean the user explicitly set an
-            # env var — falling back would silently swallow their typo.
+            # values), flag the error so load() can safely fall back to
+            # the YAML file.  Invalid values mean the user explicitly set
+            # an env var — falling back would silently swallow their typo.
             raise ConfigurationError(
                 "\n".join(msgs),
                 missing_only=bool(missing and not errors),
@@ -295,6 +237,8 @@ class MailConfig:
             password=password,
             db_path=db_path,
             imap_folder=imap_folder,
+            llm_api_key=llm_api_key,
+            llm_model=llm_model,
         )
 
     @classmethod
@@ -319,15 +263,19 @@ class MailConfig:
               username: user@example.com
               password: s3cret
 
+            llm:
+              api_key: sk-or-v1-…
+              model: deepseek/deepseek-v4-flash
+
         All fields are optional; missing fields fall back to the same
         defaults as ``from_env()``.
 
         Args:
             path: Filesystem path to the YAML file.
             validate: If True (the default), raise ConfigurationError
-                when required fields are empty.  Set to False when
-                loading a defaults file that intentionally has blank
-                required fields.
+                when required fields are empty.  Set to False to load a
+                partial file that intentionally leaves required fields
+                blank (e.g. round-tripping ``detect`` output in tests).
 
         Returns:
             A fully-populated ``MailConfig``.
@@ -383,7 +331,11 @@ class MailConfig:
         password = _get_str(auth_section, "password", "")
 
         store_section = _get_table(data, "store") or {}
-        db_path = _get_str(store_section, "path", "mail.db")
+        db_path = _get_str(store_section, "path", DEFAULT_DB_PATH)
+
+        llm_section = _get_table(data, "llm") or {}
+        llm_api_key = _get_str(llm_section, "api_key", "")
+        llm_model = _get_str(llm_section, "model", DEFAULT_LLM_MODEL)
 
         # -- validate TLS modes --------------------------------------------
 
@@ -430,127 +382,8 @@ class MailConfig:
             password=password,
             db_path=db_path,
             imap_folder=imap_folder,
-        )
-
-    @classmethod
-    def from_toml(cls, path: str | Path) -> MailConfig:
-        """Build a ``MailConfig`` from a TOML file.
-
-        The file is expected to follow this structure::
-
-            [imap]
-            host = "imap.example.com"
-            port = 993
-            tls_mode = "direct-tls"
-
-            [smtp]
-            host = "smtp.example.com"
-            port = 587
-            tls_mode = "starttls"
-
-            [auth]
-            username = "user@example.com"
-            password = "s3cret"
-
-        All fields are optional; missing fields fall back to the same
-        defaults as ``from_env()``.
-
-        Args:
-            path: Filesystem path to the TOML file.
-
-        Returns:
-            A fully-populated ``MailConfig``.
-
-        Raises:
-            ConfigurationError: If the file cannot be parsed or if
-                required fields are missing.
-            FileNotFoundError: If *path* does not exist.
-        """
-        path = Path(path)
-
-        try:
-            raw = path.read_text()
-        except FileNotFoundError:
-            raise
-        except OSError as exc:
-            raise ConfigurationError(
-                f"Cannot read config file {path}: {exc}"
-            ) from exc
-
-        try:
-            data: dict[str, object] = tomllib.loads(raw)
-        except tomllib.TOMLDecodeError as exc:
-            raise ConfigurationError(
-                f"Invalid TOML in {path}: {exc}"
-            ) from exc
-
-        # -- extract sections ----------------------------------------------
-
-        imap_section = _get_table(data, "imap") or {}
-        smtp_section = _get_table(data, "smtp") or {}
-        auth_section = _get_table(data, "auth") or {}
-
-        # -- read fields with defaults -------------------------------------
-
-        imap_host = _get_str(imap_section, "host", "")
-        imap_port = _get_int(imap_section, "port", 993, path)
-        imap_tls_mode = _get_str(imap_section, "tls_mode", "direct-tls")
-        imap_folder = _get_str(imap_section, "folder", "INBOX")
-
-        smtp_host = _get_str(smtp_section, "host", "")
-        smtp_port = _get_int(smtp_section, "port", 587, path)
-        smtp_tls_mode = _get_str(smtp_section, "tls_mode", "starttls")
-
-        username = _get_str(auth_section, "username", "")
-        password = _get_str(auth_section, "password", "")
-
-        store_section = _get_table(data, "store") or {}
-        db_path = _get_str(store_section, "path", "mail.db")
-
-        # -- validate TLS modes --------------------------------------------
-
-        errors: list[str] = []
-        for label, value in [
-            ("imap.tls_mode", imap_tls_mode),
-            ("smtp.tls_mode", smtp_tls_mode),
-        ]:
-            if value not in _VALID_TLS_MODES:
-                errors.append(
-                    f"{label} must be one of {sorted(_VALID_TLS_MODES)!r}, "
-                    f"got {value!r}"
-                )
-
-        # -- required fields -----------------------------------------------
-
-        missing: list[str] = []
-        for label, value in [
-            ("imap.host", imap_host),
-            ("smtp.host", smtp_host),
-            ("auth.username", username),
-        ]:
-            if not value:
-                missing.append(label)
-
-        if missing:
-            errors.append(
-                "Missing required field(s) in TOML: "
-                + ", ".join(missing)
-            )
-
-        if errors:
-            raise ConfigurationError("\n".join(errors))
-
-        return cls(
-            imap_host=imap_host,
-            imap_port=imap_port,
-            imap_tls_mode=imap_tls_mode,
-            smtp_host=smtp_host,
-            smtp_port=smtp_port,
-            smtp_tls_mode=smtp_tls_mode,
-            username=username,
-            password=password,
-            db_path=db_path,
-            imap_folder=imap_folder,
+            llm_api_key=llm_api_key,
+            llm_model=llm_model,
         )
 
 
@@ -560,21 +393,18 @@ class MailConfig:
 
 
 def load() -> MailConfig:
-    """Load ``MailConfig``, preferring environment variables over file config.
+    """Load ``MailConfig`` through a single cascade: defaults → file → env.
 
     1.  Call ``MailConfig.from_env()``.  If all required fields are
-        present, return immediately (env wins).
+        present in the environment, return immediately (env wins).
     2.  Otherwise, if *only* required fields are missing (no invalid
-        values), determine the config path via the ``MAIL_CONFIG_PATH``
-        env var (defaulting to ``config/mail.local.yaml``) and load it.
-    3.  If the path ends with ``.yaml`` or ``.yml``, load via
-        ``from_yaml()``; otherwise via ``from_toml()``.
-    4.  If a ``MAIL_DEFAULTS_PATH`` env var is set (or a file exists
-        alongside the main config named ``mail.defaults.yaml``), the
-        defaults file is loaded first and the main config is deep-merged
-        on top — the defaults supply every missing key.
-    5.  Then *re-apply* environment variables on top, so that any env
-        var that IS set overrides the corresponding file value.
+        values), load the YAML config file at ``MAIL_CONFIG_PATH``
+        (defaulting to ``config/mail.local.yaml``).
+    3.  *Re-apply* environment variables on top, so any ``MAIL_*`` var
+        that IS set overrides the corresponding file value field-by-field.
+
+    Defaults live in the ``MailConfig`` dataclass — fields absent from
+    both the file and the environment fall back to those.
 
     If ``from_env()`` fails because of an invalid value (e.g. a
     non-integer port), the error is re-raised immediately — the user
@@ -588,54 +418,53 @@ def load() -> MailConfig:
         if not exc.missing_only:
             raise
 
-    # — determine file path —
+    # — load the YAML config file —
     config_path = Path(
-        os.environ.get("MAIL_CONFIG_PATH", "config/mail.local.yaml")
+        os.environ.get("MAIL_CONFIG_PATH", DEFAULT_CONFIG_PATH)
     )
-
-    # — load file config (YAML or TOML) —
     try:
-        if config_path.suffix in (".yaml", ".yml"):
-            file_cfg = MailConfig.from_yaml(config_path)
-        else:
-            file_cfg = MailConfig.from_toml(config_path)
+        file_cfg = MailConfig.from_yaml(config_path)
     except FileNotFoundError:
         raise ConfigurationError(
             f"Config file not found: {config_path}"
         ) from None
 
-    # — load defaults if available and deep-merge —
-    defaults_path = os.environ.get("MAIL_DEFAULTS_PATH", "")
-    if not defaults_path:
-        # Auto-detect: mail.defaults.yaml alongside the main config.
-        candidate = config_path.with_name("mail.defaults.yaml")
-        if candidate.exists():
-            defaults_path = str(candidate)
-
-    if defaults_path:
-        try:
-            defaults_cfg = MailConfig.from_yaml(
-                defaults_path, validate=False
-            )
-        except FileNotFoundError:
-            defaults_cfg = None
-        except ConfigurationError:
-            defaults_cfg = None
-        if defaults_cfg is not None:
-            file_cfg = _deep_merge(defaults_cfg, file_cfg)
-
     # — env vars override file values field-by-field —
-    cfg = _merge_env_onto_toml(file_cfg)
-
-    # — step 6: secrets application —
-    secrets = get_secrets()
-    if secrets.mail_password:
-        cfg = dataclasses.replace(cfg, password=secrets.mail_password)
-
-    return cfg
+    return _merge_env(file_cfg)
 
 
-def _merge_env_onto_toml(base: MailConfig) -> MailConfig:
+def load_llm() -> tuple[str, str]:
+    """Resolve ``(api_key, model)`` for LLM features through the same
+    cascade as :func:`load`, but *without* requiring the mail fields.
+
+    Order: ``LLM_API_KEY`` / ``LLM_MODEL`` environment variables win;
+    otherwise the ``llm:`` section of the YAML config file at
+    ``MAIL_CONFIG_PATH`` (default ``config/mail.local.yaml``) is consulted.
+    The model falls back to :data:`DEFAULT_LLM_MODEL`.
+
+    This is separated from :func:`load` because ``detect`` runs before a
+    complete mail configuration exists — it only needs the LLM settings.
+    """
+    api_key = os.environ.get("LLM_API_KEY", "")
+    model = os.environ.get("LLM_MODEL", "")
+
+    if not api_key or not model:
+        config_path = Path(
+            os.environ.get("MAIL_CONFIG_PATH", DEFAULT_CONFIG_PATH)
+        )
+        if config_path.exists():
+            try:
+                file_cfg = MailConfig.from_yaml(config_path, validate=False)
+            except (ConfigurationError, FileNotFoundError, OSError):
+                file_cfg = None
+            if file_cfg is not None:
+                api_key = api_key or file_cfg.llm_api_key
+                model = model or file_cfg.llm_model
+
+    return api_key, model or DEFAULT_LLM_MODEL
+
+
+def _merge_env(base: MailConfig) -> MailConfig:
     """Return a new ``MailConfig`` where any set env var overrides *base*."""
     env_map: dict[str, str] = {
         "imap_host": "MAIL_IMAP_HOST",
@@ -648,6 +477,8 @@ def _merge_env_onto_toml(base: MailConfig) -> MailConfig:
         "password": "MAIL_PASSWORD",
         "db_path": "MAIL_DB_PATH",
         "imap_folder": "MAIL_IMAP_FOLDER",
+        "llm_api_key": "LLM_API_KEY",
+        "llm_model": "LLM_MODEL",
     }
 
     kwargs: dict[str, str | int] = {}
@@ -666,8 +497,8 @@ def _merge_env_onto_toml(base: MailConfig) -> MailConfig:
             kwargs[field_name] = getattr(base, field_name)
 
     # If any TLS overrides were supplied, they've been validated above;
-    # also validate the ones that came from TOML (already done in
-    # from_toml, but belt-and-suspenders).
+    # also validate the ones that came from the file (already done in
+    # from_yaml, but belt-and-suspenders).
     for field_name in ("imap_tls_mode", "smtp_tls_mode"):
         val = kwargs[field_name]
         if isinstance(val, str):
@@ -677,78 +508,7 @@ def _merge_env_onto_toml(base: MailConfig) -> MailConfig:
 
 
 # ---------------------------------------------------------------------------
-# Deep merge helper for YAML defaults + local config
-# ---------------------------------------------------------------------------
-
-
-def _deep_merge(
-    defaults: MailConfig, overrides: MailConfig
-) -> MailConfig:
-    """Return a new ``MailConfig`` where every non-default field in
-    *overrides* replaces the corresponding field from *defaults*.
-
-    A field is considered "non-default" if it differs from the
-    ``MailConfig`` constructor's built-in default.  For string fields
-    (host, username, password) this means non-empty; for int / TLS /
-    folder / db_path fields this means not equal to the sentinel.
-
-    This allows ``mail.defaults.yaml`` to supply every key and
-    ``mail.local.yaml`` to only override the ones the operator cares
-    about.
-    """
-    # The dataclass defaults are what from_yaml / from_toml
-    # produce when a key is absent.  We compare against those.
-    _d = MailConfig(
-        imap_host="",
-        smtp_host="",
-        username="",
-        password="",
-    )
-    return MailConfig(
-        imap_host=_pick_str(overrides.imap_host, defaults.imap_host),
-        smtp_host=_pick_str(overrides.smtp_host, defaults.smtp_host),
-        username=_pick_str(overrides.username, defaults.username),
-        password=_pick_str(overrides.password, defaults.password),
-        imap_port=(
-            defaults.imap_port
-            if overrides.imap_port == _d.imap_port
-            else overrides.imap_port
-        ),
-        smtp_port=(
-            defaults.smtp_port
-            if overrides.smtp_port == _d.smtp_port
-            else overrides.smtp_port
-        ),
-        imap_tls_mode=(
-            defaults.imap_tls_mode
-            if overrides.imap_tls_mode == _d.imap_tls_mode
-            else overrides.imap_tls_mode
-        ),
-        smtp_tls_mode=(
-            defaults.smtp_tls_mode
-            if overrides.smtp_tls_mode == _d.smtp_tls_mode
-            else overrides.smtp_tls_mode
-        ),
-        imap_folder=(
-            defaults.imap_folder
-            if overrides.imap_folder == _d.imap_folder
-            else overrides.imap_folder
-        ),
-        db_path=(
-            defaults.db_path
-            if overrides.db_path == _d.db_path
-            else overrides.db_path
-        ),
-    )
-
-
-def _pick_str(override: str, fallback: str) -> str:
-    """Return *override* if non-empty, else *fallback*."""
-    return override if override else fallback
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers for TOML parsing
+# Internal helpers for YAML parsing
 # ---------------------------------------------------------------------------
 
 

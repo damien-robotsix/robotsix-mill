@@ -3,8 +3,9 @@
 # Copy this file to config/mail.local.yaml and fill in your real values.
 # config/mail.local.yaml is git-ignored so credentials never land in the repo.
 #
-# All fields shown below override the defaults in config/mail.defaults.yaml.
-# Commented lines show every available option; uncomment to override.
+# Any field you omit falls back to its built-in default (shown commented
+# below). Any MAIL_* environment variable that is set overrides the
+# corresponding value here.
 
 imap:
   host: imap.example.com
@@ -19,7 +20,14 @@ smtp:
 
 auth:
   username: user@example.com
-  password: ""  # password stored in config/secrets.yaml
+  password: ""  # set your password here, or via the MAIL_PASSWORD env var
 
 # store:
-#   path: /home/mailbot/data/mail.db
+#   path: .data/mail.db
+
+# LLM provider — used by the `detect` command and future LLM-assisted mail
+# processing. Optional; the LLM_API_KEY / LLM_MODEL environment variables
+# override these values.
+# llm:
+#   api_key: sk-or-v1-…
+#   model: deepseek/deepseek-v4-flash

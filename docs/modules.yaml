@@ -31,12 +31,12 @@ modules:
 
   - name: config
     description: >-
-      Configuration loading (TOML + env), config templates.
+      Configuration loading (YAML file + env), config template.
     paths:
       - src/robotsix_auto_mail/config.py
       - tests/test_config.py
       - config/.gitkeep
-      - config/mail.example.toml
+      - config/mail.local.example.yaml
 
   - name: db
     description: >-

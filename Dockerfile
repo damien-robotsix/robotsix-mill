@@ -24,11 +24,16 @@ COPY --from=builder /usr/local/bin/robotsix-auto-mail /usr/local/bin/robotsix-au
 
 RUN groupadd --gid 1000 mailbot && \
     useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash mailbot && \
-    mkdir -p /home/mailbot/data /home/mailbot/config && \
-    chown mailbot:mailbot /home/mailbot/data /home/mailbot/config
+    mkdir -p /home/mailbot/.data /home/mailbot/config && \
+    chown mailbot:mailbot /home/mailbot/.data /home/mailbot/config
 
 COPY --chown=mailbot:mailbot entrypoint.sh /usr/local/bin/entrypoint.sh
 
 USER mailbot
+
+# Run from the home directory so relative defaults resolve under it:
+# the config file (config/mail.local.yaml) and the SQLite store
+# (.data/mail.db) both land in the bind-mounted / persisted locations.
+WORKDIR /home/mailbot
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

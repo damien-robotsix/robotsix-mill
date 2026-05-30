@@ -1,18 +1,34 @@
-"""Email provider auto-detection via LLM.
+"""Email provider auto-detection.
 
-Given an email address, ``detect_provider()`` calls an LLM to return the
-correct IMAP and SMTP settings.  All ``pydantic_ai`` imports are lazy so
-the rest of the CLI works without the optional ``[llm]`` dependency.
+Two complementary detectors return IMAP/SMTP settings for an email address:
+
+* :func:`autoconfig_lookup` — queries the Mozilla ISPDB and the domain's own
+  autoconfig endpoint over HTTPS (no LLM, very accurate for known providers
+  and many custom domains). Uses only the standard library.
+* :func:`detect_provider` — asks an LLM, optionally with feedback describing a
+  previous failed attempt so it can refine a non-obvious guess.
+
+All ``pydantic_ai`` imports are lazy so the rest of the CLI works without the
+optional ``[llm]`` dependency.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
+import urllib.error
+import urllib.parse
+import urllib.request
+from xml.etree import ElementTree
 
 import pydantic
 
-from robotsix_auto_mail.config import MailConfig
+from robotsix_auto_mail.config import (
+    DEFAULT_DB_PATH,
+    DEFAULT_LLM_MODEL,
+    MailConfig,
+)
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -118,8 +134,24 @@ settings.
 993 `direct-tls`, `smtp.126.com`/`smtp.163.com` port 587 `starttls`.
 - For self-hosted / custom domains (e.g. `@example.com`): the typical \
 pattern is `imap.<domain>` port 993 and `smtp.<domain>` port 587 — but \
-if you're unsure, return `imap.<domain>` / `smtp.<domain>` as best-guess \
-with standard ports.
+many custom domains are hosted by a managed provider, so consider these too.
+
+**Managed hosting of custom domains (the address domain is NOT the mail host):**
+- Google Workspace → `imap.gmail.com` / `smtp.gmail.com`.
+- Microsoft 365 / Exchange Online → `outlook.office365.com` / `smtp.office365.com`.
+- Zoho-hosted → `imap.zoho.com` / `smtp.zoho.com` (or `.eu`/`.in` regional).
+- Fastmail-hosted → `imap.fastmail.com` / `smtp.fastmail.com`.
+- mailbox.org → `imap.mailbox.org` / `smtp.mailbox.org`.
+- Migadu → `imap.migadu.com` / `smtp.migadu.com`.
+- Gandi → `mail.gandi.net` (IMAP 993 direct-tls, SMTP 587 starttls).
+- OVH → `ssl0.ovh.net` (IMAP 993 direct-tls, SMTP 587 starttls).
+- Infomaniak → `mail.infomaniak.com`.
+- Purelymail → `imap.purelymail.com` / `smtp.purelymail.com`.
+- cPanel/Plesk shared hosting → often `mail.<domain>` or the server hostname.
+
+When the obvious `imap.<domain>` is uncertain, prefer `mail.<domain>` or the \
+provider patterns above. If you are given feedback that a previous guess \
+failed, do NOT repeat it — propose a genuinely different host.
 
 Return ONLY a JSON object matching the schema — no explanation, no markdown \
 fences."""
@@ -135,6 +167,7 @@ def detect_provider(
     *,
     model: str | None = None,
     api_key: str | None = None,
+    feedback: str | None = None,
 ) -> MailProvider:
     """Detect IMAP/SMTP settings for *email_address* via an LLM.
 
@@ -144,6 +177,10 @@ def detect_provider(
             var or ``"deepseek/deepseek-v4-flash"``.
         api_key: OpenRouter API key.  Defaults to the ``LLM_API_KEY`` env
             var.  Required unless the env var is set.
+        feedback: Optional description of a previous failed attempt (which
+            host was tried and how it failed).  When provided, it is added
+            to the prompt so the model can propose a different, non-obvious
+            configuration instead of repeating the failed guess.
 
     Returns:
         A ``MailProvider`` with the detected settings.
@@ -161,13 +198,12 @@ def detect_provider(
     resolved_key = api_key or os.environ.get("LLM_API_KEY", "")
     if not resolved_key:
         raise DetectionError(
-            "LLM_API_KEY environment variable is required"
+            "No LLM API key found — set the LLM_API_KEY environment "
+            "variable or add an `llm.api_key` entry to your config file"
         )
 
     # -- resolve model --
-    resolved_model = model or os.environ.get(
-        "LLM_MODEL", "deepseek/deepseek-v4-flash"
-    )
+    resolved_model = model or os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL)
 
     # -- build agent --
     provider = OpenRouterProvider(api_key=resolved_key)
@@ -180,16 +216,24 @@ def detect_provider(
         output_type=PromptedOutput(DetectedProvider),
     )
 
+    # -- build the user message (+ optional refinement feedback) --
+    user_message = email_address
+    if feedback:
+        user_message += (
+            "\n\nThe previous configuration attempt FAILED:\n"
+            f"{feedback}\n"
+            "Propose a corrected configuration with a DIFFERENT host — "
+            "do not repeat the failed guess."
+        )
+
     # -- call LLM --
     try:
-        result = agent.run_sync(
-            _DETECT_SYSTEM_PROMPT + "\n\n" + email_address
-        )
+        result = agent.run_sync(_DETECT_SYSTEM_PROMPT + "\n\n" + user_message)
     except Exception as exc:
         raise DetectionError(str(exc)) from exc
 
     # -- extract and convert --
-    detected: DetectedProvider = result.data
+    detected: DetectedProvider = result.output
     return MailProvider(
         imap_host=detected.imap_host,
         imap_port=detected.imap_port,
@@ -201,6 +245,107 @@ def detect_provider(
 
 
 # ---------------------------------------------------------------------------
+# Autoconfig (Mozilla ISPDB + domain autoconfig) — no LLM required
+# ---------------------------------------------------------------------------
+
+# Mozilla maps Thunderbird "socketType" values to our TLS-mode vocabulary.
+_SOCKET_TYPE_TO_TLS = {
+    "SSL": "direct-tls",
+    "STARTTLS": "starttls",
+    "plain": "none",
+}
+
+
+def _autoconfig_urls(email_address: str) -> list[str]:
+    """Return candidate autoconfig URLs to try, most authoritative first."""
+    domain = email_address.rpartition("@")[2].strip().lower()
+    if not domain:
+        return []
+    quoted = urllib.parse.quote(email_address)
+    return [
+        # Mozilla ISPDB — central database keyed by domain.
+        f"https://autoconfig.thunderbird.net/v1.1/{domain}",
+        # Provider-hosted autoconfig (the Thunderbird autoconfig protocol).
+        f"https://autoconfig.{domain}/mail/config-v1.1.xml"
+        f"?emailaddress={quoted}",
+    ]
+
+
+def _parse_autoconfig_xml(xml_text: str) -> MailProvider | None:
+    """Parse a Thunderbird ``clientConfig`` document into a MailProvider.
+
+    Returns ``None`` when the document lacks a usable IMAP + SMTP pair.
+    """
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+
+    def _server(kind: str, type_attr: str) -> dict[str, str] | None:
+        for node in root.iter(kind):
+            if node.get("type") == type_attr:
+                host = (node.findtext("hostname") or "").strip()
+                port = (node.findtext("port") or "").strip()
+                socket = (node.findtext("socketType") or "").strip()
+                if host:
+                    return {"host": host, "port": port, "socket": socket}
+        return None
+
+    imap = _server("incomingServer", "imap")
+    smtp = _server("outgoingServer", "smtp")
+    if imap is None or smtp is None:
+        return None
+
+    def _port(value: str, default: int) -> int:
+        try:
+            return int(value)
+        except ValueError:
+            return default
+
+    def _tls(socket: str, port: int) -> str:
+        mode = _SOCKET_TYPE_TO_TLS.get(socket)
+        if mode is not None:
+            return mode
+        # Fall back to a sensible default based on the port.
+        return "direct-tls" if port == 993 else "starttls"
+
+    imap_port = _port(imap["port"], 993)
+    smtp_port = _port(smtp["port"], 587)
+    return MailProvider(
+        imap_host=imap["host"],
+        imap_port=imap_port,
+        imap_tls_mode=_tls(imap["socket"], imap_port),
+        smtp_host=smtp["host"],
+        smtp_port=smtp_port,
+        smtp_tls_mode=_tls(smtp["socket"], smtp_port),
+    )
+
+
+def autoconfig_lookup(
+    email_address: str, *, timeout: float = 5.0
+) -> MailProvider | None:
+    """Look up IMAP/SMTP settings via published autoconfig, without an LLM.
+
+    Tries the Mozilla ISPDB and the domain's own autoconfig endpoint. Returns
+    a :class:`MailProvider` on the first usable hit, or ``None`` if nothing
+    resolves (unknown domain, network error, malformed document, …) — callers
+    should then fall back to :func:`detect_provider`.
+    """
+    for url in _autoconfig_urls(email_address):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                if getattr(resp, "status", 200) != 200:
+                    continue
+                xml_text = resp.read().decode("utf-8", errors="replace")
+        except (urllib.error.URLError, OSError, ValueError):
+            continue
+        provider = _parse_autoconfig_xml(xml_text)
+        if provider is not None:
+            return provider
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Conversion helpers
 # ---------------------------------------------------------------------------
 
@@ -208,12 +353,11 @@ def detect_provider(
 def provider_to_config(
     provider: MailProvider,
     username: str,
-    db_path: str = "mail.db",
+    password: str = "",
+    db_path: str = DEFAULT_DB_PATH,
 ) -> MailConfig:
-    """Convert a ``MailProvider`` + username into a ``MailConfig``.
-
-    The password is always set to ``""`` — it is handled separately via
-    ``secrets.yaml``.
+    """Convert a ``MailProvider`` + username (+ optional password) into a
+    ``MailConfig``.
     """
     return MailConfig(
         imap_host=provider.imap_host,
@@ -223,7 +367,7 @@ def provider_to_config(
         smtp_port=provider.smtp_port,
         smtp_tls_mode=provider.smtp_tls_mode,
         username=username,
-        password="",
+        password=password,
         db_path=db_path,
         imap_folder="INBOX",
     )
@@ -234,20 +378,27 @@ def provider_to_config(
 # ---------------------------------------------------------------------------
 
 
-def render_config(config: MailConfig, fmt: str = "yaml") -> str:
-    """Render a ``MailConfig`` as a valid YAML or TOML config file.
+def render_config(config: MailConfig) -> str:
+    """Render a ``MailConfig`` as a valid YAML config file.
 
-    The ``auth.password`` field is always emitted as ``""`` with a
-    trailing comment pointing to ``config/secrets.yaml``.
+    When ``config.password`` is set it is written into ``auth.password``;
+    otherwise the field is emitted as ``""`` with a note that the
+    password can be supplied here or via the ``MAIL_PASSWORD`` env var.
+
+    An ``llm:`` section is appended when ``config.llm_api_key`` is set, so
+    that re-running ``detect`` over an existing file preserves the key.
     """
-    if fmt == "toml":
-        return _render_config_toml(config)
-    return _render_config_yaml(config)
+    if config.password:
+        # json.dumps yields a double-quoted scalar that is valid YAML and
+        # safely escapes any special characters in the password.
+        password_line = f"password: {json.dumps(config.password)}"
+    else:
+        password_line = (
+            'password: ""  # set your password here, '
+            "or via the MAIL_PASSWORD env var"
+        )
 
-
-def _render_config_yaml(config: MailConfig) -> str:
-    """Render *config* as YAML."""
-    return f"""\
+    text = f"""\
 # Auto-detected mail configuration for {config.username}
 # Generated by: robotsix-auto-mail detect
 #
@@ -266,53 +417,17 @@ smtp:
 
 auth:
   username: {config.username}
-  password: ""  # password stored in config/secrets.yaml
+  {password_line}
 
 store:
   path: {config.db_path}
 """
 
-
-def _render_config_toml(config: MailConfig) -> str:
-    """Render *config* as TOML."""
-    return f"""\
-# Auto-detected mail configuration for {config.username}
-# Generated by: robotsix-auto-mail detect
-#
-# Verify these settings before using — run `robotsix-auto-mail probe`.
-
-[imap]
-host = "{config.imap_host}"
-port = {config.imap_port}
-tls_mode = "{config.imap_tls_mode}"
-folder = "{config.imap_folder}"
-
-[smtp]
-host = "{config.smtp_host}"
-port = {config.smtp_port}
-tls_mode = "{config.smtp_tls_mode}"
-
-[auth]
-username = "{config.username}"
-password = ""  # password stored in config/secrets.yaml
-
-[store]
-path = "{config.db_path}"
+    if config.llm_api_key:
+        text += f"""
+llm:
+  api_key: {json.dumps(config.llm_api_key)}
+  model: {config.llm_model}
 """
 
-
-def render_secrets(password: str) -> str:
-    """Render a ``secrets.yaml`` file from a password string.
-
-    When *password* is empty, emits a fill-in comment.
-    """
-    if password:
-        pw_line = f"{password!r}"
-    else:
-        pw_line = '""  # fill in your password'
-
-    return f"""\
-# Secrets for robotsix-auto-mail.
-# This file is git-ignored — do not commit it.
-mail_password: {pw_line}
-"""
+    return text

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import sqlite3
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # MailRecord
@@ -76,7 +77,13 @@ def init_db(path: str) -> sqlite3.Connection:
 
     Enables WAL journal mode and foreign-key enforcement.  The caller
     owns the returned connection and must close it.
+
+    The parent directory is created if needed, so a path like
+    ``.data/mail.db`` works on a fresh checkout.  The special
+    ``":memory:"`` path is left untouched.
     """
+    if path != ":memory:":
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.executescript(_SCHEMA)
     # Migration: add status column to databases created before the

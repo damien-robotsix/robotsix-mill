@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -14,11 +15,46 @@ from robotsix_auto_mail.detect import (
     DetectedProvider,
     DetectionError,
     MailProvider,
+    autoconfig_lookup,
     detect_provider,
     provider_to_config,
     render_config,
-    render_secrets,
 )
+
+
+class _FakeResp:
+    """Minimal stand-in for an ``http.client.HTTPResponse`` used by urlopen."""
+
+    def __init__(self, body: str, status: int = 200) -> None:
+        self._body = body.encode("utf-8")
+        self.status = status
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> "_FakeResp":
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+
+_ISPDB_XML = """\
+<clientConfig version="1.1">
+  <emailProvider id="example.net">
+    <incomingServer type="imap">
+      <hostname>imap.example.net</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>smtp.example.net</hostname>
+      <port>587</port>
+      <socketType>STARTTLS</socketType>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>
+"""
 
 # ---------------------------------------------------------------------------
 # DetectedProvider — validation
@@ -187,11 +223,18 @@ def test_provider_to_config_maps_correctly() -> None:
     assert cfg.username == "user@example.com"
 
 
-def test_provider_to_config_password_is_always_empty() -> None:
-    """The password field is always the empty string."""
+def test_provider_to_config_password_defaults_empty() -> None:
+    """The password field defaults to the empty string."""
     mp = MailProvider(imap_host="ih", smtp_host="sh")
     cfg = provider_to_config(mp, "user@example.com")
     assert cfg.password == ""
+
+
+def test_provider_to_config_password_forwarded() -> None:
+    """An explicit password is forwarded to MailConfig."""
+    mp = MailProvider(imap_host="ih", smtp_host="sh")
+    cfg = provider_to_config(mp, "user@example.com", password="s3cret")
+    assert cfg.password == "s3cret"
 
 
 def test_provider_to_config_imap_folder_defaults_to_inbox() -> None:
@@ -202,10 +245,10 @@ def test_provider_to_config_imap_folder_defaults_to_inbox() -> None:
 
 
 def test_provider_to_config_default_db_path() -> None:
-    """db_path defaults to 'mail.db' when not overridden."""
+    """db_path defaults to '.data/mail.db' when not overridden."""
     mp = MailProvider(imap_host="ih", smtp_host="sh")
     cfg = provider_to_config(mp, "user@example.com")
-    assert cfg.db_path == "mail.db"
+    assert cfg.db_path == ".data/mail.db"
 
 
 def test_provider_to_config_explicit_db_path() -> None:
@@ -220,14 +263,14 @@ def test_provider_to_config_explicit_db_path() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_render_config_yaml_contains_imap_fields() -> None:
-    """YAML output contains the imap section with correct values."""
+def test_render_config_contains_imap_fields() -> None:
+    """Output contains the imap section with correct values."""
     mp = MailProvider(
         imap_host="imap.example.com",
         smtp_host="smtp.example.com",
     )
     cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg, fmt="yaml")
+    output = render_config(cfg)
     assert "imap:" in output
     assert "host: imap.example.com" in output
     assert "port: 993" in output
@@ -235,30 +278,39 @@ def test_render_config_yaml_contains_imap_fields() -> None:
     assert "folder: INBOX" in output
 
 
-def test_render_config_yaml_contains_smtp_fields() -> None:
-    """YAML output contains the smtp section with correct values."""
+def test_render_config_contains_smtp_fields() -> None:
+    """Output contains the smtp section with correct values."""
     mp = MailProvider(
         imap_host="imap.example.com",
         smtp_host="smtp.example.com",
     )
     cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg, fmt="yaml")
+    output = render_config(cfg)
     assert "smtp:" in output
     assert "host: smtp.example.com" in output
     assert "port: 587" in output
     assert "tls_mode: starttls" in output
 
 
-def test_render_config_yaml_password_with_comment() -> None:
-    """YAML output has auth.password as '' with the secrets comment."""
+def test_render_config_empty_password_has_comment() -> None:
+    """With no password, auth.password is '' with a fill-in note."""
     mp = MailProvider(imap_host="ih", smtp_host="sh")
     cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg, fmt="yaml")
-    assert 'password: ""  # password stored in config/secrets.yaml' in output
+    output = render_config(cfg)
+    assert 'password: ""' in output
+    assert "MAIL_PASSWORD" in output
 
 
-def test_render_config_yaml_round_trip(tmp_path: Path) -> None:
-    """YAML output can be parsed back by MailConfig.from_yaml() with validate=False."""
+def test_render_config_writes_password() -> None:
+    """A supplied password is written into auth.password and round-trips."""
+    mp = MailProvider(imap_host="ih", smtp_host="sh")
+    cfg = provider_to_config(mp, "user@example.com", password="s3:cret#1")
+    output = render_config(cfg)
+    assert '"s3:cret#1"' in output
+
+
+def test_render_config_round_trip(tmp_path: Path) -> None:
+    """Output can be parsed back by MailConfig.from_yaml()."""
     mp = MailProvider(
         imap_host="imap.example.com",
         smtp_host="smtp.example.com",
@@ -267,13 +319,13 @@ def test_render_config_yaml_round_trip(tmp_path: Path) -> None:
         smtp_port=465,
         smtp_tls_mode="direct-tls",
     )
-    cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg, fmt="yaml")
+    cfg = provider_to_config(mp, "user@example.com", password="s3:cret#1")
+    output = render_config(cfg)
 
     yaml_file = tmp_path / "test.yaml"
     yaml_file.write_text(output)
 
-    parsed = MailConfig.from_yaml(yaml_file, validate=False)
+    parsed = MailConfig.from_yaml(yaml_file)
     assert parsed.imap_host == "imap.example.com"
     assert parsed.imap_port == 143
     assert parsed.imap_tls_mode == "starttls"
@@ -281,108 +333,7 @@ def test_render_config_yaml_round_trip(tmp_path: Path) -> None:
     assert parsed.smtp_port == 465
     assert parsed.smtp_tls_mode == "direct-tls"
     assert parsed.username == "user@example.com"
-    assert parsed.password == ""
-
-
-# ---------------------------------------------------------------------------
-# render_config — TOML
-# ---------------------------------------------------------------------------
-
-
-def test_render_config_toml_contains_imap_fields() -> None:
-    """TOML output contains the [imap] section with correct values."""
-    mp = MailProvider(
-        imap_host="imap.example.com",
-        smtp_host="smtp.example.com",
-    )
-    cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg, fmt="toml")
-    assert "[imap]" in output
-    assert 'host = "imap.example.com"' in output
-    assert "port = 993" in output
-    assert 'tls_mode = "direct-tls"' in output
-    assert 'folder = "INBOX"' in output
-
-
-def test_render_config_toml_contains_smtp_fields() -> None:
-    """TOML output contains the [smtp] section with correct values."""
-    mp = MailProvider(
-        imap_host="imap.example.com",
-        smtp_host="smtp.example.com",
-    )
-    cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg, fmt="toml")
-    assert "[smtp]" in output
-    assert 'host = "smtp.example.com"' in output
-    assert "port = 587" in output
-    assert 'tls_mode = "starttls"' in output
-
-
-def test_render_config_toml_password_with_comment() -> None:
-    """TOML output has auth.password as '' with the secrets comment."""
-    mp = MailProvider(imap_host="ih", smtp_host="sh")
-    cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg, fmt="toml")
-    assert 'password = ""  # password stored in config/secrets.yaml' in output
-
-
-def test_render_config_toml_round_trip(tmp_path: Path) -> None:
-    """TOML output can be parsed back by MailConfig.from_toml()."""
-    mp = MailProvider(
-        imap_host="imap.example.com",
-        smtp_host="smtp.example.com",
-        imap_port=143,
-        imap_tls_mode="starttls",
-        smtp_port=465,
-        smtp_tls_mode="direct-tls",
-    )
-    cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg, fmt="toml")
-
-    toml_file = tmp_path / "test.toml"
-    toml_file.write_text(output)
-
-    parsed = MailConfig.from_toml(toml_file)
-    assert parsed.imap_host == "imap.example.com"
-    assert parsed.imap_port == 143
-    assert parsed.imap_tls_mode == "starttls"
-    assert parsed.smtp_host == "smtp.example.com"
-    assert parsed.smtp_port == 465
-    assert parsed.smtp_tls_mode == "direct-tls"
-    assert parsed.username == "user@example.com"
-    assert parsed.password == ""
-
-
-def test_render_config_default_format_is_yaml() -> None:
-    """Calling render_config without fmt produces YAML."""
-    mp = MailProvider(imap_host="ih", smtp_host="sh")
-    cfg = provider_to_config(mp, "user@example.com")
-    output = render_config(cfg)
-    assert "imap:" in output
-    assert "smtp:" in output
-    assert "auth:" in output
-    assert "[imap]" not in output  # not TOML
-
-
-# ---------------------------------------------------------------------------
-# render_secrets
-# ---------------------------------------------------------------------------
-
-
-def test_render_secrets_non_empty_password() -> None:
-    """With a non-empty password, the value is rendered and header is present."""
-    output = render_secrets("my-s3cret")
-    assert '# Secrets for robotsix-auto-mail.' in output
-    assert '# This file is git-ignored — do not commit it.' in output
-    assert "mail_password: 'my-s3cret'" in output
-
-
-def test_render_secrets_empty_password() -> None:
-    """With an empty password, a fill-in comment is rendered."""
-    output = render_secrets("")
-    assert '# Secrets for robotsix-auto-mail.' in output
-    assert "mail_password:" in output
-    assert '""  # fill in your password' in output
+    assert parsed.password == "s3:cret#1"
 
 
 # ---------------------------------------------------------------------------
@@ -394,7 +345,7 @@ def test_detect_provider_success() -> None:
     """Mock the Agent; detect_provider returns expected MailProvider."""
     with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}, clear=True):
         mock_run_result = mock.MagicMock()
-        mock_run_result.data = DetectedProvider(
+        mock_run_result.output = DetectedProvider(
             imap_host="imap.example.com",
             smtp_host="smtp.example.com",
             imap_port=993,
@@ -422,7 +373,7 @@ def test_detect_provider_passes_api_key_arg() -> None:
     """When api_key is passed as argument, it's used instead of env var."""
     with mock.patch.dict(os.environ, {}, clear=True):
         mock_run_result = mock.MagicMock()
-        mock_run_result.data = DetectedProvider(
+        mock_run_result.output = DetectedProvider(
             imap_host="imap.example.com",
             smtp_host="smtp.example.com",
         )
@@ -467,7 +418,7 @@ def test_detect_provider_llm_model_fallback() -> None:
     # Only set LLM_API_KEY, leave LLM_MODEL unset.
     with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}, clear=True):
         mock_run_result = mock.MagicMock()
-        mock_run_result.data = DetectedProvider(
+        mock_run_result.output = DetectedProvider(
             imap_host="imap.example.com",
             smtp_host="smtp.example.com",
         )
@@ -501,7 +452,7 @@ def test_detect_provider_llm_model_from_env() -> None:
         clear=True,
     ):
         mock_run_result = mock.MagicMock()
-        mock_run_result.data = DetectedProvider(
+        mock_run_result.output = DetectedProvider(
             imap_host="imap.example.com",
             smtp_host="smtp.example.com",
         )
@@ -532,7 +483,7 @@ def test_detect_provider_explicit_model_arg() -> None:
         clear=True,
     ):
         mock_run_result = mock.MagicMock()
-        mock_run_result.data = DetectedProvider(
+        mock_run_result.output = DetectedProvider(
             imap_host="imap.example.com",
             smtp_host="smtp.example.com",
         )
@@ -573,3 +524,57 @@ def test_detection_error_chain() -> None:
     err = DetectionError("wrapped")
     err.__cause__ = cause
     assert err.__cause__ is cause
+
+
+# ---------------------------------------------------------------------------
+# autoconfig_lookup
+# ---------------------------------------------------------------------------
+
+
+def test_autoconfig_lookup_parses_ispdb() -> None:
+    """A valid clientConfig document is parsed into a MailProvider."""
+    with mock.patch(
+        "urllib.request.urlopen", return_value=_FakeResp(_ISPDB_XML)
+    ):
+        provider = autoconfig_lookup("user@example.net")
+    assert provider is not None
+    assert provider.imap_host == "imap.example.net"
+    assert provider.imap_port == 993
+    assert provider.imap_tls_mode == "direct-tls"  # SSL → direct-tls
+    assert provider.smtp_host == "smtp.example.net"
+    assert provider.smtp_port == 587
+    assert provider.smtp_tls_mode == "starttls"  # STARTTLS → starttls
+
+
+def test_autoconfig_lookup_network_error_returns_none() -> None:
+    """A network failure yields None (caller falls back to the LLM)."""
+    with mock.patch(
+        "urllib.request.urlopen",
+        side_effect=urllib.error.URLError("no route"),
+    ):
+        assert autoconfig_lookup("user@example.net") is None
+
+
+def test_autoconfig_lookup_garbage_returns_none() -> None:
+    """A non-XML / unparseable body yields None after trying every URL."""
+    with mock.patch(
+        "urllib.request.urlopen", return_value=_FakeResp("not xml at all")
+    ):
+        assert autoconfig_lookup("user@example.net") is None
+
+
+def test_autoconfig_lookup_missing_smtp_returns_none() -> None:
+    """A document with an IMAP server but no SMTP server is rejected."""
+    xml = """\
+<clientConfig version="1.1">
+  <emailProvider id="x">
+    <incomingServer type="imap">
+      <hostname>imap.example.net</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+    </incomingServer>
+  </emailProvider>
+</clientConfig>
+"""
+    with mock.patch("urllib.request.urlopen", return_value=_FakeResp(xml)):
+        assert autoconfig_lookup("user@example.net") is None
