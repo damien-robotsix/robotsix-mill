@@ -32,12 +32,16 @@ from pydantic_ai.models.openai import OpenAIChatModel
 # read). We pin DeepSeek calls to DeepSeek's own endpoint to keep the cache
 # warm across the many tool-call turns of a stage (see _inject_provider_pin).
 #
-# Caveat under investigation: pinned to DeepSeek first-party, deepseek-v4-pro
-# can intermittently 400 with "reasoning_content in the thinking mode must be
-# passed back" (an earlier pin-only attempt blocked tickets — PR #503). It was
-# NOT reproducible in isolation, so rather than ship an unproven field-rename
-# fix we classify that 400 as transient (agents/retry.py) and retry it, which
-# also tells us whether the error is intermittent. Revisit if retries exhaust.
+# Pinned to DeepSeek first-party, deepseek models run in thinking mode and
+# DeepSeek's API requires the prior turn's reasoning echoed back under the
+# field name ``reasoning_content``. pydantic-ai's OpenRouter profile sends it
+# under ``reasoning`` (the OpenRouter-normalised name), so DeepSeek rejects
+# follow-up turns with a 400 ("reasoning_content … must be passed back").
+# PROVEN deterministic: a retry experiment (PR #505) exhausted all 4 retries
+# on the same 400, on both deepseek-v4-pro and -flash. _map_messages therefore
+# renames ``reasoning`` -> ``reasoning_content`` on deepseek assistant
+# messages at send time. The transient-retry classification stays as a cheap
+# backstop. The two travel with the pin; never ship the pin without this.
 _PINNED_PROVIDER = "DeepSeek"
 _PIN_MODEL_PREFIX = "deepseek/"
 
@@ -73,8 +77,23 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
     (``usage: {include: true}``) so the response carries ``usage.cost``.
 
     For ``deepseek/*`` models it pins the upstream provider to DeepSeek so
-    the prompt cache stays warm across turns (see module note).
+    the prompt cache stays warm across turns, and renames echoed-back
+    thinking from ``reasoning`` to the DeepSeek-native ``reasoning_content``
+    field so DeepSeek's thinking mode accepts the follow-up (see module note).
     """
+
+    async def _map_messages(self, messages: Any, model_request_parameters: Any) -> Any:
+        mapped = await super()._map_messages(messages, model_request_parameters)
+        if str(getattr(self, "model_name", "") or "").startswith(_PIN_MODEL_PREFIX):
+            for msg in mapped:
+                if (
+                    isinstance(msg, dict)
+                    and msg.get("role") == "assistant"
+                    and msg.get("reasoning") is not None
+                    and "reasoning_content" not in msg
+                ):
+                    msg["reasoning_content"] = msg.pop("reasoning")
+        return mapped
 
     async def _completions_create(self, *args: Any, **kwargs: Any) -> Any:
         _inject_usage_include(args, kwargs)
