@@ -61,9 +61,15 @@ WORKDIR /build
 # source tree into the production image).
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
+# DO NOT switch this to `uv sync` / `UV_PROJECT_ENVIRONMENT=system`. That
+# env var is a venv PATH, not a mode: uv builds a venv at /build/system and
+# puts the `robotsix-mill` console script at /build/system/bin, so the base
+# stage's `COPY --from=builder /usr/local/bin/robotsix-mill` fails with
+# "not found" and the image won't build. `uv pip install --system` targets
+# the system interpreter (/usr/local), keeps uv's speed, and lands the
+# script where the COPY expects it. (Regressed twice — see PR #491.)
 RUN pip install uv --no-cache-dir \
-    && uv lock --extra ${INSTALL_EXTRAS//,/ --extra } \
-    && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --no-dev --extra ${INSTALL_EXTRAS}
+    && uv pip install --system --no-cache ".[${INSTALL_EXTRAS}]"
 
 # =============================================================================
 # Stage 2: base — shared runtime setup (not built directly; extended by
@@ -130,9 +136,11 @@ COPY . /app
 # Layer dev tooling (pytest, mypy, ruff, bandit) on top of the
 # site-packages inherited from base.
 ARG INSTALL_EXTRAS=dev,tracing
-RUN pip install uv --no-cache-dir \
-    && uv lock --extra dev --extra tracing \
-    && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --extra dev --extra tracing \
+# Plain pip here (not uv): the base stage copies the builder's site-packages
+# but NOT its /usr/local/bin/uv launcher, so a fresh `pip install uv` sees uv
+# already satisfied and never recreates the binary → "uv: not found". pip is
+# present and the editable install over inherited deps is cheap. (See PR #491.)
+RUN pip install --no-cache-dir --root-user-action=ignore -e ".[dev,tracing]" \
     && chown -R mill:mill /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
