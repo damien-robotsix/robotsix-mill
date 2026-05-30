@@ -16,6 +16,7 @@ from . import _epics
 from . import _passes
 from . import _costs
 from . import _traces
+from . import _candidates
 
 router = APIRouter()
 
@@ -26,3 +27,4 @@ router.include_router(_epics.router)
 router.include_router(_passes.router)
 router.include_router(_costs.router)
 router.include_router(_traces.router)
+router.include_router(_candidates.router)

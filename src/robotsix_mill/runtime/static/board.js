@@ -1321,6 +1321,7 @@ function toggleBody(btn) {
 function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
  if(deepReviewPollTimer){clearInterval(deepReviewPollTimer);deepReviewPollTimer=null}
  deepReviewOpen=false;deepReviewTraceId=null;deepReviewFindings=[];
+ candidatesOpen=false;
  document.getElementById("drawer").classList.remove("open")}
 // Cache the last runs payload (sans elapsed) so the 1s auto-refresh
 // only rebuilds the list DOM when something material changed (new run,
@@ -1607,12 +1608,106 @@ async function renderCostDashboard(){
 }
 // -- deep review --------------------------------------------------------
 let deepReviewOpen=false;
+let candidatesOpen=false;
 let deepReviewTraceId=null;
 let deepReviewPollTimer=null;
 let deepReviewPollCount=0;
 let deepReviewPollStart=0;
 let deepReviewFindings=[];  // [{category, text}] for ticket creation
 let lastReviewsCache=[];
+// --- AGENT.md candidates ----------------------------------------------------
+// Surface AGENT_CANDIDATES.md entries (written by retrospect) as actionable
+// cards. Validate files an audited-repo draft ticket; reject just stamps the
+// .md file. Both routes update the file in place so re-opening the drawer
+// shows the candidate gone.
+
+async function openCandidates(){
+ if(candidatesOpen){close_();return}
+ if(sel||deepReviewOpen||runsOpen||costDashboardOpen)close_();
+ candidatesOpen=true;
+ document.getElementById("drawer").classList.add("open");
+ await renderCandidatesList();
+}
+
+async function renderCandidatesList(){
+ const repo=getRepoId();
+ const esc=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
+ const drawer=document.getElementById("d");
+ if(!repo||repo==="all"){
+  drawer.innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+   '<h3>AGENT.md candidates</h3>'+
+   '<div class="muted" style="padding:12px 0">Select a single repo (top-left selector) — candidates are per-board.</div>';
+  return;
+ }
+ drawer.innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
+  '<h3>AGENT.md candidates · '+esc(repo)+'</h3>'+
+  '<div class="muted" style="margin-bottom:10px;font-size:11px">'+
+  'Retrospect proposes rules for the audited repo\'s <code>AGENT.md</code>. '+
+  'Validate to file a draft ticket that edits <code>AGENT.md</code> on this repo; '+
+  'reject to dismiss.</div>'+
+  '<div id="candidates-list">loading…</div>';
+ let cands;
+ try{cands=await jget("/candidates?repo_id="+encodeURIComponent(repo))}
+ catch(e){
+  document.getElementById("candidates-list").innerHTML=
+   '<div class="muted" style="padding:12px 0;color:#f87171">failed to load candidates: '+esc(String(e))+'</div>';
+  return;
+ }
+ if(!Array.isArray(cands)||!cands.length){
+  document.getElementById("candidates-list").innerHTML=
+   '<div class="muted" style="padding:12px 0">No pending candidates. Retrospect appends new entries as it runs.</div>';
+  return;
+ }
+ let html='';
+ cands.forEach(function(c){
+  html+='<div class="candidate-card" id="cand-'+esc(c.candidate_id)+'" style="border:1px solid #2c313d;border-radius:6px;padding:10px 12px;margin-bottom:10px;background:#1d212c">'+
+   '<div style="font-size:11px;color:#9ca3af;margin-bottom:4px">'+esc(c.section)+' · proposed '+esc(c.proposed_at)+'</div>'+
+   '<blockquote style="margin:4px 0 8px 0;padding:6px 10px;border-left:3px solid #7c3aed;background:#1a1d27;color:#e2e4eb;font-size:13px;line-height:1.4">'+
+   esc(c.rule)+'</blockquote>'+
+   '<div style="font-size:11px;color:#9ca3af;margin-bottom:8px"><strong>Rationale:</strong> '+esc(c.rationale)+'</div>'+
+   '<div style="font-size:10px;color:#6b7280;margin-bottom:8px">From ticket <code>'+esc(c.source_ticket)+'</code></div>'+
+   '<div style="display:flex;gap:6px">'+
+    '<button onclick="validateCandidate(\''+esc(c.candidate_id)+'\')" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">'+
+    '✓ Validate &amp; file ticket</button>'+
+    '<button onclick="rejectCandidate(\''+esc(c.candidate_id)+'\')" style="font-size:11px;padding:4px 12px;background:#374151;color:#cfd3db;border:none;border-radius:4px;cursor:pointer">'+
+    '✕ Reject</button>'+
+   '</div>'+
+  '</div>';
+ });
+ document.getElementById("candidates-list").innerHTML=html;
+}
+
+async function validateCandidate(cid){
+ const repo=getRepoId();
+ const card=document.getElementById("cand-"+cid);
+ if(card){card.style.opacity='0.5';card.querySelectorAll("button").forEach(b=>b.disabled=true)}
+ try{
+  const r=await fetch("/candidates/"+encodeURIComponent(cid)+"/validate?repo_id="+encodeURIComponent(repo),{method:"POST"});
+  if(!r.ok){
+   const txt=await r.text();
+   alert("Validate failed: "+txt);
+   if(card){card.style.opacity='';card.querySelectorAll("button").forEach(b=>b.disabled=false)}
+   return;
+  }
+  // Refresh the list — the validated card drops out, the new ticket
+  // appears in the kanban via the regular refresh tick.
+  await renderCandidatesList();
+ }catch(e){
+  alert("Validate error: "+e);
+  if(card){card.style.opacity='';card.querySelectorAll("button").forEach(b=>b.disabled=false)}
+ }
+}
+
+async function rejectCandidate(cid){
+ if(!confirm("Reject this candidate? It stays in the file as audit trail but won't be surfaced again."))return;
+ const repo=getRepoId();
+ try{
+  const r=await fetch("/candidates/"+encodeURIComponent(cid)+"/reject?repo_id="+encodeURIComponent(repo),{method:"POST"});
+  if(!r.ok){alert("Reject failed: "+await r.text());return}
+  await renderCandidatesList();
+ }catch(e){alert("Reject error: "+e)}
+}
+
 async function openDeepReview(){
  if(deepReviewOpen){close_();return}
  if(sel){close_()}
