@@ -818,11 +818,22 @@ class Settings(BaseSettings):
     # needs deeper reasoning.
     survey_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Cap the survey main agent's tool-call request budget. The
-    # $15.32 trace had 22 chat calls and 25 web_fetch calls — well
-    # past the point of diminishing returns. 12 caps the worst case
-    # at ~12 × per-call cost while still allowing room for repo
-    # exploration + 3-4 web_research dispatches.
-    survey_request_limit: int = Field(default=12)
+    # ancient $15.32 trace had 22 chat calls and 25 web_fetch
+    # calls — well past diminishing returns; this is what motivated
+    # any cap at all.
+    #
+    # The one-subject-per-run prompt (agent_definitions/periodic/
+    # survey.yaml) targets ≤7 requests, but pydantic-ai retries on
+    # validation failures + read_ticket lookups for the
+    # recent-proposals dedup + the final structured-output round
+    # routinely push real runs to 10-15. The 12 cap killed
+    # well-behaved runs mid-conclusion.
+    #
+    # 25 caps the worst case at ~$0.50-1.25 per run (per-call ~
+    # $0.02-0.05 on the survey model) — same order of magnitude as
+    # the previous 12 cap, but with headroom for the natural
+    # request budget of a one-subject run.
+    survey_request_limit: int = Field(default=25)
     # Path to the survey agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/survey_memory.md.
     survey_memory_path: Path | None = Field(default=None)
