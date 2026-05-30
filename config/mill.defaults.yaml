@@ -31,13 +31,13 @@ core:
     audit: deepseek/deepseek-v4-flash                     # periodic quality/security scan; flash is enough — read-only proposer, no code-writing risk
     dedup: *default_model                                 # pre-refine duplicate/already-done check
     web_research: *default_model                          # web lookups — conclusion only
-    review: *default_model                                # blind dual-model diff audit — KEEP on pro (gates merges)
+    review: deepseek/deepseek-v4-flash                    # blind diff audit — flash by operator choice (cost): gates merges but cheap is acceptable here
     trace_inspector: deepseek/deepseek-v4-flash           # inspects Langfuse observation tree — flash is plenty for summarisation
     test_gap: deepseek/deepseek-v4-flash                  # periodic "untested modules" finder — read-only, flash sufficient
     agent_check: deepseek/deepseek-v4-flash               # periodic agent-yaml audit — read-only structural check
     health: deepseek/deepseek-v4-flash                    # periodic codebase-health 6-dim scan — read-only summariser
     survey: deepseek/deepseek-v4-flash                    # discovers OSS projects; proposes improvements — flash is plenty (cf $15.32 trace 1bfa36ab)
-    doc: *default_model                                   # documentation agent
+    doc: deepseek/deepseek-v4-flash                       # documentation agent — flash (docs don't gate merges; review runs after)
     triage: &cheap_model deepseek/deepseek-v4-flash       # pre-refine triage — fast/cheap classification
     auto_approve: *cheap_model                            # auto-approve triage — flash is plenty for spec-shape classification
     scope_triage: *cheap_model                            # scope-violation triage — fast and cheap
@@ -128,7 +128,7 @@ gates:
   auto_approve_enabled: false              # conservative auto-approve triage
   auto_approve_model: deepseek/deepseek-v4-flash  # model for auto-approve triage (flash is plenty for spec-shape classification)
   review_enabled: false                    # enable dual-model code review before deliver
-  review_model: *default_model             # review agent model
+  review_model: deepseek/deepseek-v4-flash  # review agent model — flash by operator choice (cost); must match core.models.review above
   review_max_rounds: 3                     # max CODE_REVIEW round-trips before escalate
   auto_merge_enabled: false                # auto-merge green PR via forge API (opt-in)
   review_feedback_enabled: false           # enable autonomous review-revision (opt-in — implements changes requested by human reviewers)
