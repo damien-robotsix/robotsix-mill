@@ -168,6 +168,7 @@ def detect_provider(
     model: str | None = None,
     api_key: str | None = None,
     feedback: str | None = None,
+    mx_hosts: list[str] | None = None,
 ) -> MailProvider:
     """Detect IMAP/SMTP settings for *email_address* via an LLM.
 
@@ -181,6 +182,9 @@ def detect_provider(
             host was tried and how it failed).  When provided, it is added
             to the prompt so the model can propose a different, non-obvious
             configuration instead of repeating the failed guess.
+        mx_hosts: Optional MX hostnames for the domain (see
+            :func:`mx_lookup`).  Added to the prompt as a strong hint so the
+            model identifies the hosting provider instead of guessing.
 
     Returns:
         A ``MailProvider`` with the detected settings.
@@ -216,8 +220,16 @@ def detect_provider(
         output_type=PromptedOutput(DetectedProvider),
     )
 
-    # -- build the user message (+ optional refinement feedback) --
+    # -- build the user message (+ optional MX hint / refinement feedback) --
     user_message = email_address
+    if mx_hosts:
+        user_message += (
+            "\n\nThe domain's MX records point to: "
+            + ", ".join(mx_hosts[:5])
+            + "\nIdentify the hosting provider from these MX hosts and return "
+            "ITS imap/smtp settings (the mailbox host is usually NOT the "
+            "address domain)."
+        )
     if feedback:
         user_message += (
             "\n\nThe previous configuration attempt FAILED:\n"
@@ -342,6 +354,113 @@ def autoconfig_lookup(
         provider = _parse_autoconfig_xml(xml_text)
         if provider is not None:
             return provider
+    return None
+
+
+# ---------------------------------------------------------------------------
+# MX-record provider detection (DNS-over-HTTPS) — no LLM required
+# ---------------------------------------------------------------------------
+
+# Google's DNS-over-HTTPS JSON resolver — stdlib-only, works in slim images.
+_DOH_RESOLVER = "https://dns.google/resolve"
+
+# MX-host substring → known provider IMAP/SMTP settings. The first matching
+# host wins; ``None`` marks an anti-spam gateway that hides the real provider
+# (so the caller falls through to autoconfig/the LLM). MailProvider defaults
+# (IMAP 993 direct-tls, SMTP 587 starttls) suit every entry below.
+_MX_PROVIDERS: list[tuple[tuple[str, ...], MailProvider | None]] = [
+    (("google.com", "googlemail.com"),
+     MailProvider(imap_host="imap.gmail.com", smtp_host="smtp.gmail.com")),
+    (("outlook.com", "office365.com", "protection.outlook.com"),
+     MailProvider(imap_host="outlook.office365.com",
+                  smtp_host="smtp.office365.com")),
+    (("gandi.net",),
+     MailProvider(imap_host="mail.gandi.net", smtp_host="mail.gandi.net")),
+    (("zoho.com", "zoho.eu"),
+     MailProvider(imap_host="imap.zoho.com", smtp_host="smtp.zoho.com")),
+    (("mailbox.org",),
+     MailProvider(imap_host="imap.mailbox.org", smtp_host="smtp.mailbox.org")),
+    (("migadu.com",),
+     MailProvider(imap_host="imap.migadu.com", smtp_host="smtp.migadu.com")),
+    (("messagingengine.com", "fastmail"),
+     MailProvider(imap_host="imap.fastmail.com",
+                  smtp_host="smtp.fastmail.com")),
+    (("ovh.net", "ovh.ca"),
+     MailProvider(imap_host="ssl0.ovh.net", smtp_host="ssl0.ovh.net")),
+    (("infomaniak.com",),
+     MailProvider(imap_host="mail.infomaniak.com",
+                  smtp_host="mail.infomaniak.com")),
+    (("icloud.com", "me.com", "mac.com"),
+     MailProvider(imap_host="imap.mail.me.com", smtp_host="smtp.mail.me.com")),
+    (("secureserver.net",),
+     MailProvider(imap_host="imap.secureserver.net",
+                  smtp_host="smtpout.secureserver.net")),
+    (("yandex",),
+     MailProvider(imap_host="imap.yandex.com", smtp_host="smtp.yandex.com")),
+    (("yahoodns.net",),
+     MailProvider(imap_host="imap.mail.yahoo.com",
+                  smtp_host="smtp.mail.yahoo.com")),
+    # Anti-spam gateways — the real mailbox provider is hidden behind these.
+    (("pphosted.com", "proofpoint", "mimecast", "barracudanetworks.com"),
+     None),
+]
+
+
+def mx_lookup(email_address: str, *, timeout: float = 5.0) -> list[str]:
+    """Return the MX hostnames for the email's domain, lowest preference first.
+
+    Uses DNS-over-HTTPS (so no system resolver or extra dependency is needed)
+    and returns an empty list on any failure.
+    """
+    domain = email_address.rpartition("@")[2].strip().lower()
+    if not domain:
+        return []
+    url = f"{_DOH_RESOLVER}?name={urllib.parse.quote(domain)}&type=MX"
+    request = urllib.request.Request(
+        url, headers={"Accept": "application/dns-json"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
+            if getattr(resp, "status", 200) != 200:
+                return []
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+
+    records: list[tuple[int, str]] = []
+    for answer in data.get("Answer") or []:
+        if not isinstance(answer, dict) or answer.get("type") != 15:
+            continue  # type 15 == MX
+        parts = str(answer.get("data", "")).split()
+        if len(parts) == 2:
+            try:
+                preference = int(parts[0])
+            except ValueError:
+                preference = 999
+            host = parts[1]
+        else:
+            preference, host = 999, (parts[-1] if parts else "")
+        host = host.rstrip(".").lower()
+        if host:
+            records.append((preference, host))
+
+    records.sort(key=lambda item: item[0])
+    return [host for _, host in records]
+
+
+def provider_from_mx(mx_hosts: list[str]) -> MailProvider | None:
+    """Map MX hostnames to known provider settings.
+
+    Returns the first real provider match.  Anti-spam gateways (which hide
+    the true provider) and unknown hosts yield ``None`` so the caller can
+    fall back to autoconfig or the LLM.
+    """
+    for host in mx_hosts:
+        for needles, provider in _MX_PROVIDERS:
+            if provider is not None and any(n in host for n in needles):
+                return provider
     return None
 
 

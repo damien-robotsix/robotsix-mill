@@ -429,6 +429,8 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             DetectionError,
             autoconfig_lookup,
             detect_provider,
+            mx_lookup,
+            provider_from_mx,
             provider_to_config,
             render_config,
         )
@@ -445,8 +447,9 @@ def _cmd_detect(args: argparse.Namespace) -> int:
 
     api_key, model = load_llm()
 
-    # -- initial detection: published autoconfig first, LLM fallback --
+    # -- initial detection ladder: autoconfig → MX→provider → LLM --
     sys.stderr.write(f"Detecting settings for {args.email}…\n")
+    mx_hosts: list[str] = []
     provider = autoconfig_lookup(args.email)
     if provider is not None:
         sys.stderr.write(
@@ -454,17 +457,32 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             f"smtp={provider.smtp_host}\n"
         )
     else:
-        sys.stderr.write("  autoconfig: no match — asking the LLM…\n")
-        try:
-            provider = detect_provider(
-                args.email, model=model, api_key=api_key
+        sys.stderr.write("  autoconfig: no match — checking MX records…\n")
+        mx_hosts = mx_lookup(args.email)
+        if mx_hosts:
+            sys.stderr.write(f"  MX: {', '.join(mx_hosts[:3])}\n")
+        provider = provider_from_mx(mx_hosts)
+        if provider is not None:
+            sys.stderr.write(
+                f"  MX provider: imap={provider.imap_host} "
+                f"smtp={provider.smtp_host}\n"
             )
-        except DetectionError as exc:
-            sys.stderr.write(f"Error: {exc}\n")
-            return 1
-        sys.stderr.write(
-            f"  LLM: imap={provider.imap_host} smtp={provider.smtp_host}\n"
-        )
+        else:
+            sys.stderr.write("  no known provider — asking the LLM…\n")
+            try:
+                provider = detect_provider(
+                    args.email,
+                    model=model,
+                    api_key=api_key,
+                    mx_hosts=mx_hosts,
+                )
+            except DetectionError as exc:
+                sys.stderr.write(f"Error: {exc}\n")
+                return 1
+            sys.stderr.write(
+                f"  LLM: imap={provider.imap_host} "
+                f"smtp={provider.smtp_host}\n"
+            )
 
     # -- password handling --
     password: str | None = args.password
@@ -566,6 +584,7 @@ def _cmd_detect(args: argparse.Namespace) -> int:
                     model=model,
                     api_key=api_key,
                     feedback=_verify_feedback(config, result),
+                    mx_hosts=mx_hosts,
                 )
             except DetectionError as exc:
                 sys.stderr.write(f"  LLM refinement error: {exc}\n")

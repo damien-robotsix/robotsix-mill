@@ -49,8 +49,20 @@ docker compose run robotsix-auto-mail board
 ## Auto-detection with `detect`
 
 Instead of manually researching and writing config, you can auto-generate it
-from just an email address. The `detect` command uses an LLM to look up the
-correct IMAP/SMTP settings for your provider.
+from just an email address. The `detect` command resolves the IMAP/SMTP
+settings through a ladder, most authoritative first:
+
+1. **Published autoconfig** — the Mozilla ISPDB and the domain's own
+   `autoconfig.<domain>` endpoint.
+2. **MX records** — a DNS-over-HTTPS lookup identifies the hosting provider
+   from the domain's mail servers (e.g. `*.mail.ovh.net` → OVH), mapped to
+   that provider's known IMAP/SMTP settings.
+3. **LLM** — only if the first two miss; the MX hostnames are passed in as a
+   hint so it identifies the provider rather than guessing blindly.
+
+After writing the config, `detect` verifies it by connecting (see below), and
+refines on failure. The LLM step needs the optional `[llm]` dependency and an
+API key; autoconfig and MX detection do not.
 
 ### Setup
 

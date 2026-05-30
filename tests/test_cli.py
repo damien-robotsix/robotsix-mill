@@ -899,9 +899,13 @@ def test_detect_missing_pydantic_ai(capsys: pytest.CaptureFixture[str]) -> None:
 
 @pytest.fixture
 def no_autoconfig() -> object:
-    """Force the autoconfig lookup to miss so tests exercise the LLM path."""
+    """Force autoconfig + MX detection to miss so tests reach the LLM path."""
     with mock.patch(
         "robotsix_auto_mail.detect.autoconfig_lookup", return_value=None
+    ), mock.patch(
+        "robotsix_auto_mail.detect.mx_lookup", return_value=[]
+    ), mock.patch(
+        "robotsix_auto_mail.detect.provider_from_mx", return_value=None
     ):
         yield
 
@@ -1101,7 +1105,7 @@ def test_detect_llm_model_env(
 
     assert rc == 0
     mock_dp.assert_called_once_with(
-        "user@x.com", model="test-model", api_key="sk-test"
+        "user@x.com", model="test-model", api_key="sk-test", mx_hosts=[]
     )
 
 

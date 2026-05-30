@@ -17,6 +17,8 @@ from robotsix_auto_mail.detect import (
     MailProvider,
     autoconfig_lookup,
     detect_provider,
+    mx_lookup,
+    provider_from_mx,
     provider_to_config,
     render_config,
 )
@@ -578,3 +580,58 @@ def test_autoconfig_lookup_missing_smtp_returns_none() -> None:
 """
     with mock.patch("urllib.request.urlopen", return_value=_FakeResp(xml)):
         assert autoconfig_lookup("user@example.net") is None
+
+
+# ---------------------------------------------------------------------------
+# mx_lookup / provider_from_mx
+# ---------------------------------------------------------------------------
+
+_MX_JSON = (
+    '{"Status":0,"Answer":['
+    '{"name":"example.net.","type":15,"data":"20 mx2.example.net."},'
+    '{"name":"example.net.","type":15,"data":"10 mx1.example.net."}'
+    "]}"
+)
+
+
+def test_mx_lookup_parses_and_sorts() -> None:
+    """MX records are parsed and returned lowest-preference first."""
+    with mock.patch(
+        "urllib.request.urlopen", return_value=_FakeResp(_MX_JSON)
+    ):
+        hosts = mx_lookup("user@example.net")
+    assert hosts == ["mx1.example.net", "mx2.example.net"]
+
+
+def test_mx_lookup_network_error_returns_empty() -> None:
+    """A DoH failure yields an empty list."""
+    with mock.patch(
+        "urllib.request.urlopen",
+        side_effect=urllib.error.URLError("no route"),
+    ):
+        assert mx_lookup("user@example.net") == []
+
+
+def test_provider_from_mx_gandi() -> None:
+    """A Gandi MX target maps to mail.gandi.net."""
+    provider = provider_from_mx(["spool.mail.gandi.net", "fb.mail.gandi.net"])
+    assert provider is not None
+    assert provider.imap_host == "mail.gandi.net"
+    assert provider.smtp_host == "mail.gandi.net"
+
+
+def test_provider_from_mx_google() -> None:
+    """A Google Workspace MX target maps to Gmail settings."""
+    provider = provider_from_mx(["aspmx.l.google.com"])
+    assert provider is not None
+    assert provider.imap_host == "imap.gmail.com"
+
+
+def test_provider_from_mx_gateway_is_none() -> None:
+    """An anti-spam gateway hides the provider, so no mapping is returned."""
+    assert provider_from_mx(["mx0.example.pphosted.com"]) is None
+
+
+def test_provider_from_mx_unknown_is_none() -> None:
+    """An unrecognised MX host yields None."""
+    assert provider_from_mx(["mail.some-tiny-host.example"]) is None
