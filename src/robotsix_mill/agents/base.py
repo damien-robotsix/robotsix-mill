@@ -19,7 +19,6 @@ from typing import Any
 
 from ..config import Settings, get_secrets
 from .report_issue import make_report_issue_tool
-from .web_research import make_web_research_tool
 
 
 def _close_async_client(client: "httpx.AsyncClient") -> None:

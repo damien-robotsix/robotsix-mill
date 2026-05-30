@@ -999,7 +999,9 @@ def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -1033,7 +1035,9 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
     repo.mkdir()
     seen_tools: list = []
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         seen_tools.extend(t.__name__ for t in tools)
 
         class FakeAgent:
@@ -1070,7 +1074,9 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
 
     seen_tools: list = []
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         seen_tools.extend(t.__name__ for t in tools)
 
         class FakeAgent:
@@ -1580,7 +1586,9 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
 
     raw_md = "## Problem\nraw output\n## Scope\n- no json"
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single(raw_md)})()
@@ -1610,7 +1618,9 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
     # We simulate by returning a proper RefineResult from the fake.
     raw = '{"split": false, "spec": "## Problem\nunclosed string'
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 # Simulate PromptedOutput parsing — returns a RefineResult.
@@ -1639,7 +1649,9 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -1670,7 +1682,9 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -1785,7 +1799,9 @@ def test_sendback_uses_short_prompt(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -1816,7 +1832,9 @@ def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
+    def fake_build_agent(
+        settings, system_prompt, tools, web_knowledge, model_name, **kwargs
+    ):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:

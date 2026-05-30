@@ -151,7 +151,9 @@ def test_tools_include_shell_tools(tmp_path, monkeypatch):
     """The tools list passed to build_agent includes run_command and friends."""
     captured_tools = []
 
-    def fake_build_agent(settings, *, system_prompt, output_type, tools, web_knowledge, **kw):
+    def fake_build_agent(
+        settings, *, system_prompt, output_type, tools, web_knowledge, **kw
+    ):
         captured_tools.extend(tools or [])
 
         class FakeAgent:
@@ -189,7 +191,9 @@ def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
     """The system_prompt captures the rebase workflow."""
     captured_prompt = []
 
-    def fake_build_agent(settings, *, system_prompt, output_type, tools, web_knowledge, **kw):
+    def fake_build_agent(
+        settings, *, system_prompt, output_type, tools, web_knowledge, **kw
+    ):
         captured_prompt.append(system_prompt)
 
         class FakeAgent:

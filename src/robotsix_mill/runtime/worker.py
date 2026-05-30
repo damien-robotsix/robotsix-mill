@@ -2456,8 +2456,7 @@ class Worker:
         if inflight:
             grace = max(0, self.ctx.settings.shutdown_grace_seconds)
             log.info(
-                "stop: awaiting %d in-flight periodic pass(es) "
-                "(grace %ds)",
+                "stop: awaiting %d in-flight periodic pass(es) (grace %ds)",
                 len(inflight),
                 grace,
             )

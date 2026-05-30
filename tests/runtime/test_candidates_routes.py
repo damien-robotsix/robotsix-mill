@@ -144,9 +144,7 @@ def test_reject_unknown_candidate_404(client, candidates_file):
     assert r.status_code == 404
 
 
-def test_only_other_candidate_remains_pending_after_validate(
-    client, candidates_file
-):
+def test_only_other_candidate_remains_pending_after_validate(client, candidates_file):
     """Two-candidate file: validating one leaves the other untouched."""
     listing = client.get("/candidates?repo_id=test-repo").json()
     assert len(listing) == 2

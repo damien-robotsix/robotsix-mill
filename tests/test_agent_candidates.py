@@ -142,7 +142,9 @@ def test_update_status_only_target_block_changes(tmp_path):
     """Stamping one block doesn't touch the other."""
     p = _write(tmp_path, _BLOCK1 + "\n" + _BLOCK2)
     cands = load_candidates(p)
-    cid_block2 = next(c for c in cands if c.section == "## Testing conventions").candidate_id
+    cid_block2 = next(
+        c for c in cands if c.section == "## Testing conventions"
+    ).candidate_id
     update_status(p, cid_block2, "rejected")
     after = load_candidates(p)
     block1 = next(c for c in after if c.section == "## Project layout")
