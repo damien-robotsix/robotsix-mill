@@ -360,6 +360,14 @@ class Settings(BaseSettings):
     # stage_timeout_seconds when a stage isn't listed.  A value of 0
     # disables the timeout for that stage.
     stage_timeout_overrides: dict[str, int] = Field(default_factory=dict)
+    # Maximum seconds to wait for in-flight periodic-agent passes
+    # (survey, audit, health, …) to finish before tearing the worker
+    # down on container shutdown. The mill's docker-compose ships a
+    # matching ``stop_grace_period`` so docker won't SIGKILL before
+    # the wait completes; if you change one, change the other.
+    # 0 → wait forever; set <= the docker grace period to bound the
+    # final wait.
+    shutdown_grace_seconds: int = Field(default=1800)
 
     # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain

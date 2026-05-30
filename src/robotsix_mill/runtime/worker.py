@@ -786,6 +786,12 @@ class Worker:
         self._trace_review_task: asyncio.Task | None = None
         self._cost_warmer_task: asyncio.Task | None = None
         self._cost_warmer_fast_task: asyncio.Task | None = None
+        # Periodic-pass runs currently executing in worker threads.
+        # The to_thread wrapper registers them on entry and removes
+        # on exit; ``stop()`` awaits this set (with a grace timeout)
+        # before tearing the loops down so a survey / audit / etc.
+        # mid-run isn't killed by a container restart.
+        self._inflight_passes: set[asyncio.Task] = set()
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
         self._bc_check_task: asyncio.Task | None = None
@@ -1343,6 +1349,25 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("%s scheduler tick failed", label)
 
+    async def _tracked_to_thread(self, fn, *args, **kwargs):
+        """Run *fn* in the default thread pool, tracking the call so
+        :meth:`stop` can wait for it before tearing the loop down.
+
+        Difference vs ``asyncio.to_thread``: the underlying future is
+        wrapped in a task that's registered in ``_inflight_passes`` and
+        ``shield``-ed from cancellation. If the caller (a periodic
+        loop) gets cancelled mid-run, the loop task still raises
+        ``CancelledError`` immediately, but the thread keeps executing
+        and ``stop()`` will await its completion (bounded by
+        ``shutdown_grace_seconds``). Without this, a SIGTERM in the
+        middle of a survey pass would kill the agent halfway through
+        the run and lose the work.
+        """
+        task = asyncio.create_task(asyncio.to_thread(fn, *args, **kwargs))
+        self._inflight_passes.add(task)
+        task.add_done_callback(self._inflight_passes.discard)
+        return await asyncio.shield(task)
+
     async def _fire_periodic_pass(
         self,
         label: str,
@@ -1375,7 +1400,7 @@ class Worker:
                 label,
                 repo_config=repo_config,
             ):
-                result = await asyncio.to_thread(
+                result = await self._tracked_to_thread(
                     runner_fn,
                     session_id=session_id,
                     repo_config=repo_config,
@@ -1438,7 +1463,7 @@ class Worker:
                 with tracing.start_ticket_root_span(
                     session_id, label, repo_config=None
                 ):
-                    result = await asyncio.to_thread(
+                    result = await self._tracked_to_thread(
                         runner_fn,
                         session_id=session_id,
                     )
@@ -2423,6 +2448,31 @@ class Worker:
                 )
 
     async def stop(self) -> None:
+        # Wait for periodic passes that are mid-run (survey, audit,
+        # health, …) to finish before tearing the loops down. Without
+        # this a SIGTERM during a survey run would lose the work and
+        # leave half-cooked drafts.
+        inflight = list(self._inflight_passes)
+        if inflight:
+            grace = max(0, self.ctx.settings.shutdown_grace_seconds)
+            log.info(
+                "stop: awaiting %d in-flight periodic pass(es) "
+                "(grace %ds)",
+                len(inflight),
+                grace,
+            )
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*inflight, return_exceptions=True),
+                    timeout=grace if grace > 0 else None,
+                )
+            except asyncio.TimeoutError:
+                log.warning(
+                    "stop: in-flight passes did not finish within %ds — "
+                    "cancelling remaining %d",
+                    grace,
+                    sum(1 for t in inflight if not t.done()),
+                )
         tasks = list(self._tasks)
         for attr in (
             "_poll_task",
