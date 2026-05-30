@@ -45,6 +45,9 @@ testpaths = ["tests"]
 precision = 2
 show_missing = true
 
+[tool.deptry]
+extras = ["dev", "tracing"]
+
 [tool.bandit]
 # Run with: pre-commit run bandit --all-files
 # (uses `-c pyproject.toml` via the pre-commit hook args)

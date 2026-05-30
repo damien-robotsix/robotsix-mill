@@ -73,6 +73,11 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run bandit -c pyproject.toml -r src/ --severity-level medium
 
+      - name: Deptry (dependency import check)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run deptry . --extras dev,tracing
+
       - name: Run tests
         env:
           UV_PROJECT_ENVIRONMENT: system
