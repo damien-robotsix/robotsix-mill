@@ -44,6 +44,13 @@ library_knowledge: true
 # Refine does not emit draft tickets through structured output —
 # it produces a RefineResult. Let it self-report blocking issues.
 report_issue: true
+
+# Refine produces a structured RefineResult; the stage runner handles
+# all board interaction. These are never used — drop them to save
+# tokens per call.
+reply_to_thread: false
+close_thread: false
+
 output_type: RefineResult
 retries: 2
 
