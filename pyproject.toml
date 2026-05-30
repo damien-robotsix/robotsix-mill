@@ -140,6 +140,26 @@ max-complexity = 10
 # call here while the rest of the codebase already moved off it.
 "tests/runtime/test_langfuse_client.py" = ["DTZ003"]
 
+[tool.deptry]
+known_first_party = ["robotsix_mill"]
+
+[tool.deptry.per_rule_ignores]
+# CLI-only dev/lint/docs tools that are never imported at runtime.
+DEP002 = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "bandit",
+    "mypy",
+    "ruff",
+    "deptry",
+    "mkdocs-material",
+    "langfuse",
+]
+# Packages imported directly but pulled in transitively through
+# pydantic-ai-slim / sqlmodel — the imports are intentional.
+DEP003 = ["pydantic", "sqlalchemy", "openai"]
+
 [tool.mypy]
 strict = true
 python_version = "3.14"

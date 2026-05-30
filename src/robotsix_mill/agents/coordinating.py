@@ -373,8 +373,12 @@ def run_coordinator(
                 # pydantic-ai doesn't append a duplicate.
                 run_user_prompt = None
 
-        if final_message_history:
-            final_message_history = history_compress.compress_history(
+        # Compress older tool outputs if the estimated token count
+        # exceeds the configured budget (default: 80 % of 128 K).
+        if final_message_history is not None:
+            from .history_compress import compress_history
+
+            compress_history(
                 final_message_history,
                 max_tokens=settings.history_max_tokens,
                 keep_last=settings.history_keep_last,

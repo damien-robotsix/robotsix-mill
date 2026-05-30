@@ -69,6 +69,8 @@ core:
     rate_limit_backoff_base: 30.0      # base seconds for rate-limit backoff (longer window)
     rate_limit_backoff_cap: 120.0      # max seconds between rate-limit retries
     rate_limit_fallback_retries: 3     # consecutive rate-limit failures before switching model
+    history_max_tokens: 102400         # estimated token budget before compressing older tool outputs
+    history_keep_last: 5               # most-recent tool outputs to keep fully expanded after compression
 
   # -- memory ledgers, reference files, and dedup lookback (5 fields) ------
   memory:
