@@ -47,13 +47,13 @@ def test_detected_provider_defaults() -> None:
 def test_detected_provider_missing_imap_host() -> None:
     """Missing imap_host raises pydantic.ValidationError."""
     with pytest.raises(pydantic.ValidationError):
-        DetectedProvider(smtp_host="smtp.example.com")
+        DetectedProvider(smtp_host="smtp.example.com")  # type: ignore[call-arg]
 
 
 def test_detected_provider_missing_smtp_host() -> None:
     """Missing smtp_host raises pydantic.ValidationError."""
     with pytest.raises(pydantic.ValidationError):
-        DetectedProvider(imap_host="imap.example.com")
+        DetectedProvider(imap_host="imap.example.com")  # type: ignore[call-arg]
 
 
 def test_detected_provider_imap_port_zero() -> None:
