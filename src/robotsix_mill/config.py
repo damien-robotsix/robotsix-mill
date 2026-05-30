@@ -404,7 +404,7 @@ class Settings(BaseSettings):
     # an actionable error string instead of writing broken code that
     # would only be caught one expensive test cycle later.
     # Configured via ``core.lint_on_edit`` in the YAML config.
-    lint_on_edit: bool = True
+    lint_on_edit: bool = Field(default=True, alias="MILL_LINT_ON_EDIT")
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
     # refine + implement agents' system prompt. Relative to CWD (/app in
     # the container, repo root locally).
