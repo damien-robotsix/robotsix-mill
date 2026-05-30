@@ -149,7 +149,10 @@ def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
 # --- NEEDS_DISCUSSION --------------------------------------------------
 
 
-def test_needs_discussion_transitions_to_blocked(ctx_factory, monkeypatch):
+def test_needs_discussion_pauses_for_user_reply(ctx_factory, monkeypatch):
+    """NEEDS_DISCUSSION is a human-decision verdict, not a failure — it
+    pauses the ticket for the operator's reply (AWAITING_USER_REPLY)
+    with an [ASK_USER] thread, NOT BLOCKED."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
@@ -169,11 +172,14 @@ def test_needs_discussion_transitions_to_blocked(ctx_factory, monkeypatch):
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.BLOCKED
+    assert out.next_state is State.AWAITING_USER_REPLY
 
     comments = ctx.service.list_comments(t.id)
     assert len(comments) == 1
-    assert comments[0].body == "questionable design"
+    # Posted as an [ASK_USER] thread so the resume mechanism fires when
+    # the operator replies + closes it.
+    assert comments[0].body.startswith("[ASK_USER]")
+    assert "questionable design" in comments[0].body
 
 
 # --- Blind review: diff + spec only, no implementation context --------
@@ -504,7 +510,7 @@ def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
     out = ReviewStage().run(t, ctx)
-    assert out.next_state is State.BLOCKED
+    assert out.next_state is State.AWAITING_USER_REPLY
 
     t2 = ctx.service.get(t.id)
     assert t2.review_rounds == 1  # unchanged

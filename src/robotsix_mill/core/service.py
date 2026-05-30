@@ -567,6 +567,31 @@ class TicketService:
                 self._on_transition(ticket)
             return ticket
 
+    def add_history_note(self, ticket_id: str, note: str) -> TicketEvent:
+        """Append a non-transition history entry that records an
+        informational note on the ticket.
+
+        Used for the post-stage Langfuse trace breadcrumb. Previously
+        the worker posted that link as a comment (author=mill); refine
+        and implement then read the comment stream and treated the
+        inaccessible URL as reviewer feedback. Writing to history
+        instead keeps the audit trail visible to a human browsing the
+        ticket without contaminating the channel agents read.
+
+        The event reuses the ticket's CURRENT state — it's a side-band
+        note, not a transition. Hash chain stays intact: the next real
+        transition's ``prev_hash`` correctly points at this entry.
+        """
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            event = _make_event(s, ticket_id=ticket_id, state=ticket.state, note=note)
+            s.add(event)
+            s.commit()
+            s.refresh(event)
+            return event
+
     def resume_blocked(self, ticket_id: str) -> Ticket:
         """Resume a blocked ticket to the state it was blocked from.
 

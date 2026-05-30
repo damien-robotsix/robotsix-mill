@@ -116,7 +116,7 @@ def run_spawn_subtask(
         system_prompt=system_prompt,
         model_name=model_name or settings.model,
         tools=[make_explore_tool(settings, repo_dir), *fs_tools],
-        web=False,
+        web_knowledge=False,
         report_issue=False,
         read_ticket=False,
         reply_to_thread=False,

@@ -13,7 +13,6 @@ model: "${MILL_DOC_CLASSIFIER_MODEL}"
 
 tools: []
 
-web: false
 report_issue: false
 output_type: DocClassifierResult
 retries: 2

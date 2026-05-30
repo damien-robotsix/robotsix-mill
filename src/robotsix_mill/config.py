@@ -155,22 +155,27 @@ class Settings(BaseSettings):
     bespoke_default_model: str = Field(
         default="deepseek/deepseek-v4-flash",
     )
-    # Model for the library-knowledge curator sub-agent — a cheap call
-    # that answers from a cached per-library knowledge file and only
-    # falls back to web_research when the file is stale or doesn't
-    # cover the question.
-    library_knowledge_model: str = Field(
+    # Model for the web_knowledge gateway sub-agent — a multi-turn
+    # flash agent that owns the per-repo Markdown knowledge base
+    # (per-library .md files + a cross-library _general.md) AND a
+    # web_search tool, and decides autonomously which to use. Every
+    # parent-agent route to the internet now goes through it, so the
+    # knowledge base accumulates instead of fragmenting and cost
+    # attribution for web hits stays in one place.
+    web_knowledge_model: str = Field(
         default="deepseek/deepseek-v4-flash",
     )
-    # How long the cached library knowledge file is considered fresh
-    # (days). A consult on an older file triggers a web_research
-    # refresh before answering.
-    library_knowledge_stale_days: int = Field(
+    # How long a cached web_knowledge .md file is considered fresh
+    # (days). A consultation that hits a stale file is allowed to
+    # web_search and update the file.
+    web_knowledge_stale_days: int = Field(
         default=30,
     )
-    # Bound on the curator sub-agent's tool requests per consultation.
-    consult_library_request_limit: int = Field(
-        default=5,
+    # Bound on the web_knowledge sub-agent's tool requests per
+    # consultation. Each request is one Markdown read, one web_search,
+    # or one Markdown write.
+    web_knowledge_request_limit: int = Field(
+        default=8,
     )
     # Model for the pre-refine dedup/already-done check — a cheap call
     # that short-circuits duplicate drafts before the expensive refiner.
@@ -197,7 +202,13 @@ class Settings(BaseSettings):
     # sources, and distills the cause — exploration-heavy work that
     # easily exceeds 8 calls on a non-trivial failure. 50 leaves ample
     # headroom (flash is cheap; cost-bounded by ticket-level cap).
-    test_request_limit: int = Field(default=50)
+    # Aligned with config/mill.defaults.yaml's core.limits.test_requests (8).
+    # Pre-alignment the field default was 50 (legacy from before the
+    # test agent flipped to a cheap flash model that doesn't need
+    # nearly as many tool calls). The yaml value wins at runtime via
+    # _YAML_PATH_TO_ALIAS; this just stops the dry-Settings() default
+    # from contradicting it on machines without a yaml override.
+    test_request_limit: int = Field(default=8)
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
     max_fix_iterations: int = Field(default=8)
@@ -214,11 +225,6 @@ class Settings(BaseSettings):
     # bounding a real hang. On timeout the call raises -> transient ->
     # retry/backoff rides it out (or it BLOCKs visibly).
     model_request_timeout: float = Field(default=900.0)
-    # How many tickets the worker pool processes in parallel. One
-    # ticket's stages still run sequentially within its consumer; this
-    # is cross-ticket concurrency. Each in-flight implement may spawn a
-    # sandbox container and hit the model API, so keep it modest.
-    max_concurrency: int = Field(default=4)
     transient_retries: int = Field(default=4)
     transient_backoff_base: float = Field(default=2.0)
     transient_backoff_cap: float = Field(default=30.0)
@@ -355,6 +361,14 @@ class Settings(BaseSettings):
     # stage_timeout_seconds when a stage isn't listed.  A value of 0
     # disables the timeout for that stage.
     stage_timeout_overrides: dict[str, int] = Field(default_factory=dict)
+    # Maximum seconds to wait for in-flight periodic-agent passes
+    # (survey, audit, health, …) to finish before tearing the worker
+    # down on container shutdown. The mill's docker-compose ships a
+    # matching ``stop_grace_period`` so docker won't SIGKILL before
+    # the wait completes; if you change one, change the other.
+    # 0 → wait forever; set <= the docker grace period to bound the
+    # final wait.
+    shutdown_grace_seconds: int = Field(default=1800)
 
     # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain
@@ -696,14 +710,35 @@ class Settings(BaseSettings):
     # actual cost when they click the ticket. The warmer pre-fills the
     # cache so the cost column is always populated.
     cost_warmer_periodic: bool = Field(default=True)
-    # Seconds between full cycles. Defaults to 60s so the cache stays
-    # comfortably within ``_COST_TTL_SECONDS`` (60s) and the column
-    # never shows stale-looking gaps.
-    cost_warmer_interval_seconds: int = Field(default=60)
-    # Milliseconds between individual ticket cost refreshes within a
-    # cycle. Throttles the Langfuse API hit-rate. With 100 tickets and
-    # 200ms pace, a cycle takes ~20s; well within the 60s budget.
+    # Seconds between full cycles. Default 20s: a full sweep of a
+    # busy board (200+ tickets) finishes in ~15s with the default
+    # concurrency, so the column refreshes faster than the cache TTL
+    # — idle tickets stay populated without ever showing a $0 dip.
+    cost_warmer_interval_seconds: int = Field(default=20)
+    # Concurrent Langfuse calls during a sweep. Each call takes
+    # ~250ms; with concurrency=4 a 200-ticket sweep takes ~12s. Bump
+    # higher for snappier refreshes on large boards (mind the
+    # Langfuse rate limit); drop to 1 to revert to fully-serial.
+    cost_warmer_concurrency: int = Field(default=4)
+    # Legacy per-call pace setting (kept for backward compat with
+    # YAML overrides). The parallel sweep above ignores it — the
+    # semaphore is the only throttle. Drop it entirely after the
+    # next config bump.
     cost_warmer_pace_ms: int = Field(default=200)
+    # Independent on/off for the fast loop (see comment below).
+    # Gated separately from the slow loop so an operator can disable
+    # the per-active-ticket Langfuse polling without losing the
+    # comprehensive sweep, e.g. when Langfuse rate-limits become a
+    # concern.
+    cost_warmer_fast_periodic: bool = Field(default=True)
+    # Seconds between *fast* warmer cycles. The slow warmer above
+    # walks every ticket and is fine for idle ones, but a full sweep
+    # takes a minute or more on a busy board — long enough that an
+    # actively-running ticket's cost looks frozen to the operator
+    # watching it. The fast loop walks ONLY tickets in active stages
+    # (refine, implement, review, …) and bypasses the cache TTL, so a
+    # board user sees the cost climb in near-real-time.
+    cost_warmer_fast_interval_seconds: int = Field(default=5)
 
     # --- timeout escalation ---
     # When True, the worker runs periodic timeout-escalation passes at the
@@ -778,11 +813,22 @@ class Settings(BaseSettings):
     # needs deeper reasoning.
     survey_model: str = Field(default="deepseek/deepseek-v4-flash")
     # Cap the survey main agent's tool-call request budget. The
-    # $15.32 trace had 22 chat calls and 25 web_fetch calls — well
-    # past the point of diminishing returns. 12 caps the worst case
-    # at ~12 × per-call cost while still allowing room for repo
-    # exploration + 3-4 web_research dispatches.
-    survey_request_limit: int = Field(default=12)
+    # ancient $15.32 trace had 22 chat calls and 25 web_fetch
+    # calls — well past diminishing returns; this is what motivated
+    # any cap at all.
+    #
+    # The "keep trying subjects until one yields a draft" prompt
+    # (agent_definitions/periodic/survey.yaml) targets ≤10 requests
+    # per subject attempt, up to 3 attempts per run if the first
+    # subjects don't reveal a citable gap. Worst case: 3 × ~10 =
+    # 30 requests, plus pydantic-ai validation retries + the final
+    # structured-output round → 40 is the safe ceiling.
+    #
+    # Per-call cost on the survey model is ~$0.02-0.05, so 40
+    # caps worst-case spend at ~$0.80-2.00 per run. Significantly
+    # below the historical $15 runaway and a reasonable price for
+    # the guarantee that every run produces a draft.
+    survey_request_limit: int = Field(default=40)
     # Path to the survey agent's Markdown memory ledger. Override to pin
     # a specific path; unset (default) derives <data_dir>/survey_memory.md.
     survey_memory_path: Path | None = Field(default=None)
@@ -1121,13 +1167,6 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
 
     # -- range checks --------------------------------------------------
-
-    @field_validator("max_concurrency")
-    @classmethod
-    def _validate_max_concurrency(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("max_concurrency must be ≥ 1")
-        return v
 
     @field_validator("model_request_timeout")
     @classmethod

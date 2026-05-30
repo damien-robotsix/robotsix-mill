@@ -33,8 +33,11 @@ async def test_stub_pauses_chain(ctx, service, monkeypatch):
 
 
 async def test_noop_outcome_leaves_ticket(ctx, service, monkeypatch):
-    """Same-state Outcome (e.g. merge: PR still open) = no transition,
-    no history spam — the poll re-runs it later."""
+    """Same-state Outcome (e.g. merge: PR still open) = no transition.
+
+    The worker still appends a trace-link breadcrumb to history so
+    the operator can find the Langfuse trace for the no-op run, but
+    every event is at the same state — no real state change."""
 
     class NoOp(Stage):
         name = "refine"
@@ -47,7 +50,7 @@ async def test_noop_outcome_leaves_ticket(ctx, service, monkeypatch):
     t = service.create("x")
     await process_ticket(t.id, ctx)
     assert service.get(t.id).state is State.DRAFT
-    assert [e.state for e in service.history(t.id)] == [State.DRAFT]
+    assert all(e.state is State.DRAFT for e in service.history(t.id))
 
 
 async def test_working_stages_chain_to_real_tail(ctx, service, monkeypatch):
@@ -971,3 +974,85 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
     )
     assert seen["repo_config"] is fake_repo
     assert captured_repo_config.get("value") is fake_repo
+
+
+# ---------------------------------------------------------------------------
+# Graceful shutdown — periodic passes finish before stop()
+# ---------------------------------------------------------------------------
+
+
+async def test_stop_awaits_inflight_passes(ctx, monkeypatch):
+    """stop() must wait for in-flight ``_tracked_to_thread`` calls to
+    finish, not cancel them. Without this a SIGTERM during a survey
+    run kills the agent mid-pass."""
+    import threading
+    import time
+
+    w = Worker(ctx, run_registry=None)
+    started = threading.Event()
+    finished_at: dict = {}
+
+    def slow_runner():
+        # Simulates a survey pass that needs to flush memory + db
+        # before exit. Should not be killed.
+        started.set()
+        time.sleep(0.2)
+        finished_at["t"] = time.monotonic()
+        return "ok"
+
+    # Spawn the tracked thread call exactly as a periodic loop would.
+    call_task = asyncio.create_task(w._tracked_to_thread(slow_runner))
+    # Give the thread a moment to actually enter slow_runner.
+    for _ in range(100):
+        if started.is_set():
+            break
+        await asyncio.sleep(0.005)
+    assert started.is_set(), "slow_runner never started"
+
+    # Now simulate teardown. stop() should await the in-flight thread.
+    stop_started = time.monotonic()
+    await w.stop()
+    stop_elapsed = time.monotonic() - stop_started
+
+    assert "t" in finished_at, (
+        "slow_runner did not complete before stop() returned — "
+        "the in-flight pass was killed prematurely"
+    )
+    # The wait should have taken at least most of the 0.2 s nap.
+    assert stop_elapsed >= 0.15
+    # Cleanup the call task (it should be done).
+    assert call_task.done()
+
+
+async def test_stop_grace_timeout_does_not_hang(ctx, monkeypatch):
+    """If a pass runs past ``shutdown_grace_seconds`` stop() logs a
+    warning and proceeds — it must never hang the process."""
+    import threading
+    import time
+
+    # Tight grace so the test is fast.
+    monkeypatch.setattr(ctx.settings, "shutdown_grace_seconds", 1)
+    w = Worker(ctx, run_registry=None)
+    started = threading.Event()
+
+    def very_slow_runner():
+        started.set()
+        time.sleep(5)  # > grace
+        return "late"
+
+    call_task = asyncio.create_task(w._tracked_to_thread(very_slow_runner))
+    for _ in range(100):
+        if started.is_set():
+            break
+        await asyncio.sleep(0.005)
+
+    t0 = time.monotonic()
+    await w.stop()
+    elapsed = time.monotonic() - t0
+    # Stop returned somewhere around the 1 s grace, not 5 s.
+    assert elapsed < 3.0, (
+        f"stop() waited {elapsed:.1f}s; should have bailed out near the 1s grace"
+    )
+    # The shielded call is still running in the background. Cancel
+    # the wrapper task so we don't leak it past the test.
+    call_task.cancel()

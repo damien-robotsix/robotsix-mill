@@ -19,12 +19,11 @@ tools:
   - list_dir
   - run_command
 
-web: false
 report_issue: false
 read_ticket: true
 reply_to_thread: false
 output_type: ModuleCuratorResult
-retries: 2
+retries: 4
 module: module_curator
 skills: [board-read]
 

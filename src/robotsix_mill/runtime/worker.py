@@ -17,7 +17,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import RepoConfig, get_repos_config
@@ -33,17 +33,26 @@ from .run_registry import RunRegistry
 log = logging.getLogger("robotsix_mill.worker")
 
 
-def _post_trace_comment(
+def _post_trace_event(
     ctx: StageContext,
     ticket_id: str,
     trace_id: str | None,
     stage_name: str,
 ) -> None:
-    """Post a top-level trace-link comment on the ticket, if possible.
+    """Append the post-stage Langfuse trace URL to the ticket's history.
 
-    No-op when *trace_id* is ``None`` or ``langfuse_trace_url`` cannot
-    construct a URL (e.g. missing Langfuse credentials).  Failures are
-    logged at warning level and never propagate.
+    Previously this wrote a comment with ``author="mill"``, which
+    contaminated the channel refine + implement read for reviewer
+    feedback — agents saw the unreadable trace URL and asked the
+    operator "what did the reviewer say?". Writing the same breadcrumb
+    to ``TicketEvent.note`` instead keeps it visible to humans
+    browsing the ticket (the drawer renders history-event notes as
+    Markdown so the link stays clickable) without polluting the
+    comment stream.
+
+    No-op when *trace_id* is ``None`` or ``langfuse_trace_url`` can't
+    build a URL (Langfuse unconfigured). Failures are logged at
+    warning level and never propagate.
     """
     if trace_id is None:
         return
@@ -51,12 +60,12 @@ def _post_trace_comment(
     url = langfuse_trace_url(trace_id, repo_config=repo_config)
     if url is None:
         return
-    body = f"🔍 [Trace: {stage_name}]({url})"
+    note = f"🔍 [Trace: {stage_name}]({url})"
     try:
-        ctx.service.add_comment(ticket_id, body, author="mill")
+        ctx.service.add_history_note(ticket_id, note)
     except Exception:
         log.warning(
-            "failed to post trace-link comment for %s (%s)",
+            "failed to post trace-link history event for %s (%s)",
             ticket_id,
             stage_name,
             exc_info=True,
@@ -196,7 +205,7 @@ async def _process_ticket_inner(
                 ticket_id,
                 timeout,
             )
-            _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             note = f"stage {stage_name} timed out after {timeout}s"[:200]
             ctx.service.transition(ticket_id, State.BLOCKED, note=note)
             ticket = ctx.service.get(ticket_id)
@@ -211,7 +220,7 @@ async def _process_ticket_inner(
                 ticket.state,
                 ticket_id,
             )
-            _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
             log.exception("%s: %s failed", stage_name, ticket_id)
@@ -247,10 +256,10 @@ async def _process_ticket_inner(
                         max_attempts,
                         delay,
                     )
-                    _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+                    _post_trace_event(ctx, ticket_id, trace_id, stage_name)
                     return
                 # Retries exhausted — block.
-                _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+                _post_trace_event(ctx, ticket_id, trace_id, stage_name)
                 note = (
                     f"Transient: {type(e).__name__} persisted after "
                     f"{max_attempts} attempts — last: {e}"
@@ -261,7 +270,7 @@ async def _process_ticket_inner(
                     send_notification(ticket, State.BLOCKED, note, ctx.settings)
             else:
                 # FATAL — block immediately.
-                _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+                _post_trace_event(ctx, ticket_id, trace_id, stage_name)
                 note = f"Fatal: {type(e).__name__}: {e}"[:200]
                 ctx.service.transition(ticket_id, State.BLOCKED, note=note)
                 ticket = ctx.service.get(ticket_id)
@@ -282,7 +291,7 @@ async def _process_ticket_inner(
         if outcome.next_state == ticket.state:
             # no-op (e.g. merge: PR still open) — leave it; the poll
             # re-enqueues later. No transition, no trace, no spam.
-            _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             log.debug(
                 "%s: %s no-op at %s (awaiting external event)",
                 stage_name,
@@ -290,8 +299,15 @@ async def _process_ticket_inner(
                 ticket.state,
             )
             return
+        # Trace breadcrumb first, then the transition. Keeping the
+        # transition as the last event preserves the simple "what
+        # state am I in now?" read on ``history[-1]`` for downstream
+        # callers (tests, retrospect, UI). The trace event records
+        # the stage that produced the transition and sits at the
+        # pre-transition state — semantically "work done while in
+        # this state".
+        _post_trace_event(ctx, ticket_id, trace_id, stage_name)
         ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
-        _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
         log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
         # Best-effort push notification for human-attention states.
         if outcome.next_state in _TRIGGER_STATES:
@@ -769,6 +785,13 @@ class Worker:
         self._trace_health_task: asyncio.Task | None = None
         self._trace_review_task: asyncio.Task | None = None
         self._cost_warmer_task: asyncio.Task | None = None
+        self._cost_warmer_fast_task: asyncio.Task | None = None
+        # Periodic-pass runs currently executing in worker threads.
+        # The to_thread wrapper registers them on entry and removes
+        # on exit; ``stop()`` awaits this set (with a grace timeout)
+        # before tearing the loops down so a survey / audit / etc.
+        # mid-run isn't killed by a container restart.
+        self._inflight_passes: set[asyncio.Task] = set()
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
         self._bc_check_task: asyncio.Task | None = None
@@ -1326,6 +1349,25 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("%s scheduler tick failed", label)
 
+    async def _tracked_to_thread(self, fn, *args, **kwargs):
+        """Run *fn* in the default thread pool, tracking the call so
+        :meth:`stop` can wait for it before tearing the loop down.
+
+        Difference vs ``asyncio.to_thread``: the underlying future is
+        wrapped in a task that's registered in ``_inflight_passes`` and
+        ``shield``-ed from cancellation. If the caller (a periodic
+        loop) gets cancelled mid-run, the loop task still raises
+        ``CancelledError`` immediately, but the thread keeps executing
+        and ``stop()`` will await its completion (bounded by
+        ``shutdown_grace_seconds``). Without this, a SIGTERM in the
+        middle of a survey pass would kill the agent halfway through
+        the run and lose the work.
+        """
+        task = asyncio.create_task(asyncio.to_thread(fn, *args, **kwargs))
+        self._inflight_passes.add(task)
+        task.add_done_callback(self._inflight_passes.discard)
+        return await asyncio.shield(task)
+
     async def _fire_periodic_pass(
         self,
         label: str,
@@ -1358,7 +1400,7 @@ class Worker:
                 label,
                 repo_config=repo_config,
             ):
-                result = await asyncio.to_thread(
+                result = await self._tracked_to_thread(
                     runner_fn,
                     session_id=session_id,
                     repo_config=repo_config,
@@ -1421,7 +1463,7 @@ class Worker:
                 with tracing.start_ticket_root_span(
                     session_id, label, repo_config=None
                 ):
-                    result = await asyncio.to_thread(
+                    result = await self._tracked_to_thread(
                         runner_fn,
                         session_id=session_id,
                     )
@@ -1526,7 +1568,7 @@ class Worker:
     async def _cost_warmer_loop(self) -> None:
         """Background cost-warmer.
 
-        Walks every non-archived ticket on each repo and calls
+        Walks every non-closed ticket on each repo and calls
         ``session_cost`` to refresh its cached Langfuse value. The
         board's /tickets list endpoint reads from the SAME process-
         local cache via ``session_cost_cached`` (cache-only, never
@@ -1534,18 +1576,18 @@ class Worker:
         column on the board is populated even when the operator
         hasn't opened the ticket drawer.
 
-        Throttling: ``cost_warmer_pace_ms`` between ticket lookups
-        bounds the Langfuse API hit-rate; ``cost_warmer_interval_
-        seconds`` is the wall-time between full cycles. Defaults
-        (60s cycle, 200ms pace) give a comfortable ~100 tickets per
-        20s, well under the 60s cache TTL so the column never shows
-        a stale-looking dip.
+        Throttling: ``cost_warmer_concurrency`` bounds in-flight
+        Langfuse calls (the semaphore replaces the older serial
+        ``cost_warmer_pace_ms``); ``cost_warmer_interval_seconds``
+        is the wall-time between cycles. With concurrency=4 and a
+        ~250ms median Langfuse latency, ~200 open tickets sweep in
+        ~12s, so the column refreshes well inside the 60s cache TTL
+        and idle tickets never show a $0 dip.
 
-        Each cycle handles per-repo failure independently so a single
-        Langfuse outage on one repo doesn't stall the others. Closed
-        tickets older than 24h are skipped — their cost is final and
-        already cached from a prior cycle (if it was warmed) or
-        irrelevant (board doesn't list them by default).
+        Closed tickets are skipped entirely — their cost is final
+        and the board hides them by default. Each cycle handles
+        per-repo failure independently so a Langfuse outage on one
+        repo doesn't stall the others.
         """
         from ..core.models import Ticket
         from ..core.service import TicketService
@@ -1553,8 +1595,8 @@ class Worker:
         from ..langfuse_client import session_cost
 
         settings = self.ctx.settings
-        interval = max(30, settings.cost_warmer_interval_seconds)
-        pace = max(0.05, settings.cost_warmer_pace_ms / 1000.0)
+        interval = max(10, settings.cost_warmer_interval_seconds)
+        concurrency = max(1, settings.cost_warmer_concurrency)
         terminal = {State.CLOSED, State.EPIC_CLOSED}
 
         await asyncio.sleep(self._initial_delay("cost-warmer", interval))
@@ -1566,7 +1608,27 @@ class Worker:
                 for rc in repos.repos.values()
                 if getattr(rc, "cost_warmer_periodic", True)
             ]
-            warmed_count = 0
+            sem = asyncio.Semaphore(concurrency)
+
+            async def _warm_one(ticket: Ticket, repo_config) -> int:
+                async with sem:
+                    try:
+                        await asyncio.to_thread(
+                            session_cost,
+                            settings,
+                            ticket.id,
+                            repo_config=repo_config,
+                        )
+                        return 1
+                    except Exception:  # noqa: BLE001
+                        log.debug(
+                            "cost-warmer: lookup failed for %s",
+                            ticket.id,
+                            exc_info=True,
+                        )
+                        return 0
+
+            tasks: list[asyncio.Future] = []
             for repo_config in repo_configs:
                 try:
                     svc = TicketService(settings, board_id=repo_config.board_id)
@@ -1578,33 +1640,18 @@ class Worker:
                     )
                     continue
 
-                now = datetime.now(timezone.utc)
-                cutoff = now - timedelta(hours=24)
                 for ticket in tickets:
+                    # Closed tickets never accrue new cost — skip them
+                    # entirely. Their cached value (if any) persists,
+                    # and the detail-drawer click still does a blocking
+                    # fetch for authoritativeness if the operator
+                    # opens one.
                     if ticket.state in terminal:
-                        try:
-                            updated = ticket.updated_at
-                            if updated and updated.tzinfo is None:
-                                updated = updated.replace(tzinfo=timezone.utc)
-                            if updated and updated < cutoff:
-                                continue
-                        except Exception:  # noqa: BLE001
-                            pass
-                    try:
-                        await asyncio.to_thread(
-                            session_cost,
-                            settings,
-                            ticket.id,
-                            repo_config=repo_config,
-                        )
-                        warmed_count += 1
-                    except Exception:  # noqa: BLE001 — never break the loop
-                        log.debug(
-                            "cost-warmer: lookup failed for %s",
-                            ticket.id,
-                            exc_info=True,
-                        )
-                    await asyncio.sleep(pace)
+                        continue
+                    tasks.append(_warm_one(ticket, repo_config))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            warmed_count = sum(r for r in results if isinstance(r, int))
 
             cycle_secs = time.monotonic() - cycle_start
             log.debug(
@@ -1613,6 +1660,74 @@ class Worker:
                 cycle_secs,
             )
             # Sleep the remainder of the interval if we finished early.
+            await asyncio.sleep(max(0.0, interval - cycle_secs))
+
+    async def _cost_warmer_fast_loop(self) -> None:
+        """Fast cost-warmer: walks only active-state tickets.
+
+        The slow warmer is comprehensive but takes ~90s+ to cycle on a
+        busy board. For tickets that are currently being processed
+        (refine, implement, review, …) the operator notices the
+        $-amount lagging long before that — the spending climbs while
+        the column shows yesterday's value. This loop hits Langfuse for
+        every active-state ticket every few seconds with ``force=True``
+        so the TTL gate doesn't deflect the call. Throttled by
+        interval, not by pace, since active tickets are typically <10
+        at a time.
+
+        Active states are read from ``STAGE_FOR_STATE`` so the loop
+        automatically tracks any new pipeline stages added.
+        """
+        from ..core.service import TicketService
+        from ..core.states import STAGE_FOR_STATE
+        from ..langfuse_client import session_cost
+
+        settings = self.ctx.settings
+        interval = max(2, settings.cost_warmer_fast_interval_seconds)
+        active_states = set(STAGE_FOR_STATE.keys())
+
+        await asyncio.sleep(self._initial_delay("cost-warmer-fast", interval))
+        while True:
+            cycle_start = time.monotonic()
+            repos = get_repos_config()
+            warmed = 0
+            for repo_config in repos.repos.values():
+                if not getattr(repo_config, "cost_warmer_periodic", True):
+                    continue
+                try:
+                    svc = TicketService(settings, board_id=repo_config.board_id)
+                    tickets = svc.list()
+                except Exception:  # noqa: BLE001
+                    log.exception(
+                        "cost-warmer-fast: listing tickets failed for %s",
+                        repo_config.repo_id,
+                    )
+                    continue
+                for ticket in tickets:
+                    if ticket.state not in active_states:
+                        continue
+                    try:
+                        await asyncio.to_thread(
+                            session_cost,
+                            settings,
+                            ticket.id,
+                            repo_config=repo_config,
+                            force=True,
+                        )
+                        warmed += 1
+                    except Exception:  # noqa: BLE001
+                        log.debug(
+                            "cost-warmer-fast: lookup failed for %s",
+                            ticket.id,
+                            exc_info=True,
+                        )
+
+            cycle_secs = time.monotonic() - cycle_start
+            log.debug(
+                "cost-warmer-fast cycle: %d active tickets warmed in %.1fs",
+                warmed,
+                cycle_secs,
+            )
             await asyncio.sleep(max(0.0, interval - cycle_secs))
 
     async def _bespoke_supervisor(self, repo_config: RepoConfig) -> None:
@@ -2272,11 +2387,18 @@ class Worker:
             "cost-warmer",
             self._cost_warmer_loop,
             "_cost_warmer_task",
-            log_msg="Cost warmer enabled: cycle %ds, pace %dms",
+            log_msg="Cost warmer enabled: cycle %ds, concurrency=%d",
             log_args=(
                 self.ctx.settings.cost_warmer_interval_seconds,
-                self.ctx.settings.cost_warmer_pace_ms,
+                self.ctx.settings.cost_warmer_concurrency,
             ),
+        )
+        self._start_poll_loop_pass(
+            "cost-warmer-fast",
+            self._cost_warmer_fast_loop,
+            "_cost_warmer_fast_task",
+            log_msg="Cost warmer (fast, active tickets) enabled: interval %ds",
+            log_args=(self.ctx.settings.cost_warmer_fast_interval_seconds,),
         )
         self._start_poll_loop_pass(
             "langfuse-cleanup",
@@ -2326,6 +2448,31 @@ class Worker:
                 )
 
     async def stop(self) -> None:
+        # Wait for periodic passes that are mid-run (survey, audit,
+        # health, …) to finish before tearing the loops down. Without
+        # this a SIGTERM during a survey run would lose the work and
+        # leave half-cooked drafts.
+        inflight = list(self._inflight_passes)
+        if inflight:
+            grace = max(0, self.ctx.settings.shutdown_grace_seconds)
+            log.info(
+                "stop: awaiting %d in-flight periodic pass(es) "
+                "(grace %ds)",
+                len(inflight),
+                grace,
+            )
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*inflight, return_exceptions=True),
+                    timeout=grace if grace > 0 else None,
+                )
+            except asyncio.TimeoutError:
+                log.warning(
+                    "stop: in-flight passes did not finish within %ds — "
+                    "cancelling remaining %d",
+                    grace,
+                    sum(1 for t in inflight if not t.done()),
+                )
         tasks = list(self._tasks)
         for attr in (
             "_poll_task",
@@ -2333,6 +2480,7 @@ class Worker:
             "_trace_health_task",
             "_trace_review_task",
             "_cost_warmer_task",
+            "_cost_warmer_fast_task",
             "_health_task",
             "_ci_monitor_task",
             "_agent_check_task",

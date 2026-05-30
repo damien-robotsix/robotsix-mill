@@ -40,6 +40,11 @@ background:#1a2a3b;color:#60c0fa;border:1px solid #2a3a4b;border-radius:4px;curs
 margin-left:4px">
   Deep Review
 </button>
+<button onclick="openCandidates()" style="font-size:11px;padding:3px 10px;
+background:#2a1a3b;color:#c598fb;border:1px solid #3a2a4b;border-radius:4px;cursor:pointer;
+margin-left:4px" title="AGENT.md candidates from retrospect — validate to file a draft, reject to dismiss">
+  📋 AGENT.md
+</button>
 <span style="border-left:1px solid #2a2e37;align-self:stretch;margin-left:8px"></span>
 <button onclick="newInquiry()" style="font-size:11px;padding:3px 10px;
 background:#0891b2;color:#fff;border:none;border-radius:4px;cursor:pointer;

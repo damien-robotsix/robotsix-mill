@@ -12,7 +12,6 @@ model: "${MILL_TRIAGE_MODEL}"
 
 tools: []
 
-web: false
 report_issue: false
 reply_to_thread: false
 close_thread: false

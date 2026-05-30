@@ -23,14 +23,13 @@ tools:
   - list_dir
 
 # No web research needed — this agent only inspects the local repo.
-web: false
 
 # Emits draft tickets via structured output (PromptedOutput[BcCheckResult]).
 report_issue: false
 read_ticket: true
 
 output_type: BcCheckResult
-retries: 2
+retries: 4
 
 # Module path for the agent and its output type.
 module: bc_check

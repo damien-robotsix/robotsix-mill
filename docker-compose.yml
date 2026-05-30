@@ -22,6 +22,11 @@ services:
   mill:
     image: robotsix/mill:latest
     restart: unless-stopped
+    # Match Settings.shutdown_grace_seconds (default 1800). The worker
+    # waits for in-flight periodic passes (survey, audit, health, …)
+    # to finish on SIGTERM; docker's default 10s would SIGKILL before
+    # that wait completed and kill an agent mid-run.
+    stop_grace_period: 30m
     # Default Docker soft limit is 1024 — easily exhausted when many
     # workers (max_concurrency=10) each spawn git/trivy/agent
     # subprocesses with their own pipes. We've seen this crash workers

@@ -16,19 +16,34 @@ MAX_ENTRIES = 50
 @dataclass
 class RunEntry:
     id: str
+    # Mirrors every label string passed to ``registry.start(label)``.
+    # The codebase mixes hyphens (older callers) with underscores
+    # (newer callers); both styles are intentionally accepted here
+    # rather than forcing a global rename. Keep this list in sync
+    # with grep ``registry.start("`` and the worker
+    # ``_start_periodic_pass`` label arguments.
     kind: Literal[
         "audit",
-        "trace-health",
-        "health",
         "agent_check",
+        "bc-check",
+        "bc_check",
         "completeness-check",
+        "completeness_check",
+        "config-sync",
+        "copy-paste",
+        "copy_paste",
         "cost-reconciliation",
         "deep-review",
-        "survey",
         "epic-breakdown",
-        "config-sync",
+        "health",
+        "langfuse-cleanup",
+        "module_curator",
+        "roadmap-sync",
+        "survey",
         "test-gap",
-        "bc-check",
+        "trace-health",
+        "trace-review",
+        "trace_review",
     ]
     started_at: str  # ISO-8601 UTC
     finished_at: str | None = None

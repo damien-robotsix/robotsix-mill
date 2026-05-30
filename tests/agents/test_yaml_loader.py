@@ -66,7 +66,7 @@ system_prompt: You are a test agent.
 tools:
   - explore
   - read_file
-web: true
+web_knowledge: true
 report_issue: false
 output_type: TestResult
 retries: 3
@@ -83,7 +83,7 @@ skills:
     assert ad.model == "test/model-v1"
     assert ad.system_prompt == "You are a test agent."
     assert ad.tools == ["explore", "read_file"]
-    assert ad.web is True
+    assert ad.web_knowledge is True
     assert ad.report_issue is False
     assert ad.output_type == "TestResult"
     assert ad.retries == 3
@@ -108,7 +108,7 @@ system_prompt: Do one thing well.
     assert ad.description is None
     assert ad.category is None
     assert ad.tools == []
-    assert ad.web is False
+    assert ad.web_knowledge is False
     assert ad.report_issue is True
     assert ad.output_type is None
     assert ad.retries == 2
@@ -211,15 +211,15 @@ model: gpt-4
     assert "system_prompt" in err_str.lower() or "Field required" in err_str
 
 
-def test_wrong_type_web(tmp_path):
-    """web: [1, 2, 3] (list) → ValidationError."""
+def test_wrong_type_web_knowledge(tmp_path):
+    """web_knowledge: [1, 2, 3] (list) → ValidationError."""
     p = _write_yaml(
         tmp_path,
         """\
-name: bad-web
+name: bad-web-knowledge
 model: gpt-4
 system_prompt: test
-web:
+web_knowledge:
   - 1
   - 2
   - 3
@@ -228,7 +228,7 @@ web:
     with pytest.raises(Exception) as exc_info:
         load_agent_definition(p)
     err_str = str(exc_info.value)
-    assert "web" in err_str.lower() or "bool" in err_str.lower()
+    assert "web_knowledge" in err_str.lower() or "bool" in err_str.lower()
 
 
 def test_wrong_type_retries(tmp_path):
@@ -338,7 +338,7 @@ def test_real_refine_yaml_parses():
         ad = load_agent_definition(p)
         assert ad.name == "refine"
         assert ad.category == "pipeline"
-        assert ad.web is True
+        assert ad.web_knowledge is True
         assert ad.report_issue is True
         assert ad.output_type == "RefineResult"
         assert ad.retries == 2
@@ -364,7 +364,7 @@ def test_agent_definition_model_validation():
         }
     )
     assert ad.name == "test"
-    assert ad.web is False
+    assert ad.web_knowledge is False
     assert ad.retries == 2
     assert ad.tools == []
 

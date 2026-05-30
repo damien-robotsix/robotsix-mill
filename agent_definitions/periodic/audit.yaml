@@ -27,12 +27,21 @@ tools:
   # `detect_duplication` is intentional and matched by the runtime
   # injection.
 
-web: true
 report_issue: false
 read_ticket: true
 reply_to_thread: false
+web_knowledge: true
 output_type: AuditResult
-retries: 2
+# Bumped 2 → 4 after a 7m51s audit on robotsix-auto-mail spent its
+# whole budget in the model's ``thinking`` channel (findings: TLS
+# duplication, oversized config.py, …) and never emitted the
+# structured AuditResult — pydantic-ai re-prompted twice, both times
+# the model returned empty ``parts: []``, then errored. The cap of
+# 2 was discarding real audit work because deepseek-v4-flash
+# occasionally stalls on the final structured emit. The combined
+# "MUST emit AuditResult" rule below + this higher reprompt budget
+# gives the model the slack to recover.
+retries: 4
 module: auditing
 skills: [board-read]
 
@@ -148,3 +157,22 @@ system_prompt: |
   actionable proposal.
 
   Return the full, updated memory document in `updated_memory`.
+
+  STRUCTURED OUTPUT IS MANDATORY:
+
+  After your analysis you MUST emit the ``AuditResult`` structured
+  output. This is non-negotiable, even if you found ZERO gaps worth
+  proposing — in that case return:
+
+  - ``draft_titles: []``
+  - ``draft_bodies: []``
+  - ``gap_ids: []``
+  - ``updated_memory: <full memory document, unchanged if no new
+    observations>``
+
+  Do NOT end the run with raw thinking content, prose findings, or
+  unstructured commentary. Do NOT return an empty response. The
+  pipeline reads ONLY the structured ``AuditResult`` JSON — anything
+  else is discarded and the entire audit pass is wasted. If you have
+  findings worth noting but not worth filing, summarise them in
+  ``updated_memory`` instead and return empty draft lists.

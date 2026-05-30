@@ -233,8 +233,17 @@ class ImplementStage(Stage):
 
         feedback: str | None = None
         open_thread_ids: set[int] | None = None
+        # ``mill`` and ``system`` author comments (worker trace-link
+        # breadcrumbs, timeout-escalation pings) are diagnostic
+        # metadata, not feedback. Including them taught implement to
+        # treat unreadable Langfuse URLs as review comments and ask
+        # the operator "what did the reviewer say?". Trace links now
+        # write to history (see worker._post_trace_event) but the
+        # filter stays as defence-in-depth.
+        _NON_FEEDBACK_AUTHORS = {"mill", "system"}
         if ticket.blocked_from is None:  # not a BLOCKED resume
             comments = ctx.service.list_comments(ticket.id)
+            comments = [c for c in comments if c.author not in _NON_FEEDBACK_AUTHORS]
             if comments:
                 open_threads = [
                     c for c in comments if c.parent_id is None and c.closed_at is None

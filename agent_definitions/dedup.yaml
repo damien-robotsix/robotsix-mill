@@ -13,7 +13,6 @@ tools:
   - read_file
   - list_dir
 
-web: false
 report_issue: true
 read_ticket: true
 output_type: DedupResult

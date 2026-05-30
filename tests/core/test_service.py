@@ -1247,3 +1247,39 @@ def test_make_event_state_value_stored_as_enum(service):
     t = service.create("state as enum")
     events = service.history(t.id)
     assert isinstance(events[0].state, State)
+
+
+# ---------------------------------------------------------------------------
+# add_history_note: side-band events for trace breadcrumbs
+# ---------------------------------------------------------------------------
+
+
+def test_add_history_note_appends_event_at_current_state(service):
+    """add_history_note writes a TicketEvent at the ticket's CURRENT
+    state (no transition) and chains into the existing hash chain."""
+    t = service.create("trace-target")
+    pre = service.history(t.id)
+    assert len(pre) == 1
+    assert pre[0].state is State.DRAFT
+
+    event = service.add_history_note(t.id, "🔍 [Trace: refine](https://example/x)")
+
+    assert event.state is State.DRAFT  # same state — no transition
+    assert event.note == "🔍 [Trace: refine](https://example/x)"
+
+    post = service.history(t.id)
+    assert len(post) == 2
+    assert post[-1].id == event.id
+    # Hash chain intact: the new event's prev_hash matches the prior
+    # event's hash.
+    assert post[-1].prev_hash == post[0].hash
+    # The ticket's state is unchanged.
+    assert service.get(t.id).state is State.DRAFT
+
+
+def test_add_history_note_unknown_ticket_raises(service):
+    """KeyError for a non-existent ticket id — parity with transition()."""
+    import pytest as _pytest
+
+    with _pytest.raises(KeyError):
+        service.add_history_note("does-not-exist", "irrelevant")

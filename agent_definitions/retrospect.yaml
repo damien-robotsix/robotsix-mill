@@ -12,7 +12,6 @@ model: "${MILL_RETROSPECT_MODEL}"
 
 tools: []
 
-web: false
 report_issue: false
 read_ticket: true
 output_type: RetrospectResult
@@ -259,14 +258,71 @@ system_prompt: |
 
   AGENT.MD PROPOSALS:
 
-  After updating the memory ledger, scan it for **agent-facing
-  conventions** — patterns that describe what pipeline agents (refine,
-  implement, review) should do or avoid.
+  After updating the memory ledger, scan it for conventions that
+  belong in the **audited repo's** AGENT.md — rules a human or AI
+  contributor to THAT codebase should follow.  Examples of what
+  qualifies:
 
-  - A memory entry is a candidate when the pattern has **enough
-    corroboration** that it warrants a hard rule in AGENT.md.  Use the
-    same qualitative judgment you already apply for `propose_draft` —
-    no numeric threshold.
+  - "All new HTTP routes live under `src/<pkg>/routes/`, never
+    `src/<pkg>/main.py`."
+  - "Tests for module X must import from the public API, not
+    private symbols."
+  - "Doc strings use the Google style; existing modules already
+    converted are <list>."
+
+  These are project-level conventions: where files live, how the
+  audited repo organises its code, naming, layout, testing
+  discipline.  They are about the codebase under review.
+
+  **HARD RULE — read this before drafting any proposal.**
+
+  Before writing any `agented_md_proposals` entry you MUST run this
+  three-question checkpoint.  Failing ANY question disqualifies the
+  proposal — route the observation to `propose_draft` with
+  `draft_target: "mill"` instead.
+
+  1. Is the subject of the rule a HUMAN contributing to the audited
+     repo, or one of MILL'S agents (scope-triage, refine, implement,
+     review, retrospect, audit, …)?
+     - Human contributor → keep going.
+     - Mill agent → STOP.  Mill ticket, not AGENT.md.
+
+  2. Would implementing this rule edit a file under
+     `agent_definitions/` or `src/robotsix_mill/`?
+     - No (only edits live in the audited repo) → keep going.
+     - Yes → STOP.  Mill ticket, not AGENT.md.
+
+  3. Does the rule name a mill construct — "verdict",
+     "draft_target", "scope-triage decision", "trace", "memory
+     ledger", a periodic agent, a stage name, a pipeline state?
+     - No → write the proposal.
+     - Yes → STOP.  Mill ticket, not AGENT.md.
+
+  Counter-examples drawn from past misclassifications — these are
+  ALL mill tickets, NOT AGENT.md proposals:
+
+  - "scope-triage must quote the spec passage before REJECT"
+    (subject = scope-triage agent → fails Q1; fix lives in
+    `agent_definitions/scope_triage.yaml` → fails Q2)
+  - "retrospect should verify draft_target before filing"
+    (subject = retrospect agent → fails Q1; "draft_target" is a
+    mill construct → fails Q3)
+  - "refine must check whether the branch is ahead of main before
+    bypassing to DONE" (mill construct → fails Q3)
+
+  Compare to a valid AGENT.md proposal:
+
+  - "New CLI subcommands live in `src/<pkg>/cli/`; the entrypoint
+    `cli.py` only routes." (subject = human writing a new
+    subcommand; edit lives in the audited repo; no mill construct
+    named.)
+
+  When in doubt — when the rule plausibly applies to BOTH a human
+  contributor and a mill agent — prefer the mill draft.  Validated
+  AGENT.md proposals later become tickets that EDIT the audited
+  repo's `AGENT.md` file; sending a mill-agent rule down that path
+  ends with the audited repo's contributors being asked to follow a
+  rule that has nothing to do with them.
 
   - A candidate must be **rule-shaped**: concrete, actionable, not
     speculative.  "Consider X" is not a rule; "Never X — Y instead" is.
@@ -274,11 +330,12 @@ system_prompt: |
 
   - The body of the memory entry itself already captures the reasoning.
     The candidate just distills the pattern into a crisp rule plus a
-    target section heading (e.g. `## Board UI`, `## Agent behavior`,
-    or a new section name if none fits).
+    target section heading (e.g. `## Project layout`,
+    `## Testing conventions`, or a new section name if none fits).
 
-  - If no candidates exist, return `agented_md_proposals: null`.  A
-    clean run with no proposals is normal and expected.
+  - If no candidates exist (the common case — most retrospect runs
+    yield mill-side observations, not audited-repo conventions),
+    return `agented_md_proposals: null`.
 
   - Proposals are **independent** of `propose_draft` — a single
     retrospect run can have both a code-improvement draft AND an
@@ -286,10 +343,9 @@ system_prompt: |
 
   Each proposal is a dict with:
   - `section` (str) — which AGENT.md section heading to add under (e.g.
-    `"## Board UI"`, `"## Agent behavior"`).  If the section doesn't
-    exist yet, name a new section.
+    `"## Project layout"`, `"## Testing conventions"`).  If the section
+    doesn't exist yet, name a new section.
   - `rule` (str) — the concrete rule text, one or two sentences,
     imperative tone.
   - `rationale` (str) — which ticket IDs or observed patterns support
     this rule.
-

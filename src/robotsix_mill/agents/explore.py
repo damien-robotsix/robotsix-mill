@@ -64,6 +64,16 @@ SCOPE DISCIPLINE — always follow these limits:
     run_command("grep -rn 'UnexpectedModelBehavior'")
     run_command("grep -rn 'def build_fs_tools' src/")
     run_command("grep -n '^## ' README.md")
+- USE LIMIT + OFFSET ON read_file: never read a whole large file
+  when you already know the line range. ``read_file`` accepts
+  ``offset:`` and ``limit:`` arguments — pass them whenever grep
+  has given you a line number. A 30-line window is almost always
+  enough to see the function and its callers; reading a 2000-line
+  file end-to-end burns the caller's token budget on context you
+  won't reference.
+  Examples:
+    read_file("src/foo.py", offset=140, limit=40)   # function at L150
+    read_file("config/repos.yaml", offset=1, limit=30)
 - FILE BUDGET: read at most 5 files per answer. If you need more, stop
   and return the most relevant files found so far, with a note that
   more exist.

@@ -13,7 +13,6 @@ model: "${MILL_AUDIT_MODEL}"
 
 tools: []
 
-web: false
 report_issue: false
 output_type: EpicStatusResult
 retries: 2

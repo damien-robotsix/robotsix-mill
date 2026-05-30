@@ -16,7 +16,6 @@ tools:
   - list_dir
   - edit_file
 
-web: false
 report_issue: false
 output_type: DocResult
 retries: 2

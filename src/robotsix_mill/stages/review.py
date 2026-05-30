@@ -1,9 +1,10 @@
-"""Review stage: CODE_REVIEW -> DELIVERABLE | READY | BLOCKED.
+"""Review stage: CODE_REVIEW -> DOCUMENTING | READY | AWAITING_USER_REPLY.
 
 Runs a blind dual-model review of the implementation diff. The review
 agent sees ONLY the git diff and ticket spec — no implementation
-context.  APPROVE → DELIVERABLE; REQUEST_CHANGES → READY (with review
-comments stored); NEEDS_DISCUSSION → BLOCKED (with comments stored).
+context.  APPROVE → DOCUMENTING; REQUEST_CHANGES → READY (with review
+comments stored); NEEDS_DISCUSSION → AWAITING_USER_REPLY (posts the
+verdict as an [ASK_USER] thread; operator's reply auto-resumes review).
 """
 
 from __future__ import annotations
@@ -165,12 +166,26 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
 
     prior_comments = ctx.service.list_comments(ticket.id)
     if prior_comments:
-        # Identify closed thread IDs — skip those threads and their replies.
-        closed_ids = {c.id for c in prior_comments if c.closed_at is not None}
+        # Closed threads are normally skipped (resolved REQUEST_CHANGES
+        # feedback the implement agent already addressed). EXCEPTION: a
+        # closed top-level [ASK_USER] thread carries the operator's
+        # decision from a NEEDS_DISCUSSION pause — the re-run review
+        # MUST see it (and its replies) or it will just re-ask the same
+        # question and loop. Keep those; drop everything else closed.
+        askuser_ids = {
+            c.id
+            for c in prior_comments
+            if c.parent_id is None and c.body.startswith("[ASK_USER]")
+        }
+        excluded_ids = {
+            c.id
+            for c in prior_comments
+            if c.closed_at is not None and c.id not in askuser_ids
+        }
         formatted = "\n".join(
             f"{'  ↳ ' if c.parent_id is not None else ''}[{c.author}] {c.body}"
             for c in prior_comments
-            if c.id not in closed_ids and c.parent_id not in closed_ids
+            if c.id not in excluded_ids and c.parent_id not in excluded_ids
         )
         if formatted:
             parts.append(section("prior-review-comments", formatted))
@@ -356,8 +371,24 @@ class ReviewStage(Stage):
                 verdict.comments,
             )
         else:  # NEEDS_DISCUSSION
-            ctx.service.add_comment(ticket.id, verdict.comments, author="review")
+            # A genuine human-decision verdict (e.g. "AC5 vs the 13
+            # pre-existing bandit findings — pick one of 3 options").
+            # This is NOT an error, so it must NOT BLOCK (which reads
+            # as a failure and needs a manual resume). Pause for the
+            # operator's reply instead: post the verdict as an
+            # [ASK_USER] thread and route to AWAITING_USER_REPLY. When
+            # the operator answers and closes the thread,
+            # _maybe_resume_awaiting_user_reply auto-resumes the ticket
+            # to CODE_REVIEW (paused_from) and review re-runs — this
+            # time with the operator's decision visible in
+            # prior-context (see _build_prior_context, which keeps
+            # closed [ASK_USER] threads).
+            ctx.service.add_comment(
+                ticket.id,
+                f"[ASK_USER]\n\n{verdict.comments}",
+                author="review",
+            )
             return Outcome(
-                State.BLOCKED,
+                State.AWAITING_USER_REPLY,
                 verdict.comments,
             )

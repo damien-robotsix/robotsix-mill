@@ -13,7 +13,6 @@ tools:
   - read_file
   - list_dir
 
-web: false
 report_issue: false
 reply_to_thread: false
 output_type: ReviewVerdict

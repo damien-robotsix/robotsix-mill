@@ -34,8 +34,16 @@ class AgentDefinition(BaseModel):
     model: str
     system_prompt: str
     tools: list[str] = []
-    web: bool = False
-    library_knowledge: bool = False
+    # Single web/library knowledge gateway. When True the agent gets
+    # ``ask_web_knowledge`` (a multi-turn flash agent that owns a
+    # per-repo Markdown knowledge base AND a web-search tool, and
+    # decides autonomously which to use). The previous ``web`` flag
+    # (direct ``web_research`` injection) and ``library_knowledge``
+    # flag (deterministic per-library cache) are gone — every route
+    # to the internet now goes through the web_knowledge agent so
+    # cost attribution stays tractable and the knowledge base
+    # accumulates instead of fragmenting.
+    web_knowledge: bool = False
     report_issue: bool = True
     read_ticket: bool = False
     reply_to_thread: bool = True

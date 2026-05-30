@@ -999,7 +999,7 @@ def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -1033,7 +1033,7 @@ def test_run_command_present_when_repo_dir_given(monkeypatch, tmp_path):
     repo.mkdir()
     seen_tools: list = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         seen_tools.extend(t.__name__ for t in tools)
 
         class FakeAgent:
@@ -1070,7 +1070,7 @@ def test_run_command_absent_when_repo_dir_is_none(monkeypatch, tmp_path):
 
     seen_tools: list = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         seen_tools.extend(t.__name__ for t in tools)
 
         class FakeAgent:
@@ -1580,7 +1580,7 @@ def test_refine_agent_fallback_raw_markdown(monkeypatch, tmp_path):
 
     raw_md = "## Problem\nraw output\n## Scope\n- no json"
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 return type("R", (), {"output": _single(raw_md)})()
@@ -1610,7 +1610,7 @@ def test_refine_agent_malformed_json_fallback(monkeypatch, tmp_path):
     # We simulate by returning a proper RefineResult from the fake.
     raw = '{"split": false, "spec": "## Problem\nunclosed string'
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         class FakeAgent:
             def run_sync(self, msg, message_history=None, board_id=""):
                 # Simulate PromptedOutput parsing — returns a RefineResult.
@@ -1639,7 +1639,7 @@ def test_split_heuristic_present_in_system_prompt(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -1670,7 +1670,7 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -1785,7 +1785,7 @@ def test_sendback_uses_short_prompt(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -1816,7 +1816,7 @@ def test_first_refinement_uses_full_prompt(monkeypatch, tmp_path):
 
     seen_system_prompt: list[str] = []
 
-    def fake_build_agent(settings, system_prompt, tools, web, model_name, **kwargs):
+    def fake_build_agent(settings, system_prompt, tools, web_knowledge, model_name, **kwargs):
         seen_system_prompt.append(system_prompt)
 
         class FakeAgent:
@@ -2063,8 +2063,8 @@ def test_refine_split_single_child_prefers_agent_title(ctx, service, monkeypatch
 
 
 def test_triage_refine_agent_config(monkeypatch, tmp_path):
-    """triage_refine builds an agent with zero tools, web=False, and
-    the correct triage_model."""
+    """triage_refine builds an agent with zero tools,
+    web_knowledge=False, and the correct triage_model."""
     from robotsix_mill.agents import base as base_mod
     from robotsix_mill.agents.refining import triage_refine, TriageResult
 
@@ -2075,7 +2075,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
         system_prompt,
         output_type,
         tools,
-        web,
+        web_knowledge,
         report_issue,
         model_name,
         name,
@@ -2083,7 +2083,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
     ):
         seen_kwargs.update(
             tools=tools,
-            web=web,
+            web_knowledge=web_knowledge,
             report_issue=report_issue,
             model_name=model_name,
             name=name,
@@ -2104,7 +2104,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
 
     assert result.decision == "REFINE"
     assert seen_kwargs["tools"] == []
-    assert seen_kwargs["web"] is False
+    assert seen_kwargs["web_knowledge"] is False
     assert seen_kwargs["report_issue"] is False
     assert seen_kwargs["model_name"] == "test/triage-model"
     assert seen_kwargs["name"] == "triage"
