@@ -1,13 +1,18 @@
 """Web-knowledge sub-agent — the single gateway to the internet.
 
 A multi-turn flash agent that answers focused library / API / framework
-questions. It owns a small per-repo knowledge base on disk:
+questions. It owns a small mill-global knowledge base on disk:
 
-  - ``<data_dir>/<board>/library_knowledge/<lib>.md`` — one Markdown
-    file per library, frontmatter-stamped with ``last_updated:``.
-  - ``<data_dir>/<board>/library_knowledge/_general.md`` — cross-
-    library memory for cross-cutting notes that don't fit a single
-    library (e.g. "OpenRouter caches prompts with N-minute TTL").
+  - ``<data_dir>/library_knowledge/<lib>.md`` — one Markdown file per
+    library, frontmatter-stamped with ``last_updated:``.
+  - ``<data_dir>/library_knowledge/_general.md`` — cross-library
+    memory for cross-cutting notes that don't fit a single library
+    (e.g. "OpenRouter caches prompts with N-minute TTL").
+
+The cache is centralized (NOT per-board): library facts like
+"imaplib.login raises this exception on Gmail" don't change between
+repos, and partitioning them per-board fragmented identical knowledge
+across every repo that asked the same question.
 
 The agent is autonomous. It receives the caller's question, sees an
 index of every existing knowledge file in its system prompt, and
@@ -73,18 +78,19 @@ def _slug(library: str) -> str:
     return s or "unknown"
 
 
-def _knowledge_dir(settings: Settings, board_id: str) -> Path:
-    if board_id:
-        return settings.data_dir / board_id / "library_knowledge"
+def _knowledge_dir(settings: Settings) -> Path:
+    """Mill-global cache directory. NOT per-board: library facts
+    don't change between repos, so partitioning would just fragment
+    identical knowledge across boards."""
     return settings.data_dir / "library_knowledge"
 
 
-def _library_path(settings: Settings, board_id: str, library: str) -> Path:
-    return _knowledge_dir(settings, board_id) / f"{_slug(library)}.md"
+def _library_path(settings: Settings, library: str) -> Path:
+    return _knowledge_dir(settings) / f"{_slug(library)}.md"
 
 
-def _general_path(settings: Settings, board_id: str) -> Path:
-    return _knowledge_dir(settings, board_id) / _GENERAL_FILENAME
+def _general_path(settings: Settings) -> Path:
+    return _knowledge_dir(settings) / _GENERAL_FILENAME
 
 
 def _parse_frontmatter(text: str) -> tuple[datetime | None, str]:
@@ -116,16 +122,16 @@ def _stamp_frontmatter(library: str, body: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_index(settings: Settings, board_id: str) -> str:
+def _build_index(settings: Settings) -> str:
     """Render an inline index of every library file + the general
     memory size, so the agent sees what it already has without
     spending a turn on ``list_knowledge_files``. Returns "(empty)"
     when nothing has been cached yet."""
-    d = _knowledge_dir(settings, board_id)
+    d = _knowledge_dir(settings)
     if not d.is_dir():
         return "(empty)"
     rows: list[str] = []
-    general = _general_path(settings, board_id)
+    general = _general_path(settings)
     if general.is_file():
         size_kb = general.stat().st_size / 1024
         rows.append(f"- _general memory_ ({size_kb:.1f} KB)")
@@ -217,7 +223,7 @@ you've learned).
 # ---------------------------------------------------------------------------
 
 
-def _make_tools(settings: Settings, board_id: str) -> list:
+def _make_tools(settings: Settings) -> list:
     """Build the closures the agent calls during a consult."""
     from .web_research import run_web_research
 
@@ -226,14 +232,14 @@ def _make_tools(settings: Settings, board_id: str) -> list:
         written so far. You also see this index in your system
         prompt; call this tool only if you want a refresh after a
         write."""
-        return _build_index(settings, board_id)
+        return _build_index(settings)
 
     def read_library(library: str) -> str:
         """Read the cached knowledge file for *library*. Returns the
         full body (no frontmatter) plus the last_updated stamp on the
         first line. Returns ``(not found)`` if the file does not
         exist."""
-        path = _library_path(settings, board_id, library)
+        path = _library_path(settings, library)
         if not path.is_file():
             return "(not found)"
         try:
@@ -247,7 +253,7 @@ def _make_tools(settings: Settings, board_id: str) -> list:
     def read_general_memory() -> str:
         """Read the cross-library general memory file. Returns
         ``(empty)`` when nothing has been written yet."""
-        path = _general_path(settings, board_id)
+        path = _general_path(settings)
         if not path.is_file():
             return "(empty)"
         try:
@@ -262,7 +268,7 @@ def _make_tools(settings: Settings, board_id: str) -> list:
         file outright; pass the FULL revised note, not a delta."""
         if not content or not content.strip():
             return "skipped: empty content"
-        path = _library_path(settings, board_id, library)
+        path = _library_path(settings, library)
         try:
             stamped = _stamp_frontmatter(library, content)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -279,7 +285,7 @@ def _make_tools(settings: Settings, board_id: str) -> list:
         library facts that don't fit a single ``<library>.md``."""
         if not note or not note.strip():
             return "skipped: empty note"
-        path = _general_path(settings, board_id)
+        path = _general_path(settings)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -321,7 +327,6 @@ def run_web_knowledge(
     *,
     settings: Settings,
     question: str,
-    board_id: str = "",
 ) -> str:
     """Run one multi-turn consult and return the agent's answer.
 
@@ -349,12 +354,12 @@ def run_web_knowledge(
         ),
     )
 
-    index = _build_index(settings, board_id)
+    index = _build_index(settings)
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT_TEMPLATE.format(index=index),
         output_type=str,
-        tools=_make_tools(settings, board_id),
+        tools=_make_tools(settings),
         name="web_knowledge",
         retries=2,
     )
@@ -379,11 +384,7 @@ def run_web_knowledge(
 # ---------------------------------------------------------------------------
 
 
-def make_ask_web_knowledge_tool(
-    settings: Settings,
-    *,
-    board_id: str = "",
-):
+def make_ask_web_knowledge_tool(settings: Settings):
     """Build the ``ask_web_knowledge`` tool that calling agents use as
     their single gateway to the internet. Other agents do NOT receive
     a direct ``web_search`` tool — only this gateway."""
@@ -392,7 +393,7 @@ def make_ask_web_knowledge_tool(
         """Ask the web-knowledge agent ONE focused question about a
         library, framework, API, or technical fact.
 
-        The web-knowledge agent owns a per-repo Markdown knowledge
+        The web-knowledge agent owns a mill-global Markdown knowledge
         base (one file per library + a general-memory file). It
         decides whether the cached files cover your question or
         whether it needs to web-search for fresh information. After
@@ -409,11 +410,7 @@ def make_ask_web_knowledge_tool(
                 figures out which library file (if any) to read and
                 whether to refresh from the web.
         """
-        return run_web_knowledge(
-            settings=settings,
-            question=question,
-            board_id=board_id,
-        )
+        return run_web_knowledge(settings=settings, question=question)
 
     from .tool_registry import ToolInfo, ToolRegistry
 

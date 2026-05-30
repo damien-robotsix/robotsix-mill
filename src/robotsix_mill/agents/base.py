@@ -354,18 +354,18 @@ def build_agent(
         all_tools.append(make_ask_user_tool(settings, agent_name=name))
     if web_knowledge:
         # The SINGLE gateway to the internet. A multi-turn flash
-        # agent that owns a per-repo Markdown knowledge base
-        # (``<board>/library_knowledge/*.md`` + ``_general.md``)
+        # agent that owns a mill-global Markdown knowledge base
+        # (``<data_dir>/library_knowledge/*.md`` + ``_general.md``)
         # AND a web-search tool, and decides autonomously which to
         # use. The previous ``web`` flag (direct ``web_research``)
         # and ``library_knowledge`` flag (deterministic cache) are
         # gone — every web hit now flows through one agent name
-        # so cost attribution is tractable.
+        # so cost attribution is tractable, and the cache is shared
+        # across boards because library facts don't change between
+        # repos.
         from .web_knowledge import make_ask_web_knowledge_tool
 
-        all_tools.append(
-            make_ask_web_knowledge_tool(settings, board_id=board_id),
-        )
+        all_tools.append(make_ask_web_knowledge_tool(settings))
 
     agent_kwargs: dict[str, Any] = dict(
         model=model,
