@@ -70,8 +70,7 @@ def _build_body(body: str, category: str, agent_name: str | None) -> str:
             f"{(body or '').strip()}\n"
         )
     return (
-        f"**Reported by an agent** (category: {category})\n\n"
-        f"{(body or '').strip()}\n"
+        f"**Reported by an agent** (category: {category})\n\n{(body or '').strip()}\n"
     )
 
 

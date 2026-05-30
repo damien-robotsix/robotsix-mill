@@ -24,7 +24,7 @@ jobs:
           version: "0.8.15"
 
       - name: Generate lockfile
-        run: uv lock
+        run: uv lock --extra dev --extra tracing
         env:
           UV_PROJECT_ENVIRONMENT: system
 

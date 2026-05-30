@@ -130,9 +130,7 @@ class MergeStage(Stage):
         # HUMAN_MR_APPROVAL path: poll PR status.
         return self._handle_human_mr_approval(ticket, ctx)
 
-    def _handle_human_mr_approval(
-        self, ticket: Ticket, ctx: StageContext
-    ) -> Outcome:
+    def _handle_human_mr_approval(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status from HUMAN_MR_APPROVAL: merged/closed/conflicting/CI/auto-merge."""
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
@@ -718,9 +716,7 @@ class MergeStage(Stage):
             return self._handle_rebase_success(
                 ticket, ctx, branch, repo_dir, counter_path, attempt, max_attempts
             )
-        return self._handle_rebase_failure(
-            ticket, counter_path, attempt, max_attempts
-        )
+        return self._handle_rebase_failure(ticket, counter_path, attempt, max_attempts)
 
     def _validate_workspace_for_rebase(
         self, ctx: StageContext, ticket: Ticket
