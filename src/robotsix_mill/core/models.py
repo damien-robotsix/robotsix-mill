@@ -41,6 +41,7 @@ class SourceKind(StrEnum):
     TRACE_REVIEW = "trace-review"
     MODULE_CURATOR = "module_curator"
     ROADMAP_SYNC = "roadmap_sync"
+    META = "meta"
 
 
 def _now() -> datetime:
