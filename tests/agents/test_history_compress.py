@@ -26,7 +26,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from robotsix_mill.history_compress import compress_history
+from robotsix_mill.agents.history_compress import compress_history
 
 # ------------------------------------------------------------------
 # Helpers
@@ -112,18 +112,18 @@ class TestCompressHistory:
     # -- (a) under-budget fast paths -----------------------------------
 
     def test_empty_history_returns_empty_list(self):
-        assert compress_history([], history_max_tokens=100, history_keep_last=2) == []
+        assert compress_history([], max_tokens=100, keep_last=2) == []
 
     def test_max_tokens_zero_returns_unchanged(self):
         msg = _mk_request(_mk_user_prompt("hi"))
         history = [msg]
-        result = compress_history(history, history_max_tokens=0, history_keep_last=0)
+        result = compress_history(history, max_tokens=0, keep_last=0)
         assert result is history
 
     def test_max_tokens_negative_returns_unchanged(self):
         msg = _mk_request(_mk_user_prompt("hi"))
         history = [msg]
-        result = compress_history(history, history_max_tokens=-1, history_keep_last=0)
+        result = compress_history(history, max_tokens=-1, keep_last=0)
         assert result is history
 
     def test_under_budget_returns_same_list(self):
@@ -133,7 +133,7 @@ class TestCompressHistory:
             _mk_response(_mk_tool_call(args={"path": "x"})),
         ]
         budget = _total_est(*msgs) + 10  # well above
-        result = compress_history(msgs, history_max_tokens=budget, history_keep_last=2)
+        result = compress_history(msgs, max_tokens=budget, keep_last=2)
         assert result is msgs
 
     def test_exactly_at_budget_returns_unchanged(self):
@@ -142,7 +142,7 @@ class TestCompressHistory:
             _mk_request(_mk_user_prompt("a")),
         ]
         budget = _total_est(*msgs)
-        result = compress_history(msgs, history_max_tokens=budget, history_keep_last=0)
+        result = compress_history(msgs, max_tokens=budget, keep_last=0)
         assert result is msgs
 
     # -- (b) over-budget drops from front -----------------------------
@@ -157,7 +157,7 @@ class TestCompressHistory:
         ]
         # Budget: only enough for the last 2 messages.
         budget = _total_est(msgs[2], msgs[3])
-        result = compress_history(msgs, history_max_tokens=budget, history_keep_last=0)
+        result = compress_history(msgs, max_tokens=budget, keep_last=0)
         assert len(result) == 2
         assert result[0] is msgs[2]
         assert result[1] is msgs[3]
@@ -169,7 +169,7 @@ class TestCompressHistory:
         msgs = [large, small, small, small]
         # Budget: enough for the last 3 small messages but NOT the large one.
         budget = _total_est(small, small, small)
-        result = compress_history(msgs, history_max_tokens=budget, history_keep_last=0)
+        result = compress_history(msgs, max_tokens=budget, keep_last=0)
         assert len(result) == 3
         assert result[0] is msgs[1]
         assert result[1] is msgs[2]
@@ -187,7 +187,7 @@ class TestCompressHistory:
             _mk_request(_mk_user_prompt("Y" * 200)),
         ]
         # Dropping both messages brings estimate to 0, which is ≤ 1.
-        result = compress_history(msgs, history_max_tokens=1, history_keep_last=0)
+        result = compress_history(msgs, max_tokens=1, keep_last=0)
         assert result == []
 
     def test_keep_last_preserves_tail_unconditionally(self):
@@ -201,7 +201,7 @@ class TestCompressHistory:
             _mk_request(_mk_user_prompt("keeper3")),
         ]
         # Budget is tiny — far below even one large message.
-        result = compress_history(msgs, history_max_tokens=1, history_keep_last=3)
+        result = compress_history(msgs, max_tokens=1, keep_last=3)
         assert len(result) == 3
         assert result[0] is msgs[3]
         assert result[1] is msgs[4]
@@ -213,7 +213,7 @@ class TestCompressHistory:
             _mk_request(_mk_user_prompt("hi")),
             _mk_request(_mk_user_prompt("there")),
         ]
-        result = compress_history(msgs, history_max_tokens=1, history_keep_last=10)
+        result = compress_history(msgs, max_tokens=1, keep_last=10)
         # The loop: for i in range(2 - 2) = range(0) → no iterations
         # Falls through to: return message_history[-10:] → all 2
         assert len(result) == 2
@@ -229,7 +229,7 @@ class TestCompressHistory:
             _mk_response(_mk_tool_call(args={"path": "z"})),
         ]
         budget = _total_est(msgs[1], msgs[2])
-        result = compress_history(msgs, history_max_tokens=budget, history_keep_last=2)
+        result = compress_history(msgs, max_tokens=budget, keep_last=2)
         assert len(result) == 2
         assert result[0] is msgs[1]
         assert result[1] is msgs[2]
@@ -244,7 +244,7 @@ class TestCompressHistory:
             ),
         ]
         budget = _total_est(msgs[1], msgs[2])
-        result = compress_history(msgs, history_max_tokens=budget, history_keep_last=2)
+        result = compress_history(msgs, max_tokens=budget, keep_last=2)
         assert len(result) == 2
         # Compare asdict representations — deep equality.
         assert dataclasses.asdict(result[0]) == dataclasses.asdict(msgs[1])
@@ -262,9 +262,7 @@ class TestCompressHistory:
         history = [small, large]
         # Budget: just enough for the large message.
         budget = _est(large)
-        result = compress_history(
-            history, history_max_tokens=budget, history_keep_last=0
-        )
+        result = compress_history(history, max_tokens=budget, keep_last=0)
         assert len(result) == 1
         assert result[0] is large
 
@@ -277,9 +275,7 @@ class TestCompressHistory:
         # Put small first, large second; tight budget drops only small.
         history = [small, large]
         budget = _est(large)
-        result = compress_history(
-            history, history_max_tokens=budget, history_keep_last=0
-        )
+        result = compress_history(history, max_tokens=budget, keep_last=0)
         assert len(result) == 1
         assert result[0] is large
 
@@ -294,14 +290,10 @@ class TestCompressHistory:
         combined = _total_est(req, resp)
         assert combined > 0
         # Budget = combined → no drop.
-        result = compress_history(
-            history, history_max_tokens=combined, history_keep_last=2
-        )
+        result = compress_history(history, max_tokens=combined, keep_last=2)
         assert result is history
 
         # Budget = combined - 1 → one message dropped from front.
-        result = compress_history(
-            history, history_max_tokens=combined - 1, history_keep_last=0
-        )
+        result = compress_history(history, max_tokens=combined - 1, keep_last=0)
         assert len(result) == 1
         assert result[0] is resp

@@ -20,7 +20,8 @@ from typing import Literal
 from pydantic import BaseModel, model_validator
 
 from ..config import Settings
-from ..history_compress import compress_history
+
+from . import history_compress
 
 log = logging.getLogger(__name__)
 
@@ -373,10 +374,10 @@ def run_coordinator(
                 run_user_prompt = None
 
         if final_message_history:
-            final_message_history = compress_history(
+            final_message_history = history_compress.compress_history(
                 final_message_history,
-                history_max_tokens=settings.history_max_tokens,
-                history_keep_last=settings.history_keep_last,
+                max_tokens=settings.history_max_tokens,
+                keep_last=settings.history_keep_last,
             )
 
         result = call_with_retry(
@@ -713,10 +714,10 @@ def run_coordinator_with_experts(
             )
             try:
                 compressed_history = (
-                    compress_history(
+                    history_compress.compress_history(
                         preseed_history,
-                        history_max_tokens=settings.history_max_tokens,
-                        history_keep_last=settings.history_keep_last,
+                        max_tokens=settings.history_max_tokens,
+                        keep_last=settings.history_keep_last,
                     )
                     if preseed_history
                     else None
