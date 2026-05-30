@@ -13,7 +13,7 @@ import json
 import logging
 import re
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from secrets import token_hex
 
@@ -119,6 +119,7 @@ class TicketService:
         """
         self.settings = settings
         self.board_id = board_id
+        self._on_transition: "Callable[[Ticket], None] | None" = None
 
     def workspace(self, ticket: Ticket) -> Workspace:
         """Return the :class:`Workspace` for *ticket*.
@@ -568,6 +569,8 @@ class TicketService:
             # Purge oldest terminal tickets if we just crossed the cap.
             if dst in self._ARCHIVABLE_STATES:
                 self._maybe_purge_archived()
+            if self._on_transition is not None:
+                self._on_transition(ticket)
             return ticket
 
     def resume_blocked(self, ticket_id: str) -> Ticket:
@@ -612,6 +615,8 @@ class TicketService:
             )
             s.commit()
             s.refresh(ticket)
+            if self._on_transition is not None:
+                self._on_transition(ticket)
             return ticket
 
     def set_retry_state(
@@ -1087,6 +1092,7 @@ class TicketService:
                 )
             )
             s.commit()
+            s.refresh(ticket)
             log.info(
                 "%s: auto-resumed from AWAITING_USER_REPLY → %s "
                 "(all %d ask_user threads closed)",
@@ -1094,6 +1100,8 @@ class TicketService:
                 dst.value,
                 len(ask_threads),
             )
+            if self._on_transition is not None:
+                self._on_transition(ticket)
 
     def reopen_thread(
         self,
@@ -1160,6 +1168,8 @@ class TicketService:
             if comment is not None:
                 s.refresh(comment)
             s.refresh(ticket)
+            if self._on_transition is not None:
+                self._on_transition(ticket)
             return comment, ticket
 
     def request_changes(
@@ -1196,6 +1206,8 @@ class TicketService:
             if comment is not None:
                 s.refresh(comment)
             s.refresh(ticket)
+            if self._on_transition is not None:
+                self._on_transition(ticket)
             return comment, ticket
 
     def mark_done(
@@ -1244,4 +1256,6 @@ class TicketService:
             if comment is not None:
                 s.refresh(comment)
             s.refresh(ticket)
+            if self._on_transition is not None:
+                self._on_transition(ticket)
             return comment, ticket

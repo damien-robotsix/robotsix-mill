@@ -13,6 +13,7 @@ from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE, State
 from ..forge import get_forge
+from .broadcaster import BoardBroadcaster
 from .run_registry import RunRegistry
 from .worker import Worker
 
@@ -30,6 +31,11 @@ def get_worker(request: Request) -> Worker:
 def get_settings(request: Request) -> Settings:
     """Return the ``Settings`` stored on app state during lifespan startup."""
     return request.app.state.settings
+
+
+def get_broadcaster(request: Request) -> BoardBroadcaster:
+    """Return the ``BoardBroadcaster`` stored on app state during lifespan startup."""
+    return request.app.state.broadcaster
 
 
 def get_run_registry(

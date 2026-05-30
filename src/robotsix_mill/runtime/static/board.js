@@ -396,50 +396,7 @@ async function refresh(){
  if(activeList) activeList.forEach(a=>{ active[a.ticket_id]=a; });
  activeMap=active;
  if(tok!==refreshSeq)return;        // a newer refresh started — drop stale
- const by={}; ST.forEach(s=>by[s]=[]);
- ts.forEach(t=>(by[t.state]=by[t.state]||[]).push(t));
- // Terminal-ish columns get reverse-chronological ordering so the
- // most recently closed/done ticket is on top — useful when scanning
- // "what just finished" without scrolling past stale items. CLOSED is
- // terminal, so its updated_at IS its closed_at; DONE is the
- // retrospect-in-flight window. Active columns keep creation-order
- // (oldest queued at top — natural FIFO of work).
- ["closed","done","epic_closed"].forEach(s=>{
-  if(by[s]) by[s].sort((a,b)=>(b.updated_at||"").localeCompare(a.updated_at||""));
- });
- document.getElementById("meta").textContent=
-   ts.length+" tickets · "+new Date().toLocaleTimeString();
- const board=document.getElementById("board");
- // Diff-based update: keep .col + .card DOM nodes alive across
- // refreshes so .cards scrollTop and board scrollLeft persist
- // naturally; replace only the inner content of cards whose visible
- // signature changed. Avoids the scroll-snap and flicker that the
- // previous wholesale innerHTML rebuild caused.
- const visibleStates=ST.filter(s=>by[s]&&by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed));
- const visibleSet=new Set(visibleStates);
- // Drop columns whose state has no tickets (or is hidden when
- // wantClosed=false). Their .cards' scroll state is gone, but the
- // column wasn't visible anyway.
- board.querySelectorAll(".col").forEach(col=>{
-  if(!visibleSet.has(col.dataset.state)) col.remove();
- });
- // Walk visibleStates in order; ensure each column exists in the
- // right slot. insertBefore is a no-op when col is already there.
- let prevCol=null;
- visibleStates.forEach(s=>{
-  let col=board.querySelector(`.col[data-state="${s}"]`);
-  if(!col){
-   col=document.createElement("div");
-   col.className="col";
-   col.dataset.state=s;
-   col.innerHTML=`<h2>${esc(s)}<span class="n"></span></h2><div class="cards"></div>`;
-  }
-  const expectedNext=prevCol?prevCol.nextSibling:board.firstChild;
-  if(col!==expectedNext) board.insertBefore(col,expectedNext);
-  col.querySelector("h2 .n").textContent=by[s].length;
-  syncCards(col,by[s],repoId,s);
-  prevCol=col;
- });
+ _renderBoard(ts, wantClosed, repoId);
 }
 
 // Render just the inner HTML of one card, given the ticket data,
@@ -2082,4 +2039,146 @@ async function refreshDetail(id){
  }
  swap("ticket-merge", t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"");
 }
-refresh();setInterval(()=>{refresh();if(runsOpen)renderRuns();else if(sel)refreshDetail(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},1000);
+refresh();setInterval(()=>{if(runsOpen)renderRuns();else if(sel)refreshDetail(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},1000);
+
+// Shared board rendering — used by both HTTP refresh() and the WebSocket
+// ticket_list handler so the column-building logic lives in one place.
+function _renderBoard(ts, wantClosed, repoId){
+  const by={}; ST.forEach(s=>by[s]=[]);
+  ts.forEach(t=>(by[t.state]=by[t.state]||[]).push(t));
+  ["closed","done","epic_closed"].forEach(s=>{
+   if(by[s]) by[s].sort((a,b)=>(b.updated_at||"").localeCompare(a.updated_at||""));
+  });
+  document.getElementById("meta").textContent=
+    ts.length+" tickets · "+new Date().toLocaleTimeString();
+  const board=document.getElementById("board");
+  const visibleStates=ST.filter(s=>by[s]&&by[s].length>0&&(s!=="closed"&&s!=="epic_closed"||wantClosed));
+  const visibleSet=new Set(visibleStates);
+  board.querySelectorAll(".col").forEach(col=>{
+   if(!visibleSet.has(col.dataset.state)) col.remove();
+  });
+  let prevCol=null;
+  visibleStates.forEach(s=>{
+   let col=board.querySelector(`.col[data-state="${s}"]`);
+   if(!col){
+    col=document.createElement("div");
+    col.className="col";
+    col.dataset.state=s;
+    col.innerHTML=`<h2>${esc(s)}<span class="n"></span></h2><div class="cards"></div>`;
+   }
+   const expectedNext=prevCol?prevCol.nextSibling:board.firstChild;
+   if(col!==expectedNext) board.insertBefore(col,expectedNext);
+   col.querySelector("h2 .n").textContent=by[s].length;
+   syncCards(col,by[s],repoId,s);
+   prevCol=col;
+  });
+}
+
+// Patch a single ticket card in the DOM from pushed WebSocket data,
+// avoiding a full HTTP round-trip.  Handles state changes (moving
+// the card between columns) and new tickets.
+function _patchTicket(t){
+  const repoId=getRepoId();
+  const newState=t.state;
+  let card=document.querySelector(`.card[data-id="${t.id}"]`);
+  let oldCol=card?card.closest(".col"):null;
+  const oldState=oldCol?oldCol.dataset.state:null;
+
+  if(card && oldState===newState){
+    // Same column — just update the card's inner content.
+    const sig=renderCardInner(t, repoId, newState);
+    if(card._sig!==sig){card.innerHTML=sig;card._sig=sig;}
+    const wantClass=`card s-${newState}`;
+    if(card.className!==wantClass) card.className=wantClass;
+    return;
+  }
+
+  // State changed or new ticket — remove from old column.
+  if(card){card.remove();card._sig=null;}
+  if(oldCol){
+    const n=oldCol.querySelector("h2 .n");
+    if(n){const c=parseInt(n.textContent)-1;n.textContent=Math.max(0,c);}
+    if(!oldCol.querySelector(".card")) oldCol.remove();
+  }
+
+  // Find or create the target column in ST order.
+  const board=document.getElementById("board");
+  let targetCol=board.querySelector(`.col[data-state="${newState}"]`);
+  if(!targetCol){
+    targetCol=document.createElement("div");
+    targetCol.className="col";
+    targetCol.dataset.state=newState;
+    targetCol.innerHTML=`<h2>${esc(newState)}<span class="n">0</span></h2><div class="cards"></div>`;
+    const targetIdx=ST.indexOf(newState);
+    let inserted=false;
+    for(let i=targetIdx+1;i<ST.length;i++){
+      const next=board.querySelector(`.col[data-state="${ST[i]}"]`);
+      if(next){board.insertBefore(targetCol,next);inserted=true;break;}
+    }
+    if(!inserted)board.appendChild(targetCol);
+  }
+
+  // Create or reuse card.
+  if(!card){
+    card=document.createElement("div");
+    card.dataset.id=t.id;
+    card.addEventListener("click",()=>open_(t.id));
+  }
+  const wantClass=`card s-${newState}`;
+  card.className=wantClass;
+  const sig=renderCardInner(t,repoId,newState);
+  card.innerHTML=sig;
+  card._sig=sig;
+
+  // Append card to target column and bump its count.
+  targetCol.querySelector(".cards").appendChild(card);
+  const tn=targetCol.querySelector("h2 .n");
+  if(tn){tn.textContent=parseInt(tn.textContent)+1;}
+}
+
+// -- WebSocket real-time push --------------------------------------------
+let wsReconnectTimer=null;
+let wsActive=false;
+let wsReconnectDelay=2000;
+let wsKeepaliveTimer=null;
+const WS_RECONNECT_MAX=30000;
+const WS_RECONNECT_BASE=2000;
+function connectWebSocket(){
+  if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}
+  let proto=window.location.protocol==="https:"?"wss":"ws";
+  let qs="show_closed="+(showClosed?"true":"false");
+  let url=proto+"://"+window.location.host+"/ws/board?"+qs;
+  let sock=new WebSocket(url);
+  sock.onopen=function(){
+    wsActive=true;
+    wsReconnectDelay=WS_RECONNECT_BASE;
+    // 30s keepalive refresh as a belt-and-suspenders fallback.
+    if(wsKeepaliveTimer)clearInterval(wsKeepaliveTimer);
+    wsKeepaliveTimer=setInterval(refresh,30000);
+  };
+  sock.onmessage=function(evt){
+    try{
+      let msg=JSON.parse(evt.data);
+      if(msg.type==="ticket_list"){
+        let ts=msg.tickets||[];
+        ++refreshSeq;
+        _renderBoard(ts, showClosed, getRepoId());
+        fetchGates();
+        fetchLangfuseStatus();
+      } else if(msg.type==="ticket_update"){
+        _patchTicket(msg.ticket);
+      }
+    }catch(e){/* ignore malformed messages */}
+  };
+  sock.onclose=function(){
+    wsActive=false;
+    if(wsKeepaliveTimer){clearInterval(wsKeepaliveTimer);wsKeepaliveTimer=null}
+    // Exponential backoff: 2s → 4s → 8s → … → 30s max.
+    wsReconnectTimer=setTimeout(connectWebSocket,wsReconnectDelay);
+    wsReconnectDelay=Math.min(wsReconnectDelay*2,WS_RECONNECT_MAX);
+  };
+  sock.onerror=function(){
+    sock.close();  // onclose handler will reconnect
+  };
+}
+connectWebSocket();
