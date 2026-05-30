@@ -253,16 +253,14 @@ class Settings(BaseSettings):
     consult_request_limit: int = Field(default=15)
     explore_request_limit: int = Field(default=100)
     explore_max_tokens: int = Field(default=600)
-    # Token budget for message history compression in the coordinator
-    # loop.  When the message history exceeds this many tokens (rough
-    # char/4 estimate), ``compress_history`` drops the oldest messages
-    # while preserving the last ``history_keep_last`` messages intact.
-    # Set to 0 (or a negative value) to disable compression.
-    history_max_tokens: int = Field(default=0)
-    # Number of most-recent messages to preserve unconditionally when
-    # ``compress_history`` trims the message history.  A typical value
-    # is 4–6 to keep the last tool-call/return pair + user prompt.
-    history_keep_last: int = Field(default=4)
+    # Estimated token budget for the coordinator's message history
+    # before compression kicks in.  When the char/4 heuristic exceeds
+    # this threshold, older tool outputs are elided (replaced with a
+    # short placeholder).  Defaults to 80 % of a 128 K context window.
+    history_max_tokens: int = Field(default=102_400)
+    # How many of the most recent tool outputs to keep fully expanded
+    # after compression elides older ones.
+    history_keep_last: int = Field(default=5)
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
     dedup_request_limit: int = Field(default=4)
     doc_request_limit: int = Field(default=8)

@@ -1,52 +1,67 @@
-"""Token-aware history compression.
+"""Drop oldest messages from the front when estimated token count
+exceeds a configurable threshold.
 
-Only elides ``ToolReturnPart.content`` strings — never touches user
-messages, system prompts, or model responses. When the estimated token
-count exceeds *max_tokens*, the oldest tool-return content strings are
-truncated (their text replaced with a short placeholder) until the
-budget is satisfied, while always preserving the last *keep_last*
-messages unconditionally.
+Only the message list is shortened — individual messages are never
+mutated.  Token estimation uses the chars/4 heuristic, preferring
+``msg.json()`` when available (as in pydantic-ai runtime objects).
 """
 
 from __future__ import annotations
 
-import logging
+import json
 
-log = logging.getLogger(__name__)
+
+def _estimate_tokens(msg) -> int:
+    """Token estimate for a single message (chars // 4).
+
+    Prefers ``msg.json()`` when available (pydantic-ai runtime objects
+    carry it); falls back to summing part content and args for plain
+    dataclass instances.
+    """
+    if hasattr(msg, "json"):
+        return len(msg.json()) // 4
+    total = 0
+    for part in getattr(msg, "parts", []):
+        content = getattr(part, "content", None)
+        if isinstance(content, str):
+            total += len(content)
+        args = getattr(part, "args", None)
+        if isinstance(args, str):
+            total += len(args)
+        elif isinstance(args, dict):
+            total += len(json.dumps(args))
+    return total // 4
 
 
 def compress_history(
-    message_history: list,
+    messages: list,
     *,
-    max_tokens: int,
-    keep_last: int,
+    max_tokens: int = 100_000,
+    keep_last: int = 5,
 ) -> list:
-    """Elide ``ToolReturnPart.content`` strings from the front when the
-    estimated token count exceeds *max_tokens*, preserving the last
-    *keep_last* messages unconditionally.
+    """Drop oldest messages from the front until the remaining ones
+    fit within ``max_tokens``, preserving the last ``keep_last``
+    messages unconditionally.
 
-    Token estimation uses a coarse char/4 heuristic (≈ English prose).
-    Returns the original list when *max_tokens* ≤ 0 or the budget is
-    already satisfied.
+    Returns a slice of the original list — message objects themselves
+    are never modified.  Under-budget lists (and lists where
+    ``max_tokens <= 0``) are returned unchanged.
     """
-    if not message_history or max_tokens <= 0:
-        return message_history
+    # Non-positive max_tokens means "no limit" — never compress.
+    if max_tokens <= 0:
+        return messages
 
-    # Estimate total tokens: sum of JSON-serialised message length / 4.
-    total_est = sum(len(m.json()) // 4 for m in message_history)
+    total = sum(_estimate_tokens(m) for m in messages)
+    if total <= max_tokens:
+        return messages  # under budget — same list object
 
-    if total_est <= max_tokens:
-        return message_history
+    n = len(messages)
+    # Try dropping from the front, one message at a time, but never
+    # drop into the protected tail of size *keep_last*.
+    for i in range(n - keep_last):
+        remaining = messages[i + 1 :]
+        if sum(_estimate_tokens(m) for m in remaining) <= max_tokens:
+            return remaining
 
-    keep_last_val = max(keep_last, 0)
-    # Walk from the front, dropping messages until we're within budget
-    # or only *keep_last* remain.
-    for i in range(len(message_history) - keep_last_val):
-        dropped_est = len(message_history[i].json()) // 4
-        total_est -= dropped_est
-        if total_est <= max_tokens:
-            return message_history[i + 1 :]
-
-    # Budget still exceeded even after dropping all but keep_last;
-    # return only the tail.
-    return message_history[-keep_last_val:] if keep_last_val else message_history[-1:]
+    # Still over budget — fall back to just the protected tail.
+    return messages[max(0, n - keep_last) :]
