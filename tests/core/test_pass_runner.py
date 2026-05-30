@@ -862,8 +862,6 @@ def test_full_path_module_stripping(tmp_path, monkeypatch):
     db.reset_engine()
 
 
-
-
 def test_output_emit_failure_degrades_to_noop(tmp_path):
     """A periodic agent that fails to emit a parseable structured Result
     (pydantic-ai UnexpectedModelBehavior, "Exceeded maximum output

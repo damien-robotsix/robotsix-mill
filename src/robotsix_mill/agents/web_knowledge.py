@@ -223,7 +223,7 @@ you've learned).
 # ---------------------------------------------------------------------------
 
 
-def _make_tools(settings: Settings) -> list:
+def _make_tools(settings: Settings) -> list:  # noqa: C901 — closures, extraction would expose `settings` in tool signatures
     """Build the closures the agent calls during a consult."""
     from .web_research import run_web_research
 

@@ -29,7 +29,9 @@ log = logging.getLogger(__name__)
 
 _BLOCK_SEP = re.compile(r"\n---\n", re.MULTILINE)
 _HEADING_RE = re.compile(r"^###\s+Proposed addition to\s+(.+?)\s*$", re.MULTILINE)
-_RULE_RE = re.compile(r"^>\s*\*\*Rule:\*\*\s*(.+?)(?=\n\n|\Z)", re.MULTILINE | re.DOTALL)
+_RULE_RE = re.compile(
+    r"^>\s*\*\*Rule:\*\*\s*(.+?)(?=\n\n|\Z)", re.MULTILINE | re.DOTALL
+)
 _RATIONALE_RE = re.compile(
     r"\*\*Rationale:\*\*\s*(.+?)(?=\n\n\*\*Proposed|\n\n\*\*Status|\Z)",
     re.DOTALL,
@@ -128,9 +130,7 @@ def _format_status_line(status: str, filed: str | None) -> str:
     return f"**Status:** {status}"
 
 
-def _rewrite_block_status(
-    block: str, new_status: str, filed_ticket: str | None
-) -> str:
+def _rewrite_block_status(block: str, new_status: str, filed_ticket: str | None) -> str:
     """Return *block* with its Status line replaced (or appended). The
     new line sits between **Proposed:** and the trailing block, so the
     block stays human-readable."""

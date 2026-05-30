@@ -288,9 +288,7 @@ def run_agent_pass(
     from pydantic_ai.exceptions import UnexpectedModelBehavior
 
     try:
-        res = agent_fn(
-            settings=settings, memory=memory_text, recent_proposals=rp_block
-        )
+        res = agent_fn(settings=settings, memory=memory_text, recent_proposals=rp_block)
     except UnexpectedModelBehavior as e:
         log.warning(
             "%s: agent did not emit a parseable structured Result "
