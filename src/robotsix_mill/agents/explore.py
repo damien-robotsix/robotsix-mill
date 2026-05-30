@@ -68,6 +68,10 @@ SCOPE DISCIPLINE — always follow these limits:
     run_command("grep -rn 'UnexpectedModelBehavior'")
     run_command("grep -rn 'def build_fs_tools' src/")
     run_command("grep -n '^## ' README.md")
+- CONFIRM PATHS: before calling read_file on a path you have not already
+  seen in a previous list_dir or grep result, verify it exists with
+  list_dir on the parent directory or run_command with find. Never guess
+  a file path.
 - USE LIMIT + OFFSET ON read_file: never read a whole large file
   when you already know the line range. ``read_file`` accepts
   ``offset:`` and ``limit:`` arguments — pass them whenever grep
