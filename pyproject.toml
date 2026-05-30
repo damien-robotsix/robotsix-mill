@@ -11,6 +11,7 @@ requires-python = ">=3.14"
 license = "MIT"
 authors = [{ name = "Damien Robotsix" }]
 dependencies = [
+    "pydantic>=2",
     "pydantic-ai-slim[openrouter,openai]>=1.0",
     "pydantic-settings>=2",
     "pyyaml>=6",
