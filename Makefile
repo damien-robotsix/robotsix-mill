@@ -13,7 +13,7 @@ $(BIN)/activate:
 # Uses uv sync with the committed uv.lock for reproducible installs.
 install:
 	uv lock
-	uv sync --frozen --group dev --extra tracing
+	uv sync --frozen --extra dev --extra tracing
 
 test: install
 	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70
