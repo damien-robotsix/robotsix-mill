@@ -17,7 +17,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import RepoConfig, get_repos_config
@@ -1527,7 +1527,7 @@ class Worker:
     async def _cost_warmer_loop(self) -> None:
         """Background cost-warmer.
 
-        Walks every non-archived ticket on each repo and calls
+        Walks every non-closed ticket on each repo and calls
         ``session_cost`` to refresh its cached Langfuse value. The
         board's /tickets list endpoint reads from the SAME process-
         local cache via ``session_cost_cached`` (cache-only, never
@@ -1535,18 +1535,18 @@ class Worker:
         column on the board is populated even when the operator
         hasn't opened the ticket drawer.
 
-        Throttling: ``cost_warmer_pace_ms`` between ticket lookups
-        bounds the Langfuse API hit-rate; ``cost_warmer_interval_
-        seconds`` is the wall-time between full cycles. Defaults
-        (60s cycle, 200ms pace) give a comfortable ~100 tickets per
-        20s, well under the 60s cache TTL so the column never shows
-        a stale-looking dip.
+        Throttling: ``cost_warmer_concurrency`` bounds in-flight
+        Langfuse calls (the semaphore replaces the older serial
+        ``cost_warmer_pace_ms``); ``cost_warmer_interval_seconds``
+        is the wall-time between cycles. With concurrency=4 and a
+        ~250ms median Langfuse latency, ~200 open tickets sweep in
+        ~12s, so the column refreshes well inside the 60s cache TTL
+        and idle tickets never show a $0 dip.
 
-        Each cycle handles per-repo failure independently so a single
-        Langfuse outage on one repo doesn't stall the others. Closed
-        tickets older than 24h are skipped — their cost is final and
-        already cached from a prior cycle (if it was warmed) or
-        irrelevant (board doesn't list them by default).
+        Closed tickets are skipped entirely — their cost is final
+        and the board hides them by default. Each cycle handles
+        per-repo failure independently so a Langfuse outage on one
+        repo doesn't stall the others.
         """
         from ..core.models import Ticket
         from ..core.service import TicketService
@@ -1554,8 +1554,8 @@ class Worker:
         from ..langfuse_client import session_cost
 
         settings = self.ctx.settings
-        interval = max(30, settings.cost_warmer_interval_seconds)
-        pace = max(0.05, settings.cost_warmer_pace_ms / 1000.0)
+        interval = max(10, settings.cost_warmer_interval_seconds)
+        concurrency = max(1, settings.cost_warmer_concurrency)
         terminal = {State.CLOSED, State.EPIC_CLOSED}
 
         await asyncio.sleep(self._initial_delay("cost-warmer", interval))
@@ -1567,7 +1567,27 @@ class Worker:
                 for rc in repos.repos.values()
                 if getattr(rc, "cost_warmer_periodic", True)
             ]
-            warmed_count = 0
+            sem = asyncio.Semaphore(concurrency)
+
+            async def _warm_one(ticket: Ticket, repo_config) -> int:
+                async with sem:
+                    try:
+                        await asyncio.to_thread(
+                            session_cost,
+                            settings,
+                            ticket.id,
+                            repo_config=repo_config,
+                        )
+                        return 1
+                    except Exception:  # noqa: BLE001
+                        log.debug(
+                            "cost-warmer: lookup failed for %s",
+                            ticket.id,
+                            exc_info=True,
+                        )
+                        return 0
+
+            tasks: list[asyncio.Future] = []
             for repo_config in repo_configs:
                 try:
                     svc = TicketService(settings, board_id=repo_config.board_id)
@@ -1579,33 +1599,18 @@ class Worker:
                     )
                     continue
 
-                now = datetime.now(timezone.utc)
-                cutoff = now - timedelta(hours=24)
                 for ticket in tickets:
+                    # Closed tickets never accrue new cost — skip them
+                    # entirely. Their cached value (if any) persists,
+                    # and the detail-drawer click still does a blocking
+                    # fetch for authoritativeness if the operator
+                    # opens one.
                     if ticket.state in terminal:
-                        try:
-                            updated = ticket.updated_at
-                            if updated and updated.tzinfo is None:
-                                updated = updated.replace(tzinfo=timezone.utc)
-                            if updated and updated < cutoff:
-                                continue
-                        except Exception:  # noqa: BLE001
-                            pass
-                    try:
-                        await asyncio.to_thread(
-                            session_cost,
-                            settings,
-                            ticket.id,
-                            repo_config=repo_config,
-                        )
-                        warmed_count += 1
-                    except Exception:  # noqa: BLE001 — never break the loop
-                        log.debug(
-                            "cost-warmer: lookup failed for %s",
-                            ticket.id,
-                            exc_info=True,
-                        )
-                    await asyncio.sleep(pace)
+                        continue
+                    tasks.append(_warm_one(ticket, repo_config))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            warmed_count = sum(r for r in results if isinstance(r, int))
 
             cycle_secs = time.monotonic() - cycle_start
             log.debug(
@@ -2341,10 +2346,10 @@ class Worker:
             "cost-warmer",
             self._cost_warmer_loop,
             "_cost_warmer_task",
-            log_msg="Cost warmer enabled: cycle %ds, pace %dms",
+            log_msg="Cost warmer enabled: cycle %ds, concurrency=%d",
             log_args=(
                 self.ctx.settings.cost_warmer_interval_seconds,
-                self.ctx.settings.cost_warmer_pace_ms,
+                self.ctx.settings.cost_warmer_concurrency,
             ),
         )
         self._start_poll_loop_pass(

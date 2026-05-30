@@ -701,13 +701,20 @@ class Settings(BaseSettings):
     # actual cost when they click the ticket. The warmer pre-fills the
     # cache so the cost column is always populated.
     cost_warmer_periodic: bool = Field(default=True)
-    # Seconds between full cycles. Defaults to 60s so the cache stays
-    # comfortably within ``_COST_TTL_SECONDS`` (60s) and the column
-    # never shows stale-looking gaps.
-    cost_warmer_interval_seconds: int = Field(default=60)
-    # Milliseconds between individual ticket cost refreshes within a
-    # cycle. Throttles the Langfuse API hit-rate. With 100 tickets and
-    # 200ms pace, a cycle takes ~20s; well within the 60s budget.
+    # Seconds between full cycles. Default 20s: a full sweep of a
+    # busy board (200+ tickets) finishes in ~15s with the default
+    # concurrency, so the column refreshes faster than the cache TTL
+    # — idle tickets stay populated without ever showing a $0 dip.
+    cost_warmer_interval_seconds: int = Field(default=20)
+    # Concurrent Langfuse calls during a sweep. Each call takes
+    # ~250ms; with concurrency=4 a 200-ticket sweep takes ~12s. Bump
+    # higher for snappier refreshes on large boards (mind the
+    # Langfuse rate limit); drop to 1 to revert to fully-serial.
+    cost_warmer_concurrency: int = Field(default=4)
+    # Legacy per-call pace setting (kept for backward compat with
+    # YAML overrides). The parallel sweep above ignores it — the
+    # semaphore is the only throttle. Drop it entirely after the
+    # next config bump.
     cost_warmer_pace_ms: int = Field(default=200)
     # Independent on/off for the fast loop (see comment below).
     # Gated separately from the slow loop so an operator can disable
