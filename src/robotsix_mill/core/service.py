@@ -361,6 +361,7 @@ class TicketService:
         kind: str = "task",
         parent_id: str | None = None,
         board_id: str | None = None,
+        priority: bool = False,
     ) -> Ticket:
         """Create a new ticket with the given *title*.
 
@@ -476,7 +477,7 @@ class TicketService:
                 depends_on=depends_on,
                 parent_id=parent_id,
                 board_id=board_id if board_id is not None else self.board_id,
-                priority=inherited_priority,
+                priority=priority or inherited_priority,
             )
             s.add(ticket)
             s.flush()

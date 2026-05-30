@@ -156,6 +156,7 @@ def test_detects_new_failure_and_creates_draft(tmp_path, monkeypatch):
     assert "docker-publish" in t.title
     assert "build error" in (ctx.service.workspace(t).read_description() or "")
     assert t.state == State.DRAFT
+    assert t.priority is True
 
     # Verify state file was written.
     assert state_path.exists()
