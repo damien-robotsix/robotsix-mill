@@ -42,9 +42,7 @@ class BoardBroadcaster:
                 "priority": ticket.priority,
                 "retry_attempt": ticket.retry_attempt,
                 "updated_at": (
-                    ticket.updated_at.isoformat()
-                    if ticket.updated_at
-                    else None
+                    ticket.updated_at.isoformat() if ticket.updated_at else None
                 ),
                 "parent_id": ticket.parent_id,
                 "source": ticket.source,
@@ -91,9 +89,7 @@ class BoardBroadcaster:
         q: Queue = asyncio.Queue()
         self._queues.append(q)
         # Send initial state as the first message.
-        await q.put(
-            json.dumps({"type": "ticket_list", "tickets": initial_tickets})
-        )
+        await q.put(json.dumps({"type": "ticket_list", "tickets": initial_tickets}))
         return q
 
     def unsubscribe(self, q: Queue) -> None:

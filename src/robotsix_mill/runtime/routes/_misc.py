@@ -190,7 +190,11 @@ async def ws_board(
     tickets = svc.list(exclude_states=exclude)
     initial = [
         enrich_ticket_read(
-            t, settings, svc, blocking_cost=False, fetch_pr_url=False,
+            t,
+            settings,
+            svc,
+            blocking_cost=False,
+            fetch_pr_url=False,
         ).model_dump(mode="json")
         for t in tickets
     ]
