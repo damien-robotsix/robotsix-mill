@@ -174,6 +174,32 @@ def make_session_id(kind: str) -> str:
     return f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
 
 
+def langfuse_trace_url(
+    trace_id: str, repo_config: RepoConfig | None = None
+) -> str | None:
+    """Build the Langfuse web-UI URL for a trace.
+
+    Credential resolution mirrors ``_origin_session_url`` in ``deps.py``:
+    when *repo_config* is provided, its ``langfuse_base_url`` and
+    ``langfuse_project_name`` are used; otherwise the global
+    :class:`Secrets` singleton is consulted.
+
+    Returns ``None`` when the base URL or project identifier is missing.
+    """
+    if repo_config is not None:
+        base = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
+            "/"
+        )
+        project_id = repo_config.langfuse_project_name
+    else:
+        secrets = get_secrets()
+        base = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
+        project_id = secrets.langfuse_project_id
+    if base and project_id:
+        return f"{base}/project/{project_id}/traces/{trace_id}"
+    return None
+
+
 def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:
     """Check credentials without importing anything heavy.
 
@@ -489,6 +515,19 @@ class _RootIO:
     def __init__(self, span):
         self._span = span
 
+    @property
+    def trace_id(self) -> str | None:
+        """Return the 32-char hex trace id for the current OTel span.
+
+        Returns ``None`` when ``self._span`` is ``None`` (tracing off).
+        """
+        if self._span is None:
+            return None
+        from opentelemetry.trace import format_trace_id
+
+        trace_id_int = self._span.get_span_context().trace_id
+        return format_trace_id(trace_id_int)
+
     def _serialize(self, value) -> str:
         if isinstance(value, str):
             s = value
@@ -517,6 +556,10 @@ class _RootIO:
 class _NoopRootIO:
     """Drop-in for ``_RootIO`` when tracing is disabled — accepts the
     same calls and silently discards them."""
+
+    @property
+    def trace_id(self) -> None:
+        return None
 
     def set_input(self, value) -> None:  # noqa: D401, ARG002
         pass
