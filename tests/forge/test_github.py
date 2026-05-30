@@ -8,6 +8,7 @@ import httpx as real_httpx
 import pytest
 
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.forge.github import (
     GitHubForge,
     _build_headers,
@@ -1290,8 +1291,6 @@ def test_pr_files_empty_files(tmp_path, monkeypatch):
 # create_repo
 # ---------------------------------------------------------------------------
 
-from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
-
 
 def test_create_repo_happy_path_org(tmp_path, monkeypatch):
     """201 from org endpoint → returns RepoInfo with correct fields."""
@@ -1321,9 +1320,7 @@ def test_create_repo_flag_disabled(tmp_path, monkeypatch):
     """NotConfiguredError raised when enable_repo_creation=False (default)."""
     forge = _forge(tmp_path)  # enable_repo_creation defaults to False
     with pytest.raises(NotConfiguredError, match="Repo creation is disabled"):
-        forge.create_repo(
-            name="my-repo", owner="o", private=True, description="desc"
-        )
+        forge.create_repo(name="my-repo", owner="o", private=True, description="desc")
 
 
 def test_create_repo_org_fallback_to_user(tmp_path, monkeypatch):
@@ -1336,7 +1333,6 @@ def test_create_repo_org_fallback_to_user(tmp_path, monkeypatch):
     }
 
     call_count = 0
-    org_403_returned = _make_response(403, {}, "forbidden")
 
     # We need a post that returns 403 first, then 201 on second call.
     class TwoStepPostClient:
@@ -1399,6 +1395,4 @@ def test_create_repo_other_non_2xx(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path, enable_repo_creation=True)
     with pytest.raises(RuntimeError, match="GitHub repo create failed: 500"):
-        forge.create_repo(
-            name="my-repo", owner="o", private=True, description="desc"
-        )
+        forge.create_repo(name="my-repo", owner="o", private=True, description="desc")
