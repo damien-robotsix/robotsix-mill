@@ -10,6 +10,7 @@ from __future__ import annotations
 import html
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler
+from urllib.parse import parse_qs, unquote
 
 from robotsix_auto_mail.db import MailRecord
 
@@ -48,7 +49,10 @@ h1 { margin-bottom: 1rem; font-size: 1.5rem; }
 .card .subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card .date { font-size: 0.8rem; color: #888; }
 .card .body-preview { font-size: 0.85rem; color: #444; margin-top: 0.25rem; }
-.card .no-body { font-style: italic; color: #999; }"""
+.card .no-body { font-style: italic; color: #999; }
+.card-form { margin-top: 0.4rem; display: flex; gap: 0.25rem; align-items: center; }
+.card-form select { font-size: 0.75rem; padding: 0.1rem 0.2rem; }
+.card-form button { font-size: 0.75rem; padding: 0.1rem 0.5rem; cursor: pointer; }"""
 
 
 def _build_board_html(db_path: str) -> str:
@@ -118,12 +122,29 @@ def _render_card(record: MailRecord) -> str:
     else:
         body_html = html.escape(body)
 
+    # Build status dropdown with current status pre-selected.
+    options_parts: list[str] = []
+    for s in _BOARD_COLUMNS:
+        sel = ' selected' if s == record.status else ''
+        options_parts.append(
+            f'<option value="{html.escape(s)}"{sel}>{html.escape(s.capitalize())}</option>'
+        )
+
+    form_html = (
+        '<form class="card-form" method="post" action="/move">'
+        f'<input type="hidden" name="message_id" value="{html.escape(record.message_id)}">'
+        f'<select name="status">{"".join(options_parts)}</select>'
+        '<button type="submit">Move</button>'
+        '</form>'
+    )
+
     return (
         f'<div class="card">'
         f'<div class="sender">{sender}</div>'
         f'<div class="subject">{subject}</div>'
         f'<div class="date">{date_str}</div>'
         f'<div class="body-preview">{body_html}</div>'
+        f'{form_html}'
         f'</div>'
     )
 
@@ -152,12 +173,14 @@ def make_board_handler(
                 self._redirect("/board")
             elif self.path == "/board":
                 self._serve_board()
+            elif self.path.startswith("/email/") and self.path.endswith("/status"):
+                self._serve_email_status()
             else:
                 self._not_found()
 
-        def _redirect(self, location: str) -> None:
-            """Send a 301 redirect to *location*."""
-            self.send_response(301)
+        def _redirect(self, location: str, code: int = 301) -> None:
+            """Send a redirect to *location*."""
+            self.send_response(code)
             self.send_header("Location", location)
             self.end_headers()
 
@@ -185,6 +208,85 @@ def make_board_handler(
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write(b"Not found")
+
+        def _bad_request(self, message: str) -> None:
+            """Send a 400 Bad Request with a plain-text body."""
+            encoded = message.encode("utf-8")
+            self.send_response(400)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def do_POST(self) -> None:  # noqa: N802
+            """Route POST requests."""
+            if self.path == "/move":
+                self._handle_move()
+            else:
+                self._not_found()
+
+        def _handle_move(self) -> None:
+            """Process POST /move — update a card's status and redirect."""
+            from robotsix_auto_mail.db import init_db
+            from robotsix_auto_mail.status import set_status, VALID_STATUSES
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(content_length).decode("utf-8")
+            fields = parse_qs(raw)
+
+            # parse_qs returns {key: [value, ...]} — extract first value.
+            message_id = (fields.get("message_id") or [""])[0].strip()
+            new_status = (fields.get("status") or [""])[0].strip()
+
+            if not message_id or not new_status:
+                self._bad_request("Missing message_id or status")
+                return
+
+            if new_status not in VALID_STATUSES:
+                self._bad_request(f"Invalid status: {new_status!r}")
+                return
+
+            conn = init_db(self.db_path)
+            try:
+                ok = set_status(conn, message_id, new_status)
+            finally:
+                conn.close()
+
+            if not ok:
+                self._not_found()
+                return
+
+            self._redirect("/board", code=302)
+
+        def _serve_email_status(self) -> None:
+            """Serve GET /email/{message_id}/status — return status as text."""
+            from robotsix_auto_mail.db import init_db
+            from robotsix_auto_mail.status import get_status
+
+            # Extract the URL-encoded message_id from the path:
+            #   "/email/<encoded>/status" → extract and decode.
+            path = self.path
+            prefix = "/email/"
+            suffix = "/status"
+            encoded_mid = path[len(prefix) : -len(suffix)]
+            message_id = unquote(encoded_mid)
+
+            conn = init_db(self.db_path)
+            try:
+                status = get_status(conn, message_id)
+            finally:
+                conn.close()
+
+            if status is None:
+                self._not_found()
+                return
+
+            encoded_body = status.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded_body)))
+            self.end_headers()
+            self.wfile.write(encoded_body)
 
         def log_message(self, format: str, *args: object) -> None:  # noqa: A002
             """Suppress logging to stderr (keep server quiet)."""

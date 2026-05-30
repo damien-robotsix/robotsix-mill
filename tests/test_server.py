@@ -53,6 +53,15 @@ def test_render_card_basic() -> None:
     assert "2025-01-10 12:00" in html
     assert "This is the body." in html
     assert 'class="card"' in html
+    # Move form present
+    assert '<form class="card-form"' in html
+    assert 'method="post" action="/move"' in html
+    assert '<input type="hidden" name="message_id"' in html
+    assert 'value="abc"' in html
+    assert '<select name="status">' in html
+    assert '<button type="submit">Move</button>' in html
+    # Default status (no explicit status → ''), so "inbox" is selected first
+    assert '<option value="inbox" selected' in html
 
 
 def test_render_card_empty_subject() -> None:
@@ -131,6 +140,8 @@ def test_render_card_html_escapes_sender() -> None:
     html = _render_card(record)
     assert "&lt;script&gt;" in html
     assert "<script>" not in html
+    # Form should still be present
+    assert '<form class="card-form"' in html
 
 
 def test_render_card_html_escapes_subject() -> None:
@@ -157,6 +168,34 @@ def test_render_card_html_escapes_body() -> None:
     html = _render_card(record)
     assert "&lt;img" in html
     assert "<img" not in html
+
+
+def test_render_card_selected_status() -> None:
+    """The current status should have the 'selected' attribute."""
+    record = MailRecord(
+        message_id="test-id",
+        sender="x",
+        subject="s",
+        date="2025-01-01T00:00:00",
+        body_plain="body",
+        status="done",
+    )
+    html = _render_card(record)
+    assert '<option value="done" selected>Done</option>' in html
+    assert '<option value="inbox">Inbox</option>' in html
+
+
+def test_render_card_message_id_with_angle_brackets() -> None:
+    """Message IDs containing <, > should be HTML-escaped in the hidden input."""
+    record = MailRecord(
+        message_id="<abc123@example.com>",
+        sender="x",
+        subject="s",
+        date="2025-01-01T00:00:00",
+        body_plain="body",
+    )
+    html = _render_card(record)
+    assert 'value="&lt;abc123@example.com&gt;"' in html
 
 
 # ---------------------------------------------------------------------------
@@ -510,6 +549,321 @@ def test_handler_xss_prevention() -> None:
             assert "&lt;script&gt;" in body
             assert "&lt;img onerror" in body
             assert "&lt;b&gt;evil&lt;/b&gt;" in body
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+# ---------------------------------------------------------------------------
+# POST /move tests
+# ---------------------------------------------------------------------------
+
+
+def _post_form(port: int, fields: dict[str, str]) -> tuple[int, str]:
+    """POST url-encoded *fields* to /move and return (status, body)."""
+    import urllib.request
+
+    data = urllib.parse.urlencode(fields).encode("utf-8")
+    url = f"http://127.0.0.1:{port}/move"
+
+    # Don't follow redirects, and capture 400/404 bodies.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, hdrs, newurl):
+            return None
+
+    class CaptureError(urllib.request.HTTPDefaultErrorHandler):
+        def http_error_default(self, req, fp, code, msg, hdrs):
+            return fp
+
+    opener = urllib.request.build_opener(NoRedirect(), CaptureError())
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    resp = opener.open(req)
+    body = resp.read().decode("utf-8")
+    return resp.status, body
+
+
+def test_move_success_redirects_302() -> None:
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "move-me",
+                    "sender": "x@x.com",
+                    "subject": "Move test",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            status, body = _post_form(port, {"message_id": "move-me", "status": "done"})
+            assert status == 302, f"Expected 302, got {status}: {body}"
+
+            # Verify the card actually moved by checking /board.
+            resp = urlopen(f"http://127.0.0.1:{port}/board")
+            board_html = resp.read().decode("utf-8")
+            # Should be in Done column, not Inbox
+            counts = re.findall(r'<span class="count">(\d+)</span>', board_html)
+            assert counts == ["0", "0", "1", "0"], f"Unexpected counts: {counts}"
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_move_to_triaging() -> None:
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "m-triaging",
+                    "sender": "t@t.com",
+                    "subject": "Triaging",
+                    "date": "2025-02-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            status, _ = _post_form(port, {"message_id": "m-triaging", "status": "triaging"})
+            assert status == 302
+
+            resp = urlopen(f"http://127.0.0.1:{port}/board")
+            body = resp.read().decode("utf-8")
+            counts = re.findall(r'<span class="count">(\d+)</span>', body)
+            assert counts == ["0", "1", "0", "0"]
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_move_to_archive() -> None:
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "m-archive",
+                    "sender": "a@a.com",
+                    "subject": "Archive",
+                    "date": "2025-03-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            status, _ = _post_form(port, {"message_id": "m-archive", "status": "archive"})
+            assert status == 302
+
+            resp = urlopen(f"http://127.0.0.1:{port}/board")
+            body = resp.read().decode("utf-8")
+            counts = re.findall(r'<span class="count">(\d+)</span>', body)
+            assert counts == ["0", "0", "0", "1"]
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_move_invalid_status_returns_400() -> None:
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "bad-status",
+                    "sender": "x@x.com",
+                    "subject": "Bad",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            status, body = _post_form(port, {"message_id": "bad-status", "status": "bogus"})
+            assert status == 400
+            assert "Invalid status: 'bogus'" in body
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_move_missing_message_id_returns_400() -> None:
+    server, port = _start_test_server(":memory:")
+    try:
+        status, body = _post_form(port, {"status": "done"})
+        assert status == 400
+        assert "Missing message_id or status" in body
+    finally:
+        server.shutdown()
+
+
+def test_move_missing_status_returns_400() -> None:
+    server, port = _start_test_server(":memory:")
+    try:
+        status, body = _post_form(port, {"message_id": "anything"})
+        assert status == 400
+        assert "Missing message_id or status" in body
+    finally:
+        server.shutdown()
+
+
+def test_move_empty_message_id_returns_400() -> None:
+    server, port = _start_test_server(":memory:")
+    try:
+        status, body = _post_form(port, {"message_id": "  ", "status": "done"})
+        assert status == 400
+        assert "Missing message_id or status" in body
+    finally:
+        server.shutdown()
+
+
+def test_move_unknown_message_id_returns_404() -> None:
+    server, port = _start_test_server(":memory:")
+    try:
+        status, body = _post_form(port, {"message_id": "does-not-exist", "status": "done"})
+        assert status == 404
+        assert body == "Not found"
+    finally:
+        server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# GET /email/{message_id}/status tests
+# ---------------------------------------------------------------------------
+
+
+def test_email_status_returns_200() -> None:
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "<abc123@example.com>",
+                    "sender": "x@x.com",
+                    "subject": "Status test",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "triaging",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            import urllib.request
+
+            encoded = urllib.request.pathname2url("<abc123@example.com>")
+            resp = urlopen(f"http://127.0.0.1:{port}/email/{encoded}/status")
+            assert resp.status == 200
+            assert resp.headers.get("Content-Type", "").startswith("text/plain")
+            body = resp.read().decode("utf-8")
+            assert body == "triaging"
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_email_status_unknown_message_id_returns_404() -> None:
+    server, port = _start_test_server(":memory:")
+    try:
+        import urllib.error
+
+        try:
+            urlopen(f"http://127.0.0.1:{port}/email/nonexistent/status")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError("Expected HTTPError 404")
+    finally:
+        server.shutdown()
+
+
+def test_email_path_without_status_suffix_returns_404() -> None:
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "mid1",
+                    "sender": "x@x.com",
+                    "subject": "Test",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            import urllib.error
+
+            try:
+                urlopen(f"http://127.0.0.1:{port}/email/mid1")
+            except urllib.error.HTTPError as exc:
+                assert exc.code == 404
+            else:
+                raise AssertionError("Expected HTTPError 404")
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_email_status_simple_message_id() -> None:
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "simple-id",
+                    "sender": "s@s.com",
+                    "subject": "Simple",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "done",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            resp = urlopen(f"http://127.0.0.1:{port}/email/simple-id/status")
+            assert resp.status == 200
+            assert resp.read().decode("utf-8") == "done"
         finally:
             server.shutdown()
     finally:
