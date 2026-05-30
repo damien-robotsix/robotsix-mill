@@ -105,6 +105,16 @@ docker compose exec mill robotsix-mill ticket new --title "Add X" --description-
 .venv/bin/robotsix-mill ticket new --title "Add X" --description-file -
 ```
 
+To create an epic instead of a task, use `robotsix-mill epic new`:
+
+```sh
+# Docker:
+docker compose exec mill robotsix-mill epic new --title "Refactor auth" --description-file epics/auth.md
+
+# Local:
+.venv/bin/robotsix-mill epic new --title "Refactor auth" --description-file epics/auth.md
+```
+
 The pipeline runs automatically from here. Other useful commands:
 
 ```sh

@@ -1143,6 +1143,42 @@ def test_create_epic_via_api(client):
     assert data["kind"] == "epic"
 
 
+def test_create_epic_via_api_repo_resolution(client):
+    """POST /epics in single-repo mode auto-selects the repo without repo_id."""
+    r = client.post("/epics", json={"title": "No repo_id given"})
+    assert r.status_code == 201
+    data = r.json()
+    assert data["state"] == "epic_open"
+    assert data["kind"] == "epic"
+    # The ticket should have been placed on the lone board.
+    assert data.get("board_id") is not None
+
+
+def test_create_epic_missing_title(client):
+    """POST /epics with empty title returns 400."""
+    r = client.post("/epics", json={"title": "", "description": "desc"})
+    assert r.status_code == 400
+    assert "title is required" in r.json()["detail"]
+
+
+def test_create_epic_via_cli_pattern(client):
+    """The CLI 'epic new' flow hits POST /epics — validate end-to-end shape."""
+    r = client.post(
+        "/epics",
+        json={
+            "title": "CLI-created epic",
+            "description": "From the terminal",
+        },
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert data["state"] == "epic_open"
+    assert data["kind"] == "epic"
+    assert data["title"] == "CLI-created epic"
+    # CLI prints the id — verify it's present and non-empty.
+    assert data["id"]
+
+
 def test_create_ticket_with_parent(client, service):
     """POST /tickets with parent_id set links child to epic."""
     epic = service.create("Epic", kind="epic")

@@ -6,6 +6,7 @@
     robotsix-mill ticket show <id>
     robotsix-mill ticket approve <id>
     robotsix-mill ticket resume-blocked <id>
+    robotsix-mill epic new --title T [--description-file F | -]
     robotsix-mill inquire --title T [--description-file F | -]
     robotsix-mill audit                        # run an audit pass
     robotsix-mill trace-health                 # run a trace-health check
@@ -387,6 +388,47 @@ def _ticket_new(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def _epic_new(args: argparse.Namespace, settings: Settings) -> int:
+    body = ""
+    if args.description_file == "-":
+        body = sys.stdin.read()
+    elif args.description_file:
+        with open(args.description_file, encoding="utf-8") as f:
+            body = f.read()
+    # Resolve repo_id: required in multi-repo mode, optional in single-repo.
+    repo_id = args.repo_id
+    if repo_id is None:
+        from .config import get_repos_config
+        from .config_loader import ConfigError as _ConfigError
+
+        try:
+            repos = get_repos_config()
+        except _ConfigError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        if len(repos.repos) == 1:
+            repo_id = next(iter(repos.repos.keys()))
+        elif not repos.repos:
+            print("Error: no repos defined in config/repos.yaml", file=sys.stderr)
+            return 2
+        else:
+            sorted_keys = sorted(repos.repos.keys())
+            print(
+                f"Error: --repo-id is required when multiple repos are configured. "
+                f"Available repos: {sorted_keys}",
+                file=sys.stderr,
+            )
+            return 2
+    with _client(settings) as c:
+        r = c.post(
+            "/epics",
+            json={"title": args.title, "description": body, "repo_id": repo_id},
+        )
+        r.raise_for_status()
+        print(r.json()["id"])
+    return 0
+
+
 def _ticket_list(args: argparse.Namespace, settings: Settings) -> int:
     params: dict = {"state": args.state} if args.state else {}
     if args.repo_id:
@@ -644,6 +686,21 @@ def main(argv: list[str] | None = None) -> int:
         "--description-file", help="file with the question body; '-' reads stdin"
     )
 
+    # --- epic command ---
+    p_epic = sub.add_parser("epic", help="epic operations")
+    esub = p_epic.add_subparsers(dest="ecmd", required=True)
+
+    p_epic_new = esub.add_parser("new", help="create a new epic")
+    p_epic_new.add_argument("--title", required=True)
+    p_epic_new.add_argument(
+        "--description-file", help="file with the description; '-' reads stdin"
+    )
+    p_epic_new.add_argument(
+        "--repo-id",
+        help="repository identifier (required when multiple repos are "
+        "registered; optional when only one)",
+    )
+
     args = parser.parse_args(argv)
     settings = Settings()
 
@@ -655,6 +712,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_and_print(args.cmd, args)
     if args.cmd == "inquire":
         return _inquire(args, settings)
+    if args.cmd == "epic" and args.ecmd == "new":
+        return _epic_new(args, settings)
     if args.cmd == "ticket":
         if args.tcmd == "new":
             return _ticket_new(args, settings)
