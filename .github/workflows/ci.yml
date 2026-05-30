@@ -31,3 +31,6 @@ jobs:
 
       - name: Test (pytest)
         run: pytest
+
+      - name: Audit dependencies (pip-audit)
+        uses: pypa/gh-action-pip-audit@v1.1.0
