@@ -47,25 +47,42 @@ def test_inject_noop_when_no_settings():
 # --- _inject_provider_pin (pin DeepSeek to keep prompt cache warm) ------
 
 
-def test_provider_pin_set_for_deepseek():
+def test_provider_pin_set_for_deepseek_pro_forces_xhigh_reasoning():
     ms: dict = {}
     _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-pro")
     assert ms["extra_body"]["provider"] == {
         "only": [_PINNED_PROVIDER],
         "allow_fallbacks": False,
     }
+    # pro reasons on every turn (consistent) at max effort
+    assert ms["extra_body"]["reasoning"] == {"effort": "xhigh"}
+
+
+def test_provider_pin_disables_reasoning_for_deepseek_flash():
+    ms: dict = {}
+    _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-flash")
+    assert ms["extra_body"]["provider"]["only"] == [_PINNED_PROVIDER]
+    # flash never reasons (consistent, cheap) → nothing to round-trip
+    assert ms["extra_body"]["reasoning"] == {"enabled": False}
 
 
 def test_provider_pin_skipped_for_non_deepseek():
     ms: dict = {}
     _inject_provider_pin((), {"model_settings": ms}, "openai/gpt-4o-mini")
     assert "provider" not in ms.get("extra_body", {})
+    assert "reasoning" not in ms.get("extra_body", {})
 
 
 def test_provider_pin_respects_caller_override():
     ms = {"extra_body": {"provider": {"order": ["Novita"]}}}
     _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-pro")
     assert ms["extra_body"]["provider"] == {"order": ["Novita"]}  # untouched
+
+
+def test_provider_pin_respects_caller_reasoning_override():
+    ms = {"extra_body": {"reasoning": {"effort": "low"}}}
+    _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-pro")
+    assert ms["extra_body"]["reasoning"] == {"effort": "low"}  # untouched
 
 
 def test_provider_pin_noop_when_no_settings():
@@ -142,9 +159,9 @@ def test_extract_reasoning_details_absent_or_str_response():
     assert _extract_reasoning_details("plain string response") is None
 
 
-def test_map_model_response_echoes_reasoning_details_and_drops_bare():
+def test_map_model_response_echoes_reasoning_details_on_tool_call_turn():
     pytest.importorskip("pydantic_ai.providers.openrouter")
-    from pydantic_ai.messages import ModelResponse, TextPart, ThinkingPart
+    from pydantic_ai.messages import ModelResponse, ThinkingPart, ToolCallPart
     from pydantic_ai.providers.openrouter import OpenRouterProvider
 
     from robotsix_mill.agents.openrouter_cost import CostInstrumentedOpenRouterModel
@@ -152,10 +169,11 @@ def test_map_model_response_echoes_reasoning_details_and_drops_bare():
     m = CostInstrumentedOpenRouterModel(
         "deepseek/deepseek-v4-pro", provider=OpenRouterProvider(api_key="x")
     )
+    # Tool-call turn → DeepSeek REQUIRES reasoning echoed back.
     resp = ModelResponse(
         parts=[
             ThinkingPart(id="reasoning", content="step 1...", provider_name=m.system),
-            TextPart(content="answer"),
+            ToolCallPart("f", {}, tool_call_id="c1"),
         ],
         provider_details={"reasoning_details": _RD},
     )
@@ -165,9 +183,9 @@ def test_map_model_response_echoes_reasoning_details_and_drops_bare():
     assert "reasoning_content" not in param
 
 
-def test_map_model_response_noop_without_reasoning_details():
+def test_map_model_response_omits_reasoning_on_non_tool_call_turn():
     pytest.importorskip("pydantic_ai.providers.openrouter")
-    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.messages import ModelResponse, TextPart, ThinkingPart
     from pydantic_ai.providers.openrouter import OpenRouterProvider
 
     from robotsix_mill.agents.openrouter_cost import CostInstrumentedOpenRouterModel
@@ -175,9 +193,19 @@ def test_map_model_response_noop_without_reasoning_details():
     m = CostInstrumentedOpenRouterModel(
         "deepseek/deepseek-v4-pro", provider=OpenRouterProvider(api_key="x")
     )
-    resp = ModelResponse(parts=[TextPart(content="answer")])
+    # No tool call → DeepSeek does NOT want prior CoT; reasoning must be OMITTED
+    # even if reasoning_details was captured, or the sequence mismatches → 400.
+    resp = ModelResponse(
+        parts=[
+            ThinkingPart(id="reasoning", content="step 1...", provider_name=m.system),
+            TextPart(content="answer"),
+        ],
+        provider_details={"reasoning_details": _RD},
+    )
     param = m._map_model_response(resp)
     assert "reasoning_details" not in param
+    assert "reasoning" not in param
+    assert "reasoning_content" not in param
 
 
 # --- record_openrouter_cost guards (hermetic) --------------------------

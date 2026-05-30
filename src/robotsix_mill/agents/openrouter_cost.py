@@ -123,15 +123,26 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
 
     def _map_model_response(self, message: Any) -> Any:
         param = super()._map_model_response(message)
-        if isinstance(param, dict) and param.get("role") == "assistant":
+        if not (isinstance(param, dict) and param.get("role") == "assistant"):
+            return param
+        # DeepSeek thinking-mode rule (api-docs.deepseek.com/guides/thinking_mode):
+        # reasoning must be echoed back ONLY on assistant turns that performed
+        # a tool call; for non-tool-call turns the prior CoT is NOT concatenated
+        # and must be OMITTED — including it makes the echoed sequence mismatch
+        # what the model generated and triggers the 400.
+        if param.get("tool_calls"):
             rd = (message.provider_details or {}).get(_REASONING_DETAILS_KEY)
             if rd:
-                # Echo the exact array DeepSeek generated. The bare-text
-                # ``reasoning`` field pydantic already set is a lossy subset;
-                # drop it so the two can't disagree (DeepSeek validates match).
+                # Send the exact reasoning_details array; drop the lossy bare
+                # fields so the two can't disagree.
                 param.pop("reasoning", None)
                 param.pop("reasoning_content", None)
                 param[_REASONING_DETAILS_KEY] = rd
+        else:
+            # No tool call → omit reasoning entirely.
+            param.pop("reasoning", None)
+            param.pop("reasoning_content", None)
+            param.pop(_REASONING_DETAILS_KEY, None)
         return param
 
     async def _completions_create(self, *args: Any, **kwargs: Any) -> Any:
@@ -143,11 +154,21 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
 
 
 def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
-    """Pin ``deepseek/*`` calls to the DeepSeek upstream provider so the
-    prompt cache stays warm across turns (see module note). Hard pin (no
-    fallbacks). No-op for non-DeepSeek models and when a caller already set
-    ``provider`` (don't trample an explicit override). MUST be paired with
-    the ``reasoning_content`` profile override in ``__init__``."""
+    """Pin ``deepseek/*`` calls to the DeepSeek upstream provider (keeps the
+    prompt cache warm) AND force a CONSISTENT reasoning mode so DeepSeek's
+    thinking-mode round-trip validation doesn't break on a mixed sequence.
+
+    The 400 ("reasoning_content must be passed back") is triggered by an
+    *inconsistent* mix of reasoning / no-reasoning assistant turns — proven
+    by direct test: all-reasoning and all-no-reasoning both pass, the mix
+    fails. So we pin reasoning to one extreme per model tier:
+      * pro   → effort ``xhigh`` (max): reason on every turn, paired with
+                the reasoning_details round-trip in this class. Keeps CoT.
+      * flash → reasoning disabled: never reason → nothing to round-trip.
+                Cheap + consistent (review/doc/periodic; low-stakes).
+
+    No-op for non-DeepSeek models and when a caller already pinned
+    ``provider`` (don't trample an explicit override)."""
     if not model_name.startswith(_PIN_MODEL_PREFIX):
         return
     settings = _resolve_model_settings(args, kwargs)
@@ -157,6 +178,11 @@ def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
     if "provider" in extra_body:
         return  # caller set an explicit routing preference — respect it
     extra_body["provider"] = {"only": [_PINNED_PROVIDER], "allow_fallbacks": False}
+    if "reasoning" not in extra_body:
+        if "flash" in model_name:
+            extra_body["reasoning"] = {"enabled": False}
+        else:
+            extra_body["reasoning"] = {"effort": "xhigh"}
     settings["extra_body"] = extra_body
 
 
