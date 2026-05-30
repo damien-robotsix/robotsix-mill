@@ -26,3 +26,16 @@ repos:
     #                             #   gets its own consumer pool, so a
     #                             #   busy repo can't block another.
     # language: python             # optional — auto-injects language conventions into implement agent
+
+  # Meta board — synthetic board for cross-repo proposals.
+  # Uncomment and copy into config/repos.yaml to enable the meta-agent.
+  # Uses the SAME Langfuse project as robotsix-mill itself (not a
+  # per-repo project), so copy your mill Langfuse keys here.
+  #
+  # meta:
+  #   board_id: "meta"
+  #   langfuse:
+  #     project_name: "robotsix-mill"
+  #     public_key: "pk-lf-..."     # <-- copy robotsix-mill public key
+  #     secret_key: "sk-lf-..."     # <-- copy robotsix-mill secret key
+  #     base_url: "https://cloud.langfuse.com"  # <-- same as mill
