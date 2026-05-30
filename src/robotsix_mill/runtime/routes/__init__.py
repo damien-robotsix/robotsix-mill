@@ -69,9 +69,7 @@ def _resolve_cost_repo(repo_id: str | None, request: Request):
     return repos.repos[repo_id]
 
 
-def _resolve_agent_run_repos(
-    repo_id: str | None, request: Request
-) -> list:
+def _resolve_agent_run_repos(repo_id: str | None, request: Request) -> list:
     """Resolve *repo_id* to a list of ``RepoConfig`` (or ``None``) for
     agent-run routes.
 
@@ -100,7 +98,7 @@ def _resolve_agent_run_repos(
 # Import sub-modules to register their routes on ``router``.
 # These have the side-effect of decorating ``router`` with endpoints.
 from . import _agents  # noqa: E402, F401
-from . import _costs   # noqa: E402, F401
-from . import _misc    # noqa: E402, F401
-from . import _tickets # noqa: E402, F401
+from . import _costs  # noqa: E402, F401
+from . import _misc  # noqa: E402, F401
+from . import _tickets  # noqa: E402, F401
 from . import _traces  # noqa: E402, F401
