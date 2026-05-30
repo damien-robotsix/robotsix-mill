@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import FastAPI
 
-from robotsix_mill.config import ReposRegistry
 from robotsix_mill.runtime.lifespan import create_lifespan, setup_logging
 
 
@@ -38,9 +37,9 @@ class TestSetupLogging:
         count_after_first = len(root.handlers)
         setup_logging()
 
-        assert (
-            len(root.handlers) == count_after_first
-        ), "setup_logging should be idempotent"
+        assert len(root.handlers) == count_after_first, (
+            "setup_logging should be idempotent"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -63,9 +62,7 @@ def lifespan_mocks(monkeypatch):
 
     mock_dr_instance = MagicMock()
     mock_dr_class = MagicMock(return_value=mock_dr_instance)
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.lifespan.DeepReviewStore", mock_dr_class
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.lifespan.DeepReviewStore", mock_dr_class)
 
     mock_rr_instance = MagicMock()
     mock_rr_class = MagicMock(return_value=mock_rr_instance)
@@ -104,9 +101,7 @@ async def test_create_lifespan_multi_repo_sets_app_state(
         assert app.state.single_repo_id is None
         assert app.state.worker is lifespan_mocks["worker"]
         assert app.state.run_registry is lifespan_mocks["rr_instance"]
-        assert app.state.run_registries == {
-            "test-board": lifespan_mocks["rr_instance"]
-        }
+        assert app.state.run_registries == {"test-board": lifespan_mocks["rr_instance"]}
         assert app.state.deep_review_results == {}
         assert app.state.deep_review_store is lifespan_mocks["dr_instance"]
 
@@ -179,6 +174,3 @@ async def test_create_lifespan_deep_review_store_path(
     dr_path = lifespan_mocks["dr_class"].call_args[0][0]
     assert dr_path.name == "deep_review_results.json"
     assert str(settings.data_dir) in str(dr_path)
-
-
-
