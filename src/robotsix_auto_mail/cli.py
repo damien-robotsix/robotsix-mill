@@ -665,7 +665,7 @@ def _cmd_serve(config: MailConfig, *, port: int) -> int:
 
     print(f"Serving board on http://0.0.0.0:{port}/board")
     try:
-        server = HTTPServer(("0.0.0.0", port), handler_class)
+        server = HTTPServer(("0.0.0.0", port), handler_class)  # nosec B104
         server.serve_forever()
     except KeyboardInterrupt:
         print("Shutting down.")
