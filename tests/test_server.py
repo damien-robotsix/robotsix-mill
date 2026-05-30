@@ -552,8 +552,7 @@ def test_handler_xss_prevention() -> None:
             resp = urlopen(f"http://127.0.0.1:{port}/board")
             body = resp.read().decode("utf-8")
 
-            # All angle brackets must be escaped
-            assert "<script>" not in body
+            # All angle brackets in user data must be escaped
             assert "&lt;script&gt;" in body
             assert "&lt;img onerror" in body
             assert "&lt;b&gt;evil&lt;/b&gt;" in body
@@ -1391,3 +1390,323 @@ def test_handler_email_detail_html_version_note() -> None:
             server.shutdown()
     finally:
         os.unlink(db_path)
+
+
+# ---------------------------------------------------------------------------
+# _build_detail_html embed mode
+# ---------------------------------------------------------------------------
+
+
+def test_build_detail_html_embed_no_full_page_chrome() -> None:
+    """embed=True returns a fragment without DOCTYPE, <html>, <head>, <body>,
+    <title>, meta refresh, back-link, or <h1>."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "<embed-test@test.com>",
+                    "sender": "embed-sender@test.com",
+                    "subject": "Embed Test Subject",
+                    "date": "2025-06-15T14:30:00",
+                    "body_plain": "Embed body content.",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        html = _build_detail_html(db_path, "<embed-test@test.com>", embed=True)
+        assert html is not None
+        assert "<!DOCTYPE html>" not in html
+        assert "<html" not in html
+        assert "<head>" not in html
+        assert "<body>" not in html
+        assert "<title>" not in html
+        assert 'meta http-equiv="refresh"' not in html
+        assert "← Back to board" not in html
+        assert "<h1>" not in html
+        assert 'class="detail-container"' not in html
+        # Should have embed wrapper and content
+        assert 'class="embed-detail"' in html
+        assert "<style>" in html
+        assert "embed-sender@test.com" in html
+        assert "Embed body content." in html
+        # Move form should be present
+        assert '<form class="detail-form"' in html
+    finally:
+        os.unlink(db_path)
+
+
+def test_build_detail_html_embed_has_redirect_to() -> None:
+    """embed=True includes a redirect_to hidden input in the move form."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "<redirect-embed@test.com>",
+                    "sender": "x@x.com",
+                    "subject": "Redirect Embed",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "triaging",
+                },
+            ],
+        )
+
+        html = _build_detail_html(db_path, "<redirect-embed@test.com>", embed=True)
+        assert html is not None
+        assert 'name="redirect_to"' in html
+        # The redirect_to value should point back to the embed URL
+        assert '/email/' in html
+        assert '?embed=1' in html
+    finally:
+        os.unlink(db_path)
+
+
+def test_build_detail_html_embed_nonexistent_returns_none() -> None:
+    """embed=True returns None for unknown message_id, same as default."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        result = _build_detail_html(db_path, "<nope@x.com>", embed=True)
+        assert result is None
+    finally:
+        os.unlink(db_path)
+
+
+# ---------------------------------------------------------------------------
+# _build_board_html side-panel skeleton + script
+# ---------------------------------------------------------------------------
+
+
+def test_build_board_html_has_side_panel_skeleton() -> None:
+    """_build_board_html output contains the side-panel HTML skeleton."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        html = _build_board_html(db_path)
+        assert 'class="board-wrapper"' in html
+        assert 'class="side-panel"' in html
+        assert 'id="side-panel"' in html
+        assert 'class="panel-header"' in html
+        assert 'class="close-btn"' in html
+        assert "&times;" in html
+        assert "<iframe" in html
+    finally:
+        os.unlink(db_path)
+
+
+def test_build_board_html_has_script_block() -> None:
+    """_build_board_html output includes the JavaScript with openDetail/closeDetail."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        html = _build_board_html(db_path)
+        assert "function openDetail(messageId, subject)" in html
+        assert "function closeDetail()" in html
+        assert "'/email/' + messageId + '?embed=1'" in html
+        assert "classList.add('open')" in html
+        assert "classList.remove('open')" in html
+        assert "location.hash" in html
+        # Delegated click on .board
+        assert "closest('.card')" in html
+        assert "getAttribute('data-message-id')" in html
+        # Escape key handler
+        assert "Escape" in html
+        # Hash change handler
+        assert "'hashchange'" in html
+    finally:
+        os.unlink(db_path)
+
+
+# ---------------------------------------------------------------------------
+# _render_card data-message-id attribute
+# ---------------------------------------------------------------------------
+
+
+def test_render_card_has_data_message_id() -> None:
+    """_render_card includes data-message-id with URL-encoded message_id."""
+    record = MailRecord(
+        message_id="<test@example.com>",
+        sender="x@x.com",
+        subject="s",
+        date="2025-01-01T00:00:00",
+        body_plain="body",
+    )
+    html = _render_card(record)
+    assert 'data-message-id="' in html
+    # The value should be URL-encoded
+    import urllib.parse
+    quoted = urllib.parse.quote("<test@example.com>", safe="")
+    assert f'data-message-id="{quoted}"' in html
+
+
+def test_render_card_data_message_id_present_with_subject_link() -> None:
+    """data-message-id coexists with the existing subject <a> link for non-JS fallback."""
+    record = MailRecord(
+        message_id="abc123",
+        sender="x@x.com",
+        subject="Hello",
+        date="2025-01-01T00:00:00",
+        body_plain="body",
+    )
+    html = _render_card(record)
+    assert 'data-message-id="abc123"' in html
+    assert '<a href="/email/abc123">' in html
+
+
+# ---------------------------------------------------------------------------
+# POST /move with redirect_to
+# ---------------------------------------------------------------------------
+
+
+def test_move_with_redirect_to() -> None:
+    """POST /move with redirect_to redirects to the specified path."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "redirect-me",
+                    "sender": "x@x.com",
+                    "subject": "Redirect test",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            status, body = _post_form(
+                port,
+                {
+                    "message_id": "redirect-me",
+                    "status": "done",
+                    "redirect_to": "/email/redirect-me?embed=1",
+                },
+            )
+            assert status == 302, f"Expected 302, got {status}: {body}"
+
+            # Also verify normal redirect still works (no redirect_to)
+            status2, body2 = _post_form(
+                port,
+                {"message_id": "redirect-me", "status": "triaging"},
+            )
+            assert status2 == 302
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_move_with_empty_redirect_to_falls_back_to_board() -> None:
+    """Empty redirect_to should redirect to /board (backward-compatible)."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "fallback-me",
+                    "sender": "x@x.com",
+                    "subject": "Fallback test",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "body",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            status, body = _post_form(
+                port,
+                {
+                    "message_id": "fallback-me",
+                    "status": "done",
+                    "redirect_to": "",
+                },
+            )
+            assert status == 302, f"Expected 302, got {status}: {body}"
+            # Should redirect to /board because redirect_to is empty
+            # (the test NoRedirect handler doesn't follow, so we can't
+            # check Location directly here; we rely on status 302 and
+            # the board counts to verify correctness)
+            resp = urlopen(f"http://127.0.0.1:{port}/board")
+            board_html = resp.read().decode("utf-8")
+            counts = re.findall(r'<span class="count">(\d+)</span>', board_html)
+            assert counts == ["0", "0", "1", "0"]
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+# ---------------------------------------------------------------------------
+# GET /email/{message_id}?embed=1 handler integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_handler_email_detail_embed_returns_fragment() -> None:
+    """GET /email/{id}?embed=1 returns HTML fragment without full-page chrome."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _populate_db(
+            db_path,
+            [
+                {
+                    "message_id": "embed-handler@test.com",
+                    "sender": "eh@test.com",
+                    "subject": "Embed Handler",
+                    "date": "2025-01-01T00:00:00",
+                    "body_plain": "embed handler body",
+                    "status": "inbox",
+                },
+            ],
+        )
+
+        server, port = _start_test_server(db_path)
+        try:
+            resp = urlopen(f"http://127.0.0.1:{port}/email/embed-handler@test.com?embed=1")
+            assert resp.status == 200
+            body = resp.read().decode("utf-8")
+            # Fragment — no full-page chrome
+            assert "<!DOCTYPE html>" not in body
+            assert "<html" not in body
+            assert "<title>" not in body
+            # But has the content
+            assert "eh@test.com" in body
+            assert "embed handler body" in body
+            assert 'class="embed-detail"' in body
+            # Move form with redirect_to
+            assert 'name="redirect_to"' in body
+        finally:
+            server.shutdown()
+    finally:
+        os.unlink(db_path)
+
+
+def test_handler_email_detail_embed_unknown_returns_404() -> None:
+    """GET /email/unknown?embed=1 returns 404 (same as non-embed)."""
+    server, port = _start_test_server(":memory:")
+    try:
+        import urllib.error
+        try:
+            urlopen(f"http://127.0.0.1:{port}/email/does-not-exist?embed=1")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError("Expected HTTPError 404")
+    finally:
+        server.shutdown()
