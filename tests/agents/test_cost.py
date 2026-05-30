@@ -9,6 +9,8 @@ real-time path has been REMOVED — it leaked across concurrent tickets.
 import pytest
 
 from robotsix_mill.agents.openrouter_cost import (
+    _PINNED_PROVIDER,
+    _inject_provider_pin,
     _inject_usage_include,
     record_openrouter_cost,
 )
@@ -39,6 +41,65 @@ def test_inject_positional_model_settings():
 
 def test_inject_noop_when_no_settings():
     _inject_usage_include((), {})  # must not raise
+
+
+# --- _inject_provider_pin (pin DeepSeek to keep prompt cache warm) ------
+
+
+def test_provider_pin_set_for_deepseek():
+    ms: dict = {}
+    _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-pro")
+    assert ms["extra_body"]["provider"] == {
+        "only": [_PINNED_PROVIDER],
+        "allow_fallbacks": False,
+    }
+
+
+def test_provider_pin_skipped_for_non_deepseek():
+    ms: dict = {}
+    _inject_provider_pin((), {"model_settings": ms}, "openai/gpt-4o-mini")
+    assert "provider" not in ms.get("extra_body", {})
+
+
+def test_provider_pin_respects_caller_override():
+    ms = {"extra_body": {"provider": {"order": ["Novita"]}}}
+    _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-pro")
+    assert ms["extra_body"]["provider"] == {"order": ["Novita"]}  # untouched
+
+
+def test_provider_pin_noop_when_no_settings():
+    _inject_provider_pin((), {}, "deepseek/deepseek-v4-pro")  # must not raise
+
+
+# --- DeepSeek reasoning round-trip 400 → transient retry ----------------
+# Pinned to DeepSeek, deepseek-v4-pro can intermittently 400 demanding the
+# prior turn's reasoning_content. We classify that as transient and retry
+# (to learn if it's intermittent) rather than ship an unproven fix.
+
+
+def test_deepseek_reasoning_roundtrip_400_is_transient():
+    from robotsix_mill.agents.retry import is_transient
+
+    class ModelHTTPError(Exception):
+        def __init__(self):
+            self.status_code = 400
+            super().__init__(
+                "status_code: 400, body: The reasoning_content in the "
+                "thinking mode must be passed back to the API."
+            )
+
+    assert is_transient(ModelHTTPError()) is True
+
+
+def test_other_400_stays_non_transient():
+    from robotsix_mill.agents.retry import is_transient
+
+    class ModelHTTPError(Exception):
+        def __init__(self):
+            self.status_code = 400
+            super().__init__("status_code: 400, body: invalid model name")
+
+    assert is_transient(ModelHTTPError()) is False
 
 
 # --- record_openrouter_cost guards (hermetic) --------------------------

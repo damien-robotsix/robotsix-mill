@@ -76,6 +76,25 @@ def _is_openrouter_upstream_error(exc: BaseException) -> bool:
     return "finish_reason" in msg and "'error'" in msg
 
 
+def _is_deepseek_reasoning_roundtrip_error(exc: BaseException) -> bool:
+    """Recognise DeepSeek's thinking-mode reasoning round-trip 400.
+
+    Once OpenRouter routing is pinned to DeepSeek first-party,
+    deepseek-v4-pro can intermittently reject a follow-up turn with a 400
+    whose body says "The reasoning_content in the thinking mode must be
+    passed back to the API." It was NOT reproducible in isolation
+    (controlled multi-turn calls all succeeded), so we treat it as a
+    transient hiccup and retry rather than ship an unproven field-rename
+    fix — a re-run re-derives the turn and usually succeeds. If retries
+    consistently exhaust on this, it's deterministic, not intermittent,
+    and the proper round-trip fix is warranted. Narrowly matched on the
+    distinctive marker so other genuine 400s stay non-transient."""
+    if _status(exc) != 400:
+        return False
+    msg = str(exc).lower()
+    return "reasoning_content" in msg and "thinking mode" in msg
+
+
 def is_transient(exc: BaseException) -> bool:
     """True only for retryable infrastructure failures. Walks the
     cause/context chain so a timeout wrapped by openai/pydantic-ai
@@ -94,6 +113,8 @@ def is_transient(exc: BaseException) -> bool:
         if name in _TRANSIENT_NAMES:
             return True
         if _is_openrouter_upstream_error(cur):
+            return True
+        if _is_deepseek_reasoning_roundtrip_error(cur):
             return True
         code = _status(cur)
         if code is not None and (code == 429 or 500 <= code < 600):
