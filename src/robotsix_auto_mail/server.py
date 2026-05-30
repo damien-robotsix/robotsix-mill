@@ -8,29 +8,14 @@ path.
 from __future__ import annotations
 
 import html
-from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, unquote
 
 from robotsix_auto_mail.db import MailRecord
+from robotsix_auto_mail.format import _format_date
 from robotsix_auto_mail.status import STATUS_ORDER
 
 _BOARD_COLUMNS = STATUS_ORDER
-
-
-def _format_date(raw: str) -> str:
-    """Parse an ISO-8601 *raw* date and return a human-friendly string.
-
-    Returns *raw* unchanged when parsing fails.  This is a copy of the
-    identically-named helper in ``cli.py`` so that the two modules stay
-    independent.
-    """
-    try:
-        dt = datetime.fromisoformat(raw)
-        return dt.strftime("%Y-%m-%d %H:%M")
-    except (ValueError, TypeError):
-        return raw
-
 
 _BODY_PREVIEW_LIMIT = 100
 
