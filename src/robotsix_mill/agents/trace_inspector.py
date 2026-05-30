@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -44,6 +45,22 @@ Three categories of finding:
 3. **optimization**: cost / latency / token-usage waste. Unusually
    high token usage for trivial work, redundant tool calls, a stage
    dominated by one slow operation.
+
+## Phase 1 classifier flags
+
+The trace may carry deterministic flags set by the pre-classifier.
+Pay special attention to these combinations:
+
+- **``incomplete_trace``**: the trace ended before a final synthesis
+  step — the root span ``output`` is null, or the last observation is
+  a tool call (not a chat generation).
+- **``incomplete_trace`` + ``restart_correlated``**: the trace's
+  latest timestamp falls within the process restart correlation window.
+  The root cause is almost certainly a container restart (Docker
+  restart, OOM kill, deployment roll) that cut the agent mid-flight —
+  NOT an agent-loop bug. Your ``proposed_solution`` should focus on
+  restart resilience (checkpointing, idempotent requeue, graceful
+  shutdown) rather than agent-loop fixes.
 
 ## How to produce a *useful* finding
 
@@ -189,6 +206,7 @@ def run_trace_inspector(
     repo_dir: Path | None = None,
     memory: str = "",
     model_name: str | None = None,
+    started_at: datetime | None = None,
 ) -> TraceInspectResult:
     """Analyse a single trace's full observation tree and return
     structured findings with proposed solutions.
@@ -213,6 +231,11 @@ def run_trace_inspector(
     ``<memory>...</memory>`` so the agent can avoid re-proposing what
     it already addressed, strengthen confidence on recurring patterns,
     and emit an updated ledger via ``result.updated_memory``.
+
+    The optional ``started_at`` is the process start time — passed
+    through from the trace-review runner so the LLM can reason about
+    restart correlation when ``incomplete_trace`` +
+    ``restart_correlated`` flags are present.
 
     On error, the result's ``error`` field is populated rather than
     returning a silent empty findings list — the previous behaviour
@@ -272,6 +295,12 @@ def run_trace_inspector(
     limits = UsageLimits(request_limit=request_limit)
     prompt = (
         section("memory", memory or "(empty — start a new ledger)")
+        + "\n\n"
+        + section(
+            "process_info",
+            f"Process started at: {started_at.isoformat() if started_at else 'unknown'}\n"
+            f"Current time: {datetime.now(timezone.utc).isoformat()}",
+        )
         + "\n\n"
         + "Analyse the following Langfuse trace JSON for tool errors, "
         + "agent limitations, and optimisation opportunities. For each "

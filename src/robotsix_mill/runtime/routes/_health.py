@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json as _json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -18,7 +19,15 @@ router = APIRouter()
 
 
 @router.get("/health")
-def health() -> dict:
+def health(request: Request) -> dict:
+    started_at: datetime | None = getattr(request.app.state, "started_at", None)
+    if started_at is not None:
+        uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
+        return {
+            "status": "ok",
+            "started_at": started_at.isoformat(),
+            "uptime_seconds": int(uptime),
+        }
     return {"status": "ok"}
 
 
