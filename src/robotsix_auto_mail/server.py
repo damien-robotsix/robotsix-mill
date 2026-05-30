@@ -13,9 +13,9 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, unquote
 
 from robotsix_auto_mail.db import MailRecord
+from robotsix_auto_mail.status import STATUS_ORDER
 
-#: Fixed column order for the kanban board (matches the epic spec).
-_BOARD_COLUMNS: tuple[str, ...] = ("inbox", "triaging", "done", "archive")
+_BOARD_COLUMNS = STATUS_ORDER
 
 
 def _format_date(raw: str) -> str:
