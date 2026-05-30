@@ -15,7 +15,6 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
-from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml

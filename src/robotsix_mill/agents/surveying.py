@@ -7,8 +7,6 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from pydantic import BaseModel, Field
 
 from ..config import Settings

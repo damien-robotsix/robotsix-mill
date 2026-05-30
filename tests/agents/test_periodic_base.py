@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,7 +12,6 @@ from robotsix_mill.agents import (
     fs_tools,
     jscpd_tool,
     overlays,
-    periodic_base,
     retry,
     yaml_loader,
 )
@@ -34,8 +32,10 @@ def settings() -> Settings:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_fake_tool(name: str):
     """Return a callable with a ``__name__`` attribute."""
+
     def _fake(*_args, **_kwargs):
         return None
 
@@ -57,10 +57,21 @@ def _fake_result(output=None):
 
 def _default_definition():
     return MagicMock(
-        model=None, system_prompt="base prompt", web=False, library_knowledge=False,
-        report_issue=False, read_ticket=False, reply_to_thread=False,
-        close_thread=False, ask_user=False, output_type="", retries=0,
-        module="", skills=None, modules=False, inject_agent_md=False,
+        model=None,
+        system_prompt="base prompt",
+        web=False,
+        library_knowledge=False,
+        report_issue=False,
+        read_ticket=False,
+        reply_to_thread=False,
+        close_thread=False,
+        ask_user=False,
+        output_type="",
+        retries=0,
+        module="",
+        skills=None,
+        modules=False,
+        inject_agent_md=False,
     )
 
 
@@ -77,7 +88,9 @@ def _setup_patches(monkeypatch, **overrides):
     monkeypatch.setattr(yaml_loader, "load_agent_definition", mock_load)
 
     # build_fs_tools
-    fake_fs_tools = overrides.get("build_fs_tools", [_make_fake_tool("read_file"), _make_fake_tool("list_dir")])
+    fake_fs_tools = overrides.get(
+        "build_fs_tools", [_make_fake_tool("read_file"), _make_fake_tool("list_dir")]
+    )
     mock_build_fs = MagicMock(return_value=fake_fs_tools)
     mocks["build_fs_tools"] = mock_build_fs
     monkeypatch.setattr(fs_tools, "build_fs_tools", mock_build_fs)
@@ -122,6 +135,7 @@ def _setup_patches(monkeypatch, **overrides):
 # Basic pipeline invocation
 # ---------------------------------------------------------------------------
 
+
 def test_basic_pipeline(settings, monkeypatch, tmp_path):
     """A representative call exercises the full pipeline and clips output."""
     mocks = _setup_patches(monkeypatch)
@@ -164,6 +178,7 @@ def test_basic_pipeline(settings, monkeypatch, tmp_path):
 # repo_dir=None: no tools
 # ---------------------------------------------------------------------------
 
+
 def test_no_repo_dir_no_tools(settings, monkeypatch):
     """When repo_dir is None, no fs/explore/jscpd tools are built."""
     mocks = _setup_patches(monkeypatch)
@@ -191,6 +206,7 @@ def test_no_repo_dir_no_tools(settings, monkeypatch):
 # ---------------------------------------------------------------------------
 # include_forge_url
 # ---------------------------------------------------------------------------
+
 
 def test_include_forge_url_injects_section(settings, monkeypatch, tmp_path):
     """When include_forge_url=True, the prompt contains the forge URL section."""
@@ -236,6 +252,7 @@ def test_no_forge_url_when_false(settings, monkeypatch, tmp_path):
 # include_jscpd
 # ---------------------------------------------------------------------------
 
+
 def test_include_jscpd_adds_tool(settings, monkeypatch, tmp_path):
     """When include_jscpd=True, the jscpd tool is appended to the tool list."""
     mocks = _setup_patches(monkeypatch)
@@ -279,6 +296,7 @@ def test_no_jscpd_when_false(settings, monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 # include_run_command
 # ---------------------------------------------------------------------------
+
 
 def test_include_run_command_adds_to_fs_filter(settings, monkeypatch, tmp_path):
     """When include_run_command=True, run_command tool is included in tools."""
@@ -340,6 +358,7 @@ def test_no_run_command_when_false(settings, monkeypatch, tmp_path):
 # usage_limits forwarding
 # ---------------------------------------------------------------------------
 
+
 def test_usage_limits_forwarded(settings, monkeypatch, tmp_path):
     """When usage_limits is passed, it is forwarded to agent.run_sync()."""
     mocks = _setup_patches(monkeypatch)
@@ -385,6 +404,7 @@ def test_no_usage_limits_when_none(settings, monkeypatch, tmp_path):
 # extra_roots forwarding
 # ---------------------------------------------------------------------------
 
+
 def test_extra_roots_forwarded(settings, monkeypatch, tmp_path):
     """When extra_roots is provided, it is forwarded to build_fs_tools."""
     mocks = _setup_patches(monkeypatch)
@@ -429,6 +449,7 @@ def test_extra_roots_none_when_not_provided(settings, monkeypatch, tmp_path):
 # overlay key
 # ---------------------------------------------------------------------------
 
+
 def test_overlay_key_matches_definition_name(settings, monkeypatch, tmp_path):
     """The overlay key passed to load_overlay matches definition_name."""
     mocks = _setup_patches(monkeypatch)
@@ -450,6 +471,7 @@ def test_overlay_key_matches_definition_name(settings, monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 # model_setting fallback
 # ---------------------------------------------------------------------------
+
 
 def test_model_setting_used_when_definition_model_none(settings, monkeypatch, tmp_path):
     """When definition.model is None, model_setting is used."""
