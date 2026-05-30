@@ -1,17 +1,17 @@
 # -------------------------------------------------------------------------
-# robotsix-auto-mail — Docker Compose file with CLI + board services.
+# robotsix-auto-mail — Docker Compose file with ingester + board services.
 #
-# CLI service (one-shot invocations via `docker compose run`):
+# `docker compose up -d` runs the full stack:
+#   - robotsix-auto-mail : long-running ingester (fetches new mail on an
+#     interval set by ingest.interval_minutes in config, default 15 min)
+#   - board              : the read-only web board at
+#     http://localhost:${BOARD_PORT:-8078}/board
+#
+# One-shot commands override the default command via `docker compose run`:
 #
 #     docker compose run robotsix-auto-mail probe
-#     docker compose run robotsix-auto-mail ingest
-#     docker compose run robotsix-auto-mail board
-#     docker compose run robotsix-auto-mail --help
-#
-# Board service (long-running daemon via `docker compose up`):
-#
-#     docker compose up board
-#     # → http://localhost:${BOARD_PORT:-8078}/board
+#     docker compose run robotsix-auto-mail detect you@example.com
+#     docker compose run robotsix-auto-mail ingest          # single pass
 #
 # Configuration is delivered via YAML files bind-mounted from the host
 # ./config directory.  The only environment variable set here points the
@@ -26,10 +26,11 @@ services:
       dockerfile: Dockerfile
     stdin_open: true
     tty: false
-    restart: "no"
+    restart: unless-stopped
 
-    # No command: is set — the operator supplies the subcommand at
-    # runtime via `docker compose run robotsix-auto-mail <subcommand>`.
+    # Default: run the periodic ingester. `docker compose run … <cmd>`
+    # overrides this for one-shot commands (probe, detect, ingest, …).
+    command: ingest --watch
 
     environment:
       MAIL_CONFIG_PATH: /home/mailbot/config/mail.local.yaml

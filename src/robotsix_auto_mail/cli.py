@@ -10,6 +10,7 @@ import dataclasses
 import errno
 import getpass
 import sys
+import time
 from datetime import datetime
 from typing import TextIO
 
@@ -49,6 +50,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Fetch and parse messages without storing or advancing watermark",
+    )
+    ingest_parser.add_argument(
+        "--watch",
+        action="store_true",
+        default=False,
+        help=(
+            "Keep running, ingesting on an interval (minutes) set by "
+            "ingest.interval_minutes in the config (default 15)"
+        ),
     )
 
     sub.add_parser("board", help="Display ingested mail in a read-only board view")
@@ -178,8 +188,8 @@ def _cmd_probe(config: MailConfig) -> int:
     return 0 if failures == 0 else 1
 
 
-def _cmd_ingest(config: MailConfig, *, dry_run: bool = False) -> int:
-    """Run the ingest subcommand: fetch, parse, store, and update watermark.
+def _ingest_cycle(config: MailConfig, *, dry_run: bool = False) -> int:
+    """Run a single ingest pass: fetch, parse, store, and update watermark.
 
     Returns 0 when the pipeline runs (including per-message errors),
     or 1 for a fatal connection failure (ImapClient raise).
@@ -215,6 +225,38 @@ def _cmd_ingest(config: MailConfig, *, dry_run: bool = False) -> int:
             sys.stdout.write(f"  UID {err_obj.uid}{mid}: {err_obj.error}\n")
 
     return 0
+
+
+def _cmd_ingest(
+    config: MailConfig, *, dry_run: bool = False, watch: bool = False
+) -> int:
+    """Run the ingest subcommand once, or repeatedly in watch mode.
+
+    In watch mode it loops forever, running an ingest cycle every
+    ``config.ingest_interval_minutes`` minutes.  A failed cycle is logged
+    and the loop continues; Ctrl-C exits cleanly with 0.
+    """
+    if not watch:
+        return _ingest_cycle(config, dry_run=dry_run)
+
+    interval_minutes = max(1, config.ingest_interval_minutes)
+    sys.stdout.write(
+        f"Watch mode: ingesting every {interval_minutes} min "
+        "(Ctrl-C to stop).\n"
+    )
+    sys.stdout.flush()
+    try:
+        while True:
+            try:
+                _ingest_cycle(config, dry_run=dry_run)
+            except Exception as exc:  # never let one bad cycle kill the loop
+                sys.stderr.write(f"Ingest cycle failed: {exc}\n")
+            sys.stdout.write(f"Next ingest in {interval_minutes} min.\n")
+            sys.stdout.flush()
+            time.sleep(interval_minutes * 60)
+    except KeyboardInterrupt:
+        sys.stdout.write("\nWatch stopped.\n")
+        return 0
 
 
 _BODY_PREVIEW_LIMIT = 150
@@ -668,7 +710,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             sys.stderr.write(f"Error loading configuration: {exc}\n")
             return 1
-        return _cmd_ingest(config, dry_run=args.dry_run)
+        return _cmd_ingest(config, dry_run=args.dry_run, watch=args.watch)
 
     if args.command == "board":
         try:

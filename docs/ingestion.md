@@ -29,6 +29,20 @@ connect → fetch → parse → store → update watermark
 $ robotsix-auto-mail ingest
 ```
 
+A single pass: fetch new mail since the watermark, store it, and exit.
+
+### Watch mode (automatic, on an interval)
+
+```sh
+$ robotsix-auto-mail ingest --watch
+```
+
+Runs a cycle, then repeats every `ingest.interval_minutes` (config, default
+15; override with `MAIL_INGEST_INTERVAL`).  A failed cycle is logged and the
+loop continues; Ctrl-C stops it cleanly.  This is the default command of the
+`robotsix-auto-mail` Docker service, so `docker compose up -d` keeps the
+board's datastore fed automatically.
+
 ### Dry-run mode
 
 ```sh
@@ -122,11 +136,12 @@ never re-fetched.
 The `ingest` subcommand uses the same IMAP connection and authentication
 settings as the rest of `robotsix-auto-mail` (see
 [docs/connecting.md](connecting.md)).  Two additional keys control the local
-datastore:
+datastore and the watch interval:
 
 | Variable | YAML key | Default | Purpose |
 |---|---|---|---|
 | `MAIL_DB_PATH` | `store.path` | `.data/mail.db` | Filesystem path to the SQLite database |
 | `MAIL_IMAP_FOLDER` | `imap.folder` | `INBOX` | IMAP mailbox folder to fetch from |
+| `MAIL_INGEST_INTERVAL` | `ingest.interval_minutes` | `15` | Minutes between cycles in `--watch` mode |
 
 The database is created automatically on first use — no manual setup is needed.

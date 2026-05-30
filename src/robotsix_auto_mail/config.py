@@ -59,6 +59,9 @@ DEFAULT_CONFIG_PATH = "config/mail.local.yaml"
 # Default LLM model for the ``detect`` command (and future mail processing).
 DEFAULT_LLM_MODEL = "deepseek/deepseek-v4-flash"
 
+# Default interval (minutes) between automatic ingest cycles in watch mode.
+DEFAULT_INGEST_INTERVAL_MINUTES = 15
+
 
 def _check_tls_mode(label: str, value: str) -> None:
     if value not in _VALID_TLS_MODES:
@@ -109,6 +112,9 @@ class MailConfig:
     # subcommand and future LLM-assisted mail processing.
     llm_api_key: str = ""
     llm_model: str = DEFAULT_LLM_MODEL
+
+    # Minutes between automatic ingest cycles (`ingest --watch`).
+    ingest_interval_minutes: int = DEFAULT_INGEST_INTERVAL_MINUTES
 
     # -- masking -----------------------------------------------------------
 
@@ -207,6 +213,12 @@ class MailConfig:
         llm_api_key = os.environ.get("LLM_API_KEY", "")
         llm_model = os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL)
 
+        ingest_interval_minutes = _optional_int(
+            "MAIL_INGEST_INTERVAL",
+            "ingest_interval_minutes",
+            DEFAULT_INGEST_INTERVAL_MINUTES,
+        )
+
         # -- final validation ----------------------------------------------
 
         msgs: list[str] = []
@@ -239,6 +251,7 @@ class MailConfig:
             imap_folder=imap_folder,
             llm_api_key=llm_api_key,
             llm_model=llm_model,
+            ingest_interval_minutes=ingest_interval_minutes,
         )
 
     @classmethod
@@ -337,6 +350,14 @@ class MailConfig:
         llm_api_key = _get_str(llm_section, "api_key", "")
         llm_model = _get_str(llm_section, "model", DEFAULT_LLM_MODEL)
 
+        ingest_section = _get_table(data, "ingest") or {}
+        ingest_interval_minutes = _get_int(
+            ingest_section,
+            "interval_minutes",
+            DEFAULT_INGEST_INTERVAL_MINUTES,
+            path,
+        )
+
         # -- validate TLS modes --------------------------------------------
 
         errors: list[str] = []
@@ -384,6 +405,7 @@ class MailConfig:
             imap_folder=imap_folder,
             llm_api_key=llm_api_key,
             llm_model=llm_model,
+            ingest_interval_minutes=ingest_interval_minutes,
         )
 
 
@@ -479,14 +501,19 @@ def _merge_env(base: MailConfig) -> MailConfig:
         "imap_folder": "MAIL_IMAP_FOLDER",
         "llm_api_key": "LLM_API_KEY",
         "llm_model": "LLM_MODEL",
+        "ingest_interval_minutes": "MAIL_INGEST_INTERVAL",
     }
 
     kwargs: dict[str, str | int] = {}
     for field_name, env_key in env_map.items():
         raw = os.environ.get(env_key, "")
         if raw:
-            # Port fields need int parsing.
-            if field_name in ("imap_port", "smtp_port"):
+            # Integer fields need parsing.
+            if field_name in (
+                "imap_port",
+                "smtp_port",
+                "ingest_interval_minutes",
+            ):
                 kwargs[field_name] = _parse_int(env_key, raw)
             else:
                 kwargs[field_name] = raw

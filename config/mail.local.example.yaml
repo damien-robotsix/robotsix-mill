@@ -25,6 +25,11 @@ auth:
 # store:
 #   path: .data/mail.db
 
+# Automatic ingestion (used by `ingest --watch`, the default Docker service).
+# How often, in minutes, to fetch new mail. Overridable via MAIL_INGEST_INTERVAL.
+# ingest:
+#   interval_minutes: 15
+
 # LLM provider — used by the `detect` command and future LLM-assisted mail
 # processing. Optional; the LLM_API_KEY / LLM_MODEL environment variables
 # override these values.

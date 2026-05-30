@@ -189,6 +189,7 @@ auth:
 | `auth.username` | yes | – | Login username (typically the full email address) |
 | `auth.password` | no | – | Login password (may instead be supplied via `MAIL_PASSWORD`) |
 | `store.path` | no | `".data/mail.db"` | Filesystem path for the SQLite database |
+| `ingest.interval_minutes` | no | `15` | Minutes between automatic ingest cycles (`ingest --watch`) |
 | `llm.api_key` | no | – | LLM provider API key for `detect` / mail processing (may instead be supplied via `LLM_API_KEY`) |
 | `llm.model` | no | `"deepseek/deepseek-v4-flash"` | LLM model name |
 
@@ -209,6 +210,7 @@ debug output regardless of how they are supplied.
 | `MAIL_SMTP_TLS_MODE` | no | `starttls` | TLS negotiation for SMTP — one of `starttls`, `direct-tls`, `none` |
 | `MAIL_IMAP_FOLDER` | no | `INBOX` | IMAP mailbox folder name |
 | `MAIL_DB_PATH` | no | `.data/mail.db` | Filesystem path for the SQLite database |
+| `MAIL_INGEST_INTERVAL` | no | `15` | Minutes between automatic ingest cycles (`ingest --watch`) |
 | `MAIL_CONFIG_PATH` | no | `config/mail.local.yaml` | Filesystem path to the YAML config file |
 | `LLM_API_KEY` | no | – | LLM provider API key (overrides `llm.api_key`); required for `detect` |
 | `LLM_MODEL` | no | `deepseek/deepseek-v4-flash` | LLM model name (overrides `llm.model`) |

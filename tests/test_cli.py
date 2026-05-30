@@ -1335,3 +1335,66 @@ llm:
     # …but the llm section is preserved
     assert "sk-keep-me" in content
     assert "anthropic/claude-3-haiku" in content
+
+
+# ---------------------------------------------------------------------------
+# ingest --watch
+# ---------------------------------------------------------------------------
+
+
+def test_ingest_watch_parser() -> None:
+    """The ingest subcommand exposes --watch (default False)."""
+    parser = build_parser()
+    assert parser.parse_args(["ingest", "--watch"]).watch is True
+    assert parser.parse_args(["ingest"]).watch is False
+
+
+def test_ingest_watch_loops_then_stops_on_interrupt(
+    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Watch mode runs a cycle, then exits 0 when interrupted during sleep."""
+    from robotsix_auto_mail.cli import _cmd_ingest
+
+    with mock.patch(
+        "robotsix_auto_mail.cli._ingest_cycle", return_value=0
+    ) as mock_cycle, mock.patch(
+        "robotsix_auto_mail.cli.time.sleep", side_effect=KeyboardInterrupt
+    ):
+        rc = _cmd_ingest(env_cfg, watch=True)
+
+    assert rc == 0
+    mock_cycle.assert_called_once()
+    assert "Watch stopped" in capsys.readouterr().out
+
+
+def test_ingest_watch_survives_cycle_error(
+    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failing cycle is logged and does not abort the watch loop."""
+    from robotsix_auto_mail.cli import _cmd_ingest
+
+    with mock.patch(
+        "robotsix_auto_mail.cli._ingest_cycle",
+        side_effect=RuntimeError("boom"),
+    ), mock.patch(
+        "robotsix_auto_mail.cli.time.sleep", side_effect=KeyboardInterrupt
+    ):
+        rc = _cmd_ingest(env_cfg, watch=True)
+
+    assert rc == 0
+    assert "Ingest cycle failed" in capsys.readouterr().err
+
+
+def test_ingest_single_pass_unaffected(
+    env_cfg: MailConfig,
+) -> None:
+    """Without --watch, _cmd_ingest delegates to a single cycle."""
+    from robotsix_auto_mail.cli import _cmd_ingest
+
+    with mock.patch(
+        "robotsix_auto_mail.cli._ingest_cycle", return_value=0
+    ) as mock_cycle:
+        rc = _cmd_ingest(env_cfg, watch=False)
+
+    assert rc == 0
+    mock_cycle.assert_called_once_with(env_cfg, dry_run=False)
