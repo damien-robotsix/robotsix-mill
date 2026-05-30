@@ -20,7 +20,6 @@ from typing import Literal
 from pydantic import BaseModel, model_validator
 
 from ..config import Settings
-from ..history_compress import compress_history
 
 from . import history_compress
 
