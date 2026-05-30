@@ -57,11 +57,12 @@ RUN ARCH="$(dpkg --print-architecture)" \
 # no dev toolchain.  The dev stage re-installs with "dev,tracing".
 ARG INSTALL_EXTRAS=tracing
 WORKDIR /build
-# Copy only what pip needs to install the package (avoids baking the full
+# Copy only what uv needs to install the package (avoids baking the full
 # source tree into the production image).
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir --root-user-action=ignore ".[${INSTALL_EXTRAS}]"
+RUN pip install uv --no-cache-dir \
+    && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --no-dev --extra ${INSTALL_EXTRAS}
 
 # =============================================================================
 # Stage 2: base — shared runtime setup (not built directly; extended by
@@ -128,7 +129,8 @@ COPY . /app
 # Layer dev tooling (pytest, mypy, ruff, bandit) on top of the
 # site-packages inherited from base.
 ARG INSTALL_EXTRAS=dev,tracing
-RUN pip install --no-cache-dir --root-user-action=ignore -e ".[${INSTALL_EXTRAS}]" \
+RUN pip install uv --no-cache-dir \
+    && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --group dev --extra tracing \
     && chown -R mill:mill /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
