@@ -1,4 +1,4 @@
-"""Tests for ``compress_history`` in ``coordinating.py``.
+"""Tests for ``compress_history`` in ``history_compress.py``.
 
 Covers all five acceptance criteria from the parent ticket
 ``20260528T071800Z-add-token-aware-observation-compression--a636``:
@@ -26,7 +26,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from robotsix_mill.agents.coordinating import compress_history
+from robotsix_mill.history_compress import compress_history
 
 # ------------------------------------------------------------------
 # Helpers
