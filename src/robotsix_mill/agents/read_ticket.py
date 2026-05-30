@@ -16,6 +16,93 @@ from __future__ import annotations
 
 from ..config import Settings
 
+# Output budgets (chars). The description is capped individually; the whole
+# rendered Markdown is capped again at the end so a long history/comment run
+# can't blow the agent's context.
+_DESC_CAP = 3000
+_RESULT_CAP = 6000
+# History/comment row limits (most-recent-first; older rows summarised).
+_HISTORY_ROWS = 30
+_COMMENT_ROWS = 15
+
+
+def _truncate_at_boundary(text: str, cap: int, markers: tuple[str, ...]) -> str:
+    """Return *text* trimmed to roughly *cap* chars, preferring to cut at the
+    last occurrence of one of *markers* (a heading / paragraph / line break)
+    in the final ~10% of the budget so we never cut mid-word or mid-heading.
+    Appends a ``... [truncated]`` sentinel. No-op when already within *cap*."""
+    if len(text) <= cap:
+        return text
+    cutoff = cap
+    floor = int(cap * 0.9)
+    for marker in markers:
+        pos = text.rfind(marker, 0, cap)
+        if pos != -1 and pos > floor:
+            cutoff = pos
+            break
+    return text[:cutoff] + "\n\n... [truncated]"
+
+
+def _header_lines(ticket) -> list[str]:
+    """Title + metadata block."""
+    return [
+        f"## {ticket.title}",
+        "",
+        f"**ID:** `{ticket.id}`",
+        f"**State:** {ticket.state.value}",
+        f"**Kind:** {ticket.kind}",
+        f"**Source:** {ticket.source}",
+        f"**Created:** {ticket.created_at}",
+        f"**Updated:** {ticket.updated_at}",
+        "",
+    ]
+
+
+def _description_section(desc: str) -> list[str]:
+    """``### Description`` block, soft-capped at ``_DESC_CAP`` chars."""
+    desc = (desc or "").strip()
+    if not desc:
+        body = "(no description)"
+    else:
+        body = _truncate_at_boundary(desc, _DESC_CAP, ("\n\n", "\n"))
+    return ["### Description", "", body, ""]
+
+
+def _history_section(history) -> list[str]:
+    """``### History`` block — newest ``_HISTORY_ROWS`` events, most recent first."""
+    n = len(history)
+    lines = [f"### History ({n} events)", ""]
+    if not history:
+        lines.append("(no history)")
+        lines.append("")
+        return lines
+    if n > _HISTORY_ROWS:
+        lines.append(f"... [{n - _HISTORY_ROWS} earlier events omitted]")
+        lines.append("")
+    shown = reversed(history[-_HISTORY_ROWS:] if n > _HISTORY_ROWS else history)
+    for ev in shown:
+        lines.append(f"- [{ev.state.value}] {ev.at} — {ev.note or '(no note)'}")
+    lines.append("")
+    return lines
+
+
+def _comments_section(comments) -> list[str]:
+    """``### Comments`` block — newest ``_COMMENT_ROWS`` comments, most recent first."""
+    n = len(comments)
+    lines = [f"### Comments ({n})", ""]
+    if not comments:
+        lines.append("(no comments)")
+        return lines
+    if n > _COMMENT_ROWS:
+        lines.append(f"... [{n - _COMMENT_ROWS} earlier comments omitted]")
+        lines.append("")
+    shown = reversed(comments[-_COMMENT_ROWS:] if n > _COMMENT_ROWS else comments)
+    for c in shown:
+        lines.append(f"**{c.author}** ({c.created_at}, id={c.id}):")
+        lines.append(c.body)
+        lines.append("")
+    return lines
+
 
 def make_read_ticket_tool(settings: Settings):
     """Return the ``read_ticket`` closure bound to *settings*.
@@ -43,97 +130,19 @@ def make_read_ticket_tool(settings: Settings):
 
             service = TicketService(settings)
             ticket = service.get(ticket_id)
-
             if ticket is None:
                 return f"read_ticket: no ticket found with id '{ticket_id}'"
 
-            # --- Build the Markdown output ---
-            lines: list[str] = []
+            lines = _header_lines(ticket)
+            lines += _description_section(service.workspace(ticket).read_description())
+            lines += _history_section(service.history(ticket_id))
+            lines += _comments_section(service.list_comments(ticket_id))
 
-            # Header
-            lines.append(f"## {ticket.title}")
-            lines.append("")
-            lines.append(f"**ID:** `{ticket.id}`")
-            lines.append(f"**State:** {ticket.state.value}")
-            lines.append(f"**Kind:** {ticket.kind}")
-            lines.append(f"**Source:** {ticket.source}")
-            lines.append(f"**Created:** {ticket.created_at}")
-            lines.append(f"**Updated:** {ticket.updated_at}")
-            lines.append("")
-
-            # Description (soft-cap at 3000 chars)
-            lines.append("### Description")
-            lines.append("")
-            desc = service.workspace(ticket).read_description() or ""
-            desc = desc.strip()
-            if not desc:
-                lines.append("(no description)")
-            else:
-                if len(desc) > 3000:
-                    # Prefer a paragraph boundary, then a line boundary
-                    cutoff = 3000
-                    for marker in ("\n\n", "\n"):
-                        pos = desc.rfind(marker, 0, 3000)
-                        if pos != -1 and pos > 2700:
-                            cutoff = pos
-                            break
-                    desc = desc[:cutoff] + "\n\n... [truncated]"
-                lines.append(desc)
-            lines.append("")
-
-            # History — last 30 events, most recent first
-            history = service.history(ticket_id)
-            n_history = len(history)
-            shown_history = history[-30:] if n_history > 30 else history
-            shown_history = list(reversed(shown_history))
-            lines.append(f"### History ({n_history} events)")
-            lines.append("")
-            if not history:
-                lines.append("(no history)")
-            else:
-                if n_history > 30:
-                    lines.append(f"... [{n_history - 30} earlier events omitted]")
-                    lines.append("")
-                for ev in shown_history:
-                    note_str = ev.note or "(no note)"
-                    lines.append(f"- [{ev.state.value}] {ev.at} — {note_str}")
-            lines.append("")
-
-            # Comments — last 15, most recent first
-            comments = service.list_comments(ticket_id)
-            n_comments = len(comments)
-            shown_comments = comments[-15:] if n_comments > 15 else comments
-            shown_comments = list(reversed(shown_comments))
-            lines.append(f"### Comments ({n_comments})")
-            lines.append("")
-            if not comments:
-                lines.append("(no comments)")
-            else:
-                if n_comments > 15:
-                    lines.append(f"... [{n_comments - 15} earlier comments omitted]")
-                    lines.append("")
-                for c in shown_comments:
-                    lines.append(f"**{c.author}** ({c.created_at}, id={c.id}):")
-                    lines.append(c.body)
-                    lines.append("")
-
-            result = "\n".join(lines)
-
-            # Soft overall cap at ~6000 characters.
-            # Truncate at a section/paragraph boundary when possible
-            # to avoid cutting mid-word or mid-heading.
-            if len(result) > 6000:
-                cutoff = 6000
-                # Prefer cutting before a section heading, then a
-                # paragraph break, then any newline.
-                for marker in ("\n### ", "\n## ", "\n\n", "\n"):
-                    pos = result.rfind(marker, 0, 6000)
-                    if pos != -1 and pos > 5400:
-                        cutoff = pos
-                        break
-                result = result[:cutoff] + "\n\n... [truncated]"
-
-            return result
+            return _truncate_at_boundary(
+                "\n".join(lines),
+                _RESULT_CAP,
+                ("\n### ", "\n## ", "\n\n", "\n"),
+            )
 
         except Exception as e:  # noqa: BLE001 — never abort the agent run
             return f"read_ticket: error reading ticket '{ticket_id}' ({e!r})"
