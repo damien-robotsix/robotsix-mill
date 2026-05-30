@@ -709,6 +709,20 @@ class Settings(BaseSettings):
     # cycle. Throttles the Langfuse API hit-rate. With 100 tickets and
     # 200ms pace, a cycle takes ~20s; well within the 60s budget.
     cost_warmer_pace_ms: int = Field(default=200)
+    # Independent on/off for the fast loop (see comment below).
+    # Gated separately from the slow loop so an operator can disable
+    # the per-active-ticket Langfuse polling without losing the
+    # comprehensive sweep, e.g. when Langfuse rate-limits become a
+    # concern.
+    cost_warmer_fast_periodic: bool = Field(default=True)
+    # Seconds between *fast* warmer cycles. The slow warmer above
+    # walks every ticket and is fine for idle ones, but a full sweep
+    # takes a minute or more on a busy board — long enough that an
+    # actively-running ticket's cost looks frozen to the operator
+    # watching it. The fast loop walks ONLY tickets in active stages
+    # (refine, implement, review, …) and bypasses the cache TTL, so a
+    # board user sees the cost climb in near-real-time.
+    cost_warmer_fast_interval_seconds: int = Field(default=5)
 
     # --- timeout escalation ---
     # When True, the worker runs periodic timeout-escalation passes at the

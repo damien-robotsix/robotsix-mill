@@ -154,16 +154,27 @@ def session_traces(
 
 
 def session_cost(
-    settings: Settings, session_id: str, repo_config: RepoConfig | None = None
+    settings: Settings,
+    session_id: str,
+    repo_config: RepoConfig | None = None,
+    *,
+    force: bool = False,
 ) -> float:
     """Read-time per-ticket cost: the Langfuse session total, cached for
     ``_COST_TTL_SECONDS``. Always returns a number (0.0 when Langfuse is
     unconfigured / unreachable / has no data) so callers never special-
     case None. This replaces the old persisted ``cost_usd`` + sync loop:
-    cost lives in Langfuse; we just read and briefly cache it."""
+    cost lives in Langfuse; we just read and briefly cache it.
+
+    ``force=True`` bypasses the TTL gate and always hits Langfuse. Use
+    it from the fast warmer loop for active-stage tickets — they're
+    actively accruing cost and the board user notices a stale value
+    much faster than for an idle ticket. Throttle the caller (not the
+    cache) so Langfuse isn't hammered.
+    """
     now = time.monotonic()
     hit = _cost_cache.get(session_id)
-    if hit is not None and (now - hit[1]) < _COST_TTL_SECONDS:
+    if not force and hit is not None and (now - hit[1]) < _COST_TTL_SECONDS:
         return hit[0]
     cost = session_total_cost(settings, session_id, repo_config=repo_config)
     if cost is None:
