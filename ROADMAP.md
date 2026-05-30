@@ -107,14 +107,15 @@ Expose ingested mail through a self-contained board interface so a user can see 
 
 ## Phase 5: Iteration — from board to workflow
 
-### Goal (future)
+### Goal (partially delivered)
 
-Evolve the read-only inbox board into a full mail-processing workflow with multiple columns, actions on items, and automation rules. This phase is **not** scheduled for immediate implementation — it is called out as the natural next direction after the core loop (connect → ingest → view) is in place.
+The multi-column kanban board (Inbox, Triaging, Done, Archive) with per-card
+Move dropdowns is **delivered** — see the `serve` subcommand and
+[docs/connecting.md](docs/connecting.md#the-serve-command).
 
-### Direction (not deliverables)
+### Direction (future work)
 
-- **Multiple columns**: Inbox, Triaging, Done, Archive — mail items can be dragged or moved between columns.
-- **Actions on mail items**: reply (via SMTP), archive, delete, move to another column, mark as read/unread.
+- **Actions on mail items**: reply (via SMTP), archive, delete, mark as read/unread.
 - **Rules and automation**: user-defined rules for routing incoming mail into specific columns (e.g. by sender, subject pattern).
 - **Multi-mailbox support**: ingest and display mail from more than one IMAP account or folder.
 

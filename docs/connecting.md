@@ -370,3 +370,44 @@ Your inbox is empty.
 ```
 
 Exit code is `0` on success, `1` when configuration cannot be loaded.
+
+## The `serve` command
+
+For a persistent, browser-based view of ingested mail, use the `serve`
+subcommand.  This starts a long-running HTTP server that hosts a read-only
+kanban board at `/board`.
+
+```sh
+$ robotsix-auto-mail serve
+# Listening on http://0.0.0.0:8080/board
+```
+
+### Options
+
+| Option | Default | Purpose |
+|---|---|---|
+| `--port` | `8080` | Port to listen on |
+
+### The board page
+
+Open `http://localhost:<port>/board` in a browser.  The page shows ingested
+mail in **four columns** — Inbox, Triaging, Done, Archive — each with a card
+count badge.  Every mail card has a **Move** dropdown that lets you change
+the card's status column via `POST /move`.  The board is the interface: no
+separate client is needed.
+
+The page includes `<meta http-equiv="refresh" content="30">`, so the board
+auto-refreshes every 30 seconds.
+
+### Contrast with `board`
+
+| | `board` | `serve` |
+|---|---|---|
+| **Output** | Plain text to stdout | HTML page in a browser |
+| **Layout** | Single Inbox column | Four columns (Inbox, Triaging, Done, Archive) |
+| **Lifetime** | One-shot — prints and exits | Persistent HTTP daemon |
+| **Interaction** | Read-only | Move dropdowns (`POST /move`) |
+| **Refresh** | Manual (re-run the command) | Automatic (30-second meta refresh) |
+
+Both commands read from the same local SQLite datastore — no configuration
+changes are needed to switch between them.

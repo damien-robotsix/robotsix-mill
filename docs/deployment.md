@@ -3,9 +3,11 @@
 How to build, run, and maintain the `robotsix-auto-mail` container — from
 first checkout to production push.
 
-`robotsix-auto-mail` is a **CLI tool**, not a long-running service. The
-deployment model is correspondingly simple: build an image, run commands
-against it via `docker compose run`, rinse and repeat.
+`robotsix-auto-mail` is a **CLI tool** with an optional long-running
+**web board daemon**. Most operations (`probe`, `ingest`, `board`) are
+one-shot CLI invocations via `docker compose run`. The web kanban board
+is a persistent HTTP daemon started via `docker compose up board`.
+This guide covers both patterns.
 
 ---
 
@@ -77,8 +79,9 @@ The [`Dockerfile`](../Dockerfile) has two stages:
 | `builder` | Installs the Python package (wheel) from `pyproject.toml` |
 | `production` | Copies **only** the installed artifacts from `builder`, creates a non-root `mailbot` user (UID 1000), and sets the entrypoint |
 
-The final image runs as `mailbot` (UID 1000).  No ports are exposed and there
-is no healthcheck — this is a CLI tool that starts, does its work, and exits.
+The final image runs as `mailbot` (UID 1000).  The base image exposes no ports
+and has no healthcheck — CLI operations are one-shot.  The `board` service in
+`docker-compose.yml` maps a port for the long-running web server.
 
 To build without the Compose cache:
 
@@ -90,8 +93,9 @@ docker compose build --no-cache
 
 ## Run locally
 
-All commands use `docker compose run` — **not** `docker compose up`.  The tool
-is a CLI; there is no long-running process for `up` to manage.
+CLI operations (`probe`, `ingest`, `board`) use `docker compose run` — they are
+one-shot commands.  The web board is a long-running daemon started with
+`docker compose up board`; see [Start the web board](#start-the-web-board).
 
 ### Probe connectivity (always run first)
 
@@ -122,6 +126,23 @@ docker compose run robotsix-auto-mail board
 
 Prints a read-only view of stored messages.  Requires a prior `ingest` run.
 See [docs/connecting.md](connecting.md#the-board-command) for output format.
+
+### Start the web board
+
+```sh
+docker compose up board
+# → http://localhost:${BOARD_PORT:-8078}/board
+```
+
+The board service runs as a long-lived daemon (restart policy: `on-failure`).
+It listens on the port set by `BOARD_PORT` (default: **8078**).  Open the URL
+in a browser to see the four-column kanban board with per-card Move dropdowns.
+Press `Ctrl-C` to stop the daemon.
+
+**Note:** the Docker default port is **8078** (set via `${BOARD_PORT:-8078}` in
+`docker-compose.yml`), which differs from the native CLI default of 8080.  Set
+`BOARD_PORT` in your shell or `.env` file to use a different port:
+`BOARD_PORT=9090 docker compose up board`.
 
 ### Ephemeral containers, persistent data
 
@@ -178,9 +199,10 @@ for CLI-style invocation.  Here is every top-level key and why it is there:
 | `environment` | `MAIL_CONFIG_PATH: /home/mailbot/config/mail.local.yaml` | Points the tool at the mounted config file inside the container. |
 | `volumes` | Two entries (see below) | Config bind-mount + data persistence. |
 
-There is **no** `ports:`, **no** `depends_on:`, and **no** `command:` — the
-tool has no network services, no external dependencies, and the operator
-supplies the subcommand at runtime.
+The CLI service has **no** `ports:` and **no** `depends_on:` — the
+operator supplies the subcommand at runtime via `docker compose run
+robotsix-auto-mail <subcommand>`.  The `command:` key is intentionally
+absent so the operator controls the subcommand.
 
 ### Volumes
 
@@ -188,6 +210,22 @@ supplies the subcommand at runtime.
 |---|---|---|
 | `./config:/home/mailbot/config:ro` | Bind-mount, read-only | Makes host config files available inside the container without a build. |
 | `mail_data:/home/mailbot/data` | Named volume | Persists the SQLite database across runs. |
+
+### `services.board`
+
+The `board` service runs the same image as the CLI service but with a
+different configuration suitable for a long-running daemon:
+
+| Key | Value | Why |
+|---|---|---|
+| `command` | `serve --port ${BOARD_PORT:-8078}` | Starts the web server as a daemon instead of a one-shot CLI command. |
+| `restart` | `on-failure` | Restarts if the process crashes — unlike the CLI service's `restart: "no"`, this is a daemon that should stay up. |
+| `ports` | `"${BOARD_PORT:-8078}:${BOARD_PORT:-8078}"` | Maps the board port to the host so browsers can reach it. |
+| `environment` | `MAIL_CONFIG_PATH: /home/mailbot/config/mail.local.yaml` | Same as the CLI service — both read the same config. |
+| `volumes` | Same as CLI service | Shares the `mail_data` volume so the CLI and board see the same database. |
+
+There is no `stdin_open` or `tty` — the board is a daemon, not an
+interactive process.
 
 ### `volumes.mail_data`
 
@@ -283,10 +321,11 @@ as-is — this is not an error.
     docker compose run robotsix-auto-mail ingest
     ```
 
-Because `robotsix-auto-mail` is a CLI tool (not a long-running service),
-there is no zero-downtime concern.  Each `docker compose run` creates a
-fresh container from the current image; the next `run` after a build uses
-the newly built image automatically.
+Because CLI invocations are one-shot, there is no zero-downtime concern
+for `probe`, `ingest`, or `board`.  Each `docker compose run` creates a
+fresh container from the current image.  If the web board daemon is
+running (`docker compose up board`), restart it after a rebuild:
+`docker compose up -d board` (or `docker compose restart board`).
 
 ### Full reset (including database)
 

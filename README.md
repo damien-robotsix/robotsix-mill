@@ -28,6 +28,24 @@ Configuration keys, precedence rules, and walkthroughs of the `probe`
 diagnostics command, the `ingest` mail-fetching command, and the `board`
 read-only view are documented in [docs/connecting.md](docs/connecting.md).
 
+## Web Board
+
+Start the read-only kanban board to view ingested mail in a browser:
+
+```sh
+# Native (port 8080 by default)
+robotsix-auto-mail serve
+
+# Docker (port 8078 by default, configurable via BOARD_PORT)
+docker compose up board
+
+# Then open http://localhost:<port>/board
+```
+
+The board shows ingested mail in four columns — Inbox, Triaging, Done,
+Archive — with per-card Move dropdowns and a 30-second auto-refresh.  Full
+details are in [docs/connecting.md](docs/connecting.md#the-serve-command).
+
 ## License
 
 This project is licensed under the MIT License (SPDX: `MIT`). See [LICENSE](LICENSE) for the full text.
