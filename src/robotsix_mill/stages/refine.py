@@ -333,6 +333,23 @@ class RefineStage(Stage):
             t for t in candidates if t.kind != "epic" or t.id == ticket.parent_id
         ]
 
+        # Similarity-based pre-filter: keep only the top-N most relevant
+        # candidates so the LLM sees a fixed budget regardless of repo size.
+        before_ranking = len(candidates)
+        candidates = dedup.rank_candidates_by_similarity(
+            draft_title=ticket.title,
+            draft_body=draft,
+            candidates=candidates,
+            max_candidates=s.dedup_max_candidates,
+        )
+        if len(candidates) < before_ranking:
+            log.debug(
+                "%s: similarity ranking reduced dedup candidates from %d to %d",
+                ticket.id,
+                before_ranking,
+                len(candidates),
+            )
+
         candidates_json = _build_candidates_block(candidates, ctx)
 
         try:

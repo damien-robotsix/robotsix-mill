@@ -12,11 +12,13 @@ like ``run_refine_agent``.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from ..config import Settings
+from ..core.models import Ticket
 from .prompt_blocks import section
 
 
@@ -29,6 +31,56 @@ class DedupResult(BaseModel):
 
 
 log = logging.getLogger("robotsix_mill.agents.dedup")
+
+
+def _tokenize(text: str) -> set[str]:
+    """Tokenize *text* for Jaccard similarity: lowercase, split on
+    non-alphanumeric characters, keep tokens longer than 2 chars."""
+    return set(
+        t
+        for t in re.sub(r"[^a-z0-9]+", " ", text.casefold()).split()
+        if len(t) > 2
+    )
+
+
+def rank_candidates_by_similarity(
+    *,
+    draft_title: str,
+    draft_body: str,
+    candidates: list[Ticket],
+    max_candidates: int,
+) -> list[Ticket]:
+    """Return the top-*max_candidates* tickets ranked by Jaccard
+    similarity to the draft.
+
+    When ``len(candidates) <= max_candidates``, returns the list
+    unchanged (no-op for small repos).  Otherwise tokenizes the draft
+    and each candidate's title, computes the Jaccard coefficient, sorts
+    descending, and returns the top *max_candidates*.
+    """
+    if len(candidates) <= max_candidates:
+        return list(candidates)
+
+    draft_tokens = _tokenize(draft_title + " " + draft_body)
+    if not draft_tokens:
+        # No meaningful tokens in the draft — graceful degradation:
+        # return the first max_candidates as-is.
+        return list(candidates[:max_candidates])
+
+    scored: list[tuple[float, Ticket]] = []
+    for cand in candidates:
+        cand_tokens = _tokenize(cand.title)
+        if not cand_tokens:
+            scored.append((0.0, cand))
+            continue
+        intersection = draft_tokens & cand_tokens
+        union = draft_tokens | cand_tokens
+        jaccard = len(intersection) / len(union)
+        scored.append((jaccard, cand))
+
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    scored = scored[:max_candidates]
+    return [cand for _, cand in scored]
 
 
 def _build_prompt(
