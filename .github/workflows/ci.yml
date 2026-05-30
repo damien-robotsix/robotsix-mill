@@ -19,8 +19,19 @@ jobs:
         with:
           python-version: "3.14"
 
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.15"
+
+      - name: Generate lockfile
+        run: uv lock
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+
       - name: Install dev deps
-        run: pip install -e '.[dev,tracing]'
+        run: uv sync --frozen --group dev --extra tracing
+        env:
+          UV_PROJECT_ENVIRONMENT: system
 
       - name: Validate module taxonomy
         run: |

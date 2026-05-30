@@ -8,11 +8,12 @@ BIN    := $(VENV)/bin
 
 $(BIN)/activate:
 	$(PYTHON) -m venv $(VENV)
-	$(BIN)/pip install -q --upgrade pip
 
 # Editable install with dev (+tracing) extras into a local venv.
-install: $(BIN)/activate
-	$(BIN)/pip install -q -e ".[dev,tracing]"
+# Uses uv sync with the committed uv.lock for reproducible installs.
+install:
+	uv lock
+	uv sync --frozen --group dev --extra tracing
 
 test: install
 	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70
