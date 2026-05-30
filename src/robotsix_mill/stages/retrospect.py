@@ -29,6 +29,67 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.retrospect")
 
 
+# Token signals that strongly suggest the proposed draft is about
+# mill-pipeline internals (and so belongs on the mill maintenance
+# board, not the audited repo's board). Matched case-insensitively
+# against ``<title>\n<body>``. Two or more hits on a draft the agent
+# wanted to route to ``"current"`` overrides to ``"mill"`` — the
+# audited repo's refining agent has no clone of the mill source
+# tree, so a mill-internal draft on the audited board can't be
+# implemented.
+_MILL_SIGNAL_TERMS: frozenset[str] = frozenset(
+    {
+        "src/robotsix_mill/",
+        "agent_definitions/",
+        "scope-triage",
+        "scope_triage",
+        "refine agent",
+        "refining.py",
+        "implement stage",
+        "implement.py",
+        "deliver stage",
+        "deliver.py",
+        "merge stage",
+        "merge.py",
+        "retrospect stage",
+        "retrospect.py",
+        "review stage",
+        "periodic_runner",
+        "pass_runner",
+        "the mill pipeline",
+        "mill pipeline",
+        "mill's pipeline",
+        "stages/",
+        "agents/",
+        "runtime/",
+        "agent_check",
+        "config_sync",
+        "trace-review",
+        "trace_review",
+        "trace-health",
+        "trace_health",
+        "TicketService",
+        "RepoConfig",
+        "TicketEvent",
+    }
+)
+
+
+def _looks_like_mill_internal(title: str | None, body: str | None) -> bool:
+    """Heuristic: True when the draft's title+body name enough mill-
+    internal symbols / files that routing to the audited repo would
+    leave the fix on a codebase that can't implement it.
+
+    Catches the retrospect-agent misclassification observed on c57b
+    (scope-triage loop bug filed on robotsix-auto-mail because the
+    parent ticket was on auto-mail — but every proposed file change
+    lived under ``src/robotsix_mill/``).
+    """
+    hay = f"{title or ''}\n{body or ''}".lower()
+    hits = sum(1 for term in _MILL_SIGNAL_TERMS if term.lower() in hay)
+    return hits >= 2
+
+
 def _service_for_target(
     target: str,
     default_service: TicketService,
@@ -321,8 +382,21 @@ class RetrospectStage(Stage):
         body = res.draft_body
         if res.draft_gap_id:
             body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
+        # Safety net: override ``"current"`` → ``"mill"`` when the
+        # draft's title+body names mill internals. See
+        # _looks_like_mill_internal docstring for the rationale.
+        draft_target = res.draft_target
+        if draft_target == "current" and _looks_like_mill_internal(
+            res.draft_title, body
+        ):
+            log.info(
+                "%s: retrospect draft_target auto-corrected current→mill "
+                "(draft body names mill-internal symbols)",
+                ticket.id,
+            )
+            draft_target = "mill"
         target_service = _service_for_target(
-            res.draft_target,
+            draft_target,
             ctx.service,
             settings,
         )
@@ -362,8 +436,20 @@ class RetrospectStage(Stage):
         follow_up_title = res.follow_up_title.strip()
         follow_up_body = res.follow_up_body
 
+        # Same auto-correction as the draft path: a follow-up that
+        # names mill internals belongs on the mill board.
+        follow_up_target = res.follow_up_target
+        if follow_up_target == "current" and _looks_like_mill_internal(
+            follow_up_title, follow_up_body
+        ):
+            log.info(
+                "%s: retrospect follow_up_target auto-corrected "
+                "current→mill (body names mill-internal symbols)",
+                ticket.id,
+            )
+            follow_up_target = "mill"
         target_service = _service_for_target(
-            res.follow_up_target,
+            follow_up_target,
             ctx.service,
             settings,
         )

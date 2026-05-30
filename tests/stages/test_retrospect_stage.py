@@ -19,8 +19,50 @@ from robotsix_mill.stages.retrospect import (
     _WORD_TO_NUM,
     _check_memory_count_consistency,
     _extract_ticket_ids,
+    _looks_like_mill_internal,
     _parse_numeric_count,
 )
+
+
+def test_looks_like_mill_internal_matches_pipeline_symbols():
+    """A draft body that names multiple mill-internal symbols / paths
+    triggers the safety-net override."""
+    title = "Scope-triage loops indefinitely re-evaluating runtime artifact"
+    body = (
+        "The bug lives in `src/robotsix_mill/stages/implement.py` — the "
+        "scope-triage agent doesn't dedupe files it has already "
+        "classified. Fix should add a per-ticket dedup set in the "
+        "stage handler and cap iterations."
+    )
+    assert _looks_like_mill_internal(title, body) is True
+
+
+def test_looks_like_mill_internal_ignores_repo_specific_fixes():
+    """A draft about the audited repo's own code (no mill internals
+    mentioned) stays on ``current`` — no override."""
+    assert (
+        _looks_like_mill_internal(
+            "Add docstrings to mail_box.py public methods",
+            "The IMAP wrapper at `src/robotsix_auto_mail/mail_box.py` "
+            "has 4 public methods missing docstrings. Add them following "
+            "the existing module's style.",
+        )
+        is False
+    )
+
+
+def test_looks_like_mill_internal_requires_two_hits():
+    """Single-keyword mention is insufficient (false-positive
+    suppression). A passing reference to ``stages/`` alone in an
+    otherwise-repo-specific body doesn't trigger the override."""
+    assert (
+        _looks_like_mill_internal(
+            "Refactor IMAP error paths in mail_box.py",
+            "Pattern was copied from mill's stages/ directory but lives "
+            "entirely in src/robotsix_auto_mail/mail_box.py.",
+        )
+        is False
+    )
 
 
 # ------------------------------------------------------------------
