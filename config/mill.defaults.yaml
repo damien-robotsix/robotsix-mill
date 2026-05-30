@@ -56,7 +56,7 @@ core:
     scope_triage_requests: 4           # per-call cap for scope-triage agent
     doc_classifier_requests: 3         # per-call cap for doc-classifier gate
     review_requests: 40                # per-call cap for review agent (counts tool calls + reasoning steps; 40 covers a 4-6 file PR)
-    max_concurrency: 4                 # max parallel tickets in the worker pool
+    max_concurrency: 4                 # LEGACY / not load-bearing — the worker pool sizes each repo's consumer from that repo's `max_concurrency` in repos.yaml (default 1), NOT this global. Set repos.yaml `max_concurrency: N` under a repo to run N of its tickets in parallel.
     max_fix_iterations: 8              # implement→test fix loop iterations before BLOCK
     max_stuck_cycles: 3                # re-entries to same stage without progress before BLOCK
     max_spend_usd_per_ticket: 0.0      # dollar cap per ticket (0.0 = disabled)
