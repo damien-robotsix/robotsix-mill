@@ -49,8 +49,4 @@ def compress_history(
 
     # Budget still exceeded even after dropping all but keep_last;
     # return only the tail.
-    return (
-        message_history[-keep_last_val:]
-        if keep_last_val
-        else message_history[-1:]
-    )
+    return message_history[-keep_last_val:] if keep_last_val else message_history[-1:]

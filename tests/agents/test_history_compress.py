@@ -262,9 +262,7 @@ class TestCompressHistory:
         history = [small, large]
         # Budget: just enough for the large message.
         budget = _est(large)
-        result = compress_history(
-            history, max_tokens=budget, keep_last=0
-        )
+        result = compress_history(history, max_tokens=budget, keep_last=0)
         assert len(result) == 1
         assert result[0] is large
 
@@ -277,9 +275,7 @@ class TestCompressHistory:
         # Put small first, large second; tight budget drops only small.
         history = [small, large]
         budget = _est(large)
-        result = compress_history(
-            history, max_tokens=budget, keep_last=0
-        )
+        result = compress_history(history, max_tokens=budget, keep_last=0)
         assert len(result) == 1
         assert result[0] is large
 
@@ -294,14 +290,10 @@ class TestCompressHistory:
         combined = _total_est(req, resp)
         assert combined > 0
         # Budget = combined → no drop.
-        result = compress_history(
-            history, max_tokens=combined, keep_last=2
-        )
+        result = compress_history(history, max_tokens=combined, keep_last=2)
         assert result is history
 
         # Budget = combined - 1 → one message dropped from front.
-        result = compress_history(
-            history, max_tokens=combined - 1, keep_last=0
-        )
+        result = compress_history(history, max_tokens=combined - 1, keep_last=0)
         assert len(result) == 1
         assert result[0] is resp
