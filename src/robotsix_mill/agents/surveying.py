@@ -11,7 +11,13 @@ from pydantic import BaseModel, Field
 
 from ..config import Settings
 
-MAX_GAPS = 5
+# One subject per run → one proposal max. The previous limit of 5
+# encouraged the agent to sweep the codebase for five gaps in a
+# single ~$1 run that routinely blew the 12-request budget. The
+# rewritten prompt (agent_definitions/periodic/survey.yaml) caps
+# the agent at one focused subject per run; this code-side cap is
+# defence in depth.
+MAX_GAPS = 1
 
 
 class SurveyResult(BaseModel):
