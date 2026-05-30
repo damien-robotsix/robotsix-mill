@@ -75,12 +75,8 @@ class TestRunMetaPass:
         def _fake_persist(path, text):
             persist_calls.append((path, text))
 
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.persist_memory", _fake_persist
-        )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.load_memory", lambda _p: ""
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.persist_memory", _fake_persist)
+        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
             "robotsix_mill.meta_runner._gather_meta_proposals",
             lambda _s: "<recent_proposals>\n(no recent proposals)\n</recent_proposals>",
@@ -103,9 +99,7 @@ class TestRunMetaPass:
 
         db.reset_engine()
 
-    def test_successful_pass_extraction_and_alignment(
-        self, tmp_path, monkeypatch
-    ):
+    def test_successful_pass_extraction_and_alignment(self, tmp_path, monkeypatch):
         """Extraction drafts → meta board; alignment drafts →
         per-repo board.  Both carry source=META and gap-id markers."""
         settings = _make_settings(tmp_path)
@@ -156,9 +150,7 @@ class TestRunMetaPass:
             agent_kwargs.append(kw)
             return agent_result
 
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.run_meta_agent", _fake_agent
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.run_meta_agent", _fake_agent)
 
         # Repos config
         reg = ReposRegistry(
@@ -167,9 +159,7 @@ class TestRunMetaPass:
                 "repo-b": _repo_cfg("repo-b", board_id="repo-b"),
             }
         )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.get_repos_config", lambda: reg
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.get_repos_config", lambda: reg)
 
         # Capture persist_memory
         persist_calls: list[tuple[Path, str]] = []
@@ -177,12 +167,8 @@ class TestRunMetaPass:
         def _fake_persist(path, text):
             persist_calls.append((path, text))
 
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.persist_memory", _fake_persist
-        )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.load_memory", lambda _p: ""
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.persist_memory", _fake_persist)
+        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
             "robotsix_mill.meta_runner._gather_meta_proposals",
             lambda _s: "<recent_proposals>\n(no recent proposals)\n</recent_proposals>",
@@ -289,16 +275,12 @@ class TestRunMetaPass:
                 "repo-a": _repo_cfg("repo-a", board_id="repo-a"),
             }
         )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.get_repos_config", lambda: reg
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.get_repos_config", lambda: reg)
 
         monkeypatch.setattr(
             "robotsix_mill.meta_runner.persist_memory", lambda p, t: None
         )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.load_memory", lambda _p: ""
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
             "robotsix_mill.meta_runner._gather_meta_proposals",
             lambda _s: "",
@@ -308,10 +290,7 @@ class TestRunMetaPass:
             result = run_meta_pass("test-session")
 
         # Warning logged about unknown repo
-        assert any(
-            "no-such-repo" in m and "skipping" in m
-            for m in caplog.messages
-        )
+        assert any("no-such-repo" in m and "skipping" in m for m in caplog.messages)
 
         # Extraction draft was still filed
         assert len(result.extraction_drafts_created) == 1
@@ -327,9 +306,7 @@ class TestRunMetaPass:
     ):
         """When trace_review_target_repo_id is empty, force_traces_to_mill
         is NOT called and the pass still completes (graceful degradation)."""
-        settings = _make_settings(
-            tmp_path, trace_review_target_repo_id=""
-        )
+        settings = _make_settings(tmp_path, trace_review_target_repo_id="")
         db.reset_engine()
         db.init_db(settings, board_id="meta")
 
@@ -349,9 +326,7 @@ class TestRunMetaPass:
         monkeypatch.setattr(
             "robotsix_mill.meta_runner.persist_memory", lambda p, t: None
         )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.load_memory", lambda _p: ""
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
             "robotsix_mill.meta_runner._gather_meta_proposals",
             lambda _s: "",
@@ -371,8 +346,7 @@ class TestRunMetaPass:
 
         assert result.updated_memory == "ok"
         assert any(
-            "trace_review_target_repo_id not configured" in m
-            for m in caplog.messages
+            "trace_review_target_repo_id not configured" in m for m in caplog.messages
         )
 
         db.reset_engine()
@@ -382,9 +356,7 @@ class TestRunMetaPass:
     ):
         """When trace_review_target_repo_id is set and the repo exists
         in repos config, force_traces_to_mill is called."""
-        settings = _make_settings(
-            tmp_path, trace_review_target_repo_id="mill-repo"
-        )
+        settings = _make_settings(tmp_path, trace_review_target_repo_id="mill-repo")
         db.reset_engine()
         db.init_db(settings, board_id="meta")
 
@@ -404,9 +376,7 @@ class TestRunMetaPass:
         monkeypatch.setattr(
             "robotsix_mill.meta_runner.persist_memory", lambda p, t: None
         )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.load_memory", lambda _p: ""
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
             "robotsix_mill.meta_runner._gather_meta_proposals",
             lambda _s: "",
@@ -417,9 +387,7 @@ class TestRunMetaPass:
                 "mill-repo": _repo_cfg("mill-repo"),
             }
         )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.get_repos_config", lambda: reg
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.get_repos_config", lambda: reg)
 
         # Monkeypatch _ensure_tracing so the real context manager
         # doesn't try to set up real OTLP exporters.
@@ -438,11 +406,10 @@ class TestRunMetaPass:
             ftc_called.append(rc)
             # Return a real context manager that does nothing
             from contextlib import nullcontext
+
             return nullcontext()
 
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.force_traces_to_mill", _fake_ftc
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.force_traces_to_mill", _fake_ftc)
 
         result = run_meta_pass("test-session")
 
@@ -504,16 +471,12 @@ class TestRunMetaPass:
                 "repo-b": _repo_cfg("repo-b", board_id="repo-b"),
             }
         )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.get_repos_config", lambda: reg
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.get_repos_config", lambda: reg)
 
         monkeypatch.setattr(
             "robotsix_mill.meta_runner.persist_memory", lambda p, t: None
         )
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.load_memory", lambda _p: ""
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
             "robotsix_mill.meta_runner._gather_meta_proposals",
             lambda _s: "",
@@ -523,16 +486,30 @@ class TestRunMetaPass:
         _real_create = TicketService.create
         call_count = [0]
 
-        def _failing_create(self, title, description="", source=SourceKind.USER,
-                            origin_session=None, depends_on=None, kind="task",
-                            parent_id=None, board_id=None):
+        def _failing_create(
+            self,
+            title,
+            description="",
+            source=SourceKind.USER,
+            origin_session=None,
+            depends_on=None,
+            kind="task",
+            parent_id=None,
+            board_id=None,
+        ):
             call_count[0] += 1
             if call_count[0] == 1:
                 raise RuntimeError("DB exploded")
             return _real_create(
-                self, title, description=description, source=source,
-                origin_session=origin_session, depends_on=depends_on,
-                kind=kind, parent_id=parent_id, board_id=board_id,
+                self,
+                title,
+                description=description,
+                source=source,
+                origin_session=origin_session,
+                depends_on=depends_on,
+                kind=kind,
+                parent_id=parent_id,
+                board_id=board_id,
             )
 
         monkeypatch.setattr(
@@ -582,18 +559,14 @@ class TestRunMetaPass:
             captured_memory.append(kw["memory"])
             return MetaAgentResult(updated_memory="first memory")
 
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.run_meta_agent", _fake_agent
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.run_meta_agent", _fake_agent)
 
         persist_calls: list[tuple[Path, str]] = []
 
         def _fake_persist(path, text):
             persist_calls.append((path, text))
 
-        monkeypatch.setattr(
-            "robotsix_mill.meta_runner.persist_memory", _fake_persist
-        )
+        monkeypatch.setattr("robotsix_mill.meta_runner.persist_memory", _fake_persist)
         monkeypatch.setattr(
             "robotsix_mill.meta_runner._gather_meta_proposals",
             lambda _s: "",

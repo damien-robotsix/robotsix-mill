@@ -101,8 +101,7 @@ def _file_alignment_drafts(
         target_rc = repos_config.repos.get(draft.target_repo_id)
         if target_rc is None:
             log.warning(
-                "meta_pass: alignment draft %r targets unknown "
-                "repo_id %r — skipping",
+                "meta_pass: alignment draft %r targets unknown repo_id %r — skipping",
                 draft.title,
                 draft.target_repo_id,
             )
@@ -111,9 +110,7 @@ def _file_alignment_drafts(
         gap_id = _slugify_title(draft.title)
         body = _build_body_with_gap_id(draft.body, gap_id)
         try:
-            target_service = TicketService(
-                settings, board_id=target_rc.board_id
-            )
+            target_service = TicketService(settings, board_id=target_rc.board_id)
             ticket = target_service.create(
                 title=draft.title,
                 description=body,
