@@ -35,7 +35,7 @@ retries: 2
 # Module path for the agent and its output type.
 module: bc_check
 
-skills: [board]
+skills: [board-read]
 
 system_prompt: |
   You are a backward-compatibility cleanup agent for an autonomous

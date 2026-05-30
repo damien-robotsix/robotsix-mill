@@ -59,7 +59,7 @@ retries: 2
 module: refining
 
 # Forward-looking: skill files to inject into the prompt. None today.
-skills: [board, ask_user_guardrails]
+skills: [board-report, ask_user_guardrails]
 
 system_prompt: |
   You turn a rough ticket draft into a precise, self-contained

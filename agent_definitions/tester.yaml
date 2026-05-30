@@ -21,7 +21,7 @@ report_issue: true
 # output_type absent → defaults to str
 retries: 2
 module: testing
-skills: [board]
+skills: [board-report]
 
 system_prompt: |
   You are given the raw output of a failing test run. Produce a SHORT,

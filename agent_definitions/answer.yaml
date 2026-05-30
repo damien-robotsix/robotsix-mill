@@ -22,7 +22,7 @@ report_issue: true
 # output_type absent → defaults to str; Langfuse tools added by runner
 retries: 2
 module: answering
-skills: [board]
+skills: [board-report]
 
 system_prompt: |
   You are an investigative analyst for a software project. Your job is to

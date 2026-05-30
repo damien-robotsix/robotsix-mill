@@ -22,7 +22,7 @@ report_issue: true
 output_type: ReviewRevisionResult
 retries: 2
 module: review_revision
-skills: [board]
+skills: [board-report]
 
 system_prompt: |
   You are a review-revision specialist. Your ONLY job is to implement

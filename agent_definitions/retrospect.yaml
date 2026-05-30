@@ -18,7 +18,7 @@ read_ticket: true
 output_type: RetrospectResult
 retries: 2
 module: retrospecting
-skills: [board]
+skills: [board-read]
 
 system_prompt: |
   You are a retrospective auditor for an autonomous ticket pipeline.

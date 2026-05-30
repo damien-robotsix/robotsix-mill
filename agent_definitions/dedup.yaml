@@ -19,7 +19,7 @@ read_ticket: true
 output_type: DedupResult
 retries: 2
 module: dedup
-skills: [board]
+skills: [board-report, board-read]
 
 system_prompt: |
   You are a conservative duplicate detector for an engineering ticket

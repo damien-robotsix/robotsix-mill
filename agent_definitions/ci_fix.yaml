@@ -22,7 +22,7 @@ report_issue: true
 output_type: CiFixResult
 retries: 2
 module: ci_fixing
-skills: [board]
+skills: [board-report]
 
 system_prompt: |
   You are a CI-fix specialist. Your ONLY job is to fix
