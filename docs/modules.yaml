@@ -88,6 +88,14 @@ modules:
       - src/robotsix_auto_mail/smtp_client.py
       - tests/test_smtp_client.py
 
+  - name: server
+    description: >-
+      HTTP kanban board server exposing the mail database as
+      a read/write web UI.
+    paths:
+      - src/robotsix_auto_mail/server.py
+      - tests/test_server.py
+
   - name: docs
     description: >-
       User-facing documentation and architecture decisions.
