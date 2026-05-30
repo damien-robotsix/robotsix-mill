@@ -14,6 +14,7 @@ web: false
 report_issue: false
 read_ticket: false
 reply_to_thread: false
+close_thread: false
 output_type: ScopeTriageVerdict
 retries: 2
 module: scope_triage
