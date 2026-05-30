@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Literal
 from unittest import mock
 
-import urllib3.exceptions
-
 import pydantic
 import pytest
+import urllib3.exceptions
 
 from robotsix_auto_mail.config import MailConfig
 from robotsix_auto_mail.detect import (

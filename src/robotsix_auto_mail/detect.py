@@ -19,10 +19,9 @@ import os
 import urllib.parse
 from xml.etree import ElementTree  # nosec B405
 
+import pydantic
 import urllib3
 import urllib3.exceptions
-
-import pydantic
 
 from robotsix_auto_mail.config import (
     DEFAULT_DB_PATH,
