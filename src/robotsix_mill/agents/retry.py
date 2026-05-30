@@ -52,6 +52,30 @@ _TRANSIENT_NAMES = {
 }
 
 
+def _is_openrouter_upstream_error(exc: BaseException) -> bool:
+    """Recognise OpenRouter's ``finish_reason='error'`` upstream-failure
+    signature.
+
+    When the provider behind OpenRouter errors mid-stream, OpenRouter
+    returns a completion with ``finish_reason: "error"``. The OpenAI
+    SDK then raises a pydantic ``ValidationError`` because ``"error"``
+    isn't in its ``finish_reason`` literal set
+    (``stop``/``length``/``tool_calls``/``content_filter``/``function_call``).
+    That's an upstream hiccup, not a bug in our prompt or schema — a
+    re-run almost always succeeds, so it should ride out as transient
+    rather than BLOCK the ticket.
+
+    Matched by the exception type name (``ValidationError``) plus the
+    distinctive ``finish_reason`` + ``'error'`` markers in the message,
+    so it does NOT catch our own structured-output validation failures
+    (those don't mention ``finish_reason``).
+    """
+    if type(exc).__name__ != "ValidationError":
+        return False
+    msg = str(exc)
+    return "finish_reason" in msg and "'error'" in msg
+
+
 def is_transient(exc: BaseException) -> bool:
     """True only for retryable infrastructure failures. Walks the
     cause/context chain so a timeout wrapped by openai/pydantic-ai
@@ -68,6 +92,8 @@ def is_transient(exc: BaseException) -> bool:
         if isinstance(cur, (httpx.TimeoutException, httpx.TransportError)):
             return True
         if name in _TRANSIENT_NAMES:
+            return True
+        if _is_openrouter_upstream_error(cur):
             return True
         code = _status(cur)
         if code is not None and (code == 429 or 500 <= code < 600):

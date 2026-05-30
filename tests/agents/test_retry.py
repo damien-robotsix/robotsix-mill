@@ -67,6 +67,57 @@ def test_is_transient_jsondecode_wrapped():
     assert is_transient(wrapped) is True
 
 
+def test_is_transient_openrouter_finish_reason_error():
+    """OpenRouter returns finish_reason='error' on an upstream provider
+    failure; the OpenAI SDK raises a pydantic ValidationError because
+    'error' isn't in its finish_reason literal set. That's a transient
+    upstream hiccup, not a prompt/schema bug — it must ride out, not
+    BLOCK the ticket. Matched by type name + the finish_reason/'error'
+    markers so our own structured-output validation failures are not
+    swept up."""
+    from pydantic import BaseModel, ValidationError
+
+    class _FinishReason(BaseModel):
+        finish_reason: str  # placeholder; we craft the message below
+
+    # Build a real ValidationError carrying the OpenRouter signature.
+    try:
+        # Simulate the SDK's literal-validation failure message.
+        raise _make_finish_reason_validation_error()
+    except ValidationError as e:
+        assert is_transient(e) is True
+
+    # A ValidationError WITHOUT the finish_reason signature (e.g. our
+    # own AuditResult schema failing) must NOT be treated as transient
+    # by this path.
+    class _Schema(BaseModel):
+        n: int
+
+    try:
+        _Schema(n="not-an-int")
+    except ValidationError as e:
+        assert "finish_reason" not in str(e)
+        assert is_transient(e) is False
+
+
+def _make_finish_reason_validation_error():
+    """Return a ValidationError whose message mimics the OpenRouter
+    finish_reason='error' literal failure the OpenAI SDK raises."""
+    from typing import Literal
+
+    from pydantic import BaseModel, ValidationError
+
+    class _Choice(BaseModel):
+        finish_reason: Literal[
+            "stop", "length", "tool_calls", "content_filter", "function_call"
+        ]
+
+    try:
+        _Choice(finish_reason="error")
+    except ValidationError as e:
+        return e
+
+
 def test_is_transient_walks_wrapped_timeout():
     """A hung request surfaces wrapped (openai/pydantic-ai) — the
     timeout must still be recognised through the cause chain."""
