@@ -14,6 +14,8 @@ tools: []
 
 web: false
 report_issue: false
+reply_to_thread: false
+close_thread: false
 output_type: TriageResult
 retries: 2
 module: refining
