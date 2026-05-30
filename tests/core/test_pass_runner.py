@@ -603,8 +603,6 @@ def test_gap_id_re_matches_cost_reconciliation_marker():
 def test_test_file_exists_skips_ticket(tmp_path, monkeypatch):
     """When the expected test file already exists on disk, the
     test-gap draft is skipped with a warning."""
-    from robotsix_mill.pass_runner import _test_file_exists_for_gap
-
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")

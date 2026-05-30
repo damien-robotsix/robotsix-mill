@@ -67,7 +67,8 @@ COPY src/ ./src/
 # ./system — UV_PROJECT_ENVIRONMENT is a path, not a mode — putting the
 # script at /build/system/bin out of the COPY's reach; that broke the build.)
 RUN pip install uv --no-cache-dir \
-    && uv pip install --system --no-cache ".[${INSTALL_EXTRAS}]"
+    && uv lock --extra ${INSTALL_EXTRAS//,/ --extra } \
+    && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --no-dev --extra ${INSTALL_EXTRAS}
 
 # =============================================================================
 # Stage 2: base — shared runtime setup (not built directly; extended by
@@ -134,11 +135,9 @@ COPY . /app
 # Layer dev tooling (pytest, mypy, ruff, bandit) on top of the
 # site-packages inherited from base.
 ARG INSTALL_EXTRAS=dev,tracing
-# Plain pip here (not uv): base copies the builder's site-packages but not
-# its /usr/local/bin/uv launcher, so a fresh `pip install uv` sees uv already
-# satisfied and never recreates the binary → "uv: not found". pip is already
-# present and the editable project install over inherited deps is cheap.
-RUN pip install --no-cache-dir --root-user-action=ignore -e ".[dev,tracing]" \
+RUN pip install uv --no-cache-dir \
+    && uv lock --extra dev --extra tracing \
+    && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --extra dev --extra tracing \
     && chown -R mill:mill /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then

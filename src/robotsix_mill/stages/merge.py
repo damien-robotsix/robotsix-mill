@@ -128,6 +128,11 @@ class MergeStage(Stage):
             return self._poll_waiting_auto_merge(ticket, ctx)
 
         # HUMAN_MR_APPROVAL path: poll PR status.
+        return self._handle_human_mr_approval(ticket, ctx)
+
+    def _handle_human_mr_approval(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Poll PR status from HUMAN_MR_APPROVAL: merged/closed/conflicting/CI/auto-merge."""
+        s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         try:
             pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
@@ -682,22 +687,17 @@ class MergeStage(Stage):
             "Resume-blocked to retry from human_mr_approval.",
         )
 
-    def _handle_conflict(  # noqa: C901  # TODO: split into smaller functions (ticket: split_merge_stage)
+    def _handle_conflict(
         self, ticket: Ticket, ctx: StageContext, branch: str
     ) -> Outcome:
         """Attempt rebase for a conflicting PR."""
         s = ctx.settings
-        repo_dir = _workspace_repo_dir(ctx, ticket)
-        if repo_dir is None:
-            return Outcome(
-                State.BLOCKED,
-                "PR is conflicting but workspace clone is missing; "
-                "cannot rebase. Re-run implement to recreate the clone.",
-            )
 
-        counter_path = ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER
-        attempt = _read_counter(counter_path) + 1
-        max_attempts = s.rebase_max_attempts
+        repo_dir = self._validate_workspace_for_rebase(ctx, ticket)
+        if isinstance(repo_dir, Outcome):
+            return repo_dir
+
+        counter_path, attempt, max_attempts = self._read_rebase_attempt(ctx, ticket, s)
 
         target = s.forge_target_branch
         log.info(
@@ -708,6 +708,49 @@ class MergeStage(Stage):
             target,
         )
 
+        ok = self._fetch_and_run_rebase(
+            ticket, s, ctx.repo_config, repo_dir, branch, target, attempt
+        )
+
+        if ok:
+            return self._handle_rebase_success(
+                ticket, ctx, branch, repo_dir, counter_path, attempt, max_attempts
+            )
+        return self._handle_rebase_failure(ticket, counter_path, attempt, max_attempts)
+
+    def _validate_workspace_for_rebase(
+        self, ctx: StageContext, ticket: Ticket
+    ) -> str | Outcome:
+        """Return the repo_dir string, or an Outcome to return early if missing."""
+        repo_dir = _workspace_repo_dir(ctx, ticket)
+        if repo_dir is None:
+            return Outcome(
+                State.BLOCKED,
+                "PR is conflicting but workspace clone is missing; "
+                "cannot rebase. Re-run implement to recreate the clone.",
+            )
+        return repo_dir
+
+    def _read_rebase_attempt(
+        self, ctx: StageContext, ticket: Ticket, s
+    ) -> tuple[Path, int, int]:
+        """Return (counter_path, attempt, max_attempts) for the current rebase."""
+        counter_path = ctx.service.workspace(ticket).artifacts_dir / _REBASE_COUNTER
+        attempt = _read_counter(counter_path) + 1
+        max_attempts = s.rebase_max_attempts
+        return counter_path, attempt, max_attempts
+
+    def _fetch_and_run_rebase(
+        self,
+        ticket: Ticket,
+        s,
+        repo_config,
+        repo_dir: str,
+        branch: str,
+        target: str,
+        attempt: int,
+    ) -> bool:
+        """Fetch target branch and invoke the rebase agent. Returns True on success."""
         try:
             # The merge stage is traced=False (poll-driven, normally no
             # LLM), so the worker does NOT open the ticket's root span.
@@ -739,12 +782,12 @@ class MergeStage(Stage):
                 # repo isn't the mill's own.
                 git_ops.fetch(
                     Path(repo_dir),
-                    remote_url=_resolve_remote_url(s, ctx.repo_config),
-                    token=github_token(s, repo_config=ctx.repo_config),
+                    remote_url=_resolve_remote_url(s, repo_config),
+                    token=github_token(s, repo_config=repo_config),
                     branch=target,
                 )
                 rebase_memory_path = s.memory_file_for(
-                    "rebase", ctx.repo_config.board_id if ctx.repo_config else ""
+                    "rebase", repo_config.board_id if repo_config else ""
                 )
                 memory_text = load_memory(rebase_memory_path)
                 result = run_rebase_agent(
@@ -760,99 +803,118 @@ class MergeStage(Stage):
         except Exception as e:  # noqa: BLE001
             log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False
+        return ok
 
-        if ok:
-            # Only force-push when the remote doesn't already have this
-            # exact commit. GitHub reports mergeable=False transiently
-            # right after any push (while it recomputes); pushing an
-            # unchanged branch re-triggers CI + another recompute →
-            # endless REBASING↔HUMAN_MR_APPROVAL ping-pong on a healthy PR (and
-            # an ntfy every cycle). The merge stage fetched
-            # origin/<branch> before invoking the agent, so
-            # origin/<branch> is fresh.
-            try:
-                local = git_ops.head_sha(repo_dir)
-                remote = git_ops.remote_branch_sha(repo_dir, branch)
-            except Exception:  # noqa: BLE001 — be safe: fall back to push
-                local, remote = None, "force-push"
+    def _handle_rebase_success(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+        repo_dir: str,
+        counter_path: Path,
+        attempt: int,
+        max_attempts: int,
+    ) -> Outcome:
+        """Handle a successful rebase: SHA guard, force-push, outcome routing."""
+        s = ctx.settings
+        # Only force-push when the remote doesn't already have this
+        # exact commit. GitHub reports mergeable=False transiently
+        # right after any push (while it recomputes); pushing an
+        # unchanged branch re-triggers CI + another recompute →
+        # endless REBASING↔HUMAN_MR_APPROVAL ping-pong on a healthy PR (and
+        # an ntfy every cycle). The merge stage fetched
+        # origin/<branch> before invoking the agent, so
+        # origin/<branch> is fresh.
+        try:
+            local = git_ops.head_sha(repo_dir)
+            remote = git_ops.remote_branch_sha(repo_dir, branch)
+        except Exception:  # noqa: BLE001 — be safe: fall back to push
+            local, remote = None, "force-push"
 
-            if local is not None and remote == local:
-                # Nothing to push. The rebase made no change yet GitHub
-                # still flags the PR — either GitHub is still recomputing
-                # (it will clear on a later poll → merge) or the local
-                # base is stale / the conflict is genuinely unresolvable.
-                # This is NOT progress: count it (don't reset) and bound
-                # the loop. Stay REBASING — a same-state no-op the worker
-                # leaves alone (no transition, no ntfy) — until the
-                # attempt budget is spent, then BLOCKED once.
-                if attempt < max_attempts:
-                    _write_counter(counter_path, attempt)
-                    log.info(
-                        "%s: rebase no-op (remote already current) — "
-                        "GitHub still flags conflict; re-poll %d/%d",
-                        ticket.id,
-                        attempt,
-                        max_attempts,
-                    )
-                    return Outcome(State.REBASING)  # silent re-poll
-                _write_counter(counter_path, 0)
-                log.warning(
-                    "%s: rebase keeps being a no-op but the PR is still "
-                    "conflicting after %d attempts",
-                    ticket.id,
-                    max_attempts,
-                )
-                return Outcome(
-                    State.BLOCKED,
-                    "rebase is a no-op yet GitHub still reports the PR "
-                    "conflicting — the local clone's base is likely stale "
-                    "or the conflict needs manual resolution. "
-                    "Resume-blocked to retry from human_mr_approval.",
-                )
-
-            # Remote is behind / missing → genuine push needed.
-            try:
-                git_ops.push(
-                    repo_dir,
-                    branch=branch,
-                    remote_url=s.forge_remote_url,
-                    token=github_token(s),
-                )
-            except Exception as e:  # noqa: BLE001
-                log.exception("%s: force-push after rebase failed: %s", ticket.id, e)
-                _write_counter(counter_path, attempt)
-                return Outcome(
-                    State.BLOCKED,
-                    f"rebase succeeded but force-push failed: {e}",
-                )
-            # Pushed — but a push is NOT proof the conflict is resolved
-            # (git rebase rewrites SHAs every run, so "pushed" happens
-            # even when the rebase keeps failing to truly resolve and
-            # GitHub still reports the PR conflicting). Only an actually
-            # mergeable PR clears the counter (in the HUMAN_MR_APPROVAL path).
-            # So persist the attempt and bound the loop here too.
-            log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
+        if local is not None and remote == local:
+            # Nothing to push. The rebase made no change yet GitHub
+            # still flags the PR — either GitHub is still recomputing
+            # (it will clear on a later poll → merge) or the local
+            # base is stale / the conflict is genuinely unresolvable.
+            # This is NOT progress: count it (don't reset) and bound
+            # the loop. Stay REBASING — a same-state no-op the worker
+            # leaves alone (no transition, no ntfy) — until the
+            # attempt budget is spent, then BLOCKED once.
             if attempt < max_attempts:
                 _write_counter(counter_path, attempt)
-                # Route by context: no PR yet → back to implement; PR exists → re-check gates.
-                try:
-                    pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
-                        source_branch=branch
-                    )
-                except Exception:
-                    pr = None
-                next_state = State.READY if pr is None else State.IMPLEMENT_COMPLETE
-                return Outcome(next_state)
-            _write_counter(counter_path, 0)  # reset for a future resume
+                log.info(
+                    "%s: rebase no-op (remote already current) — "
+                    "GitHub still flags conflict; re-poll %d/%d",
+                    ticket.id,
+                    attempt,
+                    max_attempts,
+                )
+                return Outcome(State.REBASING)  # silent re-poll
+            _write_counter(counter_path, 0)
+            log.warning(
+                "%s: rebase keeps being a no-op but the PR is still "
+                "conflicting after %d attempts",
+                ticket.id,
+                max_attempts,
+            )
             return Outcome(
                 State.BLOCKED,
-                f"rebased and force-pushed {max_attempts}x but GitHub "
-                "still reports the PR conflicting — the local clone's "
-                "base is likely stale or the conflict is unresolvable "
-                "automatically. Resume-blocked to retry from human_mr_approval.",
+                "rebase is a no-op yet GitHub still reports the PR "
+                "conflicting — the local clone's base is likely stale "
+                "or the conflict needs manual resolution. "
+                "Resume-blocked to retry from human_mr_approval.",
             )
 
-        # Agent failed.
+        # Remote is behind / missing → genuine push needed.
+        try:
+            git_ops.push(
+                repo_dir,
+                branch=branch,
+                remote_url=s.forge_remote_url,
+                token=github_token(s),
+            )
+        except Exception as e:  # noqa: BLE001
+            log.exception("%s: force-push after rebase failed: %s", ticket.id, e)
+            _write_counter(counter_path, attempt)
+            return Outcome(
+                State.BLOCKED,
+                f"rebase succeeded but force-push failed: {e}",
+            )
+        # Pushed — but a push is NOT proof the conflict is resolved
+        # (git rebase rewrites SHAs every run, so "pushed" happens
+        # even when the rebase keeps failing to truly resolve and
+        # GitHub still reports the PR conflicting). Only an actually
+        # mergeable PR clears the counter (in the HUMAN_MR_APPROVAL path).
+        # So persist the attempt and bound the loop here too.
+        log.info("%s: rebase succeeded, branch force-pushed", ticket.id)
+        if attempt < max_attempts:
+            _write_counter(counter_path, attempt)
+            # Route by context: no PR yet → back to implement; PR exists → re-check gates.
+            try:
+                pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
+                    source_branch=branch
+                )
+            except Exception:
+                pr = None
+            next_state = State.READY if pr is None else State.IMPLEMENT_COMPLETE
+            return Outcome(next_state)
+        _write_counter(counter_path, 0)  # reset for a future resume
+        return Outcome(
+            State.BLOCKED,
+            f"rebased and force-pushed {max_attempts}x but GitHub "
+            "still reports the PR conflicting — the local clone's "
+            "base is likely stale or the conflict is unresolvable "
+            "automatically. Resume-blocked to retry from human_mr_approval.",
+        )
+
+    def _handle_rebase_failure(
+        self,
+        ticket: Ticket,
+        counter_path: Path,
+        attempt: int,
+        max_attempts: int,
+    ) -> Outcome:
+        """Handle a failed rebase: retry counting or BLOCKED when exhausted."""
         if attempt < max_attempts:
             _write_counter(counter_path, attempt)
             log.warning(
