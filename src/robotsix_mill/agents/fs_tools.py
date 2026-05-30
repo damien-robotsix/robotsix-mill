@@ -386,9 +386,11 @@ def build_fs_tools(
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
-        # A fresh full-file read (cache miss) makes every earlier copy of
-        # this file in the message history redundant — prune them so the
-        # stale content stops costing context-window tokens.
+        # A fresh full-file read makes every earlier copy of this file in
+        # the message history redundant. Pruning them rewrites the prefix —
+        # which invalidates the upstream prompt cache on THIS turn only, but
+        # permanently shrinks the context for all later turns (cache reads
+        # still cost per-token), a net economy over a long agentic loop.
         if ctx is not None and is_full_read:
             _prune_stale_file_content(ctx, p)
 

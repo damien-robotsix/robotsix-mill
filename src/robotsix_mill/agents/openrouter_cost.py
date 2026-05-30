@@ -26,6 +26,21 @@ from typing import Any
 
 from pydantic_ai.models.openai import OpenAIChatModel
 
+# OpenRouter load-balances each model across ~14 upstream providers, and
+# prompt caches are per-provider — so routing that bounces between providers
+# turns the ~80k-token prefix into a cold miss (~13x the cost of a cache
+# read). We pin DeepSeek calls to DeepSeek's own endpoint to keep the cache
+# warm across the many tool-call turns of a stage (see _inject_provider_pin).
+#
+# Caveat under investigation: pinned to DeepSeek first-party, deepseek-v4-pro
+# can intermittently 400 with "reasoning_content in the thinking mode must be
+# passed back" (an earlier pin-only attempt blocked tickets — PR #503). It was
+# NOT reproducible in isolation, so rather than ship an unproven field-rename
+# fix we classify that 400 as transient (agents/retry.py) and retry it, which
+# also tells us whether the error is intermittent. Revisit if retries exhaust.
+_PINNED_PROVIDER = "DeepSeek"
+_PIN_MODEL_PREFIX = "deepseek/"
+
 
 def _get_cost_from_response(response: Any) -> float | None:
     """Extract the USD cost from an OpenRouter completion response.
@@ -56,23 +71,35 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
 
     Forces OpenRouter's usage-accounting opt-in
     (``usage: {include: true}``) so the response carries ``usage.cost``.
+
+    For ``deepseek/*`` models it pins the upstream provider to DeepSeek so
+    the prompt cache stays warm across turns (see module note).
     """
 
     async def _completions_create(self, *args: Any, **kwargs: Any) -> Any:
         _inject_usage_include(args, kwargs)
+        _inject_provider_pin(args, kwargs, str(getattr(self, "model_name", "") or ""))
         response = await super()._completions_create(*args, **kwargs)
         record_openrouter_cost(response)
         return response
 
 
-# NOTE: a hard provider pin (extra_body.provider = {only:[DeepSeek]}) was
-# tried here to keep DeepSeek's per-provider prompt cache warm across turns
-# (PR #499), but it broke multi-turn reasoning: pinned to DeepSeek
-# first-party, deepseek-v4-pro runs in thinking mode and the API rejects
-# follow-up turns with "reasoning_content in the thinking mode must be
-# passed back" because pydantic-ai drops reasoning_content between turns.
-# Reverted (PR #503). A reasoning-safe cache strategy (disable thinking, or
-# round-trip reasoning_content) is tracked separately before any re-attempt.
+def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
+    """Pin ``deepseek/*`` calls to the DeepSeek upstream provider so the
+    prompt cache stays warm across turns (see module note). Hard pin (no
+    fallbacks). No-op for non-DeepSeek models and when a caller already set
+    ``provider`` (don't trample an explicit override). MUST be paired with
+    the ``reasoning_content`` profile override in ``__init__``."""
+    if not model_name.startswith(_PIN_MODEL_PREFIX):
+        return
+    settings = _resolve_model_settings(args, kwargs)
+    if settings is None:
+        return
+    extra_body = dict(settings.get("extra_body") or {})
+    if "provider" in extra_body:
+        return  # caller set an explicit routing preference — respect it
+    extra_body["provider"] = {"only": [_PINNED_PROVIDER], "allow_fallbacks": False}
+    settings["extra_body"] = extra_body
 
 
 def _resolve_model_settings(args: tuple, kwargs: dict) -> Any:
