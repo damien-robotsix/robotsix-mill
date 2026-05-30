@@ -15,7 +15,12 @@ config/secrets.yaml
 config/repos.yaml
 config/mill.local.yaml
 config/mill.production.yaml
+.mill-data/
 .data/
+# Ephemeral runtime symlink the orchestrating mill drops here to point
+# at the current epic workspace. No code in this repo reads or writes
+# it; ignored so it doesn't get re-tracked accidentally.
+_epic
 dist/
 build/
 docker-compose.override.yml
