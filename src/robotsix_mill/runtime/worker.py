@@ -307,8 +307,22 @@ async def _process_ticket_inner(
         # pre-transition state — semantically "work done while in
         # this state".
         _post_trace_event(ctx, ticket_id, trace_id, stage_name)
-        ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
-        log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
+        # A stage tool may have already moved the ticket to outcome.next_state
+        # (e.g. ask_user → AWAITING_USER_REPLY) before returning an Outcome
+        # that repeats that state. Re-fetch and skip the redundant transition:
+        # transitioning to the current state is a no-op the state machine
+        # rejects, and the raised TransitionError used to crash this task.
+        _fresh = ctx.service.get(ticket_id)
+        if _fresh is not None and _fresh.state == outcome.next_state:
+            log.info(
+                "%s: %s already at %s (stage tool set it) — skipping transition",
+                stage_name,
+                ticket_id,
+                outcome.next_state,
+            )
+        else:
+            ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
+            log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
         # Best-effort push notification for human-attention states.
         if outcome.next_state in _TRIGGER_STATES:
             ticket = ctx.service.get(ticket_id)
