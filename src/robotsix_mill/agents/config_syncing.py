@@ -67,8 +67,8 @@ CLASSIFY FINDINGS:
 - **stale-yaml-key**: a YAML key exists in one of the example /
   defaults files but no matching field in the model.
 - **default-mismatch**: the YAML default disagrees with the model
-  default (e.g. defaults file says ``max_concurrency: 4`` but the
-  model defaults to ``1``).
+  default (e.g. defaults file says ``test_requests: 8`` but the
+  model field defaults to ``50``).
 - **doc-mismatch**: ``docs/configuration.md`` documents a knob with
   a value that doesn't match the model default. Only flag when the
   doc explicitly states a number / string; narrative mentions are

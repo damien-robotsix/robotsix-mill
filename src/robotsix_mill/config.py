@@ -225,11 +225,6 @@ class Settings(BaseSettings):
     # bounding a real hang. On timeout the call raises -> transient ->
     # retry/backoff rides it out (or it BLOCKs visibly).
     model_request_timeout: float = Field(default=900.0)
-    # How many tickets the worker pool processes in parallel. One
-    # ticket's stages still run sequentially within its consumer; this
-    # is cross-ticket concurrency. Each in-flight implement may spawn a
-    # sandbox container and hit the model API, so keep it modest.
-    max_concurrency: int = Field(default=4)
     transient_retries: int = Field(default=4)
     transient_backoff_base: float = Field(default=2.0)
     transient_backoff_cap: float = Field(default=30.0)
@@ -1172,13 +1167,6 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
 
     # -- range checks --------------------------------------------------
-
-    @field_validator("max_concurrency")
-    @classmethod
-    def _validate_max_concurrency(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("max_concurrency must be ≥ 1")
-        return v
 
     @field_validator("model_request_timeout")
     @classmethod

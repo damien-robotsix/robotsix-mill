@@ -96,7 +96,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("test_request_limit", "MILL_TEST_REQUEST_LIMIT", "15", 15),
     ("max_fix_iterations", "MILL_MAX_FIX_ITERATIONS", "6", 6),
     ("model_request_timeout", "MILL_MODEL_REQUEST_TIMEOUT", "123.5", 123.5),
-    ("max_concurrency", "MILL_MAX_CONCURRENCY", "2", 2),
     # --- retry / backoff ---
     ("transient_retries", "MILL_TRANSIENT_RETRIES", "7", 7),
     ("transient_backoff_base", "MILL_TRANSIENT_BACKOFF_BASE", "5.0", 5.0),
@@ -342,10 +341,10 @@ class TestTypeCoercion:
     """Pydantic Settings coerces string env vars to the field type."""
 
     def test_int_coercion(self, monkeypatch):
-        monkeypatch.setenv("MILL_MAX_CONCURRENCY", "8")
+        monkeypatch.setenv("MILL_MAX_FIX_ITERATIONS", "8")
         s = Settings()
-        assert s.max_concurrency == 8
-        assert isinstance(s.max_concurrency, int)
+        assert s.max_fix_iterations == 8
+        assert isinstance(s.max_fix_iterations, int)
 
     def test_float_coercion(self, monkeypatch):
         monkeypatch.setenv("MILL_MODEL_REQUEST_TIMEOUT", "2.5")
@@ -579,7 +578,7 @@ class TestYamlLoading:
 
         shutil.copy("config/mill.defaults.yaml", defaults)
         local = local_dir / "mill.local.yaml"
-        local.write_text("core:\n  limits:\n    max_concurrency: 99\n")
+        local.write_text("core:\n  limits:\n    max_fix_iterations: 99\n")
 
         # Patch the module-level path to point at our temp dir
         import robotsix_mill.config_loader as cl
@@ -588,7 +587,7 @@ class TestYamlLoading:
         monkeypatch.setattr(cl, "_LOCAL_FILE", local)
 
         config = load_yaml_config()
-        assert config["core"]["limits"]["max_concurrency"] == 99
+        assert config["core"]["limits"]["max_fix_iterations"] == 99
         # Other values unchanged from defaults
         assert config["core"]["models"]["coordinator"] == "deepseek/deepseek-v4-pro"
 
@@ -1246,12 +1245,7 @@ class TestValidationValid:
     def test_default_settings_passes(self):
         """Default ``Settings()`` passes all validators (smoke test)."""
         s = Settings()
-        assert s.max_concurrency == 4
-
-    def test_max_concurrency_boundary_passes(self):
-        """``max_concurrency=1`` (lower bound) passes."""
-        s = Settings(max_concurrency=1)
-        assert s.max_concurrency == 1
+        assert s.max_fix_iterations == 8
 
     def test_forge_auth_app_with_github_app_id_passes(self):
         """``forge_auth=app`` with ``github_app_id`` passes."""
@@ -1269,11 +1263,6 @@ class TestValidationValid:
 
 class TestValidationInvalid:
     """Invalid Settings constructions that must raise ``ValidationError``."""
-
-    def test_max_concurrency_zero_raises(self):
-        """``max_concurrency=0`` raises ValidationError."""
-        with pytest.raises(ValidationError, match="max_concurrency must be ≥ 1"):
-            Settings(max_concurrency=0)
 
     def test_model_request_timeout_zero_raises(self):
         """``model_request_timeout=0`` raises ValidationError."""
@@ -1359,7 +1348,9 @@ class TestFactories:
 
         shutil.copy("config/mill.defaults.yaml", defaults)
         defaults.write_text(
-            defaults.read_text().replace("max_concurrency: 4", "max_concurrency: 42")
+            defaults.read_text().replace(
+                "max_fix_iterations: 8", "max_fix_iterations: 42"
+            )
         )
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", cl.Path("/nonexistent/mill.local.yaml"))
@@ -1367,7 +1358,7 @@ class TestFactories:
         from robotsix_mill.config import load_settings
 
         s = load_settings()
-        assert s.max_concurrency == 42
+        assert s.max_fix_iterations == 42
 
     def test_load_secrets_returns_secrets_object(self):
         """``load_secrets()`` returns a ``Secrets`` object."""
@@ -1380,7 +1371,7 @@ class TestFactories:
         """Env vars override YAML defaults in ``load_settings()``."""
         import robotsix_mill.config_loader as cl
 
-        # Local overlay sets max_concurrency=42, but env var says 77
+        # Local overlay sets max_fix_iterations=42, but env var says 77
         local_dir = tmp_path / "config"
         local_dir.mkdir()
         defaults = local_dir / "mill.defaults.yaml"
@@ -1388,15 +1379,15 @@ class TestFactories:
 
         shutil.copy("config/mill.defaults.yaml", defaults)
         local = local_dir / "mill.local.yaml"
-        local.write_text("core:\n  limits:\n    max_concurrency: 42\n")
+        local.write_text("core:\n  limits:\n    max_fix_iterations: 42\n")
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", local)
-        monkeypatch.setenv("MILL_MAX_CONCURRENCY", "77")
+        monkeypatch.setenv("MILL_MAX_FIX_ITERATIONS", "77")
 
         from robotsix_mill.config import load_settings
 
         s = load_settings()
-        assert s.max_concurrency == 77  # env var wins, not YAML's 42
+        assert s.max_fix_iterations == 77  # env var wins, not YAML's 42
 
     def test_settings_init_applies_yaml_fallback(self, tmp_path, monkeypatch):
         """``Settings()`` applies YAML when field is at default;
@@ -1410,20 +1401,22 @@ class TestFactories:
 
         shutil.copy("config/mill.defaults.yaml", defaults)
         defaults.write_text(
-            defaults.read_text().replace("max_concurrency: 4", "max_concurrency: 42")
+            defaults.read_text().replace(
+                "max_fix_iterations: 8", "max_fix_iterations: 42"
+            )
         )
         monkeypatch.setattr(cl, "_DEFAULTS_FILE", defaults)
         monkeypatch.setattr(cl, "_LOCAL_FILE", cl.Path("/nonexistent/mill.local.yaml"))
 
         from robotsix_mill.config import Settings
 
-        # No kwargs → YAML value is used (Field default is 4, YAML says 42)
+        # No kwargs → YAML value is used (Field default is 8, YAML says 42)
         s1 = Settings(data_dir=str(tmp_path))
-        assert s1.max_concurrency == 42
+        assert s1.max_fix_iterations == 42
 
         # Constructor kwarg overrides YAML
-        s2 = Settings(data_dir=str(tmp_path), max_concurrency=99)
-        assert s2.max_concurrency == 99
+        s2 = Settings(data_dir=str(tmp_path), max_fix_iterations=99)
+        assert s2.max_fix_iterations == 99
 
 
 class TestFlattenYamlConfig:
@@ -1435,13 +1428,13 @@ class TestFlattenYamlConfig:
 
         yaml_config = {
             "core": {
-                "limits": {"max_concurrency": 8},
+                "limits": {"max_fix_iterations": 8},
                 "models": {"coordinator": "test/model"},
             },
             "service": {"data_dir": "/tmp/data"},
         }
         result = flatten_yaml_config(yaml_config)
-        assert result["max_concurrency"] == 8
+        assert result["max_fix_iterations"] == 8
         assert result["model"] == "test/model"
         assert result["data_dir"] == "/tmp/data"
 
