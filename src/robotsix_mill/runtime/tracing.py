@@ -655,3 +655,23 @@ def trace_stage(
     tracer = trace.get_tracer("robotsix-mill")
     with tracer.start_as_current_span(stage_name):
         yield
+
+
+@contextmanager
+def force_traces_to_mill(repo_config: RepoConfig) -> Iterator[None]:
+    """Override ``_current_pk`` so every span inside the block is stamped
+    with mill's own ``langfuse.public_key`` — not whatever per-repo key
+    the current loop iteration happens to target.
+
+    Usage::
+
+        with force_traces_to_mill(mill_config):
+            # spans here are routed to the robotsix-mill Langfuse project
+            ...
+    """
+    _ensure_tracing(repo_config=repo_config)
+    pk_token = _current_pk.set(repo_config.langfuse_public_key)
+    try:
+        yield
+    finally:
+        _current_pk.reset(pk_token)
