@@ -488,6 +488,11 @@ class Settings(BaseSettings):
     pr_summary_model: str = Field(
         default="openai/gpt-4o-mini", alias="MILL_PR_SUMMARY_MODEL"
     )
+    # When True, Forge.create_repo() is permitted to create repositories
+    # via the forge API. Default False (opt-in) — the operator must
+    # explicitly enable this and ensure the GitHub App installation has
+    # the necessary repository-creation scope.
+    enable_repo_creation: bool = Field(default=False)
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
     # A value ≤ 0 means escalate on the first REQUEST_CHANGES (the loop is

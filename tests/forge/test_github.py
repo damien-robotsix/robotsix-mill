@@ -8,6 +8,7 @@ import httpx as real_httpx
 import pytest
 
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.forge.github import (
     GitHubForge,
     _build_headers,
@@ -1284,3 +1285,114 @@ def test_pr_files_empty_files(tmp_path, monkeypatch):
     forge = _forge(tmp_path)
     files = forge._pr_files(owner="o", repo="r", pull_number=7)
     assert files == []
+
+
+# ---------------------------------------------------------------------------
+# create_repo
+# ---------------------------------------------------------------------------
+
+
+def test_create_repo_happy_path_org(tmp_path, monkeypatch):
+    """201 from org endpoint → returns RepoInfo with correct fields."""
+    fake_json = {
+        "id": 42,
+        "name": "my-repo",
+        "clone_url": "https://github.com/o/my-repo.git",
+        "html_url": "https://github.com/o/my-repo",
+    }
+    _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(201, fake_json),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    result = forge.create_repo(
+        name="my-repo", owner="o", private=True, description="A test repo"
+    )
+    assert isinstance(result, RepoInfo)
+    assert result.id == 42
+    assert result.name == "my-repo"
+    assert result.clone_url == "https://github.com/o/my-repo.git"
+    assert result.html_url == "https://github.com/o/my-repo"
+
+
+def test_create_repo_flag_disabled(tmp_path, monkeypatch):
+    """NotConfiguredError raised when enable_repo_creation=False (default)."""
+    forge = _forge(tmp_path)  # enable_repo_creation defaults to False
+    with pytest.raises(NotConfiguredError, match="Repo creation is disabled"):
+        forge.create_repo(name="my-repo", owner="o", private=True, description="desc")
+
+
+def test_create_repo_org_fallback_to_user(tmp_path, monkeypatch):
+    """403 from org endpoint → 201 from /user/repos → returns RepoInfo."""
+    fake_json = {
+        "id": 99,
+        "name": "fallback-repo",
+        "clone_url": "https://github.com/user/fallback-repo.git",
+        "html_url": "https://github.com/user/fallback-repo",
+    }
+
+    call_count = 0
+
+    # We need a post that returns 403 first, then 201 on second call.
+    class TwoStepPostClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None):
+            return _make_response(404, [], "")
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Org endpoint
+                return _make_response(403, {}, "forbidden")
+            if call_count == 2:
+                # User fallback
+                return _make_response(201, fake_json)
+            return _make_response(500, {}, "error")
+
+    monkeypatch.setattr(real_httpx, "Client", TwoStepPostClient)
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    result = forge.create_repo(
+        name="fallback-repo", owner="big-org", private=False, description="fallback"
+    )
+    assert result.id == 99
+    assert result.name == "fallback-repo"
+    assert call_count == 2
+
+
+def test_create_repo_422_name_exists(tmp_path, monkeypatch):
+    """422 with 'name already exists' → RuntimeError."""
+    _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(
+            422, {}, '{"message": "name already exists on this account"}'
+        ),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    with pytest.raises(RuntimeError, match="already exists"):
+        forge.create_repo(
+            name="existing-repo", owner="o", private=True, description="desc"
+        )
+
+
+def test_create_repo_other_non_2xx(tmp_path, monkeypatch):
+    """Non-422, non-403/404 non-2xx → RuntimeError with status code and body."""
+    _mock_httpx(
+        monkeypatch,
+        post_response=_make_response(500, {}, "internal error"),
+    )
+
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    with pytest.raises(RuntimeError, match="GitHub repo create failed: 500"):
+        forge.create_repo(name="my-repo", owner="o", private=True, description="desc")
