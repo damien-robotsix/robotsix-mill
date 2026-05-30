@@ -59,9 +59,10 @@ ARG INSTALL_EXTRAS=tracing
 WORKDIR /build
 # Copy only what uv needs to install the package (avoids baking the full
 # source tree into the production image).
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN pip install uv --no-cache-dir \
+    && uv lock \
     && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --no-dev --extra ${INSTALL_EXTRAS}
 
 # =============================================================================
@@ -130,6 +131,7 @@ COPY . /app
 # site-packages inherited from base.
 ARG INSTALL_EXTRAS=dev,tracing
 RUN pip install uv --no-cache-dir \
+    && uv lock \
     && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --group dev --extra tracing \
     && chown -R mill:mill /app
 
