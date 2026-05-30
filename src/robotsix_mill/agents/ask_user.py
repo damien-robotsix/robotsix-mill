@@ -45,9 +45,38 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
         if ticket_id is None:
             return "Error: no active ticket session — cannot determine current ticket."
 
+        # Resolve the ticket's board BEFORE constructing the service,
+        # otherwise the unbound service falls through to an empty
+        # board_id and ``db.session(settings, "")`` materialises a
+        # stray ``<data_dir>/mill.db`` at the data-dir root in
+        # multi-repo deployments. ``current_session()`` returns either
+        # the ticket id (ticket-driven flows) or a periodic-session
+        # id like ``audit-...``; only the former resolves to a row.
+        #
+        # When no repos.yaml is configured (single-repo dev / tests /
+        # bespoke setups), fall back to the unbound service whose
+        # ``_get_anywhere`` covers the legacy default DB plus any
+        # disk-discovered boards.
+        from ..config import get_repos_config
         from ..core.service import TicketService
 
-        svc = TicketService(settings)
+        board_id = ""
+        repos = get_repos_config().repos
+        if repos:
+            for rc in repos.values():
+                probe = TicketService(settings, board_id=rc.board_id)
+                if probe.get(ticket_id) is not None:
+                    board_id = rc.board_id
+                    break
+            if not board_id:
+                return (
+                    "ask_user: could not resolve a board for "
+                    f"session={ticket_id!r}; refusing to post the comment "
+                    "(this happens when ask_user is invoked from a periodic "
+                    "agent run — those have no owning ticket)."
+                )
+
+        svc = TicketService(settings, board_id=board_id)
         try:
             svc.add_comment(
                 ticket_id,
