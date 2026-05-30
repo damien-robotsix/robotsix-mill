@@ -2181,6 +2181,7 @@ class Worker:
                                 title=title,
                                 description=body,
                                 source=SourceKind.CI,
+                                priority=True,
                             )
                         except Exception:
                             log.exception(

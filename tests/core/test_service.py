@@ -835,6 +835,19 @@ def test_no_inheritance_when_no_priority_ancestor(service):
     assert child.priority is False
 
 
+def test_explicit_priority_at_create(service):
+    ticket = service.create("urgent task", priority=True)
+    assert ticket.priority is True
+
+
+def test_explicit_priority_composes_with_inheritance(service):
+    """Explicit priority=True on a child of a priority epic still yields True."""
+    epic = service.create("an epic", kind="epic")
+    service.set_priority(epic.id, True)
+    child = service.create("child", parent_id=epic.id, priority=True)
+    assert child.priority is True
+
+
 # --- ask_user close-thread → auto-resume --------------------------------
 
 
