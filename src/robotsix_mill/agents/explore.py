@@ -191,7 +191,22 @@ def run_explore(
                 raise
             return str(retry_result.output).strip()
 
-        return str(result.output).strip()
+        # Detect truncation (finish_reason == 'length') and auto-continue
+        # with a single follow-up call so the caller gets a complete answer.
+        output = str(result.output).strip()
+        finish_reason = getattr(
+            getattr(result, "response", None), "finish_reason", None
+        )
+        if finish_reason == "length":
+            continuation_result = agent.run_sync(
+                "Continue exactly from where you were cut off. "
+                "Do not repeat anything already said. "
+                "Start from the last incomplete sentence.",
+                usage_limits=limits,
+            )
+            output += "\n" + str(continuation_result.output).strip()
+
+        return output
     except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
         return f"explore failed: {e}"
     finally:
