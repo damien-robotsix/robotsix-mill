@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import os
-import urllib.error
 from pathlib import Path
 from typing import Literal
 from unittest import mock
+
+import urllib3.exceptions
 
 import pydantic
 import pytest
@@ -26,13 +27,14 @@ from robotsix_auto_mail.detect import (
 
 
 class _FakeResp:
-    """Minimal stand-in for an ``http.client.HTTPResponse`` used by urlopen."""
+    """Minimal stand-in for a ``urllib3.response.HTTPResponse``."""
 
     def __init__(self, body: str, status: int = 200) -> None:
         self._body = body.encode("utf-8")
         self.status = status
 
-    def read(self) -> bytes:
+    @property
+    def data(self) -> bytes:
         return self._body
 
     def __enter__(self) -> "_FakeResp":
@@ -537,7 +539,7 @@ def test_detection_error_chain() -> None:
 def test_autoconfig_lookup_parses_ispdb() -> None:
     """A valid clientConfig document is parsed into a MailProvider."""
     with mock.patch(
-        "urllib.request.urlopen", return_value=_FakeResp(_ISPDB_XML)
+        "urllib3.PoolManager.request", return_value=_FakeResp(_ISPDB_XML)
     ):
         provider = autoconfig_lookup("user@example.net")
     assert provider is not None
@@ -552,8 +554,8 @@ def test_autoconfig_lookup_parses_ispdb() -> None:
 def test_autoconfig_lookup_network_error_returns_none() -> None:
     """A network failure yields None (caller falls back to the LLM)."""
     with mock.patch(
-        "urllib.request.urlopen",
-        side_effect=urllib.error.URLError("no route"),
+        "urllib3.PoolManager.request",
+        side_effect=urllib3.exceptions.HTTPError("no route"),
     ):
         assert autoconfig_lookup("user@example.net") is None
 
@@ -561,7 +563,7 @@ def test_autoconfig_lookup_network_error_returns_none() -> None:
 def test_autoconfig_lookup_garbage_returns_none() -> None:
     """A non-XML / unparseable body yields None after trying every URL."""
     with mock.patch(
-        "urllib.request.urlopen", return_value=_FakeResp("not xml at all")
+        "urllib3.PoolManager.request", return_value=_FakeResp("not xml at all")
     ):
         assert autoconfig_lookup("user@example.net") is None
 
@@ -579,7 +581,7 @@ def test_autoconfig_lookup_missing_smtp_returns_none() -> None:
   </emailProvider>
 </clientConfig>
 """
-    with mock.patch("urllib.request.urlopen", return_value=_FakeResp(xml)):
+    with mock.patch("urllib3.PoolManager.request", return_value=_FakeResp(xml)):
         assert autoconfig_lookup("user@example.net") is None
 
 
@@ -598,7 +600,7 @@ _MX_JSON = (
 def test_mx_lookup_parses_and_sorts() -> None:
     """MX records are parsed and returned lowest-preference first."""
     with mock.patch(
-        "urllib.request.urlopen", return_value=_FakeResp(_MX_JSON)
+        "urllib3.PoolManager.request", return_value=_FakeResp(_MX_JSON)
     ):
         hosts = mx_lookup("user@example.net")
     assert hosts == ["mx1.example.net", "mx2.example.net"]
@@ -607,8 +609,8 @@ def test_mx_lookup_parses_and_sorts() -> None:
 def test_mx_lookup_network_error_returns_empty() -> None:
     """A DoH failure yields an empty list."""
     with mock.patch(
-        "urllib.request.urlopen",
-        side_effect=urllib.error.URLError("no route"),
+        "urllib3.PoolManager.request",
+        side_effect=urllib3.exceptions.HTTPError("no route"),
     ):
         assert mx_lookup("user@example.net") == []
 

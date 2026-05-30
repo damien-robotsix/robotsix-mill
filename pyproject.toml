@@ -8,6 +8,7 @@ version = "0.0.0"
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
+    "urllib3>=2.0",
     "pydantic>=2.0",
 ]
 
@@ -36,7 +37,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.bandit]
-skips = ["B107", "B310", "B314", "B405"]
+skips = ["B107", "B314", "B405"]
 
 [project.scripts]
 robotsix-auto-mail = "robotsix_auto_mail.cli:main"

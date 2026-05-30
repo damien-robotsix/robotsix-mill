@@ -16,10 +16,11 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
-import urllib.error
 import urllib.parse
-import urllib.request
 from xml.etree import ElementTree
+
+import urllib3
+import urllib3.exceptions
 
 import pydantic
 
@@ -28,6 +29,12 @@ from robotsix_auto_mail.config import (
     DEFAULT_LLM_MODEL,
     MailConfig,
 )
+
+# ---------------------------------------------------------------------------
+# Shared connection pool
+# ---------------------------------------------------------------------------
+
+_HTTP = urllib3.PoolManager()
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -344,11 +351,11 @@ def autoconfig_lookup(
     """
     for url in _autoconfig_urls(email_address):
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as resp:
-                if getattr(resp, "status", 200) != 200:
-                    continue
-                xml_text = resp.read().decode("utf-8", errors="replace")
-        except (urllib.error.URLError, OSError, ValueError):
+            resp = _HTTP.request("GET", url, timeout=timeout)
+            if resp.status != 200:
+                continue
+            xml_text = resp.data.decode("utf-8", errors="replace")
+        except (urllib3.exceptions.HTTPError, OSError, ValueError):
             continue
         provider = _parse_autoconfig_xml(xml_text)
         if provider is not None:
@@ -415,15 +422,15 @@ def mx_lookup(email_address: str, *, timeout: float = 5.0) -> list[str]:
     if not domain:
         return []
     url = f"{_DOH_RESOLVER}?name={urllib.parse.quote(domain)}&type=MX"
-    request = urllib.request.Request(
-        url, headers={"Accept": "application/dns-json"}
-    )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as resp:
-            if getattr(resp, "status", 200) != 200:
-                return []
-            data = json.loads(resp.read().decode("utf-8", errors="replace"))
-    except (urllib.error.URLError, OSError, ValueError):
+        resp = _HTTP.request(
+            "GET", url, timeout=timeout,
+            headers={"Accept": "application/dns-json"},
+        )
+        if resp.status != 200:
+            return []
+        data = json.loads(resp.data.decode("utf-8", errors="replace"))
+    except (urllib3.exceptions.HTTPError, OSError, ValueError):
         return []
     if not isinstance(data, dict):
         return []
