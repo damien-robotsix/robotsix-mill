@@ -1,0 +1,583 @@
+"""Agent-run background route handlers — audit, checks, health, sync, etc."""
+
+from __future__ import annotations
+
+import logging
+import threading
+
+from fastapi import Depends, Request
+
+from ..deps import get_run_registry
+from . import _resolve_agent_run_repos
+from . import router
+
+log = logging.getLogger(__name__)
+
+
+@router.post("/audit", status_code=202)
+def audit_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off an audit pass in the BACKGROUND and return at once.
+
+    The audit runs the LLM agent for minutes — blocking the HTTP
+    response made the browser fetch drop ("NetworkError"). New draft
+    tickets appear on the board when it finishes.
+    """
+    from ...audit_runner import run_audit_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("audit", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("audit")
+                r = run_audit_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("audit pass done: %d draft(s)", len(r.drafts_created))
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("audit pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="audit-pass", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/bc-check", status_code=202)
+def bc_check_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a bc-check pass in the BACKGROUND and return at once.
+
+    The bc-check agent inspects the codebase for backward-compat shims
+    and dead-code branches that are ripe for removal, drafting tickets
+    when it finds candidates. New drafts appear on the board when it
+    finishes.
+    """
+    from ...bc_check_runner import run_bc_check_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("bc-check", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("bc-check")
+                r = run_bc_check_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("bc-check pass done: %d draft(s)", len(r.drafts_created))
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("bc-check pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="bc-check-pass", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/completeness-check", status_code=202)
+def completeness_check_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    from ...completeness_check_runner import run_completeness_check_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "completeness-check", repo_id=rc.repo_id if rc else ""
+                )
+                session_id = make_session_id("completeness-check")
+                r = run_completeness_check_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info(
+                    "completeness-check pass done: %d draft(s)", len(r.drafts_created)
+                )
+            except Exception as e:
+                log.exception("completeness-check pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="completeness-check-pass", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/agent-check", status_code=202)
+def agent_check_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off an agent-check pass in the BACKGROUND and return at
+    once. The agent inspects every agent's prompt, tools, and
+    structured output, looking for coherence gaps (e.g. an agent
+    promising behaviour its tools can't deliver). New draft tickets
+    appear on the board when it finishes.
+    """
+    from ...agent_check_runner import run_agent_check_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("agent_check", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("agent-check")
+                r = run_agent_check_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info(
+                    "agent-check pass done: %d draft(s)",
+                    len(r.drafts_created),
+                )
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("agent-check pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="agent-check-pass", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/trace-health", status_code=202)
+def trace_health_check(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a trace-health check in the BACKGROUND and return at
+    once.  The check fetches Langfuse traces from the last 24h,
+    detects unsessioned traces, and files a draft ticket if needed.
+    No LLM — deterministic and fast.
+    """
+    from ...trace_health_runner import run_trace_health_check
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "trace-health", repo_id=rc.repo_id if rc else ""
+                )
+                r = run_trace_health_check(repo_config=rc)
+                summary = (
+                    f"{r.unsessioned_count}/{r.total_traces} "
+                    f"traces unsessioned ({r.window_start} to "
+                    f"{r.window_end}) — "
+                    f"{'draft created' if r.draft_created else 'no alert'}"
+                )
+                registry.finish_ok(run_id, summary)
+                if r.draft_created:
+                    log.info(
+                        "trace-health check: draft created — %d/%d traces unsessioned",
+                        r.unsessioned_count,
+                        r.total_traces,
+                    )
+                else:
+                    log.info(
+                        "trace-health check: no alert (%d/%d traces unsessioned)",
+                        r.unsessioned_count,
+                        r.total_traces,
+                    )
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("trace-health check failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="trace-health-check", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/langfuse-cleanup", status_code=202)
+def langfuse_cleanup_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a Langfuse trace cleanup in the BACKGROUND and return at
+    once.  The cleanup deletes the oldest traces until the project is
+    at most ``max_traces`` rows.  Pure HTTP, no LLM.
+    """
+    from ...langfuse_cleanup_runner import run_langfuse_cleanup_pass
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+    settings = request.app.state.settings
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "langfuse-cleanup", repo_id=rc.repo_id if rc else ""
+                )
+                r = run_langfuse_cleanup_pass(
+                    settings=settings,
+                    repo_config=rc,
+                    max_traces=settings.langfuse_cleanup_max_traces,
+                )
+                summary = (
+                    f"Langfuse project {r.project}: "
+                    f"{r.traces_before} traces → "
+                    f"{r.traces_deleted} deleted"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info(
+                    "langfuse-cleanup: %s — %d traces → %d deleted",
+                    r.project,
+                    r.traces_before,
+                    r.traces_deleted,
+                )
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("langfuse-cleanup failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="langfuse-cleanup", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/health-check", status_code=202)
+def health_check_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a codebase-health pass in the BACKGROUND and return at
+    once.
+
+    The health pass runs the LLM agent for minutes — blocking the HTTP
+    response made the browser fetch drop ("NetworkError"). New draft
+    tickets appear on the board when it finishes.
+
+    Mirrors the audit/trace-health pattern: registers the run on
+    start so the /runs panel shows it in-flight, and on finish so it
+    flips to ok/error with a summary. Without this the run is silently
+    happening behind the scenes — the Langfuse trace exists but the
+    board reports nothing.
+    """
+    from ...health_runner import run_health_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("health", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("health")
+                r = run_health_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("health pass done: %d draft(s)", len(r.drafts_created))
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("health pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="health-pass", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/test-gap", status_code=202)
+def test_gap_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a test-gap inspection pass in the BACKGROUND."""
+    from ...test_gap_runner import run_test_gap_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("test-gap", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("test-gap")
+                r = run_test_gap_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("test-gap pass done: %d draft(s)", len(r.drafts_created))
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("test-gap pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="test-gap-pass", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/survey", status_code=202)
+def survey_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a survey pass in the BACKGROUND and return at once.
+
+    The survey agent discovers similar open-source projects, studies
+    their approaches, and proposes concrete improvements as draft
+    tickets. New drafts appear on the board when it finishes.
+    """
+    from ...survey_runner import run_survey_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("survey", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("survey")
+                r = run_survey_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("survey pass done: %d draft(s)", len(r.drafts_created))
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("survey pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="survey-pass", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/config-sync", status_code=202)
+def config_sync_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a config-sync drift detection pass in the BACKGROUND."""
+    from ...config_sync_runner import run_config_sync_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start("config-sync", repo_id=rc.repo_id if rc else "")
+                session_id = make_session_id("config-sync")
+                r = run_config_sync_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("config-sync pass done: %d draft(s)", len(r.drafts_created))
+            except Exception as e:
+                log.exception("config-sync pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="config-sync-pass", daemon=True).start()
+    return {"status": "started"}
+
+
+@router.post("/trace-review", status_code=202)
+def trace_review_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a trace-review pass in the BACKGROUND.
+
+    Scans every Langfuse trace since the last run, deterministically
+    flags outliers (cost, observation count, tool errors, repeated
+    pauses, rejected generations, explore storms), runs a cheap
+    flash-model inspector over the flagged subset, and files draft
+    tickets with proposed solutions.
+    """
+    from ...trace_review_runner import run_trace_review_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "trace-review",
+                    repo_id=rc.repo_id if rc else "",
+                )
+                session_id = make_session_id("trace-review")
+                r = run_trace_review_pass(
+                    session_id=session_id,
+                    repo_config=rc,
+                )
+                summary = r.summary or f"created {len(r.drafts_created)} drafts"
+                registry.finish_ok(run_id, summary)
+                log.info("trace-review pass done: %s", summary)
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("trace-review pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run,
+        name="trace-review-pass",
+        daemon=True,
+    ).start()
+    return {"status": "started"}
+
+
+@router.post("/roadmap-sync", status_code=202)
+def roadmap_sync_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a roadmap-sync pass in the BACKGROUND.
+
+    Reads ROADMAP.md from the configured repo and reconciles its
+    H2 sections against the board's existing epics by an embedded
+    ``<!-- epic-id: ... -->`` marker. Creates new epics for unmarked
+    sections, updates existing epics whose body/title changed, and
+    opens a PR with the marker insertions so the next run is
+    idempotent.
+    """
+    from ...roadmap_sync_runner import run_roadmap_sync_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "roadmap-sync",
+                    repo_id=rc.repo_id if rc else "",
+                )
+                session_id = make_session_id("roadmap-sync")
+                r = run_roadmap_sync_pass(
+                    session_id=session_id,
+                    repo_config=rc,
+                )
+                registry.finish_ok(run_id, r.summary or "no changes")
+                log.info("roadmap-sync pass done: %s", r.summary)
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("roadmap-sync pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(
+        target=_run,
+        name="roadmap-sync-pass",
+        daemon=True,
+    ).start()
+    return {"status": "started"}
+
+
+@router.post("/cost-reconciliation", status_code=202)
+def cost_reconciliation_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a cost-reconciliation drift detection pass in the BACKGROUND."""
+    from ...cost_reconciliation_runner import run_cost_reconciliation_pass
+    from ..tracing import make_session_id
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "cost-reconciliation", repo_id=rc.repo_id if rc else ""
+                )
+                session_id = make_session_id("cost-reconciliation")
+                r = run_cost_reconciliation_pass(session_id=session_id, repo_config=rc)
+                # Prefer the runner's own summary (delta or "no overrun");
+                # fall back to generic drafts-list.
+                runner_summary = (getattr(r, "summary", "") or "").strip()
+                if runner_summary:
+                    summary = runner_summary
+                else:
+                    draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                    summary = (
+                        f"Created {len(r.drafts_created)} drafts: "
+                        f"{', '.join(draft_ids)}"
+                        f"{'…' if len(r.drafts_created) > 5 else ''}"
+                    )
+                registry.finish_ok(run_id, summary)
+                log.info(
+                    "cost-reconciliation pass done: %d draft(s)",
+                    len(r.drafts_created),
+                )
+            except Exception as e:
+                log.exception("cost-reconciliation pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="cost-reconciliation-pass", daemon=True).start()
+    return {"status": "started"}
