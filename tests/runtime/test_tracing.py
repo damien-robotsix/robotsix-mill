@@ -547,3 +547,138 @@ def test_ensure_tracing_skips_repo_without_creds_without_poisoning(monkeypatch):
     )
     tracing._ensure_tracing(repo_config=valid_config)
     assert tracing._provider_ready is True
+
+
+# --- force_traces_to_mill -------------------------------------------------
+
+
+MILL_CONFIG = __import__("robotsix_mill.config", fromlist=["RepoConfig"]).RepoConfig(
+    repo_id="mill",
+    board_id="mill-board",
+    langfuse_project_name="robotsix-mill",
+    langfuse_public_key="pk-mill",
+    langfuse_secret_key="sk-mill",
+)
+
+OTHER_CONFIG = __import__("robotsix_mill.config", fromlist=["RepoConfig"]).RepoConfig(
+    repo_id="other",
+    board_id="other-board",
+    langfuse_project_name="other-project",
+    langfuse_public_key="pk-other",
+    langfuse_secret_key="sk-other",
+)
+
+
+def test_force_traces_to_mill_calls_ensure_tracing(monkeypatch):
+    """Entering force_traces_to_mill must call _ensure_tracing with the
+    passed repo_config."""
+    calls: list = []
+
+    def fake_ensure(repo_config=None):
+        calls.append(repo_config)
+
+    monkeypatch.setattr(tracing, "_ensure_tracing", fake_ensure)
+    with tracing.force_traces_to_mill(MILL_CONFIG):
+        pass
+    assert calls == [MILL_CONFIG]
+
+
+def test_force_traces_to_mill_sets_current_pk_inside_block():
+    """While inside the with block, _current_pk.get() must return the
+    mill config's langfuse_public_key."""
+    assert tracing._current_pk.get() is None  # precondition
+    with tracing.force_traces_to_mill(MILL_CONFIG):
+        assert tracing._current_pk.get() == "pk-mill"
+    assert tracing._current_pk.get() is None  # restored
+
+
+def test_force_traces_to_mill_restores_current_pk_on_normal_exit():
+    """After the with block exits normally, _current_pk must be restored
+    to its pre-entry value."""
+    token = tracing._current_pk.set("pk-before")
+    try:
+        with tracing.force_traces_to_mill(MILL_CONFIG):
+            assert tracing._current_pk.get() == "pk-mill"
+        assert tracing._current_pk.get() == "pk-before"
+    finally:
+        tracing._current_pk.reset(token)
+
+
+def test_force_traces_to_mill_restores_current_pk_on_exception():
+    """If an exception is raised inside the with block, _current_pk must
+    still be restored to its pre-entry value."""
+    token = tracing._current_pk.set("pk-before")
+    try:
+        with pytest.raises(RuntimeError, match="boom"):
+            with tracing.force_traces_to_mill(MILL_CONFIG):
+                assert tracing._current_pk.get() == "pk-mill"
+                raise RuntimeError("boom")
+        assert tracing._current_pk.get() == "pk-before"
+    finally:
+        tracing._current_pk.reset(token)
+
+
+def test_force_traces_to_mill_nesting_is_safe():
+    """Nesting force_traces_to_mill inside a per-repo context must
+    restore the outer _current_pk on exit."""
+    # Simulate an outer per-repo context (like start_ticket_root_span)
+    token = tracing._current_pk.set("pk-other")
+    try:
+        with tracing.force_traces_to_mill(MILL_CONFIG):
+            assert tracing._current_pk.get() == "pk-mill"
+        # After exiting force_traces_to_mill, outer value restored
+        assert tracing._current_pk.get() == "pk-other"
+    finally:
+        tracing._current_pk.reset(token)
+
+
+def test_force_traces_to_mill_spans_carry_mill_public_key():
+    """Integration test: spans created inside force_traces_to_mill() must
+    carry langfuse.public_key from the mill config, verified via a
+    minimal SpanProcessor on a real OTel TracerProvider."""
+    pytest.importorskip("opentelemetry.sdk.trace")
+    from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+    from opentelemetry import trace as otel_trace
+
+    # Reset OTel's "already set" guard.
+    otel_trace._TRACER_PROVIDER = None
+    otel_trace._TRACER_PROVIDER_SET_ONCE._done = False
+
+    captured: list[dict] = []
+
+    class _StampAndCapture(SpanProcessor):
+        """Stamp langfuse.public_key from the contextvar AND capture the
+        resulting attributes — all in a single on_start so ordering
+        between separate processors doesn't matter."""
+
+        def on_start(self, span, parent_context=None):
+            pk = tracing._current_pk.get()
+            if pk:
+                span.set_attribute("langfuse.public_key", pk)
+            attrs = dict(span.attributes or {})
+            captured.append({"name": span.name, "attrs": attrs})
+
+        def on_end(self, span):
+            pass
+
+        def shutdown(self):
+            pass
+
+        def force_flush(self, timeout_millis=30000):
+            return True
+
+    provider = TracerProvider()
+    provider.add_span_processor(_StampAndCapture())
+    tracer = provider.get_tracer("test-tracer")
+
+    with tracing.force_traces_to_mill(MILL_CONFIG):
+        with tracer.start_as_current_span("meta-span"):
+            with tracer.start_as_current_span("child-span"):
+                pass
+
+    assert len(captured) >= 2, f"Expected at least 2 spans, got {len(captured)}"
+    for span_data in captured:
+        assert span_data["attrs"].get("langfuse.public_key") == "pk-mill", (
+            f"Span {span_data['name']} missing or wrong langfuse.public_key: "
+            f"{span_data['attrs']}"
+        )
