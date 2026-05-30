@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re as _re
 import shutil
 import subprocess
@@ -326,8 +325,11 @@ class ImplementStage(Stage):
         binary_artifacts: list[str] = []
         text_out_of_scope: list[str] = []
         for f in out_of_scope:
-            (binary_artifacts if _is_binary_artifact(repo_dir, f, settings.forge_target_branch)
-             else text_out_of_scope).append(f)
+            (
+                binary_artifacts
+                if _is_binary_artifact(repo_dir, f, settings.forge_target_branch)
+                else text_out_of_scope
+            ).append(f)
 
         if binary_artifacts:
             cleaned: list[str] = []

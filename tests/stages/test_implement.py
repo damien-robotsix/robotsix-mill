@@ -2438,8 +2438,7 @@ def test_binary_artifact_auto_cleanup_skips_triage(ctx_factory, tmp_path, monkey
     history = ctx.service.history(t.id)
     events = [ev.note for ev in history if ev.note]
     assert any(
-        "scope-triage auto-REJECT (binary artifacts)" in note
-        and "`test.db`" in note
+        "scope-triage auto-REJECT (binary artifacts)" in note and "`test.db`" in note
         for note in events
     ), f"auto-REJECT step event missing; history events: {events}"
 
@@ -2522,8 +2521,7 @@ def test_binary_artifact_cleanup_with_text_files_still_calls_triage(
     history = ctx.service.history(t.id)
     events = [ev.note for ev in history if ev.note]
     assert any(
-        "scope-triage auto-REJECT (binary artifacts)" in note
-        and "`test.db`" in note
+        "scope-triage auto-REJECT (binary artifacts)" in note and "`test.db`" in note
         for note in events
     )
 
@@ -2534,9 +2532,7 @@ def test_binary_artifact_cleanup_with_text_files_still_calls_triage(
     assert result.action in ("continue", "skip_iteration")
 
 
-def test_binary_artifact_git_numstat_fallback(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_binary_artifact_git_numstat_fallback(ctx_factory, tmp_path, monkeypatch):
     """A file without a known binary extension but detected by git numstat
     as binary is still auto-cleaned."""
     remote = make_bare_repo(tmp_path)
@@ -2589,9 +2585,7 @@ def test_binary_artifact_git_numstat_fallback(
     assert result.action == "skip_iteration"
 
 
-def test_binary_artifact_untracked_file_cleanup(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_binary_artifact_untracked_file_cleanup(ctx_factory, tmp_path, monkeypatch):
     """An untracked binary file (created by agent runtime, never committed)
     is still detected and cleaned by os.unlink after git checkout is a no-op."""
     remote = make_bare_repo(tmp_path)
