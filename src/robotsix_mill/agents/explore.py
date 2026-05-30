@@ -56,6 +56,10 @@ job and wastes the caller's context. No speculation, no preamble.
 Return the minimum that orients the caller.
 
 SCOPE DISCIPLINE — always follow these limits:
+- TOOL NAMES ARE NOT SHELL COMMANDS: ``read_file``, ``run_command``, and
+  ``list_dir`` are tool-call names — NOT shell commands. Invoke them
+  only through the tool_call mechanism. Never pass any tool name (e.g.
+  ``"list_dir src/foo/"``) as a command argument to ``run_command``.
 - GREP BEFORE READ: for any symbol-lookup, string-search, or
   pattern-matching task, use run_command("grep -rn 'pattern'")
   BEFORE reading files.  Only reach for read_file when you need
