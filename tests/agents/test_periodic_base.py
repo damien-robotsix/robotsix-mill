@@ -1,0 +1,514 @@
+"""Tests for :mod:`robotsix_mill.agents.periodic_base`."""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+import pytest
+
+from robotsix_mill.agents import (
+    base,
+    explore,
+    fs_tools,
+    jscpd_tool,
+    overlays,
+    retry,
+    yaml_loader,
+)
+from robotsix_mill.agents.periodic_base import run_periodic_agent
+from robotsix_mill.config import Settings
+
+
+@pytest.fixture
+def settings() -> Settings:
+    return Settings(
+        forge_remote_url="https://git.example.com/test/repo",
+        audit_model="test-model",
+        agent_check_model="test-model",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_tool(name: str):
+    """Return a callable with a ``__name__`` attribute."""
+
+    def _fake(*_args, **_kwargs):
+        return None
+
+    _fake.__name__ = name
+    return _fake
+
+
+def _fake_result(output=None):
+    """Build a mock agent.run_sync result with the expected shape."""
+    if output is None:
+        output = MagicMock()
+        output.draft_titles = [f"title_{i}" for i in range(10)]
+        output.draft_bodies = [f"body_{i}" for i in range(10)]
+        output.gap_ids = [f"gap_{i}" for i in range(10)]
+    result = MagicMock()
+    result.output = output
+    return result
+
+
+def _default_definition():
+    return MagicMock(
+        model=None,
+        system_prompt="base prompt",
+        web=False,
+        library_knowledge=False,
+        report_issue=False,
+        read_ticket=False,
+        reply_to_thread=False,
+        close_thread=False,
+        ask_user=False,
+        output_type="",
+        retries=0,
+        module="",
+        skills=None,
+        modules=False,
+        inject_agent_md=False,
+    )
+
+
+def _setup_patches(monkeypatch, **overrides):
+    """Install the standard set of patches for the periodic pipeline.
+
+    Returns a dict with the mock objects so tests can inspect them.
+    """
+    mocks: dict[str, MagicMock] = {}
+
+    # load_agent_definition
+    mock_load = MagicMock(return_value=_default_definition())
+    mocks["load_agent_definition"] = mock_load
+    monkeypatch.setattr(yaml_loader, "load_agent_definition", mock_load)
+
+    # build_fs_tools
+    fake_fs_tools = overrides.get(
+        "build_fs_tools", [_make_fake_tool("read_file"), _make_fake_tool("list_dir")]
+    )
+    mock_build_fs = MagicMock(return_value=fake_fs_tools)
+    mocks["build_fs_tools"] = mock_build_fs
+    monkeypatch.setattr(fs_tools, "build_fs_tools", mock_build_fs)
+
+    # make_explore_tool
+    mock_explore = MagicMock(return_value=_make_fake_tool("explore_tool"))
+    mocks["make_explore_tool"] = mock_explore
+    monkeypatch.setattr(explore, "make_explore_tool", mock_explore)
+
+    # make_jscpd_tool
+    mock_jscpd = MagicMock(return_value=_make_fake_tool("jscpd_tool"))
+    mocks["make_jscpd_tool"] = mock_jscpd
+    monkeypatch.setattr(jscpd_tool, "make_jscpd_tool", mock_jscpd)
+
+    # load_overlay
+    mock_load_overlay = MagicMock(return_value="")
+    mocks["load_overlay"] = mock_load_overlay
+    monkeypatch.setattr(overlays, "load_overlay", mock_load_overlay)
+
+    # build_agent_from_definition
+    mock_agent = MagicMock()
+    mock_agent.run_sync.return_value = _fake_result()
+    mock_build_agent = MagicMock(return_value=mock_agent)
+    mocks["build_agent_from_definition"] = mock_build_agent
+    mocks["agent"] = mock_agent
+    monkeypatch.setattr(base, "build_agent_from_definition", mock_build_agent)
+
+    # _safe_close
+    mock_safe_close = MagicMock()
+    mocks["_safe_close"] = mock_safe_close
+    monkeypatch.setattr(base, "_safe_close", mock_safe_close)
+
+    # call_with_retry
+    mock_retry = MagicMock(side_effect=lambda fn, **kw: fn())
+    mocks["call_with_retry"] = mock_retry
+    monkeypatch.setattr(retry, "call_with_retry", mock_retry)
+
+    return mocks
+
+
+# ---------------------------------------------------------------------------
+# Basic pipeline invocation
+# ---------------------------------------------------------------------------
+
+
+def test_basic_pipeline(settings, monkeypatch, tmp_path):
+    """A representative call exercises the full pipeline and clips output."""
+    mocks = _setup_patches(monkeypatch)
+
+    result = run_periodic_agent(
+        settings=settings,
+        definition_name="audit",
+        model_setting=settings.audit_model,
+        max_gaps=3,
+        repo_dir=tmp_path,
+        memory="some memory",
+        recent_proposals="prior proposals",
+        prompt_tail="Do the thing.",
+        include_forge_url=True,
+    )
+
+    # Clipping applied
+    assert len(result.draft_titles) == 3
+    assert len(result.draft_bodies) == 3
+    assert len(result.gap_ids) == 3
+
+    # Agent built with correct model fallback
+    _, build_kwargs = mocks["build_agent_from_definition"].call_args
+    assert build_kwargs["model_name"] == settings.audit_model
+
+    # Tools built
+    mocks["build_fs_tools"].assert_called_once()
+    mocks["make_explore_tool"].assert_called_once()
+
+    # Prompt includes memory and tail
+    call_arg = mocks["agent"].run_sync.call_args[0][0]
+    assert "Do the thing." in call_arg
+    assert "some memory" in call_arg
+
+    # what= label
+    assert mocks["call_with_retry"].call_args[1]["what"] == "audit"
+
+
+# ---------------------------------------------------------------------------
+# repo_dir=None: no tools
+# ---------------------------------------------------------------------------
+
+
+def test_no_repo_dir_no_tools(settings, monkeypatch):
+    """When repo_dir is None, no fs/explore/jscpd tools are built."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=None,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+    )
+
+    mocks["build_fs_tools"].assert_not_called()
+    mocks["make_explore_tool"].assert_not_called()
+    mocks["make_jscpd_tool"].assert_not_called()
+
+    # Agent still built, just with empty tools
+    _, build_kwargs = mocks["build_agent_from_definition"].call_args
+    assert build_kwargs["tools"] == []
+
+
+# ---------------------------------------------------------------------------
+# include_forge_url
+# ---------------------------------------------------------------------------
+
+
+def test_include_forge_url_injects_section(settings, monkeypatch, tmp_path):
+    """When include_forge_url=True, the prompt contains the forge URL section."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_forge_url=True,
+    )
+
+    prompt = mocks["agent"].run_sync.call_args[0][0]
+    assert "forge-remote-url" in prompt
+    assert "https://git.example.com/test/repo" in prompt
+
+
+def test_no_forge_url_when_false(settings, monkeypatch, tmp_path):
+    """When include_forge_url=False, no forge URL section in prompt."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_forge_url=False,
+    )
+    prompt = mocks["agent"].run_sync.call_args[0][0]
+    assert "forge-remote-url" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# include_jscpd
+# ---------------------------------------------------------------------------
+
+
+def test_include_jscpd_adds_tool(settings, monkeypatch, tmp_path):
+    """When include_jscpd=True, the jscpd tool is appended to the tool list."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_jscpd=True,
+    )
+
+    mocks["make_jscpd_tool"].assert_called_once()
+    tools_arg = mocks["build_agent_from_definition"].call_args[1]["tools"]
+    tool_names = [t.__name__ for t in tools_arg]
+    assert "jscpd_tool" in tool_names
+
+
+def test_no_jscpd_when_false(settings, monkeypatch, tmp_path):
+    """When include_jscpd=False, jscpd is not created."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_jscpd=False,
+    )
+    mocks["make_jscpd_tool"].assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# include_run_command
+# ---------------------------------------------------------------------------
+
+
+def test_include_run_command_adds_to_fs_filter(settings, monkeypatch, tmp_path):
+    """When include_run_command=True, run_command tool is included in tools."""
+    mocks = _setup_patches(
+        monkeypatch,
+        build_fs_tools=[
+            _make_fake_tool("read_file"),
+            _make_fake_tool("list_dir"),
+            _make_fake_tool("run_command"),
+            _make_fake_tool("edit_file"),
+        ],
+    )
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_run_command=True,
+    )
+    tools_arg = mocks["build_agent_from_definition"].call_args[1]["tools"]
+    tool_names = [t.__name__ for t in tools_arg]
+    assert "run_command" in tool_names
+    assert "edit_file" not in tool_names  # not in filter
+
+
+def test_no_run_command_when_false(settings, monkeypatch, tmp_path):
+    """When include_run_command=False, run_command is excluded."""
+    mocks = _setup_patches(
+        monkeypatch,
+        build_fs_tools=[
+            _make_fake_tool("read_file"),
+            _make_fake_tool("list_dir"),
+            _make_fake_tool("run_command"),
+        ],
+    )
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_run_command=False,
+    )
+    tools_arg = mocks["build_agent_from_definition"].call_args[1]["tools"]
+    tool_names = [t.__name__ for t in tools_arg]
+    assert "run_command" not in tool_names
+
+
+# ---------------------------------------------------------------------------
+# usage_limits forwarding
+# ---------------------------------------------------------------------------
+
+
+def test_usage_limits_forwarded(settings, monkeypatch, tmp_path):
+    """When usage_limits is passed, it is forwarded to agent.run_sync()."""
+    mocks = _setup_patches(monkeypatch)
+    fake_limits = MagicMock()
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        usage_limits=fake_limits,
+    )
+
+    call_kwargs = mocks["agent"].run_sync.call_args[1]
+    assert "usage_limits" in call_kwargs
+    assert call_kwargs["usage_limits"] is fake_limits
+
+
+def test_no_usage_limits_when_none(settings, monkeypatch, tmp_path):
+    """When usage_limits=None, it's not forwarded to agent.run_sync()."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        usage_limits=None,
+    )
+    call_kwargs = mocks["agent"].run_sync.call_args[1]
+    assert "usage_limits" not in call_kwargs
+
+
+# ---------------------------------------------------------------------------
+# extra_roots forwarding
+# ---------------------------------------------------------------------------
+
+
+def test_extra_roots_forwarded(settings, monkeypatch, tmp_path):
+    """When extra_roots is provided, it is forwarded to build_fs_tools."""
+    mocks = _setup_patches(monkeypatch)
+    extra = [tmp_path / "extra1"]
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        extra_roots=extra,
+    )
+
+    _, fs_kwargs = mocks["build_fs_tools"].call_args
+    assert fs_kwargs.get("extra_roots") == extra
+
+
+def test_extra_roots_none_when_not_provided(settings, monkeypatch, tmp_path):
+    """When extra_roots is None, None is passed to build_fs_tools."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        extra_roots=None,
+    )
+    _, fs_kwargs = mocks["build_fs_tools"].call_args
+    assert fs_kwargs.get("extra_roots") is None
+
+
+# ---------------------------------------------------------------------------
+# overlay key
+# ---------------------------------------------------------------------------
+
+
+def test_overlay_key_matches_definition_name(settings, monkeypatch, tmp_path):
+    """The overlay key passed to load_overlay matches definition_name."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="bc_check",
+        model_setting="fallback",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+    )
+
+    mocks["load_overlay"].assert_called_once_with(tmp_path, "bc_check")
+
+
+# ---------------------------------------------------------------------------
+# model_setting fallback
+# ---------------------------------------------------------------------------
+
+
+def test_model_setting_used_when_definition_model_none(settings, monkeypatch, tmp_path):
+    """When definition.model is None, model_setting is used."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="custom_fallback_model",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+    )
+
+    _, build_kwargs = mocks["build_agent_from_definition"].call_args
+    assert build_kwargs["model_name"] == "custom_fallback_model"
+
+
+def test_definition_model_overrides_model_setting(settings, monkeypatch, tmp_path):
+    """When definition.model is set, it takes precedence over model_setting."""
+    mocks = _setup_patches(monkeypatch)
+    defn = _default_definition()
+    defn.model = "yaml-model"
+    mocks["load_agent_definition"].return_value = defn
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        model_setting="fallback_model",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+    )
+
+    _, build_kwargs = mocks["build_agent_from_definition"].call_args
+    assert build_kwargs["model_name"] == "yaml-model"

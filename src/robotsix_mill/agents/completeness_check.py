@@ -14,7 +14,6 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..config import Settings
-from .prompt_blocks import section
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
@@ -56,7 +55,8 @@ def run_completeness_check_agent(
     it can inspect the actual codebase.  Without ``repo_dir`` the
     agent runs in a read-only reasoning mode (no repo access).
 
-    The agent is constructed via :func:`~.base.build_agent` with the
+    The agent is constructed via
+    :func:`~.periodic_base.run_periodic_agent` with the
     ``SYSTEM_PROMPT``, structured output type
     ``PromptedOutput(CompletenessCheckResult)``, ``web=False``, and
     ``report_issue=False``.
@@ -74,56 +74,15 @@ def run_completeness_check_agent(
         gap IDs clipped to ``MAX_GAPS`` (12) entries, plus the
         updated memory ledger.
     """
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
+    from .periodic_base import run_periodic_agent
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / "completeness_check.yaml"
+    return run_periodic_agent(
+        settings=settings,
+        definition_name="completeness_check",
+        model_setting=settings.completeness_check_model,
+        max_gaps=MAX_GAPS,
+        repo_dir=repo_dir,
+        memory=memory,
+        recent_proposals=recent_proposals,
+        prompt_tail="Scan the repository for incomplete feature wiring and return your findings.",
     )
-
-    tools: list = []
-    if repo_dir is not None:
-        from .explore import make_explore_tool
-        from .fs_tools import build_fs_tools
-
-        ro = [
-            t
-            for t in build_fs_tools(repo_dir, settings)
-            if t.__name__ in ("read_file", "list_dir")
-        ]
-        tools = [make_explore_tool(settings, repo_dir), *ro]
-
-    from .overlays import apply_overlay, load_overlay
-
-    system_prompt = apply_overlay(
-        definition.system_prompt,
-        load_overlay(repo_dir, "completeness_check"),
-    )
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=tools,
-        model_name=definition.model or settings.completeness_check_model,
-        system_prompt=system_prompt,
-    )
-    prompt = (
-        f"{recent_proposals}"
-        + section("memory", memory or "(empty — start a new ledger)")
-        + "\n\n"
-        + "Scan the repository for incomplete feature wiring and return your findings."
-    )
-    from .retry import call_with_retry
-
-    try:
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt), settings=settings, what="completeness_check"
-        )
-    finally:
-        _safe_close(agent)
-    result.output.draft_titles = result.output.draft_titles[:MAX_GAPS]
-    result.output.draft_bodies = result.output.draft_bodies[:MAX_GAPS]
-    result.output.gap_ids = result.output.gap_ids[:MAX_GAPS]
-    return result.output
