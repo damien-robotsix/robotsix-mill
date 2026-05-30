@@ -27,7 +27,7 @@ def audit_pass(
     tickets appear on the board when it finishes.
     """
     from ...audit_runner import run_audit_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -37,7 +37,8 @@ def audit_pass(
             try:
                 run_id = registry.start("audit", repo_id=rc.repo_id if rc else "")
                 session_id = make_session_id("audit")
-                r = run_audit_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(session_id, "audit", repo_config=rc):
+                    r = run_audit_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -69,7 +70,7 @@ def bc_check_pass(
     finishes.
     """
     from ...bc_check_runner import run_bc_check_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -79,7 +80,8 @@ def bc_check_pass(
             try:
                 run_id = registry.start("bc-check", repo_id=rc.repo_id if rc else "")
                 session_id = make_session_id("bc-check")
-                r = run_bc_check_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(session_id, "bc-check", repo_config=rc):
+                    r = run_bc_check_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -104,7 +106,7 @@ def completeness_check_pass(
     registry=Depends(get_run_registry),
 ) -> dict:
     from ...completeness_check_runner import run_completeness_check_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -116,7 +118,12 @@ def completeness_check_pass(
                     "completeness-check", repo_id=rc.repo_id if rc else ""
                 )
                 session_id = make_session_id("completeness-check")
-                r = run_completeness_check_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(
+                    session_id, "completeness-check", repo_config=rc
+                ):
+                    r = run_completeness_check_pass(
+                        session_id=session_id, repo_config=rc
+                    )
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -149,7 +156,7 @@ def agent_check_pass(
     appear on the board when it finishes.
     """
     from ...agent_check_runner import run_agent_check_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -159,7 +166,8 @@ def agent_check_pass(
             try:
                 run_id = registry.start("agent_check", repo_id=rc.repo_id if rc else "")
                 session_id = make_session_id("agent-check")
-                r = run_agent_check_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(session_id, "agent-check", repo_config=rc):
+                    r = run_agent_check_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -299,7 +307,7 @@ def health_check_pass(
     board reports nothing.
     """
     from ...health_runner import run_health_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -309,7 +317,8 @@ def health_check_pass(
             try:
                 run_id = registry.start("health", repo_id=rc.repo_id if rc else "")
                 session_id = make_session_id("health")
-                r = run_health_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(session_id, "health", repo_config=rc):
+                    r = run_health_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -335,7 +344,7 @@ def test_gap_pass(
 ) -> dict:
     """Kick off a test-gap inspection pass in the BACKGROUND."""
     from ...test_gap_runner import run_test_gap_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -345,7 +354,8 @@ def test_gap_pass(
             try:
                 run_id = registry.start("test-gap", repo_id=rc.repo_id if rc else "")
                 session_id = make_session_id("test-gap")
-                r = run_test_gap_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(session_id, "test-gap", repo_config=rc):
+                    r = run_test_gap_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -376,7 +386,7 @@ def survey_pass(
     tickets. New drafts appear on the board when it finishes.
     """
     from ...survey_runner import run_survey_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -386,7 +396,8 @@ def survey_pass(
             try:
                 run_id = registry.start("survey", repo_id=rc.repo_id if rc else "")
                 session_id = make_session_id("survey")
-                r = run_survey_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(session_id, "survey", repo_config=rc):
+                    r = run_survey_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -412,7 +423,7 @@ def config_sync_pass(
 ) -> dict:
     """Kick off a config-sync drift detection pass in the BACKGROUND."""
     from ...config_sync_runner import run_config_sync_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -422,7 +433,8 @@ def config_sync_pass(
             try:
                 run_id = registry.start("config-sync", repo_id=rc.repo_id if rc else "")
                 session_id = make_session_id("config-sync")
-                r = run_config_sync_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(session_id, "config-sync", repo_config=rc):
+                    r = run_config_sync_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -455,7 +467,7 @@ def trace_review_pass(
     tickets with proposed solutions.
     """
     from ...trace_review_runner import run_trace_review_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -468,10 +480,13 @@ def trace_review_pass(
                     repo_id=rc.repo_id if rc else "",
                 )
                 session_id = make_session_id("trace-review")
-                r = run_trace_review_pass(
-                    session_id=session_id,
-                    repo_config=rc,
-                )
+                with start_ticket_root_span(
+                    session_id, "trace-review", repo_config=rc
+                ):
+                    r = run_trace_review_pass(
+                        session_id=session_id,
+                        repo_config=rc,
+                    )
                 summary = r.summary or f"created {len(r.drafts_created)} drafts"
                 registry.finish_ok(run_id, summary)
                 log.info("trace-review pass done: %s", summary)
@@ -504,7 +519,7 @@ def roadmap_sync_pass(
     idempotent.
     """
     from ...roadmap_sync_runner import run_roadmap_sync_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -517,10 +532,13 @@ def roadmap_sync_pass(
                     repo_id=rc.repo_id if rc else "",
                 )
                 session_id = make_session_id("roadmap-sync")
-                r = run_roadmap_sync_pass(
-                    session_id=session_id,
-                    repo_config=rc,
-                )
+                with start_ticket_root_span(
+                    session_id, "roadmap-sync", repo_config=rc
+                ):
+                    r = run_roadmap_sync_pass(
+                        session_id=session_id,
+                        repo_config=rc,
+                    )
                 registry.finish_ok(run_id, r.summary or "no changes")
                 log.info("roadmap-sync pass done: %s", r.summary)
             except Exception as e:  # noqa: BLE001 — background; just log
@@ -544,7 +562,7 @@ def cost_reconciliation_pass(
 ) -> dict:
     """Kick off a cost-reconciliation drift detection pass in the BACKGROUND."""
     from ...cost_reconciliation_runner import run_cost_reconciliation_pass
-    from ..tracing import make_session_id
+    from ..tracing import make_session_id, start_ticket_root_span
 
     repo_configs = _resolve_agent_run_repos(repo_id, request)
 
@@ -556,7 +574,12 @@ def cost_reconciliation_pass(
                     "cost-reconciliation", repo_id=rc.repo_id if rc else ""
                 )
                 session_id = make_session_id("cost-reconciliation")
-                r = run_cost_reconciliation_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(
+                    session_id, "cost-reconciliation", repo_config=rc
+                ):
+                    r = run_cost_reconciliation_pass(
+                        session_id=session_id, repo_config=rc
+                    )
                 # Prefer the runner's own summary (delta or "no overrun");
                 # fall back to generic drafts-list.
                 runner_summary = (getattr(r, "summary", "") or "").strip()
