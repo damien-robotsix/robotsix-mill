@@ -115,6 +115,7 @@ def run_bespoke_pass(
         service=service,
         settings=settings,
         origin_session=session_id,
+        repo_dir=repo_dir,
     )
 
     return BespokePassResult(

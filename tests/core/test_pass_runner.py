@@ -595,3 +595,270 @@ def test_gap_id_re_matches_cost_reconciliation_marker():
     label, gap_id = matches[0]
     assert label == "cost_reconciliation"
     assert gap_id == "2025-03-15"
+
+
+# --- test-gap live-filesystem guard tests ---
+
+
+def test_test_file_exists_skips_ticket(tmp_path, monkeypatch):
+    """When the expected test file already exists on disk, the
+    test-gap draft is skipped with a warning."""
+    from robotsix_mill.pass_runner import _test_file_exists_for_gap
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Create a fake test file on disk.
+    test_file = tmp_path / "tests" / "agents" / "test_coding.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# existing tests\n", encoding="utf-8")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["test gap: add unit tests for agents/coding.py"],
+        draft_bodies=["Add tests for coding.py"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    # No tickets created — the draft was skipped.
+    assert result.drafts_created == []
+    tickets = service.list()
+    assert len(tickets) == 0
+
+    db.reset_engine()
+
+
+def test_test_file_absent_creates_ticket(tmp_path, monkeypatch):
+    """When the expected test file does NOT exist, the test-gap draft
+    is created normally."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["test gap: add unit tests for agents/nonexistent.py"],
+        draft_bodies=["Add tests for nonexistent.py"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    # Ticket IS created.
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 1
+
+    db.reset_engine()
+
+
+def test_parse_failure_falls_through(tmp_path, monkeypatch):
+    """Title that doesn't end in .py conservatively passes through."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["test gap: add unit tests for something weird"],
+        draft_bodies=["Some body"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    # Ticket IS created (conservative pass-through).
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 1
+
+    db.reset_engine()
+
+
+def test_repo_dir_none_backward_compat(tmp_path, monkeypatch):
+    """With repo_dir=None, the guard is never triggered — all drafts
+    are created, matching pre-guard behavior."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Create a test file on disk — it should NOT prevent ticket creation
+    # since repo_dir is None (guard short-circuits).
+    test_file = tmp_path / "tests" / "agents" / "test_coding.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# existing\n", encoding="utf-8")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["test gap: add unit tests for agents/coding.py"],
+        draft_bodies=["Body"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        # repo_dir NOT passed (defaults to None)
+    )
+
+    # Ticket created despite existing test file because repo_dir is None.
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 1
+
+    db.reset_engine()
+
+
+def test_non_test_gap_source_never_gated(tmp_path, monkeypatch):
+    """SourceKind other than TEST_GAP never triggers the guard,
+    regardless of repo_dir."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Existing test file — but source is AUDIT, not TEST_GAP.
+    test_file = tmp_path / "tests" / "agents" / "test_coding.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# existing\n", encoding="utf-8")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["test gap: add unit tests for agents/coding.py"],
+        draft_bodies=["Body"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    # Ticket IS created — guard only fires for TEST_GAP.
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 1
+
+    db.reset_engine()
+
+
+def test_bare_filename_module_path(tmp_path, monkeypatch):
+    """Title with a bare filename (no directory) checks the correct path."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Create the test file at tests/test_jscpd_tool.py
+    test_file = tmp_path / "tests" / "test_jscpd_tool.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# existing\n", encoding="utf-8")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["test gap: add unit tests for jscpd_tool.py"],
+        draft_bodies=["Body"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    # Ticket skipped — test file exists.
+    assert result.drafts_created == []
+    tickets = service.list()
+    assert len(tickets) == 0
+
+    db.reset_engine()
+
+
+def test_full_path_module_stripping(tmp_path, monkeypatch):
+    """Title with src/robotsix_mill/ prefix strips it before checking."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    test_file = tmp_path / "tests" / "agents" / "test_coding.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# existing\n", encoding="utf-8")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=[
+            "test gap: add unit tests for src/robotsix_mill/agents/coding.py"
+        ],
+        draft_bodies=["Body"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.TEST_GAP,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    # Ticket skipped — test file exists after prefix stripping.
+    assert result.drafts_created == []
+    tickets = service.list()
+    assert len(tickets) == 0
+
+    db.reset_engine()
