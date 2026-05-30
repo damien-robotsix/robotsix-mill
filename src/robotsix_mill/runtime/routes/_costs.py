@@ -1,12 +1,49 @@
-"""Cost-analysis route handlers — trend, by-agent, most-expensive ticket & trace."""
+"""Cost analytics routes."""
 
 from __future__ import annotations
 
-from fastapi import Depends, Request
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..deps import get_service, get_settings
-from . import _resolve_cost_repo
-from . import router
+from ._tickets import _repo_config_for_ticket
+
+log = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+def _resolve_cost_repo(repo_id: str | None, request: Request):
+    """Resolve a ``RepoConfig`` (or a list of them for "all") for cost endpoints.
+
+    Returns:
+        - ``None`` when *repo_id* is omitted and there's exactly one
+          repo (backward compat — uses global secrets).
+        - A single ``RepoConfig`` when *repo_id* names a known repo.
+        - A list of ``RepoConfig`` when *repo_id* is ``"all"``.
+        - Raises 400 for unknown *repo_id* or when *repo_id* is omitted
+          in multi-repo mode.
+    """
+    repos = request.app.state.repos
+    if repo_id is None:
+        if len(repos.repos) == 1:
+            return None  # single-repo: backward compat (global Secrets)
+        sorted_keys = sorted(repos.repos.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"repo_id is required when multiple repos are configured. "
+            f"Available repos: {sorted_keys} (or use repo_id=all)",
+        )
+    if repo_id == "all":
+        return list(repos.repos.values())
+    if repo_id not in repos.repos:
+        sorted_keys = sorted(repos.repos.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}",
+        )
+    return repos.repos[repo_id]
 
 
 @router.get("/costs/trend")
@@ -214,3 +251,32 @@ def most_expensive_trace_endpoint(
         max_tickets=max_tickets,
         repo_config=repo_config,
     )
+
+
+@router.get("/tickets/{ticket_id}/cost-breakdown")
+def cost_breakdown(
+    ticket_id: str,
+    request: Request = None,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> dict:
+    """Per-trace cost breakdown for a ticket, used by the drawer to
+    overlay agent-step costs on history rows.
+
+    The Langfuse sessionId equals the ticket id, so a single
+    `/api/public/traces?sessionId=<ticket>` query returns every agent
+    invocation tied to the ticket. Each entry carries
+    ``{name, cost, at, trace_id}`` ordered by timestamp; the drawer's
+    renderHistoryHtml matches the entries to history events by inferred
+    agent name + nearest-in-time-≤ pairing.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    from ...langfuse_client import session_traces
+
+    rows = session_traces(settings, ticket_id, repo_config=repo_config)
+    if rows is None:
+        return {"available": False, "traces": []}
+    return {"available": True, "traces": rows}

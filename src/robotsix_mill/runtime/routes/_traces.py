@@ -1,21 +1,97 @@
-"""Deep-review trace inspection routes."""
+"""Operational monitoring + traces + deep review routes."""
 
 from __future__ import annotations
 
-import json as _json
 import logging
 import threading
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from . import router
+from ..deps import (
+    get_run_registry,
+    get_settings,
+    get_worker,
+)
+
 from ...config import get_secrets
-from ..deps import get_run_registry, get_settings
 
 log = logging.getLogger(__name__)
 
+router = APIRouter()
 
-# -- deep-review --------------------------------------------------------
+
+@router.get("/runs")
+def list_runs(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> list[dict]:
+    """Return recent background-run entries (newest first).
+
+    ``?repo_id=X`` filters to runs associated with that repo.
+    When omitted, returns all (current behaviour preserved).
+    """
+    entries = registry.list_all()
+    if repo_id is not None:
+        repos = request.app.state.repos
+        if repo_id == "all":
+            pass  # no filtering
+        elif repo_id not in repos.repos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown repo: '{repo_id}'. Known repos: "
+                f"{sorted(repos.repos.keys())}",
+            )
+        else:
+            # Filter entries that carry a repo_id matching the request.
+            # Empty repo_id is treated as "applies to any repo" — covers
+            # legacy entries filed before per-repo tagging landed plus
+            # global runs from periodic agents that don't carry a
+            # repo_id today. Strict equality on a non-empty filter would
+            # hide every pre-wiring run in single-repo deployments.
+            entries = [
+                e
+                for e in entries
+                if e.get("repo_id") == repo_id or not e.get("repo_id")
+            ]
+    return entries
+
+
+@router.get("/active")
+def list_active(
+    repo_id: str | None = None,
+    request: Request = None,
+    worker=Depends(get_worker),
+) -> list[dict]:
+    """Return tickets currently being processed by a pipeline stage.
+
+    ``?repo_id=X`` filters to active tickets belonging to that repo.
+    When omitted, returns all (current behaviour preserved).
+    """
+    active = [
+        {"ticket_id": tid, "stage": info["stage"], "started_at": info["started_at"]}
+        for tid, info in worker._active.items()
+    ]
+    if repo_id is not None:
+        repos = request.app.state.repos
+        if repo_id == "all":
+            pass  # no filtering
+        elif repo_id not in repos.repos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown repo: '{repo_id}'. Known repos: "
+                f"{sorted(repos.repos.keys())}",
+            )
+        else:
+            target_board = repos.repos[repo_id].board_id
+            # Look up each active ticket's board_id from the service
+            filtered = []
+            for item in active:
+                ticket = worker.ctx.service.get(item["ticket_id"])
+                if ticket and ticket.board_id == target_board:
+                    filtered.append(item)
+            active = filtered
+    return active
 
 
 @router.get("/traces/recent")
@@ -86,8 +162,8 @@ def deep_review_trace(
                 )
                 return
 
-            import subprocess as _subprocess
-
+            import json as _json
+            import subprocess
             from ...vcs import git_ops
 
             # Clone the forge repo so the inspector can read_file /
@@ -115,7 +191,7 @@ def deep_review_trace(
                             get_secrets().forge_token,
                         )
                         repo_dir = cand
-                except _subprocess.CalledProcessError as e:
+                except subprocess.CalledProcessError as e:
                     log.warning(
                         "deep review clone failed (running tool-less): %s",
                         (e.stderr or "")[:200],
