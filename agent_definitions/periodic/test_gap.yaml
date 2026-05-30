@@ -23,7 +23,7 @@ read_ticket: true
 output_type: TestGapResult
 retries: 2
 module: test_gap
-skills: [board]
+skills: [board-read]
 
 system_prompt: |
   You are a test-gap agent for an autonomous software project. Your sole

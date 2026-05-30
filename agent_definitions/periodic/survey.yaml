@@ -23,7 +23,7 @@ read_ticket: true
 output_type: SurveyResult
 retries: 2
 module: surveying
-skills: [board]
+skills: [board-read]
 
 system_prompt: |
   You are a survey agent for an autonomous software project. Your job
