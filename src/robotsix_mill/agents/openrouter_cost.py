@@ -32,18 +32,48 @@ from pydantic_ai.models.openai import OpenAIChatModel
 # read). We pin DeepSeek calls to DeepSeek's own endpoint to keep the cache
 # warm across the many tool-call turns of a stage (see _inject_provider_pin).
 #
-# Pinned to DeepSeek first-party, deepseek models run in thinking mode and
-# DeepSeek's API requires the prior turn's reasoning echoed back under the
-# field name ``reasoning_content``. pydantic-ai's OpenRouter profile sends it
-# under ``reasoning`` (the OpenRouter-normalised name), so DeepSeek rejects
-# follow-up turns with a 400 ("reasoning_content … must be passed back").
-# PROVEN deterministic: a retry experiment (PR #505) exhausted all 4 retries
-# on the same 400, on both deepseek-v4-pro and -flash. _map_messages therefore
-# renames ``reasoning`` -> ``reasoning_content`` on deepseek assistant
-# messages at send time. The transient-retry classification stays as a cheap
-# backstop. The two travel with the pin; never ship the pin without this.
+# ⚠️ TEMPORARY WORKAROUND — remove once pydantic-ai natively round-trips
+# reasoning_details (upstream issue pydantic/pydantic-ai#2701; PR #2823 only
+# echoes the reasoning *text*, which is insufficient — verified still missing
+# in 1.104). The survey agent's memory tracks the upstream status and will
+# surface a draft when it lands; at that point delete _extract_reasoning_details,
+# the _process_response/_map_model_response overrides here, and the
+# reasoning-roundtrip transient-retry classifier in agents/retry.py.
+#
+# Why it's needed: pinned to DeepSeek first-party, deepseek models run in
+# thinking mode and DeepSeek requires the prior turn's reasoning echoed back
+# *matching what it generated* — especially on tool-call turns — or it 400s
+# ("reasoning_content in the thinking mode must be passed back"). pydantic-ai
+# (through 1.104) captures only the reasoning *text* (ThinkingPart) and
+# DISCARDS the structured ``reasoning_details`` array, so the bare-text echo
+# doesn't match → 400 (proven deterministic across review/implement/document).
+# Fix: capture the raw ``reasoning_details`` into ``ModelResponse.provider_details``
+# on the way in (_process_response) and re-emit that exact array on the
+# assistant message on the way out (_map_model_response). provider_details
+# survives the conversation_state JSON round-trip, so multi-turn histories
+# stay valid. Without the pin this never triggers; the pin + this fix are paired.
 _PINNED_PROVIDER = "DeepSeek"
 _PIN_MODEL_PREFIX = "deepseek/"
+_REASONING_DETAILS_KEY = "reasoning_details"
+
+
+def _extract_reasoning_details(response: Any) -> Any:
+    """Pull the raw ``reasoning_details`` array off an OpenRouter chat
+    completion response message, or ``None``. Handles the str-response
+    branch (no message) and the OpenAI SDK's ``model_extra`` stash for
+    fields outside the typed schema."""
+    choices = getattr(response, "choices", None)
+    if not choices:
+        return None
+    msg = getattr(choices[0], "message", None)
+    if msg is None:
+        return None
+    rd = getattr(msg, "reasoning_details", None)
+    if rd is None:
+        extra = getattr(msg, "model_extra", None)
+        if isinstance(extra, dict):
+            rd = extra.get(_REASONING_DETAILS_KEY)
+    return rd or None
 
 
 def _get_cost_from_response(response: Any) -> float | None:
@@ -77,23 +107,32 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
     (``usage: {include: true}``) so the response carries ``usage.cost``.
 
     For ``deepseek/*`` models it pins the upstream provider to DeepSeek so
-    the prompt cache stays warm across turns, and renames echoed-back
-    thinking from ``reasoning`` to the DeepSeek-native ``reasoning_content``
-    field so DeepSeek's thinking mode accepts the follow-up (see module note).
+    the prompt cache stays warm across turns, and round-trips DeepSeek's
+    structured ``reasoning_details`` across turns so thinking mode accepts
+    follow-up/tool-call turns (backport of pydantic-ai #2701, see module note).
     """
 
-    async def _map_messages(self, messages: Any, model_request_parameters: Any) -> Any:
-        mapped = await super()._map_messages(messages, model_request_parameters)
-        if str(getattr(self, "model_name", "") or "").startswith(_PIN_MODEL_PREFIX):
-            for msg in mapped:
-                if (
-                    isinstance(msg, dict)
-                    and msg.get("role") == "assistant"
-                    and msg.get("reasoning") is not None
-                    and "reasoning_content" not in msg
-                ):
-                    msg["reasoning_content"] = msg.pop("reasoning")
-        return mapped
+    def _process_response(self, response: Any) -> Any:
+        result = super()._process_response(response)
+        rd = _extract_reasoning_details(response)
+        if rd is not None:
+            pd = dict(result.provider_details or {})
+            pd[_REASONING_DETAILS_KEY] = rd
+            result.provider_details = pd
+        return result
+
+    def _map_model_response(self, message: Any) -> Any:
+        param = super()._map_model_response(message)
+        if isinstance(param, dict) and param.get("role") == "assistant":
+            rd = (message.provider_details or {}).get(_REASONING_DETAILS_KEY)
+            if rd:
+                # Echo the exact array DeepSeek generated. The bare-text
+                # ``reasoning`` field pydantic already set is a lossy subset;
+                # drop it so the two can't disagree (DeepSeek validates match).
+                param.pop("reasoning", None)
+                param.pop("reasoning_content", None)
+                param[_REASONING_DETAILS_KEY] = rd
+        return param
 
     async def _completions_create(self, *args: Any, **kwargs: Any) -> Any:
         _inject_usage_include(args, kwargs)
