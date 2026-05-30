@@ -180,6 +180,13 @@ class TicketRead(SQLModel):
     cumulative_cost: float | None = None
     depends_on: str | None
     unmet_deps: list[str]
+    # Resolved per-dependency status for drawer display. Each entry is
+    # ``{id, title, state}``; populated by ``enrich_ticket_read`` from
+    # the parsed ``depends_on`` list. Empty list when the ticket has
+    # no dependencies. The legacy ``depends_on`` JSON string and
+    # ``unmet_deps`` ID list are kept for back-compat (the worker
+    # gate keys off ``unmet_deps``).
+    dependencies: list[dict] = []
     pr_url: str | None = None
     retry_attempt: int
     last_transient_error: str | None

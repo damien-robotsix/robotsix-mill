@@ -921,11 +921,13 @@ def test_get_retrospect_returns_artifact_or_empty(client, service, tmp_path):
 
 
 def test_board_js_includes_depends_on_rendering(client):
-    """The board JS includes depends_on and unmet_deps rendering logic."""
+    """The board JS renders ``dependencies`` (structured per-dep status)
+    and surfaces the ``unmet_deps`` waiting count."""
     js = client.get("/static/board.js").text
-    assert "depends_on" in js
+    assert "t.dependencies" in js
+    assert "depends on:" in js
     assert "unmet_deps" in js
-    assert "⏳ waiting on" in js
+    assert "waiting on" in js
 
 
 # -- DeepReviewStore unit tests -----------------------------------------

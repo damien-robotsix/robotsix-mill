@@ -1307,8 +1307,21 @@ async function open_(id){
    `<br>· cost <b>$${(t.cost_usd||0).toFixed(4)}</b>`+
    (t.cumulative_cost&&t.cumulative_cost>t.cost_usd?`<br>· cumulative (incl. children) <b>$${t.cumulative_cost.toFixed(4)}</b>`:"")+
    `<br>created ${t.created_at} · updated ${t.updated_at}</p>`+
-   (t.depends_on?`<p><b>depends on:</b> ${esc(t.depends_on)}</p>`:"")+
-   (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.map(esc).join(", ")}</p>`:"")+
+   (t.dependencies&&t.dependencies.length?
+     `<div style="margin:6px 0"><b>depends on:</b><ul style="margin:4px 0 0 18px;padding:0;list-style:none">`+
+     t.dependencies.map(d=>{
+       const st=d.state||"?";
+       const terminal={"closed":1,"done":1,"epic_closed":1};
+       const blocked={"blocked":1,"errored":1};
+       const awaiting={"awaiting_user_reply":1,"human_issue_approval":1,"human_mr_approval":1};
+       const icon=terminal[st]?"✅":blocked[st]?"⛔":awaiting[st]?"⏸":"⏳";
+       const color=terminal[st]?"#10b981":blocked[st]?"#ef4444":awaiting[st]?"#a855f7":"#f59e0b";
+       const title=d.title?esc(d.title):"(unknown)";
+       const shortId=esc(d.id.slice(0,8)+"…"+d.id.slice(-4));
+       return `<li style="margin:2px 0"><span style="color:${color}">${icon}</span> <span style="color:${color};font-family:monospace;font-size:11px;text-transform:uppercase">${esc(st)}</span> · <a href="#" onclick="event.preventDefault();open_('${d.id}')" title="${esc(d.id)}">${title}</a> <span style="color:#888;font-family:monospace;font-size:11px">${shortId}</span></li>`;
+     }).join("")+
+     `</ul></div>`:"")+
+   (t.unmet_deps&&t.unmet_deps.length?`<p style="color:#f59e0b;font-weight:bold">⏳ waiting on ${t.unmet_deps.length} unfinished dep${t.unmet_deps.length>1?"s":""}</p>`:"")+
    (t.parent_id?`<p><b>Part of epic:</b> <span class="epic-ref">📋 ${esc(t.parent_title||t.parent_id)}</span></p>`:"")+
    (t.kind==="epic"?`<p><button class="add-comment-btn" style="background:#9333ea;color:#fff" onclick="generateChildren('${t.id}')">Generate Tickets</button> <button class="add-comment-btn" style="background:#2563eb;color:#fff" onclick="newChildTicket('${t.id}')">Add Ticket</button></p>`:"")+
    `<div id="ticket-action-buttons">${_actionButtonsHtml(t)}</div>`+

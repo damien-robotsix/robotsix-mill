@@ -231,6 +231,29 @@ def enrich_ticket_read(
         parent = service.get(ticket.parent_id)
         if parent:
             parent_title = parent.title
+
+    # Resolve each declared dependency to {id, title, state} so the
+    # drawer can render a readable list instead of opaque IDs.
+    import json as _json
+
+    dependencies: list[dict] = []
+    if ticket.depends_on:
+        try:
+            dep_ids = _json.loads(ticket.depends_on)
+        except ValueError, TypeError:
+            dep_ids = []
+        if isinstance(dep_ids, list):
+            for dep_id in dep_ids:
+                if not isinstance(dep_id, str):
+                    continue
+                dep = service.get(dep_id)
+                dependencies.append(
+                    {
+                        "id": dep_id,
+                        "title": dep.title if dep else None,
+                        "state": dep.state.value if dep else None,
+                    }
+                )
     return TicketRead(
         id=ticket.id,
         title=ticket.title,
@@ -248,6 +271,7 @@ def enrich_ticket_read(
         cumulative_cost=cumulative,
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
+        dependencies=dependencies,
         pr_url=_pr_url(ticket, settings, repo_config=repo_config)
         if fetch_pr_url
         else None,
