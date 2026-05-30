@@ -47,8 +47,8 @@ def ctx_factory(tmp_path, fake_sandbox):
     def make(**env):
         db.reset_engine()
         s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
-        db.init_db(s)
-        svc = TicketService(s)
+        db.init_db(s, board_id="test-board")
+        svc = TicketService(s, board_id="test-board")
         created.append(s)
         from robotsix_mill.config import RepoConfig
 
@@ -884,7 +884,7 @@ def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
     from robotsix_mill.core.db import session as db_session
     from datetime import datetime, timezone
 
-    with db_session(ctx.settings) as sess:
+    with db_session(ctx.settings, "test-board") as sess:
         tm = sess.get(TicketModel, parent.id)
         tm.state = State.CLOSED.value
         evt = TicketEvent(
@@ -926,7 +926,7 @@ def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
     from robotsix_mill.core.db import session as db_session
     from datetime import datetime, timezone
 
-    with db_session(ctx.settings) as sess:
+    with db_session(ctx.settings, "test-board") as sess:
         tm = sess.get(TicketModel, parent.id)
         tm.state = State.CLOSED.value
         evt = TicketEvent(

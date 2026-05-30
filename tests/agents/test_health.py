@@ -14,12 +14,26 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 
 
+def _test_repo_config():
+    """Synthetic RepoConfig for periodic-runner tests — the runner now
+    requires one (mono-repo board-less mode is gone)."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+
+
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
     overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     return s
 
 
@@ -109,14 +123,14 @@ def test_run_health_pass_empty_memory(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    run_health_pass(session_id="test-sid")
+    run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
 
 
 def test_run_health_pass_reads_existing_memory(tmp_path, monkeypatch):
     """Runner passes existing memory to agent."""
     settings = _make_settings(tmp_path)
-    memory_file = settings.health_memory_file
+    memory_file = settings.data_dir / "test-repo" / "health_memory.md"
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text("# Existing memory\n## Proposed\n- gap1\n", encoding="utf-8")
 
@@ -134,7 +148,7 @@ def test_run_health_pass_reads_existing_memory(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    run_health_pass(session_id="test-sid")
+    run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
 
 
@@ -154,8 +168,8 @@ def test_run_health_pass_writes_memory_verbatim(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    run_health_pass(session_id="test-sid")
-    memory_file = settings.health_memory_file
+    run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
+    memory_file = settings.data_dir / "test-repo" / "health_memory.md"
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == updated
 
@@ -165,8 +179,8 @@ def test_run_health_pass_creates_draft_tickets(tmp_path, monkeypatch):
     source='health'."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return health_agent.HealthResult(
@@ -179,7 +193,7 @@ def test_run_health_pass_creates_draft_tickets(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    result = run_health_pass(session_id="test-sid")
+    result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="health"
     tickets = service.list()
@@ -192,7 +206,7 @@ def test_run_health_pass_no_drafts_when_empty(tmp_path, monkeypatch):
     """When agent returns no drafts, none are created."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return health_agent.HealthResult(
@@ -205,14 +219,14 @@ def test_run_health_pass_no_drafts_when_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    result = run_health_pass(session_id="test-sid")
+    result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 0
 
 
 def test_run_health_pass_missing_memory_file(tmp_path, monkeypatch):
     """Missing memory file -> empty string passed, no error."""
     settings = _make_settings(tmp_path)
-    memory_file = settings.health_memory_file
+    memory_file = settings.data_dir / "test-repo" / "health_memory.md"
     if memory_file.exists():
         memory_file.unlink()
 
@@ -230,7 +244,7 @@ def test_run_health_pass_missing_memory_file(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    run_health_pass(session_id="test-sid")
+    run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
 
 
@@ -265,7 +279,7 @@ def test_run_health_pass_unreadable_memory(tmp_path, monkeypatch):
         lambda self, name, board_id="": unreadable,
     )
 
-    result = run_health_pass(session_id="test-sid")
+    result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     # Should not raise; agent gets empty memory
     assert result.updated_memory == "mem"
 
@@ -285,7 +299,7 @@ def test_health_pass_result_structure(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    result = run_health_pass(session_id="test-sid")
+    result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert isinstance(result, HealthPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
@@ -296,7 +310,7 @@ def test_run_health_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
     """Runner skips draft entries with empty title or body."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return health_agent.HealthResult(
@@ -309,7 +323,7 @@ def test_run_health_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    result = run_health_pass(session_id="test-sid")
+    result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 1  # only first has both title + body
 
 
@@ -449,7 +463,7 @@ def test_run_health_pass_opens_langfuse_session(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    res = run_health_pass(session_id="test-sid")
+    res = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
 
     assert res.session_id == "test-sid"
     assert seen["agent_ran"] is True
@@ -465,7 +479,9 @@ def test_health_session_ids_are_unique_per_run(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
-    a = run_health_pass(session_id="test-sid").session_id
+    a = run_health_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    ).session_id
     assert a == "test-sid"
 
 
@@ -498,12 +514,12 @@ def test_run_health_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(health_agent, "run_health_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
 
-    run_health_pass(session_id="test-sid")
+    run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     repo = settings.data_dir / "health_workspace" / "repo"
     assert seen["clone"] == 1 and seen["repo_dir"] == repo
 
     seen["clone"] = 0
-    run_health_pass(session_id="test-sid")
+    run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert seen["clone"] == 0 and seen["repo_dir"] == repo
 
 
@@ -521,7 +537,7 @@ def test_run_health_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr("robotsix_mill.health_runner.Settings", lambda: settings)
-    run_health_pass(session_id="test-sid")
+    run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert got["repo_dir"] is None
 
 
@@ -542,8 +558,8 @@ async def test_worker_health_task_created_when_periodic(
         health_interval_seconds="1",
     )
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     # Patch _run_periodic_pass_per_repo to a no-op so the task hangs
@@ -578,8 +594,8 @@ async def test_worker_health_task_not_created_when_periodic_false(
 
     settings = _make_settings(tmp_path, health_periodic="false")
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     worker = Worker(ctx)
@@ -599,7 +615,7 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
 
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     started = threading.Event()
     finished = threading.Event()
@@ -638,13 +654,13 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
 
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     run_event = threading.Event()
 
     def mock_run(session_id=None, repo_config=None):
         # Create a ticket directly in DB to simulate the runner
-        svc = TicketService(settings)
+        svc = TicketService(settings, board_id="test-board")
         svc.create("Health draft", "Health body", source="health")
         run_event.set()
         return HealthPassResult(
@@ -667,7 +683,7 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
         assert run_event.wait(timeout=5), "Background thread did not complete"
 
         # Verify the draft ticket was created
-        svc = TicketService(settings)
+        svc = TicketService(settings, board_id="test-board")
         tickets = svc.list()
         health_tickets = [t for t in tickets if t.source == "health"]
         assert len(health_tickets) == 1

@@ -30,6 +30,18 @@ from robotsix_mill.trace_review_runner import (
 )
 
 
+def _test_repo_config():
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+
+
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
@@ -319,7 +331,9 @@ class TestRunTraceReviewPass:
             "robotsix_mill.langfuse_client.list_all_traces_since",
             lambda *a, **kw: [],
         )
-        result = run_trace_review_pass(session_id="sess-1")
+        result = run_trace_review_pass(
+            session_id="sess-1", repo_config=_test_repo_config()
+        )
         assert result.drafts_created == []
         assert result.traces_scanned == 0
         assert result.traces_flagged == 0
@@ -343,7 +357,9 @@ class TestRunTraceReviewPass:
             "robotsix_mill.agents.trace_inspector.run_trace_inspector",
             lambda **kw: inspector_calls.append(kw) or TraceInspectResult(findings=[]),
         )
-        result = run_trace_review_pass(session_id="sess-2")
+        result = run_trace_review_pass(
+            session_id="sess-2", repo_config=_test_repo_config()
+        )
         assert result.traces_scanned == 1
         assert result.traces_flagged == 0
         assert inspector_calls == []
@@ -380,13 +396,15 @@ class TestRunTraceReviewPass:
             lambda **kw: TraceInspectResult(findings=[finding]),
         )
 
-        result = run_trace_review_pass(session_id="sess-3")
+        result = run_trace_review_pass(
+            session_id="sess-3", repo_config=_test_repo_config()
+        )
         assert result.traces_flagged == 1
         assert len(result.drafts_created) == 1
         d = result.drafts_created[0]
         assert "tool_error" in d["title"]
         # Verify it landed on the board with the right source.
-        svc = TicketService(settings, board_id="")
+        svc = TicketService(settings, board_id="test-board")
         all_tickets = svc.list()
         review_tickets = [t for t in all_tickets if t.source == SourceKind.TRACE_REVIEW]
         assert len(review_tickets) == 1
@@ -402,7 +420,7 @@ class TestRunTraceReviewPass:
     ):
         # Pre-seed an open trace-review ticket with the same normalized
         # title the inspector would produce.
-        svc = TicketService(settings, board_id="")
+        svc = TicketService(settings, board_id="test-board")
         svc.create(
             title="trace-review: tool_error — run_command kept failing on uv lock",
             description="seed",
@@ -433,7 +451,9 @@ class TestRunTraceReviewPass:
                 ]
             ),
         )
-        result = run_trace_review_pass(session_id="sess-4")
+        result = run_trace_review_pass(
+            session_id="sess-4", repo_config=_test_repo_config()
+        )
         assert result.traces_flagged == 1
         # No new draft — dedup against the existing open ticket fired.
         assert result.drafts_created == []
@@ -443,10 +463,10 @@ class TestRunTraceReviewPass:
             "robotsix_mill.langfuse_client.list_all_traces_since",
             lambda *a, **kw: [],
         )
-        before = _load_watermark(settings, "")
+        before = _load_watermark(settings, "test-board")
         assert before is None
-        run_trace_review_pass(session_id="sess-5")
-        after = _load_watermark(settings, "")
+        run_trace_review_pass(session_id="sess-5", repo_config=_test_repo_config())
+        after = _load_watermark(settings, "test-board")
         assert after is not None
         assert after.tzinfo is not None  # UTC
 
@@ -487,7 +507,9 @@ class TestRunTraceReviewPass:
             fake_inspect,
         )
 
-        result = run_trace_review_pass(session_id="sess-rel")
+        result = run_trace_review_pass(
+            session_id="sess-rel", repo_config=_test_repo_config()
+        )
         assert result.traces_scanned == 5
         # Only t5 (the $1 trace) is the outlier — the other four are
         # near the median.
@@ -518,7 +540,9 @@ class TestRunTraceReviewPass:
                 error="trace too large for the model context",
             ),
         )
-        result = run_trace_review_pass(session_id="sess-6")
+        result = run_trace_review_pass(
+            session_id="sess-6", repo_config=_test_repo_config()
+        )
         assert result.traces_flagged == 1
         assert result.drafts_created == []
 

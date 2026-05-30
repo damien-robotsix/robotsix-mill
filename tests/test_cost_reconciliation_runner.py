@@ -13,12 +13,26 @@ from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 
 
+def _test_repo_config():
+    """Synthetic RepoConfig for periodic-runner tests — the runner now
+    requires one (mono-repo board-less mode is gone)."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+
+
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
     overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     return s
 
 
@@ -206,7 +220,7 @@ def test_clean_pass_no_agent_no_ticket(tmp_path, monkeypatch):
         fake_agent,
     )
 
-    result = run_cost_reconciliation_pass()
+    result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert result.drafts_created == []
     assert "clean" in result.summary
     assert len(agent_called) == 0
@@ -248,7 +262,7 @@ def test_dirty_pass_creates_draft(tmp_path, monkeypatch):
         fake_agent,
     )
 
-    result = run_cost_reconciliation_pass()
+    result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert len(result.drafts_created) == 1
     draft = result.drafts_created[0]
     assert draft["id"]
@@ -256,7 +270,7 @@ def test_dirty_pass_creates_draft(tmp_path, monkeypatch):
     assert "5.00" in result.summary  # delta
 
     # Verify the ticket exists in the DB with correct source
-    service = TicketService(settings)
+    service = TicketService(settings, board_id="test-board")
     ticket = service.get(draft["id"])
     assert ticket is not None
     assert ticket.source == SourceKind.COST_RECONCILIATION
@@ -281,7 +295,7 @@ def test_missing_management_key_skips_gracefully(tmp_path, monkeypatch):
         fake_or,
     )
 
-    result = run_cost_reconciliation_pass()
+    result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert result.drafts_created == []
     assert "skip" in result.summary.lower()
 
@@ -322,7 +336,7 @@ def test_langfuse_error_runs_comparison(tmp_path, monkeypatch):
         fake_agent,
     )
 
-    result = run_cost_reconciliation_pass()
+    result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert len(result.drafts_created) == 1  # delta > $1 → draft
     assert "5.00" in result.summary
 
@@ -376,7 +390,7 @@ def test_duplicate_date_suppressed(tmp_path, monkeypatch):
 
     # Pre-seed a prior cost-reconciliation ticket for yesterday's date
     # with the marker that the runner would have written.
-    service = TicketService(settings)
+    service = TicketService(settings, board_id="test-board")
     date_str = _yesterday_date_str()
     body = f"old\n<!-- cost_reconciliation-gap-id: {date_str} -->\n"
     prior = service.create(
@@ -385,7 +399,7 @@ def test_duplicate_date_suppressed(tmp_path, monkeypatch):
         source=SourceKind.COST_RECONCILIATION,
     )
 
-    result = run_cost_reconciliation_pass()
+    result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
 
     assert result.drafts_created == []
     assert "already filed" in result.summary
@@ -401,7 +415,7 @@ def test_new_date_creates_draft_when_prior_exists_for_other_date(
     settings = _make_settings(tmp_path)
     agent_calls = _patch_dirty_pass(monkeypatch, settings)
 
-    service = TicketService(settings)
+    service = TicketService(settings, board_id="test-board")
     other_date = "2025-01-01"  # any non-yesterday date
     body = f"old\n<!-- cost_reconciliation-gap-id: {other_date} -->\n"
     service.create(
@@ -410,7 +424,7 @@ def test_new_date_creates_draft_when_prior_exists_for_other_date(
         source=SourceKind.COST_RECONCILIATION,
     )
 
-    result = run_cost_reconciliation_pass()
+    result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
 
     assert len(result.drafts_created) == 1
     assert len(agent_calls) == 1  # agent invoked for the new date

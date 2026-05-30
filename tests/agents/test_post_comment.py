@@ -38,13 +38,13 @@ def settings(tmp_path, monkeypatch):
     _cfg._secrets = Secrets(openrouter_api_key="k")
     s = Settings(data_dir=str(tmp_path))
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     return s
 
 
 @pytest.fixture
 def ticket(settings):
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
     return svc.create("Investigate config drift", "body text")
 
 
@@ -62,7 +62,7 @@ class TestPostComment:
         out = tool("## Findings\n\nNo drift; YAML chain is wired.")
         assert out.startswith("posted comment ")
 
-        svc = TicketService(settings)
+        svc = TicketService(settings, board_id="test-board")
         comments = svc.list_comments(ticket.id)
         assert len(comments) == 1
         assert comments[0].parent_id is None
@@ -84,7 +84,7 @@ class TestPostComment:
         assert tool("").startswith("post_comment: empty body")
         assert tool("   \n\t  ").startswith("post_comment: empty body")
 
-        svc = TicketService(settings)
+        svc = TicketService(settings, board_id="test-board")
         assert svc.list_comments(ticket.id) == []
 
     def test_dedupes_same_body_in_one_run(
@@ -108,7 +108,7 @@ class TestPostComment:
         assert first.startswith("posted comment ")
         assert "duplicate" in second
 
-        svc = TicketService(settings)
+        svc = TicketService(settings, board_id="test-board")
         assert len(svc.list_comments(ticket.id)) == 1
 
     def test_different_bodies_post_separately(
@@ -128,7 +128,7 @@ class TestPostComment:
         tool = _pc.make_post_comment_tool(settings, agent_name="implement")
         tool("First finding.")
         tool("Second finding.")
-        svc = TicketService(settings)
+        svc = TicketService(settings, board_id="test-board")
         assert len(svc.list_comments(ticket.id)) == 2
 
     def test_no_active_session_returns_error_string(

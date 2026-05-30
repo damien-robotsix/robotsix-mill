@@ -244,16 +244,22 @@ def run_periodic_pass(
     clone_dir: Path | None = None
     forge_remote_url = settings.forge_remote_url
 
-    if repo_config is not None:
-        service = TicketService(settings, board_id=repo_config.board_id)
-        repo_data_dir = settings.data_dir / repo_config.repo_id
-        repo_data_dir.mkdir(parents=True, exist_ok=True)
-        memory_file = repo_data_dir / config.memory_filename
-        if repo_config.forge_remote_url:
-            forge_remote_url = repo_config.forge_remote_url
-            clone_dir = repo_data_dir / config.workspace_subdir / "repo"
-    else:
-        service = TicketService(settings)
+    if repo_config is None:
+        # Periodic passes must run against a registered repo. The
+        # legacy board-less fallback that wrote to <data_dir>/mill.db
+        # is gone; tests should pass an explicit repo_config.
+        raise ValueError(
+            f"run_periodic_pass({config.label}): repo_config is "
+            "required — configure at least one repo in "
+            "config/repos.yaml and pass its RepoConfig in."
+        )
+    service = TicketService(settings, board_id=repo_config.board_id)
+    repo_data_dir = settings.data_dir / repo_config.repo_id
+    repo_data_dir.mkdir(parents=True, exist_ok=True)
+    memory_file = repo_data_dir / config.memory_filename
+    if repo_config.forge_remote_url:
+        forge_remote_url = repo_config.forge_remote_url
+        clone_dir = repo_data_dir / config.workspace_subdir / "repo"
 
     # Lazy import the agent module (keeps monkeypatch seam alive).
     import importlib

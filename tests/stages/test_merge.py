@@ -20,12 +20,12 @@ def _ctx(tmp_path, **env):
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     from robotsix_mill.config import RepoConfig
 
     return StageContext(
         settings=s,
-        service=TicketService(s),
+        service=TicketService(s, board_id="test-board"),
         repo_config=RepoConfig(
             repo_id="test-repo",
             board_id="test-board",

@@ -54,7 +54,7 @@ def test_verify_no_events(monkeypatch, tmp_path):
 
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path), require_approval="false")
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
 
     # Monkeypatch Settings() inside the runner to return our settings.
     monkeypatch.setattr(
@@ -76,9 +76,9 @@ def test_verify_clean_chain(monkeypatch, tmp_path):
 
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path), require_approval="false")
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     # Use default board "" so the verify runner finds the events.
-    svc = TicketService(s, board_id="")
+    svc = TicketService(s, board_id="test-board")
 
     t = svc.create("clean chain")
     svc.transition(t.id, State.READY, note="refined")
@@ -100,14 +100,14 @@ def test_verify_corrupted_hash(monkeypatch, tmp_path):
 
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path), require_approval="false")
-    db.init_db(s)
-    svc = TicketService(s, board_id="")
+    db.init_db(s, board_id="test-board")
+    svc = TicketService(s, board_id="test-board")
 
     t = svc.create("tampered")
     svc.transition(t.id, State.READY)
 
     # Corrupt the second event's hash.
-    with db.session(s, "") as sess:
+    with db.session(s, "test-board") as sess:
         ev = sess.exec(
             __import__("sqlmodel")
             .select(TicketEvent)
@@ -142,14 +142,14 @@ def test_verify_corrupted_prev_hash(monkeypatch, tmp_path):
 
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path), require_approval="false")
-    db.init_db(s)
-    svc = TicketService(s, board_id="")
+    db.init_db(s, board_id="test-board")
+    svc = TicketService(s, board_id="test-board")
 
     t = svc.create("prev tampered")
     svc.transition(t.id, State.READY)
 
     # Corrupt the second event's prev_hash.
-    with db.session(s, "") as sess:
+    with db.session(s, "test-board") as sess:
         ev = sess.exec(
             __import__("sqlmodel")
             .select(TicketEvent)
@@ -176,10 +176,10 @@ def test_verify_skips_empty_hash_events(monkeypatch, tmp_path):
 
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path), require_approval="false")
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
 
     # Insert a bare event with empty hash (simulating pre-migration).
-    with db.session(s, "") as sess:
+    with db.session(s, "test-board") as sess:
         sess.add(
             TicketEvent(
                 ticket_id="legacy-ticket",
@@ -208,8 +208,8 @@ def test_verify_single_ticket_filter(monkeypatch, tmp_path):
 
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path), require_approval="false")
-    db.init_db(s)
-    svc = TicketService(s, board_id="")
+    db.init_db(s, board_id="test-board")
+    svc = TicketService(s, board_id="test-board")
 
     t1 = svc.create("ticket one")
     svc.transition(t1.id, State.READY)

@@ -31,46 +31,34 @@ _initialized: set[str] = set()
 
 
 def _db_path(settings: Settings, board_id: str) -> Path:
-    """Return the on-disk path for *board_id*'s SQLite file."""
-    if board_id:
-        return settings.data_dir / board_id / "mill.db"
-    return settings.data_dir / "mill.db"
+    """Return the on-disk path for *board_id*'s SQLite file.
+
+    Single-repo deployments configure exactly one repo in
+    ``config/repos.yaml`` and get ``<data_dir>/<repo_id>/mill.db`` —
+    the legacy board-less ``<data_dir>/mill.db`` is gone. Raises
+    ``ValueError`` when *board_id* is empty so callers that forgot to
+    thread it through fail loudly at the site of the bug.
+    """
+    if not board_id:
+        raise ValueError(
+            "db._db_path: board_id is required. The board-less "
+            "<data_dir>/mill.db is gone; configure your repo(s) in "
+            "config/repos.yaml and pass the board_id through."
+        )
+    return settings.data_dir / board_id / "mill.db"
 
 
 def get_engine(settings: Settings, board_id: str = ""):
     """Return the per-board SQLite engine, creating it on first call.
 
-    *board_id* selects the repo whose DB to open. Empty string uses
-    the default DB at ``<data_dir>/mill.db``.
-
-    Emits a warning with a stack trace when board_id is empty AND
-    multi-repo is configured AND the file would be NEWLY created —
-    every ticket should live in a per-repo DB in that mode, so any
-    fresh ``<data_dir>/mill.db`` materialisation indicates a missing
-    board_id thread-through. The engine is still returned so the
-    caller doesn't blow up; the offending site can be fixed on its
-    own schedule.
+    See :func:`_db_path`; *board_id* is required. The default
+    parameter value is kept only because the cache lookup runs before
+    the path resolution — the empty key still raises when it reaches
+    ``_db_path``.
     """
     engine = _engines.get(board_id)
     if engine is None:
         path = _db_path(settings, board_id)
-        if not board_id and not path.exists():
-            try:
-                from ..config import get_repos_config
-
-                if get_repos_config().repos:
-                    import logging
-                    import traceback
-
-                    logging.getLogger("robotsix_mill.core.db").warning(
-                        "db.get_engine: creating board-less mill.db at %s "
-                        "in multi-repo mode — board_id should be threaded "
-                        "through. Stack:\n%s",
-                        path,
-                        "".join(traceback.format_stack(limit=8)),
-                    )
-            except Exception:  # noqa: BLE001
-                pass
         path.parent.mkdir(parents=True, exist_ok=True)
         url = f"sqlite:///{path}"
         engine = create_engine(

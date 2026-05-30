@@ -56,8 +56,8 @@ def ctx_factory(tmp_path):
     def make(**env):
         db.reset_engine()
         s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
-        db.init_db(s)
-        svc = TicketService(s)
+        db.init_db(s, board_id="test-board")
+        svc = TicketService(s, board_id="test-board")
         created.append(s)
         from robotsix_mill.config import RepoConfig
 

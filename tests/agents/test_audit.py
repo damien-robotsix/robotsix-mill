@@ -12,12 +12,26 @@ from robotsix_mill.core.states import State
 from robotsix_mill.core.models import SourceKind
 
 
+def _test_repo_config():
+    """Synthetic RepoConfig for periodic-runner tests — the runner now
+    requires one (mono-repo board-less mode is gone)."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+
+
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
     overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     return s
 
 
@@ -123,14 +137,14 @@ def test_run_audit_pass_empty_memory(tmp_path, monkeypatch):
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
-    run_audit_pass(session_id="test-sid")
+    run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
 
 
 def test_run_audit_pass_reads_existing_memory(tmp_path, monkeypatch):
     """Runner passes existing memory to agent."""
     settings = _make_settings(tmp_path)
-    memory_file = settings.audit_memory_file
+    memory_file = settings.data_dir / "test-repo" / "audit_memory.md"
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text("# Existing memory\n## Proposed\n- gap1\n", encoding="utf-8")
 
@@ -148,7 +162,7 @@ def test_run_audit_pass_reads_existing_memory(tmp_path, monkeypatch):
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
-    run_audit_pass(session_id="test-sid")
+    run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
 
 
@@ -168,8 +182,8 @@ def test_run_audit_pass_writes_memory_verbatim(tmp_path, monkeypatch):
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
-    run_audit_pass(session_id="test-sid")
-    memory_file = settings.audit_memory_file
+    run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
+    memory_file = settings.data_dir / "test-repo" / "audit_memory.md"
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == updated
 
@@ -177,8 +191,8 @@ def test_run_audit_pass_writes_memory_verbatim(tmp_path, monkeypatch):
 def test_run_audit_pass_creates_draft_tickets(tmp_path, monkeypatch):
     """Runner creates draft tickets for each proposed gap."""
     settings = _make_settings(tmp_path)
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return auditing.AuditResult(
@@ -191,7 +205,7 @@ def test_run_audit_pass_creates_draft_tickets(tmp_path, monkeypatch):
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
-    result = run_audit_pass(session_id="test-sid")
+    result = run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="audit"
     tickets = service.list()
@@ -207,7 +221,7 @@ def test_run_audit_pass_creates_draft_tickets(tmp_path, monkeypatch):
 def test_run_audit_pass_no_drafts_when_empty(tmp_path, monkeypatch):
     """When agent returns no drafts, none are created."""
     settings = _make_settings(tmp_path)
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return auditing.AuditResult(
@@ -220,7 +234,7 @@ def test_run_audit_pass_no_drafts_when_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
-    result = run_audit_pass(session_id="test-sid")
+    result = run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert len(result.drafts_created) == 0
 
 
@@ -228,7 +242,7 @@ def test_run_audit_pass_missing_memory_file(tmp_path, monkeypatch):
     """Missing memory file -> empty string passed, no error."""
     settings = _make_settings(tmp_path)
     # Ensure memory file does NOT exist
-    memory_file = settings.audit_memory_file
+    memory_file = settings.data_dir / "test-repo" / "audit_memory.md"
     if memory_file.exists():
         memory_file.unlink()
 
@@ -247,7 +261,7 @@ def test_run_audit_pass_missing_memory_file(tmp_path, monkeypatch):
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
     # Should not raise
-    run_audit_pass(session_id="test-sid")
+    run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
 
 
@@ -266,7 +280,7 @@ def test_audit_pass_result_structure(tmp_path, monkeypatch):
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
-    result = run_audit_pass(session_id="test-sid")
+    result = run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert isinstance(result, AuditPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
@@ -356,7 +370,7 @@ def test_run_audit_pass_opens_langfuse_session(tmp_path, monkeypatch):
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
-    res = run_audit_pass(session_id="test-sid")
+    res = run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
 
     assert res.session_id == "test-sid"
     assert seen["agent_ran"] is True
@@ -372,7 +386,9 @@ def test_audit_session_ids_are_unique_per_run(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
-    a = run_audit_pass(session_id="test-sid").session_id
+    a = run_audit_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    ).session_id
     assert a == "test-sid"
 
 
@@ -403,12 +419,14 @@ def test_run_audit_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(auditing, "run_audit_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
 
-    run_audit_pass(session_id="test-sid")
+    run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     repo = settings.data_dir / "audit_workspace" / "repo"
     assert seen["clone"] == 1 and seen["repo_dir"] == repo
 
     seen["clone"] = 0
-    run_audit_pass(session_id="test-sid")  # reuse existing clone
+    run_audit_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )  # reuse existing clone
     assert seen["clone"] == 0 and seen["repo_dir"] == repo
 
 
@@ -426,5 +444,5 @@ def test_run_audit_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr("robotsix_mill.audit_runner.Settings", lambda: settings)
-    run_audit_pass(session_id="test-sid")
+    run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert got["repo_dir"] is None

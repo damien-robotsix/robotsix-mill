@@ -13,7 +13,7 @@ def _make_settings(tmp_path, **overrides):
     overrides.setdefault("survey_periodic", False)
     s = Settings(**overrides)
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     return s
 
 
@@ -33,8 +33,8 @@ async def test_worker_survey_task_created_when_periodic(
         survey_interval_seconds="1",
     )
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     # Patch _run_periodic_pass to be a no-op to avoid running immediately
@@ -66,8 +66,8 @@ async def test_worker_survey_task_not_created_when_periodic_false(
 
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     worker = Worker(ctx)

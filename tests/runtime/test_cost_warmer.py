@@ -27,21 +27,42 @@ from robotsix_mill.stages import StageContext
 def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     db.reset_engine()
-    from robotsix_mill.config import _reset_repos_config, _reset_secrets
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import (
+        RepoConfig,
+        ReposRegistry,
+        _reset_repos_config,
+        _reset_secrets,
+    )
 
     _reset_secrets()
     _reset_repos_config()
-    return Settings(
+    s = Settings(
         data_dir=str(tmp_path),
         cost_warmer_interval_seconds=30,
         cost_warmer_pace_ms=0,
     )
+    # Single-repo deployments now register at least one repo; the
+    # cost-warmer iterates ``get_repos_config().repos`` and has no
+    # legacy board-less fallback.
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="test-project",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            )
+        }
+    )
+    return s
 
 
 @pytest.fixture
 def worker(settings):
-    svc = TicketService(settings, board_id="")
-    db.init_db(settings)
+    svc = TicketService(settings, board_id="test-board")
+    db.init_db(settings, board_id="test-board")
     ctx = StageContext(settings=settings, service=svc, repo_config=None)
     return Worker(ctx, run_registry=None)
 
@@ -78,7 +99,7 @@ def test_cost_warmer_refreshes_every_non_archived_ticket(
     monkeypatch,
 ):
     """One cycle visits each non-archived ticket exactly once."""
-    svc = TicketService(settings, board_id="")
+    svc = TicketService(settings, board_id="test-board")
     t1 = svc.create("a", "draft body")
     t2 = svc.create("b", "draft body")
 
@@ -100,7 +121,7 @@ def test_cost_warmer_skips_old_terminal_tickets(
 ):
     """CLOSED / EPIC_CLOSED tickets older than 24h are not refreshed —
     their cost is final and warming them on every cycle is wasted."""
-    svc = TicketService(settings, board_id="")
+    svc = TicketService(settings, board_id="test-board")
     fresh = svc.create("fresh", "body")
     old = svc.create("old-closed", "body")
     svc.transition(old.id, State.CLOSED, "done")
@@ -109,7 +130,7 @@ def test_cost_warmer_skips_old_terminal_tickets(
     from robotsix_mill.core.models import Ticket
 
     long_ago = datetime.now(timezone.utc) - timedelta(days=3)
-    with db.session(settings) as s:
+    with db.session(settings, "test-board") as s:
         row = s.get(Ticket, old.id)
         row.updated_at = long_ago
         s.add(row)
@@ -134,7 +155,7 @@ def test_cost_warmer_survives_per_ticket_failure(
 ):
     """A Langfuse error on one ticket must not stop the loop from
     refreshing the rest of the batch."""
-    svc = TicketService(settings, board_id="")
+    svc = TicketService(settings, board_id="test-board")
     t1 = svc.create("a", "body")
     t2 = svc.create("b", "body")
     t3 = svc.create("c", "body")

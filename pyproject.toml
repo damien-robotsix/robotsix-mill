@@ -125,6 +125,7 @@ max-complexity = 10
 "src/robotsix_mill/agents/web_research.py" = ["C901"]
 "src/robotsix_mill/trace_review_runner.py" = ["C901"]
 "src/robotsix_mill/trace_health_runner.py" = ["C901"]
+"src/robotsix_mill/verify_runner.py" = ["C901"]
 "src/robotsix_mill/runtime/tracing.py" = ["C901"]
 "src/robotsix_mill/stages/merge.py" = ["C901"]
 "src/robotsix_mill/stages/pause.py" = ["C901"]

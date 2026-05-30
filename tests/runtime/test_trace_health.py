@@ -19,6 +19,18 @@ from robotsix_mill.trace_health_runner import (
 from robotsix_mill.langfuse_client import list_all_traces_since
 
 
+def _test_repo_config():
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+
+
 # ---------------------------------------------------------------------------
 # fixtures
 # ---------------------------------------------------------------------------
@@ -60,7 +72,7 @@ def _settings(tmp_path, **overrides):
 def _init_db_for_test(settings):
     """Reset the cached engine so each test gets a clean, isolated DB."""
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
 
 def _enable_tracing_secrets():
@@ -128,14 +140,14 @@ def test_unsessioned_traces_creates_draft(tmp_path, monkeypatch):
     _patch_list_all_traces(monkeypatch, traces)
     _patch_settings(monkeypatch, settings)
 
-    result = run_trace_health_check()
+    result = run_trace_health_check(repo_config=_test_repo_config())
 
     assert result.draft_created is True
     assert result.unsessioned_count == 3
     assert result.total_traces == 10
 
     # Exactly one ticket with source="trace-health"
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
     tickets = [t for t in svc.list() if t.source == "trace-health"]
     assert len(tickets) == 1
 
@@ -169,13 +181,13 @@ def test_all_sessioned_no_ticket(tmp_path, monkeypatch):
     _patch_list_all_traces(monkeypatch, traces)
     _patch_settings(monkeypatch, settings)
 
-    result = run_trace_health_check()
+    result = run_trace_health_check(repo_config=_test_repo_config())
 
     assert result.draft_created is False
     assert result.unsessioned_count == 0
     assert result.total_traces == 5
 
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
     tickets = [t for t in svc.list() if t.source == "trace-health"]
     assert len(tickets) == 0
 
@@ -193,13 +205,13 @@ def test_zero_traces_no_ticket(tmp_path, monkeypatch):
     _patch_list_all_traces(monkeypatch, [])
     _patch_settings(monkeypatch, settings)
 
-    result = run_trace_health_check()
+    result = run_trace_health_check(repo_config=_test_repo_config())
 
     assert result.draft_created is False
     assert result.unsessioned_count == 0
     assert result.total_traces == 0
 
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
     tickets = [t for t in svc.list() if t.source == "trace-health"]
     assert len(tickets) == 0
 
@@ -213,7 +225,7 @@ def test_dedup_open_ticket_skips(tmp_path, monkeypatch):
     """Pre-existing non-CLOSED trace-health ticket → no second draft."""
     settings = _settings(tmp_path)
     _init_db_for_test(settings)
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
 
     # Pre-seed an open trace-health ticket (DRAFT is non-CLOSED)
     existing = svc.create("old alert", "old body", source="trace-health")
@@ -223,7 +235,7 @@ def test_dedup_open_ticket_skips(tmp_path, monkeypatch):
     _patch_list_all_traces(monkeypatch, traces)
     _patch_settings(monkeypatch, settings)
 
-    result = run_trace_health_check()
+    result = run_trace_health_check(repo_config=_test_repo_config())
 
     assert result.draft_created is False
     assert result.unsessioned_count == 3
@@ -238,7 +250,7 @@ def test_dedup_blocked_ticket_skips(tmp_path, monkeypatch):
     """Pre-existing BLOCKED trace-health ticket → still skip."""
     settings = _settings(tmp_path)
     _init_db_for_test(settings)
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
 
     existing = svc.create("old alert", "old body", source="trace-health")
     # DRAFT → READY → BLOCKED (valid path: READY can transition to BLOCKED)
@@ -250,7 +262,7 @@ def test_dedup_blocked_ticket_skips(tmp_path, monkeypatch):
     _patch_list_all_traces(monkeypatch, traces)
     _patch_settings(monkeypatch, settings)
 
-    result = run_trace_health_check()
+    result = run_trace_health_check(repo_config=_test_repo_config())
     assert result.draft_created is False
 
     tickets = [t for t in svc.list() if t.source == "trace-health"]
@@ -266,7 +278,7 @@ def test_closed_ticket_does_not_block(tmp_path, monkeypatch):
     """A CLOSED trace-health ticket → new draft still created."""
     settings = _settings(tmp_path)
     _init_db_for_test(settings)
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
 
     old = svc.create("old alert", "old body", source="trace-health")
     # Valid path to CLOSED: DRAFT → READY → DELIVERABLE → IMPLEMENT_COMPLETE → HUMAN_MR_APPROVAL → DONE → CLOSED
@@ -282,7 +294,7 @@ def test_closed_ticket_does_not_block(tmp_path, monkeypatch):
     _patch_list_all_traces(monkeypatch, traces)
     _patch_settings(monkeypatch, settings)
 
-    result = run_trace_health_check()
+    result = run_trace_health_check(repo_config=_test_repo_config())
     assert result.draft_created is True
 
     tickets = [t for t in svc.list() if t.source == "trace-health"]
@@ -317,7 +329,7 @@ def test_tracing_disabled_noop(tmp_path, monkeypatch):
     monkeypatch.setattr(httpx, "Client", NoNetworkClient)
     _patch_settings(monkeypatch, settings)
 
-    result = run_trace_health_check()
+    result = run_trace_health_check(repo_config=_test_repo_config())
 
     assert result.draft_created is False
     assert result.unsessioned_count == 0
@@ -325,7 +337,7 @@ def test_tracing_disabled_noop(tmp_path, monkeypatch):
     assert len(captured) == 0, "httpx.Client was instantiated"
 
     # No tickets created
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
     tickets = [t for t in svc.list() if t.source == "trace-health"]
     assert len(tickets) == 0
 
@@ -657,7 +669,7 @@ def test_start_ticket_root_span_not_called(tmp_path, monkeypatch):
         lambda: settings,
     )
 
-    result = run_trace_health_check()
+    result = run_trace_health_check(repo_config=_test_repo_config())
 
     assert result.draft_created is True
     assert seen["span_called"] is False, (
@@ -665,7 +677,7 @@ def test_start_ticket_root_span_not_called(tmp_path, monkeypatch):
     )
 
     # Verify the created ticket's origin_session.
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
     tickets = [t for t in svc.list() if t.source == "trace-health"]
     assert len(tickets) == 1
     assert tickets[0].origin_session is not None

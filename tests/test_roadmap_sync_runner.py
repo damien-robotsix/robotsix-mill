@@ -161,7 +161,7 @@ def settings(tmp_path, monkeypatch):
 
 @pytest.fixture
 def service(settings):
-    return TicketService(settings, board_id="")
+    return TicketService(settings, board_id="test-board")
 
 
 class TestCreateOrUpdateEpics:

@@ -29,13 +29,13 @@ def _ctx(tmp_path: Path, **env_overrides):
     }
     env.update(env_overrides)
     s = Settings(**env)
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     from robotsix_mill.core.service import TicketService
     from robotsix_mill.config import RepoConfig
 
     return StageContext(
         settings=s,
-        service=TicketService(s),
+        service=TicketService(s, board_id="test-board"),
         repo_config=RepoConfig(
             repo_id="test-repo",
             board_id="test-board",

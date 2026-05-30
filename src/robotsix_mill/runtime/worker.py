@@ -1566,27 +1566,20 @@ class Worker:
         while True:
             cycle_start = time.monotonic()
             repos = get_repos_config()
-            repo_configs = list(repos.repos.values())
-            if not repo_configs:
-                repo_configs = [None]  # type: ignore[list-item]
-            else:
-                repo_configs = [
-                    rc
-                    for rc in repo_configs
-                    if getattr(rc, "cost_warmer_periodic", True)
-                ]
+            repo_configs = [
+                rc
+                for rc in repos.repos.values()
+                if getattr(rc, "cost_warmer_periodic", True)
+            ]
             warmed_count = 0
             for repo_config in repo_configs:
                 try:
-                    svc = TicketService(
-                        settings,
-                        board_id=(repo_config.board_id if repo_config else ""),
-                    )
+                    svc = TicketService(settings, board_id=repo_config.board_id)
                     tickets: list[Ticket] = svc.list()
                 except Exception:  # noqa: BLE001 — survive per-repo errors
                     log.exception(
                         "cost-warmer: listing tickets failed for %s",
-                        repo_config.repo_id if repo_config else "default",
+                        repo_config.repo_id,
                     )
                     continue
 

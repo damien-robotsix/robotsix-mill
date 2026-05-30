@@ -86,7 +86,7 @@ def review_settings(tmp_path) -> Settings:
         refine_triage_enabled="false",
         spec_review_enabled="true",
     )
-    dbmod.init_db(s)
+    dbmod.init_db(s, board_id="test-board")
     yield s
     dbmod.reset_engine()
 
@@ -95,7 +95,7 @@ def review_settings(tmp_path) -> Settings:
 def review_service(review_settings):
     from robotsix_mill.core.service import TicketService
 
-    return TicketService(review_settings)
+    return TicketService(review_settings, board_id="test-board")
 
 
 @pytest.fixture

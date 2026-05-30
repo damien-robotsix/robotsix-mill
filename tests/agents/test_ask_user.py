@@ -18,7 +18,7 @@ def test_writes_comment_with_ask_user_marker(settings, service, monkeypatch):
 
     assert result == "__ASK_USER_PAUSE__"
 
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
     comments = svc.list_comments(ticket.id)
     assert len(comments) == 1
     comment = comments[0]
@@ -54,7 +54,7 @@ def test_idempotent_second_call_no_duplicate_comment(settings, service, monkeypa
     assert r1 == "__ASK_USER_PAUSE__"
     assert r2 == "__ASK_USER_PAUSE__"
 
-    svc = TicketService(settings)
+    svc = TicketService(settings, board_id="test-board")
     comments = svc.list_comments(ticket.id)
     assert len(comments) == 1
     assert "Q1" in comments[0].body

@@ -7,12 +7,26 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 
 
+def _test_repo_config():
+    """Synthetic RepoConfig for periodic-runner tests — the runner now
+    requires one (mono-repo board-less mode is gone)."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+
+
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
     overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     return s
 
 
@@ -38,7 +52,7 @@ def test_run_config_sync_pass_empty_memory(tmp_path, monkeypatch):
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    run_config_sync_pass(session_id="test-sid")
+    run_config_sync_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
 
 
@@ -47,7 +61,7 @@ def test_run_config_sync_pass_reads_existing_memory(tmp_path, monkeypatch):
     from robotsix_mill.agents import config_syncing
 
     settings = _make_settings(tmp_path)
-    memory_file = settings.config_sync_memory_file
+    memory_file = settings.data_dir / "test-repo" / "config_sync_memory.md"
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text("# Existing memory\n## Proposed\n- gap1\n", encoding="utf-8")
 
@@ -65,7 +79,7 @@ def test_run_config_sync_pass_reads_existing_memory(tmp_path, monkeypatch):
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    run_config_sync_pass(session_id="test-sid")
+    run_config_sync_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
 
 
@@ -87,8 +101,8 @@ def test_run_config_sync_pass_writes_memory_verbatim(tmp_path, monkeypatch):
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    run_config_sync_pass(session_id="test-sid")
-    memory_file = settings.config_sync_memory_file
+    run_config_sync_pass(session_id="test-sid", repo_config=_test_repo_config())
+    memory_file = settings.data_dir / "test-repo" / "config_sync_memory.md"
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == updated
 
@@ -100,8 +114,8 @@ def test_run_config_sync_pass_creates_draft_tickets(tmp_path, monkeypatch):
 
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return config_syncing.ConfigSyncResult(
@@ -117,7 +131,9 @@ def test_run_config_sync_pass_creates_draft_tickets(tmp_path, monkeypatch):
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    result = run_config_sync_pass(session_id="test-sid")
+    result = run_config_sync_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="config_sync"
     tickets = service.list()
@@ -132,7 +148,7 @@ def test_run_config_sync_pass_no_drafts_when_empty(tmp_path, monkeypatch):
 
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return config_syncing.ConfigSyncResult(
@@ -145,7 +161,9 @@ def test_run_config_sync_pass_no_drafts_when_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    result = run_config_sync_pass(session_id="test-sid")
+    result = run_config_sync_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
     assert len(result.drafts_created) == 0
 
 
@@ -154,7 +172,7 @@ def test_run_config_sync_pass_missing_memory_file(tmp_path, monkeypatch):
     from robotsix_mill.agents import config_syncing
 
     settings = _make_settings(tmp_path)
-    memory_file = settings.config_sync_memory_file
+    memory_file = settings.data_dir / "test-repo" / "config_sync_memory.md"
     if memory_file.exists():
         memory_file.unlink()
 
@@ -172,7 +190,7 @@ def test_run_config_sync_pass_missing_memory_file(tmp_path, monkeypatch):
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    run_config_sync_pass(session_id="test-sid")
+    run_config_sync_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
 
 
@@ -193,7 +211,9 @@ def test_config_sync_pass_result_structure(tmp_path, monkeypatch):
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    result = run_config_sync_pass(session_id="test-sid")
+    result = run_config_sync_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
     assert isinstance(result, ConfigSyncPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
@@ -220,7 +240,7 @@ def test_run_config_sync_pass_session_id_passed_through(tmp_path, monkeypatch):
     monkeypatch.setattr(config_syncing, "run_config_sync_agent", mock_agent)
     monkeypatch.setattr("robotsix_mill.config_sync_runner.Settings", lambda: settings)
 
-    res = run_config_sync_pass(session_id="test-sid")
+    res = run_config_sync_pass(session_id="test-sid", repo_config=_test_repo_config())
 
     assert res.session_id == "test-sid"
     assert seen["agent_ran"] is True

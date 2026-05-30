@@ -41,7 +41,7 @@ def _ctx(tmp_path, repo_config=None, **env):
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
 
     if repo_config is None:
         repo_config = RepoConfig(

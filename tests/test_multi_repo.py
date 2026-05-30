@@ -310,7 +310,7 @@ def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
     settings.data_dir = data_dir
 
     # Re-init DB under the new data_dir settings.
-    _db.init_db(settings)
+    _db.init_db(settings, board_id="test-board")
 
     repo_a = RepoConfig(
         repo_id="repo-a",
@@ -368,7 +368,7 @@ def test_bc_check_repo_isolation(settings, monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     settings.data_dir = data_dir
-    _db.init_db(settings)
+    _db.init_db(settings, board_id="test-board")
 
     repo_a = RepoConfig(
         repo_id="repo-a",

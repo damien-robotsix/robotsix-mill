@@ -276,8 +276,8 @@ async def test_worker_timeout_escalation_task_created_when_periodic(
         timeout_escalation_interval_seconds="1",
     )
     db.reset_engine()
-    db.init_db(s)
-    service = TicketService(s)
+    db.init_db(s, board_id="test-board")
+    service = TicketService(s, board_id="test-board")
     ctx = StageContext(settings=s, service=service, repo_config=repo_config)
 
     # Patch _timeout_escalation_poll_loop to be a no-op.
@@ -310,8 +310,8 @@ async def test_worker_timeout_escalation_task_not_created_when_periodic_false(
         timeout_escalation_periodic="false",
     )
     db.reset_engine()
-    db.init_db(s)
-    service = TicketService(s)
+    db.init_db(s, board_id="test-board")
+    service = TicketService(s, board_id="test-board")
     ctx = StageContext(settings=s, service=service, repo_config=repo_config)
 
     worker = Worker(ctx)

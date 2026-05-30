@@ -333,7 +333,14 @@ def run_trace_review_pass(
     filed. Never raises — best-effort throughout.
     """
     settings = Settings()
-    source_board_id = repo_config.board_id if repo_config else ""
+    if repo_config is None:
+        # Mono-repo mode is gone — every pass runs against a registered
+        # repo so its source/target boards are well-defined.
+        raise ValueError(
+            "run_trace_review_pass: repo_config is required — "
+            "configure at least one repo in config/repos.yaml."
+        )
+    source_board_id = repo_config.board_id
     # Findings are agent-side improvements (mill code, mill prompts),
     # not application-repo work. Route every draft to the configured
     # target board when set; fall back to the source repo's board only
@@ -384,7 +391,7 @@ def run_trace_review_pass(
         len(traces),
         window_start,
         window_end,
-        repo_config.repo_id if repo_config else "(default)",
+        repo_config.repo_id,
     )
 
     drafts: list[dict] = []

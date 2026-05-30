@@ -86,21 +86,22 @@ def run_bespoke_pass(
         label, the updated memory text, and any drafts created.
     """
     settings = Settings()
-    board_id = repo_config.board_id if repo_config else ""
+    if repo_config is None:
+        raise ValueError(
+            "run_bespoke_pass: repo_config is required — "
+            "configure at least one repo in config/repos.yaml."
+        )
+    board_id = repo_config.board_id
     source_label = f"bespoke:{definition.name}"
 
-    if repo_config is not None:
-        service = TicketService(settings, board_id=board_id)
-    else:
-        service = TicketService(settings)
-
+    service = TicketService(settings, board_id=board_id)
     memory_file = _memory_file_for(settings, board_id, definition.name)
 
     log.info(
         "bespoke pass %r starting (session %s, repo %s)",
         definition.name,
         session_id,
-        board_id or "<default>",
+        board_id,
     )
     agent_fn = partial(
         _bespoke_agent.run_bespoke_agent,

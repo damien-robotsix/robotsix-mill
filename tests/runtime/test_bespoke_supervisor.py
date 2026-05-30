@@ -46,7 +46,7 @@ def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     s = Settings(data_dir=str(tmp_path / "data"))
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     _reset_secrets()
     return s
 

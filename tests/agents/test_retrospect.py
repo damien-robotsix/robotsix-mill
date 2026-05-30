@@ -15,12 +15,12 @@ def _ctx(tmp_path, **env):
     db.reset_engine()
     env.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**env)
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     from robotsix_mill.config import RepoConfig
 
     return StageContext(
         settings=s,
-        service=TicketService(s),
+        service=TicketService(s, board_id="test-board"),
         repo_config=RepoConfig(
             repo_id="test-repo",
             board_id="test-board",
@@ -718,8 +718,8 @@ def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path
 
     db.reset_engine()
     s = Settings(data_dir=str(tmp_path / "data"))
-    db.init_db(s)
-    svc = TicketService(s)
+    db.init_db(s, board_id="test-board")
+    svc = TicketService(s, board_id="test-board")
 
     # Create a retrospect-sourced ticket with NO gap-id marker.
     ticket = svc.create(

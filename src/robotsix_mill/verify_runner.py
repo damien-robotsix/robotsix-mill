@@ -49,7 +49,11 @@ def run_verify_pass(
     settings = Settings()
     boards: set[str] = set()
 
-    # Determine which boards to scan.
+    # Determine which boards to scan. With the board-less default DB
+    # gone, this is simply every registered repo's board_id plus any
+    # board with a ``mill.db`` on disk (covers repos that were
+    # registered transiently and have since been removed but still
+    # carry historical TicketEvent rows worth verifying).
     try:
         from .config import get_repos_config
 
@@ -57,7 +61,12 @@ def run_verify_pass(
         boards = {rc.board_id for rc in repos.values()}
     except Exception:
         pass
-    boards.add("")  # default DB
+    try:
+        for child in settings.data_dir.iterdir():
+            if child.is_dir() and (child / "mill.db").exists():
+                boards.add(child.name)
+    except OSError:
+        pass
 
     result = VerifyResult()
     seen_tickets: set[str] = set()

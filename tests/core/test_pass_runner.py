@@ -59,8 +59,8 @@ def _make_agent(updated_memory="new memory", draft_titles=None, draft_bodies=Non
 def test_happy_path_drafts_created_and_memory_persisted(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("# Memory v1\n", encoding="utf-8")
@@ -104,8 +104,8 @@ def test_happy_path_drafts_created_and_memory_persisted(tmp_path, monkeypatch):
 def test_missing_memory_file_first_run(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "nonexistent.md"
     # File does NOT exist on disk
@@ -142,8 +142,8 @@ def test_missing_memory_file_first_run(tmp_path, monkeypatch):
 def test_agent_returns_zero_drafts(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("some memory", encoding="utf-8")
@@ -176,8 +176,8 @@ def test_agent_returns_zero_drafts(tmp_path, monkeypatch):
 def test_updated_memory_differs_from_input(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("old", encoding="utf-8")
@@ -207,8 +207,8 @@ def test_updated_memory_differs_from_input(tmp_path, monkeypatch):
 def test_service_create_raises_error_swallowed(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("input memory", encoding="utf-8")
@@ -248,8 +248,8 @@ def test_service_create_raises_error_swallowed(tmp_path, monkeypatch):
 def test_memory_write_ioerror_swallowed(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("old memory", encoding="utf-8")
@@ -293,8 +293,8 @@ def test_memory_write_ioerror_swallowed(tmp_path, monkeypatch):
 def test_verified_state_table_in_agent_prompt(tmp_path):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     # Create three tickets with gap-id markers in different states.
 
@@ -304,7 +304,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
         "body A\n\n<!-- audit-gap-id: gap_alpha -->",
         source=SourceKind.AUDIT,
     )
-    with db.session(settings) as s:
+    with db.session(settings, "test-board") as s:
         ticket = s.get(type(ta), ta.id)
         ticket.state = State.DONE
         s.add(TicketEvent(ticket_id=ta.id, state=State.DONE, note="done"))
@@ -318,7 +318,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
         "body B\n\n<!-- audit-gap-id: gap_beta -->",
         source=SourceKind.AUDIT,
     )
-    with db.session(settings) as s:
+    with db.session(settings, "test-board") as s:
         ticket = s.get(type(tb), tb.id)
         ticket.state = State.CLOSED
         s.add(TicketEvent(ticket_id=tb.id, state=State.CLOSED, note="closed"))
@@ -330,7 +330,7 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
         "body C\n\n<!-- audit-gap-id: gap_gamma -->",
         source=SourceKind.AUDIT,
     )
-    with db.session(settings) as s:
+    with db.session(settings, "test-board") as s:
         ticket = s.get(type(tc), tc.id)
         ticket.state = State.HUMAN_MR_APPROVAL
         s.add(
@@ -382,8 +382,8 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
 def test_marker_round_trip(tmp_path):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("old", encoding="utf-8")
@@ -409,7 +409,7 @@ def test_marker_round_trip(tmp_path):
     tickets = service.list()
     assert len(tickets) == 1
     tid = tickets[0].id
-    desc = Workspace(settings.workspaces_dir_for(""), tid).read_description()
+    desc = Workspace(settings.workspaces_dir_for("test-board"), tid).read_description()
     assert "<!-- health-gap-id: fix_z -->" in desc
 
     # Now call _verify_prior_proposals directly
@@ -426,8 +426,8 @@ def test_marker_round_trip(tmp_path):
 def test_no_marker_ticket_not_in_mapping(tmp_path):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     # Create a ticket WITH the correct source but NO gap-id marker.
     service.create(
@@ -446,8 +446,8 @@ def test_no_marker_ticket_not_in_mapping(tmp_path):
 def test_missing_gap_ids_no_crash(tmp_path):
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("mem", encoding="utf-8")
@@ -472,7 +472,9 @@ def test_missing_gap_ids_no_crash(tmp_path):
     assert len(result.drafts_created) == 1
     tickets = service.list()
     assert len(tickets) == 1
-    desc = Workspace(settings.workspaces_dir_for(""), tickets[0].id).read_description()
+    desc = Workspace(
+        settings.workspaces_dir_for("test-board"), tickets[0].id
+    ).read_description()
     # No marker appended
     assert "gap-id:" not in desc
 

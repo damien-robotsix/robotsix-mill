@@ -15,12 +15,26 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 
 
+def _test_repo_config():
+    """Synthetic RepoConfig for periodic-runner tests — the runner now
+    requires one (mono-repo board-less mode is gone)."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+
+
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
     overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     return s
 
 
@@ -110,14 +124,14 @@ def test_run_completeness_check_pass_empty_memory(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass(session_id="test-sid")
+    run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
 
 
 def test_run_completeness_check_pass_reads_existing_memory(tmp_path, monkeypatch):
     """Runner passes existing memory to agent."""
     settings = _make_settings(tmp_path)
-    memory_file = settings.completeness_check_memory_file
+    memory_file = settings.data_dir / "test-repo" / "completeness_check_memory.md"
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text("# Existing memory\n## Proposed\n- gap1\n", encoding="utf-8")
 
@@ -137,7 +151,7 @@ def test_run_completeness_check_pass_reads_existing_memory(tmp_path, monkeypatch
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass(session_id="test-sid")
+    run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == ["# Existing memory\n## Proposed\n- gap1\n"]
 
 
@@ -159,8 +173,8 @@ def test_run_completeness_check_pass_writes_memory_verbatim(tmp_path, monkeypatc
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass(session_id="test-sid")
-    memory_file = settings.completeness_check_memory_file
+    run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
+    memory_file = settings.data_dir / "test-repo" / "completeness_check_memory.md"
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == updated
 
@@ -170,8 +184,8 @@ def test_run_completeness_check_pass_creates_draft_tickets(tmp_path, monkeypatch
     source='completeness_check'."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return cc_agent.CompletenessCheckResult(
@@ -186,7 +200,9 @@ def test_run_completeness_check_pass_creates_draft_tickets(tmp_path, monkeypatch
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass(session_id="test-sid")
+    result = run_completeness_check_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="completeness_check"
     tickets = service.list()
@@ -199,7 +215,7 @@ def test_run_completeness_check_pass_no_drafts_when_empty(tmp_path, monkeypatch)
     """When agent returns no drafts, none are created."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return cc_agent.CompletenessCheckResult(
@@ -214,14 +230,16 @@ def test_run_completeness_check_pass_no_drafts_when_empty(tmp_path, monkeypatch)
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass(session_id="test-sid")
+    result = run_completeness_check_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
     assert len(result.drafts_created) == 0
 
 
 def test_run_completeness_check_pass_missing_memory_file(tmp_path, monkeypatch):
     """Missing memory file -> empty string passed, no error."""
     settings = _make_settings(tmp_path)
-    memory_file = settings.completeness_check_memory_file
+    memory_file = settings.data_dir / "test-repo" / "completeness_check_memory.md"
     if memory_file.exists():
         memory_file.unlink()
 
@@ -241,7 +259,7 @@ def test_run_completeness_check_pass_missing_memory_file(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass(session_id="test-sid")
+    run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert captured_memory == [""]
 
 
@@ -262,7 +280,9 @@ def test_completeness_check_pass_result_structure(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass(session_id="test-sid")
+    result = run_completeness_check_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
     assert isinstance(result, CompletenessCheckPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
@@ -273,7 +293,7 @@ def test_run_completeness_check_pass_skips_empty_title_or_body(tmp_path, monkeyp
     """Runner skips draft entries with empty title or body."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     def mock_agent(**kwargs):
         return cc_agent.CompletenessCheckResult(
@@ -288,7 +308,9 @@ def test_run_completeness_check_pass_skips_empty_title_or_body(tmp_path, monkeyp
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass(session_id="test-sid")
+    result = run_completeness_check_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
     assert len(result.drafts_created) == 1  # only first has both title + body
 
 
@@ -441,7 +463,9 @@ def test_run_completeness_check_pass_opens_langfuse_session(tmp_path, monkeypatc
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    res = run_completeness_check_pass(session_id="test-sid")
+    res = run_completeness_check_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
 
     assert res.session_id == "test-sid"
     assert seen["agent_ran"] is True
@@ -459,7 +483,9 @@ def test_completeness_check_session_ids_are_unique_per_run(tmp_path, monkeypatch
     monkeypatch.setattr(
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
-    a = run_completeness_check_pass(session_id="test-sid").session_id
+    a = run_completeness_check_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    ).session_id
     assert a == "test-sid"
 
 
@@ -494,12 +520,12 @@ def test_run_completeness_check_pass_clones_and_passes_repo_dir(tmp_path, monkey
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    run_completeness_check_pass(session_id="test-sid")
+    run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     repo = settings.data_dir / "completeness_check_workspace" / "repo"
     assert seen["clone"] == 1 and seen["repo_dir"] == repo
 
     seen["clone"] = 0
-    run_completeness_check_pass(session_id="test-sid")
+    run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert seen["clone"] == 0 and seen["repo_dir"] == repo
 
 
@@ -519,7 +545,7 @@ def test_run_completeness_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeyp
     monkeypatch.setattr(
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
-    run_completeness_check_pass(session_id="test-sid")
+    run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert got["repo_dir"] is None
 
 
@@ -534,7 +560,7 @@ def test_run_completeness_check_pass_clips_to_max_gaps(tmp_path, monkeypatch):
 
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings)
+    db.init_db(settings, board_id="test-board")
 
     n = MAX_GAPS + 3  # 15 entries, exceeds the 12-entry cap
 
@@ -551,7 +577,9 @@ def test_run_completeness_check_pass_clips_to_max_gaps(tmp_path, monkeypatch):
         "robotsix_mill.completeness_check_runner.Settings", lambda: settings
     )
 
-    result = run_completeness_check_pass(session_id="test-sid")
+    result = run_completeness_check_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
     assert len(result.drafts_created) == MAX_GAPS
 
 
@@ -572,8 +600,8 @@ async def test_worker_completeness_check_task_created_when_periodic(
         completeness_check_interval_seconds="1",
     )
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     # Patch _run_periodic_pass to be a no-op (avoid running immediately)
@@ -603,8 +631,8 @@ async def test_worker_completeness_check_task_not_created_when_periodic_false(
 
     settings = _make_settings(tmp_path, completeness_check_periodic="false")
     db.reset_engine()
-    db.init_db(settings)
-    service = TicketService(settings)
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
     worker = Worker(ctx)

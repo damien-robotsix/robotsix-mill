@@ -27,9 +27,21 @@ def _settings(tmp_path, **overrides):
     overrides.setdefault("data_dir", str(tmp_path / "data"))
     s = Settings(**overrides)
     db.reset_engine()
-    db.init_db(s)
+    db.init_db(s, board_id="test-board")
     _reset_secrets()
     return s
+
+
+def _test_repo_config():
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
 
 
 def _definition(**overrides) -> BespokeAgentDefinition:
@@ -106,7 +118,7 @@ class TestRunBespokePass:
         result = run_bespoke_pass(
             session_id="sess-1",
             definition=_definition(name="mail-checker"),
-            repo_config=None,
+            repo_config=_test_repo_config(),
             repo_dir=None,
         )
 
@@ -117,7 +129,7 @@ class TestRunBespokePass:
         # Ticket carries the per-agent source label, not a generic
         # "bespoke" lumping. Future dedup queries hit only this
         # agent's history.
-        svc = TicketService(s)
+        svc = TicketService(s, board_id="test-board")
         tickets = svc.list()
         assert len(tickets) == 1
         assert tickets[0].source == "bespoke:mail-checker"
@@ -157,20 +169,20 @@ class TestRunBespokePass:
         run_bespoke_pass(
             session_id="s1",
             definition=_definition(name="agent-a"),
-            repo_config=None,
+            repo_config=_test_repo_config(),
             repo_dir=None,
         )
         run_bespoke_pass(
             session_id="s2",
             definition=_definition(name="agent-b"),
-            repo_config=None,
+            repo_config=_test_repo_config(),
             repo_dir=None,
         )
         # A second run of agent-a should see ITS own memory, not B's.
         run_bespoke_pass(
             session_id="s3",
             definition=_definition(name="agent-a"),
-            repo_config=None,
+            repo_config=_test_repo_config(),
             repo_dir=None,
         )
 
@@ -210,7 +222,7 @@ class TestRunBespokePass:
         run_bespoke_pass(
             session_id="s1",
             definition=_definition(name="mail-checker"),
-            repo_config=None,
+            repo_config=_test_repo_config(),
             repo_dir=clone,
         )
 

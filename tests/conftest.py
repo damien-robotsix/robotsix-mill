@@ -149,7 +149,9 @@ def settings(tmp_path) -> Settings:
     # Default to autonomous mode so existing tests that depend on
     # refine→ready chaining stay green without per-test overrides.
     s = Settings(data_dir=str(tmp_path), require_approval="false")
-    db.init_db(s)
+    # Single-repo deployments now live under <data_dir>/<board_id>/.
+    # Match the default ``service`` fixture below.
+    db.init_db(s, board_id="test-board")
     yield s
     db.reset_engine()
 
