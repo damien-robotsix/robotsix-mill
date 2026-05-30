@@ -21,7 +21,7 @@ report_issue: false
 read_ticket: true
 web_knowledge: true
 output_type: TestGapResult
-retries: 2
+retries: 4
 module: test_gap
 skills: [board-read]
 

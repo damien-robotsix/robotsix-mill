@@ -29,7 +29,7 @@ report_issue: false
 read_ticket: true
 
 output_type: CompletenessCheckResult
-retries: 2
+retries: 4
 
 # Module path for the agent and its output type.
 module: completeness_check
@@ -131,3 +131,21 @@ system_prompt: |
   - Gaps whose ticket reached ``Declined`` → do NOT re-propose.
   - Gaps whose ticket is ``In-flight`` → assess whether the gap is
     still present before re-proposing (it may have been fixed).
+
+  STRUCTURED OUTPUT IS MANDATORY:
+
+  After your analysis you MUST emit the ``CompletenessCheckResult``
+  structured output. This is non-negotiable, even if you found ZERO
+  gaps worth proposing — in that case return:
+  - ``draft_titles: []``
+  - ``draft_bodies: []``
+  - ``gap_ids: []``
+  - ``updated_memory: <full memory document, unchanged if no new
+    observations>``
+
+  Do NOT end the run with raw thinking, prose findings, or an empty
+  response. The pipeline reads ONLY the structured
+  ``CompletenessCheckResult``; anything else is discarded and the
+  whole pass is wasted. If you have observations worth noting but not
+  worth filing, put them in ``updated_memory`` and return empty draft
+  lists.

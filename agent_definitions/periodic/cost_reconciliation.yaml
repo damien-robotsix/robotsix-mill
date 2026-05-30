@@ -17,7 +17,7 @@ tools: []
 report_issue: false
 read_ticket: false
 output_type: CostReconciliationResult
-retries: 2
+retries: 4
 module: cost_reconciling
 skills: []
 
