@@ -202,7 +202,13 @@ class Settings(BaseSettings):
     # sources, and distills the cause — exploration-heavy work that
     # easily exceeds 8 calls on a non-trivial failure. 50 leaves ample
     # headroom (flash is cheap; cost-bounded by ticket-level cap).
-    test_request_limit: int = Field(default=50)
+    # Aligned with config/mill.defaults.yaml's core.limits.test_requests (8).
+    # Pre-alignment the field default was 50 (legacy from before the
+    # test agent flipped to a cheap flash model that doesn't need
+    # nearly as many tool calls). The yaml value wins at runtime via
+    # _YAML_PATH_TO_ALIAS; this just stops the dry-Settings() default
+    # from contradicting it on machines without a yaml override.
+    test_request_limit: int = Field(default=8)
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
     max_fix_iterations: int = Field(default=8)

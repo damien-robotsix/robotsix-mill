@@ -263,6 +263,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.test_requests": "test_request_limit",
     "core.limits.consult_requests": "consult_request_limit",
     "core.limits.explore_requests": "explore_request_limit",
+    "core.limits.explore_max_tokens": "explore_max_tokens",
     "core.limits.dedup_requests": "dedup_request_limit",
     "core.limits.doc_classifier_requests": "doc_classifier_request_limit",
     "core.limits.review_requests": "review_request_limit",
