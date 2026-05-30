@@ -2370,6 +2370,279 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     assert result.feedback is None
 
 
+# --- binary artifact auto-cleanup in scope guardrail ----------------------
+
+
+def test_binary_artifact_auto_cleanup_skips_triage(ctx_factory, tmp_path, monkeypatch):
+    """When all out-of-scope files are binary artifacts, the scope-triage
+    LLM is NOT invoked, the binary files are auto-cleaned, and the result
+    is skip_iteration (ticket continues to test gate)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    # Create a binary artifact file (test.db) that is out-of-scope.
+    db_path = repo / "test.db"
+    db_path.write_bytes(b"\x00\x01\x02\x03SQLite format 3\0")
+    _git(repo, "add", "test.db")
+    _git(repo, "commit", "-q", "-m", "wip with binary")
+
+    settings = ctx.settings
+
+    # Mock scope-triage to verify it is NOT called.
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    triage_called = []
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        triage_called.append(1)
+        raise AssertionError("scope-triage should not be called for binary artifacts")
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    # a) scope-triage LLM NOT invoked
+    assert len(triage_called) == 0, (
+        "scope-triage agent should not be called for binary-only out-of-scope"
+    )
+
+    # b) binary file no longer exists on disk
+    assert not db_path.exists(), "binary artifact should be removed from disk"
+
+    # c) result is skip_iteration
+    assert result.action == "skip_iteration"
+    assert result.outcome is None
+
+    # d) step event contains auto-REJECT with filename
+    history = ctx.service.history(t.id)
+    events = [ev.note for ev in history if ev.note]
+    assert any(
+        "scope-triage auto-REJECT (binary artifacts)" in note and "`test.db`" in note
+        for note in events
+    ), f"auto-REJECT step event missing; history events: {events}"
+
+
+def test_binary_artifact_cleanup_with_text_files_still_calls_triage(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When out-of-scope files include both a binary artifact AND a text
+    file, the binary is auto-cleaned AND the text file is still passed to
+    the scope-triage LLM (called exactly once, with only the text file)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    # Create a binary artifact AND a text file, both out-of-scope.
+    db_path = repo / "test.db"
+    db_path.write_bytes(b"\x00\x01\x02\x03SQLite format 3\0")
+    (repo / "README.md").write_text("out of scope text edit")
+    _git(repo, "add", "test.db", "README.md")
+    _git(repo, "commit", "-q", "-m", "wip with binary and text")
+
+    settings = ctx.settings
+
+    # Mock scope-triage to capture what files it receives.
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    triage_calls = []
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        triage_calls.append((out_of_scope_files, diff_summaries))
+        return ScopeTriageVerdict(
+            action="EXPAND",
+            justification="README.md is a natural side-effect edit",
+            expand_files=["README.md"],
+        )
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    # Binary file is removed from disk.
+    assert not db_path.exists(), "binary artifact should be removed from disk"
+
+    # Triage agent is called exactly once.
+    assert len(triage_calls) == 1, (
+        "scope-triage should be called exactly once for mixed out-of-scope"
+    )
+
+    out_of_scope_files, diff_summaries = triage_calls[0]
+
+    # Only the text file is passed to triage.
+    assert out_of_scope_files == ["README.md"], (
+        f"expected only README.md, got {out_of_scope_files}"
+    )
+    assert "README.md" in diff_summaries
+    assert "test.db" not in diff_summaries
+
+    # Auto-REJECT step event was emitted for the binary.
+    history = ctx.service.history(t.id)
+    events = [ev.note for ev in history if ev.note]
+    assert any(
+        "scope-triage auto-REJECT (binary artifacts)" in note and "`test.db`" in note
+        for note in events
+    )
+
+    # Result should be EXPAND (continue or skip_iteration depending on
+    # whether expand files need re-run). Since README.md may or may not
+    # already be in changed, either is fine — but it should not be a
+    # return (which would mean BLOCKED).
+    assert result.action in ("continue", "skip_iteration")
+
+
+def test_binary_artifact_git_numstat_fallback(ctx_factory, tmp_path, monkeypatch):
+    """A file without a known binary extension but detected by git numstat
+    as binary is still auto-cleaned."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    # Create a file with a non-binary extension but binary content
+    # (git will treat it as binary).
+    weird_path = repo / "datafile.dat"
+    weird_path.write_bytes(b"\x00\x01\x02\x03\x04\x05\x06\x07\x08")
+    _git(repo, "add", "datafile.dat")
+    _git(repo, "commit", "-q", "-m", "wip with misnamed binary")
+
+    settings = ctx.settings
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    triage_called = []
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        triage_called.append(1)
+        raise AssertionError("scope-triage should not be called")
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert len(triage_called) == 0
+    assert not weird_path.exists(), "misnamed binary should be removed from disk"
+    assert result.action == "skip_iteration"
+
+
+def test_binary_artifact_untracked_file_cleanup(ctx_factory, tmp_path, monkeypatch):
+    """An untracked binary file (created by agent runtime, never committed)
+    is still detected and cleaned by os.unlink after git checkout is a no-op."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+
+    # Create an untracked binary file — NOT committed.
+    untracked_db = repo / "mail.db"
+    untracked_db.write_bytes(b"\x00\x01\x02\x03SQLite format 3\0")
+
+    # Also modify a tracked, in-scope file so that changed_files returns
+    # something we can work with alongside the untracked binary.
+    (repo / "a.txt").write_text("modified in-scope file")
+    _git(repo, "add", "a.txt")
+    _git(repo, "commit", "-q", "-m", "in-scope change")
+
+    settings = ctx.settings
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    triage_called = []
+
+    def _fake_triage(
+        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
+    ):
+        triage_called.append(1)
+        raise AssertionError("scope-triage should not be called")
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert len(triage_called) == 0
+    assert not untracked_db.exists(), (
+        "untracked binary artifact should be removed from disk"
+    )
+    assert result.action == "skip_iteration"
+
+
 # --- misc helper --------------------------------------------------------
 
 
