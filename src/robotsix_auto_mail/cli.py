@@ -11,10 +11,10 @@ import errno
 import getpass
 import sys
 import time
-from datetime import datetime
 from typing import TextIO
 
 from robotsix_auto_mail import __version__
+from robotsix_auto_mail.format import _format_date
 from robotsix_auto_mail.config import MailConfig, load
 from robotsix_auto_mail.db import MailRecord, init_db, list_records
 from robotsix_auto_mail.imap import ImapAuthError, ImapClient, ImapError
@@ -262,17 +262,6 @@ def _cmd_ingest(
 _BODY_PREVIEW_LIMIT = 150
 _SEPARATOR = "-" * 60 + "\n"
 
-
-def _format_date(raw: str) -> str:
-    """Parse an ISO-8601 *raw* date and return a human-friendly string.
-
-    Returns *raw* unchanged when parsing fails.
-    """
-    try:
-        dt = datetime.fromisoformat(raw)
-        return dt.strftime("%Y-%m-%d %H:%M")
-    except (ValueError, TypeError):
-        return raw
 
 
 def _render_card(record: MailRecord, file: TextIO) -> None:
