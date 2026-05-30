@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import Body, Depends, HTTPException, Request
 
+from . import router
 from ...core.models import (
     Comment,
     CommentCreate,

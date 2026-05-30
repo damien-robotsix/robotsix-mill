@@ -8,6 +8,7 @@ import threading
 
 from fastapi import Depends, HTTPException, Request
 
+from . import router
 from ...config import get_secrets
 from ..deps import get_run_registry, get_settings
 
