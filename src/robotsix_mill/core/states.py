@@ -120,6 +120,11 @@ TRANSITIONS: dict[State, set[State]] = {
         State.ERRORED,
         State.BLOCKED,
         State.AWAITING_USER_REPLY,
+        # implement-stage ``no_change_needed`` bypass: when the agent
+        # confirms the spec is already satisfied by the codebase, route
+        # straight to DONE. Mirrors the DELIVERABLE→DONE edge for the
+        # downstream-empty-branch case.
+        State.DONE,
     },
     # review APPROVE -> documenting; REQUEST_CHANGES -> back to ready
     # (the implement<->review loop never touches documenting).

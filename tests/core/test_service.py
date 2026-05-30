@@ -82,7 +82,8 @@ def test_state_machine_edges():
     # straight to DONE instead of pushing an empty branch and getting
     # a 422 from the forge.
     assert can_transition(State.DELIVERABLE, State.DONE)
-    assert not can_transition(State.READY, State.DONE)
+    # READY → DONE: implement-stage ``no_change_needed`` bypass.
+    assert can_transition(State.READY, State.DONE)
 
 
 # --- BLOCKED resume path ---
