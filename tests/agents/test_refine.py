@@ -932,6 +932,58 @@ def test_dedup_no_parent_fallback_unchanged(ctx, service, monkeypatch):
     assert f"## {epic.id}" not in candidates_text  # epics excluded
 
 
+def test_dedup_candidate_cap_enforced(ctx, service, monkeypatch):
+    """Create 12 candidate tickets (above the default max of 8), run
+    dedup, verify the candidate block contains at most 8 sections."""
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+
+    # Create the draft ticket.
+    draft_ticket = service.create("draft ticket", _DEDUP_BODY)
+
+    # Create 12 candidate tickets with diverse titles.
+    titles = [
+        "Add dark mode toggle",
+        "Fix login timeout bug",
+        "Refactor database layer",
+        "Update README badges",
+        "Rate limiting middleware",
+        "CSV export feature",
+        "CI pipeline improvements",
+        "Add healthcheck endpoint",
+        "Add user avatar field",
+        "Implement search functionality",
+        "Upgrade to Python 3.14",
+        "Add WebSocket support",
+    ]
+    for title in titles:
+        service.create(title, "some body text for candidate ticket")
+
+    seen_block = None
+
+    def fake_dedup(
+        *, settings, draft_title, draft_body, repo_dir=None, candidates_json
+    ):
+        nonlocal seen_block
+        seen_block = candidates_json
+        return {"duplicate_of": None, "already_done": None, "reason": "no match"}
+
+    monkeypatch.setattr(dedup, "run_dedup_check", fake_dedup)
+
+    out = RefineStage().run(draft_ticket, ctx)
+
+    assert out.next_state is State.READY
+    assert seen_block is not None
+
+    # Count candidate sections (each is "## <id>").
+    # The default dedup_max_candidates is 8, so at most 8 sections.
+    section_count = seen_block.count("\n## ")
+    # "(no candidates)" has zero sections.
+    assert section_count <= 8, (
+        f"expected at most 8 candidate sections, got {section_count}"
+    )
+
+
 # --- datetime timezone-awareness round-trip tests ---
 
 

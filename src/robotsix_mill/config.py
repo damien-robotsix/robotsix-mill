@@ -284,6 +284,10 @@ class Settings(BaseSettings):
     # How many days back closed tickets are considered as duplicate
     # candidates by the pre-refine dedup check.
     dedup_lookback_days: int = Field(default=7)
+    # Maximum number of candidates to pass to the dedup LLM after
+    # similarity-based pre-filtering.  Caps the token budget regardless
+    # of repo size.  ≥ 1 enforced by validator.
+    dedup_max_candidates: int = Field(default=8)
     # Local-dev default: ``.data`` — the same path the docker-compose
     # volume mounts at /data, so host CLI invocations and the container
     # share state instead of leaking a separate sibling tree. The
@@ -1313,6 +1317,13 @@ class Settings(BaseSettings):
     def _validate_dedup_request_limit(cls, v: int) -> int:
         if v < 1:
             raise ValueError("dedup_request_limit must be ≥ 1")
+        return v
+
+    @field_validator("dedup_max_candidates")
+    @classmethod
+    def _validate_dedup_max_candidates(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("dedup_max_candidates must be ≥ 1")
         return v
 
     @field_validator("web_research_request_limit")
