@@ -6,6 +6,7 @@ Entry point: ``main()``, exposed via console_scripts in pyproject.toml.
 from __future__ import annotations
 
 import argparse
+import errno
 import sys
 from datetime import datetime
 from typing import TextIO
@@ -45,6 +46,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("board", help="Display ingested mail in a read-only board view")
+
+    serve_parser = sub.add_parser(
+        "serve", help="Start the web board server"
+    )
+    serve_parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port to listen on (default: %(default)s)",
+    )
 
     return parser
 
@@ -234,6 +245,31 @@ def _cmd_board(config: MailConfig) -> int:
     return 0
 
 
+def _cmd_serve(config: MailConfig, *, port: int) -> int:
+    """Run the serve subcommand: start the web board HTTP server.
+
+    Returns 0 on clean shutdown, 1 if the port is already in use.
+    """
+    from http.server import HTTPServer
+
+    from robotsix_auto_mail.server import make_board_handler
+
+    handler_class = make_board_handler(config.db_path)
+
+    print(f"Serving board on http://0.0.0.0:{port}/board")
+    try:
+        server = HTTPServer(("0.0.0.0", port), handler_class)
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("Shutting down.")
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE:
+            print(f"Port {port} is already in use.", file=sys.stderr)
+            return 1
+        raise
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse args and dispatch to the appropriate subcommand handler.
 
@@ -265,6 +301,14 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(f"Error loading configuration: {exc}\n")
             return 1
         return _cmd_board(config)
+
+    if args.command == "serve":
+        try:
+            config = load()
+        except Exception as exc:
+            sys.stderr.write(f"Error loading configuration: {exc}\n")
+            return 1
+        return _cmd_serve(config, port=args.port)
 
     # No command given — print help and exit 1.
     parser.print_help(sys.stderr)
