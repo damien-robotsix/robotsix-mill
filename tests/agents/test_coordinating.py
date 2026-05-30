@@ -839,6 +839,7 @@ class TestRunCoordinatorWithExperts:
             spec=spec,
             file_map=file_map,
             feedback=feedback,
+            board_id="test-board",
         )
 
     # -- routing ----------------------------------------------------------
@@ -944,7 +945,7 @@ class TestRunCoordinatorWithExperts:
         }
         self._call(tmp_path, file_map={"src/foo.py"})
 
-        mem_file = tmp_path / "expert_a_memory.md"
+        mem_file = tmp_path / "test-board" / "expert_a_memory.md"
         assert mem_file.exists()
         assert "learned X" in mem_file.read_text()
 

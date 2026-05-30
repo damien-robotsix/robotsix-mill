@@ -175,6 +175,7 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
         repo_dir=tmp_path,
         domain="python-backend",
         question="where is X?",
+        board_id="test-board",
     )
     assert out == "expert answer"
     assert cap["name"] == "consult:python-backend"

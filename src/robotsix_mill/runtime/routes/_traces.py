@@ -197,14 +197,10 @@ def deep_review_trace(
                         (e.stderr or "")[:200],
                     )
 
-            # Read inspector memory (best-effort).
-            memory_file = settings.memory_file_for("trace_inspector", "")
+            # Read inspector memory (best-effort). Deep review is a
+            # cross-repo operation without a natural board_id, and the
+            # legacy global memory file is gone — skip ledger loading.
             memory = ""
-            if memory_file.exists():
-                try:
-                    memory = memory_file.read_text(encoding="utf-8")
-                except OSError:
-                    memory = ""
 
             trace_data = _json.dumps(detail, default=str)
             # Wrap the LLM call in an OTel root span so its pydantic-ai
@@ -222,14 +218,13 @@ def deep_review_trace(
                     memory=memory,
                 )
             # Persist updated memory verbatim (atomic write).
+            # Deep review is cross-repo — skip persistence since there
+            # is no single per-repo ledger to write to.
             if result.updated_memory:
-                try:
-                    memory_file.parent.mkdir(parents=True, exist_ok=True)
-                    tmp = memory_file.with_suffix(".md.tmp")
-                    tmp.write_text(result.updated_memory, encoding="utf-8")
-                    tmp.replace(memory_file)
-                except OSError as e:
-                    log.warning("deep review: could not write memory file: %s", e)
+                log.debug(
+                    "deep review: skipping memory persistence "
+                    "(cross-repo, no single board_id to write to)"
+                )
 
             data = {
                 # JS renderDeepReviewResult treats status=="error" as
