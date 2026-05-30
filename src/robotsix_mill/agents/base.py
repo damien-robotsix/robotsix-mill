@@ -125,8 +125,7 @@ def build_agent_from_definition(
         name=definition.name,
         system_prompt=definition.system_prompt,
         model_name=definition.model,
-        web=definition.web,
-        library_knowledge=definition.library_knowledge,
+        web_knowledge=definition.web_knowledge,
         report_issue=definition.report_issue,
         read_ticket=definition.read_ticket,
         reply_to_thread=definition.reply_to_thread,
@@ -277,8 +276,7 @@ def build_agent(
     system_prompt: str,
     output_type: Any = str,
     tools: list | None = None,
-    web: bool = False,
-    library_knowledge: bool = False,
+    web_knowledge: bool = False,
     report_issue: bool = True,
     read_ticket: bool = False,
     reply_to_thread: bool = True,
@@ -354,19 +352,19 @@ def build_agent(
         from .ask_user import make_ask_user_tool
 
         all_tools.append(make_ask_user_tool(settings, agent_name=name))
-    if web:
-        # Not ":online", not web_fetch on the main agent — a cheap
-        # sub-agent does the searching and hands back only a conclusion.
-        all_tools.append(make_web_research_tool(settings))
-    if library_knowledge:
-        # Cached per-library knowledge with a web_research-backed
-        # refresher. Preferred over raw web_research for library API
-        # questions — same library asked across tickets pays for ONE
-        # web_research, not N.
-        from .consult_library import make_consult_library_tool
+    if web_knowledge:
+        # The SINGLE gateway to the internet. A multi-turn flash
+        # agent that owns a per-repo Markdown knowledge base
+        # (``<board>/library_knowledge/*.md`` + ``_general.md``)
+        # AND a web-search tool, and decides autonomously which to
+        # use. The previous ``web`` flag (direct ``web_research``)
+        # and ``library_knowledge`` flag (deterministic cache) are
+        # gone — every web hit now flows through one agent name
+        # so cost attribution is tractable.
+        from .web_knowledge import make_ask_web_knowledge_tool
 
         all_tools.append(
-            make_consult_library_tool(settings, board_id=board_id),
+            make_ask_web_knowledge_tool(settings, board_id=board_id),
         )
 
     agent_kwargs: dict[str, Any] = dict(

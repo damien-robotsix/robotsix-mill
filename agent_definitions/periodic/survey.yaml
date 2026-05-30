@@ -17,9 +17,9 @@ tools:
   - read_file
   - list_dir
 
-web: true
 report_issue: false
 read_ticket: true
+web_knowledge: true
 output_type: SurveyResult
 retries: 2
 module: surveying

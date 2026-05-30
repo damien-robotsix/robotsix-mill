@@ -76,7 +76,7 @@ def test_config_sync_result_field_types():
 
 
 def test_run_config_sync_agent_web_false(monkeypatch):
-    """config-sync agent is constructed with web=False."""
+    """config-sync agent is constructed with web_knowledge=False."""
     from robotsix_mill.config import Settings
 
     build_calls = []
@@ -96,7 +96,7 @@ def test_run_config_sync_agent_web_false(monkeypatch):
     config_syncing.run_config_sync_agent(settings=s, memory="")
 
     assert len(build_calls) == 1
-    assert build_calls[0]["web"] is False
+    assert build_calls[0]["web_knowledge"] is False
     assert build_calls[0]["name"] == "config-sync"
     assert build_calls[0]["model_name"] == s.config_sync_model
 

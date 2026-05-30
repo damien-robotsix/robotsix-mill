@@ -155,22 +155,27 @@ class Settings(BaseSettings):
     bespoke_default_model: str = Field(
         default="deepseek/deepseek-v4-flash",
     )
-    # Model for the library-knowledge curator sub-agent — a cheap call
-    # that answers from a cached per-library knowledge file and only
-    # falls back to web_research when the file is stale or doesn't
-    # cover the question.
-    library_knowledge_model: str = Field(
+    # Model for the web_knowledge gateway sub-agent — a multi-turn
+    # flash agent that owns the per-repo Markdown knowledge base
+    # (per-library .md files + a cross-library _general.md) AND a
+    # web_search tool, and decides autonomously which to use. Every
+    # parent-agent route to the internet now goes through it, so the
+    # knowledge base accumulates instead of fragmenting and cost
+    # attribution for web hits stays in one place.
+    web_knowledge_model: str = Field(
         default="deepseek/deepseek-v4-flash",
     )
-    # How long the cached library knowledge file is considered fresh
-    # (days). A consult on an older file triggers a web_research
-    # refresh before answering.
-    library_knowledge_stale_days: int = Field(
+    # How long a cached web_knowledge .md file is considered fresh
+    # (days). A consultation that hits a stale file is allowed to
+    # web_search and update the file.
+    web_knowledge_stale_days: int = Field(
         default=30,
     )
-    # Bound on the curator sub-agent's tool requests per consultation.
-    consult_library_request_limit: int = Field(
-        default=5,
+    # Bound on the web_knowledge sub-agent's tool requests per
+    # consultation. Each request is one Markdown read, one web_search,
+    # or one Markdown write.
+    web_knowledge_request_limit: int = Field(
+        default=8,
     )
     # Model for the pre-refine dedup/already-done check — a cheap call
     # that short-circuits duplicate drafts before the expensive refiner.

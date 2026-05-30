@@ -10,7 +10,6 @@ model: "${MILL_SCOPE_TRIAGE_MODEL}"
 
 tools: []
 
-web: false
 report_issue: false
 read_ticket: false
 reply_to_thread: false

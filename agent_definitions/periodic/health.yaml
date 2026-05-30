@@ -19,9 +19,9 @@ tools:
   - read_file
   - list_dir
 
-web: true
 report_issue: false
 read_ticket: true
+web_knowledge: true
 output_type: HealthResult
 retries: 2
 module: health

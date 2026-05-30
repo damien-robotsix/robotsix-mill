@@ -17,8 +17,8 @@ tools:
   - list_dir
   - run_command
 
-web: true
 report_issue: true
+web_knowledge: true
 # output_type absent → defaults to str; Langfuse tools added by runner
 retries: 2
 module: answering

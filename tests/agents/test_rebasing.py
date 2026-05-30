@@ -108,15 +108,17 @@ def test_run_rebase_agent_raises_when_api_key_falsy(tmp_path, key):
 
 
 def test_build_agent_called_with_web_false_and_settings(tmp_path, monkeypatch):
-    """build_agent is called with web=False, a Settings, and shell tools."""
+    """build_agent is called with web_knowledge=False, a Settings, and shell tools."""
     captured = {}
 
-    def fake_build_agent(settings, *, system_prompt, output_type, tools, web, **kw):
+    def fake_build_agent(
+        settings, *, system_prompt, output_type, tools, web_knowledge, **kw
+    ):
         captured["settings"] = settings
         captured["system_prompt"] = system_prompt
         captured["output_type"] = output_type
         captured["tools"] = tools
-        captured["web"] = web
+        captured["web_knowledge"] = web_knowledge
 
         # Return a fake agent whose run_sync returns DONE.
         class FakeAgent:
@@ -137,7 +139,7 @@ def test_build_agent_called_with_web_false_and_settings(tmp_path, monkeypatch):
         target="main",
     )
     assert result.status == "DONE"
-    assert captured["web"] is False
+    assert captured["web_knowledge"] is False
     assert isinstance(captured["settings"], Settings)
     # output_type is now PromptedOutput(RebaseResult), not str
     from pydantic_ai import PromptedOutput
@@ -149,7 +151,7 @@ def test_tools_include_shell_tools(tmp_path, monkeypatch):
     """The tools list passed to build_agent includes run_command and friends."""
     captured_tools = []
 
-    def fake_build_agent(settings, *, system_prompt, output_type, tools, web, **kw):
+    def fake_build_agent(settings, *, system_prompt, output_type, tools, web_knowledge, **kw):
         captured_tools.extend(tools or [])
 
         class FakeAgent:
@@ -187,7 +189,7 @@ def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
     """The system_prompt captures the rebase workflow."""
     captured_prompt = []
 
-    def fake_build_agent(settings, *, system_prompt, output_type, tools, web, **kw):
+    def fake_build_agent(settings, *, system_prompt, output_type, tools, web_knowledge, **kw):
         captured_prompt.append(system_prompt)
 
         class FakeAgent:

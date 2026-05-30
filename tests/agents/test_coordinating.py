@@ -175,8 +175,7 @@ class TestRunCoordinator:
             system_prompt,
             output_type=None,
             tools=None,
-            web=False,
-            library_knowledge=False,
+            web_knowledge=False,
             report_issue=True,
             read_ticket=False,
             reply_to_thread=True,
@@ -191,7 +190,7 @@ class TestRunCoordinator:
             self.captured["system_prompt"] = system_prompt
             self.captured["output_type"] = output_type
             self.captured["tools"] = tools
-            self.captured["web"] = web
+            self.captured["web_knowledge"] = web_knowledge
             self.captured["name"] = name
             self.captured["model_name"] = model_name
 
@@ -536,7 +535,7 @@ class TestRunCoordinator:
         across invocations."""
         self._run(settings, tmp_path)
 
-        assert self.captured["web"] is True
+        assert self.captured["web_knowledge"] is True
         assert self.captured["name"] == "implement"
         assert isinstance(self.captured["output_type"], PromptedOutput)
         assert self.captured["output_type"].outputs is ImplementResult

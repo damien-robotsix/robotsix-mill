@@ -50,8 +50,9 @@ def fake_ai(monkeypatch):
 def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     """The main agent uses MILL_MODEL and gets explore (scout) + its
     OWN fs tools (incl. run_command for focused diagnosis) +
-    web_research. There is NO run_tests tool — the implement stage owns
-    the test→retry→escalate loop and runs the suite itself."""
+    ask_web_knowledge (single gateway to the internet). There is NO
+    run_tests tool — the implement stage owns the test→retry→escalate
+    loop and runs the suite itself."""
     s = _settings(
         tmp_path,
         model="main/cap",
@@ -65,9 +66,9 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "ask_user",
+        "ask_web_knowledge",
         "close_thread",
         "consult_expert",
-        "consult_library",
         "delete_file",
         "edit_file",
         "explore",
@@ -78,7 +79,6 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
         "report_issue",
         "run_command",
         "spawn_subtask",
-        "web_research",
         "write_file",
     ]
     assert fake_ai["name"] == "implement"
@@ -286,7 +286,7 @@ def test_build_agent_without_name_is_compatible(tmp_path, monkeypatch):
 
 def test_audit_agent_tool_set(tmp_path, monkeypatch):
     """AC: audit agent gets explore, list_dir, read_file, run_command,
-    and web_research — exactly five tools."""
+    and ask_web_knowledge — the single gateway to web lookups."""
     from robotsix_mill.agents import auditing
 
     cap = {}
@@ -324,6 +324,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
 
     assert cap["tools"] == [
         "ask_user",
+        "ask_web_knowledge",
         "close_thread",
         "detect_duplication",
         "explore",
@@ -331,7 +332,6 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
         "read_file",
         "read_ticket",
         "run_command",
-        "web_research",
     ]
 
 

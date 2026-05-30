@@ -31,7 +31,6 @@ tools:
 # Cheap web_research sub-agent for genuinely external lookups only
 # (library docs, API references, best practices). The agent is told
 # NOT to web-fetch the project's own files.
-web: true
 
 # Cached library knowledge sub-agent. Preferred over raw web_research
 # for library API questions — the first lookup per library does ONE
@@ -39,7 +38,6 @@ web: true
 # <data_dir>/<board>/library_knowledge/<lib>.md, so subsequent
 # consults of the same library across any future ticket answer
 # directly from the cache.
-library_knowledge: true
 
 # Refine does not emit draft tickets through structured output —
 # it produces a RefineResult. Let it self-report blocking issues.
@@ -50,6 +48,7 @@ report_issue: true
 # tokens per call.
 reply_to_thread: false
 close_thread: false
+web_knowledge: true
 
 output_type: RefineResult
 retries: 2

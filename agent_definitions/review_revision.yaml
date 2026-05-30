@@ -17,7 +17,6 @@ tools:
   - list_dir
   - run_command
 
-web: false
 report_issue: true
 output_type: ReviewRevisionResult
 retries: 2

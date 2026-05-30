@@ -201,7 +201,7 @@ def run_config_sync_agent(
         system_prompt=SYSTEM_PROMPT,
         output_type=PromptedOutput(ConfigSyncResult),
         tools=tools,
-        web=False,
+        web_knowledge=False,
         report_issue=False,
         read_ticket=True,
         model_name=settings.config_sync_model,

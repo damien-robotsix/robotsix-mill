@@ -27,10 +27,10 @@ tools:
   # `detect_duplication` is intentional and matched by the runtime
   # injection.
 
-web: true
 report_issue: false
 read_ticket: true
 reply_to_thread: false
+web_knowledge: true
 output_type: AuditResult
 retries: 2
 module: auditing

@@ -84,7 +84,7 @@ def _make_definition(**kw):
         name="test-def",
         system_prompt="You are a test agent.",
         model=None,
-        web=False,
+        web_knowledge=False,
         report_issue=False,
         read_ticket=False,
         reply_to_thread=False,

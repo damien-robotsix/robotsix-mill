@@ -137,10 +137,10 @@ def test_tool_registry_deduplicates_by_name():
 
 
 def test_all_tools_registered(tmp_path, monkeypatch):
-    """Construct an agent via build_agent() with web=True and a full
-    tool set (mimicking the coordinator's tool assembly), then assert
-    that ToolRegistry.list_tools() contains exactly the expected set of
-    tool names."""
+    """Construct an agent via build_agent() with web_knowledge=True and
+    a full tool set (mimicking the coordinator's tool assembly), then
+    assert that ToolRegistry.list_tools() contains exactly the expected
+    set of tool names."""
     s = _settings(tmp_path)
 
     cap = {}
@@ -190,7 +190,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
             *fs_tools,
             _make_run_tests_tool := coordinating.make_run_tests_tool(s, tmp_path),
         ],
-        web=True,
+        web_knowledge=True,
         name="implement",
     )
     _agent.close()
@@ -206,7 +206,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
         "run_command",
         "explore",
         "run_tests",
-        "web_research",
+        "ask_web_knowledge",
         "report_issue",
         "reply_to_thread",
         "close_thread",

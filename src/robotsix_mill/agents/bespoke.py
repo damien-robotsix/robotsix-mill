@@ -98,7 +98,7 @@ def run_bespoke_agent(
         system_prompt=definition.system_prompt,
         model_name=model_name,
         tools=tools,
-        web=definition.web,
+        web_knowledge=definition.web_knowledge,
         report_issue=False,
         read_ticket=False,
         reply_to_thread=False,

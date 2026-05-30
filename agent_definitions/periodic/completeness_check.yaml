@@ -23,7 +23,6 @@ tools:
   - list_dir
 
 # No web research needed — this agent only inspects the local repo.
-web: false
 
 # Emits draft tickets via structured output (PromptedOutput[CompletenessCheckResult]).
 report_issue: false

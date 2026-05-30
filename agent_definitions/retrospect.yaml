@@ -12,7 +12,6 @@ model: "${MILL_RETROSPECT_MODEL}"
 
 tools: []
 
-web: false
 report_issue: false
 read_ticket: true
 output_type: RetrospectResult
@@ -292,4 +291,3 @@ system_prompt: |
     imperative tone.
   - `rationale` (str) — which ticket IDs or observed patterns support
     this rule.
-

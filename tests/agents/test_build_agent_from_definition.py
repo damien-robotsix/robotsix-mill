@@ -50,7 +50,7 @@ def test_happy_path_passes_all_fields(monkeypatch):
         name="refine",
         model="anthropic/claude-opus",
         system_prompt="Refine tickets.",
-        web=True,
+        web_knowledge=True,
         report_issue=True,
         retries=3,
         output_type=None,  # str output
@@ -65,7 +65,7 @@ def test_happy_path_passes_all_fields(monkeypatch):
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == "Refine tickets."
     assert kwargs["model_name"] == "anthropic/claude-opus"
-    assert kwargs["web"] is True
+    assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 3
     assert kwargs["output_type"] is str
@@ -100,7 +100,7 @@ def test_real_refine_yaml_builds(monkeypatch):
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == definition.system_prompt
     assert kwargs["model_name"] == "test/model"
-    assert kwargs["web"] is True
+    assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 2
     # output_type should be PromptedOutput(RefineResult)
@@ -243,7 +243,7 @@ def test_override_multiple_fields(monkeypatch):
         name="original",
         model="original/model",
         system_prompt="Original.",
-        web=False,
+        web_knowledge=False,
         retries=1,
     )
     settings = Settings()
@@ -263,7 +263,7 @@ def test_override_multiple_fields(monkeypatch):
     assert kwargs["system_prompt"] == "Overridden."
     assert kwargs["retries"] == 5
     # Non-overridden fields stay from definition.
-    assert kwargs["web"] is False
+    assert kwargs["web_knowledge"] is False
 
 
 # ── end-to-end: real refine.yaml → working agent ──────────────────────
@@ -272,8 +272,8 @@ def test_override_multiple_fields(monkeypatch):
 def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     """End-to-end: load refine.yaml via load_agent_definition, build
     the agent via build_agent_from_definition, and verify that
-    web=True and report_issue=True cause the web_research and
-    report_issue tools to be injected into the agent's toolset."""
+    web_knowledge=True and report_issue=True cause the
+    ask_web_knowledge and report_issue tools to be injected."""
     import os
     from pathlib import Path
 
@@ -307,10 +307,11 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     toolset = agent._agent._function_toolset
     tool_names = set(toolset.tools.keys())
 
-    # web=True → web_research tool injected.
-    assert definition.web is True
-    assert "web_research" in tool_names, (
-        f"web_research tool not injected despite web=True. Captured tools: {tool_names}"
+    # web_knowledge=True → ask_web_knowledge gateway tool injected.
+    assert definition.web_knowledge is True
+    assert "ask_web_knowledge" in tool_names, (
+        f"ask_web_knowledge tool not injected despite "
+        f"web_knowledge=True. Captured tools: {tool_names}"
     )
 
     # report_issue=True → report_issue tool injected.
