@@ -48,6 +48,8 @@ class BoardBroadcaster:
                 ),
                 "parent_id": ticket.parent_id,
                 "source": ticket.source,
+                "cost_usd": ticket.cost_usd,
+                "cumulative_cost": getattr(ticket, "cumulative_cost", None),
             },
         }
         data = json.dumps(payload)

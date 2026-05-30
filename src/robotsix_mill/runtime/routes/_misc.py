@@ -184,9 +184,9 @@ async def ws_board(
     """
     await websocket.accept()
 
-    # Build the initial ticket list (same as GET /tickets, excluding
-    # closed by default — matches the board's initial render).
-    exclude = {State.CLOSED, State.EPIC_CLOSED}
+    # Honour the board's showClosed toggle via query param.
+    show_closed = request.query_params.get("show_closed", "").lower() == "true"
+    exclude = set() if show_closed else {State.CLOSED, State.EPIC_CLOSED}
     tickets = svc.list(exclude_states=exclude)
     initial = [
         enrich_ticket_read(
