@@ -33,10 +33,12 @@ services:
 
     environment:
       MAIL_CONFIG_PATH: /home/mailbot/config/mail.local.yaml
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-v4-flash}
 
     volumes:
       # Config bind-mount — YAML files available without image rebuild.
-      - ./config:/home/mailbot/config:ro
+      - ./config:/home/mailbot/config
       # Data named volume — SQLite database persists across runs.
       - mail_data:/home/mailbot/data
 
@@ -57,7 +59,7 @@ services:
       - "${BOARD_PORT:-8078}:${BOARD_PORT:-8078}"
 
     volumes:
-      - ./config:/home/mailbot/config:ro
+      - ./config:/home/mailbot/config
       - mail_data:/home/mailbot/data
 
 volumes:

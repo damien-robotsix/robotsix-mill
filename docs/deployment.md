@@ -49,6 +49,21 @@ Then edit `config/mail.local.yaml` with your real IMAP and SMTP credentials:
 $EDITOR config/mail.local.yaml
 ```
 
+### 2a. Alternative: auto-detect provider settings (detect)
+
+Instead of manually creating `config/mail.local.yaml`, you can auto-generate
+it from just your email address:
+
+```sh
+export LLM_API_KEY=sk-or-v1-…
+docker compose run robotsix-auto-mail detect user@gmail.com
+```
+
+This calls an LLM to look up the correct IMAP/SMTP settings, writes
+`config/mail.local.yaml`, and optionally prompts for your password (stored in
+`config/secrets.yaml`).  See [docs/connecting.md](connecting.md#auto-detection-with-detect)
+for full details.
+
 The file `config/mail.local.yaml` is **git-ignored** (`config/mail.local.yaml`
 in `.gitignore`), so your credentials stay local and never land in the repo.
 
@@ -175,8 +190,8 @@ here — the connecting doc is authoritative.
 ### How configuration reaches the container
 
 - `docker-compose.yml` sets `MAIL_CONFIG_PATH=/home/mailbot/config/mail.local.yaml`.
-- The `./config:/home/mailbot/config:ro` bind-mount maps the host `config/`
-  directory into the container **read-only**.
+- The `./config:/home/mailbot/config` bind-mount maps the host `config/`
+  directory into the container.
 - Editing `config/mail.local.yaml` on the host takes effect on the **next**
   `docker compose run` — no rebuild required.
 
@@ -208,7 +223,7 @@ absent so the operator controls the subcommand.
 
 | Volume | Type | Purpose |
 |---|---|---|
-| `./config:/home/mailbot/config:ro` | Bind-mount, read-only | Makes host config files available inside the container without a build. |
+| `./config:/home/mailbot/config` | Bind-mount | Makes host config files available inside the container without a build. |
 | `mail_data:/home/mailbot/data` | Named volume | Persists the SQLite database across runs. |
 
 ### `services.board`
@@ -273,7 +288,7 @@ with a plain `docker run`:
 
 ```sh
 docker run --rm \
-  -v "$(pwd)/config:/home/mailbot/config:ro" \
+  -v "$(pwd)/config:/home/mailbot/config" \
   -v mail_data:/home/mailbot/data \
   -e MAIL_CONFIG_PATH=/home/mailbot/config/mail.local.yaml \
   registry.example.com/robotsix-auto-mail:v1.0.0 \

@@ -94,6 +94,27 @@ robotsix-auto-mail detect user@gmail.com \
 | `--output PATH` | no | `config/mail.local.yaml` | Write mail config to this path |
 | `--stdout` | no | – | Print config to stdout instead of writing to file |
 
+### Docker invocation
+
+```sh
+# Set your OpenRouter API key
+export LLM_API_KEY=sk-or-v1-…
+
+# Detect provider settings and write config
+docker compose run robotsix-auto-mail detect user@gmail.com
+
+# Verify connectivity with the generated config
+docker compose run robotsix-auto-mail probe
+```
+
+The `detect` command writes `config/mail.local.yaml` and (when a password is
+supplied) `config/secrets.yaml` into the bind-mounted `./config` directory on
+the host.  No image rebuild is needed — the files are available immediately.
+
+The `--password` flag works the same as in native mode.  When omitted, an
+interactive prompt appears (requires a TTY — use `docker compose run` without
+`-T`).
+
 ### Caveats
 
 - **LLM output should be verified.** Run `robotsix-auto-mail probe` after

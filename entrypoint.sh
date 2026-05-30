@@ -8,7 +8,7 @@ set -eu
 
 # Bypass config checks for flags that should never require config.
 case "${1-}" in
-    -h|--help|-V|--version|"") exec robotsix-auto-mail "$@" ;;
+    -h|--help|-V|--version|""|detect) exec robotsix-auto-mail "$@" ;;
 esac
 
 _TEMP_CONFIG=""
