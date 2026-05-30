@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
 from ...core.models import Comment, CommentCreate
 from ..deps import get_service, get_settings
@@ -39,7 +39,9 @@ def add_comment(
     persisted.
     """
     try:
-        comment = svc.add_comment(ticket_id, body.body, author=body.author, parent_id=body.parent_id)
+        comment = svc.add_comment(
+            ticket_id, body.body, author=body.author, parent_id=body.parent_id
+        )
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except ValueError as e:

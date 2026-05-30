@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..deps import get_service, get_settings
 from ._tickets import _repo_config_for_ticket
@@ -75,8 +75,10 @@ def cost_trend(
         all_buckets: dict[str, dict] = {}
         for rc in repo_config:
             buckets = aggregate_cost_trend(
-                settings, lookback_hours,
-                max_tickets=max_tickets, repo_config=rc,
+                settings,
+                lookback_hours,
+                max_tickets=max_tickets,
+                repo_config=rc,
             )
             for b in buckets:
                 key = b["ts"]
@@ -86,8 +88,10 @@ def cost_trend(
                 all_buckets[key]["trace_count"] += b["trace_count"]
         return {"buckets": sorted(all_buckets.values(), key=lambda x: x["ts"])}
     buckets = aggregate_cost_trend(
-        settings, lookback_hours,
-        max_tickets=max_tickets, repo_config=repo_config,
+        settings,
+        lookback_hours,
+        max_tickets=max_tickets,
+        repo_config=repo_config,
     )
     return {"buckets": buckets}
 
@@ -121,8 +125,10 @@ def cost_by_agent(
         agg: dict[str, dict] = {}
         for rc in repo_config:
             entries = aggregate_cost_by_name(
-                settings, lookback_hours,
-                max_tickets=max_tickets, repo_config=rc,
+                settings,
+                lookback_hours,
+                max_tickets=max_tickets,
+                repo_config=rc,
             )
             for e in entries:
                 name = e["name"]
@@ -134,8 +140,10 @@ def cost_by_agent(
         result.sort(key=lambda x: x["total_cost"], reverse=True)
         return result
     return aggregate_cost_by_name(
-        settings, lookback_hours,
-        max_tickets=max_tickets, repo_config=repo_config,
+        settings,
+        lookback_hours,
+        max_tickets=max_tickets,
+        repo_config=repo_config,
     )
 
 
@@ -170,16 +178,20 @@ def most_expensive_ticket_endpoint(
         best: dict | None = None
         for rc in repo_config:
             result = most_expensive_ticket(
-                settings, lookback_hours,
-                max_tickets=max_tickets, repo_config=rc,
+                settings,
+                lookback_hours,
+                max_tickets=max_tickets,
+                repo_config=rc,
             )
             if result and (best is None or result["total_cost"] > best["total_cost"]):
                 best = result
         result = best
     else:
         result = most_expensive_ticket(
-            settings, lookback_hours,
-            max_tickets=max_tickets, repo_config=repo_config,
+            settings,
+            lookback_hours,
+            max_tickets=max_tickets,
+            repo_config=repo_config,
         )
 
     if result is None:
@@ -225,15 +237,19 @@ def most_expensive_trace_endpoint(
         best: dict | None = None
         for rc in repo_config:
             result = most_expensive_trace(
-                settings, lookback_hours,
-                max_tickets=max_tickets, repo_config=rc,
+                settings,
+                lookback_hours,
+                max_tickets=max_tickets,
+                repo_config=rc,
             )
             if result and (best is None or result["total_cost"] > best["total_cost"]):
                 best = result
         return best
     return most_expensive_trace(
-        settings, lookback_hours,
-        max_tickets=max_tickets, repo_config=repo_config,
+        settings,
+        lookback_hours,
+        max_tickets=max_tickets,
+        repo_config=repo_config,
     )
 
 
@@ -259,6 +275,7 @@ def cost_breakdown(
         raise HTTPException(404, "ticket not found")
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     from ...langfuse_client import session_traces
+
     rows = session_traces(settings, ticket_id, repo_config=repo_config)
     if rows is None:
         return {"available": False, "traces": []}

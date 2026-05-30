@@ -5,15 +5,15 @@ from __future__ import annotations
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..deps import (
-    get_repos_registry,
     get_run_registry,
-    get_service,
     get_settings,
     get_worker,
 )
+
+from ...config import get_secrets
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,8 @@ def list_runs(
             # repo_id today. Strict equality on a non-empty filter would
             # hide every pre-wiring run in single-repo deployments.
             entries = [
-                e for e in entries
+                e
+                for e in entries
                 if e.get("repo_id") == repo_id or not e.get("repo_id")
             ]
     return entries
@@ -184,8 +185,10 @@ def deep_review_trace(
                         repo_dir = cand
                     else:
                         git_ops.clone(
-                            settings.forge_remote_url, cand,
-                            settings.forge_target_branch, get_secrets().forge_token,
+                            settings.forge_remote_url,
+                            cand,
+                            settings.forge_target_branch,
+                            get_secrets().forge_token,
                         )
                         repo_dir = cand
                 except subprocess.CalledProcessError as e:
@@ -208,7 +211,8 @@ def deep_review_trace(
             # spans get exported as a properly-named, session-grouped
             # Langfuse trace.
             with tracing.start_ticket_root_span(
-                tracing.make_session_id("deep-review"), "deep-review",
+                tracing.make_session_id("deep-review"),
+                "deep-review",
                 extra_attributes={"source_trace_id": trace_id},
             ):
                 result = run_trace_inspector(
@@ -225,9 +229,7 @@ def deep_review_trace(
                     tmp.write_text(result.updated_memory, encoding="utf-8")
                     tmp.replace(memory_file)
                 except OSError as e:
-                    log.warning(
-                        "deep review: could not write memory file: %s", e
-                    )
+                    log.warning("deep review: could not write memory file: %s", e)
 
             data = {
                 # JS renderDeepReviewResult treats status=="error" as
@@ -271,9 +273,7 @@ def deep_review_trace(
 
     # Mark as running before thread starts.
     state.deep_review_results[trace_id] = {"status": "running"}
-    threading.Thread(
-        target=_run, name=f"deep-review-{trace_id}", daemon=True
-    ).start()
+    threading.Thread(target=_run, name=f"deep-review-{trace_id}", daemon=True).start()
     return {"status": "started", "trace_id": trace_id}
 
 

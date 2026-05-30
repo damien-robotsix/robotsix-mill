@@ -7,16 +7,14 @@ import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..deps import get_run_registry, get_settings
+from ..deps import get_run_registry
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _resolve_agent_run_repos(
-    repo_id: str | None, request: Request
-) -> list:
+def _resolve_agent_run_repos(repo_id: str | None, request: Request) -> list:
     """Resolve *repo_id* to a list of ``RepoConfig`` (or ``None``) for
     agent-run routes.
 
@@ -24,8 +22,6 @@ def _resolve_agent_run_repos(
     per repo.  A ``None`` element means single-repo backward compat
     (the runner uses global secrets / memory paths).
     """
-    from ...config import RepoConfig
-
     repos = request.app.state.repos
     if repo_id is None:
         if len(repos.repos) <= 1:
@@ -74,17 +70,13 @@ def audit_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "audit pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("audit pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("audit pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="audit-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="audit-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -120,17 +112,13 @@ def bc_check_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "bc-check pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("bc-check pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("bc-check pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="bc-check-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="bc-check-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -149,7 +137,9 @@ def completeness_check_pass(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("completeness-check", repo_id=rc.repo_id if rc else "")
+                run_id = registry.start(
+                    "completeness-check", repo_id=rc.repo_id if rc else ""
+                )
                 session_id = make_session_id("completeness-check")
                 r = run_completeness_check_pass(session_id=session_id, repo_config=rc)
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
@@ -159,7 +149,9 @@ def completeness_check_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info("completeness-check pass done: %d draft(s)", len(r.drafts_created))
+                log.info(
+                    "completeness-check pass done: %d draft(s)", len(r.drafts_created)
+                )
             except Exception as e:
                 log.exception("completeness-check pass failed")
                 if run_id:
@@ -209,9 +201,7 @@ def agent_check_pass(
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="agent-check-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="agent-check-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -234,7 +224,9 @@ def trace_health_check(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("trace-health", repo_id=rc.repo_id if rc else "")
+                run_id = registry.start(
+                    "trace-health", repo_id=rc.repo_id if rc else ""
+                )
                 r = run_trace_health_check(repo_config=rc)
                 summary = (
                     f"{r.unsessioned_count}/{r.total_traces} "
@@ -245,15 +237,13 @@ def trace_health_check(
                 registry.finish_ok(run_id, summary)
                 if r.draft_created:
                     log.info(
-                        "trace-health check: draft created — "
-                        "%d/%d traces unsessioned",
+                        "trace-health check: draft created — %d/%d traces unsessioned",
                         r.unsessioned_count,
                         r.total_traces,
                     )
                 else:
                     log.info(
-                        "trace-health check: no alert "
-                        "(%d/%d traces unsessioned)",
+                        "trace-health check: no alert (%d/%d traces unsessioned)",
                         r.unsessioned_count,
                         r.total_traces,
                     )
@@ -262,9 +252,7 @@ def trace_health_check(
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="trace-health-check", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="trace-health-check", daemon=True).start()
     return {"status": "started"}
 
 
@@ -287,7 +275,9 @@ def langfuse_cleanup_pass(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("langfuse-cleanup", repo_id=rc.repo_id if rc else "")
+                run_id = registry.start(
+                    "langfuse-cleanup", repo_id=rc.repo_id if rc else ""
+                )
                 r = run_langfuse_cleanup_pass(
                     settings=settings,
                     repo_config=rc,
@@ -301,16 +291,16 @@ def langfuse_cleanup_pass(
                 registry.finish_ok(run_id, summary)
                 log.info(
                     "langfuse-cleanup: %s — %d traces → %d deleted",
-                    r.project, r.traces_before, r.traces_deleted,
+                    r.project,
+                    r.traces_before,
+                    r.traces_deleted,
                 )
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("langfuse-cleanup failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="langfuse-cleanup", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="langfuse-cleanup", daemon=True).start()
     return {"status": "started"}
 
 
@@ -352,17 +342,13 @@ def health_check_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "health pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("health pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("health pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="health-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="health-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -392,17 +378,13 @@ def test_gap_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "test-gap pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("test-gap pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("test-gap pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="test-gap-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="test-gap-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -437,17 +419,13 @@ def survey_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "survey pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("survey pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:  # noqa: BLE001 — background; just log
                 log.exception("survey pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="survey-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="survey-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -477,17 +455,13 @@ def config_sync_pass(
                     f"{'…' if len(r.drafts_created) > 5 else ''}"
                 )
                 registry.finish_ok(run_id, summary)
-                log.info(
-                    "config-sync pass done: %d draft(s)", len(r.drafts_created)
-                )
+                log.info("config-sync pass done: %d draft(s)", len(r.drafts_created))
             except Exception as e:
                 log.exception("config-sync pass failed")
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="config-sync-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="config-sync-pass", daemon=True).start()
     return {"status": "started"}
 
 
@@ -515,15 +489,15 @@ def trace_review_pass(
             run_id = None
             try:
                 run_id = registry.start(
-                    "trace-review", repo_id=rc.repo_id if rc else "",
+                    "trace-review",
+                    repo_id=rc.repo_id if rc else "",
                 )
                 session_id = make_session_id("trace-review")
                 r = run_trace_review_pass(
-                    session_id=session_id, repo_config=rc,
+                    session_id=session_id,
+                    repo_config=rc,
                 )
-                summary = (
-                    r.summary or f"created {len(r.drafts_created)} drafts"
-                )
+                summary = r.summary or f"created {len(r.drafts_created)} drafts"
                 registry.finish_ok(run_id, summary)
                 log.info("trace-review pass done: %s", summary)
             except Exception as e:  # noqa: BLE001 — background; just log
@@ -532,7 +506,9 @@ def trace_review_pass(
                     registry.finish_error(run_id, str(e))
 
     threading.Thread(
-        target=_run, name="trace-review-pass", daemon=True,
+        target=_run,
+        name="trace-review-pass",
+        daemon=True,
     ).start()
     return {"status": "started"}
 
@@ -562,11 +538,13 @@ def roadmap_sync_pass(
             run_id = None
             try:
                 run_id = registry.start(
-                    "roadmap-sync", repo_id=rc.repo_id if rc else "",
+                    "roadmap-sync",
+                    repo_id=rc.repo_id if rc else "",
                 )
                 session_id = make_session_id("roadmap-sync")
                 r = run_roadmap_sync_pass(
-                    session_id=session_id, repo_config=rc,
+                    session_id=session_id,
+                    repo_config=rc,
                 )
                 registry.finish_ok(run_id, r.summary or "no changes")
                 log.info("roadmap-sync pass done: %s", r.summary)
@@ -576,7 +554,9 @@ def roadmap_sync_pass(
                     registry.finish_error(run_id, str(e))
 
     threading.Thread(
-        target=_run, name="roadmap-sync-pass", daemon=True,
+        target=_run,
+        name="roadmap-sync-pass",
+        daemon=True,
     ).start()
     return {"status": "started"}
 
@@ -597,7 +577,9 @@ def cost_reconciliation_pass(
         for rc in repo_configs:
             run_id = None
             try:
-                run_id = registry.start("cost-reconciliation", repo_id=rc.repo_id if rc else "")
+                run_id = registry.start(
+                    "cost-reconciliation", repo_id=rc.repo_id if rc else ""
+                )
                 session_id = make_session_id("cost-reconciliation")
                 r = run_cost_reconciliation_pass(session_id=session_id, repo_config=rc)
                 # Prefer the runner's own summary (delta or "no overrun");
@@ -622,7 +604,5 @@ def cost_reconciliation_pass(
                 if run_id:
                     registry.finish_error(run_id, str(e))
 
-    threading.Thread(
-        target=_run, name="cost-reconciliation-pass", daemon=True
-    ).start()
+    threading.Thread(target=_run, name="cost-reconciliation-pass", daemon=True).start()
     return {"status": "started"}

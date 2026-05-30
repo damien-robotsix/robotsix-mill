@@ -5,12 +5,11 @@ from __future__ import annotations
 import logging
 import threading
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...core.models import TicketRead
 from ..deps import (
     enrich_ticket_read,
-    get_repos_registry,
     get_run_registry,
     get_service,
     get_settings,
@@ -64,7 +63,9 @@ def create_epic(
 
     try:
         ticket = svc.create(
-            title=title, description=description, kind="epic",
+            title=title,
+            description=description,
+            kind="epic",
             board_id=board_id or None,
         )
     except ValueError as e:
@@ -89,7 +90,11 @@ def list_children(
     repo_config = _repo_config_for_ticket(parent, request.app.state.repos)
     return [
         enrich_ticket_read(
-            t, settings, svc, blocking_cost=False, fetch_pr_url=False,
+            t,
+            settings,
+            svc,
+            blocking_cost=False,
+            fetch_pr_url=False,
             repo_config=repo_config,
         )
         for t in svc.list_children(ticket_id)
@@ -125,6 +130,7 @@ def generate_children(
     # children on the mill board. Use a service pinned to the epic's
     # actual board for every mutation in the background runner.
     from ...core.service import TicketService as _TicketService
+
     epic_board_id = ticket.board_id or svc.board_id
     epic_svc = _TicketService(settings, board_id=epic_board_id)
 
@@ -145,14 +151,17 @@ def generate_children(
 
             session_id = ticket_id
             with tracing.start_ticket_root_span(
-                session_id, "epic-breakdown",
+                session_id,
+                "epic-breakdown",
                 repo_config=epic_repo_config,
                 extra_attributes={"ticket_id": ticket_id},
             ) as root:
-                root.set_input({
-                    "ticket_id": ticket_id,
-                    "epic_title": ticket.title,
-                })
+                root.set_input(
+                    {
+                        "ticket_id": ticket_id,
+                        "epic_title": ticket.title,
+                    }
+                )
                 description = epic_svc.workspace(ticket).read_description()
                 result = run_epic_breakdown_agent(
                     settings=settings,
@@ -186,21 +195,21 @@ def generate_children(
                     f"{', '.join(created_ids[:5])}"
                     f"{'…' if len(created_ids) > 5 else ''}"
                 )
-                root.set_output({
-                    "children_created": len(created_ids),
-                    "child_ids": created_ids,
-                    "epic_body_updated": bool(
-                        result.epic_body and result.epic_body.strip()
-                    ),
-                })
+                root.set_output(
+                    {
+                        "children_created": len(created_ids),
+                        "child_ids": created_ids,
+                        "epic_body_updated": bool(
+                            result.epic_body and result.epic_body.strip()
+                        ),
+                    }
+                )
                 # Record the breakdown in the epic's own history so the
                 # drawer shows what happened (and how much it cost).
                 # add_step_event uses the current state, so this stays
                 # in EPIC_OPEN — no state machine churn.
                 try:
-                    body_changed = bool(
-                        result.epic_body and result.epic_body.strip()
-                    )
+                    body_changed = bool(result.epic_body and result.epic_body.strip())
                     epic_svc.add_step_event(
                         ticket_id,
                         "epic-breakdown: spawned "
@@ -215,7 +224,8 @@ def generate_children(
             registry.finish_ok(run_id, summary)
             log.info(
                 "epic-breakdown done: %d children for %s",
-                len(created_ids), ticket_id,
+                len(created_ids),
+                ticket_id,
             )
         except Exception as e:  # noqa: BLE001 — background; just log
             log.exception("epic-breakdown failed for %s", ticket_id)

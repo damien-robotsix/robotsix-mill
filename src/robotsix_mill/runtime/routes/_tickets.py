@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -15,14 +14,11 @@ from ...core.models import (
     TicketRead,
     TicketTransition,
 )
-from ...config import get_repo_config, get_secrets
 from ...core.service import TransitionError
 from ...core.states import STAGE_FOR_STATE, State
 from ...forge import get_forge
 from ..deps import (
     enrich_ticket_read,
-    get_repo_config_for,
-    get_repos_registry,
     get_service,
     get_settings,
     get_worker,
@@ -156,9 +152,7 @@ def list_tickets(
             log.exception("list_tickets: failed to query board %r", s.board_id)
 
     return [
-        enrich_ticket_read(
-            t, settings, svc, blocking_cost=False, fetch_pr_url=False
-        )
+        enrich_ticket_read(t, settings, svc, blocking_cost=False, fetch_pr_url=False)
         for t in tickets
     ]
 
@@ -223,10 +217,13 @@ def get_retrospect(
 # "details" button that fetches that file via the route below.
 # Listed once here so the UI and the listing endpoint stay in sync.
 _STAGE_ARTIFACTS: dict[str, list[str]] = {
-    "refine": ["draft-original.md", "file_map.json", "refine-verbose.md",
-               "epic-body-proposed.md"],
-    "implement": ["implement.md", "implement_summary.md",
-                  "reference_files.json"],
+    "refine": [
+        "draft-original.md",
+        "file_map.json",
+        "refine-verbose.md",
+        "epic-body-proposed.md",
+    ],
+    "implement": ["implement.md", "implement_summary.md", "reference_files.json"],
     "review": ["review.md"],
     "document": [],
     "deliver": ["deliver.md"],
@@ -261,13 +258,18 @@ def list_artifacts(
                 stat = p.stat()
             except OSError:
                 continue
-            items.append({
-                "name": p.name,
-                "size": stat.st_size,
-                "mtime": datetime.fromtimestamp(
-                    stat.st_mtime, tz=timezone.utc,
-                ).isoformat().replace("+00:00", "Z"),
-            })
+            items.append(
+                {
+                    "name": p.name,
+                    "size": stat.st_size,
+                    "mtime": datetime.fromtimestamp(
+                        stat.st_mtime,
+                        tz=timezone.utc,
+                    )
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                }
+            )
     items.sort(key=lambda x: x["mtime"])
     return {"artifacts": items}
 
@@ -339,9 +341,7 @@ def approve_ticket(
     settings=Depends(get_settings),
 ) -> TicketRead:
     try:
-        ticket = svc.transition(
-            ticket_id, State.READY, note="approved by human"
-        )
+        ticket = svc.transition(ticket_id, State.READY, note="approved by human")
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
@@ -353,16 +353,11 @@ def approve_ticket(
         if ticket.parent_id:
             parent = svc.get(ticket.parent_id)
             if parent is not None and parent.kind == "epic":
-                artifact = (
-                    svc.workspace(ticket).artifacts_dir
-                    / "epic-body-proposed.md"
-                )
+                artifact = svc.workspace(ticket).artifacts_dir / "epic-body-proposed.md"
                 if artifact.exists():
                     epic_body = artifact.read_text(encoding="utf-8").strip()
                     if epic_body:
-                        new_hash = svc.workspace(parent).write_description(
-                            epic_body
-                        )
+                        new_hash = svc.workspace(parent).write_description(epic_body)
                         svc.set_content_hash(parent.id, new_hash)
     except Exception:
         pass  # best-effort: approval always succeeds
@@ -392,17 +387,13 @@ def merge_now(
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     if ticket.state is not State.HUMAN_MR_APPROVAL:
-        raise HTTPException(
-            409, "ticket is not in human_mr_approval"
-        )
+        raise HTTPException(409, "ticket is not in human_mr_approval")
 
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     forge = get_forge(settings, repo_config=repo_config)
     pr = forge.pr_status(source_branch=ticket.branch)
     if pr is None:
-        raise HTTPException(
-            409, "no PR found for branch — nothing to merge"
-        )
+        raise HTTPException(409, "no PR found for branch — nothing to merge")
     pr_url = pr.get("url", ticket.branch)
 
     result = forge.merge_pr(source_branch=ticket.branch)
@@ -466,8 +457,10 @@ def get_merge_info(
                 ci_conclusion = cs.get("conclusion")
                 if ci_conclusion == "failure":
                     ci_failing = [
-                        {"name": f.get("name", ""),
-                         "summary": (f.get("summary") or "")[:200]}
+                        {
+                            "name": f.get("name", ""),
+                            "summary": (f.get("summary") or "")[:200],
+                        }
                         for f in (cs.get("failing") or [])
                     ]
         except Exception:
@@ -479,8 +472,10 @@ def get_merge_info(
         try:
             raw = forge.pr_files(source_branch=branch)
             # Sort by total changes desc, cap at 50.
-            raw.sort(key=lambda f: f.get("additions", 0) + f.get("deletions", 0),
-                     reverse=True)
+            raw.sort(
+                key=lambda f: f.get("additions", 0) + f.get("deletions", 0),
+                reverse=True,
+            )
             files = raw[:50]
         except Exception:
             pass
@@ -503,9 +498,7 @@ def get_merge_reason(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    reason_path = (
-        svc.workspace(ticket).artifacts_dir / "merge_reason.txt"
-    )
+    reason_path = svc.workspace(ticket).artifacts_dir / "merge_reason.txt"
     if not reason_path.exists():
         return {"reason": ""}
     return {"reason": reason_path.read_text(encoding="utf-8").strip()}
@@ -533,7 +526,11 @@ def get_merge_status(
 
     # Only relevant for merge-ready states.  Everything else gets a
     # clean "no" so the drawer doesn't bother rendering a button.
-    if ticket.state not in (State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE, State.IMPLEMENT_COMPLETE):
+    if ticket.state not in (
+        State.HUMAN_MR_APPROVAL,
+        State.WAITING_AUTO_MERGE,
+        State.IMPLEMENT_COMPLETE,
+    ):
         return {
             "mergeable": None,
             "ci_conclusion": None,
@@ -626,7 +623,10 @@ def request_changes(
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
+    return {
+        "comment": comment,
+        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
+    }
 
 
 @router.post("/tickets/{ticket_id}/priority", response_model=TicketRead)
@@ -677,14 +677,19 @@ def redraft(
     """Redraft a ticket from any active state back to DRAFT with an
     optional comment."""
     try:
-        comment, ticket = svc.redraft(ticket_id, body.body or "", author=body.author or "user")
+        comment, ticket = svc.redraft(
+            ticket_id, body.body or "", author=body.author or "user"
+        )
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return {"comment": comment, "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)}
+    return {
+        "comment": comment,
+        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
+    }
 
 
 @router.post("/tickets/{ticket_id}/mark-done")

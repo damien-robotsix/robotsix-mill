@@ -59,8 +59,7 @@ def list_repos(
         rc = repos.repos[single]
         return [{"repo_id": rc.repo_id, "board_id": rc.board_id}]
     return [
-        {"repo_id": rc.repo_id, "board_id": rc.board_id}
-        for rc in repos.repos.values()
+        {"repo_id": rc.repo_id, "board_id": rc.board_id} for rc in repos.repos.values()
     ]
 
 
