@@ -76,7 +76,7 @@ jobs:
       - name: Deptry (dependency import check)
         env:
           UV_PROJECT_ENVIRONMENT: system
-        run: uv run deptry . --extras dev,tracing
+        run: uv run deptry .
 
       - name: Run tests
         env:
