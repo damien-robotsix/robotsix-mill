@@ -194,8 +194,10 @@ def run_explore(
         # Detect truncation (finish_reason == 'length') and auto-continue
         # with a single follow-up call so the caller gets a complete answer.
         output = str(result.output).strip()
-        finish_reason = getattr(getattr(result, 'response', None), 'finish_reason', None)
-        if finish_reason == 'length':
+        finish_reason = getattr(
+            getattr(result, "response", None), "finish_reason", None
+        )
+        if finish_reason == "length":
             continuation_result = agent.run_sync(
                 "Continue exactly from where you were cut off. "
                 "Do not repeat anything already said. "
