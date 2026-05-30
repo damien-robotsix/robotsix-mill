@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import urllib.error
 from pathlib import Path
+from typing import Literal
 from unittest import mock
 
 import pydantic
@@ -37,7 +38,7 @@ class _FakeResp:
     def __enter__(self) -> "_FakeResp":
         return self
 
-    def __exit__(self, *exc: object) -> bool:
+    def __exit__(self, *exc: object) -> Literal[False]:
         return False
 
 
