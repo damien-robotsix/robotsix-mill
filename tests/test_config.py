@@ -405,19 +405,14 @@ class TestComputedProperties:
 
     # -- data-directory derivations --
 
-    def test_db_path(self, tmp_path):
-        s = Settings(data_dir=str(tmp_path))
-        assert s.db_path == tmp_path / "mill.db"
-
     def test_workspaces_dir(self, tmp_path):
         s = Settings(data_dir=str(tmp_path))
-        # ``workspaces_dir`` was renamed to ``workspaces_dir_for(board_id)``;
-        # passing an empty board_id falls back to <data_dir>/workspaces.
-        assert s.workspaces_dir_for("") == tmp_path / "workspaces"
+        assert s.workspaces_dir_for("my-board") == tmp_path / "my-board" / "workspaces"
 
-    def test_db_url(self, tmp_path):
+    def test_workspaces_dir_empty_raises(self, tmp_path):
         s = Settings(data_dir=str(tmp_path))
-        assert s.db_url == f"sqlite:///{tmp_path / 'mill.db'}"
+        with pytest.raises(ValueError, match="board_id is required"):
+            s.workspaces_dir_for("")
 
     # -- tracing_enabled --
 

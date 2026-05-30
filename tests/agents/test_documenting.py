@@ -524,6 +524,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
 
         assert captured_tools is not None
@@ -574,6 +575,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
 
         assert captured_system_prompt is not None
@@ -617,6 +619,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
 
         assert captured_system_prompt is not None
@@ -635,6 +638,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
 
         assert len(fake_agent.calls) == 1
@@ -665,6 +669,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
             reference_files=["README.md", "src/app.py"],
         )
 
@@ -692,6 +697,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
             reference_files=["README.md"],
         )
 
@@ -736,6 +742,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
             model_name="openai/gpt-4o",
         )
 
@@ -779,6 +786,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
             # model_name not passed → None
         )
 
@@ -822,6 +830,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
 
         # No model_name in overrides — definition.model is left alone.
@@ -841,6 +850,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
 
         _, kwargs = fake_agent.calls[0]
@@ -871,6 +881,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
             extra_roots=extra,
         )
         assert captured == [extra]
@@ -896,6 +907,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
             extra_roots=extra,
         )
         assert captured == [extra]
@@ -971,13 +983,14 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
 
         assert len(mem_calls) == 1
         path, text = mem_calls[0]
         assert text == "new doc layout discovered"
         # Verify the path is the expected doc_memory file.
-        assert path == settings.memory_file_for("doc", "")
+        assert path == settings.memory_file_for("doc", "test-board")
 
     def test_persist_memory_not_called_when_updated_memory_empty(
         self,
@@ -1007,6 +1020,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
 
         assert len(mem_calls) == 0
@@ -1023,6 +1037,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
         assert fake_agent.closed is True
 
@@ -1040,6 +1055,7 @@ class TestRunDocAgent:
                 repo_dir=repo_dir,
                 diff=self.DIFF,
                 spec=self.SPEC,
+                board_id="test-board",
             )
         assert fake_agent.closed is True
 
@@ -1060,6 +1076,7 @@ class TestRunDocAgent:
             repo_dir=repo_dir,
             diff=self.DIFF,
             spec=self.SPEC,
+            board_id="test-board",
         )
         assert result is expected
         assert result.user_facing is True

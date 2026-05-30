@@ -930,46 +930,38 @@ class Settings(BaseSettings):
     ntfy_url: str | None = Field(default=None, alias="NTFY_URL")
     ntfy_token: str | None = Field(default=None, alias="NTFY_TOKEN")
 
-    # --- board ---
-    board_id: str = Field(default="")
-
-    @property
-    def db_path(self) -> Path:
-        """Resolved path to the SQLite database file."""
-        return self.data_dir / "mill.db"
-
     def workspaces_dir_for(self, board_id: str) -> Path:
-        """Per-repo workspaces directory. Empty *board_id* falls back
-        to the legacy default at ``<data_dir>/workspaces``."""
-        if board_id:
-            return self.data_dir / board_id / "workspaces"
-        return self.data_dir / "workspaces"
+        """Per-repo workspaces directory. *board_id* is required —
+        raises ``ValueError`` when empty."""
+        if not board_id:
+            raise ValueError(
+                "workspaces_dir_for: board_id is required. "
+                "The board-less <data_dir>/workspaces is gone."
+            )
+        return self.data_dir / board_id / "workspaces"
 
-    def memory_file_for(self, name: str, board_id: str = "") -> Path:
+    def memory_file_for(self, name: str, board_id: str) -> Path:
         """Return the per-repo memory ledger path for *name*
         (e.g. ``"implement"``, ``"refine"``, ``"audit"``).
 
         Honors any explicit ``<name>_memory_path`` setting override
         (env / YAML); otherwise routes to
-        ``<data_dir>/<board_id>/<name>_memory.md`` when *board_id* is
-        set, falling back to the legacy global path
-        ``<data_dir>/<name>_memory.md`` when not.
+        ``<data_dir>/<board_id>/<name>_memory.md``.  *board_id* is
+        required — raises ``ValueError`` when empty.
 
         Memory ledgers are repo-specific observation logs (codebase
         conventions, testing patterns, gotchas) — each repo
         accumulates its own.
         """
+        if not board_id:
+            raise ValueError(
+                "memory_file_for: board_id is required. "
+                "The board-less <data_dir>/<name>_memory.md is gone."
+            )
         override = getattr(self, f"{name}_memory_path", None)
         if override is not None:
             return override
-        if board_id:
-            return self.data_dir / board_id / f"{name}_memory.md"
-        return self.data_dir / f"{name}_memory.md"
-
-    @property
-    def db_url(self) -> str:
-        """SQLAlchemy-compatible database URL derived from :attr:`db_path`."""
-        return f"sqlite:///{self.db_path}"
+        return self.data_dir / board_id / f"{name}_memory.md"
 
     @property
     def tracing_enabled(self) -> bool:

@@ -603,7 +603,7 @@ def test_deep_review_session_id_format(client, monkeypatch):
     seen = {}
 
     @contextlib.contextmanager
-    def fake_root(ticket_id, stage_name=None, extra_attributes=None):
+    def fake_root(ticket_id, stage_name=None, extra_attributes=None, repo_config=None):
         seen["ticket_id"] = ticket_id
         seen["stage_name"] = stage_name
         seen["extra_attributes"] = extra_attributes

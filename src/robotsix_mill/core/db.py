@@ -22,7 +22,7 @@ from ..config import Settings
 
 log = logging.getLogger("robotsix_mill.db")
 
-# Per-board engine cache. "" key is the default DB at <data_dir>/mill.db.
+# Per-board engine cache.
 _engines: dict[str, object] = {}
 
 # Tracks which boards have had init_db() called so we can lazily
@@ -48,13 +48,11 @@ def _db_path(settings: Settings, board_id: str) -> Path:
     return settings.data_dir / board_id / "mill.db"
 
 
-def get_engine(settings: Settings, board_id: str = ""):
+def get_engine(settings: Settings, board_id: str):
     """Return the per-board SQLite engine, creating it on first call.
 
-    See :func:`_db_path`; *board_id* is required. The default
-    parameter value is kept only because the cache lookup runs before
-    the path resolution — the empty key still raises when it reaches
-    ``_db_path``.
+    *board_id* is required — raises ``ValueError`` (via
+    :func:`_db_path`) when empty.
     """
     engine = _engines.get(board_id)
     if engine is None:
@@ -69,7 +67,7 @@ def get_engine(settings: Settings, board_id: str = ""):
     return engine
 
 
-def init_db(settings: Settings, board_id: str = "") -> None:
+def init_db(settings: Settings, board_id: str) -> None:
     """Create tables (if missing) on the per-board DB."""
     # import models so SQLModel.metadata is populated before create_all
     from . import models  # noqa: F401
@@ -118,7 +116,7 @@ def init_db(settings: Settings, board_id: str = "") -> None:
     _initialized.add(board_id)
 
 
-def session(settings: Settings, board_id: str = "") -> Session:
+def session(settings: Settings, board_id: str) -> Session:
     """Return a new SQLModel Session bound to the per-board engine.
 
     Lazily initializes the per-board schema on first access — so a
