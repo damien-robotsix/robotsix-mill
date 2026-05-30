@@ -33,17 +33,26 @@ from .run_registry import RunRegistry
 log = logging.getLogger("robotsix_mill.worker")
 
 
-def _post_trace_comment(
+def _post_trace_event(
     ctx: StageContext,
     ticket_id: str,
     trace_id: str | None,
     stage_name: str,
 ) -> None:
-    """Post a top-level trace-link comment on the ticket, if possible.
+    """Append the post-stage Langfuse trace URL to the ticket's history.
 
-    No-op when *trace_id* is ``None`` or ``langfuse_trace_url`` cannot
-    construct a URL (e.g. missing Langfuse credentials).  Failures are
-    logged at warning level and never propagate.
+    Previously this wrote a comment with ``author="mill"``, which
+    contaminated the channel refine + implement read for reviewer
+    feedback — agents saw the unreadable trace URL and asked the
+    operator "what did the reviewer say?". Writing the same breadcrumb
+    to ``TicketEvent.note`` instead keeps it visible to humans
+    browsing the ticket (the drawer renders history-event notes as
+    Markdown so the link stays clickable) without polluting the
+    comment stream.
+
+    No-op when *trace_id* is ``None`` or ``langfuse_trace_url`` can't
+    build a URL (Langfuse unconfigured). Failures are logged at
+    warning level and never propagate.
     """
     if trace_id is None:
         return
@@ -51,12 +60,12 @@ def _post_trace_comment(
     url = langfuse_trace_url(trace_id, repo_config=repo_config)
     if url is None:
         return
-    body = f"🔍 [Trace: {stage_name}]({url})"
+    note = f"🔍 [Trace: {stage_name}]({url})"
     try:
-        ctx.service.add_comment(ticket_id, body, author="mill")
+        ctx.service.add_history_note(ticket_id, note)
     except Exception:
         log.warning(
-            "failed to post trace-link comment for %s (%s)",
+            "failed to post trace-link history event for %s (%s)",
             ticket_id,
             stage_name,
             exc_info=True,
@@ -196,7 +205,7 @@ async def _process_ticket_inner(
                 ticket_id,
                 timeout,
             )
-            _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             note = f"stage {stage_name} timed out after {timeout}s"[:200]
             ctx.service.transition(ticket_id, State.BLOCKED, note=note)
             ticket = ctx.service.get(ticket_id)
@@ -211,7 +220,7 @@ async def _process_ticket_inner(
                 ticket.state,
                 ticket_id,
             )
-            _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
             log.exception("%s: %s failed", stage_name, ticket_id)
@@ -247,10 +256,10 @@ async def _process_ticket_inner(
                         max_attempts,
                         delay,
                     )
-                    _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+                    _post_trace_event(ctx, ticket_id, trace_id, stage_name)
                     return
                 # Retries exhausted — block.
-                _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+                _post_trace_event(ctx, ticket_id, trace_id, stage_name)
                 note = (
                     f"Transient: {type(e).__name__} persisted after "
                     f"{max_attempts} attempts — last: {e}"
@@ -261,7 +270,7 @@ async def _process_ticket_inner(
                     send_notification(ticket, State.BLOCKED, note, ctx.settings)
             else:
                 # FATAL — block immediately.
-                _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+                _post_trace_event(ctx, ticket_id, trace_id, stage_name)
                 note = f"Fatal: {type(e).__name__}: {e}"[:200]
                 ctx.service.transition(ticket_id, State.BLOCKED, note=note)
                 ticket = ctx.service.get(ticket_id)
@@ -282,7 +291,7 @@ async def _process_ticket_inner(
         if outcome.next_state == ticket.state:
             # no-op (e.g. merge: PR still open) — leave it; the poll
             # re-enqueues later. No transition, no trace, no spam.
-            _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             log.debug(
                 "%s: %s no-op at %s (awaiting external event)",
                 stage_name,
@@ -290,8 +299,15 @@ async def _process_ticket_inner(
                 ticket.state,
             )
             return
+        # Trace breadcrumb first, then the transition. Keeping the
+        # transition as the last event preserves the simple "what
+        # state am I in now?" read on ``history[-1]`` for downstream
+        # callers (tests, retrospect, UI). The trace event records
+        # the stage that produced the transition and sits at the
+        # pre-transition state — semantically "work done while in
+        # this state".
+        _post_trace_event(ctx, ticket_id, trace_id, stage_name)
         ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
-        _post_trace_comment(ctx, ticket_id, trace_id, stage_name)
         log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
         # Best-effort push notification for human-attention states.
         if outcome.next_state in _TRIGGER_STATES:

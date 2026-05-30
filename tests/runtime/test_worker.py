@@ -33,8 +33,11 @@ async def test_stub_pauses_chain(ctx, service, monkeypatch):
 
 
 async def test_noop_outcome_leaves_ticket(ctx, service, monkeypatch):
-    """Same-state Outcome (e.g. merge: PR still open) = no transition,
-    no history spam — the poll re-runs it later."""
+    """Same-state Outcome (e.g. merge: PR still open) = no transition.
+
+    The worker still appends a trace-link breadcrumb to history so
+    the operator can find the Langfuse trace for the no-op run, but
+    every event is at the same state — no real state change."""
 
     class NoOp(Stage):
         name = "refine"
@@ -47,7 +50,7 @@ async def test_noop_outcome_leaves_ticket(ctx, service, monkeypatch):
     t = service.create("x")
     await process_ticket(t.id, ctx)
     assert service.get(t.id).state is State.DRAFT
-    assert [e.state for e in service.history(t.id)] == [State.DRAFT]
+    assert all(e.state is State.DRAFT for e in service.history(t.id))
 
 
 async def test_working_stages_chain_to_real_tail(ctx, service, monkeypatch):
