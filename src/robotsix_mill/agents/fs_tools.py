@@ -428,9 +428,6 @@ def build_fs_tools(
             return syntax_error
         try:
             p = _safe(root, path, extra_roots=extra_roots)
-            err = _check_python_syntax(path, content)
-            if err is not None:
-                return f"write_file refused: {err}"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
         except (ValueError, OSError) as e:
