@@ -102,6 +102,58 @@ def test_other_400_stays_non_transient():
     assert is_transient(ModelHTTPError()) is False
 
 
+# --- _map_messages renames reasoning -> reasoning_content for deepseek ---
+
+
+def _run_map(model, messages):
+    import asyncio
+
+    from pydantic_ai.models import ModelRequestParameters
+
+    return asyncio.run(model._map_messages(messages, ModelRequestParameters()))
+
+
+def test_deepseek_renames_reasoning_to_reasoning_content():
+    pytest.importorskip("pydantic_ai.providers.openrouter")
+    from pydantic_ai.messages import ModelResponse, TextPart, ThinkingPart
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from robotsix_mill.agents.openrouter_cost import CostInstrumentedOpenRouterModel
+
+    m = CostInstrumentedOpenRouterModel(
+        "deepseek/deepseek-v4-pro", provider=OpenRouterProvider(api_key="x")
+    )
+    resp = ModelResponse(
+        parts=[
+            ThinkingPart(id="reasoning", content="thoughts", provider_name=m.system),
+            TextPart(content="answer"),
+        ]
+    )
+    asst = next(x for x in _run_map(m, [resp]) if x.get("role") == "assistant")
+    assert asst.get("reasoning_content") == "thoughts"
+    assert "reasoning" not in asst
+
+
+def test_non_deepseek_keeps_reasoning_field():
+    pytest.importorskip("pydantic_ai.providers.openrouter")
+    from pydantic_ai.messages import ModelResponse, TextPart, ThinkingPart
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from robotsix_mill.agents.openrouter_cost import CostInstrumentedOpenRouterModel
+
+    m = CostInstrumentedOpenRouterModel(
+        "openai/gpt-4o-mini", provider=OpenRouterProvider(api_key="x")
+    )
+    resp = ModelResponse(
+        parts=[
+            ThinkingPart(id="reasoning", content="t", provider_name=m.system),
+            TextPart(content="a"),
+        ]
+    )
+    asst = next(x for x in _run_map(m, [resp]) if x.get("role") == "assistant")
+    assert "reasoning_content" not in asst
+
+
 # --- record_openrouter_cost guards (hermetic) --------------------------
 
 
