@@ -8,8 +8,24 @@ returning its URL.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 from ..config import RepoConfig, Settings
+
+
+class NotConfiguredError(RuntimeError):
+    """Raised when an optional forge capability (e.g. repo creation) is
+    disabled by configuration."""
+
+
+@dataclass
+class RepoInfo:
+    """Metadata about a repository returned by :meth:`Forge.create_repo`."""
+
+    id: int
+    name: str
+    clone_url: str
+    html_url: str
 
 
 class Forge(ABC):
@@ -154,6 +170,16 @@ class Forge(ABC):
         Returns concatenated, ANSI-stripped, size-capped log text with
         job-name headers.  Returns an empty string when no failed jobs
         are found.
+        """
+
+    @abstractmethod
+    def create_repo(
+        self, *, name: str, owner: str, private: bool, description: str
+    ) -> RepoInfo:
+        """Create a new repository under *owner* and return its metadata.
+
+        Must raise ``NotConfiguredError`` when repo creation is disabled
+        by configuration (e.g. a feature flag).
         """
 
 

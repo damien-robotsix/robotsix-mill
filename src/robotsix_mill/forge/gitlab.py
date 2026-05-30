@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 
 from ..config import get_secrets
-from .base import Forge
+from .base import Forge, RepoInfo
 
 
 def _build_headers(token: str) -> dict:
@@ -149,6 +149,11 @@ class GitLabForge(Forge):
         raise NotImplementedError("GitLab forge adapter not implemented yet")
 
     def fetch_workflow_job_logs(self, *, run_id: int) -> str:
+        raise NotImplementedError("GitLab forge adapter not implemented yet")
+
+    def create_repo(
+        self, *, name: str, owner: str, private: bool, description: str
+    ) -> RepoInfo:
         raise NotImplementedError("GitLab forge adapter not implemented yet")
 
     # ------------------------------------------------------------------

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from .base import Forge
+from .base import Forge, NotConfiguredError, RepoInfo
 
 # Regex for stripping ANSI escape sequences (CSI / SGR).
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
@@ -56,6 +56,16 @@ def _parse_owner_repo(remote_url: str) -> tuple[str, str]:
     if not m:
         raise RuntimeError(f"cannot parse owner/repo from {remote_url!r}")
     return m.group("owner"), m.group("repo")
+
+
+def _parse_repo_info(r: dict) -> RepoInfo:
+    """Extract ``RepoInfo`` from a GitHub ``POST /repos`` response dict."""
+    return RepoInfo(
+        id=r["id"],
+        name=r["name"],
+        clone_url=r["clone_url"],
+        html_url=r["html_url"],
+    )
 
 
 class GitHubForge(Forge):
@@ -151,6 +161,58 @@ class GitHubForge(Forge):
                 f"GitHub PR create failed: {r.status_code} {r.text[:300]}"
             )
 
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _create_repo(
+        self,
+        *,
+        name: str,
+        owner: str,
+        private: bool,
+        description: str,
+    ) -> RepoInfo:
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        token = github_token(s, repo_config=self._repo_config)
+        headers = _build_headers(token)
+        payload = {
+            "name": name,
+            "private": private,
+            "description": description,
+            "auto_init": False,
+        }
+
+        with httpx.Client(timeout=30) as c:
+            # Primary: create under org
+            org_url = f"{api}/orgs/{owner}/repos"
+            r = c.post(org_url, headers=headers, json=payload)
+            if r.status_code == 201:
+                return _parse_repo_info(r.json())
+            # Fallback on 403/404: create under user
+            if r.status_code in (403, 404):
+                user_url = f"{api}/user/repos"
+                r2 = c.post(user_url, headers=headers, json=payload)
+                if r2.status_code == 201:
+                    return _parse_repo_info(r2.json())
+                # If the fallback also fails, surface that error instead
+                r = r2
+            # 422 handling — no retry; repo creation races don't apply
+            if r.status_code == 422:
+                err_text = r.text or ""
+                if "name already exists" in err_text.lower():
+                    raise RuntimeError(
+                        f"Repository '{name}' already exists under '{owner}'"
+                    )
+                raise RuntimeError(
+                    f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
+                )
+            raise RuntimeError(
+                f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
+            )
+
     def pr_status(self, *, source_branch: str) -> dict | None:
         owner, repo = self._owner_repo
         return self._get_pr(owner=owner, repo=repo, head=source_branch)
@@ -242,6 +304,23 @@ class GitHubForge(Forge):
             owner=owner,
             repo=repo,
             run_id=run_id,
+        )
+
+    def create_repo(
+        self, *, name: str, owner: str, private: bool, description: str
+    ) -> RepoInfo:
+        if not self.settings.enable_repo_creation:
+            raise NotConfiguredError(
+                "Repo creation is disabled. Set enable_repo_creation=True "
+                "and verify the GitHub App installation has the "
+                "Administration:Read and write permission (or equivalent "
+                "PAT scope)."
+            )
+        return self._create_repo(
+            name=name,
+            owner=owner,
+            private=private,
+            description=description,
         )
 
     # --- HTTP seamm (monkeypatched in tests) ---
