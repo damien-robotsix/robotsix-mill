@@ -29,7 +29,7 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
 
       - name: Install dev deps
-        run: uv sync --frozen --group dev --extra tracing
+        run: uv sync --frozen --extra dev --extra tracing
         env:
           UV_PROJECT_ENVIRONMENT: system
 

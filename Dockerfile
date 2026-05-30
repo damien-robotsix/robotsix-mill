@@ -132,7 +132,7 @@ COPY . /app
 ARG INSTALL_EXTRAS=dev,tracing
 RUN pip install uv --no-cache-dir \
     && uv lock \
-    && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --group dev --extra tracing \
+    && UV_PROJECT_ENVIRONMENT=system uv sync --frozen --extra dev --extra tracing \
     && chown -R mill:mill /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
