@@ -256,7 +256,7 @@ class MailConfig:
 
     @classmethod
     def _parse_config_dict(
-        cls, data: dict, path: Path, *, validate: bool = True
+        cls, data: dict[str, object], path: Path, *, validate: bool = True
     ) -> MailConfig:
         # -- extract sections ----------------------------------------------
 
