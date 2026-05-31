@@ -480,7 +480,7 @@ def test_run_test_gap_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     seen["clone"] = 0
     run_test_gap_pass(session_id="test-sid", repo_config=_test_repo_config())
-    assert seen["clone"] == 0 and seen["repo_dir"] == repo
+    assert seen["clone"] == 1 and seen["repo_dir"] == repo  # re-clones fresh each run
 
 
 def test_run_test_gap_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -18,11 +19,11 @@ def clone_all_repos(settings) -> dict[str, Path]:
     """Clone every registered repo that has a ``forge_remote_url``.
 
     Best-effort: a clone failure for one repo is logged as a warning
-    and the remaining repos are still processed.  Idempotent: repos
-    whose ``.git`` directory already exists are skipped.
+    and the remaining repos are still processed.  Each call wipes any
+    existing workspace and clones FRESH, so callers (periodic agents)
+    always get the current ``origin`` tip — never a stale reused tree.
 
-    Returns a ``dict`` mapping ``repo_id`` → clone destination path
-    (whether newly cloned or pre-existing).
+    Returns a ``dict`` mapping ``repo_id`` → clone destination path.
     """
     repos_config = get_repos_config()
     result: dict[str, Path] = {}
@@ -39,9 +40,11 @@ def clone_all_repos(settings) -> dict[str, Path]:
 
         dest = settings.data_dir / "meta" / "workspace" / repo_id / "repo"
 
-        if (dest / ".git").is_dir():
-            result[repo_id] = dest
-            continue
+        # Each run starts from a CLEAN, fresh clone: wipe any prior workspace
+        # so periodic agents (meta, module-curator) never analyse a STALE tree
+        # (a reused clone keeps whatever commit it was last left at).
+        if dest.exists():
+            shutil.rmtree(dest, ignore_errors=True)
 
         try:
             git_ops.clone(
