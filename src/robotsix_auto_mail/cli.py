@@ -447,41 +447,52 @@ def _prompt_hosts(
     )
 
 
-def _cmd_detect(args: argparse.Namespace) -> int:
-    """Run the detect subcommand: auto-detect provider settings, write the
-    config, and verify it by connecting — refining with autoconfig, the LLM,
-    and finally a manual prompt when the servers cannot be reached.
+def _get_password(args: argparse.Namespace) -> str | None:
+    """Get password from args or interactive prompt.
 
-    Returns 0 on success, 1 on any error.
+    Returns the password, or ``None`` if the user cancelled (EOF / KeyboardInterrupt).
     """
-    # -- lazy-import detect (pydantic_ai is optional) --
-    try:
-        from robotsix_auto_mail.detect import (
-            DetectionError,
-            autoconfig_lookup,
-            detect_provider,
-            mx_lookup,
-            provider_from_mx,
-            provider_to_config,
-            render_config,
-        )
-    except ImportError:
-        sys.stderr.write(
-            "The 'detect' command requires the pydantic-ai package. "
-            "Install it with: pip install robotsix-auto-mail[dev]\n"
-        )
-        return 1
+    password: str | None = args.password
+    if password is None and not args.stdout:
+        try:
+            password = getpass.getpass("Email password: ")
+        except (EOFError, KeyboardInterrupt):
+            sys.stderr.write("\nDetection cancelled.\n")
+            return None
+    elif password is None and args.stdout:
+        password = ""  # no prompt in stdout mode  # nosec B105
+    return password
 
-    from pathlib import Path
 
-    from robotsix_auto_mail.config import ConfigurationError, load_llm
+def _detect_settings(
+    email: str,
+    api_key: str | None,
+    autoconfig_lookup: object,
+    mx_lookup: object,
+    provider_from_mx: object,
+    detect_provider: object,
+    _detection_error: type,
+) -> tuple[object | None, list[str]]:
+    """Run the provider-detection ladder for *email*.
 
-    api_key, _ = load_llm()
+    Tries, in order:
+    1. ``autoconfig_lookup`` (Thunderbird/Outlook-style autodiscovery)
+    2. MX-record lookup → ``provider_from_mx``
+    3. LLM ``detect_provider`` (requires *api_key*)
 
-    # -- initial detection ladder: autoconfig → MX→provider → LLM --
-    sys.stderr.write(f"Detecting settings for {args.email}…\n")
+    Returns ``(provider, mx_hosts)`` where *provider* is a
+    ``MailProvider`` and *mx_hosts* is the (possibly empty) list of
+    MX hostnames discovered during step 2 — needed later when the
+    verification loop asks the LLM for a refinement.
+
+    Prints progress messages to stderr (exactly as today).
+
+    Returns ``(None, mx_hosts)`` when ``detect_provider``
+    raises ``DetectionError`` (the error is printed to stderr).
+    """
+    sys.stderr.write(f"Detecting settings for {email}…\n")
     mx_hosts: list[str] = []
-    provider = autoconfig_lookup(args.email)
+    provider = autoconfig_lookup(email)
     if provider is not None:
         sys.stderr.write(
             f"  autoconfig: imap={provider.imap_host} "
@@ -489,7 +500,7 @@ def _cmd_detect(args: argparse.Namespace) -> int:
         )
     else:
         sys.stderr.write("  autoconfig: no match — checking MX records…\n")
-        mx_hosts = mx_lookup(args.email)
+        mx_hosts = mx_lookup(email)
         if mx_hosts:
             sys.stderr.write(f"  MX: {', '.join(mx_hosts[:3])}\n")
         provider = provider_from_mx(mx_hosts)
@@ -502,41 +513,60 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             sys.stderr.write("  no known provider — asking the LLM…\n")
             try:
                 provider = detect_provider(
-                    args.email,
+                    email,
                     api_key=api_key,
                     mx_hosts=mx_hosts,
                 )
-            except DetectionError as exc:
+            except _detection_error as exc:
                 sys.stderr.write(f"Error: {exc}\n")
-                return 1
+                return None, mx_hosts
             sys.stderr.write(
                 f"  LLM: imap={provider.imap_host} "
                 f"smtp={provider.smtp_host}\n"
             )
+    return provider, mx_hosts
 
-    # -- password handling --
-    password: str | None = args.password
-    if password is None and not args.stdout:
-        try:
-            password = getpass.getpass("Email password: ")
-        except (EOFError, KeyboardInterrupt):
-            sys.stderr.write("\nDetection cancelled.\n")
-            return 1
-    elif password is None and args.stdout:
-        password = ""  # no prompt in stdout mode  # nosec B105
 
-    # -- preserve settings detect doesn't generate (LLM credentials, a custom
-    #    store path, an existing password) from an existing config file --
-    output_path = Path(args.output)
+def _verify_and_refine(
+    provider: object,
+    *,
+    email: str,
+    api_key: str | None,
+    mx_hosts: list[str],
+    output_path: object,
+    password: str | None,
+    password_from_args: str | None,
+    no_verify: bool,
+    provider_to_config: object,
+    render_config: object,
+    detect_provider: object,
+    _detection_error: type,
+) -> int:
+    """Verify *config* by connecting, refining on failure.
+
+    Refinement strategy (bounded):
+    1. Auth-only failure → re-prompt password (max 2 attempts
+       for interactively-entered passwords; 0 when ``--password``
+       was supplied).
+    2. Host/connection failure → ask the LLM for a refined provider
+       (max 2 attempts), then fall back to a manual interactive
+       prompt.
+
+    Returns 0 when verification succeeds, 1 when all budgets are
+    exhausted.  Writes the (possibly refined) config to *output_path*
+    after each change so the on-disk file stays in sync.
+    """
+    from robotsix_auto_mail.config import ConfigurationError
+
     prev: MailConfig | None = None
-    if not args.stdout and output_path.exists():
+    if output_path.exists():
         try:
             prev = MailConfig.from_yaml(output_path, validate=False)
         except (ConfigurationError, OSError):
             prev = None
 
     def _build(prov: object, pw: str | None) -> MailConfig:
-        cfg = provider_to_config(prov, args.email, password=pw or "")  # type: ignore[arg-type]
+        cfg = provider_to_config(prov, email, password=pw or "")  # type: ignore[arg-type]
         if prev is not None:
             cfg = dataclasses.replace(
                 cfg,
@@ -547,21 +577,11 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             )
         return cfg
 
-    config = _build(provider, password)
-
-    # -- stdout mode: print and return (no write, no verify) --
-    if args.stdout:
-        sys.stderr.write(
-            f"# Detected settings for {args.email} — verify before using.\n"
-            "# Save this as config/mail.local.yaml.\n"
-        )
-        sys.stdout.write(render_config(config))
-        return 0
-
     def _write(cfg: MailConfig) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(render_config(cfg))
 
+    config = _build(provider, password)
     _write(config)
     sys.stderr.write(f"Config written to {output_path}\n")
 
@@ -571,7 +591,7 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             "(or set MAIL_PASSWORD), then run `probe` to verify.\n"
         )
         return 0
-    if args.no_verify:
+    if no_verify:
         return 0
 
     # -- verify + refine loop --
@@ -579,7 +599,7 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     #   manual prompt;  auth failure → re-prompt the password.
     llm_budget = 2
     # only re-prompt the password when it was entered interactively
-    pw_budget = 2 if args.password is None else 0
+    pw_budget = 2 if password_from_args is None else 0
     manual_used = False
 
     while True:
@@ -610,12 +630,12 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             sys.stderr.write("Refining the host with the LLM…\n")
             try:
                 refined = detect_provider(
-                    args.email,
+                    email,
                     api_key=api_key,
                     feedback=_verify_feedback(config, result),
                     mx_hosts=mx_hosts,
                 )
-            except DetectionError as exc:
+            except _detection_error as exc:
                 sys.stderr.write(f"  LLM refinement error: {exc}\n")
                 refined = None
             if refined is not None:
@@ -648,6 +668,57 @@ def _cmd_detect(args: argparse.Namespace) -> int:
         f"Edit {output_path} and re-run `probe`.\n"
     )
     return 1
+
+
+def _cmd_detect(args: argparse.Namespace) -> int:
+    """Run the detect subcommand: auto-detect provider settings, write the
+    config, and verify it by connecting — refining with autoconfig, the LLM,
+    and finally a manual prompt when the servers cannot be reached.
+    Returns 0 on success, 1 on any error.
+    """
+    try:
+        from robotsix_auto_mail.detect import (
+            DetectionError,
+            autoconfig_lookup,
+            detect_provider,
+            mx_lookup,
+            provider_from_mx,
+            provider_to_config,
+            render_config,
+        )
+    except ImportError:
+        sys.stderr.write(
+            "The 'detect' command requires the pydantic-ai package. "
+            "Install it with: pip install robotsix-auto-mail[dev]\n"
+        )
+        return 1
+    from pathlib import Path
+
+    from robotsix_auto_mail.config import load_llm
+    api_key, _ = load_llm()
+    provider, mx_hosts = _detect_settings(
+        args.email, api_key, autoconfig_lookup, mx_lookup,
+        provider_from_mx, detect_provider, DetectionError)
+    if provider is None:
+        return 1
+    password = _get_password(args)
+    if password is None:
+        return 1
+    if args.stdout:
+        config = provider_to_config(provider, args.email, password=password or "")  # type: ignore[arg-type]
+        sys.stderr.write(
+            f"# Detected settings for {args.email} — verify before using.\n"
+            "# Save this as config/mail.local.yaml.\n"
+        )
+        sys.stdout.write(render_config(config))
+        return 0
+    return _verify_and_refine(
+        provider,
+        email=args.email, api_key=api_key, mx_hosts=mx_hosts,
+        output_path=Path(args.output), password=password,
+        password_from_args=args.password, no_verify=args.no_verify,
+        provider_to_config=provider_to_config, render_config=render_config,
+        detect_provider=detect_provider, _detection_error=DetectionError)
 
 
 def _cmd_serve(config: MailConfig, *, port: int) -> int:
