@@ -197,9 +197,7 @@ def run_retrospect_agent(
 
         ro_tool_names: set[str] = {"read_file", "list_dir", "run_command"}
         tools = [
-            t
-            for t in build_fs_tools(repo_dir, settings)
-            if t.__name__ in ro_tool_names
+            t for t in build_fs_tools(repo_dir, settings) if t.__name__ in ro_tool_names
         ]
 
     # PromptedOutput (not the default ToolOutput): the cheap driver
