@@ -286,3 +286,99 @@ def test_langfuse_trace_roundtrip_claude_sdk_has_cost() -> None:
         f"trace landed but totalCost={total_cost} (expected > 0 — claude_sdk "
         f"records total_cost_usd on the span)"
     )
+
+
+@pytest.mark.live
+def test_langfuse_trace_claude_sdk_tool_and_subagent() -> None:
+    """claude_sdk WITH tools — the hand-instrumented SDK tool path produces a
+    trace showing tool spans and a nested subagent (all subscription-auth).
+
+    The SDK runs its own tool loop, so this is instrumented by hand: a root
+    AGENT span, a TOOL span per SDK tool call (emitted in the tool wrapper, so a
+    subagent run inside a tool nests under it), and cost on a child generation.
+    Asserts the subagent observation nests under the consult_expert tool.
+    """
+    _require_claude()  # LANGFUSE_* + claude CLI + claude_agent_sdk
+
+    from robotsix_llmio.claude_sdk import ClaudeSDKProvider
+    from robotsix_llmio.core import (
+        Tier,
+        flush_tracing,
+        langfuse_session,
+        setup_langfuse_tracing,
+    )
+
+    assert setup_langfuse_tracing() is True
+
+    provider = ClaudeSDKProvider()
+    subagent = provider.build_agent(
+        tier=Tier.CHEAP,
+        system_prompt="You are a physics expert. Answer in one short sentence.",
+        output_type=str,
+        name="subagent-physics",
+    )
+
+    def add(a: int, b: int) -> int:
+        """Add two integers."""
+        return a + b
+
+    async def consult_expert(question: str) -> str:
+        """Delegate a question to a specialist subagent and return its answer."""
+        run = await subagent.run(question)
+        return str(run.output)
+
+    outer = provider.build_agent(
+        tier=Tier.CHEAP,
+        system_prompt=(
+            "Use the add tool for arithmetic and the consult_expert tool for "
+            "science questions."
+        ),
+        tools=[add, consult_expert],
+        name="claude-coordinator",
+    )
+
+    session_id = f"llmio-livetest-claudesub-{uuid.uuid4().hex[:12]}"
+    try:
+        with langfuse_session(session_id):
+            result = provider.call_with_retry(
+                lambda: outer.run_sync(
+                    "Use the consult_expert tool to find out why the sky is "
+                    "blue, then report exactly what it told you."
+                )
+            )
+        assert len(str(result.output)) > 0
+    finally:
+        outer.close()
+        subagent.close()
+
+    flush_tracing()
+
+    traces: list[dict] | None = None
+    for _ in range(15):
+        traces = _langfuse_traces(session_id)
+        if traces:
+            break
+        time.sleep(4)
+    assert traces, f"no Langfuse trace for session {session_id!r} after polling"
+
+    trace = traces[0]
+    obs = (_langfuse_get("/api/public/observations", {"traceId": trace["id"], "limit": 100}) or {}).get("data", [])
+    by_id = {o["id"]: o for o in obs}
+    names = {o.get("name") for o in obs}
+    types: dict[str, int] = {}
+    for o in obs:
+        types[o.get("type", "?")] = types.get(o.get("type", "?"), 0) + 1
+
+    # A tool call (consult_expert) and a subagent run, both traced.
+    assert types.get("TOOL", 0) >= 1, f"expected a tool span, got {types}"
+    assert "consult_expert" in names and "subagent-physics run" in names, names
+
+    # The subagent must nest under the tool that invoked it.
+    sub = next(o for o in obs if o.get("name") == "subagent-physics run")
+    parent = by_id.get(sub.get("parentObservationId"))
+    assert parent is not None and parent.get("name") == "consult_expert", (
+        f"subagent should nest under consult_expert, parent={parent}"
+    )
+
+    total_cost = sum(float(t.get("totalCost") or 0) for t in traces)
+    assert total_cost > 0, f"trace landed but totalCost={total_cost}"

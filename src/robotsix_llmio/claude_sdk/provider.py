@@ -17,8 +17,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from ..core._otel import get_tracer, start_span
 from ..core.provider import LLMProvider, Tier
 from .transient import is_claude_sdk_transient
+
+_TRACER_NAME = "robotsix_llmio.claude_sdk"
 
 # Baked tier→model map. Values are Claude Code model aliases passed straight to
 # the SDK's ``model`` option (it resolves them to the latest concrete model).
@@ -112,12 +115,26 @@ def _convert_tools(tools: list[Any]) -> tuple[list[str], Any]:
             args: dict[str, Any],
             _fn: Any = fn,
             _is_async: bool = is_async,
+            _name: str = name,
         ) -> dict[str, Any]:
-            if _is_async:
-                result = await _fn(**args)
-            else:
-                result = _fn(**args)
-            return {"content": [{"type": "text", "text": str(result)}]}
+            # Emit a TOOL span around the actual call, so the tool (and any
+            # subagent it runs) nests under the agent-run span in traces.
+            with start_span(
+                get_tracer(_TRACER_NAME),
+                _name,
+                {
+                    "gen_ai.operation.name": "execute_tool",
+                    "gen_ai.tool.name": _name,
+                    "langfuse.observation.input": json.dumps(args, default=str),
+                },
+            ) as sp:
+                if _is_async:
+                    result = await _fn(**args)
+                else:
+                    result = _fn(**args)
+                if sp is not None:
+                    sp.set_attribute("langfuse.observation.output", str(result))
+                return {"content": [{"type": "text", "text": str(result)}]}
 
         wrapped.append(_wrapper)
         allowed.append(f"mcp__milltools__{name}")
@@ -175,6 +192,7 @@ class _SdkToolAgentHandle:
         server: Any,
         allowed_tools: list[str],
         output_type: Any = str,
+        name: str | None = None,
         max_turns: int | None = None,
     ) -> None:
         self._sdk_model = sdk_model
@@ -182,6 +200,7 @@ class _SdkToolAgentHandle:
         self._server = server
         self._allowed_tools = allowed_tools
         self._output_type = output_type
+        self._name = name or "claude_sdk agent"
         if max_turns is None:
             # Single source of truth for the runaway cap (see model._MAX_TURNS).
             # Generous, because an injected-MCP-tool loop legitimately needs many
@@ -231,19 +250,58 @@ class _SdkToolAgentHandle:
             setting_sources=[],
         )
 
+        from ..core.cost import record_cost
+
         chunks: list[str] = []
         result: Any = None
-        async for message in query(prompt=user_prompt, options=options):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        chunks.append(block.text)
-            elif isinstance(message, ResultMessage):
-                result = message
+        # Root agent-run span: tool spans (emitted by the tool wrapper) nest
+        # under it, and cost/usage land here so the trace shows like a normal
+        # agent run despite the SDK driving its own loop.
+        with start_span(
+            get_tracer(_TRACER_NAME),
+            self._name,
+            {
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.system": "anthropic",
+                "gen_ai.request.model": self._sdk_model,
+                "langfuse.observation.input": user_prompt,
+            },
+        ) as root:
+            async for message in query(prompt=user_prompt, options=options):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            chunks.append(block.text)
+                elif isinstance(message, ResultMessage):
+                    result = message
 
-        text = "".join(chunks).strip()
-        if not text and result is not None:
-            text = (getattr(result, "result", None) or "").strip()
+            text = "".join(chunks).strip()
+            if not text and result is not None:
+                text = (getattr(result, "result", None) or "").strip()
+
+            if root is not None:
+                root.set_attribute("langfuse.observation.output", text)
+            # A child generation span carries token usage + the SDK's (estimated)
+            # cost so they roll up into the trace — Langfuse sums cost from child
+            # observations, not from the root span (which becomes the trace).
+            usage_obj = getattr(result, "usage", None) if result is not None else None
+            with start_span(
+                get_tracer(_TRACER_NAME),
+                f"chat {self._sdk_model}",
+                {
+                    "gen_ai.operation.name": "chat",
+                    "gen_ai.system": "anthropic",
+                    "gen_ai.request.model": self._sdk_model,
+                },
+            ) as gen:
+                if gen is not None and isinstance(usage_obj, dict):
+                    in_tok = usage_obj.get("input_tokens")
+                    out_tok = usage_obj.get("output_tokens")
+                    if in_tok is not None:
+                        gen.set_attribute("gen_ai.usage.input_tokens", int(in_tok))
+                    if out_tok is not None:
+                        gen.set_attribute("gen_ai.usage.output_tokens", int(out_tok))
+                record_cost(result, lambda r: getattr(r, "total_cost_usd", None))
 
         output = _parse_output(text, output_type)
 
@@ -318,4 +376,5 @@ class ClaudeSDKProvider(LLMProvider):
             server=server,
             allowed_tools=allowed_tools,
             output_type=output_type,
+            name=name,
         )
