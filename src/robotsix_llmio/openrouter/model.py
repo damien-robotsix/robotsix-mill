@@ -72,9 +72,7 @@ def record_openrouter_cost(response: Any) -> None:
 
     usage_obj = getattr(response, "usage", None)
     span.set_attribute("gen_ai.usage.cost", cost)
-    span.set_attribute(
-        "langfuse.observation.cost_details", json.dumps({"total": cost})
-    )
+    span.set_attribute("langfuse.observation.cost_details", json.dumps({"total": cost}))
     span.set_attribute("gen_ai.operation.name", "chat")
     span.set_attribute("gen_ai.provider.name", "openrouter")
     span.set_attribute("gen_ai.system", "openrouter")

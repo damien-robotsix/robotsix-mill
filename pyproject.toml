@@ -30,5 +30,12 @@ packages = ["src/robotsix_llmio"]
 [tool.ruff]
 line-length = 88
 
+[tool.mypy]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "robotsix_llmio.openrouter_deepseek.*"
+disable_error_code = ["typeddict-item", "override", "misc", "literal-required"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

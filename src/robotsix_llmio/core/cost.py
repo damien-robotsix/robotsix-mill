@@ -27,9 +27,7 @@ def record_cost(response: Any, get_cost: Callable[[Any], float | None]) -> None:
     span.set_attribute("gen_ai.usage.cost", cost)
     span.set_attribute("gen_ai.operation.name", "chat")
     # Langfuse cost rollup (harmless span attribute for other backends).
-    span.set_attribute(
-        "langfuse.observation.cost_details", json.dumps({"total": cost})
-    )
+    span.set_attribute("langfuse.observation.cost_details", json.dumps({"total": cost}))
 
 
 def flush_current_provider() -> None:

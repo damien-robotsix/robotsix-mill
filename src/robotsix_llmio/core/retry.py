@@ -32,7 +32,9 @@ log = logging.getLogger("robotsix_llmio.retry")
 T = TypeVar("T")
 
 
-def _walk_cause_chain(exc: BaseException, max_depth: int = 10) -> Iterator[BaseException]:
+def _walk_cause_chain(
+    exc: BaseException, max_depth: int = 10
+) -> Iterator[BaseException]:
     """Yield each exception in the cause/context chain, bounded to *max_depth*."""
     cur: BaseException | None = exc
     seen = 0
@@ -167,8 +169,7 @@ def call_with_retry(
                 if not using_fallback and fallback_fn is not None:
                     using_fallback = True
                     log.warning(
-                        "%s: rate-limit fallback activated on first "
-                        "UsageLimitExceeded",
+                        "%s: rate-limit fallback activated on first UsageLimitExceeded",
                         what,
                     )
                     _record_rate_limit_span(
