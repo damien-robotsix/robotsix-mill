@@ -481,7 +481,8 @@ def test_origin_session_url_computed_when_config_set(service, settings, secrets_
 
     t = service.create("URL test", origin_session="sess-abc")
     secrets_set(
-        langfuse_base_url="https://cloud.langfuse.com", langfuse_project_id="proj-xyz"
+        langfuse_base_url="https://cloud.langfuse.com",
+        langfuse_project_name="proj-xyz",
     )
 
     tr = enrich_ticket_read(t, settings, service)
@@ -501,6 +502,65 @@ def test_origin_session_url_none_when_config_missing(service, settings):
     tr = enrich_ticket_read(t, settings, service)
     assert tr.origin_session == "sess-abc"
     assert tr.origin_session_url is None
+
+
+def test_origin_session_url_with_repo_config(service, settings, repo_config):
+    """enrich_ticket_read computes origin_session_url when a repo_config
+    is provided (primary path)."""
+    from robotsix_mill.runtime.deps import enrich_ticket_read
+
+    t = service.create("Repo config URL test", origin_session="sess-xyz")
+    tr = enrich_ticket_read(t, settings, service, repo_config=repo_config)
+    assert tr.origin_session == "sess-xyz"
+    assert tr.origin_session_url == (
+        "https://cloud.langfuse.com/project/test-project/sessions/sess-xyz"
+    )
+
+
+def test_origin_session_url_empty_base_url_fallback(service, settings, repo_config):
+    """enrich_ticket_read falls back to cloud.langfuse.com when
+    repo_config.langfuse_base_url is empty."""
+    from robotsix_mill.runtime.deps import enrich_ticket_read
+
+    t = service.create("Empty base URL test", origin_session="sess-1")
+    repo_config.langfuse_base_url = ""
+    tr = enrich_ticket_read(t, settings, service, repo_config=repo_config)
+    assert tr.origin_session_url == (
+        "https://cloud.langfuse.com/project/test-project/sessions/sess-1"
+    )
+
+
+def test_origin_session_url_secrets_project_name_preferred(
+    service, settings, secrets_set
+):
+    """secrets fallback prefers langfuse_project_name over langfuse_project_id."""
+    from robotsix_mill.runtime.deps import enrich_ticket_read
+
+    t = service.create("Name preferred test", origin_session="sess-2")
+    secrets_set(
+        langfuse_base_url="https://custom.lf.example.com",
+        langfuse_project_name="my-project-name",
+        langfuse_project_id="proj-old-id",
+    )
+    tr = enrich_ticket_read(t, settings, service)
+    assert tr.origin_session_url == (
+        "https://custom.lf.example.com/project/my-project-name/sessions/sess-2"
+    )
+
+
+def test_origin_session_url_secrets_project_id_fallback(service, settings, secrets_set):
+    """secrets fallback uses langfuse_project_id when langfuse_project_name is absent."""
+    from robotsix_mill.runtime.deps import enrich_ticket_read
+
+    t = service.create("ID fallback test", origin_session="sess-3")
+    secrets_set(
+        langfuse_base_url="https://cloud.langfuse.com",
+        langfuse_project_id="proj-legacy",
+    )
+    tr = enrich_ticket_read(t, settings, service)
+    assert tr.origin_session_url == (
+        "https://cloud.langfuse.com/project/proj-legacy/sessions/sess-3"
+    )
 
 
 def test_board_html_references_static_assets(client):

@@ -682,3 +682,92 @@ def test_force_traces_to_mill_spans_carry_mill_public_key():
             f"Span {span_data['name']} missing or wrong langfuse.public_key: "
             f"{span_data['attrs']}"
         )
+
+
+# ---------------------------------------------------------------------------
+# langfuse_trace_url tests
+# ---------------------------------------------------------------------------
+
+
+def test_langfuse_trace_url_with_repo_config(repo_config):
+    """langfuse_trace_url builds the correct URL from a RepoConfig."""
+    url = tracing.langfuse_trace_url("trace-abc123", repo_config=repo_config)
+    assert url == (
+        "https://cloud.langfuse.com/project/test-project/traces/trace-abc123"
+    )
+
+
+def test_langfuse_trace_url_repo_config_custom_base(repo_config):
+    """langfuse_trace_url honours a custom base_url in RepoConfig."""
+    repo_config.langfuse_base_url = "https://selfhosted.lf.example.com"
+    url = tracing.langfuse_trace_url("trace-xyz", repo_config=repo_config)
+    assert url == (
+        "https://selfhosted.lf.example.com/project/test-project/traces/trace-xyz"
+    )
+
+
+def test_langfuse_trace_url_empty_base_url_fallback(repo_config):
+    """langfuse_trace_url falls back to cloud.langfuse.com when
+    repo_config.langfuse_base_url is empty."""
+    repo_config.langfuse_base_url = ""
+    url = tracing.langfuse_trace_url("trace-1", repo_config=repo_config)
+    assert url == ("https://cloud.langfuse.com/project/test-project/traces/trace-1")
+
+
+def test_langfuse_trace_url_secrets_fallback(secrets_set):
+    """langfuse_trace_url uses Secrets when no RepoConfig is given."""
+    secrets_set(
+        langfuse_base_url="https://cloud.langfuse.com",
+        langfuse_project_name="secrets-project",
+    )
+    url = tracing.langfuse_trace_url("trace-456")
+    assert url == (
+        "https://cloud.langfuse.com/project/secrets-project/traces/trace-456"
+    )
+
+
+def test_langfuse_trace_url_secrets_project_name_preferred(secrets_set):
+    """secrets fallback prefers langfuse_project_name over langfuse_project_id."""
+    secrets_set(
+        langfuse_base_url="https://cloud.langfuse.com",
+        langfuse_project_name="name-project",
+        langfuse_project_id="id-project",
+    )
+    url = tracing.langfuse_trace_url("trace-789")
+    assert url == ("https://cloud.langfuse.com/project/name-project/traces/trace-789")
+
+
+def test_langfuse_trace_url_secrets_project_id_fallback(secrets_set):
+    """secrets fallback uses langfuse_project_id when langfuse_project_name is absent."""
+    secrets_set(
+        langfuse_base_url="https://cloud.langfuse.com",
+        langfuse_project_id="legacy-project-id",
+    )
+    url = tracing.langfuse_trace_url("trace-legacy")
+    assert url == (
+        "https://cloud.langfuse.com/project/legacy-project-id/traces/trace-legacy"
+    )
+
+
+def test_langfuse_trace_url_none_when_base_missing():
+    """langfuse_trace_url returns None when no base URL is configured."""
+    # No secrets set — base_url will be None, and the fallback
+    # only applies via the "or" pattern, so with no RepoConfig
+    # and empty secrets it should return None.
+    url = tracing.langfuse_trace_url("trace-nope")
+    assert url is None
+
+
+def test_langfuse_trace_url_none_when_project_missing(secrets_set):
+    """langfuse_trace_url returns None when a base URL is set but
+    no project identifier is configured."""
+    secrets_set(langfuse_base_url="https://cloud.langfuse.com")
+    url = tracing.langfuse_trace_url("trace-missing-project")
+    assert url is None
+
+
+def test_langfuse_trace_url_trailing_slash_stripped(repo_config):
+    """langfuse_trace_url strips trailing slashes from the base URL."""
+    repo_config.langfuse_base_url = "https://cloud.langfuse.com/"
+    url = tracing.langfuse_trace_url("trace-slash", repo_config=repo_config)
+    assert url == ("https://cloud.langfuse.com/project/test-project/traces/trace-slash")
