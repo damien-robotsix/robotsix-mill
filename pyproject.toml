@@ -31,7 +31,7 @@ openrouter_deepseek = ["robotsix-llmio[openrouter]"]
 claude_sdk = ["claude-agent-sdk>=0.2"]
 # Optional: emit cost/usage onto the active OpenTelemetry span.
 tracing = ["opentelemetry-api", "opentelemetry-sdk"]
-dev = ["pytest", "ruff", "mypy"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "bandit", "pip-audit"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_llmio"]
@@ -40,7 +40,9 @@ packages = ["src/robotsix_llmio"]
 line-length = 88
 
 [tool.mypy]
-ignore_missing_imports = true
+python_version = "3.11"
+ignore_missing_imports = false
+warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = "robotsix_llmio.openrouter_deepseek.*"
