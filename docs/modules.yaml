@@ -1,0 +1,13 @@
+modules:
+  - id: robotsix_llmio-core
+    paths:
+      - src/robotsix_llmio/core/**
+      - tests/test_core_retry.py
+  - id: robotsix_llmio-openrouter
+    paths:
+      - src/robotsix_llmio/openrouter/**
+      - tests/test_openrouter.py
+  - id: robotsix_llmio-openrouter-deepseek
+    paths:
+      - src/robotsix_llmio/openrouter_deepseek/**
+      - tests/test_openrouter_deepseek.py
