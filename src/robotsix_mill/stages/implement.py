@@ -175,9 +175,7 @@ class ImplementStage(Stage):
 
         # --- meta-board new-repo extraction gate ---
         if ticket.source == SourceKind.META:
-            params = ImplementStage._parse_new_repo_params_for_implement(
-                ctx, ticket
-            )
+            params = ImplementStage._parse_new_repo_params_for_implement(ctx, ticket)
             if params is not None:
                 return ImplementStage._run_repo_scaffold(ctx, ticket, s, params)
 
