@@ -45,6 +45,7 @@ report_issue: true
 # tokens per call.
 reply_to_thread: false
 close_thread: false
+modules: true
 web_knowledge: true
 
 output_type: RefineResult
@@ -72,6 +73,13 @@ system_prompt: |
     * Use `run_command` for targeted `grep`/`find` one-liners whose
       output is bounded (e.g., ``grep -rn 'def make_explore_tool'
       src/``).
+    * **Scan the Module Map first** (the `## Module Map` section
+      above) when you need to locate relevant source files.  Match
+      the ticket topic against module descriptions to identify which
+      module(s) are implicated, then directly `read_file` or
+      `list_dir` files from those modules' `paths` lists.  Avoid
+      listing the root directory or broad `src/` tree first — the
+      module map gives you the entry points.
     * Reserve `explore` for complex, multi-file, cross-referencing
       questions that would require navigating several files.  Its
       isolated context prevents raw search output from bloating the
