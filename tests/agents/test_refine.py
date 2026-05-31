@@ -3378,9 +3378,7 @@ def test_run_refine_agent_short_circuits_on_memory_match(monkeypatch, settings):
     def _fail_if_called(*args, **kwargs):
         pytest.fail("build_agent_from_definition was called — short-circuit failed")
 
-    monkeypatch.setattr(
-        base_module, "build_agent_from_definition", _fail_if_called
-    )
+    monkeypatch.setattr(base_module, "build_agent_from_definition", _fail_if_called)
 
     result = refining.run_refine_agent(
         settings=settings,

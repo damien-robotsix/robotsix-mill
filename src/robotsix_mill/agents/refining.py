@@ -407,7 +407,7 @@ that can each ship alone, split into focused children:
 """
 
 
-def _check_memory_for_no_change(
+def _check_memory_for_no_change(  # noqa: C901 — Jaccard guard with date-cutoff/outcome parsing; refactoring would scatter tightly-coupled logic
     title: str,
     draft: str,
     memory: str,
