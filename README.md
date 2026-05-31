@@ -28,6 +28,13 @@ consumer only ever picks a **tier** (`default` or `cheap`).
 pip install "robotsix-llmio[openrouter_deepseek]"
 ```
 
+## Configuration
+
+The API key can be passed directly to the provider constructor or set via the
+`OPENROUTER_API_KEY` environment variable. Copy `.env.example` to `.env` and
+replace the placeholder with a real key — `.env` is git-ignored so the secret
+never leaves your machine.
+
 ## Use
 
 ```python
