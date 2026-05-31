@@ -14,16 +14,24 @@ repo (no forge configured) it falls back to draft-only as before.
 
 from __future__ import annotations
 
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
+
+import yaml as _yaml
 
 from pydantic import BaseModel, Field, model_validator
 
 from ..config import Settings
 from .prompt_blocks import section
 
+# Pre-LLM memory guard: skip the model call when a recent prior refine
+# run already concluded no_change_needed for the same topic.
+MEMORY_NO_CHANGE_MAX_AGE_DAYS: int = 90
+MEMORY_NO_CHANGE_SIMILARITY_THRESHOLD: float = 0.25
+
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
-import yaml as _yaml
 
 _SYSPROMPT_PATH = (
     Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
@@ -399,7 +407,252 @@ that can each ship alone, split into focused children:
 """
 
 
-def run_refine_agent(
+# --- Pre-LLM memory guard helpers -------------------------------------------
+
+
+def _parse_memory_entries(memory: str) -> list[dict]:
+    """Parse the refine agent's memory ledger into structured entries.
+
+    Each entry has:
+      - date: datetime (UTC)
+      - slug: str (hyphenated description from the header line)
+      - outcome: str (the value after ``**Outcome**:``)
+      - rationale: str (text after ``—`` on outcome line)
+      - lesson: str (text after ``**Lesson**:``)
+    """
+    if not memory.strip():
+        return []
+
+    entries: list[dict] = []
+    current: dict | None = None
+    # Matches "## Refine run YYYY-MM-DD — slug"
+    header_re = re.compile(r"^##\s+Refine\s+run\s+(\d{4}-\d{2}-\d{2})\s*[-—]\s*(.+)$")
+
+    for line in memory.splitlines():
+        m = header_re.match(line)
+        if m:
+            if current is not None:
+                entries.append(current)
+            date_str, slug = m.group(1), m.group(2).strip()
+            try:
+                date = datetime.strptime(date_str, "%Y-%m-%d").replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                date = datetime.min.replace(tzinfo=timezone.utc)
+            current = {
+                "date": date,
+                "slug": slug,
+                "outcome": "",
+                "rationale": "",
+                "lesson": "",
+            }
+            continue
+
+        if current is None:
+            continue
+
+        # Match "- **Outcome**: `no_change_needed` — rationale"
+        out_m = re.match(r"^-\s+\*\*Outcome\*\*:\s*(.+?)(?:\s*[-—]\s*(.*))?$", line)
+        if out_m:
+            current["outcome"] = out_m.group(1).strip().strip("`")
+            current["rationale"] = (out_m.group(2) or "").strip()
+            continue
+
+        # Match "- **Lesson**: text"
+        lesson_m = re.match(r"^-\s+\*\*Lesson\*\*:\s*(.*)$", line)
+        if lesson_m:
+            current["lesson"] = lesson_m.group(1).strip()
+            continue
+
+    if current is not None:
+        entries.append(current)
+
+    return entries
+
+
+# Stopwords filtered out before computing Jaccard similarity.
+_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "can",
+        "shall",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "under",
+        "again",
+        "further",
+        "then",
+        "once",
+        "here",
+        "there",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "both",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "nor",
+        "not",
+        "only",
+        "own",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "and",
+        "but",
+        "or",
+        "yet",
+        "it",
+        "its",
+        "that",
+        "this",
+        "these",
+        "those",
+        "i",
+        "me",
+        "my",
+        "we",
+        "our",
+        "you",
+        "your",
+        "he",
+        "she",
+        "him",
+        "her",
+        "they",
+        "them",
+    }
+)
+
+
+def _tokenize(text: str) -> frozenset[str]:
+    """Lowercase, strip punctuation, split into words, remove stopwords
+    and words ≤ 2 chars.  Returns a frozenset for hashing."""
+    # Replace common punctuation / Markdown with spaces
+    cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+    words = cleaned.split()
+    return frozenset(w for w in words if len(w) > 2 and w not in _STOPWORDS)
+
+
+def _topic_similarity(
+    entry_slug: str, entry_rationale: str, title: str, draft: str
+) -> float:
+    """Compute Jaccard similarity between memory entry text and ticket text.
+
+    Returns a float in [0.0, 1.0].  1.0 = identical word sets.
+    """
+    entry_text = f"{entry_slug} {entry_rationale}"
+    ticket_text = f"{title} {draft}"
+
+    entry_words = _tokenize(entry_text)
+    ticket_words = _tokenize(ticket_text)
+
+    if not entry_words and not ticket_words:
+        return 1.0
+    if not entry_words or not ticket_words:
+        return 0.0
+
+    intersection = entry_words & ticket_words
+    union = entry_words | ticket_words
+    return len(intersection) / len(union)
+
+
+def _check_memory_for_no_change(
+    *,
+    memory: str,
+    title: str,
+    draft: str,
+) -> RefineResult | None:
+    """Check whether a recent memory entry already concluded
+    ``no_change_needed`` for the same topic.  Returns a synthetic
+    ``RefineResult`` when the memory answers the question, or ``None``
+    to proceed with the LLM call."""
+    now = datetime.now(tz=timezone.utc)
+    max_age_days = MEMORY_NO_CHANGE_MAX_AGE_DAYS
+    threshold = MEMORY_NO_CHANGE_SIMILARITY_THRESHOLD
+
+    entries = _parse_memory_entries(memory)
+
+    for entry in entries:
+        # Only consider no_change_needed outcomes
+        if entry["outcome"] != "no_change_needed":
+            continue
+
+        # Skip stale entries
+        age = now - entry["date"]
+        if age.days > max_age_days:
+            continue
+
+        # Compute topic similarity
+        sim = _topic_similarity(entry["slug"], entry["rationale"], title, draft)
+        if sim < threshold:
+            continue
+
+        # Match found — return synthetic result
+        return RefineResult(
+            no_change_needed=True,
+            no_change_rationale=(
+                f"Prior refine run ({entry['date'].strftime('%Y-%m-%d')}) "
+                f"already concluded no change needed for this topic. "
+                f"Rationale from that run: {entry['rationale']}"
+            ),
+            file_map=[],
+            reference_files=[],
+            conversation_state=None,
+            new_messages=None,
+        )
+
+    return None
+
+
+def run_refine_agent(  # noqa: C901
     *,
     settings: Settings,
     title: str,
@@ -491,6 +744,20 @@ def run_refine_agent(
             "comments. Address each one in the revised spec:\n\n"
             f"{reviewer_comments}",
         )
+
+    # Pre-LLM memory guard: short-circuit when a recent prior refine
+    # run already concluded no_change_needed for the same topic.
+    # Bypassed on resume (message_history is not None) because the
+    # operator has provided input that the agent must process.
+    if message_history is None:
+        memory_result = _check_memory_for_no_change(
+            memory=memory,
+            title=title,
+            draft=draft,
+        )
+        if memory_result is not None:
+            _safe_close(agent)
+            return memory_result
 
     try:
         result = call_with_retry(

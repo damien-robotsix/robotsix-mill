@@ -3198,3 +3198,325 @@ def test_continuation_guard_skipped_when_response_missing(monkeypatch, settings)
     # Guard skipped — exactly one call
     assert len(run_sync_calls) == 1
     assert output.spec_markdown == "## Problem\nok\n"
+
+
+# ---------------------------------------------------------------------------
+# Pre-LLM memory guard tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseMemoryEntries:
+    """Tests for ``_parse_memory_entries``."""
+
+    def test_empty_memory(self):
+        assert refining._parse_memory_entries("") == []
+        assert refining._parse_memory_entries("   \n  ") == []
+
+    def test_single_entry(self):
+        memory = """\
+## Refine run 2026-06-02 — refine-agent-no-change-needed-guard-self-check
+- **Outcome**: `no_change_needed` — prompt-level fixes don't compose like software
+- **Lesson**: code-level guard is the right fix
+"""
+        entries = refining._parse_memory_entries(memory)
+        assert len(entries) == 1
+        e = entries[0]
+        assert e["slug"] == "refine-agent-no-change-needed-guard-self-check"
+        assert e["outcome"] == "no_change_needed"
+        assert e["rationale"] == "prompt-level fixes don't compose like software"
+        assert e["lesson"] == "code-level guard is the right fix"
+        assert e["date"].year == 2026
+        assert e["date"].month == 6
+        assert e["date"].day == 2
+
+    def test_multiple_entries(self):
+        memory = """\
+## Refine run 2026-06-01 — topic-alpha
+- **Outcome**: `normal` — regular spec produced
+- **Lesson**: nothing special
+
+## Refine run 2026-06-02 — topic-beta
+- **Outcome**: `no_change_needed` — already handled elsewhere
+- **Lesson**: check before re-investigating
+"""
+        entries = refining._parse_memory_entries(memory)
+        assert len(entries) == 2
+        assert entries[0]["slug"] == "topic-alpha"
+        assert entries[1]["slug"] == "topic-beta"
+        assert entries[0]["outcome"] == "normal"
+        assert entries[1]["outcome"] == "no_change_needed"
+
+    def test_entry_without_lesson(self):
+        memory = """\
+## Refine run 2026-06-03 — topic-gamma
+- **Outcome**: `no_change_needed` — duplicate work
+"""
+        entries = refining._parse_memory_entries(memory)
+        assert len(entries) == 1
+        assert entries[0]["lesson"] == ""
+
+    def test_malformed_date_is_skipped(self):
+        """A header whose date doesn't match YYYY-MM-DD is not parsed as an entry."""
+        memory = """\
+## Refine run not-a-date — topic-delta
+- **Outcome**: `no_change_needed` — rationale
+"""
+        entries = refining._parse_memory_entries(memory)
+        assert entries == []
+
+    def test_em_dash_in_header(self):
+        memory = (
+            "## Refine run 2026-06-04 — topic-epsilon\n"
+            "- **Outcome**: `no_change_needed` — rationale here\n"
+        )
+        entries = refining._parse_memory_entries(memory)
+        assert len(entries) == 1
+        assert entries[0]["slug"] == "topic-epsilon"
+
+
+class TestTopicSimilarity:
+    """Tests for ``_topic_similarity``."""
+
+    def test_identical_strings(self):
+        sim = refining._topic_similarity(
+            "slug-here", "some rationale", "slug-here", "some rationale"
+        )
+        assert sim == 1.0
+
+    def test_disjoint_strings(self):
+        sim = refining._topic_similarity("alpha", "beta gamma", "delta", "epsilon zeta")
+        assert sim == 0.0
+
+    def test_partial_overlap(self):
+        sim = refining._topic_similarity(
+            "refine agent guard",
+            "pre-LLM short-circuit for memory",
+            "memory guard",
+            "short-circuit refine agent",
+        )
+        # Should have some overlap ("refine", "agent", "guard", "memory", "short-circuit")
+        assert 0.0 < sim < 1.0
+
+    def test_case_insensitive(self):
+        sim = refining._topic_similarity(
+            "Refine Agent", "MEMORY GUARD", "refine agent", "memory guard"
+        )
+        assert sim == 1.0
+
+    def test_punctuation_stripped(self):
+        sim = refining._topic_similarity(
+            "refine-agent",
+            "pre-LLM short-circuit!",
+            "refine agent",
+            "pre LLM short circuit",
+        )
+        assert sim > 0.5  # most words overlap after stripping punctuation
+
+    def test_stopwords_filtered(self):
+        sim = refining._topic_similarity(
+            "the guard is for the refine agent",
+            "a test of the memory",
+            "the guard is for the refine agent",
+            "a test of the memory",
+        )
+        # "the", "is", "for", "a", "of" are stopwords; only content words remain
+        assert sim == 1.0
+
+
+class TestMemoryGuard:
+    """Integration-style tests for the pre-LLM memory guard in
+    ``run_refine_agent``.  Each test monkeypatches the agent builder
+    and verifies whether the LLM was called."""
+
+    @staticmethod
+    def _mock_agent_and_retry(monkeypatch, run_sync_calls):
+        import robotsix_mill.agents.retry as retry_module
+        import robotsix_mill.agents.base as base_module
+
+        class _MockAgent:
+            def run_sync(self, user_prompt, *, message_history=None):
+                run_sync_calls.append(user_prompt)
+                return _FakeRunResult(
+                    output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
+                    finish_reason="stop",
+                    all_messages=[{"role": "user", "content": "hi"}],
+                )
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(
+            retry_module,
+            "call_with_retry",
+            lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: (
+                fn()
+            ),
+        )
+        monkeypatch.setattr(
+            base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+        )
+
+    # --- Positive trigger tests ---
+
+    def test_guard_triggers_on_matching_memory(self, monkeypatch, settings):
+        """Acceptance criterion 1: guard returns no_change_needed=True
+        without calling the LLM when memory has a matching entry."""
+        memory = """\
+## Refine run 2026-06-02 — refine-agent-no-change-needed-guard-self-check
+- **Outcome**: `no_change_needed` — prompt-level fixes don't compose like software
+- **Lesson**: code-level guard is the right fix
+"""
+        run_sync_calls: list = []
+        self._mock_agent_and_retry(monkeypatch, run_sync_calls)
+
+        output = refining.run_refine_agent(
+            settings=settings,
+            title="Add refine agent no change needed guard self check",
+            draft="The refine agent needs a code-level guard to short-circuit when prompt-level "
+            "fixes don't compose. Add a pre-LLM check that returns no_change_needed.",
+            memory=memory,
+        )
+
+        # LLM must NOT have been called
+        assert len(run_sync_calls) == 0, (
+            f"Expected 0 LLM calls, got {len(run_sync_calls)}"
+        )
+        # Must return a synthetic no_change_needed result
+        assert output.no_change_needed is True
+        assert "Prior refine run (2026-06-02)" in output.no_change_rationale
+        assert "prompt-level fixes" in output.no_change_rationale
+
+    # --- Negative / bypass tests ---
+
+    def test_guard_bypassed_on_unrelated_memory(self, monkeypatch, settings):
+        """Acceptance criterion 2: guard does NOT trigger when no entry
+        has ≥25% word overlap with the ticket."""
+        memory = """\
+## Refine run 2026-06-02 — completely-unrelated-topic
+- **Outcome**: `no_change_needed` — fix the database indexing strategy
+- **Lesson**: always add covering indexes
+"""
+        run_sync_calls: list = []
+        self._mock_agent_and_retry(monkeypatch, run_sync_calls)
+
+        output = refining.run_refine_agent(
+            settings=settings,
+            title="Refine agent memory guard",
+            draft="Add a pre-LLM short-circuit for refine agent memory.",
+            memory=memory,
+        )
+
+        # LLM must have been called (unrelated topic)
+        assert len(run_sync_calls) == 1
+        assert output.no_change_needed is False
+
+    def test_guard_bypassed_on_empty_memory(self, monkeypatch, settings):
+        """Acceptance criterion 3: empty memory → LLM call proceeds."""
+        run_sync_calls: list = []
+        self._mock_agent_and_retry(monkeypatch, run_sync_calls)
+
+        output = refining.run_refine_agent(
+            settings=settings,
+            title="Any ticket",
+            draft="Some draft",
+            memory="",
+        )
+
+        assert len(run_sync_calls) == 1
+        assert output.no_change_needed is False
+
+    def test_guard_bypassed_on_resume(self, monkeypatch, settings):
+        """Acceptance criterion 5: when message_history is not None
+        (resume from ask_user), the guard is skipped entirely."""
+        memory = """\
+## Refine run 2026-06-02 — refine-agent-no-change-needed-guard-self-check
+- **Outcome**: `no_change_needed` — prompt-level fixes don't compose
+- **Lesson**: code-level guard is the right fix
+"""
+        run_sync_calls: list = []
+        self._mock_agent_and_retry(monkeypatch, run_sync_calls)
+
+        refining.run_refine_agent(
+            settings=settings,
+            title="Trace review agent limitation: the refine agent re-explores despite memory",
+            draft="Add a guard to short-circuit.",
+            memory=memory,
+            message_history=[{"role": "user", "content": "ok"}],
+        )
+
+        # LLM must have been called (resume bypasses guard)
+        assert len(run_sync_calls) == 1
+
+    def test_guard_bypassed_on_non_no_change_entry(self, monkeypatch, settings):
+        """Acceptance criterion 6: entries with outcomes other than
+        no_change_needed are ignored."""
+        memory = """\
+## Refine run 2026-06-02 — refine-agent-no-change-needed-guard-self-check
+- **Outcome**: `normal` — regular spec produced
+- **Lesson**: code-level guard is the right fix
+"""
+        run_sync_calls: list = []
+        self._mock_agent_and_retry(monkeypatch, run_sync_calls)
+
+        refining.run_refine_agent(
+            settings=settings,
+            title="Trace review agent limitation: the refine agent re-explores despite memory",
+            draft="Add a guard to short-circuit.",
+            memory=memory,
+        )
+
+        # LLM must have been called (outcome is "normal", not "no_change_needed")
+        assert len(run_sync_calls) == 1
+
+
+class TestMemoryGuardStaleEntries:
+    """Tests for the 90-day staleness cutoff (acceptance criterion 4)."""
+
+    @staticmethod
+    def _mock_agent_and_retry(monkeypatch, run_sync_calls):
+        import robotsix_mill.agents.retry as retry_module
+        import robotsix_mill.agents.base as base_module
+
+        class _MockAgent:
+            def run_sync(self, user_prompt, *, message_history=None):
+                run_sync_calls.append(user_prompt)
+                return _FakeRunResult(
+                    output=RefineResult(split=False, spec_markdown="## Problem\nok\n"),
+                    finish_reason="stop",
+                    all_messages=[{"role": "user", "content": "hi"}],
+                )
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(
+            retry_module,
+            "call_with_retry",
+            lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: (
+                fn()
+            ),
+        )
+        monkeypatch.setattr(
+            base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+        )
+
+    def test_stale_entry_bypassed(self, monkeypatch, settings):
+        """A no_change_needed entry older than 90 days is ignored."""
+        # Use a date far in the past — definitely > 90 days
+        memory = """\
+## Refine run 2020-01-15 — refine-agent-no-change-needed-guard-self-check
+- **Outcome**: `no_change_needed` — prompt-level fixes don't compose like software
+- **Lesson**: code-level guard is the right fix
+"""
+        run_sync_calls: list = []
+        self._mock_agent_and_retry(monkeypatch, run_sync_calls)
+
+        refining.run_refine_agent(
+            settings=settings,
+            title="Trace review agent limitation: the refine agent re-explores despite memory",
+            draft="The refine agent wastes tokens re-exploring. Add a guard to short-circuit.",
+            memory=memory,
+        )
+
+        # LLM must have been called (entry is stale)
+        assert len(run_sync_calls) == 1
