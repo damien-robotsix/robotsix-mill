@@ -787,9 +787,7 @@ def test_dedup_scoped_to_board_id(tmp_path, monkeypatch, two_repo_registry):
 
     svc_b = TicketService(settings, board_id="board-b")
     tickets_b = [t for t in svc_b.list() if t.source == "trace-health"]
-    assert len(tickets_b) == 1, (
-        "board-b should have exactly one trace-health ticket"
-    )
+    assert len(tickets_b) == 1, "board-b should have exactly one trace-health ticket"
 
     # --- Direction 2: close board-a's ticket so it doesn't self-block,
     #     then run for board-a — board-b's open ticket must NOT block ---
