@@ -154,3 +154,17 @@ Remove the module entry from `docs/modules.yaml` and reassign its
 schema validator to confirm the file is still valid. The curator may
 file "stale paths" and "Classify" tickets as reminders — these aren't
 errors, just prompts to clean up.
+
+## Forge adapter conventions
+
+- **Public-method / private-HTTP-seam split.** Every new abstract
+  method added to `Forge` (`src/robotsix_mill/forge/base.py`) must
+  follow the two-layer pattern established in `GitHubForge`
+  (`src/robotsix_mill/forge/github.py`). The **public method**
+  performs validation and feature-flag checks, raises
+  `NotConfiguredError` when the capability is gated, then delegates
+  to the **private `_method_name()`**. The private method is the
+  monkeypatch-able HTTP seam — use `_build_headers(github_token(...))`
+  and `with httpx.Client(timeout=30) as c:` to talk to the API, exactly
+  as the existing private helpers do (e.g. `_create_repo`,
+  `_create_pr`, `_get_pr`).
