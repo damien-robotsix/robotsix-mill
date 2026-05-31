@@ -88,6 +88,46 @@ class RetrospectResult(BaseModel):
         return data
 
 
+def _is_structural_quote_end(text: str, quote_idx: int) -> bool:
+    """Return True if the double-quote at *quote_idx* is followed by a
+    JSON structural terminator (``}`` or ``,`` then ``"`` or ``}``)
+    after optional whitespace."""
+    j = quote_idx + 1
+    while j < len(text) and text[j] in " \t\n\r":
+        j += 1
+    if j >= len(text):
+        return False
+    if text[j] == "}":
+        return True
+    if text[j] != ",":
+        return False
+    k = j + 1
+    while k < len(text) and text[k] in " \t\n\r":
+        k += 1
+    return k < len(text) and text[k] in ('"', "}")
+
+
+def _find_memory_value_end(text: str, start: int) -> int | None:
+    """Scan forward from *start* for the closing unescaped double-quote
+    of the ``updated_memory`` field value.  Returns the index of that
+    quote, or ``None`` if no valid terminator is found.
+    """
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if ch != '"':
+            continue
+        if _is_structural_quote_end(text, i):
+            return i
+    return None
+
+
 def _repair_memory_field_escaping(text: str) -> str:
     """Attempt to repair unescaped characters in the ``updated_memory``
     field of a JSON string before pydantic-core parsing.
@@ -113,51 +153,18 @@ def _repair_memory_field_escaping(text: str) -> str:
         return text
 
     start = m.end()  # first character of the field value
-    # Scan forward from *start* looking for the first unescaped
-    # double-quote whose following structural context (comma then
-    # next key, or closing brace) marks it as the field terminator.
-    # We track a minimal escape flag so that backslash-escaped
-    # quotes inside the value don't fool the scanner.
-    escaped = False
-    for i in range(start, len(text)):
-        ch = text[i]
-        if escaped:
-            escaped = False
-            continue
-        if ch == '\\':
-            escaped = True
-            continue
-        if ch != '"':
-            continue
-        # Candidate closing quote — check what follows.
-        j = i + 1
-        while j < len(text) and text[j] in ' \t\n\r':
-            j += 1
-        if j >= len(text):
-            return text  # truncated — can't repair
-        if text[j] == '}':
-            pass  # end-of-object terminator
-        elif text[j] == ',':
-            # Comma — must be followed by the next key or closing brace
-            k = j + 1
-            while k < len(text) and text[k] in ' \t\n\r':
-                k += 1
-            if k >= len(text) or text[k] not in ('"', '}'):
-                continue  # not a structural comma — keep scanning
-        else:
-            continue  # not a terminator — keep scanning
+    end = _find_memory_value_end(text, start)
+    if end is None:
+        return text
 
-        # Try extracting and re-escaping the value between start and i
-        raw = text[start:i]
-        escaped_val = json.dumps(raw)[1:-1]  # strip surrounding quotes
-        repaired = text[:start] + escaped_val + text[i:]
-        try:
-            json.loads(repaired)
-            return repaired
-        except json.JSONDecodeError:
-            continue
-
-    return text
+    raw = text[start:end]
+    escaped_val = json.dumps(raw)[1:-1]  # strip surrounding quotes
+    repaired = text[:start] + escaped_val + text[end:]
+    try:
+        json.loads(repaired)
+        return repaired
+    except json.JSONDecodeError:
+        return text
 
 
 def run_retrospect_agent(

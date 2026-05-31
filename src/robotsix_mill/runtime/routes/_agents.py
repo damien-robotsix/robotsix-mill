@@ -480,9 +480,7 @@ def trace_review_pass(
                     repo_id=rc.repo_id if rc else "",
                 )
                 session_id = make_session_id("trace-review")
-                with start_ticket_root_span(
-                    session_id, "trace-review", repo_config=rc
-                ):
+                with start_ticket_root_span(session_id, "trace-review", repo_config=rc):
                     r = run_trace_review_pass(
                         session_id=session_id,
                         repo_config=rc,
@@ -532,9 +530,7 @@ def roadmap_sync_pass(
                     repo_id=rc.repo_id if rc else "",
                 )
                 session_id = make_session_id("roadmap-sync")
-                with start_ticket_root_span(
-                    session_id, "roadmap-sync", repo_config=rc
-                ):
+                with start_ticket_root_span(session_id, "roadmap-sync", repo_config=rc):
                     r = run_roadmap_sync_pass(
                         session_id=session_id,
                         repo_config=rc,
