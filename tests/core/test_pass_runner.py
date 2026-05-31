@@ -1,10 +1,16 @@
 """Tests for the shared agent-pass runner."""
 
+from pathlib import Path
+
 from robotsix_mill.pass_runner import (
     run_agent_pass,
     _verify_prior_proposals,
     _GAP_ID_RE,
     load_memory,
+    persist_memory,
+    _format_recent_proposals,
+    _render_verified_table,
+    _test_file_exists_for_gap,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -922,5 +928,517 @@ def test_non_output_exception_still_propagates(tmp_path):
             service=service,
             settings=settings,
         )
+
+    db.reset_engine()
+
+
+# ------------------------------------------------------------------ persist_memory direct tests
+
+
+def test_persist_memory_creates_new_file_and_parent_dirs(tmp_path):
+    """persist_memory creates the file and parent directories when the
+    memory_file does not exist."""
+    memory_file = tmp_path / "sub" / "memory.md"
+    assert not memory_file.exists()
+    persist_memory(memory_file, "hello world")
+    assert memory_file.exists()
+    assert memory_file.read_text(encoding="utf-8") == "hello world"
+
+
+def test_persist_memory_overwrites_existing_file(tmp_path):
+    """persist_memory overwrites an existing file with new content."""
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("old content", encoding="utf-8")
+    persist_memory(memory_file, "new content")
+    assert memory_file.read_text(encoding="utf-8") == "new content"
+
+
+def test_persist_memory_empty_text_file_exists_noop(tmp_path):
+    """When text is empty and the file already exists, persist_memory
+    does NOT overwrite it."""
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("original", encoding="utf-8")
+    persist_memory(memory_file, "")
+    assert memory_file.read_text(encoding="utf-8") == "original"
+
+
+def test_persist_memory_empty_text_file_absent_creates_empty(tmp_path):
+    """When text is empty and the file does NOT exist, persist_memory
+    creates an empty file."""
+    memory_file = tmp_path / "nonexistent.md"
+    assert not memory_file.exists()
+    persist_memory(memory_file, "")
+    assert memory_file.exists()
+    assert memory_file.read_text(encoding="utf-8") == ""
+
+
+def test_persist_memory_oserror_swallowed(tmp_path, monkeypatch, caplog):
+    """persist_memory swallows OSError and logs a warning."""
+    import logging
+
+    memory_file = tmp_path / "memory.md"
+
+    def _failing_mkdir(self, *a, **kw):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "mkdir", _failing_mkdir)
+
+    caplog.set_level(logging.WARNING)
+    # Must not raise
+    persist_memory(memory_file, "content")
+    assert "could not write memory file" in caplog.text
+
+
+# ------------------------------------------------------------------ _format_recent_proposals direct tests
+
+
+class _FakeTicket:
+    """Minimal stub matching the Ticket interface used by
+    _format_recent_proposals: .id, .state, .title."""
+
+    def __init__(self, id, state, title):
+        self.id = id
+        self.state = state
+        self.title = title
+
+
+def test_format_recent_proposals_empty():
+    """Empty list returns the '(no recent proposals)' placeholder."""
+    result = _format_recent_proposals([])
+    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+
+
+def test_format_recent_proposals_single():
+    """Single ticket renders one line with [STATE] short_id | title."""
+    t = _FakeTicket("abc123def456", State.DRAFT, "Fix bug in thing")
+    result = _format_recent_proposals([t])
+    lines = result.split("\n")
+    assert lines[0] == "<recent_proposals>"
+    assert "[draft] abc123d | Fix bug in thing" in lines[1]
+    assert lines[2] == "</recent_proposals>"
+
+
+def test_format_recent_proposals_multiple():
+    """Multiple tickets render multiple lines, order preserved."""
+    t1 = _FakeTicket("11111112222222", State.DRAFT, "First")
+    t2 = _FakeTicket("22222223333333", State.CLOSED, "Second")
+    result = _format_recent_proposals([t1, t2])
+    lines = result.split("\n")
+    assert lines[0] == "<recent_proposals>"
+    assert "[draft] 1111111 | First" in lines[1]
+    assert "[closed] 2222222 | Second" in lines[2]
+    assert lines[3] == "</recent_proposals>"
+
+
+def test_format_recent_proposals_states_roundtrip():
+    """All common states render their .value correctly."""
+    t_draft = _FakeTicket("aaa", State.DRAFT, "draft")
+    t_closed = _FakeTicket("bbb", State.CLOSED, "closed")
+    t_done = _FakeTicket("ccc", State.DONE, "done")
+    result_draft = _format_recent_proposals([t_draft])
+    result_closed = _format_recent_proposals([t_closed])
+    result_done = _format_recent_proposals([t_done])
+    assert "[draft]" in result_draft
+    assert "[closed]" in result_closed
+    assert "[done]" in result_done
+
+
+# ------------------------------------------------------------------ _render_verified_table direct tests
+
+
+def test_render_verified_table_empty():
+    """Empty dict returns header-only table (no data rows)."""
+    result = _render_verified_table({})
+    lines = result.split("\n")
+    assert "## Prior proposals — verified state" in lines[0]
+    assert "| gap_id | ticket_id | state | resolution |" in lines[2]
+    assert "|--------|-----------|-------|------------|" in lines[3]
+    # No data rows
+    assert len(lines) == 4
+
+
+def test_render_verified_table_merged_resolution():
+    """Entry with resolution='merged' shows 'merged (via DONE)'."""
+    verified = {
+        "gap_1": {
+            "ticket_id": "T-123",
+            "state": "CLOSED",
+            "resolution": "merged",
+            "branch": None,
+        }
+    }
+    result = _render_verified_table(verified)
+    assert "merged (via DONE)" in result
+    assert "T-123" in result
+
+
+def test_render_verified_table_declined_resolution():
+    """Entry with resolution='declined' shows 'declined (closed directly)'."""
+    verified = {
+        "gap_2": {
+            "ticket_id": "T-456",
+            "state": "CLOSED",
+            "resolution": "declined",
+            "branch": None,
+        }
+    }
+    result = _render_verified_table(verified)
+    assert "declined (closed directly)" in result
+    assert "T-456" in result
+
+
+def test_render_verified_table_with_branch():
+    """Entry with a branch appends ' (branch: ...)' to the ticket_id cell."""
+    verified = {
+        "gap_3": {
+            "ticket_id": "T-789",
+            "state": "DRAFT",
+            "resolution": "in-flight",
+            "branch": "feature/xyz",
+        }
+    }
+    result = _render_verified_table(verified)
+    assert "T-789 (branch: feature/xyz)" in result
+
+
+# ------------------------------------------------------------------ _test_file_exists_for_gap direct tests
+
+
+def test_test_file_exists_for_gap_non_matching_title(tmp_path):
+    """Title that doesn't match the pattern returns False."""
+    assert _test_file_exists_for_gap(tmp_path, "some other title") is False
+
+
+def test_test_file_exists_for_gap_no_py_extension(tmp_path):
+    """Title without .py at the end returns False."""
+    assert (
+        _test_file_exists_for_gap(tmp_path, "test gap: add unit tests for foo/bar")
+        is False
+    )
+
+
+def test_test_file_exists_for_gap_file_exists_directory_prefix(tmp_path):
+    """Title with directory prefix - file exists → True."""
+    test_file = tmp_path / "tests" / "agents" / "test_coding.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# tests", encoding="utf-8")
+    assert (
+        _test_file_exists_for_gap(
+            tmp_path, "test gap: add unit tests for agents/coding.py"
+        )
+        is True
+    )
+
+
+def test_test_file_exists_for_gap_file_absent(tmp_path):
+    """Title points to module with no test file → False."""
+    # Ensure the directory exists but NOT the test file
+    (tmp_path / "tests" / "agents").mkdir(parents=True, exist_ok=True)
+    assert (
+        _test_file_exists_for_gap(
+            tmp_path, "test gap: add unit tests for agents/missing.py"
+        )
+        is False
+    )
+
+
+def test_test_file_exists_for_gap_prefix_stripping(tmp_path):
+    """Title with src/robotsix_mill/ prefix — prefix stripped before check."""
+    test_file = tmp_path / "tests" / "agents" / "test_coding.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# tests", encoding="utf-8")
+    assert (
+        _test_file_exists_for_gap(
+            tmp_path,
+            "test gap: add unit tests for src/robotsix_mill/agents/coding.py",
+        )
+        is True
+    )
+
+
+def test_test_file_exists_for_gap_bare_filename(tmp_path):
+    """Bare filename (no directory) checks tests/test_<name>.py."""
+    test_file = tmp_path / "tests" / "test_foo.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# tests", encoding="utf-8")
+    assert (
+        _test_file_exists_for_gap(tmp_path, "test gap: add unit tests for foo.py")
+        is True
+    )
+
+
+def test_test_file_exists_for_gap_bare_filename_not_in_subdir(tmp_path):
+    """Documenting current limitation: bare filename only checks
+    tests/test_<name>.py, NOT tests/subdir/test_<name>.py."""
+    # Create file in subdirectory — should NOT be found by current impl
+    subdir_file = tmp_path / "tests" / "subdir" / "test_foo.py"
+    subdir_file.parent.mkdir(parents=True, exist_ok=True)
+    subdir_file.write_text("# tests", encoding="utf-8")
+    # The root tests/test_foo.py does NOT exist
+    assert (
+        _test_file_exists_for_gap(tmp_path, "test gap: add unit tests for foo.py")
+        is False
+    )
+
+
+# ------------------------------------------------------------------ load_memory additional edge cases
+
+
+def test_load_memory_oserror_on_exists(tmp_path, monkeypatch, caplog):
+    """OSError on Path.exists() returns '' and logs a warning."""
+    import logging
+
+    mf = tmp_path / "memory.md"
+    # File does not exist, but exists() itself raises
+    monkeypatch.setattr(
+        Path,
+        "exists",
+        lambda self: (_ for _ in ()).throw(OSError("disk error")),
+    )
+    caplog.set_level(logging.WARNING)
+    result = load_memory(mf, max_chars=8000)
+    assert result == ""
+    assert "could not read memory file" in caplog.text
+
+
+def test_load_memory_oserror_on_read_text(tmp_path, monkeypatch, caplog):
+    """OSError on read_text() returns '' and logs a warning."""
+    import logging
+
+    mf = tmp_path / "memory.md"
+    mf.write_text("some content", encoding="utf-8")
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda self, **kw: (_ for _ in ()).throw(OSError("read error")),
+    )
+    caplog.set_level(logging.WARNING)
+    result = load_memory(mf, max_chars=8000)
+    assert result == ""
+    assert "could not read memory file" in caplog.text
+
+
+def test_load_memory_exact_max_chars_no_truncation(tmp_path, caplog):
+    """File length exactly equals max_chars — no truncation, no warning."""
+    import logging
+
+    mf = tmp_path / "memory.md"
+    content = "a" * 200
+    mf.write_text(content, encoding="utf-8")
+
+    caplog.set_level(logging.WARNING)
+    result = load_memory(mf, max_chars=200)
+    assert result == content
+    # No warning about truncation
+    assert "truncated" not in caplog.text
+
+
+def test_load_memory_one_char_over_truncates(tmp_path, caplog):
+    """File is 1 char over max_chars — truncation triggers."""
+    import logging
+
+    mf = tmp_path / "memory.md"
+    content = "a" * 201  # 1 over
+    mf.write_text(content, encoding="utf-8")
+
+    caplog.set_level(logging.WARNING)
+    result = load_memory(mf, max_chars=200)
+    assert result.startswith("[... memory truncated:")
+    assert "chars omitted]" in result.split("\n")[0]
+    assert "truncated" in caplog.text
+
+
+def test_load_memory_single_line_over_limit(tmp_path, caplog):
+    """File is one long line (no newline), exceeds max_chars.
+    Fallback path: keeps text starting at cut_point (no newline to advance to)."""
+    import logging
+
+    mf = tmp_path / "memory.md"
+    # One long line, no newline at all
+    content = "x" * 500
+    mf.write_text(content, encoding="utf-8")
+
+    caplog.set_level(logging.WARNING)
+    result = load_memory(mf, max_chars=200)
+    assert result.startswith("[... memory truncated:")
+    # The kept portion should not be empty
+    kept_part = result.split("\n\n", 1)[1] if "\n\n" in result else ""
+    assert len(kept_part) > 0
+
+
+def test_load_memory_trailing_newline_over_limit(tmp_path):
+    """File ends with newline, exceeds max_chars — kept portion starts
+    on a complete line (not with a blank line from the trailing newline)."""
+    mf = tmp_path / "memory.md"
+    # Multiple entries, file ends with \n
+    prefix = "## Old entry\n" + ("a" * 4000) + "\n"
+    suffix = "## Recent entry\nRecent observation.\n"
+    content = prefix + suffix
+    mf.write_text(content, encoding="utf-8")
+
+    result = load_memory(mf, max_chars=2000)
+    assert result.startswith("[... memory truncated:")
+    # The kept portion should include the recent entry on a proper line
+    assert "## Recent entry" in result
+    assert "Recent observation." in result
+    # The kept text after the truncation note should NOT start with a
+    # blank line caused by advancing past a trailing newline
+    after_note = result.split("\n\n", 1)[1] if "\n\n" in result else result
+    assert not after_note.startswith("\n")
+
+
+# ------------------------------------------------------------------ _verify_prior_proposals service.list() exception
+
+
+def test_verify_prior_proposals_service_list_exception(tmp_path, monkeypatch):
+    """_verify_prior_proposals returns empty dict when service.list() raises."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    monkeypatch.setattr(
+        service,
+        "list",
+        lambda: (_ for _ in ()).throw(RuntimeError("DB down")),
+    )
+
+    result = _verify_prior_proposals(service, settings, SourceKind.AUDIT)
+    assert result == {}
+
+    db.reset_engine()
+
+
+# ------------------------------------------------------------------ run_agent_pass max_drafts clipping
+
+
+def test_max_drafts_clips_excess_titles(tmp_path, monkeypatch):
+    """Agent returns 5 titles, max_drafts=2 — only 2 tickets created."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["T1", "T2", "T3", "T4", "T5"],
+        draft_bodies=["B1", "B2", "B3", "B4", "B5"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+        max_drafts=2,
+    )
+
+    assert len(result.drafts_created) == 2
+    tickets = service.list()
+    assert len(tickets) == 2
+
+    db.reset_engine()
+
+
+def test_max_drafts_gte_titles_no_clipping(tmp_path, monkeypatch):
+    """Agent returns 3 titles, max_drafts=5 — all 3 created."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["T1", "T2", "T3"],
+        draft_bodies=["B1", "B2", "B3"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+        max_drafts=5,
+    )
+
+    assert len(result.drafts_created) == 3
+    tickets = service.list()
+    assert len(tickets) == 3
+
+    db.reset_engine()
+
+
+def test_max_drafts_none_backward_compat(tmp_path, monkeypatch):
+    """max_drafts=None (default) — all 5 titles created."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["T1", "T2", "T3", "T4", "T5"],
+        draft_bodies=["B1", "B2", "B3", "B4", "B5"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+        # max_drafts not passed — defaults to None
+    )
+
+    assert len(result.drafts_created) == 5
+    tickets = service.list()
+    assert len(tickets) == 5
+
+    db.reset_engine()
+
+
+# ------------------------------------------------------------------ run_agent_pass empty updated_memory
+
+
+def test_agent_returns_empty_updated_memory(tmp_path, monkeypatch):
+    """When the agent returns '' for updated_memory, persist_memory is
+    NOT called and the original memory survives."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("old memory", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="",  # empty string from agent
+        draft_titles=[],
+        draft_bodies=[],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    # File on disk unchanged
+    assert memory_file.read_text(encoding="utf-8") == "old memory"
+    # Result.updated_memory falls back to the pre-agent memory_text
+    assert result.updated_memory == "old memory"
 
     db.reset_engine()
