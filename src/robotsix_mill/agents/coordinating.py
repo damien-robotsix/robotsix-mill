@@ -378,7 +378,7 @@ def run_coordinator(
         if final_message_history is not None:
             from .history_compress import compress_history
 
-            compress_history(
+            final_message_history = compress_history(
                 final_message_history,
                 max_tokens=settings.history_max_tokens,
                 keep_last=settings.history_keep_last,
