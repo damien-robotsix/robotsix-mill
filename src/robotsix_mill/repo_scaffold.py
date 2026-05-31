@@ -16,8 +16,12 @@ import re as _re
 import shutil
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from .stages.base import Outcome
 
 from .config import _reset_repos_config, get_repos_config
 from .core.states import State
@@ -109,7 +113,10 @@ def run_repo_scaffold(settings, ticket, forge, ctx) -> Outcome:
     description = ctx.service.workspace(ticket).read_description()
     params = parse_new_repo_params(description)
     if params is None:
-        return Outcome(State.ERRORED, note="Could not parse new-repo params from ticket description")
+        return Outcome(
+            State.ERRORED,
+            note="Could not parse new-repo params from ticket description",
+        )
 
     try:
         repo_info = forge.create_repo(
@@ -146,7 +153,9 @@ def run_repo_scaffold(settings, ticket, forge, ctx) -> Outcome:
                 f"Either choose a different name or close this ticket if the repo "
                 f"was created manually.",
             )
-            return Outcome(State.BLOCKED, note=f"Repo {params['name']!r} already exists")
+            return Outcome(
+                State.BLOCKED, note=f"Repo {params['name']!r} already exists"
+            )
         raise
 
     try:
@@ -310,9 +319,7 @@ _ALL_PERIODIC_NAMES = (
 )
 
 
-def _append_repo_config(
-    repo_info: RepoInfo, params: dict, settings
-) -> None:
+def _append_repo_config(repo_info: RepoInfo, params: dict, settings) -> None:
     """Append a :class:`RepoConfig` stanza to ``config/repos.yaml`` for
     the newly created repository."""
     path = _repos_yaml_path()

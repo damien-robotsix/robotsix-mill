@@ -344,6 +344,18 @@ modules:
   # Support services
   # -------------------------------------------------------------------
 
+  - id: repo-scaffold
+    description: >-
+      Repo-scaffold workflow.  When a meta-board ticket carries a
+      ``new-repo`` extraction marker, this module calls
+      ``Forge.create_repo()``, scaffolds an initial commit (README,
+      LICENSE, Python skeleton), and registers the new repo in
+      ``config/repos.yaml``.
+    paths:
+      - src/robotsix_mill/repo_scaffold.py
+      - tests/test_repo_scaffold.py
+    dependencies: [config, forge, vcs]
+
   - id: sandbox
     description: >-
       Isolated subprocess execution environment.  Provides a safe sandbox

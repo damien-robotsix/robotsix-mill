@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,7 +18,6 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind, Ticket
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.repo_scaffold import (
     MARKER_KIND,
@@ -103,7 +100,9 @@ def _make_ticket(
     return svc.get(ticket.id)
 
 
-def _stage_context(settings: Settings, ticket: Ticket, board_id: str = "meta") -> StageContext:
+def _stage_context(
+    settings: Settings, ticket: Ticket, board_id: str = "meta"
+) -> StageContext:
     svc = TicketService(settings, board_id=board_id)
     return StageContext(settings=settings, service=svc)
 
@@ -226,9 +225,7 @@ class TestAppendRepoConfig:
             langfuse_base_url="https://langfuse.example.com",
         )
         reg = ReposRegistry(repos={"robotsix-mill": mill_cfg})
-        monkeypatch.setattr(
-            "robotsix_mill.repo_scaffold.get_repos_config", lambda: reg
-        )
+        monkeypatch.setattr("robotsix_mill.repo_scaffold.get_repos_config", lambda: reg)
 
         repo_info = RepoInfo(
             id=42,
@@ -301,9 +298,7 @@ class TestAppendRepoConfig:
             langfuse_base_url="https://lf.custom.com",
         )
         reg = ReposRegistry(repos={"robotsix-mill": mill_cfg})
-        monkeypatch.setattr(
-            "robotsix_mill.repo_scaffold.get_repos_config", lambda: reg
-        )
+        monkeypatch.setattr("robotsix_mill.repo_scaffold.get_repos_config", lambda: reg)
 
         repo_info = RepoInfo(
             id=1,
@@ -355,9 +350,7 @@ class TestAppendRepoConfig:
 
         mill_cfg = _repo_cfg("robotsix-mill", board_id="robotsix-mill")
         reg = ReposRegistry(repos={"robotsix-mill": mill_cfg})
-        monkeypatch.setattr(
-            "robotsix_mill.repo_scaffold.get_repos_config", lambda: reg
-        )
+        monkeypatch.setattr("robotsix_mill.repo_scaffold.get_repos_config", lambda: reg)
 
         repo_info = RepoInfo(
             id=2,
@@ -415,9 +408,7 @@ class TestRunRepoScaffold:
         # Register mill repo for langfuse key copy
         mill_cfg = _repo_cfg("robotsix-mill", board_id="robotsix-mill")
         reg = ReposRegistry(repos={"robotsix-mill": mill_cfg})
-        monkeypatch.setattr(
-            "robotsix_mill.repo_scaffold.get_repos_config", lambda: reg
-        )
+        monkeypatch.setattr("robotsix_mill.repo_scaffold.get_repos_config", lambda: reg)
 
         # Set up repos.yaml path
         repos_file = tmp_path / "repos.yaml"
@@ -461,15 +452,11 @@ class TestRunRepoScaffold:
                 {"repo": repo, "branch": branch, "remote_url": remote_url}
             )
 
-        monkeypatch.setattr(
-            "robotsix_mill.repo_scaffold.git_ops.clone", _fake_clone
-        )
+        monkeypatch.setattr("robotsix_mill.repo_scaffold.git_ops.clone", _fake_clone)
         monkeypatch.setattr(
             "robotsix_mill.repo_scaffold.git_ops.commit_all", _fake_commit_all
         )
-        monkeypatch.setattr(
-            "robotsix_mill.repo_scaffold.git_ops.push", _fake_push
-        )
+        monkeypatch.setattr("robotsix_mill.repo_scaffold.git_ops.push", _fake_push)
         monkeypatch.setattr(
             "robotsix_mill.repo_scaffold.github_token",
             lambda s, repo_config=None: "fake-token",
