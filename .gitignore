@@ -7,3 +7,6 @@ build/
 .pytest_cache/
 .ruff_cache/
 .env
+
+# Coverage data file (pytest --cov)
+.coverage

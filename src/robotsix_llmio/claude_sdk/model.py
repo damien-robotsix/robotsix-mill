@@ -108,8 +108,7 @@ def render_prompt(messages: list[ModelMessage]) -> str:
     if len(turns) == 1 and turns[0][0] == "user":
         return turns[0][1]
     return "\n\n".join(
-        f"{'User' if role == 'user' else 'Assistant'}: {text}"
-        for role, text in turns
+        f"{'User' if role == 'user' else 'Assistant'}: {text}" for role, text in turns
     )
 
 
@@ -189,15 +188,16 @@ class ClaudeSDKModel(Model):
                     for p in message.parts
                     if isinstance(p, SystemPromptPart) and p.content
                 )
-        instructions = self._get_instructions(messages, params)
-        if instructions:
-            parts.append(instructions)
+        # pydantic-ai renamed/replaced the old ``_get_instructions`` (→ str)
+        # with ``_get_instruction_parts`` (→ list[InstructionPart] | None);
+        # join the parts' content into the system text.
+        instruction_parts = self._get_instruction_parts(messages, params)
+        if instruction_parts:
+            parts.extend(p.content for p in instruction_parts if p.content)
         combined = "\n\n".join(dict.fromkeys(parts))  # de-dup, preserve order
         return combined or None
 
-    async def _invoke(
-        self, prompt: str, system_text: str | None
-    ) -> tuple[str, Any]:
+    async def _invoke(self, prompt: str, system_text: str | None) -> tuple[str, Any]:
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeAgentOptions,
