@@ -2,25 +2,18 @@
 
 Requires the ``openrouter_deepseek`` extra (which pulls the OpenRouter
 transport deps). The model/provider are loaded lazily via PEP 562
-``__getattr__`` so importing the lightweight ``transient`` helpers stays free of
-pydantic-ai / opentelemetry; a missing extra surfaces a clear install hint when
-the model/provider is actually used.
+``__getattr__`` so a missing extra surfaces a clear install hint only when the
+model/provider is actually used. Transient retry is inherited from the
+OpenRouter layer (this layer adds no DeepSeek-specific transient signature).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .transient import (
-    is_deepseek_reasoning_roundtrip_error,
-    is_deepseek_transient,
-)
-
 __all__ = [
     "OpenRouterDeepseekProvider",
     "OpenRouterDeepseekModel",
-    "is_deepseek_transient",
-    "is_deepseek_reasoning_roundtrip_error",
 ]
 
 

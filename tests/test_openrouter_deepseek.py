@@ -1,4 +1,4 @@
-"""Derived DeepSeek layer — pin, per-tier reasoning, transient."""
+"""Derived DeepSeek layer — pin + per-tier reasoning policy."""
 
 from __future__ import annotations
 
@@ -6,10 +6,6 @@ import pytest
 
 from robotsix_llmio.core.provider import Tier
 from robotsix_llmio.openrouter_deepseek.provider import OpenRouterDeepseekProvider
-from robotsix_llmio.openrouter_deepseek.transient import (
-    is_deepseek_reasoning_roundtrip_error,
-    is_deepseek_transient,
-)
 
 
 def _model(tier: Tier):
@@ -56,29 +52,3 @@ def test_pin_respects_caller_provider_override():
     ms = {"extra_body": {"provider": {"only": ["Other"]}}}
     m._inject_pin((), {"model_settings": ms})
     assert ms["extra_body"]["provider"]["only"] == ["Other"]  # untouched
-
-
-# --- transient -------------------------------------------------------------
-
-
-def test_reasoning_roundtrip_400_detected():
-    class HTTP400(Exception):
-        status_code = 400
-
-        def __str__(self):
-            return "The reasoning_content in the thinking mode must be passed back."
-
-    e = HTTP400()
-    assert is_deepseek_reasoning_roundtrip_error(e) is True
-    assert is_deepseek_transient(e) is True
-
-
-def test_plain_400_not_transient():
-    class HTTP400(Exception):
-        status_code = 400
-
-        def __str__(self):
-            return "bad request"
-
-    assert is_deepseek_reasoning_roundtrip_error(HTTP400()) is False
-    assert is_deepseek_transient(HTTP400()) is False

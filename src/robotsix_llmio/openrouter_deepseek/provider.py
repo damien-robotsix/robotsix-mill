@@ -10,7 +10,6 @@ from __future__ import annotations
 from ..core.provider import Tier
 from ..openrouter.provider import OpenRouterProvider
 from .model import OpenRouterDeepseekModel
-from .transient import is_deepseek_transient
 
 # Baked models — choosing this provider IS choosing these.
 _DEFAULT_MODEL = "deepseek/deepseek-v4-pro"
@@ -33,6 +32,3 @@ class OpenRouterDeepseekProvider(OpenRouterProvider):
         else:
             # Capable tier — reasoning at max effort.
             model.reasoning_setting = {"effort": "xhigh"}
-
-    def _is_transient(self, exc: BaseException) -> bool:
-        return is_deepseek_transient(exc)
