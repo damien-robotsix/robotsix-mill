@@ -668,7 +668,9 @@ class TestGuardClause:
 
         db.reset_engine()
 
-    def test_meta_ticket_without_marker_blocks_as_cross_repo(self, tmp_path, monkeypatch):
+    def test_meta_ticket_without_marker_blocks_as_cross_repo(
+        self, tmp_path, monkeypatch
+    ):
         """A META ticket without the new-repo marker is NOT scaffolded; it
         BLOCKs at the cross-repo implement gate (the multi-repo implement +
         deliver half isn't built yet) with a clear note."""

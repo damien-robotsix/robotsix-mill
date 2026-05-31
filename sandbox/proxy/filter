@@ -1,0 +1,11 @@
+# Destination host allowlist for the sandbox egress proxy.
+# POSIX extended regex, matched against the request host (FilterExtended On,
+# FilterURLs Off). With FilterDefaultDeny Yes, ONLY hosts matching a line
+# here are permitted; everything else is refused. One pattern per line.
+#
+# Python package installs (pip / uv):
+(^|\.)pypi\.org$
+(^|\.)pythonhosted\.org$
+# Git operations + release/asset downloads on GitHub:
+(^|\.)github\.com$
+(^|\.)githubusercontent\.com$
