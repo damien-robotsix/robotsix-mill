@@ -27,6 +27,7 @@ from robotsix_llmio.openrouter.transient import (
 from robotsix_llmio.openrouter.transient import (
     is_openrouter_upstream_error as _is_openrouter_upstream_error,
 )
+
 # Import from the .transient submodule (NOT the package __init__) so this shim
 # stays free of pydantic_ai/opentelemetry at module load — runtime.tracing's
 # import chain reaches here and must not eagerly import OTel.
