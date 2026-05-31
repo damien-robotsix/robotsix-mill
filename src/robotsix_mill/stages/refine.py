@@ -192,11 +192,23 @@ class RefineStage(Stage):
 
         s = ctx.settings
 
-        # Phase 1: clone
-        result = RefineStage._clone_or_resume(ctx, ticket, ws)
-        if isinstance(result, Outcome):
-            return result
-        repo_dir = result
+        # Phase 1: build the workspace. A meta-board ticket is cross-repo:
+        # a triage agent picks the required registered repos and we clone
+        # those into a multi-repo workspace (repo_dir = first, extra_roots =
+        # all), so the refine agent can read across them. Every other board
+        # is the normal single-repo clone.
+        extra_roots: list[Path] | None = None
+        if ticket.board_id == "meta":
+            repo_dir, extra_roots, outcome = RefineStage._build_meta_workspace(
+                ctx, ticket, ws, draft
+            )
+            if outcome is not None:
+                return outcome
+        else:
+            result = RefineStage._clone_or_resume(ctx, ticket, ws)
+            if isinstance(result, Outcome):
+                return result
+            repo_dir = result
 
         # Phase 2: dedup guard
         dup = RefineStage._run_dedup_guard(ctx, ticket, draft, repo_dir, s)
@@ -205,8 +217,55 @@ class RefineStage(Stage):
 
         # Phase 3: refine agent + result handling
         return RefineStage._run_refine_agent(
-            ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s
+            ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
         )
+
+    @staticmethod
+    def _build_meta_workspace(
+        ctx: StageContext, ticket: Ticket, ws, spec: str
+    ) -> tuple[Path | None, list[Path] | None, Outcome | None]:
+        """Build the multi-repo workspace for a meta-board ticket.
+
+        Runs the repo-triage agent over *spec* to pick the required
+        registered repos, clones them fresh into ``ws.dir/repos/<id>``, and
+        returns ``(repo_dir, extra_roots, None)``. On failure (triage error
+        or no repo cloned) returns ``(None, None, Outcome(BLOCKED))``.
+        """
+        from ..agents.meta_triage import required_repos_for
+        from ..meta_workspace import build_meta_workspace
+
+        try:
+            repo_ids = required_repos_for(settings=ctx.settings, spec=spec)
+        except Exception:
+            log.warning("%s: meta repo-triage failed", ticket.id, exc_info=True)
+            ctx.service.add_comment(
+                ticket.id,
+                "[BLOCKED] meta repo-triage failed — could not determine which "
+                "repositories this cross-repo proposal requires.",
+                author="refine",
+            )
+            return None, None, Outcome(State.BLOCKED, "meta repo-triage failed")
+
+        repo_dir, extra_roots = build_meta_workspace(ctx.settings, ws, repo_ids)
+        if repo_dir is None:
+            ctx.service.add_comment(
+                ticket.id,
+                "[BLOCKED] meta workspace: none of the required repos "
+                f"({', '.join(repo_ids) or 'none'}) could be cloned.",
+                author="refine",
+            )
+            return (
+                None,
+                None,
+                Outcome(State.BLOCKED, "meta workspace: no repos could be cloned"),
+            )
+        log.info(
+            "%s: meta workspace built — %d repo(s): %s",
+            ticket.id,
+            len(extra_roots),
+            ", ".join(p.name for p in extra_roots),
+        )
+        return repo_dir, extra_roots, None
 
     @staticmethod
     def _clone_or_resume(
@@ -398,6 +457,7 @@ class RefineStage(Stage):
         title: str,
         ws,
         s,
+        extra_roots: list[Path] | None = None,
     ) -> Outcome:
         """Run the full refine-agent pipeline and handle the result.
 
@@ -576,7 +636,8 @@ class RefineStage(Stage):
         )
         memory_text = load_memory(refine_memory_path, max_chars=s.max_memory_chars)
 
-        extra_roots: list[Path] | None = None
+        # extra_roots is passed in (non-empty for meta-board multi-repo
+        # workspaces; None for the normal single-repo path).
 
         # --- resume awareness: detect if returning from a pause ---
         resume_history: list | None = None
