@@ -335,7 +335,10 @@ def run_agent_pass(
             continue
         # Live-filesystem guard: skip drafts whose expected test
         # file(s) already exist on disk.
-        if source_label in (SourceKind.TEST_GAP, SourceKind.HEALTH) and repo_dir is not None:
+        if (
+            source_label in (SourceKind.TEST_GAP, SourceKind.HEALTH)
+            and repo_dir is not None
+        ):
             if _test_file_exists_for_gap(repo_dir, title):
                 log.warning(
                     "%s draft skipped — test file(s) already exist on disk: %s",
