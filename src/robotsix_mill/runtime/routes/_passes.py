@@ -672,3 +672,53 @@ def cost_reconciliation_pass(
 
     threading.Thread(target=_run, name="cost-reconciliation-pass", daemon=True).start()
     return {"status": "started"}
+
+
+@router.post("/meta", status_code=202)
+def meta_pass(
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a META pass in the BACKGROUND and return at once.
+
+    The meta-agent surveys ALL registered repo clones, identifies
+    extraction and alignment opportunities, and files drafts to the
+    meta board and per-repo boards respectively.  This is a global
+    pass — it does not fan out per-repo.
+    """
+    from ...meta_runner import MetaPassResult, run_meta_pass
+    from ..tracing import make_session_id
+
+    def _run() -> None:
+        run_id = None
+        try:
+            run_id = registry.start("meta")
+            session_id = make_session_id("meta")
+            result: MetaPassResult = run_meta_pass(session_id=session_id)
+            total_drafts = len(result.extraction_drafts_created) + len(
+                result.alignment_drafts_created
+            )
+            extraction_ids = [d["id"] for d in result.extraction_drafts_created[:3]]
+            alignment_ids = [d["id"] for d in result.alignment_drafts_created[:3]]
+            parts = []
+            if extraction_ids:
+                parts.append(f"Extraction: {', '.join(extraction_ids)}")
+            if alignment_ids:
+                parts.append(f"Alignment: {', '.join(alignment_ids)}")
+            summary = "; ".join(parts) if parts else "No drafts created"
+            if total_drafts > 6:
+                summary += " …"
+            registry.finish_ok(run_id, summary)
+            log.info(
+                "meta pass done: %d extraction + %d alignment = %d total draft(s)",
+                len(result.extraction_drafts_created),
+                len(result.alignment_drafts_created),
+                total_drafts,
+            )
+        except Exception as e:  # noqa: BLE001 — background; just log
+            log.exception("meta pass failed")
+            if run_id:
+                registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="meta-pass", daemon=True).start()
+    return {"status": "started"}

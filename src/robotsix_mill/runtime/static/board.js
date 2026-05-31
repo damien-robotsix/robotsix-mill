@@ -267,6 +267,7 @@ function onRepoChange(value){
   if(value==="all")url.searchParams.delete("repo");
   else url.searchParams.set("repo",value);
   window.history.replaceState({},"",url);
+  toggleMetaOnlyButtons();
   refresh();
 }
 async function fetchRepos(){
@@ -385,6 +386,7 @@ async function refresh(){
  const tok=++refreshSeq;
  await fetchRepos();
  const repoId=getRepoId();
+ toggleMetaOnlyButtons();
  const ticketsBase=repoId!=="all"?"/tickets?repo_id="+encodeURIComponent(repoId):"/tickets";
  const url=wantClosed?ticketsBase:(ticketsBase+(ticketsBase.includes("?")?"&":"?")+"include_closed=false");
  const activeUrl=repoId!=="all"?"/active?repo_id="+encodeURIComponent(repoId):"/active";
@@ -1144,6 +1146,24 @@ async function runRoadmapSync(){
  } finally {
    btn.disabled=false; btn.textContent='Roadmap Sync';
  }
+}
+async function runMeta(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const r=await jpost("/meta");
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Meta-agent pass started — new extraction and alignment draft tickets will appear on the board when it finishes.");
+   setTimeout(refresh,3000);
+ } catch(e) {
+   alert("Meta pass failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Meta';
+ }
+}
+function toggleMetaOnlyButtons(){
+ const onMeta=getRepoId()==="meta";
+ document.querySelectorAll(".meta-only").forEach(el=>{el.style.display=onMeta?"":"none"});
 }
 async function generateChildren(id){
  const btn=event.target;
