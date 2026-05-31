@@ -243,17 +243,19 @@ def test_cost_endpoint_missing_repo_id_multi_repo(multi_repo_client):
 
 
 def test_repos_endpoint(multi_repo_client):
-    """GET /repos returns both repos, no credential leaks."""
+    """GET /repos returns both repos plus the synthetic meta board,
+    with no credential leaks."""
     r = multi_repo_client.get("/repos")
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
-    assert len(data) == 2
+    # Two registered repos + the synthetic cross-repo "meta" board.
+    assert len(data) == 3
 
     repo_ids = {entry["repo_id"] for entry in data}
     board_ids = {entry["board_id"] for entry in data}
-    assert repo_ids == {"repo-a", "repo-b"}
-    assert board_ids == {"board-a", "board-b"}
+    assert repo_ids == {"repo-a", "repo-b", "meta"}
+    assert board_ids == {"board-a", "board-b", "meta"}
 
     # No credential leak
     for entry in data:
@@ -292,6 +294,31 @@ def test_board_filter_integration_smoke(multi_repo_client):
     titles = {t["title"] for t in r.json()}
     assert "Smoke-B" in titles
     assert "Smoke-A" not in titles
+
+
+def test_meta_board_visible_and_listable(multi_repo_client, settings):
+    """The synthetic cross-repo meta board must be queryable via
+    ?repo_id=meta (no 400) and included in the 'all repos' view, so
+    extraction proposals are never hidden from the operator."""
+    from robotsix_mill.core.models import SourceKind
+    from robotsix_mill.core.service import TicketService
+
+    svc = TicketService(settings, board_id="meta")
+    t = svc.create(
+        title="Extract shared cascade loader",
+        description="meta proposal body",
+        source=SourceKind.META,
+        origin_session="meta-test",
+    )
+
+    # Explicit meta query is allowed (not a 400) and returns the draft.
+    r = multi_repo_client.get("/tickets?repo_id=meta")
+    assert r.status_code == 200
+    assert t.id in {x["id"] for x in r.json()}
+
+    # The "all repos" view includes meta-board tickets too.
+    r_all = multi_repo_client.get("/tickets")
+    assert t.id in {x["id"] for x in r_all.json()}
 
 
 # -- 4. Periodic-agent isolation (Approach B) ---------------------------
