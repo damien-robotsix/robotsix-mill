@@ -3,6 +3,7 @@ modules:
     paths:
       - src/robotsix_llmio/__init__.py
       - src/robotsix_llmio/core/**
+      - src/robotsix_llmio/py.typed
       - tests/test_core_retry.py
   - id: robotsix_llmio-openrouter
     paths:
@@ -12,3 +13,8 @@ modules:
     paths:
       - src/robotsix_llmio/openrouter_deepseek/**
       - tests/test_openrouter_deepseek.py
+      - tests/test_openrouter_deepseek_live.py
+  - id: robotsix_llmio-claude-sdk
+    paths:
+      - src/robotsix_llmio/claude_sdk/**
+      - tests/test_claude_sdk.py
