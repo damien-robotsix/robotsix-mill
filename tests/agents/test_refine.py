@@ -3284,9 +3284,7 @@ class TestTopicSimilarity:
         assert sim == 1.0
 
     def test_disjoint_strings(self):
-        sim = refining._topic_similarity(
-            "alpha", "beta gamma", "delta", "epsilon zeta"
-        )
+        sim = refining._topic_similarity("alpha", "beta gamma", "delta", "epsilon zeta")
         assert sim == 0.0
 
     def test_partial_overlap(self):
@@ -3307,7 +3305,10 @@ class TestTopicSimilarity:
 
     def test_punctuation_stripped(self):
         sim = refining._topic_similarity(
-            "refine-agent", "pre-LLM short-circuit!", "refine agent", "pre LLM short circuit"
+            "refine-agent",
+            "pre-LLM short-circuit!",
+            "refine agent",
+            "pre LLM short circuit",
         )
         assert sim > 0.5  # most words overlap after stripping punctuation
 
@@ -3347,7 +3348,9 @@ class TestMemoryGuard:
         monkeypatch.setattr(
             retry_module,
             "call_with_retry",
-            lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+            lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: (
+                fn()
+            ),
         )
         monkeypatch.setattr(
             base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
@@ -3400,6 +3403,7 @@ class TestMemoryGuard:
             settings=settings,
             title="Refine agent memory guard",
             draft="Add a pre-LLM short-circuit for refine agent memory.",
+            memory=memory,
         )
 
         # LLM must have been called (unrelated topic)
@@ -3432,7 +3436,7 @@ class TestMemoryGuard:
         run_sync_calls: list = []
         self._mock_agent_and_retry(monkeypatch, run_sync_calls)
 
-        output = refining.run_refine_agent(
+        refining.run_refine_agent(
             settings=settings,
             title="Trace review agent limitation: the refine agent re-explores despite memory",
             draft="Add a guard to short-circuit.",
@@ -3454,7 +3458,7 @@ class TestMemoryGuard:
         run_sync_calls: list = []
         self._mock_agent_and_retry(monkeypatch, run_sync_calls)
 
-        output = refining.run_refine_agent(
+        refining.run_refine_agent(
             settings=settings,
             title="Trace review agent limitation: the refine agent re-explores despite memory",
             draft="Add a guard to short-circuit.",
@@ -3488,7 +3492,9 @@ class TestMemoryGuardStaleEntries:
         monkeypatch.setattr(
             retry_module,
             "call_with_retry",
-            lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+            lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: (
+                fn()
+            ),
         )
         monkeypatch.setattr(
             base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
@@ -3505,7 +3511,7 @@ class TestMemoryGuardStaleEntries:
         run_sync_calls: list = []
         self._mock_agent_and_retry(monkeypatch, run_sync_calls)
 
-        output = refining.run_refine_agent(
+        refining.run_refine_agent(
             settings=settings,
             title="Trace review agent limitation: the refine agent re-explores despite memory",
             draft="The refine agent wastes tokens re-exploring. Add a guard to short-circuit.",

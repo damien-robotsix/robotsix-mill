@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+import yaml as _yaml
+
 from pydantic import BaseModel, Field, model_validator
 
 from ..config import Settings
@@ -30,7 +32,6 @@ MEMORY_NO_CHANGE_MAX_AGE_DAYS: int = 90
 MEMORY_NO_CHANGE_SIMILARITY_THRESHOLD: float = 0.25
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
-import yaml as _yaml
 
 _SYSPROMPT_PATH = (
     Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
@@ -434,10 +435,18 @@ def _parse_memory_entries(memory: str) -> list[dict]:
                 entries.append(current)
             date_str, slug = m.group(1), m.group(2).strip()
             try:
-                date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                date = datetime.strptime(date_str, "%Y-%m-%d").replace(
+                    tzinfo=timezone.utc
+                )
             except ValueError:
                 date = datetime.min.replace(tzinfo=timezone.utc)
-            current = {"date": date, "slug": slug, "outcome": "", "rationale": "", "lesson": ""}
+            current = {
+                "date": date,
+                "slug": slug,
+                "outcome": "",
+                "rationale": "",
+                "lesson": "",
+            }
             continue
 
         if current is None:
@@ -465,19 +474,100 @@ def _parse_memory_entries(memory: str) -> list[dict]:
 # Stopwords filtered out before computing Jaccard similarity.
 _STOPWORDS: frozenset[str] = frozenset(
     {
-        "a", "an", "the", "is", "are", "was", "were", "be", "been",
-        "have", "has", "had", "do", "does", "did", "will", "would",
-        "could", "should", "may", "might", "can", "shall", "to",
-        "of", "in", "for", "on", "with", "at", "by", "from", "as",
-        "into", "through", "during", "before", "after", "above",
-        "below", "between", "under", "again", "further", "then",
-        "once", "here", "there", "when", "where", "why", "how",
-        "all", "both", "each", "few", "more", "most", "other",
-        "some", "such", "no", "nor", "not", "only", "own", "same",
-        "so", "than", "too", "very", "and", "but", "or", "yet",
-        "it", "its", "that", "this", "these", "those", "i", "me",
-        "my", "we", "our", "you", "your", "he", "she", "him", "her",
-        "they", "them",
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "can",
+        "shall",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "under",
+        "again",
+        "further",
+        "then",
+        "once",
+        "here",
+        "there",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "both",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "nor",
+        "not",
+        "only",
+        "own",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "and",
+        "but",
+        "or",
+        "yet",
+        "it",
+        "its",
+        "that",
+        "this",
+        "these",
+        "those",
+        "i",
+        "me",
+        "my",
+        "we",
+        "our",
+        "you",
+        "your",
+        "he",
+        "she",
+        "him",
+        "her",
+        "they",
+        "them",
     }
 )
 
@@ -541,9 +631,7 @@ def _check_memory_for_no_change(
             continue
 
         # Compute topic similarity
-        sim = _topic_similarity(
-            entry["slug"], entry["rationale"], title, draft
-        )
+        sim = _topic_similarity(entry["slug"], entry["rationale"], title, draft)
         if sim < threshold:
             continue
 
@@ -564,7 +652,7 @@ def _check_memory_for_no_change(
     return None
 
 
-def run_refine_agent(
+def run_refine_agent(  # noqa: C901
     *,
     settings: Settings,
     title: str,
