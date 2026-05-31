@@ -628,6 +628,7 @@ class RetrospectStage(Stage):
         recent = ctx.service.recent_proposals_for(SourceKind.RETROSPECT, limit=100)
         rp_block = _format_recent_proposals(recent)
 
+        repo_dir = ws.repo_dir if ws.repo_dir.exists() else None
         try:
             res = retrospecting.run_retrospect_agent(
                 settings=s,
@@ -639,6 +640,7 @@ class RetrospectStage(Stage):
                 recent_proposals=rp_block,
                 epic_context=epic_ctx,
                 sibling_context=sibling_ctx,
+                repo_dir=repo_dir,
             )
         except Exception as e:  # noqa: BLE001 — resumable, never lose the ticket
             log.exception("%s: retrospect agent failed", ticket.id)
