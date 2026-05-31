@@ -189,40 +189,55 @@ class AgentPassResult:
 
 
 def _test_file_exists_for_gap(repo_dir: Path, title: str) -> bool:
-    """Return ``True`` if the expected test file for a test-gap draft
-    already exists on disk.
+    """Return ``True`` if the expected test file(s) for a draft
+    already exist on disk.
 
-    Parses titles of the form ``test gap: add unit tests for <module_path>``
-    and derives the expected test-file path under ``repo_dir / "tests"``.
+    For **test-gap** drafts, parses titles of the form
+    ``test gap: add unit tests for <module_path>`` and derives the
+    expected test-file path under ``repo_dir / "tests"``.
+
+    For **health** drafts, parses titles of the form
+    ``Add tests/<dir>/ test subdirectory for ...`` and checks whether
+    any ``test_*.py`` file already exists under that test directory.
+
     Returns ``False`` (conservative: don't block) on any parse failure.
     """
+    # TEST_GAP pattern: "test gap: add unit tests for <module_path>"
     m = re.match(r"^test gap: add unit tests for (.+)", title)
-    if not m:
+    if m:
+        module_path = m.group(1).strip()
+
+        # Strip leading src/robotsix_mill/ prefix if present (the system
+        # prompt example uses the short form, but guard against the LLM
+        # emitting the full path).
+        prefix = "src/robotsix_mill/"
+        if module_path.startswith(prefix):
+            module_path = module_path[len(prefix) :]
+
+        # Must end with .py to derive a test file.
+        if not module_path.endswith(".py"):
+            return False
+
+        # Split into directory and basename: foo.py → test_foo.py
+        parts = module_path.rsplit("/", 1)
+        if len(parts) == 2:
+            directory, basename = parts
+            test_path = repo_dir / "tests" / directory / f"test_{basename}"
+        else:
+            basename = module_path
+            test_path = repo_dir / "tests" / f"test_{basename}"
+
+        return test_path.exists()
+
+    # HEALTH pattern: "Add tests/<dir>/ test subdirectory for ..."
+    m = re.match(r"^Add tests/(.+?)/", title)
+    if m:
+        test_dir = repo_dir / "tests" / m.group(1).strip()
+        if test_dir.is_dir():
+            return any(test_dir.glob("test_*.py"))
         return False
 
-    module_path = m.group(1).strip()
-
-    # Strip leading src/robotsix_mill/ prefix if present (the system
-    # prompt example uses the short form, but guard against the LLM
-    # emitting the full path).
-    prefix = "src/robotsix_mill/"
-    if module_path.startswith(prefix):
-        module_path = module_path[len(prefix) :]
-
-    # Must end with .py to derive a test file.
-    if not module_path.endswith(".py"):
-        return False
-
-    # Split into directory and basename: foo.py → test_foo.py
-    parts = module_path.rsplit("/", 1)
-    if len(parts) == 2:
-        directory, basename = parts
-        test_path = repo_dir / "tests" / directory / f"test_{basename}"
-    else:
-        basename = module_path
-        test_path = repo_dir / "tests" / f"test_{basename}"
-
-    return test_path.exists()
+    return False
 
 
 def run_agent_pass(
@@ -318,12 +333,13 @@ def run_agent_pass(
         body = res.draft_bodies[i]
         if not title or not body:
             continue
-        # Live-filesystem guard: skip test-gap drafts whose expected
-        # test file already exists on disk.
-        if source_label == SourceKind.TEST_GAP and repo_dir is not None:
+        # Live-filesystem guard: skip drafts whose expected test
+        # file(s) already exist on disk.
+        if source_label in (SourceKind.TEST_GAP, SourceKind.HEALTH) and repo_dir is not None:
             if _test_file_exists_for_gap(repo_dir, title):
                 log.warning(
-                    "test-gap draft skipped — test file already exists: %s",
+                    "%s draft skipped — test file(s) already exist on disk: %s",
+                    source_label,
                     title,
                 )
                 continue

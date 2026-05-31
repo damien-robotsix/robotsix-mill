@@ -37,6 +37,38 @@ def _make_settings(tmp_path, **overrides):
     return s
 
 
+class _FakeHealthAgentResult:
+    """Returned by mock health agent callables — matches the interface
+    that run_agent_pass accesses."""
+
+    def __init__(self, updated_memory, draft_titles, draft_bodies, gap_ids=None):
+        self.updated_memory = updated_memory
+        self.draft_titles = draft_titles
+        self.draft_bodies = draft_bodies
+        if gap_ids is not None:
+            self.gap_ids = gap_ids
+
+
+def _make_health_agent(
+    updated_memory="new memory", draft_titles=None, draft_bodies=None, gap_ids=None
+):
+    """Return a callable that returns a _FakeHealthAgentResult with the given data."""
+    if draft_titles is None:
+        draft_titles = []
+    if draft_bodies is None:
+        draft_bodies = []
+
+    def agent_fn(*, settings, memory, recent_proposals=""):
+        return _FakeHealthAgentResult(
+            updated_memory=updated_memory,
+            draft_titles=draft_titles,
+            draft_bodies=draft_bodies,
+            gap_ids=gap_ids,
+        )
+
+    return agent_fn
+
+
 # --- Agent tests ---
 
 
@@ -688,6 +720,51 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
         health_tickets = [t for t in tickets if t.source == "health"]
         assert len(health_tickets) == 1
         assert health_tickets[0].title == "Health draft"
+
+
+# --- Live-filesystem guard ---
+
+
+def test_health_draft_blocked_when_test_dir_exists(tmp_path, monkeypatch):
+    """A health-agent draft claiming a missing test directory is
+    blocked when the directory already contains test_*.py files."""
+    from robotsix_mill.pass_runner import run_agent_pass
+    from robotsix_mill.core.models import SourceKind
+
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Create the test directory with a test file already in it.
+    test_dir = tmp_path / "tests" / "vcs"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    (test_dir / "test_git_ops.py").write_text("# tests exist\n", encoding="utf-8")
+
+    memory_file = tmp_path / "health_memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_health_agent(
+        updated_memory="mem",
+        draft_titles=["Add tests/vcs/ test subdirectory for git_ops.py"],
+        draft_bodies=["Body for vcs test subdirectory"],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.HEALTH,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    # Draft should be skipped because the directory already has tests.
+    assert result.drafts_created == []
+    tickets = service.list()
+    assert len(tickets) == 0
+
+    db.reset_engine()
 
 
 # --- Board HTML tests ---
