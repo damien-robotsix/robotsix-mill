@@ -1,4 +1,4 @@
-"""Derived DeepSeek layer — pin, per-tier reasoning, echo/strip, transient."""
+"""Derived DeepSeek layer — pin, per-tier reasoning, transient."""
 
 from __future__ import annotations
 
@@ -10,9 +10,6 @@ from robotsix_llmio.openrouter_deepseek.transient import (
     is_deepseek_reasoning_roundtrip_error,
     is_deepseek_transient,
 )
-
-_RD = [{"type": "reasoning.text", "text": "thought", "format": "unknown", "index": 0}]
-_EMPTY = [{"type": "reasoning.text", "text": "", "format": "unknown"}]
 
 
 def _model(tier: Tier):
@@ -44,7 +41,6 @@ def test_default_tier_pins_and_xhigh():
         "allow_fallbacks": False,
     }
     assert ms["extra_body"]["reasoning"] == {"effort": "xhigh"}
-    assert m.echo_reasoning is True
 
 
 def test_cheap_tier_pins_and_disables_reasoning():
@@ -53,7 +49,6 @@ def test_cheap_tier_pins_and_disables_reasoning():
     m._inject_pin((), {"model_settings": ms})
     assert ms["extra_body"]["provider"]["only"] == ["DeepSeek"]
     assert ms["extra_body"]["reasoning"] == {"enabled": False}
-    assert m.echo_reasoning is False
 
 
 def test_pin_respects_caller_provider_override():
@@ -61,63 +56,6 @@ def test_pin_respects_caller_provider_override():
     ms = {"extra_body": {"provider": {"only": ["Other"]}}}
     m._inject_pin((), {"model_settings": ms})
     assert ms["extra_body"]["provider"]["only"] == ["Other"]  # untouched
-
-
-# --- reasoning echo / strip ------------------------------------------------
-
-
-def test_default_echoes_reasoning_on_tool_call():
-    pytest.importorskip("pydantic_ai.providers.openrouter")
-    from pydantic_ai.messages import ModelResponse, ToolCallPart
-
-    m = _model(Tier.DEFAULT)
-    resp = ModelResponse(
-        parts=[ToolCallPart("f", {}, tool_call_id="c1")],
-        provider_details={"reasoning_details": _RD},
-    )
-    param = m._map_model_response(resp)
-    assert param["reasoning_details"] == _RD
-
-
-def test_default_empty_reasoning_when_missing_on_tool_call():
-    pytest.importorskip("pydantic_ai.providers.openrouter")
-    from pydantic_ai.messages import ModelResponse, ToolCallPart
-
-    m = _model(Tier.DEFAULT)
-    resp = ModelResponse(
-        parts=[ToolCallPart("f", {}, tool_call_id="c1")],
-        provider_details={},  # no reasoning_details captured
-    )
-    param = m._map_model_response(resp)
-    assert param["reasoning_details"] == _EMPTY
-    assert "reasoning" not in param and "reasoning_content" not in param
-
-
-def test_default_omits_reasoning_on_non_tool_call():
-    pytest.importorskip("pydantic_ai.providers.openrouter")
-    from pydantic_ai.messages import ModelResponse, TextPart
-
-    m = _model(Tier.DEFAULT)
-    resp = ModelResponse(
-        parts=[TextPart("hi")], provider_details={"reasoning_details": _RD}
-    )
-    param = m._map_model_response(resp)
-    assert "reasoning_details" not in param
-
-
-def test_cheap_strips_all_reasoning_even_on_tool_call():
-    pytest.importorskip("pydantic_ai.providers.openrouter")
-    from pydantic_ai.messages import ModelResponse, ToolCallPart
-
-    m = _model(Tier.CHEAP)
-    resp = ModelResponse(
-        parts=[ToolCallPart("f", {}, tool_call_id="c1")],
-        provider_details={"reasoning_details": _RD},  # captured but flash → strip
-    )
-    param = m._map_model_response(resp)
-    assert "reasoning_details" not in param
-    assert "reasoning" not in param and "reasoning_content" not in param
-    assert "tool_calls" in param
 
 
 # --- transient -------------------------------------------------------------

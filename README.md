@@ -16,11 +16,11 @@ consumer only ever picks a **tier** (`default` or `cheap`).
    OpenRouter upstream-error transient signature. Model-family agnostic.
 3. **`robotsix_llmio.openrouter_deepseek`** — the derived layer most consumers
    plug in. Extends the OpenRouter layer with DeepSeek specifics: pin the
-   upstream provider to DeepSeek (warm prompt cache), tier→reasoning policy
-   (`default`→`effort: xhigh` + `reasoning_details` round-trip;
-   `cheap`→`reasoning disabled`), and the thinking-mode `400` transient
-   detector. The models are **baked**: `default = deepseek/deepseek-v4-pro`,
-   `cheap = deepseek/deepseek-v4-flash`.
+   upstream provider to DeepSeek (warm prompt cache) and a tier→reasoning policy
+   (`default`→`effort: xhigh`; `cheap`→`reasoning disabled`), plus the
+   thinking-mode `400` transient detector. pydantic-ai round-trips reasoning
+   natively, so this layer does **not** remap it. The models are **baked**:
+   `default = deepseek/deepseek-v4-pro`, `cheap = deepseek/deepseek-v4-flash`.
 
 ### Alternative transport — Claude Agent SDK (subscription auth)
 

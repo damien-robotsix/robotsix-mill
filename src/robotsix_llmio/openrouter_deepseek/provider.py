@@ -28,14 +28,11 @@ class OpenRouterDeepseekProvider(OpenRouterProvider):
 
     def _post_build_model(self, model: OpenRouterDeepseekModel, tier: Tier) -> None:  # type: ignore[override]
         if tier == Tier.CHEAP:
-            # Verdict/generation work — no chain-of-thought. Disabling makes
-            # DeepSeek emit no reasoning_content, so the mix-400 cannot fire.
+            # Verdict/generation work — no chain-of-thought.
             model.reasoning_setting = {"enabled": False}
-            model.echo_reasoning = False
         else:
-            # Capable tier — reasoning at max effort, round-tripped.
+            # Capable tier — reasoning at max effort.
             model.reasoning_setting = {"effort": "xhigh"}
-            model.echo_reasoning = True
 
     def _is_transient(self, exc: BaseException) -> bool:
         return is_deepseek_transient(exc)

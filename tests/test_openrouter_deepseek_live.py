@@ -32,7 +32,7 @@ def _echo(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# DeepSeek V4 Pro  (Tier.DEFAULT, reasoning enabled, echo_reasoning=True)
+# DeepSeek V4 Pro  (Tier.DEFAULT, reasoning enabled)
 # ---------------------------------------------------------------------------
 
 
@@ -92,10 +92,15 @@ def test_pro_tool_usage() -> None:
 
 @pytest.mark.live
 def test_pro_thinking_tool_mix() -> None:
-    """Reasoning + tool round-trip — the reliability case.
+    """Thinking + tool, multi-turn — works WITHOUT any reasoning remap.
 
-    Exercises the echo path: reasoning_details must survive a tool-call
-    turn so the next request doesn't trigger the thinking-mode 400.
+    This documents why the DeepSeek reasoning round-trip tweak was removed: a
+    thinking+tool conversation pinned to DeepSeek first-party completes with no
+    HTTP 400. pydantic-ai round-trips reasoning natively, so the layer needs no
+    ``reasoning_details`` echo. Asserts thinking is genuinely active (a
+    ``ThinkingPart`` on the tool-call response) so the 400 precondition is met
+    yet still does not fire. If this ever starts 400ing, the tweak is back on
+    the table.
     """
     _require_key()
     provider = _make_provider()
@@ -113,28 +118,20 @@ def test_pro_thinking_tool_mix() -> None:
         output = str(result.output)
         assert "Hello from DeepSeek" in output
 
-        from pydantic_ai.messages import ModelResponse, ToolCallPart
+        from pydantic_ai.messages import ModelResponse, ThinkingPart, ToolCallPart
 
         messages = result.all_messages()
-        tool_call_msgs: list[ModelResponse] = []
-        for msg in messages:
-            if isinstance(msg, ModelResponse):
-                for part in msg.parts:
-                    if isinstance(part, ToolCallPart):
-                        tool_call_msgs.append(msg)
-                        break
-
-        assert len(tool_call_msgs) > 0, "Expected at least one tool call"
-
-        # Every ModelResponse that carries a tool call must have
-        # reasoning_details echoed back (the round-trip echo path).
-        for msg in tool_call_msgs:
-            rd = (msg.provider_details or {}).get("reasoning_details")
-            assert rd is not None, (
-                f"Expected reasoning_details on tool-call ModelResponse, "
-                f"got provider_details={msg.provider_details}"
-            )
-            assert len(rd) > 0, "reasoning_details must be non-empty"
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        tool_calls = [
+            p for m in responses for p in m.parts if isinstance(p, ToolCallPart)
+        ]
+        thinking = [
+            p for m in responses for p in m.parts if isinstance(p, ThinkingPart)
+        ]
+        assert len(tool_calls) > 0, "Expected at least one tool call"
+        # Thinking must be active — otherwise this wouldn't exercise the 400
+        # precondition at all (reaching here without a 400 is the whole point).
+        assert len(thinking) > 0, "Expected reasoning (ThinkingPart) to be active"
     finally:
         agent.close()
 
@@ -167,10 +164,11 @@ def test_flash_basic_text() -> None:
 
 @pytest.mark.live
 def test_flash_tool_usage() -> None:
-    """Tool call with reasoning disabled — verifies the strip path.
+    """Tool call with reasoning disabled (cheap tier).
 
-    Since reasoning is disabled for the cheap tier, reasoning_details
-    must never appear on tool-call messages (no thinking-mode mix-400).
+    The pin sets ``reasoning: {enabled: False}``, so DeepSeek emits no
+    reasoning at all — there is nothing to round-trip and no ``ThinkingPart``.
+    The tool call still works.
     """
     _require_key()
     provider = _make_provider()
@@ -187,24 +185,17 @@ def test_flash_tool_usage() -> None:
         output = str(result.output).lower()
         assert "hello from flash" in output
 
-        from pydantic_ai.messages import ModelResponse, ToolCallPart
+        from pydantic_ai.messages import ModelResponse, ThinkingPart, ToolCallPart
 
-        messages = result.all_messages()
-        tool_call_msgs: list[ModelResponse] = []
-        for msg in messages:
-            if isinstance(msg, ModelResponse):
-                for part in msg.parts:
-                    if isinstance(part, ToolCallPart):
-                        tool_call_msgs.append(msg)
-                        break
-
-        assert len(tool_call_msgs) > 0, "Expected at least one tool call"
-
-        # Flash / reasoning-disabled tier: no reasoning_details anywhere.
-        for msg in tool_call_msgs:
-            rd = (msg.provider_details or {}).get("reasoning_details")
-            assert rd is None, (
-                f"Expected no reasoning_details on flash tool-call message, got {rd}"
-            )
+        responses = [m for m in result.all_messages() if isinstance(m, ModelResponse)]
+        tool_calls = [
+            p for m in responses for p in m.parts if isinstance(p, ToolCallPart)
+        ]
+        thinking = [
+            p for m in responses for p in m.parts if isinstance(p, ThinkingPart)
+        ]
+        assert len(tool_calls) > 0, "Expected at least one tool call"
+        # Reasoning is disabled for the cheap tier — no thinking should appear.
+        assert thinking == [], "Cheap tier disables reasoning; expected no thinking"
     finally:
         agent.close()
