@@ -83,6 +83,16 @@ def _make_event(
 
 log = logging.getLogger("robotsix_mill.service")
 
+# A ticket auto-unblocks its ``unblocks`` targets when it reaches one of
+# these completion states (DONE = merged/auto-merged; CLOSED = retrospected;
+# EPIC_CLOSED = all epic children done). Firing on both DONE and CLOSED is
+# idempotent — targets are only moved if still BLOCKED.
+_UNBLOCK_TRIGGER_STATES: set[State] = {
+    State.DONE,
+    State.CLOSED,
+    State.EPIC_CLOSED,
+}
+
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -358,6 +368,7 @@ class TicketService:
         source: str = SourceKind.USER,
         origin_session: str | None = None,
         depends_on: str | None = None,
+        unblocks: str | None = None,
         kind: str = "task",
         parent_id: str | None = None,
         board_id: str | None = None,
@@ -475,6 +486,7 @@ class TicketService:
                 source=source,
                 origin_session=origin_session,
                 depends_on=depends_on,
+                unblocks=unblocks,
                 parent_id=parent_id,
                 board_id=board_id if board_id is not None else self.board_id,
                 priority=priority or inherited_priority,
@@ -566,6 +578,59 @@ class TicketService:
                 self._maybe_purge_archived()
             if self._on_transition is not None:
                 self._on_transition(ticket)
+            # Capture unblock targets to fire AFTER this session closes
+            # (cross-board: each target may live on another board's DB; we
+            # must not hold this session open while transitioning them).
+            unblock_targets = (
+                _parse_depends_on_str(ticket.unblocks)
+                if dst in _UNBLOCK_TRIGGER_STATES
+                else []
+            )
+        if unblock_targets:
+            self._fire_unblocks(ticket_id, unblock_targets)
+        return self.get(ticket_id) or ticket
+
+    def _fire_unblocks(self, solver_id: str, target_ids: list[str]) -> None:
+        """Transition each BLOCKED ticket in *target_ids* to DRAFT.
+
+        Called when *solver_id* completes. Best-effort and idempotent: a
+        target that is missing or not currently BLOCKED is skipped (so
+        re-firing on DONE then CLOSED is a no-op the second time). Targets
+        may live on other boards — ``transition`` resolves each via
+        ``_board_for``.
+        """
+        note = f"auto-unblocked: solver {solver_id} completed"
+        for tid in target_ids:
+            try:
+                target = self.get(tid)
+                if target is None or target.state is not State.BLOCKED:
+                    continue
+                self.transition(tid, State.DRAFT, note=note)
+                log.info("unblock: %s -> DRAFT (solver %s completed)", tid, solver_id)
+            except Exception:
+                log.warning(
+                    "unblock: failed to re-open %s (solver %s)",
+                    tid,
+                    solver_id,
+                    exc_info=True,
+                )
+
+    def set_unblocks(self, ticket_id: str, target_ids: list[str]) -> Ticket:
+        """Set the list of ticket IDs *ticket_id* auto-unblocks on completion.
+
+        Stored as a JSON array; replaces any prior value. Self-references are
+        dropped. Returns the updated ticket; raises ``KeyError`` if unknown.
+        """
+        cleaned = [t for t in dict.fromkeys(target_ids) if t and t != ticket_id]
+        with db.session(self.settings, self._board_for(ticket_id)) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(ticket_id)
+            ticket.unblocks = json.dumps(cleaned) if cleaned else None
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+            s.refresh(ticket)
             return ticket
 
     def add_history_note(self, ticket_id: str, note: str) -> TicketEvent:

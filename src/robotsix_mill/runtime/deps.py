@@ -184,6 +184,19 @@ def _pr_url(
     return None
 
 
+def _parse_str_id_list(raw: str | None) -> list[str]:
+    """Parse a JSON array of string ticket IDs; ``[]`` on any error/empty."""
+    if not raw:
+        return []
+    import json as _json
+
+    try:
+        parsed = _json.loads(raw)
+    except ValueError, TypeError:
+        return []
+    return [x for x in parsed if isinstance(x, str)] if isinstance(parsed, list) else []
+
+
 def enrich_ticket_read(
     ticket: Ticket,
     settings: Settings,
@@ -264,6 +277,7 @@ def enrich_ticket_read(
         parent_id=ticket.parent_id,
         parent_title=parent_title,
         source=ticket.source,
+        unblocks=_parse_str_id_list(getattr(ticket, "unblocks", None)),
         origin_session=ticket.origin_session,
         origin_session_url=_origin_session_url(
             ticket, settings, repo_config=repo_config
