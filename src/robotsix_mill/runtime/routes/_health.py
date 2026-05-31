@@ -6,12 +6,12 @@ import json as _json
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from ..board_html import BOARD_HTML
 from ...core.states import State
-from ..deps import get_repos_registry, get_settings
+from ..deps import enrich_ticket_read, get_repos_registry, get_settings
 
 log = logging.getLogger(__name__)
 
@@ -99,3 +99,47 @@ def gates(settings=Depends(get_settings)) -> dict:
 def board() -> str:
     st_json = _json.dumps([s.value for s in State])
     return BOARD_HTML.replace("{ST_STATES}", st_json)
+
+
+@router.websocket("/ws/board")
+async def ws_board(websocket: WebSocket) -> None:
+    """WebSocket endpoint for real-time board updates (live auto-refresh).
+
+    On connect, sends the full ticket list as the first message; subsequent
+    messages are ``ticket_update`` events pushed by the broadcaster on each
+    ticket transition.
+
+    Deps are read straight off ``websocket.app.state`` rather than via
+    ``Depends(...)``: FastAPI cannot resolve HTTP ``Request``-based
+    dependencies for a WebSocket scope, so declaring them made the handshake
+    fail with **403 before ``accept()``**. (This route also previously lived
+    only in the unincluded legacy ``_misc.py``, so it was never registered —
+    which silently disabled the board's live auto-refresh.)
+    """
+    await websocket.accept()
+
+    svc = websocket.app.state.service
+    settings = websocket.app.state.settings
+    broadcaster = websocket.app.state.broadcaster
+
+    show_closed = websocket.query_params.get("show_closed", "").lower() == "true"
+    exclude = set() if show_closed else {State.CLOSED, State.EPIC_CLOSED}
+    tickets = svc.list(exclude_states=exclude)
+    initial = [
+        enrich_ticket_read(
+            t, settings, svc, blocking_cost=False, fetch_pr_url=False
+        ).model_dump(mode="json")
+        for t in tickets
+    ]
+
+    q = await broadcaster.subscribe(initial)
+    try:
+        while True:
+            data = await q.get()
+            await websocket.send_text(data)
+    except WebSocketDisconnect:
+        pass
+    except Exception:  # noqa: BLE001 — never let a push error kill the socket
+        pass
+    finally:
+        broadcaster.unsubscribe(q)

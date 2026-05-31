@@ -959,3 +959,18 @@ def test_mark_done_happy_path(client, service):
     assert data["id"] == t.id
     assert data["title"] == "Mark done test"
     assert data["state"] == "done"
+
+
+# -- WebSocket /ws/board (live board auto-refresh) ----------------------
+
+
+def test_ws_board_connects_and_sends_initial_list(client):
+    """The board's live-refresh WebSocket must accept the handshake and
+    push an initial ``ticket_list``. Regression: /ws/board was orphaned in
+    an unincluded module (never registered → 403) and used Request-based
+    deps that can't resolve for a WebSocket scope, silently breaking the
+    board's auto-refresh."""
+    with client.websocket_connect("/ws/board?show_closed=false") as ws:
+        msg = ws.receive_json()
+        assert msg["type"] == "ticket_list"
+        assert isinstance(msg["tickets"], list)
