@@ -127,4 +127,26 @@ with langfuse_session("my-run-id"):       # groups the run's spans under one ses
 flush_tracing()  # force-export before exit (or after a run you want shipped)
 ```
 
-Single-tenant: one Langfuse project per process.
+**Explicit root span** — group several agent runs (and non-agent steps) under one
+trace with stage-level input/output via `start_trace`:
+
+```python
+from robotsix_llmio.core import start_trace
+
+with start_trace("review-stage", session_id="ticket-42") as trace:
+    trace.set_input({"ticket": 42})
+    result = provider.call_with_retry(lambda: agent.run_sync("..."))
+    trace.set_output(result.output)
+    print(trace.trace_id)
+```
+
+**Multi-tenant** — one process exporting to several Langfuse projects: call
+`setup_langfuse_tracing(public_key=..., secret_key=..., base_url=...)` once per
+project, then route each unit of work to its project:
+
+```python
+from robotsix_llmio.core import langfuse_project
+
+with langfuse_project("pk-projectB"):     # spans here ship to project B
+    result = provider.call_with_retry(lambda: agent.run_sync("..."))
+```
