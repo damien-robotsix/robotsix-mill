@@ -19,10 +19,10 @@ dev = [
     "pytest",
     "hatchling",
     "types-PyYAML",
-    "pydantic-ai-slim[openrouter]>=1.0",
+    "robotsix-llmio[openrouter-deepseek]",
 ]
 llm = [
-    "pydantic-ai-slim[openrouter]>=1.0",
+    "robotsix-llmio[openrouter-deepseek]",
 ]
 
 [tool.ruff]

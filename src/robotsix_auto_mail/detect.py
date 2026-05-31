@@ -22,11 +22,12 @@ from xml.etree import ElementTree  # nosec B405
 import pydantic
 import urllib3
 import urllib3.exceptions
+from robotsix_llmio.core import Tier
+from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
 
 from robotsix_auto_mail.config import (
     _VALID_TLS_MODES,
     DEFAULT_DB_PATH,
-    DEFAULT_LLM_MODEL,
     MailConfig,
 )
 
@@ -171,7 +172,7 @@ fences."""
 def detect_provider(
     email_address: str,
     *,
-    model: str | None = None,
+    tier: Tier = Tier.CHEAP,
     api_key: str | None = None,
     feedback: str | None = None,
     mx_hosts: list[str] | None = None,
@@ -180,8 +181,9 @@ def detect_provider(
 
     Args:
         email_address: The email address to detect provider settings for.
-        model: OpenRouter model name.  Defaults to the ``LLM_MODEL`` env
-            var or ``"deepseek/deepseek-v4-flash"``.
+        tier: LLM tier to use.  ``Tier.CHEAP`` (default) maps to
+            ``deepseek/deepseek-v4-flash``; ``Tier.DEFAULT`` maps to
+            ``deepseek/deepseek-v4-pro``.
         api_key: OpenRouter API key.  Defaults to the ``LLM_API_KEY`` env
             var.  Required unless the env var is set.
         feedback: Optional description of a previous failed attempt (which
@@ -208,21 +210,13 @@ def detect_provider(
         )
 
     # -- lazy imports so the rest of the CLI works without pydantic_ai --
-    from pydantic_ai import Agent, PromptedOutput
-    from pydantic_ai.models.openai import OpenAIChatModel
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
-
-    # -- resolve model --
-    resolved_model = model or os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL)
+    from pydantic_ai import PromptedOutput
 
     # -- build agent --
-    provider = OpenRouterProvider(api_key=resolved_key)
-    agent_model = OpenAIChatModel(
-        model_name=resolved_model,
-        provider=provider,
-    )
-    agent = Agent(
-        model=agent_model,
+    llm_provider = OpenRouterDeepseekProvider(api_key=resolved_key)
+    agent_handle = llm_provider.build_agent(
+        tier=tier,
+        system_prompt=_DETECT_SYSTEM_PROMPT,
         output_type=PromptedOutput(DetectedProvider),
     )
 
@@ -246,9 +240,14 @@ def detect_provider(
 
     # -- call LLM --
     try:
-        result = agent.run_sync(_DETECT_SYSTEM_PROMPT + "\n\n" + user_message)
+        result = llm_provider.call_with_retry(
+            lambda: agent_handle.run_sync(user_message),
+            what="email provider detection",
+        )
     except Exception as exc:
         raise DetectionError(str(exc)) from exc
+    finally:
+        agent_handle.close()
 
     # -- extract and convert --
     detected: DetectedProvider = result.output

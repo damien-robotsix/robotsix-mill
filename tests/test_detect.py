@@ -11,6 +11,7 @@ from unittest import mock
 import pydantic
 import pytest
 import urllib3.exceptions
+from robotsix_llmio.core import Tier
 
 from robotsix_auto_mail.config import MailConfig
 from robotsix_auto_mail.detect import (
@@ -347,7 +348,7 @@ def test_render_config_round_trip(tmp_path: Path) -> None:
 
 
 def test_detect_provider_success() -> None:
-    """Mock the Agent; detect_provider returns expected MailProvider."""
+    """Mock the provider; detect_provider returns expected MailProvider."""
     with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}, clear=True):
         mock_run_result = mock.MagicMock()
         mock_run_result.output = DetectedProvider(
@@ -358,11 +359,17 @@ def test_detect_provider_success() -> None:
             smtp_port=587,
             smtp_tls_mode="starttls",
         )
-        mock_agent_instance = mock.MagicMock()
-        mock_agent_instance.run_sync.return_value = mock_run_result
-        mock_agent_cls = mock.MagicMock(return_value=mock_agent_instance)
+        mock_handle = mock.MagicMock()
+        mock_handle.run_sync.return_value = mock_run_result
 
-        with mock.patch("pydantic_ai.Agent", mock_agent_cls):
+        mock_provider = mock.MagicMock()
+        mock_provider.build_agent.return_value = mock_handle
+        mock_provider.call_with_retry.side_effect = lambda fn, what: fn()
+
+        with mock.patch(
+            "robotsix_auto_mail.detect.OpenRouterDeepseekProvider",
+            return_value=mock_provider,
+        ):
             result = detect_provider("user@example.com")
 
         assert isinstance(result, MailProvider)
@@ -372,6 +379,7 @@ def test_detect_provider_success() -> None:
         assert result.imap_tls_mode == "direct-tls"
         assert result.smtp_port == 587
         assert result.smtp_tls_mode == "starttls"
+        mock_handle.close.assert_called_once()
 
 
 def test_detect_provider_passes_api_key_arg() -> None:
@@ -382,32 +390,46 @@ def test_detect_provider_passes_api_key_arg() -> None:
             imap_host="imap.example.com",
             smtp_host="smtp.example.com",
         )
-        mock_agent_instance = mock.MagicMock()
-        mock_agent_instance.run_sync.return_value = mock_run_result
-        mock_agent_cls = mock.MagicMock(return_value=mock_agent_instance)
+        mock_handle = mock.MagicMock()
+        mock_handle.run_sync.return_value = mock_run_result
 
-        with mock.patch("pydantic_ai.Agent", mock_agent_cls):
+        mock_provider = mock.MagicMock()
+        mock_provider.build_agent.return_value = mock_handle
+        mock_provider.call_with_retry.side_effect = lambda fn, what: fn()
+
+        mock_provider_cls = mock.MagicMock(return_value=mock_provider)
+
+        with mock.patch(
+            "robotsix_auto_mail.detect.OpenRouterDeepseekProvider",
+            mock_provider_cls,
+        ):
             result = detect_provider(
                 "user@example.com", api_key="sk-arg-key"
             )
 
         assert result.imap_host == "imap.example.com"
+        mock_provider_cls.assert_called_once_with(api_key="sk-arg-key")
 
 
 def test_detect_provider_llm_call_error() -> None:
-    """When Agent.run_sync raises, DetectionError wraps the original message."""
+    """When call_with_retry raises, DetectionError wraps the original message."""
     with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}, clear=True):
-        mock_agent_instance = mock.MagicMock()
-        mock_agent_instance.run_sync.side_effect = RuntimeError(
+        mock_handle = mock.MagicMock()
+        mock_provider = mock.MagicMock()
+        mock_provider.build_agent.return_value = mock_handle
+        mock_provider.call_with_retry.side_effect = RuntimeError(
             "LLM API timeout"
         )
-        mock_agent_cls = mock.MagicMock(return_value=mock_agent_instance)
 
-        with mock.patch("pydantic_ai.Agent", mock_agent_cls):
+        with mock.patch(
+            "robotsix_auto_mail.detect.OpenRouterDeepseekProvider",
+            return_value=mock_provider,
+        ):
             with pytest.raises(DetectionError) as exc:
                 detect_provider("user@example.com")
 
         assert "LLM API timeout" in str(exc.value)
+        mock_handle.close.assert_called_once()
 
 
 def test_detect_provider_missing_api_key() -> None:
@@ -418,97 +440,56 @@ def test_detect_provider_missing_api_key() -> None:
         assert "LLM_API_KEY" in str(exc.value)
 
 
-def test_detect_provider_llm_model_fallback() -> None:
-    """When LLM_MODEL env var is unset, the default model is used."""
-    # Only set LLM_API_KEY, leave LLM_MODEL unset.
+def test_detect_provider_tier_default() -> None:
+    """When no tier arg is passed, build_agent is called with Tier.CHEAP."""
     with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}, clear=True):
         mock_run_result = mock.MagicMock()
         mock_run_result.output = DetectedProvider(
             imap_host="imap.example.com",
             smtp_host="smtp.example.com",
         )
-        mock_agent_instance = mock.MagicMock()
-        mock_agent_instance.run_sync.return_value = mock_run_result
-        mock_agent_cls = mock.MagicMock(return_value=mock_agent_instance)
+        mock_handle = mock.MagicMock()
+        mock_handle.run_sync.return_value = mock_run_result
 
-        # We also mock OpenAIChatModel to capture the model name.
-        mock_model_instance = mock.MagicMock()
-        mock_model_cls = mock.MagicMock(return_value=mock_model_instance)
+        mock_provider = mock.MagicMock()
+        mock_provider.build_agent.return_value = mock_handle
+        mock_provider.call_with_retry.side_effect = lambda fn, what: fn()
 
         with mock.patch(
-            "pydantic_ai.Agent", mock_agent_cls
-        ), mock.patch(
-            "pydantic_ai.models.openai.OpenAIChatModel", mock_model_cls
+            "robotsix_auto_mail.detect.OpenRouterDeepseekProvider",
+            return_value=mock_provider,
         ):
             detect_provider("user@example.com")
 
-        # OpenAIChatModel should have been called with the default model.
-        call_args = mock_model_cls.call_args
-        assert call_args is not None
-        # model_name is passed as keyword arg
-        assert call_args[1].get("model_name") == "deepseek/deepseek-v4-flash"
+        mock_provider.build_agent.assert_called_once()
+        call_kwargs = mock_provider.build_agent.call_args.kwargs
+        assert call_kwargs["tier"] == Tier.CHEAP
 
 
-def test_detect_provider_llm_model_from_env() -> None:
-    """When LLM_MODEL env var is set, it overrides the default."""
-    with mock.patch.dict(
-        os.environ,
-        {"LLM_API_KEY": "sk-test", "LLM_MODEL": "custom/model"},
-        clear=True,
-    ):
+def test_detect_provider_explicit_tier() -> None:
+    """When tier=Tier.DEFAULT is passed, build_agent is called with it."""
+    with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}, clear=True):
         mock_run_result = mock.MagicMock()
         mock_run_result.output = DetectedProvider(
             imap_host="imap.example.com",
             smtp_host="smtp.example.com",
         )
-        mock_agent_instance = mock.MagicMock()
-        mock_agent_instance.run_sync.return_value = mock_run_result
-        mock_agent_cls = mock.MagicMock(return_value=mock_agent_instance)
+        mock_handle = mock.MagicMock()
+        mock_handle.run_sync.return_value = mock_run_result
 
-        mock_model_instance = mock.MagicMock()
-        mock_model_cls = mock.MagicMock(return_value=mock_model_instance)
-
-        with mock.patch(
-            "pydantic_ai.Agent", mock_agent_cls
-        ), mock.patch(
-            "pydantic_ai.models.openai.OpenAIChatModel", mock_model_cls
-        ):
-            detect_provider("user@example.com")
-
-        call_args = mock_model_cls.call_args
-        assert call_args is not None
-        assert call_args[1].get("model_name") == "custom/model"
-
-
-def test_detect_provider_explicit_model_arg() -> None:
-    """The model= keyword argument takes precedence over env var."""
-    with mock.patch.dict(
-        os.environ,
-        {"LLM_API_KEY": "sk-test", "LLM_MODEL": "env/model"},
-        clear=True,
-    ):
-        mock_run_result = mock.MagicMock()
-        mock_run_result.output = DetectedProvider(
-            imap_host="imap.example.com",
-            smtp_host="smtp.example.com",
-        )
-        mock_agent_instance = mock.MagicMock()
-        mock_agent_instance.run_sync.return_value = mock_run_result
-        mock_agent_cls = mock.MagicMock(return_value=mock_agent_instance)
-
-        mock_model_instance = mock.MagicMock()
-        mock_model_cls = mock.MagicMock(return_value=mock_model_instance)
+        mock_provider = mock.MagicMock()
+        mock_provider.build_agent.return_value = mock_handle
+        mock_provider.call_with_retry.side_effect = lambda fn, what: fn()
 
         with mock.patch(
-            "pydantic_ai.Agent", mock_agent_cls
-        ), mock.patch(
-            "pydantic_ai.models.openai.OpenAIChatModel", mock_model_cls
+            "robotsix_auto_mail.detect.OpenRouterDeepseekProvider",
+            return_value=mock_provider,
         ):
-            detect_provider("user@example.com", model="explicit/model")
+            detect_provider("user@example.com", tier=Tier.DEFAULT)
 
-        call_args = mock_model_cls.call_args
-        assert call_args is not None
-        assert call_args[1].get("model_name") == "explicit/model"
+        mock_provider.build_agent.assert_called_once()
+        call_kwargs = mock_provider.build_agent.call_args.kwargs
+        assert call_kwargs["tier"] == Tier.DEFAULT
 
 
 # ---------------------------------------------------------------------------

@@ -1088,8 +1088,9 @@ def test_detect_detection_error(
 def test_detect_llm_model_env(
     capsys: pytest.CaptureFixture[str], no_autoconfig: object
 ) -> None:
-    """detect passes LLM_MODEL and LLM_API_KEY from the environment to
-    detect_provider."""
+    """detect passes LLM_API_KEY from the environment to
+    detect_provider (model is no longer forwarded — the tier bakes the model
+    choice)."""
     mock_provider = MailProvider(
         imap_host="imap.gmail.com",
         smtp_host="smtp.gmail.com",
@@ -1107,7 +1108,7 @@ def test_detect_llm_model_env(
 
     assert rc == 0
     mock_dp.assert_called_once_with(
-        "user@x.com", model="test-model", api_key="sk-test", mx_hosts=[]
+        "user@x.com", api_key="sk-test", mx_hosts=[]
     )
 
 

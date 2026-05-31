@@ -476,7 +476,7 @@ def _cmd_detect(args: argparse.Namespace) -> int:
 
     from robotsix_auto_mail.config import ConfigurationError, load_llm
 
-    api_key, model = load_llm()
+    api_key, _ = load_llm()
 
     # -- initial detection ladder: autoconfig → MX→provider → LLM --
     sys.stderr.write(f"Detecting settings for {args.email}…\n")
@@ -503,7 +503,6 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             try:
                 provider = detect_provider(
                     args.email,
-                    model=model,
                     api_key=api_key,
                     mx_hosts=mx_hosts,
                 )
@@ -612,7 +611,6 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             try:
                 refined = detect_provider(
                     args.email,
-                    model=model,
                     api_key=api_key,
                     feedback=_verify_feedback(config, result),
                     mx_hosts=mx_hosts,
