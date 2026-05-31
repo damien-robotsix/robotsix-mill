@@ -14,8 +14,6 @@ repo (no forge configured) it falls back to draft-only as before.
 
 from __future__ import annotations
 
-import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -594,7 +592,6 @@ def run_refine_agent(
             "comments. Address each one in the revised spec:\n\n"
             f"{reviewer_comments}",
         )
-
 
     try:
         result = call_with_retry(
