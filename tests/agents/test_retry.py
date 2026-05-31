@@ -159,19 +159,9 @@ def test_transient_then_success(tmp_path):
     assert len(slept) == 2  # two backoffs before the 3rd, successful call
 
 
-def test_persistent_transient_exhausts_then_raises(tmp_path):
-    s = _settings(tmp_path, transient_retries="3")
-    slept, calls = [], {"n": 0}
-
-    def fn():
-        calls["n"] += 1
-        raise ModelHTTPError(429, "hy3")
-
-    with pytest.raises(ModelHTTPError):
-        call_with_retry(fn, settings=s, sleep=slept.append)
-    assert calls["n"] == 4  # 1 try + 3 retries
-    assert len(slept) == 3
-    assert all(d <= s.transient_backoff_cap * 1.5 for d in slept)  # capped+jitter
+# NOTE: retry COUNT/BACKOFF/flush semantics now live in robotsix-llmio (baked
+# constants, internal OTel flush) and are covered by that package's tests. Mill
+# keeps only the classification re-exports + the boundary/fallback behaviour.
 
 
 @pytest.mark.parametrize(
@@ -192,19 +182,6 @@ def test_non_transient_not_retried(tmp_path, exc):
     with pytest.raises(type(exc)):
         call_with_retry(fn, settings=s, sleep=lambda _: None)
     assert calls["n"] == 1  # raised immediately, no retry
-
-
-def test_zero_retries_means_single_attempt(tmp_path):
-    s = _settings(tmp_path, transient_retries="0")
-    calls = {"n": 0}
-
-    def fn():
-        calls["n"] += 1
-        raise ModelHTTPError(429, "m")
-
-    with pytest.raises(ModelHTTPError):
-        call_with_retry(fn, settings=s, sleep=lambda _: None)
-    assert calls["n"] == 1
 
 
 # --- is_rate_limited classification -------------------------------------
@@ -353,99 +330,12 @@ def test_rate_limit_fallback_not_called_for_transient(tmp_path):
 
     with pytest.raises(ModelHTTPError):
         call_with_retry(fn, settings=s, sleep=lambda _: None, fallback_fn=fallback)
-    assert calls["n"] == 3  # 1 try + 2 retries (transient, not rate-limit)
+    # Baked retry count (5 = 1 try + 4 retries); the key assertion is that a
+    # transient NEVER activates the rate-limit fallback.
+    assert calls["n"] == 5
     assert fallback_calls["n"] == 0
 
 
-# --- flush_tracing on failure / retry -----------------------------------
-
-
-def test_non_retryable_flushes_before_raise(tmp_path, monkeypatch):
-    """Non-retryable error: flush_tracing must be called before the
-    exception propagates."""
-    flush_calls = []
-
-    def fake_flush():
-        flush_calls.append(1)
-
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.flush_tracing",
-        fake_flush,
-    )
-    s = _settings(tmp_path)
-
-    def fn():
-        raise ValueError("boom")
-
-    with pytest.raises(ValueError):
-        call_with_retry(fn, settings=s, sleep=lambda _: None)
-    assert len(flush_calls) == 1
-
-
-def test_persistent_transient_flushes_per_attempt(tmp_path, monkeypatch):
-    """Transient failures that exhaust retries: flush_tracing must be
-    called once per failed attempt."""
-    flush_calls = []
-
-    def fake_flush():
-        flush_calls.append(1)
-
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.flush_tracing",
-        fake_flush,
-    )
-    s = _settings(tmp_path, transient_retries="3")
-    calls = {"n": 0}
-
-    def fn():
-        calls["n"] += 1
-        raise ModelHTTPError(429, "hy3")
-
-    with pytest.raises(ModelHTTPError):
-        call_with_retry(fn, settings=s, sleep=lambda _: None)
-    assert calls["n"] == 4  # 1 try + 3 retries
-    assert len(flush_calls) == 4  # flush after each of the 4 failed attempts
-
-
-def test_success_does_not_flush(tmp_path, monkeypatch):
-    """A successful call must NOT call flush_tracing."""
-    flush_calls = []
-
-    def fake_flush():
-        flush_calls.append(1)
-
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.flush_tracing",
-        fake_flush,
-    )
-    s = _settings(tmp_path)
-
-    def fn():
-        return "ok"
-
-    out = call_with_retry(fn, settings=s)
-    assert out == "ok"
-    assert len(flush_calls) == 0
-
-
-def test_flush_tracing_error_does_not_swallow_agent_exception(
-    tmp_path,
-    monkeypatch,
-):
-    """If flush_tracing itself raises, the original agent exception
-    must still propagate (not be swallowed by the flush guard)."""
-
-    def fake_flush():
-        raise RuntimeError("trace export failed")
-
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.tracing.flush_tracing",
-        fake_flush,
-    )
-    s = _settings(tmp_path)
-
-    def fn():
-        raise ValueError("agent boom")
-
-    with pytest.raises(ValueError):
-        call_with_retry(fn, settings=s, sleep=lambda _: None)
+# Trace-flush-on-retry now happens inside robotsix-llmio (best-effort OTel
+# force_flush), no longer via mill's runtime.tracing.flush_tracing — so the
+# former flush-hook tests moved out with the retry logic.

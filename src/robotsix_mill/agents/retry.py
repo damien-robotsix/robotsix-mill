@@ -1,306 +1,68 @@
-"""Bounded retry+backoff for TRANSIENT model/network failures and
-rate-limit (UsageLimitExceeded) errors.
+"""Compatibility shim — retry/backoff now lives in the robotsix-llmio library.
 
-The cheap driver model (tencent/hy3-preview) has a single OpenRouter
-provider that intermittently returns HTTP 429 ("Provider returned
-error"); transient 5xx / connection blips happen too. These should be
-ridden out, not turned into BLOCKED tickets or dropped notifications.
+``call_with_retry`` + the transient/rate-limit classifiers were extracted into
+``robotsix-llmio`` (``core`` + the provider layers). This module preserves the
+historical mill API: the ``settings`` keyword is still accepted (the library
+now bakes the retry/backoff constants, which equal mill's former defaults), and
+the public classifier names are re-exported.
 
-Transient = pydantic-ai ``ModelHTTPError`` with status 429 or 5xx, an
-``httpx`` timeout/transport error, or an ``httpx`` 429/5xx response.
-
-``UsageLimitExceeded`` (pydantic-ai budget cap) is transient-like but
-uses a longer, rate-limit-aware backoff schedule (30s base, 120s cap)
-and supports model/provider fallback after consecutive failures.
-
-Everything else (other 4xx, bugs) is NOT retried — it must surface
-immediately, unchanged.
+The call-level retry predicate is the OpenRouter transient set (429/5xx/timeout/
+malformed-JSON/upstream-error) — deliberately NOT the DeepSeek reasoning-400,
+which surfaces to the worker's stage-retry (a fresh re-run) rather than being
+retried in the same conversation. ``classify_stage_error`` picks up the
+reasoning-400 via the re-exported detector.
 """
 
 from __future__ import annotations
 
-import logging
-import random
 import time
 from typing import Callable, TypeVar
 
-from ..config import Settings
-
-log = logging.getLogger("robotsix_mill.retry")
+from robotsix_llmio.core import call_with_retry as _lib_call_with_retry
+from robotsix_llmio.core import is_rate_limited
+from robotsix_llmio.core.retry import _status
+from robotsix_llmio.openrouter.transient import (
+    is_openrouter_transient as is_transient,
+)
+from robotsix_llmio.openrouter.transient import (
+    is_openrouter_upstream_error as _is_openrouter_upstream_error,
+)
+# Import from the .transient submodule (NOT the package __init__) so this shim
+# stays free of pydantic_ai/opentelemetry at module load — runtime.tracing's
+# import chain reaches here and must not eagerly import OTel.
+from robotsix_llmio.openrouter_deepseek.transient import (
+    is_deepseek_reasoning_roundtrip_error as _is_deepseek_reasoning_roundtrip_error,
+)
 
 T = TypeVar("T")
 
-
-def _status(exc: BaseException) -> int | None:
-    # pydantic-ai ModelHTTPError(status_code, ...) and httpx
-    # HTTPStatusError(response.status_code) both expose a status.
-    code = getattr(exc, "status_code", None)
-    if isinstance(code, int):
-        return code
-    resp = getattr(exc, "response", None)
-    rc = getattr(resp, "status_code", None)
-    return rc if isinstance(rc, int) else None
-
-
-# JSONDecodeError: the model occasionally emits malformed JSON for a
-# tool call / structured output; a re-run almost always yields valid
-# JSON, so treat it as transient instead of hard-ERRORing the ticket.
-_TRANSIENT_NAMES = {
-    "APITimeoutError",
-    "APIConnectionError",
-    "JSONDecodeError",
-}
-
-
-def _is_openrouter_upstream_error(exc: BaseException) -> bool:
-    """Recognise OpenRouter's ``finish_reason='error'`` upstream-failure
-    signature.
-
-    When the provider behind OpenRouter errors mid-stream, OpenRouter
-    returns a completion with ``finish_reason: "error"``. The OpenAI
-    SDK then raises a pydantic ``ValidationError`` because ``"error"``
-    isn't in its ``finish_reason`` literal set
-    (``stop``/``length``/``tool_calls``/``content_filter``/``function_call``).
-    That's an upstream hiccup, not a bug in our prompt or schema — a
-    re-run almost always succeeds, so it should ride out as transient
-    rather than BLOCK the ticket.
-
-    Matched by the exception type name (``ValidationError``) plus the
-    distinctive ``finish_reason`` + ``'error'`` markers in the message,
-    so it does NOT catch our own structured-output validation failures
-    (those don't mention ``finish_reason``).
-    """
-    if type(exc).__name__ != "ValidationError":
-        return False
-    msg = str(exc)
-    return "finish_reason" in msg and "'error'" in msg
-
-
-def is_transient(exc: BaseException) -> bool:
-    """True only for retryable infrastructure failures. Walks the
-    cause/context chain so a timeout wrapped by openai/pydantic-ai
-    (e.g. ModelHTTPError <- APITimeoutError <- httpx.ReadTimeout) is
-    still recognised."""
-    import httpx
-
-    cur: BaseException | None = exc
-    seen = 0
-    while cur is not None and seen < 10:
-        name = type(cur).__name__
-        if name == "UsageLimitExceeded":
-            return False  # budget cap — never transient
-        if isinstance(cur, (httpx.TimeoutException, httpx.TransportError)):
-            return True
-        if name in _TRANSIENT_NAMES:
-            return True
-        if _is_openrouter_upstream_error(cur):
-            return True
-        code = _status(cur)
-        if code is not None and (code == 429 or 500 <= code < 600):
-            return True
-        cur = cur.__cause__ or cur.__context__
-        seen += 1
-    return False
-
-
-def is_rate_limited(exc: BaseException) -> bool:
-    """True only for ``UsageLimitExceeded`` (the pydantic-ai budget-cap
-    exception).  Walks the cause/context chain so a wrapped exception is
-    still recognised.
-
-    This is distinct from :func:`is_transient` — ``UsageLimitExceeded``
-    is NOT transient (re-running immediately just re-hits the limit),
-    but it IS rate-limited (retryable with a longer, rate-limit-aware
-    backoff and optional model/provider fallback).
-    """
-    cur: BaseException | None = exc
-    seen = 0
-    while cur is not None and seen < 10:
-        if type(cur).__name__ == "UsageLimitExceeded":
-            return True
-        cur = cur.__cause__ or cur.__context__
-        seen += 1
-    return False
-
-
-def _retry_after_seconds(exc: BaseException) -> float | None:
-    """Walk the exception chain looking for retry-after information.
-
-    Checks for a ``retry_after_seconds`` attribute or an ``httpx.Response``
-    with a ``Retry-After`` header.  Returns ``None`` if no such information
-    is found — the caller falls back to the computed backoff.
-    """
-    cur: BaseException | None = exc
-    seen = 0
-    while cur is not None and seen < 10:
-        # Direct retry_after_seconds attribute (forward-looking)
-        ra = getattr(cur, "retry_after_seconds", None)
-        if isinstance(ra, (int, float)):
-            return float(ra)
-        # httpx.Response with Retry-After header
-        resp = getattr(cur, "response", None)
-        if resp is not None:
-            headers = getattr(resp, "headers", None)
-            if headers is not None:
-                ra_val = headers.get("Retry-After") or headers.get("retry-after")
-                if ra_val is not None:
-                    try:
-                        return float(ra_val)
-                    except TypeError, ValueError:
-                        pass
-        cur = cur.__cause__ or cur.__context__
-        seen += 1
-    return None
-
-
-def _record_rate_limit_span(
-    delay: float,
-    cumulative_backoff: float,
-    count: int,
-    fallback_activated: bool,
-    fallback_model: str,
-) -> None:
-    """Record rate-limit backoff metrics on the current OTel span.
-
-    No-op when OpenTelemetry is not installed or no span is recording.
-    """
-    try:
-        from opentelemetry import trace as otel_trace  # type: ignore[import-untyped]
-    except ImportError:
-        return
-    span = otel_trace.get_current_span()
-    if span is None or not span.is_recording():
-        return
-    span.set_attribute("mill.rate_limit.count", count)
-    span.set_attribute("mill.rate_limit.backoff_seconds", cumulative_backoff)
-    if fallback_activated:
-        span.set_attribute("mill.rate_limit.fallback_activated", True)
-        span.set_attribute("mill.rate_limit.fallback_model", fallback_model)
+__all__ = [
+    "call_with_retry",
+    "is_transient",
+    "is_rate_limited",
+    "_status",
+    "_is_openrouter_upstream_error",
+    "_is_deepseek_reasoning_roundtrip_error",
+]
 
 
 def call_with_retry(
     fn: Callable[[], T],
     *,
-    settings: Settings,
+    settings: object | None = None,
     what: str = "model call",
     sleep: Callable[[float], None] = time.sleep,
     fallback_fn: Callable[[], T] | None = None,
 ) -> T:
-    """Run ``fn`` and retry it on transient failures only.
+    """Run ``fn`` with bounded transient/rate-limit retry.
 
-    Transient failures (429, 5xx, timeouts, JSON-decode) use a short
-    exponential backoff (2s base, 30s cap).
-
-    ``UsageLimitExceeded`` (pydantic-ai budget cap) is **never retried**:
-    if a ``fallback_fn`` is provided it is tried exactly once;
-    otherwise the exception is re-raised immediately with no backoff.
-
-    Re-raises immediately for non-transient errors, and re-raises the
-    last error once retries are exhausted.
+    *settings* is accepted for signature compatibility but no longer drives the
+    schedule — the library bakes the (formerly mill-default) constants.
     """
-    from ..runtime import tracing  # lazy import
-
-    attempts = max(0, settings.transient_retries)
-    using_fallback = False
-    rate_limit_count = 0
-    cumulative_backoff = 0.0
-
-    for attempt in range(attempts + 1):
-        try:
-            if using_fallback:
-                assert fallback_fn is not None  # type-narrowing
-                return fallback_fn()
-            result = fn()
-            return result
-        except Exception as e:  # noqa: BLE001 — re-raised unless retryable
-            if attempt >= attempts:
-                try:
-                    tracing.flush_tracing()
-                except Exception:
-                    log.warning("flush_tracing failed", exc_info=True)
-                raise
-
-            # --- transient branch (unchanged) ---------------------------------
-            if is_transient(e):
-                delay = min(
-                    settings.transient_backoff_cap,
-                    settings.transient_backoff_base * (2**attempt),
-                )
-                delay += random.uniform(0, delay / 2)  # jitter
-                log.warning(
-                    "%s: transient %s (attempt %d/%d) — retrying in %.1fs",
-                    what,
-                    type(e).__name__,
-                    attempt + 1,
-                    attempts,
-                    delay,
-                )
-                try:
-                    tracing.flush_tracing()
-                except Exception:
-                    log.warning("flush_tracing failed", exc_info=True)
-                sleep(delay)
-                continue
-
-            # --- rate-limit branch ------------------------------------------
-            if is_rate_limited(e):
-                rate_limit_count += 1
-
-                # Fallback activation on first UsageLimitExceeded
-                if not using_fallback and fallback_fn is not None:
-                    using_fallback = True
-                    fallback_model = settings.rate_limit_fallback_model
-                    log.warning(
-                        "%s: rate-limit fallback activated on first "
-                        "UsageLimitExceeded (model=%s)",
-                        what,
-                        fallback_model,
-                    )
-                    _record_rate_limit_span(
-                        delay=0.0,
-                        cumulative_backoff=cumulative_backoff,
-                        count=rate_limit_count,
-                        fallback_activated=True,
-                        fallback_model=fallback_model,
-                    )
-                    # Try fallback immediately — same attempt slot
-                    continue
-
-                # No fallback (or fallback also exhausted) → re-raise immediately
-                try:
-                    tracing.flush_tracing()
-                except Exception:
-                    log.warning("flush_tracing failed", exc_info=True)
-                raise
-
-            # --- non-retryable -------------------------------------------------
-            try:
-                tracing.flush_tracing()
-            except Exception:
-                log.warning("flush_tracing failed", exc_info=True)
-            raise
-    raise AssertionError("unreachable")  # pragma: no cover
-
-
-def _is_deepseek_reasoning_roundtrip_error(exc: BaseException) -> bool:
-    """Detect the DeepSeek thinking-mode reasoning round-trip 400.
-
-    When a long-running implement pins to DeepSeek's first-party
-    provider (to warm the prompt cache), the model can intermittently
-    emit an inconsistent reasoning sequence and the API responds with
-    HTTP 400 and a message about reasoning_content needing to be passed
-    back.  A fresh re-run usually yields a clean sequence, so this is
-    treated as transient — routed into the worker's stage-retry rather
-    than a hard BLOCK.
-    """
-    if _status(exc) != 400:
-        return False
-    cur: BaseException | None = exc
-    seen = 0
-    while cur is not None and seen < 10:
-        msg = str(cur)
-        if "reasoning_content" in msg and "passed back" in msg:
-            return True
-        cur = cur.__cause__ or cur.__context__
-        seen += 1
-    return False
+    return _lib_call_with_retry(
+        fn,
+        what=what,
+        sleep=sleep,
+        fallback_fn=fallback_fn,
+        is_transient_fn=is_transient,
+    )

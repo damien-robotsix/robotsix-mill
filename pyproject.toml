@@ -13,6 +13,10 @@ authors = [{ name = "Damien Robotsix" }]
 dependencies = [
     "pydantic>=2",
     "pydantic-ai-slim[openrouter,openai]>=1.0",
+    # LLM I/O (OpenRouter model construction, DeepSeek pin, per-tier reasoning,
+    # cost, retry/transient) extracted to a standalone library. See
+    # agents/openrouter_cost.py + agents/retry.py (now thin shims).
+    "robotsix-llmio[openrouter_deepseek] @ git+https://github.com/damien-robotsix/robotsix-llmio@main",
     "pydantic-settings>=2",
     "pyyaml>=6",
     "sqlmodel>=0.0.22",
