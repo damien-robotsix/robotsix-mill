@@ -281,6 +281,7 @@ def call_with_retry(
             raise
     raise AssertionError("unreachable")  # pragma: no cover
 
+
 def _is_deepseek_reasoning_roundtrip_error(exc: BaseException) -> bool:
     """Detect the DeepSeek thinking-mode reasoning round-trip 400.
 
