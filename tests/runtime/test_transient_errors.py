@@ -304,3 +304,46 @@ def test_classify_none_cause_context():
     exc.__cause__ = None
     exc.__context__ = None
     assert classify_stage_error(exc) == "fatal"
+
+
+# ---------------------------------------------------------------------------
+# DeepSeek thinking-mode reasoning round-trip 400 — must be transient so the
+# worker's stage-retry does a fresh re-run instead of a hard BLOCK that needs
+# a manual resume. See project-deepseek-pin-reasoning-blocker.
+# ---------------------------------------------------------------------------
+
+
+def _reasoning_400():
+    from pydantic_ai.exceptions import ModelHTTPError
+
+    return ModelHTTPError(
+        400,
+        "deepseek/deepseek-v4-pro",
+        {
+            "error": {
+                "message": (
+                    "The reasoning_content in the thinking mode must be "
+                    "passed back to the API."
+                )
+            }
+        },
+    )
+
+
+def test_classify_transient_deepseek_reasoning_400_direct():
+    assert classify_stage_error(_reasoning_400()) == "transient"
+
+
+def test_classify_transient_deepseek_reasoning_400_in_cause_chain():
+    # This is the production shape: coding.AgentRunError wraps the
+    # ModelHTTPError as __cause__ before implement.py reclassifies it.
+    outer = RuntimeError("agent run failed")
+    outer.__cause__ = _reasoning_400()
+    assert classify_stage_error(outer) == "transient"
+
+
+def test_classify_fatal_plain_400_is_not_reasoning_roundtrip():
+    from pydantic_ai.exceptions import ModelHTTPError
+
+    plain = ModelHTTPError(400, "x", {"error": {"message": "bad request"}})
+    assert classify_stage_error(plain) == "fatal"

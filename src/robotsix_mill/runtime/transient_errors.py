@@ -11,6 +11,8 @@ import subprocess
 
 import httpx
 
+from ..agents.retry import _is_deepseek_reasoning_roundtrip_error
+
 try:
     import openai
 except ImportError:  # pragma: no cover
@@ -88,6 +90,18 @@ def classify_stage_error(exc: BaseException) -> str:
         if _is_transient_openai(current):
             return "transient"
         if _is_transient_called_process_error(current):
+            return "transient"
+        # DeepSeek thinking-mode reasoning round-trip 400. Pinning to
+        # DeepSeek first-party warms its prompt cache (big cost win) but
+        # long pro implements can intermittently emit an inconsistent
+        # reasoning sequence and get a 400. A fresh stage re-run usually
+        # re-derives a clean sequence, so treat it as transient: this
+        # routes it into the worker's bounded stage-retry (3 fresh runs
+        # with backoff) instead of a hard BLOCK needing manual resume.
+        # See [[project-deepseek-pin-reasoning-blocker]]. Shares the
+        # detector with agents/retry.py to keep the two classifiers in
+        # agreement.
+        if _is_deepseek_reasoning_roundtrip_error(current):
             return "transient"
 
         if current.__cause__ is not None and id(current.__cause__) not in seen:
