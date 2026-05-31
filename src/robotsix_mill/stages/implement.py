@@ -192,7 +192,12 @@ class ImplementStage(Stage):
         # --- test-baseline check: detect pre-existing failures BEFORE
         # the agent loop so we don't waste cycles on an unfixable base.
         baseline_outcome = ImplementStage._run_baseline_check(
-            ctx, ticket, repo_dir, branch, resuming, s,
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            resuming,
+            s,
         )
         if baseline_outcome is not None:
             return baseline_outcome
@@ -1019,7 +1024,7 @@ class ImplementStage(Stage):
         if cache_path.exists():
             try:
                 cache = json.loads(cache_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 cache = None
             if isinstance(cache, dict):
                 cached_sha = cache.get("base_sha")

@@ -2905,9 +2905,7 @@ def test_baseline_check_sandbox_unavailable(ctx_factory, tmp_path, monkeypatch):
     def _sandbox_error(*, settings, repo_dir, repo_config=None):
         return False, "sandbox unavailable: Docker daemon not running"
 
-    monkeypatch.setattr(
-        "robotsix_mill.stages.implement.run_test_agent", _sandbox_error
-    )
+    monkeypatch.setattr("robotsix_mill.stages.implement.run_test_agent", _sandbox_error)
 
     t = _ticket(ctx)
 
