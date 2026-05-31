@@ -38,6 +38,8 @@ from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
+from .transient import is_claude_sdk_turn_limit
+
 PROVIDER_NAME = "claude-sdk"
 
 # Output modes this transport can satisfy with a plain text completion. The
@@ -46,10 +48,23 @@ _TEXT_OUTPUT_MODES = {"text", "prompted"}
 
 # Turn headroom for the SDK loop. With ``allowed_tools=[]`` the model has no
 # tools to call, so it answers in a single turn and ends with ``end_turn`` well
-# under this cap. The cap exists only as a runaway backstop — but it must NOT be
-# tight: the SDK raises ("Reached maximum number of turns") instead of returning
-# the answer if the budget is actually hit, so 1 is unsafe.
+# under this cap. The cap is a runaway backstop, not a tuning knob — it must NOT
+# be tight: the SDK *raises* ("Reached maximum number of turns") instead of
+# returning the answer if the budget is hit, so 1 would false-trip on clean
+# answers. If the cap is genuinely reached, that is a HARD failure raised as
+# ``ClaudeSDKTurnLimitError`` and never retried (retrying the identical request
+# would just loop to the cap again) — fail loudly so the real cause shows.
 _MAX_TURNS = 8
+
+
+class ClaudeSDKTurnLimitError(RuntimeError):
+    """The Claude Agent SDK loop hit its turn cap (``_MAX_TURNS``) without
+    returning a final answer.
+
+    A hard failure surfaced loudly: the agent loop did not converge, and the
+    identical request would just loop to the cap again — so it is never treated
+    as transient (see
+    :func:`~robotsix_llmio.claude_sdk.transient.is_claude_sdk_transient`)."""
 
 
 def _content_to_text(content: Any) -> str:
@@ -217,13 +232,24 @@ class ClaudeSDKModel(Model):
 
         chunks: list[str] = []
         result: Any = None
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        chunks.append(block.text)
-            elif isinstance(message, ResultMessage):
-                result = message
+        try:
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            chunks.append(block.text)
+                elif isinstance(message, ResultMessage):
+                    result = message
+        except Exception as exc:  # noqa: BLE001 — re-raised (converted or as-is)
+            if is_claude_sdk_turn_limit(exc):
+                raise ClaudeSDKTurnLimitError(
+                    f"Claude Agent SDK hit the {_MAX_TURNS}-turn cap without "
+                    f"producing a final answer (model={self._model_name!r}). The "
+                    f"agent loop did not converge — it kept taking turns instead "
+                    f"of terminating. This is a hard failure; retrying the "
+                    f"identical request would hit the cap again. SDK error: {exc}"
+                ) from exc
+            raise
 
         text = "".join(chunks).strip()
         if not text and result is not None:

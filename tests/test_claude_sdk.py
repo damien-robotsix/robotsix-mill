@@ -37,7 +37,10 @@ from robotsix_llmio.claude_sdk.provider import (
     _SdkToolResult,
     _convert_tools,
 )
-from robotsix_llmio.claude_sdk.transient import is_claude_sdk_transient
+from robotsix_llmio.claude_sdk.transient import (
+    is_claude_sdk_transient,
+    is_claude_sdk_turn_limit,
+)
 from robotsix_llmio.core.provider import Tier
 from robotsix_llmio.core.agent import AgentHandle
 
@@ -168,6 +171,40 @@ def test_sdk_subprocess_errors_are_transient():
 
 def test_plain_value_error_not_transient():
     assert is_claude_sdk_transient(ValueError("nope")) is False
+
+
+# --- turn-limit: hard failure, never retried -------------------------------
+
+
+def test_turn_limit_message_detected_and_not_transient():
+    e = Exception(
+        "Claude Code returned an error result: Reached maximum number of turns (8)"
+    )
+    assert is_claude_sdk_turn_limit(e) is True
+    # Must NOT be retried — retrying would just loop to the cap again.
+    assert is_claude_sdk_transient(e) is False
+
+
+def test_turn_limit_wins_even_when_wrapped_as_process_error():
+    # ProcessError is normally transient; the turn-limit guard must win so we
+    # fail loudly instead of burning retries.
+    class ProcessError(Exception):
+        pass
+
+    e = ProcessError("CLI exited 1: Reached maximum number of turns (8)")
+    assert is_claude_sdk_transient(e) is False
+
+
+def test_turn_limit_error_type_detected_and_not_transient():
+    from robotsix_llmio.claude_sdk.model import ClaudeSDKTurnLimitError
+
+    e = ClaudeSDKTurnLimitError("hit the cap")
+    assert is_claude_sdk_turn_limit(e) is True
+    assert is_claude_sdk_transient(e) is False
+
+
+def test_non_turn_limit_runtime_error_unaffected():
+    assert is_claude_sdk_turn_limit(RuntimeError("something else")) is False
 
 
 # ---------------------------------------------------------------------------

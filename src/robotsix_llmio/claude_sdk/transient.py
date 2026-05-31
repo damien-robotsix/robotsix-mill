@@ -18,10 +18,38 @@ _SDK_TRANSIENT_NAMES = {
     "ProcessLookupError",  # the subprocess vanished mid-stream
 }
 
+# The SDK's wording when its agent loop exhausts ``max_turns`` without producing
+# a final answer ("Reached maximum number of turns (N)").
+_TURN_LIMIT_SIGNATURE = "maximum number of turns"
+
+
+def is_claude_sdk_turn_limit(exc: BaseException) -> bool:
+    """True if *exc* (or anything in its cause/context chain) is the Claude Agent
+    SDK turn-cap failure — either the dedicated ``ClaudeSDKTurnLimitError`` or the
+    raw SDK message. Matched by name/string so this stays free of the SDK and the
+    model module (no import cycle)."""
+    cur: BaseException | None = exc
+    seen = 0
+    while cur is not None and seen < 10:
+        if type(cur).__name__ == "ClaudeSDKTurnLimitError":
+            return True
+        if _TURN_LIMIT_SIGNATURE in str(cur).lower():
+            return True
+        cur = cur.__cause__ or cur.__context__
+        seen += 1
+    return False
+
 
 def is_claude_sdk_transient(exc: BaseException) -> bool:
     """Core transient set OR a Claude Agent SDK subprocess/transport failure,
-    walking the cause/context chain for the latter."""
+    walking the cause/context chain for the latter.
+
+    The turn-cap failure is explicitly excluded — and checked FIRST, so it wins
+    even when the CLI surfaces it as a (normally-transient) ``ProcessError``.
+    Retrying it would just loop to the cap again, so it must fail loudly rather
+    than burn retries and end in an opaque error."""
+    if is_claude_sdk_turn_limit(exc):
+        return False
     if _core_is_transient(exc):
         return True
     cur: BaseException | None = exc

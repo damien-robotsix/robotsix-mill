@@ -10,22 +10,28 @@ from __future__ import annotations
 
 from typing import Any
 
-from .transient import is_claude_sdk_transient
+from .transient import is_claude_sdk_transient, is_claude_sdk_turn_limit
 
 __all__ = [
     "ClaudeSDKProvider",
     "ClaudeSDKModel",
+    "ClaudeSDKTurnLimitError",
     "is_claude_sdk_transient",
+    "is_claude_sdk_turn_limit",
 ]
 
 
 def __getattr__(name: str) -> Any:  # PEP 562 — lazy heavy imports
-    if name in ("ClaudeSDKProvider", "ClaudeSDKModel"):
+    if name in ("ClaudeSDKProvider", "ClaudeSDKModel", "ClaudeSDKTurnLimitError"):
         try:
             if name == "ClaudeSDKProvider":
                 from .provider import ClaudeSDKProvider
 
                 return ClaudeSDKProvider
+            if name == "ClaudeSDKTurnLimitError":
+                from .model import ClaudeSDKTurnLimitError
+
+                return ClaudeSDKTurnLimitError
             from .model import ClaudeSDKModel
 
             return ClaudeSDKModel
