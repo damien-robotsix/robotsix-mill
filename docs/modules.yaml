@@ -1,6 +1,7 @@
 modules:
   - id: robotsix_llmio-core
     paths:
+      - src/robotsix_llmio/__init__.py
       - src/robotsix_llmio/core/**
       - tests/test_core_retry.py
   - id: robotsix_llmio-openrouter
