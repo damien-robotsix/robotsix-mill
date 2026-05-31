@@ -53,6 +53,9 @@ def settings(tmp_path, monkeypatch):
                 langfuse_project_name="test-project",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
+                # Periodic agents are opt-in (9cc9, default off); this
+                # suite exercises the warmer running, so enable it.
+                cost_warmer_periodic=True,
             )
         }
     )
@@ -213,7 +216,8 @@ def test_cost_warmer_skips_repo_with_flag_off(
     import robotsix_mill.config as _cfg
     from robotsix_mill.config import RepoConfig, ReposRegistry
 
-    # Two repos: one opted in (default True), one opted out.
+    # Two repos: one opted in (explicit, since opt-in defaults off per
+    # 9cc9), one opted out.
     _cfg._repos_config = ReposRegistry(
         repos={
             "kept": RepoConfig(
@@ -222,6 +226,7 @@ def test_cost_warmer_skips_repo_with_flag_off(
                 langfuse_project_name="kept",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
+                cost_warmer_periodic=True,
             ),
             "skipped": RepoConfig(
                 repo_id="skipped",
