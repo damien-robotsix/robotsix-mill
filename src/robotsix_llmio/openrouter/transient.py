@@ -31,11 +31,7 @@ def is_openrouter_transient(exc: BaseException) -> bool:
     the cause/context chain for the latter."""
     if _core_retry.is_transient(exc):
         return True
-    cur: BaseException | None = exc
-    seen = 0
-    while cur is not None and seen < 10:
+    for cur in _core_retry._walk_cause_chain(exc):
         if is_openrouter_upstream_error(cur):
             return True
-        cur = cur.__cause__ or cur.__context__
-        seen += 1
     return False

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..core.retry import _status
+from ..core.retry import _status, _walk_cause_chain
 from ..openrouter.transient import is_openrouter_transient
 
 
@@ -18,14 +18,10 @@ def is_deepseek_reasoning_roundtrip_error(exc: BaseException) -> bool:
     """
     if _status(exc) != 400:
         return False
-    cur: BaseException | None = exc
-    seen = 0
-    while cur is not None and seen < 10:
+    for cur in _walk_cause_chain(exc):
         msg = str(cur)
         if "reasoning_content" in msg and "passed back" in msg:
             return True
-        cur = cur.__cause__ or cur.__context__
-        seen += 1
     return False
 
 

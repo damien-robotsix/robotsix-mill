@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import random
 import time
-from typing import Callable, TypeVar
+from typing import Callable, Iterator, TypeVar
 
 from . import constants
 from ._otel import _get_recording_span
@@ -30,6 +30,16 @@ from .cost import flush_current_provider
 log = logging.getLogger("robotsix_llmio.retry")
 
 T = TypeVar("T")
+
+
+def _walk_cause_chain(exc: BaseException, max_depth: int = 10) -> Iterator[BaseException]:
+    """Yield each exception in the cause/context chain, bounded to *max_depth*."""
+    cur: BaseException | None = exc
+    seen = 0
+    while cur is not None and seen < max_depth:
+        yield cur
+        cur = cur.__cause__ or cur.__context__
+        seen += 1
 
 
 def _status(exc: BaseException) -> int | None:
@@ -60,9 +70,7 @@ def is_transient(exc: BaseException) -> bool:
     recognised. Provider layers extend this with their own signatures."""
     import httpx
 
-    cur: BaseException | None = exc
-    seen = 0
-    while cur is not None and seen < 10:
+    for cur in _walk_cause_chain(exc):
         name = type(cur).__name__
         if name == "UsageLimitExceeded":
             return False  # budget cap — never transient
@@ -73,21 +81,15 @@ def is_transient(exc: BaseException) -> bool:
         code = _status(cur)
         if code is not None and (code == 429 or 500 <= code < 600):
             return True
-        cur = cur.__cause__ or cur.__context__
-        seen += 1
     return False
 
 
 def is_rate_limited(exc: BaseException) -> bool:
     """True only for ``UsageLimitExceeded`` (the pydantic-ai budget-cap
     exception). Walks the cause/context chain."""
-    cur: BaseException | None = exc
-    seen = 0
-    while cur is not None and seen < 10:
+    for cur in _walk_cause_chain(exc):
         if type(cur).__name__ == "UsageLimitExceeded":
             return True
-        cur = cur.__cause__ or cur.__context__
-        seen += 1
     return False
 
 
