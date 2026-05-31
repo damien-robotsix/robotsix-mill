@@ -925,14 +925,15 @@ def test_cli_ingest_config_load_failure(
     mock_from_env: mock.MagicMock,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """ingest returns 1 when config loading fails."""
+    """ingest exits with code 1 when config loading fails."""
     mock_from_env.side_effect = RuntimeError("boom")
 
     from robotsix_auto_mail.cli import main
 
-    rc = main(["ingest"])
+    with pytest.raises(SystemExit) as exc:
+        main(["ingest"])
 
-    assert rc == 1
+    assert exc.value.code == 1
     err = capsys.readouterr().err
     assert "Error loading configuration" in err
     assert "boom" in err
