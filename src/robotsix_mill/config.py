@@ -964,6 +964,15 @@ class Settings(BaseSettings):
     # enforced at 60s in the worker loop.
     config_sync_interval_seconds: int = Field(default=86400)
 
+    # --- meta-agent (cross-repo extraction/alignment survey) ---
+    # Master switch for the daily meta-agent pass. Defaults to False
+    # (off) — the operator must register the meta board in repos.yaml
+    # first.  Flip to True to enable the global daily schedule.
+    meta_periodic: bool = Field(default=False)
+    # Seconds between automatic meta-agent passes. Default 86400 (1 day).
+    # Minimum enforced at 60 s in the worker loop.
+    meta_interval_seconds: int = Field(default=86400)
+
     # --- action-agent memory paths ---
     # Path to the implement agent's Markdown memory ledger. Override to
     # pin a specific path; unset (default) derives <data_dir>/implement_memory.md.

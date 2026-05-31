@@ -819,6 +819,7 @@ class Worker:
         self._cost_reconciliation_task: asyncio.Task | None = None
         self._langfuse_cleanup_task: asyncio.Task | None = None
         self._timeout_escalation_task: asyncio.Task | None = None
+        self._meta_task: asyncio.Task | None = None
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
         # the supervisor cancels its children.
@@ -1500,6 +1501,63 @@ class Worker:
                     self.run_registry.finish_ok(run_id, summary)
             except Exception as e:  # noqa: BLE001 — never let the poll die
                 log.exception("%s poll failed", label)
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
+
+    async def _meta_pass_loop(self) -> None:
+        """Global meta-agent loop — fires once per interval (not per-repo).
+
+        The meta-agent surveys ALL registered repo clones, identifies
+        extraction and alignment opportunities, and files drafts to the
+        meta board and per-repo boards respectively.
+        """
+        from robotsix_mill.meta_runner import MetaPassResult, run_meta_pass
+
+        interval = max(60, self.ctx.settings.meta_interval_seconds)
+        initial = self._initial_delay("meta", interval)
+        await asyncio.sleep(initial)
+        while True:
+            run_id = None
+            session_id = tracing.make_session_id("meta")
+            try:
+                log.info("Starting periodic meta pass")
+                if self.run_registry:
+                    run_id = self.run_registry.start("meta")
+                with tracing.start_ticket_root_span(
+                    session_id, "meta", repo_config=None
+                ):
+                    result: MetaPassResult = await self._tracked_to_thread(
+                        run_meta_pass,
+                        session_id=session_id,
+                    )
+                total_drafts = len(result.extraction_drafts_created) + len(
+                    result.alignment_drafts_created
+                )
+                log.info(
+                    "Meta pass completed, created %d extraction + %d alignment = %d total draft(s)",
+                    len(result.extraction_drafts_created),
+                    len(result.alignment_drafts_created),
+                    total_drafts,
+                )
+                if self.run_registry and run_id:
+                    extraction_ids = [
+                        d["id"] for d in result.extraction_drafts_created[:3]
+                    ]
+                    alignment_ids = [
+                        d["id"] for d in result.alignment_drafts_created[:3]
+                    ]
+                    parts = []
+                    if extraction_ids:
+                        parts.append(f"Extraction: {', '.join(extraction_ids)}")
+                    if alignment_ids:
+                        parts.append(f"Alignment: {', '.join(alignment_ids)}")
+                    summary = "; ".join(parts) if parts else "No drafts created"
+                    if total_drafts > 6:
+                        summary += " …"
+                    self.run_registry.finish_ok(run_id, summary)
+            except Exception as e:  # noqa: BLE001 — never let the poll die
+                log.exception("Meta pass failed")
                 if self.run_registry and run_id:
                     self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
@@ -2435,6 +2493,13 @@ class Worker:
                 self.ctx.settings.timeout_escalation_threshold_seconds,
             ),
         )
+        self._start_poll_loop_pass(
+            "meta",
+            self._meta_pass_loop,
+            "_meta_task",
+            log_msg="Periodic meta-agent enabled: interval %ds",
+            log_args=(self.ctx.settings.meta_interval_seconds,),
+        )
 
         # --- CI monitor (unique: checks repo config, not just settings) ---
         if self._ci_monitor_task is None:
@@ -2508,6 +2573,7 @@ class Worker:
             "_cost_reconciliation_task",
             "_langfuse_cleanup_task",
             "_timeout_escalation_task",
+            "_meta_task",
         ):
             t = getattr(self, attr)
             if t is not None:

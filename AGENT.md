@@ -55,6 +55,26 @@ enterprise process. These are hard rules, learned the hard way.
 - If something is genuinely underspecified or a tool is missing, say
   so (or `report_issue`) — don't guess and gold-plate.
 
+## Meta-agent
+
+The **meta-agent** is a cross-repo survey agent that runs **daily**
+(86400 s interval) as a single global pass — not per-repo. It clones
+all registered repositories, compares their codebases, and files:
+
+- **Extraction proposals** (shared abstractions warranting a standalone
+  library) on the **meta board** (`board_id: "meta"`).
+- **Alignment proposals** (practice divergence — one repo has a
+  pattern another repo should adopt) on the target repo's own board.
+
+Registration steps:
+1. Add the `meta` stanza to `config/repos.yaml` (see `docs/meta-board.md`).
+2. Set `MILL_META_PERIODIC=true` (or `meta_periodic: true` in YAML config).
+3. Restart the worker — the daily pass begins on the next tick.
+
+The meta board is synthetic (no backing forge repository); tickets
+live purely in the ticket system. The agent definition lives at
+`agent_definitions/periodic/meta.yaml`.
+
 ## Reference docs: `agent_references/`
 
 Stack-specific gotchas live under `agent_references/` — one Markdown
