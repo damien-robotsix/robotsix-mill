@@ -279,26 +279,30 @@ def run_periodic_pass(
     # files. Idempotent; best-effort.
     repo_dir = None
     if forge_remote_url:
+        import shutil
         import subprocess
 
         cand = clone_dir or (settings.data_dir / config.workspace_subdir / "repo")
-        if (cand / ".git").exists():
+        # Each periodic run starts from a CLEAN, fresh clone. Wipe any prior
+        # workspace first: a reused clone keeps whatever commit it was last
+        # left at, so the agent would analyse a STALE tree (and miss work
+        # already merged upstream). Fresh clone = always current origin tip.
+        if cand.exists():
+            shutil.rmtree(cand, ignore_errors=True)
+        try:
+            git_ops.clone(
+                forge_remote_url,
+                cand,
+                settings.forge_target_branch,
+                token_fn(settings, repo_config),
+            )
             repo_dir = cand
-        else:
-            try:
-                git_ops.clone(
-                    forge_remote_url,
-                    cand,
-                    settings.forge_target_branch,
-                    token_fn(settings, repo_config),
-                )
-                repo_dir = cand
-            except subprocess.CalledProcessError as e:
-                log.warning(
-                    "%s clone failed, web/context-only: %s",
-                    config.label,
-                    (e.stderr or "")[:200],
-                )
+        except subprocess.CalledProcessError as e:
+            log.warning(
+                "%s clone failed, web/context-only: %s",
+                config.label,
+                (e.stderr or "")[:200],
+            )
 
     log.info("%s pass starting (session %s)", config.label, session_id)
 

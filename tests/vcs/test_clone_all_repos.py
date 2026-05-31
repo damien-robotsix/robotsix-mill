@@ -98,8 +98,9 @@ class TestCloneAllRepos:
         assert "no_remote" not in result
         assert len(call_args) == 1
 
-    def test_idempotency_second_call_no_reclone(self, settings: Settings, monkeypatch):
-        """The second call detects an existing .git dir and skips the clone."""
+    def test_each_call_wipes_and_reclones_fresh(self, settings: Settings, monkeypatch):
+        """Each call wipes any existing workspace and clones FRESH, so periodic
+        agents never analyse a stale reused tree."""
         reg = ReposRegistry(
             repos={
                 "alpha": _repo("alpha", forge_remote_url="https://gh.com/a.git"),
@@ -117,15 +118,21 @@ class TestCloneAllRepos:
             call_args.append((remote_url, dest, branch, token))
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
+            (dest / "stale.txt").write_text("from a previous run")
 
         monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
 
         result1 = clone_all_repos(settings)
         assert len(call_args) == 1
+        dest = result1["alpha"]
+        assert (dest / "stale.txt").exists()
 
+        # Second call must wipe the prior workspace and clone again.
         result2 = clone_all_repos(settings)
-        assert len(call_args) == 1  # no additional clone calls
+        assert len(call_args) == 2  # fresh clone every run
         assert result1 == result2
+        # The wipe happened before the re-clone (the fake clone re-creates it).
+        assert (dest / ".git").exists()
 
     def test_error_resilience_one_fails_others_succeed(
         self, settings: Settings, monkeypatch
