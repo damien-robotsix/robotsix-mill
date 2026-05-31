@@ -19,3 +19,11 @@ repos:
           - pydantic>=2.0
           - urllib3>=2.0
           - types-PyYAML
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    # keep in sync (latest stable release)
+    rev: 0.37.2
+    hooks:
+      - id: check-jsonschema
+        args: ["--schemafile", "docs/modules.schema.yaml"]
+        files: ^docs/modules\.yaml$

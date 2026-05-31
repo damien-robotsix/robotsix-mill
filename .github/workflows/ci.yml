@@ -23,6 +23,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Validate module taxonomy
+        run: |
+          pip install check-jsonschema
+          check-jsonschema --schemafile docs/modules.schema.yaml docs/modules.yaml
+
       - name: Lint (ruff)
         run: ruff check .
 

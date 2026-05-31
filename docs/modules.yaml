@@ -1,6 +1,6 @@
 # Canonical module taxonomy for robotsix-auto-mail.
 #
-# Each module declares a name, a human-readable description, and the
+# Each module declares an id, a human-readable description, and the
 # set of repo-relative file paths it owns.  Every file in the repo
 # must belong to exactly one module.  Paths use forward slashes.
 #
@@ -9,7 +9,7 @@
 # is "stale"; any new module proposal must start by adding an entry here.
 
 modules:
-  - name: core
+  - id: core
     description: >-
       Project root, package identity, build configuration, and roadmap.
     paths:
@@ -24,7 +24,7 @@ modules:
       - ROADMAP.md
       - tests/test_stub.py
 
-  - name: docker
+  - id: docker
     description: >-
       Docker image definition, Compose orchestration, and
       container entrypoint.
@@ -34,14 +34,14 @@ modules:
       - docker-compose.yml
       - entrypoint.sh
 
-  - name: cli
+  - id: cli
     description: >-
       CLI entry point exposing probe and ingest subcommands.
     paths:
       - src/robotsix_auto_mail/cli.py
       - tests/test_cli.py
 
-  - name: config
+  - id: config
     description: >-
       Configuration loading (YAML file + env), config template.
     paths:
@@ -51,21 +51,21 @@ modules:
       - config/.gitkeep
       - config/mail.local.example.yaml
 
-  - name: db
+  - id: db
     description: >-
       SQLite datastore: schema, MailRecord, insert, watermark.
     paths:
       - src/robotsix_auto_mail/db.py
       - tests/test_db.py
 
-  - name: status
+  - id: status
     description: >-
       Mail-processing status read/write layer for the kanban board.
     paths:
       - src/robotsix_auto_mail/status.py
       - tests/test_status.py
 
-  - name: detect
+  - id: detect
     description: >-
       MX-record provider detection and auto-configuration lookup
       (Mozilla ISPDB, autoconfig XML, LLM fallback).
@@ -73,42 +73,42 @@ modules:
       - src/robotsix_auto_mail/detect.py
       - tests/test_detect.py
 
-  - name: fetch
+  - id: fetch
     description: >-
       Watermark-aware IMAP fetch logic.
     paths:
       - src/robotsix_auto_mail/fetch.py
       - tests/test_fetch.py
 
-  - name: imap
+  - id: imap
     description: >-
       Low-level IMAP client (stdlib imaplib wrapper).
     paths:
       - src/robotsix_auto_mail/imap.py
       - tests/test_imap.py
 
-  - name: parser
+  - id: parser
     description: >-
       MIME to MailRecord parsing.
     paths:
       - src/robotsix_auto_mail/parser.py
       - tests/test_parser.py
 
-  - name: pipeline
+  - id: pipeline
     description: >-
       Ingestion orchestration: fetch, parse, store, watermark.
     paths:
       - src/robotsix_auto_mail/pipeline.py
       - tests/test_pipeline.py
 
-  - name: smtp
+  - id: smtp
     description: >-
       SMTP sending client.
     paths:
       - src/robotsix_auto_mail/smtp_client.py
       - tests/test_smtp_client.py
 
-  - name: server
+  - id: server
     description: >-
       HTTP kanban board server exposing the mail database as
       a read/write web UI.
@@ -116,7 +116,7 @@ modules:
       - src/robotsix_auto_mail/server.py
       - tests/test_server.py
 
-  - name: docs
+  - id: docs
     description: >-
       User-facing documentation and architecture decisions.
     paths:
@@ -124,9 +124,10 @@ modules:
       - docs/deployment.md
       - docs/ingestion.md
       - docs/modules.yaml
+      - docs/modules.schema.yaml
       - docs/decisions/0001-programming-language.md
 
-  - name: ci
+  - id: ci
     description: >-
       GitHub Actions CI pipeline.
     paths:
