@@ -54,6 +54,9 @@ from pydantic_ai.models.openai import OpenAIChatModel
 _PINNED_PROVIDER = "DeepSeek"
 _PIN_MODEL_PREFIX = "deepseek/"
 _REASONING_DETAILS_KEY = "reasoning_details"
+# Flash-tier models run with reasoning DISABLED (verdict/generation work, no
+# deep CoT) — keeps them clear of the DeepSeek thinking-mode round-trip 400.
+_FLASH_MARKER = "flash"
 
 
 def _extract_reasoning_details(response: Any) -> Any:
@@ -123,6 +126,17 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
     def _map_model_response(self, message: Any) -> Any:
         param = super()._map_model_response(message)
         if not (isinstance(param, dict) and param.get("role") == "assistant"):
+            return param
+        # Flash tier runs with reasoning DISABLED (see _inject_provider_pin),
+        # so the model emits no reasoning_content. Strip ANY reasoning fields
+        # from every echoed turn — including synthetic preseed tool-call turns
+        # — so the request is consistently reasoning-free and DeepSeek's
+        # thinking-mode mix-400 cannot fire. (Pro tier below keeps the
+        # xhigh + reasoning_details round-trip.)
+        if _FLASH_MARKER in str(getattr(self, "model_name", "") or ""):
+            param.pop("reasoning", None)
+            param.pop("reasoning_content", None)
+            param.pop(_REASONING_DETAILS_KEY, None)
             return param
         # DeepSeek thinking-mode rule (api-docs.deepseek.com/guides/thinking_mode):
         # reasoning must be echoed back ONLY on assistant turns that performed
@@ -196,7 +210,17 @@ def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
         return  # caller set an explicit routing preference — respect it
     extra_body["provider"] = {"only": [_PINNED_PROVIDER], "allow_fallbacks": False}
     if "reasoning" not in extra_body:
-        extra_body["reasoning"] = {"effort": "xhigh"}
+        # Tiered reasoning. PRO does deep work → keep xhigh. FLASH does
+        # verdict/generation work (review, document, summaries) that needs no
+        # chain-of-thought → DISABLE reasoning. Disabling is verified to make
+        # DeepSeek emit no reasoning_content at all, so the thinking-mode
+        # round-trip mix-400 cannot occur on flash. (Paired with the flash
+        # short-circuit in _map_model_response, which strips any reasoning
+        # echo so the request stays consistently reasoning-free.)
+        if _FLASH_MARKER in model_name:
+            extra_body["reasoning"] = {"enabled": False}
+        else:
+            extra_body["reasoning"] = {"effort": "xhigh"}
     settings["extra_body"] = extra_body
 
 
