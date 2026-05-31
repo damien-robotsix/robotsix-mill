@@ -10,11 +10,14 @@ from unittest.mock import Mock
 import httpx
 import openai
 
+import pytest
+
 from robotsix_mill.runtime.transient_errors import (
     _is_transient_called_process_error,
     _is_transient_httpx,
     _is_transient_openai,
     classify_stage_error,
+    reraise_if_transient,
 )
 
 
@@ -347,3 +350,34 @@ def test_classify_fatal_plain_400_is_not_reasoning_roundtrip():
 
     plain = ModelHTTPError(400, "x", {"error": {"message": "bad request"}})
     assert classify_stage_error(plain) == "fatal"
+
+
+# ---------------------------------------------------------------------------
+# reraise_if_transient — LLM stages (review/refine/retrospect) call this so a
+# transient model error gets the worker's stage-retry instead of a hard BLOCK.
+# ---------------------------------------------------------------------------
+
+
+def test_reraise_if_transient_reraises_reasoning_400():
+    exc = _reasoning_400()
+    with pytest.raises(Exception) as ei:
+        reraise_if_transient(exc)
+    assert ei.value is exc
+
+
+def test_reraise_if_transient_reraises_httpx_timeout():
+    exc = httpx.ReadTimeout("slow")
+    with pytest.raises(httpx.ReadTimeout):
+        reraise_if_transient(exc)
+
+
+def test_reraise_if_transient_returns_on_fatal():
+    # Fatal errors return (None) so the caller blocks as before.
+    assert reraise_if_transient(ValueError("boom")) is None
+
+
+def test_reraise_if_transient_returns_on_plain_400():
+    from pydantic_ai.exceptions import ModelHTTPError
+
+    plain = ModelHTTPError(400, "x", {"error": {"message": "bad request"}})
+    assert reraise_if_transient(plain) is None

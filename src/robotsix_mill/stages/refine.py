@@ -620,6 +620,14 @@ class RefineStage(Stage):
                 board_id=ctx.repo_config.board_id if ctx.repo_config else "",
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
+            # ModelHTTPError subclasses RuntimeError, so a transient model
+            # blip (OpenRouter 5xx/429/timeout, DeepSeek reasoning-400) is
+            # caught here too — re-raise it so the worker stage-retries a
+            # fresh refine run instead of a hard BLOCK. Fatal RuntimeErrors
+            # (missing API key) fall through and block as before.
+            from ..runtime.transient_errors import reraise_if_transient
+
+            reraise_if_transient(e)
             return Outcome(State.BLOCKED, str(e))
 
         # --- pause detection ---

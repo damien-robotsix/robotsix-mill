@@ -642,6 +642,12 @@ class RetrospectStage(Stage):
             )
         except Exception as e:  # noqa: BLE001 — resumable, never lose the ticket
             log.exception("%s: retrospect agent failed", ticket.id)
+            # Transient model blips get a fresh stage re-run via the
+            # worker's stage-retry rather than a hard BLOCK — same fix as
+            # implement.py / review.py.
+            from ..runtime.transient_errors import reraise_if_transient
+
+            reraise_if_transient(e)
             return Outcome(State.BLOCKED, f"retrospect failed — resumable: {e}")
 
         # Advisory consistency check: warn on count drift between
