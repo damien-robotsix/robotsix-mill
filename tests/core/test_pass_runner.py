@@ -1112,9 +1112,7 @@ def test_test_file_exists_for_gap_non_matching_title(tmp_path):
 def test_test_file_exists_for_gap_no_py_extension(tmp_path):
     """Title without .py at the end returns False."""
     assert (
-        _test_file_exists_for_gap(
-            tmp_path, "test gap: add unit tests for foo/bar"
-        )
+        _test_file_exists_for_gap(tmp_path, "test gap: add unit tests for foo/bar")
         is False
     )
 
@@ -1164,9 +1162,7 @@ def test_test_file_exists_for_gap_bare_filename(tmp_path):
     test_file.parent.mkdir(parents=True, exist_ok=True)
     test_file.write_text("# tests", encoding="utf-8")
     assert (
-        _test_file_exists_for_gap(
-            tmp_path, "test gap: add unit tests for foo.py"
-        )
+        _test_file_exists_for_gap(tmp_path, "test gap: add unit tests for foo.py")
         is True
     )
 
@@ -1180,9 +1176,7 @@ def test_test_file_exists_for_gap_bare_filename_not_in_subdir(tmp_path):
     subdir_file.write_text("# tests", encoding="utf-8")
     # The root tests/test_foo.py does NOT exist
     assert (
-        _test_file_exists_for_gap(
-            tmp_path, "test gap: add unit tests for foo.py"
-        )
+        _test_file_exists_for_gap(tmp_path, "test gap: add unit tests for foo.py")
         is False
     )
 
