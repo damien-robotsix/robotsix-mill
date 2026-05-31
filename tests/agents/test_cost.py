@@ -58,13 +58,14 @@ def test_provider_pin_set_for_deepseek_pro_forces_xhigh_reasoning():
     assert ms["extra_body"]["reasoning"] == {"effort": "xhigh"}
 
 
-def test_provider_pin_forces_xhigh_reasoning_for_deepseek_flash():
+def test_provider_pin_disables_reasoning_for_deepseek_flash():
     ms: dict = {}
     _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-flash")
     assert ms["extra_body"]["provider"]["only"] == [_PINNED_PROVIDER]
-    # flash now also uses effort xhigh — enabled=false didn't reliably
-    # suppress thinking, producing the same 400 as pro.
-    assert ms["extra_body"]["reasoning"] == {"effort": "xhigh"}
+    # Flash tier runs with reasoning DISABLED (verdict/generation work, no
+    # CoT). Disabling makes DeepSeek emit no reasoning_content, so the
+    # thinking-mode round-trip mix-400 cannot fire on flash (review stage).
+    assert ms["extra_body"]["reasoning"] == {"enabled": False}
 
 
 def test_provider_pin_skipped_for_non_deepseek():
@@ -191,10 +192,38 @@ def test_extract_reasoning_details_empty_list():
     assert _extract_reasoning_details(_FakeResponse(_FakeMsg([], in_extra=True))) == []
 
 
-def test_map_model_response_strips_reasoning_when_rd_missing_on_tool_call():
+def test_map_model_response_flash_strips_all_reasoning_on_tool_call():
+    """Flash tier runs with reasoning disabled, so the echo must strip ALL
+    reasoning (even when reasoning_details were captured) — every turn stays
+    reasoning-free and DeepSeek's thinking-mode mix-400 cannot fire."""
+    pytest.importorskip("pydantic_ai.providers.openrouter")
+    from pydantic_ai.messages import ModelResponse, ToolCallPart
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from robotsix_mill.agents.openrouter_cost import CostInstrumentedOpenRouterModel
+
+    m = CostInstrumentedOpenRouterModel(
+        "deepseek/deepseek-v4-flash", provider=OpenRouterProvider(api_key="x")
+    )
+    resp = ModelResponse(
+        parts=[ToolCallPart("f", {}, tool_call_id="c1")],
+        provider_details={"reasoning_details": _RD},  # captured, but flash → strip
+    )
+    param = m._map_model_response(resp)
+    assert "reasoning_details" not in param
+    assert "reasoning" not in param
+    assert "reasoning_content" not in param
+    assert "tool_calls" in param
+
+
+def test_map_model_response_empty_reasoning_when_rd_missing_on_tool_call():
     """On a tool-call turn where provider_details has NO reasoning_details,
-    the bare reasoning/reasoning_content fields MUST be stripped anyway.
-    Otherwise DeepSeek sees mismatched bare text and rejects with 400."""
+    emit the field PRESENT but EMPTY (not omitted). Omitting it makes the
+    echoed multi-turn sequence a MIX (some tool-call turns with
+    reasoning_details, some without), which DeepSeek's thinking-mode
+    validation rejects with the deterministic 400. An empty-but-present
+    entry keeps every tool-call turn consistently carrying reasoning_details
+    (flash accepts an empty-text entry — verified status 200)."""
     pytest.importorskip("pydantic_ai.providers.openrouter")
     from pydantic_ai.messages import ModelResponse, ThinkingPart, ToolCallPart
     from pydantic_ai.providers.openrouter import OpenRouterProvider
@@ -205,7 +234,7 @@ def test_map_model_response_strips_reasoning_when_rd_missing_on_tool_call():
         "deepseek/deepseek-v4-pro", provider=OpenRouterProvider(api_key="x")
     )
     # Tool-call turn with bare reasoning text but NO reasoning_details
-    # (simulates extraction failure or stripped provider_details).
+    # (simulates extraction failure or the model emitting no CoT this turn).
     resp = ModelResponse(
         parts=[
             ThinkingPart(id="reasoning", content="bare text", provider_name=m.system),
@@ -214,9 +243,12 @@ def test_map_model_response_strips_reasoning_when_rd_missing_on_tool_call():
         provider_details={},  # empty — no reasoning_details
     )
     param = m._map_model_response(resp)
-    # reasoning_details is absent (wasn't there to echo)
-    assert "reasoning_details" not in param
-    # BUT bare reasoning/reasoning_content must be stripped defensively
+    # reasoning_details is PRESENT but empty (field present, no content) so
+    # the echoed sequence stays consistent across tool-call turns.
+    assert param["reasoning_details"] == [
+        {"type": "reasoning.text", "text": "", "format": "unknown"}
+    ]
+    # bare reasoning/reasoning_content still stripped so they can't disagree.
     assert "reasoning" not in param
     assert "reasoning_content" not in param
     # tool_calls still present

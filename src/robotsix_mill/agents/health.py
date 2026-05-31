@@ -60,7 +60,10 @@ def run_health_agent(
     :func:`~.periodic_base.run_periodic_agent` with the role-specific
     ``SYSTEM_PROMPT``, structured output type
     ``PromptedOutput(HealthResult)`` (for provider compatibility),
-    ``web=True`` (for the ``web_research`` sub-agent tool), and
+    no web tool (``web_knowledge: false`` — codebase-health inspection
+    is answerable entirely from the local clone via explore/read_file/
+    list_dir; web access made the agent web-search the project's own
+    files and burn its request budget), and
     ``model_name=settings.health_model``.
 
     Execution is wrapped in :func:`~.retry.call_with_retry`, which

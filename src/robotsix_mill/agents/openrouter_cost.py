@@ -54,6 +54,9 @@ from pydantic_ai.models.openai import OpenAIChatModel
 _PINNED_PROVIDER = "DeepSeek"
 _PIN_MODEL_PREFIX = "deepseek/"
 _REASONING_DETAILS_KEY = "reasoning_details"
+# Flash-tier models run with reasoning DISABLED (verdict/generation work, no
+# deep CoT) — keeps them clear of the DeepSeek thinking-mode round-trip 400.
+_FLASH_MARKER = "flash"
 
 
 def _extract_reasoning_details(response: Any) -> Any:
@@ -124,6 +127,17 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
         param = super()._map_model_response(message)
         if not (isinstance(param, dict) and param.get("role") == "assistant"):
             return param
+        # Flash tier runs with reasoning DISABLED (see _inject_provider_pin),
+        # so the model emits no reasoning_content. Strip ANY reasoning fields
+        # from every echoed turn — including synthetic preseed tool-call turns
+        # — so the request is consistently reasoning-free and DeepSeek's
+        # thinking-mode mix-400 cannot fire. (Pro tier below keeps the
+        # xhigh + reasoning_details round-trip.)
+        if _FLASH_MARKER in str(getattr(self, "model_name", "") or ""):
+            param.pop("reasoning", None)
+            param.pop("reasoning_content", None)
+            param.pop(_REASONING_DETAILS_KEY, None)
+            return param
         # DeepSeek thinking-mode rule (api-docs.deepseek.com/guides/thinking_mode):
         # reasoning must be echoed back ONLY on assistant turns that performed
         # a tool call; for non-tool-call turns the prior CoT is NOT concatenated
@@ -138,12 +152,23 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
                 param.pop("reasoning_content", None)
                 param[_REASONING_DETAILS_KEY] = rd
             else:
-                # Defensive: if reasoning_details is missing (extraction
-                # failed or was stripped), drop the bare reasoning fields
-                # anyway — DeepSeek will re-derive the CoT rather than
-                # rejecting mismatched text with a deterministic 400.
+                # rd missing on a tool-call turn (model emitted no reasoning
+                # that turn, or extraction failed). OMITTING it makes the
+                # echoed sequence a MIX — some tool-call turns carry
+                # reasoning_details, some don't — which is exactly what
+                # DeepSeek's thinking-mode validation rejects with the
+                # deterministic 400. Instead send the field PRESENT but
+                # EMPTY, so EVERY tool-call turn consistently carries a
+                # reasoning_details entry. Verified flash accepts an
+                # empty-text entry (status 200, no malformed-rejection);
+                # this converts the failing "mix" into the passing
+                # "all-present" sequence. Matches the real entry shape
+                # ({type, text, format}) with empty text.
                 param.pop("reasoning", None)
                 param.pop("reasoning_content", None)
+                param[_REASONING_DETAILS_KEY] = [
+                    {"type": "reasoning.text", "text": "", "format": "unknown"}
+                ]
         else:
             # No tool call → omit reasoning entirely.
             param.pop("reasoning", None)
@@ -185,7 +210,17 @@ def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
         return  # caller set an explicit routing preference — respect it
     extra_body["provider"] = {"only": [_PINNED_PROVIDER], "allow_fallbacks": False}
     if "reasoning" not in extra_body:
-        extra_body["reasoning"] = {"effort": "xhigh"}
+        # Tiered reasoning. PRO does deep work → keep xhigh. FLASH does
+        # verdict/generation work (review, document, summaries) that needs no
+        # chain-of-thought → DISABLE reasoning. Disabling is verified to make
+        # DeepSeek emit no reasoning_content at all, so the thinking-mode
+        # round-trip mix-400 cannot occur on flash. (Paired with the flash
+        # short-circuit in _map_model_response, which strips any reasoning
+        # echo so the request stays consistently reasoning-free.)
+        if _FLASH_MARKER in model_name:
+            extra_body["reasoning"] = {"enabled": False}
+        else:
+            extra_body["reasoning"] = {"effort": "xhigh"}
     settings["extra_body"] = extra_body
 
 
