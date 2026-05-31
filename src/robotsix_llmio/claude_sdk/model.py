@@ -198,7 +198,7 @@ class ClaudeSDKModel(Model):
         return combined or None
 
     async def _invoke(self, prompt: str, system_text: str | None) -> tuple[str, Any]:
-        from claude_agent_sdk import (
+        from claude_agent_sdk import (  # type: ignore[import-not-found]
             AssistantMessage,
             ClaudeAgentOptions,
             ResultMessage,
