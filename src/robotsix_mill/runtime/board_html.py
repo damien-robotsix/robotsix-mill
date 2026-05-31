@@ -34,6 +34,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runRoadmapSync()" style="--agent-color:#9333ea">Roadmap Sync</button>
     <button onclick="runTraceReview()" style="--agent-color:#0ea5e9">Trace Review</button>
     <button onclick="runModuleCurator()" style="--agent-color:#f97316">Module Curator</button>
+    <button onclick="runMeta()" class="meta-only" style="--agent-color:#a855f7">Meta</button>
   </div>
 </div>
 <button onclick="openDeepReview()" style="font-size:11px;padding:3px 10px;
