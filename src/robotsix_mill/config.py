@@ -140,6 +140,20 @@ class Settings(BaseSettings):
     #  - retrospect_model / audit_model : structured analysis (capable).
     # Transient 429/5xx/timeouts on any of these are absorbed by the
     # bounded retry+backoff (see transient_* below).
+    #
+    # --- LLM backend toggle (DeepSeek ↔ Claude SDK) ----------------------
+    # REVERSIBLE provider selection. Default "deepseek" keeps the proven
+    # OpenRouter/DeepSeek path for every agent. Set ``llm_backend:
+    # claude_sdk`` to route ALL agents through the robotsix-llmio Claude
+    # Agent SDK transport (subscription auth, no API key; tier→model
+    # opus/haiku), or list specific agent names in ``claude_sdk_agents``
+    # to route only those while everything else stays on DeepSeek.
+    # Reverting is a config flip + restart — no code change. The Claude SDK
+    # path needs Node + the ``claude`` CLI (logged in) in the container;
+    # the *_model fields below still drive DeepSeek and only pick the tier
+    # (pro→DEFAULT/opus, flash→CHEAP/haiku) when Claude SDK is selected.
+    llm_backend: str = Field(default="deepseek")
+    claude_sdk_agents: list[str] = Field(default_factory=list)
     model: str = Field(default="deepseek/deepseek-v4-pro")
     explore_model: str = Field(default="deepseek/deepseek-v4-flash")
     test_model: str = Field(default="deepseek/deepseek-v4-flash")
