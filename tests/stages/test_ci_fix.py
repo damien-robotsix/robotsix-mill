@@ -121,6 +121,203 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
     assert _read_counter(counter) == 0
 
 
+# --- Fix succeeds but makes no code changes → no-change counter → BLOCKED ---
+
+
+def test_fix_success_no_change_hits_ceiling_blocks(tmp_path, monkeypatch):
+    """When the ci-fix agent succeeds but produces no commits (local HEAD
+    matches remote) for ci_max_auto_retries consecutive cycles, escalate
+    to BLOCKED."""
+    ctx = _gh(tmp_path, ci_max_auto_retries="2")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    push_seen = []
+
+    def fake_push(repo, branch, remote_url, token):
+        push_seen.append(branch)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        fake_push,
+    )
+    # Simulate no-change: local HEAD == remote HEAD.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "abc123",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "abc123",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    no_change_path = ctx.service.workspace(t).artifacts_dir / "ci_no_change_cycles.txt"
+
+    # Cycle 1: no change → IMPLEMENT_COMPLETE, counter=1.
+    out1 = CIFixStage().run(t, ctx)
+    assert out1.next_state is State.IMPLEMENT_COMPLETE
+    assert _read_counter(no_change_path) == 1
+    assert len(push_seen) == 1
+
+    # Cycle 2: no change again → hits ceiling (max=2) → BLOCKED.
+    out2 = CIFixStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "no code changes" in out2.note
+    assert "infrastructure flakes" in out2.note
+    # Counters reset on block.
+    assert _read_counter(no_change_path) == 0
+
+
+def test_fix_success_with_changes_resets_no_change_counter(tmp_path, monkeypatch):
+    """When the ci-fix agent produces a real commit, the no-change counter resets."""
+    ctx = _gh(tmp_path, ci_max_auto_retries="2")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    push_seen = []
+
+    def fake_push(repo, branch, remote_url, token):
+        push_seen.append(branch)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        fake_push,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    no_change_path = ctx.service.workspace(t).artifacts_dir / "ci_no_change_cycles.txt"
+
+    # Cycle 1: no change (head == remote).
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "abc123",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "abc123",
+    )
+    out1 = CIFixStage().run(t, ctx)
+    assert out1.next_state is State.IMPLEMENT_COMPLETE
+    assert _read_counter(no_change_path) == 1
+
+    # Cycle 2: real change (head != remote).
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "def456",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "abc123",
+    )
+    out2 = CIFixStage().run(t, ctx)
+    assert out2.next_state is State.IMPLEMENT_COMPLETE
+    # No-change counter reset to 0.
+    assert _read_counter(no_change_path) == 0
+
+    # Cycle 3: no change again → counter=1 (not blocked yet).
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "def456",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "def456",
+    )
+    out3 = CIFixStage().run(t, ctx)
+    assert out3.next_state is State.IMPLEMENT_COMPLETE
+    assert _read_counter(no_change_path) == 1
+
+
+def test_max_auto_retries_zero_disables_ceiling(tmp_path, monkeypatch):
+    """When ci_max_auto_retries=0, the no-change ceiling is disabled
+    (preserves pre-ceiling behaviour)."""
+    ctx = _gh(tmp_path, ci_max_auto_retries="0")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    push_seen = []
+
+    def fake_push(repo, branch, remote_url, token):
+        push_seen.append(branch)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        fake_push,
+    )
+    # Simulate no-change: local HEAD == remote HEAD.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "abc123",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.remote_branch_sha",
+        lambda repo, branch: "abc123",
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    no_change_path = ctx.service.workspace(t).artifacts_dir / "ci_no_change_cycles.txt"
+
+    # Run 5 no-change cycles — none should block (ceiling disabled).
+    for _ in range(5):
+        out = CIFixStage().run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+    # Counter still increments but never triggers a block.
+    assert _read_counter(no_change_path) == 5
+    assert len(push_seen) == 5
+
+
 # --- Fix success + push failure → BLOCKED ---
 
 
