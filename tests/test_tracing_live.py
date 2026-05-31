@@ -327,8 +327,11 @@ def test_langfuse_trace_claude_sdk_tool_and_subagent() -> None:
         run = await subagent.run(question)
         return str(run.output)
 
+    # Two tiers in one trace: opus coordinator, haiku subagent — exercises both
+    # claude_sdk models and disambiguates the two generations (chat opus / chat
+    # haiku). Opus is fine here: the prompt + output are tiny.
     outer = provider.build_agent(
-        tier=Tier.CHEAP,
+        tier=Tier.DEFAULT,
         system_prompt=(
             "Use the add tool for arithmetic and the consult_expert tool for "
             "science questions."

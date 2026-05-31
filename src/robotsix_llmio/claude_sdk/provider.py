@@ -254,9 +254,9 @@ class _SdkToolAgentHandle:
 
         chunks: list[str] = []
         result: Any = None
-        # Root agent-run span: tool spans (emitted by the tool wrapper) nest
-        # under it, and cost/usage land here so the trace shows like a normal
-        # agent run despite the SDK driving its own loop.
+        # Root agent-run span (becomes the trace). Tool spans (from the tool
+        # wrapper) nest under it; a child generation span holds the model I/O,
+        # token usage, and cost.
         with start_span(
             get_tracer(_TRACER_NAME),
             self._name,
@@ -281,9 +281,9 @@ class _SdkToolAgentHandle:
 
             if root is not None:
                 root.set_attribute("langfuse.observation.output", text)
-            # A child generation span carries token usage + the SDK's (estimated)
-            # cost so they roll up into the trace — Langfuse sums cost from child
-            # observations, not from the root span (which becomes the trace).
+            # Child generation span: the model exchange. Carries input/output +
+            # token usage + the SDK cost estimate. Cost must sit on a child
+            # observation to roll up — a root span becomes the trace, not summed.
             usage_obj = getattr(result, "usage", None) if result is not None else None
             with start_span(
                 get_tracer(_TRACER_NAME),
@@ -292,6 +292,8 @@ class _SdkToolAgentHandle:
                     "gen_ai.operation.name": "chat",
                     "gen_ai.system": "anthropic",
                     "gen_ai.request.model": self._sdk_model,
+                    "langfuse.observation.input": user_prompt,
+                    "langfuse.observation.output": text,
                 },
             ) as gen:
                 if gen is not None and isinstance(usage_obj, dict):
