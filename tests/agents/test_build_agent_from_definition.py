@@ -529,8 +529,10 @@ def test_modules_field_present_in_all_real_yamls(tmp_path):
             f"{yaml_path.name}: modules must be bool, got "
             f"{type(definition.modules).__name__}"
         )
-        # Currently no agent has opted in — that's a separate ticket
-        assert definition.modules is False, (
-            f"{yaml_path.name}: modules must be False (opt-in happens "
-            f"in a separate child ticket)"
-        )
+        # refine.yaml is the only agent that has opted in to modules.
+        # All others must still be False.
+        if yaml_path.name != "refine.yaml":
+            assert definition.modules is False, (
+                f"{yaml_path.name}: modules must be False (only refine.yaml "
+                f"has opted in so far)"
+            )
