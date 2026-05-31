@@ -13,12 +13,14 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Acquire::Retries lets apt recover from transient mirror glitches.
 # Apt version pin validated against Debian Trixie (13) — see same note in
 # the base stage.  curl is only needed in the builder for the Docker CLI
-# download; it is NOT carried into the production image.
+# download; git is needed so uv can clone git dependencies (robotsix-llmio).
+# Neither is carried into the production image.
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && apt-get update \
     && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
         curl=8.14.1-* \
+        git=1:2.47.3-* \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Docker CLI static binary ─────────────────────────────────────────────
