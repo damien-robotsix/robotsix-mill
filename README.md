@@ -22,10 +22,53 @@ consumer only ever picks a **tier** (`default` or `cheap`).
    detector. The models are **baked**: `default = deepseek/deepseek-v4-pro`,
    `cheap = deepseek/deepseek-v4-flash`.
 
+### Alternative transport — Claude Agent SDK (subscription auth)
+
+`robotsix_llmio.claude_sdk` is a **sibling of the OpenRouter layer** (both derive
+from `core.LLMProvider`) that needs **no API key**: it drives the local `claude`
+CLI through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk),
+so it authenticates with your `claude login` (Claude Code subscription / OAuth)
+credentials. `ClaudeSDKProvider` maps `default→opus`, `cheap→haiku`.
+
+Because the SDK runs its own agent loop and executes tools internally — returning
+only final text, never raw `tool_use` blocks — this transport supports
+`output_type=str` and pydantic-ai's `PromptedOutput` (JSON-in-text), but **not**
+function/tool calling or the default tool-based structured output (those raise a
+clear `UserError`). Each request also spawns a fresh CLI subprocess and pays
+Claude Code's injected system-prompt overhead, so it's a convenience transport,
+not a hot path. Runtime needs Node.js and a logged-in `claude` CLI.
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import PromptedOutput
+from robotsix_llmio.claude_sdk import ClaudeSDKProvider
+from robotsix_llmio.core import Tier
+
+provider = ClaudeSDKProvider()  # no key — uses your `claude login` session
+
+class City(BaseModel):
+    name: str
+    country: str
+
+agent = provider.build_agent(
+    tier=Tier.CHEAP, system_prompt="Extract the city.",
+    output_type=PromptedOutput(City), name="extract",
+)
+result = provider.call_with_retry(lambda: agent.run_sync("Tell me about Kyoto."))
+print(result.output)  # name='Kyoto' country='Japan'
+agent.close()
+```
+
+> Auth note: Anthropic restricts offering claude.ai login to third-party *end
+> users*; driving your *own* subscription from your own automation is the
+> intended personal use. Keep this transport for your own tooling.
+
 ## Install
 
 ```bash
 pip install "robotsix-llmio[openrouter_deepseek]"
+# or, for the subscription-auth transport (also needs Node + `claude login`):
+pip install "robotsix-llmio[claude_sdk]"
 ```
 
 ## Configuration
