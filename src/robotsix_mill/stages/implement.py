@@ -179,6 +179,22 @@ class ImplementStage(Stage):
             if params is not None:
                 return ImplementStage._run_repo_scaffold(ctx, ticket, s, params)
 
+        # --- meta-board cross-repo implement gate ---
+        # A meta ticket that isn't a new-repo scaffold needs edits across the
+        # triaged repos AND a multi-repo delivery (one PR per touched repo) —
+        # neither is supported here yet. refine already builds the triaged
+        # multi-repo workspace (RefineStage._build_meta_workspace); the
+        # implement + deliver half is a tracked follow-up. BLOCK with a clear
+        # note rather than cloning the wrong (global) repo or crashing on the
+        # board-less memory ledger.
+        if ticket.board_id == "meta":
+            return Outcome(
+                State.BLOCKED,
+                "meta cross-repo implement/delivery not yet supported — refine "
+                "builds the multi-repo workspace; the implement+deliver half is "
+                "a follow-up. The refined spec is ready for a human to action.",
+            )
+
         remote_url = _resolve_remote_url(s, ctx.repo_config)
         if not remote_url:
             return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")

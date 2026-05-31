@@ -290,6 +290,19 @@ def test_blocked_without_remote(ctx_factory):
     assert "FORGE_REMOTE_URL" in out.note
 
 
+def test_meta_ticket_blocks_at_implement_with_clear_note(ctx_factory):
+    """A meta-board ticket (cross-repo) is refined into a multi-repo
+    workspace by refine, but the implement+deliver half isn't built yet:
+    implement must BLOCK with an explicit note rather than clone the global
+    repo or crash on the board-less memory ledger."""
+    ctx = ctx_factory(test_command="true")
+    t = _ticket(ctx)
+    t.board_id = "meta"
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "meta cross-repo" in out.note
+
+
 def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(

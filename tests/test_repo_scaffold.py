@@ -668,8 +668,12 @@ class TestGuardClause:
 
         db.reset_engine()
 
-    def test_meta_ticket_without_marker_passes_through(self, tmp_path, monkeypatch):
-        """A META ticket without new-repo marker falls through to normal implement."""
+    def test_meta_ticket_without_marker_blocks_as_cross_repo(
+        self, tmp_path, monkeypatch
+    ):
+        """A META ticket without the new-repo marker is NOT scaffolded; it
+        BLOCKs at the cross-repo implement gate (the multi-repo implement +
+        deliver half isn't built yet) with a clear note."""
         settings = _make_settings(tmp_path)
         db.reset_engine()
         db.init_db(settings, board_id="meta")
@@ -686,9 +690,8 @@ class TestGuardClause:
         stage = ImplementStage()
         outcome = stage.run(ticket, ctx)
 
-        # Should hit the remote_url check (BLOCKED since no forge remote url for meta board)
         assert outcome.next_state == State.BLOCKED
-        assert "FORGE_REMOTE_URL" in (outcome.note or "")
+        assert "meta cross-repo" in (outcome.note or "")
 
         db.reset_engine()
 

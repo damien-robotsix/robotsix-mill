@@ -631,9 +631,13 @@ class RefineStage(Stage):
         # --- end triage ---
 
         # --- run the refine agent ---
-        refine_memory_path = s.memory_file_for(
-            "refine", ctx.repo_config.board_id if ctx.repo_config else ""
+        # Meta tickets have no registered repo_config; their memory ledger
+        # is keyed on the ticket's own board_id ("meta"). Every other board
+        # uses its repo_config.board_id.
+        memory_board_id = (
+            ctx.repo_config.board_id if ctx.repo_config else ticket.board_id
         )
+        refine_memory_path = s.memory_file_for("refine", memory_board_id)
         memory_text = load_memory(refine_memory_path, max_chars=s.max_memory_chars)
 
         # extra_roots is passed in (non-empty for meta-board multi-repo
@@ -678,7 +682,7 @@ class RefineStage(Stage):
                 epic_context=epic_ctx,
                 extra_roots=extra_roots,
                 message_history=resume_history,
-                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                board_id=memory_board_id,
             )
         except RuntimeError as e:  # e.g. OPENROUTER_API_KEY not set
             # ModelHTTPError subclasses RuntimeError, so a transient model

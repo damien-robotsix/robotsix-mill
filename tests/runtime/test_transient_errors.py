@@ -310,9 +310,10 @@ def test_classify_none_cause_context():
 
 
 # ---------------------------------------------------------------------------
-# DeepSeek thinking-mode reasoning round-trip 400 — must be transient so the
-# worker's stage-retry does a fresh re-run instead of a hard BLOCK that needs
-# a manual resume. See project-deepseek-pin-reasoning-blocker.
+# DeepSeek thinking-mode reasoning round-trip 400 — the special-case detector
+# was REMOVED (OpenRouter no longer raises this 400 when reasoning is stripped
+# from a tool-call turn, so robotsix-llmio dropped the detector). A 400 of any
+# shape is now classified fatal. See project-deepseek-pin-reasoning-blocker.
 # ---------------------------------------------------------------------------
 
 
@@ -333,19 +334,18 @@ def _reasoning_400():
     )
 
 
-def test_classify_transient_deepseek_reasoning_400_direct():
-    assert classify_stage_error(_reasoning_400()) == "transient"
+def test_classify_reasoning_400_is_now_fatal_direct():
+    # Detector removed → a reasoning-shaped 400 is just a fatal 400.
+    assert classify_stage_error(_reasoning_400()) == "fatal"
 
 
-def test_classify_transient_deepseek_reasoning_400_in_cause_chain():
-    # This is the production shape: coding.AgentRunError wraps the
-    # ModelHTTPError as __cause__ before implement.py reclassifies it.
+def test_classify_reasoning_400_is_now_fatal_in_cause_chain():
     outer = RuntimeError("agent run failed")
     outer.__cause__ = _reasoning_400()
-    assert classify_stage_error(outer) == "transient"
+    assert classify_stage_error(outer) == "fatal"
 
 
-def test_classify_fatal_plain_400_is_not_reasoning_roundtrip():
+def test_classify_fatal_plain_400():
     from pydantic_ai.exceptions import ModelHTTPError
 
     plain = ModelHTTPError(400, "x", {"error": {"message": "bad request"}})
@@ -358,11 +358,10 @@ def test_classify_fatal_plain_400_is_not_reasoning_roundtrip():
 # ---------------------------------------------------------------------------
 
 
-def test_reraise_if_transient_reraises_reasoning_400():
-    exc = _reasoning_400()
-    with pytest.raises(Exception) as ei:
-        reraise_if_transient(exc)
-    assert ei.value is exc
+def test_reraise_if_transient_returns_on_reasoning_400():
+    # Detector removed → a reasoning-shaped 400 is fatal, so reraise_if_transient
+    # returns (the caller blocks) rather than re-raising for a stage-retry.
+    assert reraise_if_transient(_reasoning_400()) is None
 
 
 def test_reraise_if_transient_reraises_httpx_timeout():

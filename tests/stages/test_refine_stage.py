@@ -1742,3 +1742,77 @@ def test_only_mill_comments_means_no_reviewer_feedback(
     RefineStage().run(t, ctx)
 
     assert captured["reviewer_comments"] is None
+
+
+# ---------------------------------------------------------------------------
+# meta board: triage-built multi-repo workspace + board-keyed memory ledger
+# ---------------------------------------------------------------------------
+
+
+def test_meta_ticket_uses_triage_workspace_and_meta_memory(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A meta-board ticket has no registered repo_config: refine must run the
+    repo-triage agent, clone the triaged repos (passing them as extra_roots),
+    and key the refine memory ledger on the ticket's board_id ('meta') —
+    NOT crash in memory_file_for on an empty board_id."""
+    import robotsix_mill.agents.meta_triage as mt
+    import robotsix_mill.meta_workspace as mw
+
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    ctx.repo_config = None  # meta board is not a registered repo
+    t = _ticket(
+        ctx,
+        title="Extract shared loader",
+        body=(
+            "Extract the duplicated YAML cascade loader into a shared library "
+            "consumed by both robotsix-mill and robotsix-auto-mail."
+        ),
+    )
+    t.board_id = "meta"
+
+    repo_dir = tmp_path / "repos" / "robotsix-mill"
+    repo_dir.mkdir(parents=True)
+    extra = [repo_dir, tmp_path / "repos" / "robotsix-auto-mail"]
+    monkeypatch.setattr(
+        mt, "required_repos_for", lambda *, settings, spec: ["robotsix-mill"]
+    )
+    monkeypatch.setattr(
+        mw, "build_meta_workspace", lambda settings, ws, repo_ids: (repo_dir, extra)
+    )
+
+    captured: dict = {}
+
+    def _capture(*, settings, title, draft, repo_dir=None, **kw):
+        captured["board_id"] = kw.get("board_id")
+        captured["extra_roots"] = kw.get("extra_roots")
+        return RefineResult(spec_markdown="## Problem\nExtract it")
+
+    _apply_default_mocks(monkeypatch, run_refine_agent=_capture)
+
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert captured["board_id"] == "meta"  # memory keyed on the meta board
+    assert captured["extra_roots"] == extra  # multi-repo workspace threaded
+
+
+def test_meta_ticket_blocks_when_no_repos_clonable(ctx_factory, monkeypatch):
+    """If the triaged workspace yields no clone, refine BLOCKs the meta ticket
+    with a clear note rather than proceeding with no repo_dir."""
+    import robotsix_mill.agents.meta_triage as mt
+    import robotsix_mill.meta_workspace as mw
+
+    ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
+    ctx.repo_config = None
+    t = _ticket(ctx, title="Cross-repo thing", body="Align practice X across repos.")
+    t.board_id = "meta"
+
+    monkeypatch.setattr(mt, "required_repos_for", lambda *, settings, spec: [])
+    monkeypatch.setattr(
+        mw, "build_meta_workspace", lambda settings, ws, repo_ids: (None, [])
+    )
+    _apply_default_mocks(monkeypatch)
+
+    out = RefineStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
