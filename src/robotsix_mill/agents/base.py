@@ -163,6 +163,18 @@ def _model_name(settings: Settings) -> str:
     return settings.model
 
 
+def _use_claude_sdk(settings: Settings, name: str | None) -> bool:
+    """Whether *name* should be built on the Claude SDK transport.
+
+    REVERSIBLE toggle: True when this agent is explicitly opted in via
+    ``settings.claude_sdk_agents`` OR the global ``settings.llm_backend``
+    is ``"claude_sdk"``. Default config → always False (DeepSeek path).
+    """
+    if name and name in set(settings.claude_sdk_agents or []):
+        return True
+    return settings.llm_backend == "claude_sdk"
+
+
 def _render_module_map(module_list: list[dict]) -> str:
     """Render a scannable ``## Module Map`` section from the taxonomy.
 
@@ -298,29 +310,6 @@ def build_agent(
     Note: for a structured ``output_type`` on a model whose provider
     rejects forced ``tool_choice``, wrap it in ``PromptedOutput`` at
     the call site (the default ``ToolOutput`` mode 404s there)."""
-    if not get_secrets().openrouter_api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is not set")
-
-    # lazy: keeps core import-light and the test suite hermetic.
-    # CostInstrumentedOpenRouterModel is now a thin shim over the
-    # robotsix-llmio library's OpenRouterDeepseekModel (it applies the interim
-    # substring tiering at construction); the pin/reasoning/cost plumbing lives
-    # in the library. Construction stays here unchanged so the model-patch test
-    # seam keeps working.
-    from pydantic_ai import Agent
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
-
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
-
-    http_client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(
-        model_name or _model_name(settings),
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=http_client,
-        ),
-    )
-
     all_tools = list(tools or [])
     if report_issue:
         # Every agent can self-report a blocking/degrading issue (missing
@@ -371,14 +360,59 @@ def build_agent(
 
         all_tools.append(make_ask_web_knowledge_tool(settings))
 
+    composed_system = compose_prompt(
+        settings,
+        system_prompt,
+        skills=skills,
+        modules=modules,
+    )
+    effective_model = model_name or _model_name(settings)
+
+    # --- Backend selection (REVERSIBLE; default DeepSeek) ----------------
+    # When this agent is routed to the Claude SDK (global llm_backend or a
+    # per-agent claude_sdk_agents entry), build via robotsix-llmio's
+    # ClaudeSDKProvider (subscription auth, tier→opus/haiku). Mill's tools
+    # bridge through the SDK's @tool/MCP mechanism. Everything below the
+    # branch is the unchanged DeepSeek/OpenRouter path.
+    if _use_claude_sdk(settings, name):
+        # Lazy: claude_agent_sdk is only installed/needed when the toggle
+        # is on, so the import must not run on the default DeepSeek path.
+        from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
+        from robotsix_llmio.core.provider import Tier
+
+        tier = Tier.CHEAP if "flash" in effective_model else Tier.DEFAULT
+        return ClaudeSDKProvider().build_agent(
+            tier=tier,
+            system_prompt=composed_system,
+            tools=all_tools,
+            output_type=output_type,
+            name=name,
+            retries=retries,
+        )
+
+    # --- DeepSeek / OpenRouter (default) ---------------------------------
+    # CostInstrumentedOpenRouterModel is a thin shim over robotsix-llmio's
+    # OpenRouterDeepseekModel; construction stays here so the model-patch
+    # test seam keeps working.
+    if not get_secrets().openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+
+    from pydantic_ai import Agent
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from .openrouter_cost import CostInstrumentedOpenRouterModel
+
+    http_client = timeout_http_client(settings)
+    model = CostInstrumentedOpenRouterModel(
+        effective_model,
+        provider=OpenRouterProvider(
+            api_key=get_secrets().openrouter_api_key,
+            http_client=http_client,
+        ),
+    )
     agent_kwargs: dict[str, Any] = dict(
         model=model,
-        system_prompt=compose_prompt(
-            settings,
-            system_prompt,
-            skills=skills,
-            modules=modules,
-        ),
+        system_prompt=composed_system,
         output_type=output_type,
         tools=all_tools,
         retries=retries,

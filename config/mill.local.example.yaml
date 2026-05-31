@@ -51,6 +51,14 @@ sandbox:
   # proxy_url: ""
 
 # core:
+#   # LLM backend toggle (reversible; default DeepSeek for every agent).
+#   # Route specific agents to the Claude SDK transport (subscription auth,
+#   # opus/haiku) by name — everything else stays on DeepSeek:
+#   claude_sdk_agents: [auto-approve]
+#   # ...or route EVERY agent to Claude SDK:
+#   llm_backend: claude_sdk        # default: deepseek
+#   # (Claude SDK needs Node + the `claude` CLI in the image and a mounted
+#   #  ~/.claude/.credentials.json — see Dockerfile + docker-compose.override.)
 #   models:
 #     # Trace analysis (per-trace inspector + cross-trace analyzer).
 #     # Default is deepseek-v4-flash; override here to pin a stronger

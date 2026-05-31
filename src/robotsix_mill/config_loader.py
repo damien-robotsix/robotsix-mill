@@ -258,6 +258,9 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.models.auto_approve": "auto_approve_model",
     "core.models.scope_triage": "scope_triage_model",
     "core.models.rate_limit_fallback": "rate_limit_fallback_model",
+    # -- core: LLM backend toggle (DeepSeek ↔ Claude SDK) --
+    "core.llm_backend": "llm_backend",
+    "core.claude_sdk_agents": "claude_sdk_agents",
     # -- core.limits --
     "core.limits.coordinator_requests": "coordinator_request_limit",
     "core.limits.test_requests": "test_request_limit",

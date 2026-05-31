@@ -90,7 +90,17 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && apt-get install -y --no-install-recommends \
         git=1:2.47.3-* \
         ca-certificates=20250419 \
+        nodejs=20.19.2+dfsg-1+deb13u2 \
+        npm=9.2.0~ds1-3 \
     && rm -rf /var/lib/apt/lists/*
+
+# Claude Agent SDK transport (opt-in via llm_backend / claude_sdk_agents)
+# drives the `claude` CLI subprocess for subscription-auth LLM calls. Install
+# it globally so it's on PATH; subscription credentials come from a mounted
+# ~/.claude/.credentials.json (see docker-compose.override.yml). Harmless when
+# the toggle is off (default) — nothing spawns the CLI.
+RUN npm install -g @anthropic-ai/claude-code \
+    && claude --version
 
 # Copy only the artifacts built in the builder stage — no source tree.
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
@@ -102,7 +112,12 @@ COPY --from=builder /usr/local/bin/robotsix-mill /usr/local/bin/robotsix-mill
 RUN groupadd --system --gid 1000 mill \
     && useradd --system --gid mill --uid 1000 --create-home --shell /bin/bash mill \
     && mkdir -p /data \
-    && chown -R mill:mill /data
+    && chown -R mill:mill /data \
+    # Pre-create a mill-owned ~/.claude so the Claude SDK transport's `claude`
+    # CLI can write its state/cache there; the host's .credentials.json is
+    # bind-mounted INTO this dir (read-only) without changing its ownership.
+    && mkdir -p /home/mill/.claude \
+    && chown -R mill:mill /home/mill/.claude
 
 WORKDIR /app
 
