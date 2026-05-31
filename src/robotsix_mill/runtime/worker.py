@@ -744,6 +744,10 @@ class Worker:
     # Default queue key for tickets without a board_id (legacy /
     # repo-less tickets). Always present alongside the per-repo queues.
     _DEFAULT_BOARD = ""
+    # The synthetic cross-repo meta board is not a registered repo, but its
+    # tickets ARE worked (refine builds a multi-repo workspace via triage —
+    # see RefineStage._build_meta_workspace). Consume it like a board.
+    _META_BOARD = "meta"
 
     # Stage-rank by ticket state — used as a secondary sort key in the
     # PriorityQueue (after priority_rank, before FIFO seq). Lower = pops
@@ -2357,6 +2361,7 @@ class Worker:
                 (rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()
             ]
             pool_sizes.append((self._DEFAULT_BOARD, 1))
+            pool_sizes.append((self._META_BOARD, 1))
             for board_id, n in pool_sizes:
                 for _ in range(n):
                     self._tasks.append(asyncio.create_task(self._run(board_id)))
@@ -2609,7 +2614,7 @@ class Worker:
         from ..config import get_repos_config
         from ..core.service import TicketService
 
-        boards: list[str] = []
+        boards: list[str] = [self._META_BOARD]
         try:
             for rc in get_repos_config().repos.values():
                 if rc.board_id and rc.board_id not in boards:

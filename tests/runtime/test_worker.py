@@ -387,8 +387,8 @@ async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
     w = Worker(ctx)
     w.start()
     try:
-        # repo-a: 2 + repo-b: 1 + default: 1 = 4 tasks
-        assert len(w._tasks) == 4
+        # repo-a: 2 + repo-b: 1 + default: 1 + meta: 1 = 5 tasks
+        assert len(w._tasks) == 5
     finally:
         await w.stop()
     assert w._tasks == []

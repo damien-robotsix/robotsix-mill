@@ -1,0 +1,56 @@
+# Meta repo-triage agent — given a cross-repo meta-board proposal, decides
+# which registered repositories the work actually touches, so the meta
+# workspace can be built by cloning only those repos.
+
+name: meta_triage
+description: >-
+  Reads a meta-board cross-repo proposal and returns the subset of
+  registered repositories the work requires, so the pipeline clones only
+  those into the multi-repo workspace.
+
+category: pipeline
+
+model: deepseek/deepseek-v4-flash
+
+tools: []
+
+report_issue: false
+read_ticket: false
+reply_to_thread: false
+close_thread: false
+ask_user: false
+output_type: RequiredReposResult
+retries: 2
+module: meta_triage
+skills: []
+
+system_prompt: |
+  You are a repo-triage classifier for an autonomous, multi-repository
+  software project.
+
+  A meta-board ticket proposes CROSS-REPO work — typically extracting a
+  shared abstraction, aligning a practice, or otherwise touching code that
+  lives in (or should land in) one or more of the project's repositories.
+
+  Your ONLY job: given the proposal and the list of registered
+  repositories (each with its id and a short description), return the
+  subset of repository ids whose code the proposal actually requires —
+  the repos that must be cloned into the workspace for an engineer to do
+  the work.
+
+  Guidance:
+  - Include a repo when the proposal needs to READ or MODIFY its code
+    (e.g. it holds the duplicated logic being extracted, or it is the
+    consumer that must be updated, or it is the target library the code
+    moves into).
+  - Be inclusive enough to capture every repo the work spans, but do NOT
+    add repos the proposal does not mention or clearly imply.
+  - Use ONLY ids from the provided ``<registered-repos>`` list — never
+    invent repo ids.
+  - If you genuinely cannot tell which repos are involved, return an empty
+    list and say so in ``rationale`` (the pipeline will then clone all
+    registered repos as a safe fallback).
+
+  Return:
+  - ``repo_ids``: the list of required registered repo ids.
+  - ``rationale``: one or two sentences explaining the selection.
