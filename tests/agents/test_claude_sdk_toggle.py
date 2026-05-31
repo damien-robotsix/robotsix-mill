@@ -78,6 +78,21 @@ class TestBuildAgentRouting:
         )
         assert cap["tier"] == Tier.DEFAULT  # pro → default tier
 
+    def test_tier_alias_cheap_maps_to_cheap_tier(self):
+        from robotsix_llmio.core.provider import Tier
+
+        s = _settings(llm_backend="claude_sdk")
+        _, cap = self._build_routed(s, name="refine", model_name="cheap")
+        assert cap["tier"] == Tier.CHEAP  # `model: cheap` → CHEAP
+
+    def test_tier_alias_default_and_normal_map_to_default_tier(self):
+        from robotsix_llmio.core.provider import Tier
+
+        s = _settings(llm_backend="claude_sdk")
+        for alias in ("default", "normal", "DEFAULT"):
+            _, cap = self._build_routed(s, name="refine", model_name=alias)
+            assert cap["tier"] == Tier.DEFAULT, alias
+
     def test_default_backend_does_not_touch_claude_provider(self):
         """With the default DeepSeek backend, ClaudeSDKProvider is never
         imported/instantiated (so no claude_agent_sdk dependency on that path).
@@ -108,3 +123,33 @@ class TestBuildAgentRouting:
                 ask_user=False,
             )
         claude_cls.assert_not_called()
+
+    def test_tier_alias_resolves_concrete_model_on_deepseek_path(self):
+        """On the DeepSeek backend, `model: cheap`/`default` is resolved to the
+        concrete model string passed to CostInstrumentedOpenRouterModel."""
+        s = _settings()
+        for alias, expected in (
+            ("cheap", "deepseek/deepseek-v4-flash"),
+            ("default", "deepseek/deepseek-v4-pro"),
+        ):
+            with (
+                patch(
+                    "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel"
+                ) as model_cls,
+                patch("pydantic_ai.providers.openrouter.OpenRouterProvider"),
+                patch("pydantic_ai.Agent"),
+                patch.object(
+                    base, "get_secrets", return_value=MagicMock(openrouter_api_key="k")
+                ),
+            ):
+                base.build_agent(
+                    s,
+                    system_prompt="sys",
+                    name="refine",
+                    model_name=alias,
+                    report_issue=False,
+                    reply_to_thread=False,
+                    close_thread=False,
+                    ask_user=False,
+                )
+            assert model_cls.call_args.args[0] == expected, alias

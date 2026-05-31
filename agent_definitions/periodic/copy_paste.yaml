@@ -12,7 +12,7 @@ category: periodic
 interval_seconds: 604800
 enabled: true
 
-model: deepseek/deepseek-v4-pro
+model: default
 
 tools:
   - explore

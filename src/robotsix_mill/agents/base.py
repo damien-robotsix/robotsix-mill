@@ -155,6 +155,19 @@ def build_agent_from_definition(
     return build_agent(settings, **kwargs)
 
 
+# llmio-convention tier aliases for the YAML `model` field. Letting a
+# definition say `model: cheap` / `model: default` keeps it provider-agnostic:
+# the alias maps to a concrete model on the DeepSeek backend, and the Claude
+# backend reads the tier from the resolved "flash"/"pro" substring (see
+# build_agent). The concrete strings mirror mill's Settings defaults — kept
+# here (not imported from llmio internals) to avoid the mill↔llmio skew class.
+_MODEL_TIER_ALIASES: dict[str, str] = {
+    "cheap": "deepseek/deepseek-v4-flash",  # llmio CHEAP / fast tier
+    "default": "deepseek/deepseek-v4-pro",  # llmio DEFAULT / capable tier
+    "normal": "deepseek/deepseek-v4-pro",  # alias of default
+}
+
+
 def _model_name(settings: Settings) -> str:
     # No "openrouter:" prefix — the provider is set explicitly so we can
     # use the cost-instrumented model subclass. The main agent NEVER
@@ -367,6 +380,16 @@ def build_agent(
         modules=modules,
     )
     effective_model = model_name or _model_name(settings)
+    # llmio Tier convention: agent definitions may set `model: cheap` /
+    # `model: default` (or `normal`) instead of a provider-specific model id,
+    # so they stay backend-agnostic. Resolve the alias once here (before the
+    # backend branch): the DeepSeek path then uses the concrete model string,
+    # and the Claude path infers the tier from the resolved "flash"/"pro"
+    # substring. Non-alias values (real model ids, ${VAR}-resolved) pass
+    # through unchanged.
+    effective_model = _MODEL_TIER_ALIASES.get(
+        effective_model.strip().lower(), effective_model
+    )
 
     # --- Backend selection (REVERSIBLE; default DeepSeek) ----------------
     # When this agent is routed to the Claude SDK (global llm_backend or a
