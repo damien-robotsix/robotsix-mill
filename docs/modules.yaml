@@ -7,14 +7,19 @@ modules:
       - tests/core/test_core_retry.py
   - id: robotsix_llmio-openrouter
     description: >
-      OpenRouter transport layer, including the base model-family-agnostic
-      provider and the derived DeepSeek layer with reasoning policies.
+      OpenRouter transport layer — base model-family-agnostic provider.
     paths:
       - src/robotsix_llmio/openrouter/**
-      - src/robotsix_llmio/openrouter_deepseek/**
       - tests/test_openrouter.py
-      - tests/test_openrouter_deepseek.py
-      - tests/test_openrouter_deepseek_live.py
+  - id: robotsix_llmio-openrouter-deepseek
+    description: >
+      Derived DeepSeek layer that pins the generic OpenRouter transport
+      to DeepSeek models and configures per-tier reasoning policy.
+    paths:
+      - src/robotsix_llmio/openrouter_deepseek/**
+      - tests/openrouter_deepseek/test_openrouter_deepseek.py
+      - tests/openrouter_deepseek/test_openrouter_deepseek_live.py
+      - docs/openrouter_deepseek/
   - id: robotsix_llmio-claude-sdk
     paths:
       - src/robotsix_llmio/claude_sdk/**
