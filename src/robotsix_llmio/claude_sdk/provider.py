@@ -220,6 +220,20 @@ class _SdkToolAgentHandle:
         """Run the SDK tool loop synchronously, return ``_SdkToolResult``."""
         return asyncio.run(self._run(user_prompt))
 
+    async def run(
+        self,
+        user_prompt: str,
+        *,
+        model_settings: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> _SdkToolResult:
+        """Async entry point — awaits the SDK tool loop on the current event
+        loop (unlike :meth:`run_sync`, which calls ``asyncio.run``). This lets a
+        tool-bearing agent be used as a subagent from inside another agent's
+        tool: ``await subagent.run(...)``. Its spans then nest under the calling
+        tool's span."""
+        return await self._run(user_prompt)
+
     async def _run(self, user_prompt: str) -> _SdkToolResult:
         from claude_agent_sdk import (  # type: ignore[import-not-found]
             AssistantMessage,
