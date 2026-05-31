@@ -494,7 +494,3 @@ This audit was produced by:
 7. Classifying every value by sensitivity (`secret`, `identifying`,
    `non-sensitive`) based on whether it is a token/key/password, a
    URL/username/hostname, or a tuning knob/feature flag.
-name/hostname, or a tuning knob/feature flag.
-itive`) based on whether it is a token/key/password, a
-   URL/username/hostname, or a tuning knob/feature flag.
-name/hostname, or a tuning knob/feature flag.
