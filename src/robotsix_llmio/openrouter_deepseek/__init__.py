@@ -8,7 +8,21 @@ from __future__ import annotations
 
 try:
     from .model import OpenRouterDeepseekModel
+except ImportError as exc:  # pragma: no cover — surfaced only on bad install
+    raise ImportError(
+        "robotsix_llmio.openrouter_deepseek requires the 'openrouter_deepseek' "
+        "extra. Install with: pip install 'robotsix-llmio[openrouter_deepseek]'"
+    ) from exc
+
+try:
     from .provider import OpenRouterDeepseekProvider
+except ImportError as exc:  # pragma: no cover — surfaced only on bad install
+    raise ImportError(
+        "robotsix_llmio.openrouter_deepseek requires the 'openrouter_deepseek' "
+        "extra. Install with: pip install 'robotsix-llmio[openrouter_deepseek]'"
+    ) from exc
+
+try:
     from .transient import (
         is_deepseek_reasoning_roundtrip_error,
         is_deepseek_transient,
