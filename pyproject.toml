@@ -11,15 +11,22 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Damien SIX", email = "damien.robotsix@gmail.com" }]
 dependencies = [
-    "pydantic-ai>=1.0",
+    # SLIM, not the full meta-package: the meta pulls every provider SDK plus
+    # logfire (which auto-imports opentelemetry via a pydantic plugin) — we
+    # keep the dependency surface minimal and let extras add provider support.
+    "pydantic-ai-slim>=1.0",
     "httpx",
 ]
 
 [project.optional-dependencies]
-# Layer 2 — OpenRouter transport. pydantic-ai's OpenAIChatModel backs it.
-openrouter = ["openai"]
+# Layer 2 — OpenRouter transport (OpenAIChatModel over the OpenRouter provider).
+openrouter = ["pydantic-ai-slim[openrouter,openai]>=1.0"]
 # Layer 3 — derived DeepSeek provider. Chains the openrouter extra.
 openrouter_deepseek = ["robotsix-llmio[openrouter]"]
+# Layer 2 (sibling) — Claude Agent SDK transport. No API key: authenticates via
+# the local `claude login` subscription by spawning the `claude` CLI. Requires
+# Node.js + a logged-in `claude` CLI at runtime (not pip-installable).
+claude_sdk = ["claude-agent-sdk>=0.2"]
 # Optional: emit cost/usage onto the active OpenTelemetry span.
 tracing = ["opentelemetry-api", "opentelemetry-sdk"]
 dev = ["pytest", "ruff"]

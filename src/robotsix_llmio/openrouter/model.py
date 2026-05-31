@@ -103,6 +103,14 @@ def record_openrouter_cost(response: Any) -> None:
                 span.set_attribute(
                     "gen_ai.usage.cache_creation_input_tokens", cache_creation
                 )
+        completion_details = getattr(usage_obj, "completion_tokens_details", None)
+        if completion_details is not None:
+            if isinstance(completion_details, dict):
+                reasoning = completion_details.get("reasoning_tokens")
+            else:
+                reasoning = getattr(completion_details, "reasoning_tokens", None)
+            if reasoning is not None:
+                span.set_attribute("gen_ai.usage.reasoning_tokens", reasoning)
 
 
 class OpenRouterModel(OpenAIChatModel):
