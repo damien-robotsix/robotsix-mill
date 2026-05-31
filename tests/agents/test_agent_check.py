@@ -100,6 +100,30 @@ def test_agent_check_prompt_is_repo_agnostic_and_memory_first():
         assert forbidden not in p, f"prompt still hard-codes mill internal: {forbidden}"
 
 
+def test_agent_check_handles_filed_tickets_like_audit_not_memory():
+    """Per operator: agent_check must dedup already-posted tickets via the
+    freshly-collected, per-repo `recent-proposals` block (exactly like the
+    audit agent) — NOT via memory. Memory is for the layout cache +
+    observations only, never ticket tracking."""
+    p = agent_check.SYSTEM_PROMPT.lower()
+    # audit's canonical proposal-handling line (verbatim-shared)
+    assert "the db is the source of truth for ticket history." in p
+    # recent-proposals is the dedup channel, collected per-repo each run
+    assert "recent-proposals" in p
+    assert "per-repo" in p
+    # memory must explicitly exclude ticket tracking (audit's wording)
+    assert "do not record in memory" in p
+    assert "ticket ids or ticket states" in p
+
+
+def test_agent_check_uses_normal_not_cheap_model():
+    """Per operator: agent_check runs on the normal (default) tier."""
+    from robotsix_mill.agents.yaml_loader import load_agent_definition
+
+    d = load_agent_definition(Path("agent_definitions/periodic/agent_check.yaml"))
+    assert d.model == "default"
+
+
 def test_agent_check_result_model():
     """AgentCheckResult has the expected fields."""
     result = agent_check.AgentCheckResult(
