@@ -14,8 +14,6 @@ repo (no forge configured) it falls back to draft-only as before.
 
 from __future__ import annotations
 
-import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -407,252 +405,88 @@ that can each ship alone, split into focused children:
 """
 
 
-# --- Pre-LLM memory guard helpers -------------------------------------------
-
-
-def _parse_memory_entries(memory: str) -> list[dict]:
-    """Parse the refine agent's memory ledger into structured entries.
-
-    Each entry has:
-      - date: datetime (UTC)
-      - slug: str (hyphenated description from the header line)
-      - outcome: str (the value after ``**Outcome**:``)
-      - rationale: str (text after ``—`` on outcome line)
-      - lesson: str (text after ``**Lesson**:``)
-    """
-    if not memory.strip():
-        return []
-
-    entries: list[dict] = []
-    current: dict | None = None
-    # Matches "## Refine run YYYY-MM-DD — slug"
-    header_re = re.compile(r"^##\s+Refine\s+run\s+(\d{4}-\d{2}-\d{2})\s*[-—]\s*(.+)$")
-
-    for line in memory.splitlines():
-        m = header_re.match(line)
-        if m:
-            if current is not None:
-                entries.append(current)
-            date_str, slug = m.group(1), m.group(2).strip()
-            try:
-                date = datetime.strptime(date_str, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc
-                )
-            except ValueError:
-                date = datetime.min.replace(tzinfo=timezone.utc)
-            current = {
-                "date": date,
-                "slug": slug,
-                "outcome": "",
-                "rationale": "",
-                "lesson": "",
-            }
-            continue
-
-        if current is None:
-            continue
-
-        # Match "- **Outcome**: `no_change_needed` — rationale"
-        out_m = re.match(r"^-\s+\*\*Outcome\*\*:\s*(.+?)(?:\s*[-—]\s*(.*))?$", line)
-        if out_m:
-            current["outcome"] = out_m.group(1).strip().strip("`")
-            current["rationale"] = (out_m.group(2) or "").strip()
-            continue
-
-        # Match "- **Lesson**: text"
-        lesson_m = re.match(r"^-\s+\*\*Lesson\*\*:\s*(.*)$", line)
-        if lesson_m:
-            current["lesson"] = lesson_m.group(1).strip()
-            continue
-
-    if current is not None:
-        entries.append(current)
-
-    return entries
-
-
-# Stopwords filtered out before computing Jaccard similarity.
-_STOPWORDS: frozenset[str] = frozenset(
-    {
-        "a",
-        "an",
-        "the",
-        "is",
-        "are",
-        "was",
-        "were",
-        "be",
-        "been",
-        "have",
-        "has",
-        "had",
-        "do",
-        "does",
-        "did",
-        "will",
-        "would",
-        "could",
-        "should",
-        "may",
-        "might",
-        "can",
-        "shall",
-        "to",
-        "of",
-        "in",
-        "for",
-        "on",
-        "with",
-        "at",
-        "by",
-        "from",
-        "as",
-        "into",
-        "through",
-        "during",
-        "before",
-        "after",
-        "above",
-        "below",
-        "between",
-        "under",
-        "again",
-        "further",
-        "then",
-        "once",
-        "here",
-        "there",
-        "when",
-        "where",
-        "why",
-        "how",
-        "all",
-        "both",
-        "each",
-        "few",
-        "more",
-        "most",
-        "other",
-        "some",
-        "such",
-        "no",
-        "nor",
-        "not",
-        "only",
-        "own",
-        "same",
-        "so",
-        "than",
-        "too",
-        "very",
-        "and",
-        "but",
-        "or",
-        "yet",
-        "it",
-        "its",
-        "that",
-        "this",
-        "these",
-        "those",
-        "i",
-        "me",
-        "my",
-        "we",
-        "our",
-        "you",
-        "your",
-        "he",
-        "she",
-        "him",
-        "her",
-        "they",
-        "them",
-    }
-)
-
-
-def _tokenize(text: str) -> frozenset[str]:
-    """Lowercase, strip punctuation, split into words, remove stopwords
-    and words ≤ 2 chars.  Returns a frozenset for hashing."""
-    # Replace common punctuation / Markdown with spaces
-    cleaned = re.sub(r"[^\w\s]", " ", text.lower())
-    words = cleaned.split()
-    return frozenset(w for w in words if len(w) > 2 and w not in _STOPWORDS)
-
-
-def _topic_similarity(
-    entry_slug: str, entry_rationale: str, title: str, draft: str
-) -> float:
-    """Compute Jaccard similarity between memory entry text and ticket text.
-
-    Returns a float in [0.0, 1.0].  1.0 = identical word sets.
-    """
-    entry_text = f"{entry_slug} {entry_rationale}"
-    ticket_text = f"{title} {draft}"
-
-    entry_words = _tokenize(entry_text)
-    ticket_words = _tokenize(ticket_text)
-
-    if not entry_words and not ticket_words:
-        return 1.0
-    if not entry_words or not ticket_words:
-        return 0.0
-
-    intersection = entry_words & ticket_words
-    union = entry_words | ticket_words
-    return len(intersection) / len(union)
-
-
-def _check_memory_for_no_change(
-    *,
-    memory: str,
+def _check_memory_for_no_change(  # noqa: C901 — Jaccard guard with date-cutoff/outcome parsing; refactoring would scatter tightly-coupled logic
     title: str,
     draft: str,
-) -> RefineResult | None:
-    """Check whether a recent memory entry already concluded
-    ``no_change_needed`` for the same topic.  Returns a synthetic
-    ``RefineResult`` when the memory answers the question, or ``None``
-    to proceed with the LLM call."""
-    now = datetime.now(tz=timezone.utc)
-    max_age_days = MEMORY_NO_CHANGE_MAX_AGE_DAYS
-    threshold = MEMORY_NO_CHANGE_SIMILARITY_THRESHOLD
+    memory: str,
+) -> str | None:
+    """Check *memory* ledger for a prior ``no_change_needed`` entry whose
+    topic is similar to the current ticket.  Returns the rationale string
+    from the matched entry, or ``None`` when no applicable match exists.
 
-    entries = _parse_memory_entries(memory)
+    The guard mirrors the pre-refine dedup check's Jaccard word-overlap
+    approach — same tokenizer, same threshold heuristic — to catch obvious
+    near-duplicates before the LLM is invoked.
+
+    Constants (hardcoded per 2026-06-03 memory-ledger design; promote to
+    ``Settings`` fields if operational tuning is ever needed):
+      - LOOKBACK_DAYS = 90
+      - JACCARD_THRESHOLD = 0.25
+    """
+    import re
+    from datetime import datetime, timedelta
+
+    from .dedup import tokenize
+
+    if not memory or not memory.strip():
+        return None
+
+    LOOKBACK_DAYS = 90
+    JACCARD_THRESHOLD = 0.25
+
+    cutoff = datetime.now() - timedelta(days=LOOKBACK_DAYS)
+    query_tokens = tokenize(title + " " + draft)
+    if not query_tokens:
+        return None
+
+    # Split into entries delimited by "## Refine run" headers.
+    entries = re.split(r"\n(?=## Refine run )", memory)
 
     for entry in entries:
-        # Only consider no_change_needed outcomes
-        if entry["outcome"] != "no_change_needed":
-            continue
-
-        # Skip stale entries
-        age = now - entry["date"]
-        if age.days > max_age_days:
-            continue
-
-        # Compute topic similarity
-        sim = _topic_similarity(entry["slug"], entry["rationale"], title, draft)
-        if sim < threshold:
-            continue
-
-        # Match found — return synthetic result
-        return RefineResult(
-            no_change_needed=True,
-            no_change_rationale=(
-                f"Prior refine run ({entry['date'].strftime('%Y-%m-%d')}) "
-                f"already concluded no change needed for this topic. "
-                f"Rationale from that run: {entry['rationale']}"
-            ),
-            file_map=[],
-            reference_files=[],
-            conversation_state=None,
-            new_messages=None,
+        header_match = re.match(
+            r"## Refine run (\d{4}-\d{2}-\d{2}) — (.+?)(?:\n|$)", entry
         )
+        if not header_match:
+            continue
+
+        date_str = header_match.group(1)
+        topic = header_match.group(2).strip()
+
+        try:
+            entry_date = datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            continue
+
+        if entry_date < cutoff:
+            continue
+
+        # Only consider entries that concluded no_change_needed.
+        if "**Outcome**: `no_change_needed`" not in entry:
+            continue
+
+        topic_tokens = tokenize(topic)
+        if not topic_tokens:
+            continue
+
+        intersection = query_tokens & topic_tokens
+        union = query_tokens | topic_tokens
+        jaccard = len(intersection) / len(union)
+
+        if jaccard >= JACCARD_THRESHOLD:
+            # Extract rationale from the outcome line:
+            #   **Outcome**: `no_change_needed` — <rationale>
+            rationale_match = re.search(
+                r"\*\*Outcome\*\*: *`no_change_needed`(?: *[—–-] *(.+))?(?:\n|$)",
+                entry,
+            )
+            if rationale_match and rationale_match.group(1):
+                return rationale_match.group(1).strip()
+            return ""  # matched entry but no rationale text on that line
 
     return None
 
 
-def run_refine_agent(  # noqa: C901
+def run_refine_agent(
     *,
     settings: Settings,
     title: str,
@@ -691,6 +525,20 @@ def run_refine_agent(  # noqa: C901
         was provided, otherwise ``None``
       - ``conversation_state``: raw conversation JSON for pause/resume
     """
+
+    # ------------------------------------------------------------------
+    # Pre-LLM short-circuit: check the memory ledger for a prior
+    # ``no_change_needed`` conclusion for the same topic.  This avoids
+    # re-running an expensive LLM exploration cycle when we already
+    # know there's nothing to do.
+    # ------------------------------------------------------------------
+    memory_match = _check_memory_for_no_change(title, draft, memory)
+    if memory_match is not None:
+        return RefineResult(
+            no_change_needed=True,
+            no_change_rationale=memory_match,
+            updated_memory=memory,  # unchanged — nothing new to record
+        )
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
@@ -744,20 +592,6 @@ def run_refine_agent(  # noqa: C901
             "comments. Address each one in the revised spec:\n\n"
             f"{reviewer_comments}",
         )
-
-    # Pre-LLM memory guard: short-circuit when a recent prior refine
-    # run already concluded no_change_needed for the same topic.
-    # Bypassed on resume (message_history is not None) because the
-    # operator has provided input that the agent must process.
-    if message_history is None:
-        memory_result = _check_memory_for_no_change(
-            memory=memory,
-            title=title,
-            draft=draft,
-        )
-        if memory_result is not None:
-            _safe_close(agent)
-            return memory_result
 
     try:
         result = call_with_retry(

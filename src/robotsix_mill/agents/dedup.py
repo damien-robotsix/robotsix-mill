@@ -33,7 +33,7 @@ class DedupResult(BaseModel):
 log = logging.getLogger("robotsix_mill.agents.dedup")
 
 
-def _tokenize(text: str) -> set[str]:
+def tokenize(text: str) -> set[str]:
     """Tokenize *text* for Jaccard similarity: lowercase, split on
     non-alphanumeric characters, keep tokens longer than 2 chars."""
     return set(
@@ -59,7 +59,7 @@ def rank_candidates_by_similarity(
     if len(candidates) <= max_candidates:
         return list(candidates)
 
-    draft_tokens = _tokenize(draft_title + " " + draft_body)
+    draft_tokens = tokenize(draft_title + " " + draft_body)
     if not draft_tokens:
         # No meaningful tokens in the draft — graceful degradation:
         # return the first max_candidates as-is.
@@ -67,7 +67,7 @@ def rank_candidates_by_similarity(
 
     scored: list[tuple[float, Ticket]] = []
     for cand in candidates:
-        cand_tokens = _tokenize(cand.title)
+        cand_tokens = tokenize(cand.title)
         if not cand_tokens:
             scored.append((0.0, cand))
             continue
