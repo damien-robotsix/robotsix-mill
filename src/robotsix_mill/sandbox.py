@@ -140,10 +140,14 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
     if settings.sandbox_proxy_url:
         proxy = settings.sandbox_proxy_url
         argv += [
-            "-e", f"HTTP_PROXY={proxy}",
-            "-e", f"HTTPS_PROXY={proxy}",
-            "-e", f"http_proxy={proxy}",
-            "-e", f"https_proxy={proxy}",
+            "-e",
+            f"HTTP_PROXY={proxy}",
+            "-e",
+            f"HTTPS_PROXY={proxy}",
+            "-e",
+            f"http_proxy={proxy}",
+            "-e",
+            f"https_proxy={proxy}",
         ]
     # Override the image ENTRYPOINT: images like robotsix/mill have one
     # (it starts the server) which would otherwise swallow our command.
