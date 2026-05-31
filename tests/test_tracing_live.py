@@ -474,3 +474,57 @@ def test_langfuse_trace_claude_sdk_nested_tool_agent() -> None:
         by_id.get(lookup_obs.get("parentObservationId"), {}).get("name")
         == "subagent-with-tool"
     ), "the subagent's own tool should nest under the subagent"
+
+
+@pytest.mark.live
+def test_langfuse_trace_url_resolves_to_real_trace() -> None:
+    """langfuse_trace_url builds a UI URL with the project's real id, pointing at
+    a trace that actually exists. The project id is discovered from the API, so
+    no LANGFUSE_PROJECT_ID env is required."""
+    _require()  # LANGFUSE_* + OPENROUTER_API_KEY
+
+    from robotsix_llmio.core import (
+        Tier,
+        flush_tracing,
+        langfuse_trace_url,
+        make_session_id,
+        setup_langfuse_tracing,
+        start_trace,
+    )
+    from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
+
+    projects = _langfuse_get("/api/public/projects", {})
+    assert projects and projects.get("data"), "could not discover the Langfuse project"
+    project_id = projects["data"][0]["id"]
+
+    # Register (or backfill) the project id so langfuse_trace_url can use it.
+    assert setup_langfuse_tracing(project_id=project_id) is True
+    _, _, base = _langfuse_creds()
+
+    provider = OpenRouterDeepseekProvider()
+    agent = provider.build_agent(tier=Tier.CHEAP, system_prompt="Concise.", name="url-test")
+    trace_id: str | None = None
+    try:
+        with start_trace("url-trace", session_id=make_session_id("urltest")) as root:
+            provider.call_with_retry(
+                lambda: agent.run_sync(
+                    "2+2? Just the number.", model_settings={"max_tokens": 20}
+                )
+            )
+            trace_id = root.trace_id
+    finally:
+        agent.close()
+    flush_tracing()
+
+    assert trace_id, "start_trace should expose a trace_id"
+    url = langfuse_trace_url(trace_id)
+    assert url == f"{base.rstrip('/')}/project/{project_id}/traces/{trace_id}", url
+
+    # The trace the URL points at must actually exist (poll for ingestion).
+    found = None
+    for _ in range(12):
+        found = _langfuse_get(f"/api/public/traces/{trace_id}", {})
+        if found:
+            break
+        time.sleep(4)
+    assert found and found.get("id") == trace_id, "URL points at a missing trace"

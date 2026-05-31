@@ -36,12 +36,14 @@ from ._otel import get_tracer, start_span
 
 _DEFAULT_BASE_URL = "https://cloud.langfuse.com"
 
-# The installed SDK TracerProvider (set once), the project public keys that
-# already have an exporter, and the default project (first registered) used to
-# route spans when no ``langfuse_project`` override is active.
+# The installed SDK TracerProvider (set once), the registered projects (public
+# key -> {base_url, project_id}, also the dedup set), and the default project
+# (first registered) used to route spans when no ``langfuse_project`` override
+# is active.
 _provider: Any = None
-_registered_keys: set[str] = set()
+_projects: dict[str, dict[str, Any]] = {}
 _default_public_key: str | None = None
+_shutdown_requested = False
 
 # Per-context routing: session id and target project, stamped onto every span.
 _current_session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -74,14 +76,17 @@ def setup_langfuse_tracing(
     public_key: str | None = None,
     secret_key: str | None = None,
     base_url: str | None = None,
+    project_id: str | None = None,
     service_name: str = "robotsix-llmio",
 ) -> bool:
     """Register a Langfuse project for trace export and start instrumentation.
 
     Call once for single-tenant (credentials default to the ``LANGFUSE_*`` env
     vars), or once per project for multi-tenant routing (then use
-    :func:`langfuse_project`). Idempotent per public key. Returns ``True`` when
-    the project is registered, ``False`` when credentials are absent (no-op).
+    :func:`langfuse_project`). *project_id* (or ``LANGFUSE_PROJECT_ID``) is
+    optional and only used to build web-UI links via :func:`langfuse_trace_url`.
+    Idempotent per public key. Returns ``True`` when the project is registered,
+    ``False`` when credentials are absent (no-op).
     """
     global _provider, _default_public_key
 
@@ -89,7 +94,11 @@ def setup_langfuse_tracing(
     secret_key = secret_key or os.environ.get("LANGFUSE_SECRET_KEY")
     if not (public_key and secret_key):
         return False
-    if public_key in _registered_keys:
+    project_id = project_id or os.environ.get("LANGFUSE_PROJECT_ID")
+    if public_key in _projects:
+        # Backfill a project id learned on a later call (for langfuse_trace_url).
+        if project_id and not _projects[public_key].get("project_id"):
+            _projects[public_key]["project_id"] = project_id
         return True
     base_url = base_url or os.environ.get("LANGFUSE_BASE_URL") or _DEFAULT_BASE_URL
 
@@ -160,7 +169,7 @@ def setup_langfuse_tracing(
     _provider.add_span_processor(
         _FilteredBatchSpanProcessor(exporter, target_public_key=public_key)
     )
-    _registered_keys.add(public_key)
+    _projects[public_key] = {"base_url": base_url, "project_id": project_id}
     return True
 
 
@@ -194,6 +203,44 @@ def current_session() -> str | None:
 def make_session_id(kind: str) -> str:
     """A unique session id of the form ``<kind>-<hex>`` for :func:`langfuse_session`."""
     return f"{kind}-{uuid.uuid4().hex}"
+
+
+def langfuse_trace_url(trace_id: str, *, public_key: str | None = None) -> str | None:
+    """Build the Langfuse web-UI URL for *trace_id*, or ``None`` when the
+    project's id isn't known. Uses *public_key*'s project, or the active/default
+    one. A project id is only available when it was passed to
+    :func:`setup_langfuse_tracing` (or set via ``LANGFUSE_PROJECT_ID``)."""
+    pk = public_key or _active_public_key()
+    info = _projects.get(pk) if pk else None
+    if not info or not trace_id:
+        return None
+    project_id = info.get("project_id")
+    if not project_id:
+        return None
+    return f"{info['base_url'].rstrip('/')}/project/{project_id}/traces/{trace_id}"
+
+
+def install_signal_handlers() -> None:
+    """Flush pending traces on ``SIGTERM`` / ``SIGINT`` before the process exits.
+
+    Installs handlers that flush once and then ``SystemExit(0)``. No-op when not
+    on the main thread (where signal handlers can't be installed). Call from your
+    process entry point if you run long-lived workers."""
+    import signal
+
+    def _handler(signum: int, frame: Any) -> None:
+        global _shutdown_requested
+        if _shutdown_requested:
+            return
+        _shutdown_requested = True
+        flush_tracing()
+        raise SystemExit(0)
+
+    try:
+        signal.signal(signal.SIGTERM, _handler)
+        signal.signal(signal.SIGINT, _handler)
+    except ValueError:  # pragma: no cover — not in the main thread
+        pass
 
 
 def _to_text(value: Any) -> str:

@@ -18,8 +18,10 @@ from robotsix_llmio.core.tracing import (
     _langfuse_otlp_endpoint,
     current_session,
     flush_tracing,
+    install_signal_handlers,
     langfuse_project,
     langfuse_session,
+    langfuse_trace_url,
     make_session_id,
     setup_langfuse_tracing,
     start_trace,
@@ -106,3 +108,48 @@ def test_start_trace_safe_without_provider():
 
 def test_flush_is_safe_noop_without_provider():
     flush_tracing()
+
+
+# --- trace URL + signal handlers -------------------------------------------
+
+
+def test_langfuse_trace_url_builds_from_registered_project(monkeypatch):
+    monkeypatch.setattr(
+        tracing,
+        "_projects",
+        {"pk-a": {"base_url": "https://lf.example.com", "project_id": "proj-123"}},
+    )
+    monkeypatch.setattr(tracing, "_default_public_key", "pk-a")
+    # default project
+    assert (
+        langfuse_trace_url("abc123")
+        == "https://lf.example.com/project/proj-123/traces/abc123"
+    )
+    # explicit project
+    assert langfuse_trace_url("abc123", public_key="pk-a").endswith(
+        "/project/proj-123/traces/abc123"
+    )
+    # unknown project -> None
+    assert langfuse_trace_url("abc123", public_key="pk-missing") is None
+
+
+def test_langfuse_trace_url_none_without_project_id(monkeypatch):
+    monkeypatch.setattr(
+        tracing,
+        "_projects",
+        {"pk-a": {"base_url": "https://x", "project_id": None}},
+    )
+    monkeypatch.setattr(tracing, "_default_public_key", "pk-a")
+    assert langfuse_trace_url("abc") is None
+
+
+def test_install_signal_handlers_is_safe():
+    import signal
+
+    orig_term = signal.getsignal(signal.SIGTERM)
+    orig_int = signal.getsignal(signal.SIGINT)
+    try:
+        install_signal_handlers()  # must not raise; registers flush-on-signal
+    finally:  # restore so we don't affect the rest of the test session
+        signal.signal(signal.SIGTERM, orig_term)
+        signal.signal(signal.SIGINT, orig_int)
