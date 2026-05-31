@@ -88,6 +88,85 @@ class RetrospectResult(BaseModel):
         return data
 
 
+def _is_structural_quote_end(text: str, quote_idx: int) -> bool:
+    """Return True if the double-quote at *quote_idx* is followed by a
+    JSON structural terminator (``}`` or ``,`` then ``"`` or ``}``)
+    after optional whitespace."""
+    j = quote_idx + 1
+    while j < len(text) and text[j] in " \t\n\r":
+        j += 1
+    if j >= len(text):
+        return False
+    if text[j] == "}":
+        return True
+    if text[j] != ",":
+        return False
+    k = j + 1
+    while k < len(text) and text[k] in " \t\n\r":
+        k += 1
+    return k < len(text) and text[k] in ('"', "}")
+
+
+def _find_memory_value_end(text: str, start: int) -> int | None:
+    """Scan forward from *start* for the closing unescaped double-quote
+    of the ``updated_memory`` field value.  Returns the index of that
+    quote, or ``None`` if no valid terminator is found.
+    """
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if ch != '"':
+            continue
+        if _is_structural_quote_end(text, i):
+            return i
+    return None
+
+
+def _repair_memory_field_escaping(text: str) -> str:
+    """Attempt to repair unescaped characters in the ``updated_memory``
+    field of a JSON string before pydantic-core parsing.
+
+    Fast path: returns *text* unchanged when it is already valid JSON.
+    On failure, extracts the ``updated_memory`` value from the raw text,
+    re-escapes it via :func:`json.dumps`, and reconstructs the field.
+    Returns the original text if repair fails.
+    """
+    import json
+    import re
+
+    # Fast path: already valid JSON
+    try:
+        json.loads(text)
+        return text
+    except json.JSONDecodeError:
+        pass
+
+    # Locate the "updated_memory" field opening quote
+    m = re.search(r'"updated_memory"\s*:\s*"', text)
+    if not m:
+        return text
+
+    start = m.end()  # first character of the field value
+    end = _find_memory_value_end(text, start)
+    if end is None:
+        return text
+
+    raw = text[start:end]
+    escaped_val = json.dumps(raw)[1:-1]  # strip surrounding quotes
+    repaired = text[:start] + escaped_val + text[end:]
+    try:
+        json.loads(repaired)
+        return repaired
+    except json.JSONDecodeError:
+        return text
+
+
 def run_retrospect_agent(
     *,
     settings: Settings,
@@ -120,6 +199,24 @@ def run_retrospect_agent(
         tools=[],
         model_name=definition.model or settings.retrospect_model,
     )
+
+    # Register a pre-parse repair hook so the agent's output can be
+    # salvaged when the model emits unescaped newlines / quotes inside
+    # the ``updated_memory`` JSON string value.  The hook fires after
+    # the model returns raw text but before pydantic-core attempts
+    # JSON parsing, avoiding the retry loop for this class of error.
+    from pydantic_ai.capabilities import Hooks
+
+    agent.root_capability.capabilities.append(
+        Hooks(
+            before_output_validate=lambda ctx, output_context, output: (
+                _repair_memory_field_escaping(output)
+                if isinstance(output, str)
+                else output
+            )
+        )
+    )
+
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (
         f"{recent_proposals}"
