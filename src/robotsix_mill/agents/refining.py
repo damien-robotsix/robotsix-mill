@@ -501,6 +501,26 @@ def run_refine_agent(
             settings=settings,
             what="refine",
         )
+
+        # Guard: if the agent hit the iteration limit while the model
+        # was still requesting tool calls, the last response has
+        # finish_reason == "tool_call" and result.output is empty.
+        # Synthesise a final answer with a single continuation call
+        # that includes the full message history for context.
+        finish_reason = getattr(
+            getattr(result, "response", None), "finish_reason", None
+        )
+        if finish_reason == "tool_call":
+            continuation_result = call_with_retry(
+                lambda: agent.run_sync(
+                    "Please synthesise a final answer based on the tool results above.",
+                    message_history=result.all_messages(),
+                ),
+                settings=settings,
+                what="refine (continuation after tool_calls stop)",
+            )
+            result = continuation_result
+
         output: RefineResult = result.output
         try:
             output.conversation_state = result.all_messages_json()

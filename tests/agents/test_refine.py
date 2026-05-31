@@ -2998,3 +2998,203 @@ def test_system_prompt_forbids_report_issue_for_completion():
         f"SYSTEM_PROMPT must forbid completion-notification report_issue calls "
         f"({sentinel!r}); found no match."
     )
+
+
+# ---------------------------------------------------------------------------
+# Continuation guard tests (finish_reason == "tool_call")
+# ---------------------------------------------------------------------------
+
+
+class _FakeRunResult:
+    """Minimal fake for a pydantic-ai AgentRunResult, exposing only the
+    attributes that the continuation guard reads."""
+
+    def __init__(
+        self,
+        *,
+        output,
+        finish_reason,
+        all_messages,
+        all_messages_json=b"[]",
+        new_messages_json=b"[]",
+    ):
+        self._output = output
+        self._all_messages = all_messages
+        self._all_messages_json = all_messages_json
+        self._new_messages_json = new_messages_json
+        self.response = (
+            _FakeResponse(finish_reason) if finish_reason is not None else None
+        )
+
+    @property
+    def output(self):
+        return self._output
+
+    def all_messages(self):
+        return self._all_messages
+
+    def all_messages_json(self):
+        return self._all_messages_json
+
+    def new_messages_json(self):
+        return self._new_messages_json
+
+
+class _FakeResponse:
+    def __init__(self, finish_reason):
+        self.finish_reason = finish_reason
+
+
+def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
+    """When finish_reason == 'tool_call', the guard triggers a single
+    continuation call with message_history=all_messages() and returns
+    the continuation's RefineResult."""
+    import robotsix_mill.agents.retry as retry_module
+    import robotsix_mill.agents.base as base_module
+
+    first_messages = [{"role": "tool", "content": "tool result"}]
+    expected_spec = RefineResult(split=False, spec_markdown="## Problem\nfixed\n")
+
+    # Track run_sync calls so we can assert on the continuation prompt
+    run_sync_calls = []
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None):
+            run_sync_calls.append(
+                {"user_prompt": user_prompt, "message_history": message_history}
+            )
+            if len(run_sync_calls) == 1:
+                return _FakeRunResult(
+                    output=RefineResult(split=False, spec_markdown=""),
+                    finish_reason="tool_call",
+                    all_messages=first_messages,
+                )
+            else:
+                return _FakeRunResult(
+                    output=expected_spec,
+                    finish_reason="stop",
+                    all_messages=first_messages
+                    + [{"role": "assistant", "content": "done"}],
+                )
+
+        def close(self):
+            pass
+
+    mock_agent = _MockAgent()
+
+    # call_with_retry: pass-through so the lambdas execute directly
+    def pass_through_retry(
+        fn, *, settings, what="model call", sleep=None, fallback_fn=None
+    ):
+        return fn()
+
+    monkeypatch.setattr(retry_module, "call_with_retry", pass_through_retry)
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: mock_agent
+    )
+
+    output = refining.run_refine_agent(
+        settings=settings,
+        title="Test ticket",
+        draft="original draft",
+    )
+
+    # Guard must have fired: exactly two run_sync calls
+    assert len(run_sync_calls) == 2, (
+        f"Expected 2 run_sync calls (original + continuation), got {len(run_sync_calls)}"
+    )
+
+    # Continuation must carry the first call's messages as history
+    assert run_sync_calls[1]["message_history"] == first_messages, (
+        "Continuation call must receive message_history=all_messages() from first result"
+    )
+
+    # Continuation prompt must contain the synthesis instruction
+    assert "synthesise a final answer" in run_sync_calls[1]["user_prompt"].lower(), (
+        "Continuation user prompt must instruct the model to synthesise a final answer"
+    )
+
+    # Final output must be the continuation's RefineResult
+    assert output.spec_markdown == "## Problem\nfixed\n"
+
+
+def test_continuation_guard_not_triggered_on_stop(monkeypatch, settings):
+    """When finish_reason == 'stop', no continuation occurs — the
+    original result passes through unchanged."""
+    import robotsix_mill.agents.retry as retry_module
+    import robotsix_mill.agents.base as base_module
+
+    expected_spec = RefineResult(split=False, spec_markdown="## Problem\nok\n")
+    run_sync_calls = []
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None):
+            run_sync_calls.append(user_prompt)
+            return _FakeRunResult(
+                output=expected_spec,
+                finish_reason="stop",
+                all_messages=[{"role": "user", "content": "hi"}],
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        retry_module,
+        "call_with_retry",
+        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+    )
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+
+    output = refining.run_refine_agent(
+        settings=settings,
+        title="Test ticket",
+        draft="draft",
+    )
+
+    # Only one call — no continuation
+    assert len(run_sync_calls) == 1
+    assert output.spec_markdown == "## Problem\nok\n"
+
+
+def test_continuation_guard_skipped_when_response_missing(monkeypatch, settings):
+    """When result.response is None (missing attribute), the guard is
+    skipped entirely — no AttributeError, no continuation."""
+    import robotsix_mill.agents.retry as retry_module
+    import robotsix_mill.agents.base as base_module
+
+    expected_spec = RefineResult(split=False, spec_markdown="## Problem\nok\n")
+    run_sync_calls = []
+
+    class _MockAgent:
+        def run_sync(self, user_prompt, *, message_history=None):
+            run_sync_calls.append(user_prompt)
+            return _FakeRunResult(
+                output=expected_spec,
+                finish_reason=None,  # response will be None
+                all_messages=[],
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        retry_module,
+        "call_with_retry",
+        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+    )
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
+
+    output = refining.run_refine_agent(
+        settings=settings,
+        title="Test ticket",
+        draft="draft",
+    )
+
+    # Guard skipped — exactly one call
+    assert len(run_sync_calls) == 1
+    assert output.spec_markdown == "## Problem\nok\n"
