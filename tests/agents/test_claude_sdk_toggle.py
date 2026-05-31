@@ -83,23 +83,28 @@ class TestBuildAgentRouting:
         imported/instantiated (so no claude_agent_sdk dependency on that path).
         """
         s = _settings()
-        with patch(
-            "robotsix_llmio.claude_sdk.provider.ClaudeSDKProvider"
-        ) as claude_cls:
-            # Mock the DeepSeek model so we don't need a real key/network.
-            with patch(
+        # Mock the whole DeepSeek construction chain so we don't need a real
+        # key/network: the model, the provider, and pydantic_ai.Agent itself
+        # (a mock model would otherwise trip pydantic-ai's model inference,
+        # which demands OPENAI_API_KEY).
+        with (
+            patch("robotsix_llmio.claude_sdk.provider.ClaudeSDKProvider") as claude_cls,
+            patch(
                 "robotsix_mill.agents.openrouter_cost.CostInstrumentedOpenRouterModel"
-            ):
-                with patch.object(
-                    base, "get_secrets", return_value=MagicMock(openrouter_api_key="k")
-                ):
-                    base.build_agent(
-                        s,
-                        system_prompt="sys",
-                        name="refine",
-                        report_issue=False,
-                        reply_to_thread=False,
-                        close_thread=False,
-                        ask_user=False,
-                    )
+            ),
+            patch("pydantic_ai.providers.openrouter.OpenRouterProvider"),
+            patch("pydantic_ai.Agent"),
+            patch.object(
+                base, "get_secrets", return_value=MagicMock(openrouter_api_key="k")
+            ),
+        ):
+            base.build_agent(
+                s,
+                system_prompt="sys",
+                name="refine",
+                report_issue=False,
+                reply_to_thread=False,
+                close_thread=False,
+                ask_user=False,
+            )
         claude_cls.assert_not_called()
