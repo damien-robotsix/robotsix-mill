@@ -10,7 +10,7 @@ description: >-
 
 category: pipeline
 
-model: deepseek/deepseek-v4-flash
+model: cheap
 
 tools: []
 

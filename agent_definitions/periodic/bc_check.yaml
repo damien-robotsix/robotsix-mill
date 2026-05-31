@@ -14,7 +14,7 @@ category: periodic
 interval_seconds: 86400
 enabled: true
 
-model: deepseek/deepseek-v4-flash
+model: cheap
 
 # Read-only tools for codebase exploration (conditional on repo_dir).
 tools:

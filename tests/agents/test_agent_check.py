@@ -50,70 +50,54 @@ def _empty_result():
 # --- Agent tests ---
 
 
-def test_agent_check_prompt_covers_all_coherence_dimensions():
-    """The agent-check prompt must cover all six coherence dimensions A-F
-    and now targets YAML files instead of Python source."""
+def test_agent_check_prompt_is_repo_agnostic_and_memory_first():
+    """The rewritten prompt must be repo-agnostic: discover the repo's
+    agent/tool definition layout (cached in memory), no-op when there are
+    none, and run the coherence checks against the DISCOVERED layout rather
+    than hard-coded robotsix-mill paths."""
     p = agent_check.SYSTEM_PROMPT.lower()
-    # Dimension A: Tool–Prompt Coherence
-    for kw in ("tool–prompt", "backtick-quoted", "actual tool set", "mismatch"):
-        assert kw in p, f"agent-check prompt missing tool-prompt cue: {kw}"
-    # pydantic-ai auto-injection must be documented so the agent knows
-    # not to flag absent tool mentions as gaps.
-    assert (
-        "docstring_format" in p
-        or "auto-injects" in p
-        or ("pydantic-ai" in p and "auto" in p)
-    )
-    # "tool in actual set but never mentioned" must NOT be treated as a gap.
-    assert "do not flag" in p or "DO NOT flag" in p or "absence from the prompt" in p
-    # Must mention docstring staleness / prompt-docstring contradiction checks.
-    assert "docstring" in p and ("contradict" in p or "fs_tools.py" in p)
-    # Dimension B: Skill Coherence
-    for kw in ("skill", "frontmatter", "orphan"):
-        assert kw in p, f"agent-check prompt missing skill cue: {kw}"
-    # Dimension C: Metadata Correctness
-    for kw in ("metadata", "report_issue", "name", "model", "duplicate"):
-        assert kw in p, f"agent-check prompt missing metadata cue: {kw}"
-    # Dimension D: Agent Registration Completeness
-    for kw in ("registration", "_model", "orphan"):
-        assert kw in p, f"agent-check prompt missing registration cue: {kw}"
-    # Dimension E: Prompt Self-Consistency
-    for kw in ("self-consistency", "copy-paste", "drift"):
-        assert kw in p, f"agent-check prompt missing self-consistency cue: {kw}"
-    # Dimension F: Memory Ledger Coherence
+
+    # Repo-agnostic discovery, memory-first, with a cached layout block.
+    assert "repo-agnostic" in p
+    assert "## repo layout" in p
+    assert "discover" in p
+    # No-op contract for repos without agent/tool definitions.
+    assert "no agent/tool definitions" in p
+    assert "empty" in p
+
+    # Generalized coherence dimensions (A–E), not mill-specific cues.
     for kw in (
-        "memory ledger",
-        "*_memory.md",
-        "staleness",
-        "reconciliation",
-        "format consistency",
-        "truncated",
+        "tool–prompt coherence",
+        "registration completeness",
+        "metadata correctness",
+        "prompt self-consistency",
+        "memory-ledger coherence",
     ):
-        assert kw in p, f"agent-check prompt missing memory-ledger cue: {kw}"
-    assert "skip `agent_check_memory.md`" in p or "agent_check_memory.md" in p
-    # Must reference YAML files and agent_definitions/
-    assert "agent_definitions/" in p
-    assert ".yaml" in p
-    # Must use explore/read_file/list_dir tools
-    assert "explore" in p
-    assert "read_file" in p
-    assert "list_dir" in p
-    # Must read yaml_loader.py, base.py, config.py
-    assert "yaml_loader.py" in p
-    assert "base.py" in p
-    assert "config.py" in p
-    # Must read skills and references
-    assert "skills/" in p or "SKILL.md" in p
-    assert "agent_references/" in p
-    # Memory note about deleted false-positive drafts
-    assert (
-        "90ac" in p
-        or "d847" in p
-        or "false-positive" in p
-        or ("deleted" in p and "draft" in p)
-    )
-    # Must mention `${VAR}` references for model field
-    assert "${var}" in p or "settings field" in p
+        assert kw in p, f"prompt missing coherence dimension: {kw}"
+
+    # Auto-injection rule kept but framed generically (not mill-only), so
+    # the agent doesn't flag intentionally-unmentioned tools.
+    assert "auto-inject" in p
+    assert "do not flag" in p
+
+    # Tools available.
+    for t in ("explore", "read_file", "list_dir"):
+        assert t in p
+    # recent-proposals dedup contract retained.
+    assert "recent-proposals" in p
+    # Output contract.
+    for f in ("draft_titles", "draft_bodies", "gap_ids", "updated_memory"):
+        assert f in p
+
+    # Must NOT hard-code robotsix-mill internals (the whole point).
+    for forbidden in (
+        "src/robotsix_mill",
+        "yaml_loader.py",
+        "agent_references/",
+        "90ac",
+        "d847",
+    ):
+        assert forbidden not in p, f"prompt still hard-codes mill internal: {forbidden}"
 
 
 def test_agent_check_result_model():
