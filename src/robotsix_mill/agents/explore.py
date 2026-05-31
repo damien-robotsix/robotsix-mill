@@ -251,6 +251,7 @@ def make_explore_tool(
     the given settings, repo directory, and extra roots, and registers
     itself in ``ToolRegistry`` so agents can discover it.
     """
+
     def explore(question: str) -> str:
         """Ask a fresh, context-isolated sub-agent a complex, multi-step
         question about the repository — questions that would require
