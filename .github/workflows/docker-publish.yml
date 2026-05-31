@@ -77,7 +77,11 @@ jobs:
       # supposed to ignore. `if: always()` so we still surface findings
       # in the Security tab even when the gate above trips.
       - name: Trivy vulnerability scan (SARIF for code-scanning)
-        if: always()
+        # Only scan when an image was actually built. Without this guard, a
+        # failed build leaves scan-ref empty and trivy defaults to `.`, then
+        # fails with a misleading "could not parse reference: ." that masks
+        # the real build error.
+        if: always() && steps.scan-ref.outputs.image != ''
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan-ref.outputs.image }}
@@ -176,7 +180,11 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy vulnerability scan (SARIF for code-scanning)
-        if: always()
+        # Only scan when an image was actually built. Without this guard, a
+        # failed build leaves scan-ref empty and trivy defaults to `.`, then
+        # fails with a misleading "could not parse reference: ." that masks
+        # the real build error.
+        if: always() && steps.scan-ref.outputs.image != ''
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan-ref.outputs.image }}
@@ -251,8 +259,13 @@ jobs:
       - id: build
         uses: docker/build-push-action@v7
         with:
+          # context = sandbox/proxy so the Dockerfile's COPY tinyproxy.conf /
+          # COPY filter resolve; `file` is relative to the workspace root
+          # (like publish-sandbox's `file: sandbox/Dockerfile`), so it must be
+          # the full path — a bare `Dockerfile` resolved to the repo-root mill
+          # Dockerfile and failed the build.
           context: sandbox/proxy
-          file: Dockerfile
+          file: sandbox/proxy/Dockerfile
           push: false
           load: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -274,7 +287,11 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy vulnerability scan (SARIF for code-scanning)
-        if: always()
+        # Only scan when an image was actually built. Without this guard, a
+        # failed build leaves scan-ref empty and trivy defaults to `.`, then
+        # fails with a misleading "could not parse reference: ." that masks
+        # the real build error.
+        if: always() && steps.scan-ref.outputs.image != ''
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan-ref.outputs.image }}

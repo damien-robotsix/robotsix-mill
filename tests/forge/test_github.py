@@ -507,6 +507,30 @@ def test_fetch_workflow_job_logs_all_jobs_pass(tmp_path, monkeypatch):
     assert result == ""
 
 
+def test_capture_failure_window_anchors_on_first_error():
+    """An if:always() cascade: the REAL build failure errors early, a masking
+    step re-errors near the tail. A plain tail-cap would show only the mask;
+    _capture_failure_window must surface the EARLY real failure."""
+    from robotsix_mill.forge.github import _capture_failure_window
+
+    real = "ERROR: failed to build proxy image: COPY filter not found\n##[error]Process completed with exit code 1\n"
+    filler = "noise line padding the log\n" * 5000  # skipped-step noise
+    mask = "FATAL could not parse reference: .\n##[error]Process completed with exit code 1\n"
+    log = real + filler + mask
+    out = _capture_failure_window(log, max_bytes=4000)
+    assert "failed to build proxy image" in out  # the real, earliest failure
+    assert "anchored on first failure marker" in out  # window was anchored
+    assert len(out) <= 4000 + 100
+
+
+def test_capture_failure_window_tailcaps_without_marker():
+    """No failure marker → degrade to historical tail-cap (last N bytes)."""
+    from robotsix_mill.forge.github import _capture_failure_window
+
+    out = _capture_failure_window("x" * 100_000, max_bytes=65536)
+    assert out == "x" * 65536  # plain tail, no anchor prefix
+
+
 def test_fetch_workflow_job_logs_capped(tmp_path, monkeypatch):
     """Log exceeds MILL_CI_LOG_MAX_BYTES → only last N bytes kept."""
     # Create a log longer than the default 65536 cap.
