@@ -454,7 +454,19 @@ class ImplementStage(Stage):
             verdict = None  # fall through to ESCALATE
 
         if verdict is not None and verdict.action == "EXPAND":
-            for f in verdict.expand_files:
+            new_files = [f for f in verdict.expand_files if f not in file_map]
+            if not new_files:
+                log.info(
+                    "%s: scope-triage EXPAND — all %d file(s) already in file_map; skipping",
+                    ticket.id,
+                    len(verdict.expand_files),
+                )
+                return _ScopeGuardrailResult(
+                    action="skip_iteration",
+                    file_map=file_map,
+                    feedback=None,
+                )
+            for f in new_files:
                 file_map.add(f)
             log.info(
                 "%s: scope-triage EXPAND — %s",
@@ -469,12 +481,12 @@ class ImplementStage(Stage):
             ctx.service.add_step_event(
                 ticket.id,
                 f"scope-triage EXPAND: {verdict.justification} "
-                f"(added: {', '.join(verdict.expand_files)})",
+                f"(added: {', '.join(new_files)})",
             )
             # Retroactive short-circuit: when every expand-file was
             # already modified in this pass, fall through to the test
             # gate instead of re-running the agent.
-            if set(verdict.expand_files).issubset(set(changed)):
+            if set(new_files).issubset(set(changed)):
                 log.info(
                     "%s: scope-triage EXPAND retroactive — "
                     "all expanded files already modified; "
