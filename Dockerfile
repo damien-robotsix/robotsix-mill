@@ -99,7 +99,9 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 # it globally so it's on PATH; subscription credentials come from a mounted
 # ~/.claude/.credentials.json (see docker-compose.override.yml). Harmless when
 # the toggle is off (default) — nothing spawns the CLI.
-RUN npm install -g @anthropic-ai/claude-code \
+# Pin @anthropic-ai/claude-code to a specific version. Bump when the
+# Claude SDK transport requires a newer CLI.
+RUN npm install -g @anthropic-ai/claude-code@2.1.158 \
     && claude --version
 
 # Copy only the artifacts built in the builder stage — no source tree.
