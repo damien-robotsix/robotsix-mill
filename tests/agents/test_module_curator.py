@@ -23,8 +23,10 @@ def test_module_curator_system_prompt_covers_all_drift_classes():
     # 4. Reorganization toward a per-module layout (c0fd)
     assert "reorganiz" in p
     assert "per-module" in p
-    # The reorg proposal must be conservative / one module per ticket.
-    assert "one module per ticket" in p or "conservative" in p
+    # The reorg proposal must be proactive and propose one module/group per ticket.
+    assert "one module per ticket" in p
+    # Module consolidation (grouping or merging similar modules) must be covered.
+    assert "consolidat" in p
     # Must be read-only
     assert (
         "read-only" in p

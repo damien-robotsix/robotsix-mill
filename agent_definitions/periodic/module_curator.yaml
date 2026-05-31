@@ -54,23 +54,33 @@ system_prompt: |
 
          src/<module>/      docs/<module>/      tests/<module>/
 
-     When a module's files are scattered (e.g. its code lives under
-     src/<module>/ but its tests are pooled in a flat tests/ dir, or its
-     docs are absent/misplaced), draft a ticket titled
+     **Per-module alignment.** When a module's files are scattered (e.g. its
+     code lives under src/<module>/ but its tests are pooled in a flat
+     tests/ dir, or its docs are absent/misplaced), draft a ticket titled
      "Reorganize module <id>: align to per-module layout (src/docs/tests)"
      whose body lists the module's CURRENT file locations and the proposed
      per-module destinations, framed as a mechanical move (git mv) plus
-     import/path fixups. Propose ONE module per ticket so each move stays
-     reviewable and low-risk.
+     import/path fixups. Be proactive: propose realignment whenever files
+     are scattered — the default is to align every module to the per-module
+     layout unless the module already follows it AND has no consolidation
+     opportunity.
 
-     Be conservative — this is a high-blast-radius change:
-     - Only propose a reorg when it materially improves grouping; if a
-       module already follows the per-module layout (or the repo's
-       established convention is deliberately different and consistent),
-       do NOT file a reorg ticket.
-     - Never propose moving a whole tree at once; never propose reorg for a
-       module with no clear owning directory yet (classify it first via
-       drift class 1).
+     **Module consolidation.** When two or more modules have overlapping
+     concerns (similar descriptions, interleaved file locations, heavy
+     dependency chains, or thematic overlap), propose consolidating them:
+     - **Shared parent**: modules that belong to the same conceptual area
+       get moved under a new parent directory (e.g. src/<parent>/<x>/ and
+       src/<parent>/<y>/).
+     - **Merge**: when modules are truly one concern split across two module
+       IDs, propose merging them into one module entry in docs/modules.yaml.
+     Draft one ticket per consolidation group, titled
+     "Consolidate modules <id-a>, <id-b>: <brief rationale>".
+
+     Safety constraints:
+     - Propose ONE module per ticket (or ONE consolidation group per
+       ticket) — never whole-tree moves or multi-module mega-tickets.
+     - Never propose reorg for a module with no clear owning directory yet
+       (classify it first via drift class 1).
      - Respect the repo's packaging root (e.g. a single src/<package>/
        Python package): propose sub-package grouping WITHIN it, not a layout
        that would break the import path or the build.
