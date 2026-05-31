@@ -153,7 +153,7 @@ def run_meta_agent(
         system_prompt=SYSTEM_PROMPT,
         output_type=PromptedOutput(MetaAgentResult),
         tools=tools,
-        web=False,
+        web_knowledge=False,
         report_issue=False,
         read_ticket=True,
         reply_to_thread=False,

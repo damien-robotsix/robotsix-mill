@@ -126,18 +126,28 @@ def list_tickets(
 
     repos = request.app.state.repos
     if repo_id and repo_id != "all":
-        if repo_id not in repos.repos:
+        # "meta" is the synthetic cross-repo meta-agent board (not a
+        # registered repo — see meta_runner.py / GET /repos).
+        if repo_id == "meta":
+            services = [_TicketService(settings, board_id="meta")]
+        elif repo_id not in repos.repos:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unknown repo: '{repo_id}'. Known repos: "
                 f"{sorted(repos.repos.keys())}",
             )
-        services = [_TicketService(settings, board_id=repos.repos[repo_id].board_id)]
+        else:
+            services = [
+                _TicketService(settings, board_id=repos.repos[repo_id].board_id)
+            ]
     else:
         services = [
             _TicketService(settings, board_id=rc.board_id)
             for rc in repos.repos.values()
         ]
+        # Include the synthetic meta board in the "all repos" view so
+        # extraction proposals are never silently hidden.
+        services.append(_TicketService(settings, board_id="meta"))
 
     tickets: list = []
     for s in services:

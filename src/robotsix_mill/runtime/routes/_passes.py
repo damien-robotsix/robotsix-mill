@@ -440,6 +440,53 @@ def survey_pass(
     return {"status": "started"}
 
 
+@router.post("/module-curator", status_code=202)
+def module_curator_pass(
+    repo_id: str | None = None,
+    request: Request = None,
+    registry=Depends(get_run_registry),
+) -> dict:
+    """Kick off a module-curator pass in the BACKGROUND and return at once.
+
+    The module-curator agent compares the live directory tree against
+    ``docs/modules.yaml`` and files draft tickets for unclassified files,
+    stale paths, and new module proposals. New drafts appear on the board
+    when it finishes.
+    """
+    from ...module_curator_runner import run_module_curator_pass
+    from ..tracing import make_session_id, start_ticket_root_span
+
+    repo_configs = _resolve_agent_run_repos(repo_id, request)
+
+    def _run() -> None:
+        for rc in repo_configs:
+            run_id = None
+            try:
+                run_id = registry.start(
+                    "module_curator", repo_id=rc.repo_id if rc else ""
+                )
+                session_id = make_session_id("module_curator")
+                with start_ticket_root_span(
+                    session_id, "module_curator", repo_config=rc
+                ):
+                    r = run_module_curator_pass(session_id=session_id, repo_config=rc)
+                draft_ids = [d["id"] for d in r.drafts_created[:5]]
+                summary = (
+                    f"Created {len(r.drafts_created)} drafts: "
+                    f"{', '.join(draft_ids)}"
+                    f"{'…' if len(r.drafts_created) > 5 else ''}"
+                )
+                registry.finish_ok(run_id, summary)
+                log.info("module-curator pass done: %d draft(s)", len(r.drafts_created))
+            except Exception as e:  # noqa: BLE001 — background; just log
+                log.exception("module-curator pass failed")
+                if run_id:
+                    registry.finish_error(run_id, str(e))
+
+    threading.Thread(target=_run, name="module-curator-pass", daemon=True).start()
+    return {"status": "started"}
+
+
 @router.post("/config-sync", status_code=202)
 def config_sync_pass(
     repo_id: str | None = None,

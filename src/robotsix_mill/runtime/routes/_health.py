@@ -67,9 +67,16 @@ def list_repos(
     if single is not None:
         rc = repos.repos[single]
         return [{"repo_id": rc.repo_id, "board_id": rc.board_id}]
-    return [
+    result = [
         {"repo_id": rc.repo_id, "board_id": rc.board_id} for rc in repos.repos.values()
     ]
+    # The cross-repo meta-agent files extraction proposals to a synthetic
+    # "meta" board that is NOT a registered repo (no clone/forge — see
+    # meta_runner.py, board_id="meta"). Surface it in the selector so
+    # operators can review those drafts; it is deliberately kept out of
+    # the ReposRegistry so the worker/clone/cost loops never touch it.
+    result.append({"repo_id": "meta", "board_id": "meta"})
+    return result
 
 
 @router.get("/gates")

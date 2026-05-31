@@ -1031,6 +1031,22 @@ async function runSurvey(){
    btn.disabled=false; btn.textContent='Survey';
  }
 }
+async function runModuleCurator(){
+ const btn=event.target;
+ btn.disabled=true; btn.textContent='Running...';
+ try {
+   const repoId=getRepoId();
+   const mcUrl=repoId!=="all"?"/module-curator?repo_id="+encodeURIComponent(repoId):"/module-curator";
+   const r=await jpost(mcUrl);
+   if(!r.ok){throw new Error(await r.text())}
+   alert("Module Curator started — it checks the directory tree against docs/modules.yaml and files drafts for unclassified files / stale paths / new modules. New drafts appear on the board when it finishes.");
+   setTimeout(refresh,4000);
+ } catch(e) {
+   alert("Module Curator failed to start: "+e);
+ } finally {
+   btn.disabled=false; btn.textContent='Module Curator';
+ }
+}
 async function runBcCheck(){
  const btn=event.target;
  btn.disabled=true; btn.textContent='Running...';

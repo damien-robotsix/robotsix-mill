@@ -33,6 +33,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runConfigSync()" style="--agent-color:#6366f1">Config Sync</button>
     <button onclick="runRoadmapSync()" style="--agent-color:#9333ea">Roadmap Sync</button>
     <button onclick="runTraceReview()" style="--agent-color:#0ea5e9">Trace Review</button>
+    <button onclick="runModuleCurator()" style="--agent-color:#f97316">Module Curator</button>
   </div>
 </div>
 <button onclick="openDeepReview()" style="font-size:11px;padding:3px 10px;

@@ -773,6 +773,34 @@ def test_survey_fire_and_forget(client, monkeypatch):
     release.set()  # let the daemon thread finish
 
 
+# -- POST /module-curator -----------------------------------------------
+
+
+def test_module_curator_fire_and_forget(client, monkeypatch):
+    """POST /module-curator returns 202 immediately and runs the pass in
+    a background thread (run-now surface for the daily module-curator)."""
+    from robotsix_mill import module_curator_runner
+
+    ran = threading.Event()
+    release = threading.Event()
+
+    class _R:
+        drafts_created: list = []
+
+    def slow_curator(session_id: str = "", repo_config=None):
+        ran.set()
+        release.wait(5)
+        return _R()
+
+    monkeypatch.setattr(module_curator_runner, "run_module_curator_pass", slow_curator)
+
+    r = client.post("/module-curator")
+    assert r.status_code == 202
+    assert r.json() == {"status": "started"}
+    assert ran.wait(5), "module-curator did not start in background"
+    release.set()  # let the daemon thread finish
+
+
 # -- POST /tickets/{id}/transition (happy path) -------------------------
 
 

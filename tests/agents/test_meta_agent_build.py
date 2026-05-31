@@ -1,0 +1,71 @@
+"""Regression test for the meta-agent's ``build_agent`` wiring.
+
+The existing ``tests/test_meta_runner.py`` mocks ``run_meta_agent``
+wholesale, so the *real* ``build_agent(...)`` call inside
+``run_meta_agent`` was never exercised by the suite.  That blind spot
+let a kwarg-name bug ship: the call passed ``web=False`` while
+``build_agent`` only accepts ``web_knowledge`` — so the meta-agent threw
+``TypeError`` at construction on *every* run and never filed a draft.
+
+This test routes the meta-agent's kwargs through the *real*
+``build_agent`` signature (via ``Signature.bind``) so any future
+kwarg-name drift fails loudly, while stubbing the tool builders and the
+model run so it stays hermetic and offline.
+"""
+
+from __future__ import annotations
+
+import inspect
+
+from robotsix_mill.agents import base as base_mod
+from robotsix_mill.agents import explore as explore_mod
+from robotsix_mill.agents import fs_tools as fs_tools_mod
+from robotsix_mill.agents.meta import MetaAgentResult, run_meta_agent
+from robotsix_mill.config import Settings
+
+
+class _StubResult:
+    def __init__(self) -> None:
+        self.output = MetaAgentResult(updated_memory="ledger")
+
+
+class _StubAgent:
+    def run_sync(self, prompt):  # noqa: ANN001 — test stub
+        return _StubResult()
+
+
+def test_meta_build_agent_kwargs_match_real_signature(tmp_path, monkeypatch):
+    """``run_meta_agent`` must call ``build_agent`` with kwargs the real
+    signature accepts.  An invalid kwarg (e.g. ``web=`` vs
+    ``web_knowledge=``) raises ``TypeError`` here, exactly as in prod."""
+    real_sig = inspect.signature(base_mod.build_agent)
+    captured: dict = {}
+
+    def _spy_build_agent(settings, **kwargs):
+        # Reproduces the prod failure mode: bind against the *real*
+        # signature so an unknown/renamed kwarg raises TypeError.
+        real_sig.bind(settings, **kwargs)
+        captured.update(kwargs)
+        return _StubAgent()
+
+    # Patch on the base module — meta.py does a late
+    # ``from .base import build_agent`` inside run_meta_agent.
+    monkeypatch.setattr(base_mod, "build_agent", _spy_build_agent)
+    monkeypatch.setattr(base_mod, "_safe_close", lambda _agent: None)
+    # Keep tool construction hermetic and offline.
+    monkeypatch.setattr(explore_mod, "make_explore_tool", lambda *a, **k: lambda: None)
+    monkeypatch.setattr(fs_tools_mod, "build_fs_tools", lambda *a, **k: [])
+
+    settings = Settings(data_dir=str(tmp_path / "data"))
+    result = run_meta_agent(
+        settings=settings,
+        memory="",
+        recent_proposals="",
+        repo_clones={"repo-a": tmp_path},
+    )
+
+    assert isinstance(result, MetaAgentResult)
+    assert result.updated_memory == "ledger"
+    # The fix: build_agent must have received web_knowledge, never web.
+    assert "web_knowledge" in captured
+    assert "web" not in captured
