@@ -28,15 +28,24 @@ _explore_budget_exhausted: bool = False
 
 
 def mark_explore_budget_exhausted() -> None:
+    """Set the explore-budget-exhausted sentinel.
+
+    Called by the explore sub-agent retry path when it exceeds
+    ``UsageLimits.request_limit`` even after a bounded retry.
+    ``coding.py`` checks this after the coordinator run.
+    """
     global _explore_budget_exhausted
     _explore_budget_exhausted = True
 
 
 def is_explore_budget_exhausted() -> bool:
+    """Return whether the explore-budget-exhausted sentinel is set."""
     return _explore_budget_exhausted
 
 
 def reset_explore_budget_exhausted() -> None:
+    """Reset the explore-budget-exhausted sentinel for the next
+    coordinator run."""
     global _explore_budget_exhausted
     _explore_budget_exhausted = False
 
@@ -236,6 +245,12 @@ def run_explore(
 def make_explore_tool(
     settings: Settings, repo_dir: Path, extra_roots: list[Path] | None = None
 ):
+    """Return the ``explore(question)`` closure.
+
+    Factory that creates a per-coordinator explore function wired to
+    the given settings, repo directory, and extra roots, and registers
+    itself in ``ToolRegistry`` so agents can discover it.
+    """
     def explore(question: str) -> str:
         """Ask a fresh, context-isolated sub-agent a complex, multi-step
         question about the repository — questions that would require
