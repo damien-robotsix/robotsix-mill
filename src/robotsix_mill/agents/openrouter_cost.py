@@ -138,12 +138,23 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
                 param.pop("reasoning_content", None)
                 param[_REASONING_DETAILS_KEY] = rd
             else:
-                # Defensive: if reasoning_details is missing (extraction
-                # failed or was stripped), drop the bare reasoning fields
-                # anyway — DeepSeek will re-derive the CoT rather than
-                # rejecting mismatched text with a deterministic 400.
+                # rd missing on a tool-call turn (model emitted no reasoning
+                # that turn, or extraction failed). OMITTING it makes the
+                # echoed sequence a MIX — some tool-call turns carry
+                # reasoning_details, some don't — which is exactly what
+                # DeepSeek's thinking-mode validation rejects with the
+                # deterministic 400. Instead send the field PRESENT but
+                # EMPTY, so EVERY tool-call turn consistently carries a
+                # reasoning_details entry. Verified flash accepts an
+                # empty-text entry (status 200, no malformed-rejection);
+                # this converts the failing "mix" into the passing
+                # "all-present" sequence. Matches the real entry shape
+                # ({type, text, format}) with empty text.
                 param.pop("reasoning", None)
                 param.pop("reasoning_content", None)
+                param[_REASONING_DETAILS_KEY] = [
+                    {"type": "reasoning.text", "text": "", "format": "unknown"}
+                ]
         else:
             # No tool call → omit reasoning entirely.
             param.pop("reasoning", None)
