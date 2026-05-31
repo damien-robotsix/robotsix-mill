@@ -434,14 +434,15 @@ def test_probe_imap_auth_failure(
 def test_probe_config_load_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """probe returns 1 when config loading fails."""
+    """probe exits with code 1 when config loading fails."""
     with mock.patch(
         "robotsix_auto_mail.config.MailConfig.from_env",
         side_effect=RuntimeError("boom"),
     ):
-        rc = main(["probe"])
+        with pytest.raises(SystemExit) as exc:
+            main(["probe"])
 
-    assert rc == 1
+    assert exc.value.code == 1
     err = capsys.readouterr().err
     assert "Error loading configuration" in err
     assert "boom" in err
@@ -701,14 +702,15 @@ VALUES
 def test_board_config_load_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """board returns 1 when config loading fails."""
+    """board exits with code 1 when config loading fails."""
     with mock.patch(
         "robotsix_auto_mail.cli.load",
         side_effect=RuntimeError("boom"),
     ):
-        rc = main(["board"])
+        with pytest.raises(SystemExit) as exc:
+            main(["board"])
 
-    assert rc == 1
+    assert exc.value.code == 1
     err = capsys.readouterr().err
     assert "Error loading configuration" in err
     assert "boom" in err

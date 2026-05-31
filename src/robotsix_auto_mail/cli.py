@@ -677,6 +677,15 @@ def _cmd_serve(config: MailConfig, *, port: int) -> int:
     return 0
 
 
+def _load_config_or_exit() -> MailConfig:
+    """Load configuration, or print to stderr and exit with code 1 on failure."""
+    try:
+        return load()
+    except Exception as exc:
+        sys.stderr.write(f"Error loading configuration: {exc}\n")
+        sys.exit(1)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse args and dispatch to the appropriate subcommand handler.
 
@@ -686,36 +695,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "probe":
-        try:
-            config = load()
-        except Exception as exc:
-            sys.stderr.write(f"Error loading configuration: {exc}\n")
-            return 1
-        return _cmd_probe(config)
+        return _cmd_probe(_load_config_or_exit())
 
     if args.command == "ingest":
-        try:
-            config = load()
-        except Exception as exc:
-            sys.stderr.write(f"Error loading configuration: {exc}\n")
-            return 1
-        return _cmd_ingest(config, dry_run=args.dry_run, watch=args.watch)
+        return _cmd_ingest(
+            _load_config_or_exit(), dry_run=args.dry_run, watch=args.watch
+        )
 
     if args.command == "board":
-        try:
-            config = load()
-        except Exception as exc:
-            sys.stderr.write(f"Error loading configuration: {exc}\n")
-            return 1
-        return _cmd_board(config)
+        return _cmd_board(_load_config_or_exit())
 
     if args.command == "serve":
-        try:
-            config = load()
-        except Exception as exc:
-            sys.stderr.write(f"Error loading configuration: {exc}\n")
-            return 1
-        return _cmd_serve(config, port=args.port)
+        return _cmd_serve(_load_config_or_exit(), port=args.port)
 
     if args.command == "detect":
         return _cmd_detect(args)
