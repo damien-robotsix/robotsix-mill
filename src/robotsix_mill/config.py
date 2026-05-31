@@ -550,8 +550,6 @@ class Settings(BaseSettings):
     )
     # Model used by the periodic trace-review runner — a cheap-by-design
     # flash model so a 50-trace sweep doesn't burn the audit budget.
-    # The deeper Deep Review surface keeps the expensive
-    # trace_inspector_model for one-shot operator-driven inspection.
     trace_review_model: str = Field(
         default="deepseek/deepseek-v4-flash",
     )
@@ -610,10 +608,8 @@ class Settings(BaseSettings):
     trace_review_restart_correlation_window_seconds: int = Field(
         default=60,
     )
-    # Memory ledger for the trace inspector. Used only by the manual
-    # Deep Review surface (the route path) — retrospect's deep-analysis
-    # `trace_inspect` tool calls run_trace_inspector without a memory
-    # arg. Unset (default) derives <data_dir>/trace_inspector_memory.md.
+    # Memory ledger for the trace inspector.
+    # Unset (default) derives <data_dir>/trace_inspector_memory.md.
     trace_inspector_memory_path: Path | None = Field(default=None)
     # Path to the agent-maintained Markdown memory ledger.  Override to
     # pin a specific path; unset (default) derives <data_dir>/retrospect_memory.md.

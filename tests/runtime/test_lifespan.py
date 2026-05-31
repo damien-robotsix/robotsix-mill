@@ -60,10 +60,6 @@ def lifespan_mocks(monkeypatch):
     mock_worker_class = MagicMock(return_value=mock_worker)
     monkeypatch.setattr("robotsix_mill.runtime.lifespan.Worker", mock_worker_class)
 
-    mock_dr_instance = MagicMock()
-    mock_dr_class = MagicMock(return_value=mock_dr_instance)
-    monkeypatch.setattr("robotsix_mill.runtime.lifespan.DeepReviewStore", mock_dr_class)
-
     mock_rr_instance = MagicMock()
     mock_rr_class = MagicMock(return_value=mock_rr_instance)
     monkeypatch.setattr("robotsix_mill.runtime.lifespan.RunRegistry", mock_rr_class)
@@ -78,8 +74,6 @@ def lifespan_mocks(monkeypatch):
         "init_db": mock_init_db,
         "worker": mock_worker,
         "worker_class": mock_worker_class,
-        "dr_instance": mock_dr_instance,
-        "dr_class": mock_dr_class,
         "rr_instance": mock_rr_instance,
         "rr_class": mock_rr_class,
         "install_signals": mock_install_signals,
@@ -102,8 +96,6 @@ async def test_create_lifespan_multi_repo_sets_app_state(
         assert app.state.worker is lifespan_mocks["worker"]
         assert app.state.run_registry is lifespan_mocks["rr_instance"]
         assert app.state.run_registries == {"test-board": lifespan_mocks["rr_instance"]}
-        assert app.state.deep_review_results == {}
-        assert app.state.deep_review_store is lifespan_mocks["dr_instance"]
 
     # Startup assertions
     lifespan_mocks["init_db"].assert_called_once_with(settings, "test-board")
@@ -157,20 +149,3 @@ async def test_create_lifespan_per_repo_run_registries(
     paths = [c[0][0] for c in calls]
     assert any("board-a" in str(p) and p.name == "runs.json" for p in paths)
     assert any("board-b" in str(p) and p.name == "runs.json" for p in paths)
-
-
-@pytest.mark.asyncio
-async def test_create_lifespan_deep_review_store_path(
-    settings, repos_registry, lifespan_mocks
-):
-    """DeepReviewStore is constructed with the correct data-dir path."""
-    lifespan = create_lifespan(settings, repos_registry)
-    app = FastAPI()
-
-    async with lifespan(app):
-        pass
-
-    lifespan_mocks["dr_class"].assert_called_once()
-    dr_path = lifespan_mocks["dr_class"].call_args[0][0]
-    assert dr_path.name == "deep_review_results.json"
-    assert str(settings.data_dir) in str(dr_path)

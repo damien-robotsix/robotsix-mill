@@ -21,7 +21,6 @@ from ..core.service import TicketService
 from ..stages import StageContext
 from . import tracing
 from .broadcaster import BoardBroadcaster
-from .deep_review_store import DeepReviewStore
 from .run_registry import RunRegistry
 from .worker import Worker
 
@@ -117,10 +116,6 @@ def create_lifespan(
         app.state.worker = worker
         app.state.run_registry = default_registry
         app.state.run_registries = run_registries
-        app.state.deep_review_results = {}
-        app.state.deep_review_store = DeepReviewStore(
-            settings.data_dir / "deep_review_results.json"
-        )
         tracing.install_signal_handlers()
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
