@@ -15,6 +15,47 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 # Maximum number of failed jobs whose logs are fetched per run.
 _MAX_FAILED_JOBS = 10
 
+# Earliest-failure markers in a GitHub Actions job log. In an
+# ``if: always()`` cascade the step that REALLY failed errors FIRST; later
+# steps (gated on always()) re-error with misleading input near the tail. So
+# a plain tail-cap of the job log shows only the masking error. We instead
+# anchor the captured window on the EARLIEST of these markers.
+_LOG_FAILURE_RE = re.compile(
+    r"(?:##\[error\]|^[^\n]*\bFATAL\b|\bError:|exit code [1-9]|"
+    r"Process completed with exit code [1-9])",
+    re.MULTILINE,
+)
+# When anchoring, keep a little of the log AFTER the first error and spend the
+# rest of the budget on the lead-up (where the real error message lives).
+_LOG_FAILURE_TAIL_CONTEXT = 4096
+
+
+def _capture_failure_window(clean_log: str, max_bytes: int) -> str:
+    """Return at most *max_bytes* of *clean_log*, centred on the FIRST failure
+    marker so an ``if: always()`` cascade can't mask the real failing step.
+
+    If the log fits, it's returned whole. If no failure marker is found (or it
+    already falls inside the tail window), this degrades to the historical
+    tail-cap (keep the last *max_bytes*).
+    """
+    if len(clean_log) <= max_bytes:
+        return clean_log
+    m = _LOG_FAILURE_RE.search(clean_log)
+    if m is None or m.start() >= len(clean_log) - max_bytes:
+        # No marker, or the first marker is already within the tail window →
+        # the tail-cap already shows it.
+        return clean_log[-max_bytes:]
+    # Anchor: spend most of the budget on the lead-up to the first marker
+    # (where the real error message lives), keeping a little after it. Cap the
+    # after-context at half the budget so a marker near the log start still
+    # keeps its preceding lines.
+    tail_after = min(_LOG_FAILURE_TAIL_CONTEXT, max_bytes // 2)
+    start = max(0, m.start() - (max_bytes - tail_after))
+    end = min(len(clean_log), start + max_bytes)
+    prefix = "[log truncated — window anchored on first failure marker]\n"
+    return prefix + clean_log[start:end]
+
+
 _REMOTE_RE = re.compile(
     r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
 )
@@ -800,9 +841,11 @@ class GitHubForge(Forge):
 
                 # Strip ANSI.
                 clean = _ANSI_RE.sub("", raw)
-                # Tail-cap: keep the last N bytes.
-                if len(clean) > log_max:
-                    clean = clean[-log_max:]
+                # Capture the window around the FIRST failure marker (not a
+                # blind tail-cap) so an ``if: always()`` cascade — where a
+                # downstream always-step re-errors with misleading input —
+                # can't mask the step that actually failed first.
+                clean = _capture_failure_window(clean, log_max)
 
                 parts.append(f"### Job: {job_name} (id={job_id})\n")
                 parts.append(clean)
