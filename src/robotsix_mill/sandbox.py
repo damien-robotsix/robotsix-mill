@@ -139,6 +139,12 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
     # domains (PyPI, GitHub) are reachable from the sandbox.
     if settings.sandbox_proxy_url:
         proxy = settings.sandbox_proxy_url
+        # Loopback must bypass the proxy: a repo's own test suite often spins
+        # up a localhost HTTP server and connects to it (e.g. auto-mail's
+        # tests/test_server.py). Without no_proxy those connections get routed
+        # to the egress proxy and fail (the proxy filters non-allowlisted
+        # hosts, and the suite's network guard flags the real connection).
+        no_proxy = "localhost,127.0.0.1,::1"
         argv += [
             "-e",
             f"HTTP_PROXY={proxy}",
@@ -148,6 +154,10 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
             f"http_proxy={proxy}",
             "-e",
             f"https_proxy={proxy}",
+            "-e",
+            f"NO_PROXY={no_proxy}",
+            "-e",
+            f"no_proxy={no_proxy}",
         ]
     # Override the image ENTRYPOINT: images like robotsix/mill have one
     # (it starts the server) which would otherwise swallow our command.

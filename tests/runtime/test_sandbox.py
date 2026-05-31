@@ -57,6 +57,36 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     assert a[-3:] == ["python:3.14-slim", "-lc", "pytest -q"]
 
 
+def test_proxy_env_includes_no_proxy_for_loopback(tmp_path, monkeypatch):
+    """When an egress proxy is configured, the sandbox must also set
+    NO_PROXY for loopback so a repo's own localhost test server (e.g.
+    auto-mail's test_server.py) isn't routed to the filtering proxy."""
+    s = _settings(
+        tmp_path,
+        data_dir="/data",
+        sandbox_image="python:3.14-slim",
+        sandbox_network="mill-sandbox-net",
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+
+    a = seen["argv"]
+    assert "HTTP_PROXY=http://sandbox-proxy:8888" in a
+    # loopback bypasses the proxy in both case spellings
+    assert "NO_PROXY=localhost,127.0.0.1,::1" in a
+    assert "no_proxy=localhost,127.0.0.1,::1" in a
+
+
 def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
     """Regression (production-DB pollution incident): no bind/mount may
     expose the data-dir root, mill.db, the memory ledgers, or other
