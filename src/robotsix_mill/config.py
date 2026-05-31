@@ -1626,33 +1626,33 @@ class RepoConfig(BaseModel):
     # have a test suite yet (e.g. a doc-only repo). Set in repos.yaml
     # per repo, e.g. ``test_command: "pytest -q"``.
     test_command: str = ""
-    # Per-repo periodic-agent enable flags. Default True for every
-    # one — a repo opts OUT by setting the flag to false in
-    # repos.yaml under ``periodic.<name>.enabled``. The global
-    # Settings.<name>_periodic acts as the master switch (off → the
-    # task isn't spawned at all). When on, the per-task fan-out
-    # filters by this flag so a repo can disable just its periodic
-    # work without affecting other repos.
-    audit_periodic: bool = True
-    trace_health_periodic: bool = True
-    health_periodic: bool = True
-    test_gap_periodic: bool = True
-    agent_check_periodic: bool = True
-    bc_check_periodic: bool = True
-    completeness_check_periodic: bool = True
-    copy_paste_periodic: bool = True
-    survey_periodic: bool = True
-    cost_reconciliation_periodic: bool = True
-    config_sync_periodic: bool = True
-    trace_review_periodic: bool = True
-    langfuse_cleanup_periodic: bool = True
-    cost_warmer_periodic: bool = True
-    module_curator_periodic: bool = True
-    # When True, bespoke agents discovered under
-    # ``<clone>/.robotsix-mill/agents/`` are scheduled for THIS repo.
-    # Set False in repos.yaml to opt a repo out of bespoke discovery
-    # without disabling the feature globally.
-    bespoke_periodic: bool = True
+    # Per-repo periodic-agent enable flags. Default FALSE for every
+    # one — a repo opts IN by setting the flag to true in repos.yaml
+    # under ``periodic.<name>.enabled``. Unlisted ⇒ off. (Opt-in model,
+    # ticket 9cc9: previously default-on, which silently ran agents a
+    # repo never asked for.) The global Settings.<name>_periodic is the
+    # master switch (off → the task isn't spawned at all); when on, the
+    # per-task fan-out filters by this flag, so a repo runs an agent
+    # only when it has explicitly enabled it here.
+    audit_periodic: bool = False
+    trace_health_periodic: bool = False
+    health_periodic: bool = False
+    test_gap_periodic: bool = False
+    agent_check_periodic: bool = False
+    bc_check_periodic: bool = False
+    completeness_check_periodic: bool = False
+    copy_paste_periodic: bool = False
+    survey_periodic: bool = False
+    cost_reconciliation_periodic: bool = False
+    config_sync_periodic: bool = False
+    trace_review_periodic: bool = False
+    langfuse_cleanup_periodic: bool = False
+    cost_warmer_periodic: bool = False
+    module_curator_periodic: bool = False
+    # Opt-in (default False): bespoke agents discovered under
+    # ``<clone>/.robotsix-mill/agents/`` are scheduled for THIS repo
+    # only when enabled in repos.yaml under ``periodic.bespoke.enabled``.
+    bespoke_periodic: bool = False
     language: str | None = None
 
     @field_validator("repo_id", "board_id")
@@ -1702,7 +1702,7 @@ def _periodic_flags_from_yaml(repo_data: Any) -> dict[str, bool]:
     sub-block of a repos.yaml repo entry.
 
     Each agent has a ``periodic.<name>.enabled`` key; missing entries
-    keep the RepoConfig field default (True for every periodic agent).
+    keep the RepoConfig field default (False — opt-in; see 9cc9).
     """
     if not isinstance(repo_data, dict):
         return {}

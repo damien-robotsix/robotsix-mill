@@ -1464,3 +1464,55 @@ class TestFlattenYamlConfig:
         # map to web_research_model; web.research_model is
         # traversed second because 'web' > 'core' alphabetically
         assert result["web_research_model"] == "model-b"
+
+
+class TestPeriodicOptIn:
+    """9cc9: per-repo periodic agents are opt-in (default off); they run
+    only when explicitly enabled in repos.yaml ``periodic.<name>.enabled``."""
+
+    @staticmethod
+    def _rc(**overrides):
+        from robotsix_mill.config import RepoConfig
+
+        kw = dict(
+            repo_id="r",
+            board_id="b",
+            langfuse_project_name="p",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        )
+        kw.update(overrides)
+        return RepoConfig(**kw)
+
+    def test_repoconfig_periodic_flags_default_off(self):
+        from robotsix_mill.config import _PERIODIC_FLAG_NAMES
+
+        rc = self._rc()
+        for name in _PERIODIC_FLAG_NAMES:
+            assert getattr(rc, f"{name}_periodic") is False, (
+                f"{name}_periodic must default to False (opt-in)"
+            )
+
+    def test_periodic_flags_from_yaml_explicit_only(self):
+        from robotsix_mill.config import _periodic_flags_from_yaml
+
+        flags = _periodic_flags_from_yaml(
+            {
+                "periodic": {
+                    "audit": {"enabled": True},
+                    "health": {"enabled": False},
+                }
+            }
+        )
+        # Only explicitly-listed agents appear; unlisted ones are left to
+        # the RepoConfig default (now False).
+        assert flags == {"audit_periodic": True, "health_periodic": False}
+
+    def test_repoconfig_opt_in_via_yaml_flags(self):
+        from robotsix_mill.config import _periodic_flags_from_yaml
+
+        repo_data = {"periodic": {"module_curator": {"enabled": True}}}
+        rc = self._rc(**_periodic_flags_from_yaml(repo_data))
+        assert rc.module_curator_periodic is True
+        # Anything not listed stays off.
+        assert rc.audit_periodic is False

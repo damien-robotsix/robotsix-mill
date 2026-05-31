@@ -1334,7 +1334,12 @@ class Worker:
                     repo_configs = [
                         rc
                         for rc in repo_configs
-                        if rc is None or getattr(rc, per_repo_flag, True)
+                        # Opt-in (9cc9): a registered repo runs this agent only
+                        # if its per-repo flag is set. ``rc is None`` is the
+                        # single-repo / no-repos.yaml mode, which has no
+                        # per-repo config to opt in with, so it still ticks
+                        # (governed by the Settings-level master switch).
+                        if rc is None or getattr(rc, per_repo_flag, False)
                     ]
 
                 for repo_config in repo_configs:
