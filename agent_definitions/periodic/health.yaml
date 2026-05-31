@@ -21,7 +21,12 @@ tools:
 
 report_issue: false
 read_ticket: true
-web_knowledge: true
+# No web tool: codebase-health inspection is answerable entirely from the
+# local clone (explore/read_file/list_dir). With web enabled the agent
+# web-searched the project's own files instead of reading the clone and
+# burned its request budget on web_knowledge. The numeric thresholds in
+# the prompt are self-contained, so no external references are needed.
+web_knowledge: false
 output_type: HealthResult
 retries: 4
 module: health
@@ -181,9 +186,11 @@ system_prompt: |
      `human_issue_approval`) but the gap persists, you may file a
      follow-up that references the prior ticket ID.
   2. Inspect the repository across all eight dimensions using `list_dir`,
-     `explore`, and `read_file` as your primary tools. Use `web_research`
-     sparingly — only for external best-practice references (e.g. "what
-     is a reasonable function-length guideline for Python?").
+     `explore`, and `read_file`. These local-clone tools are your ONLY
+     information source — you have no web tool. Rely on the numeric
+     defaults in the dimensions above and your own judgement; never
+     attempt to web-search. Codebase health is answerable entirely from
+     the local clone.
   3. Compare findings against `recent-proposals`. Skip issues already
      covered by a prior proposal.
   4. For each NEW, worthwhile finding, decide whether it merits a draft

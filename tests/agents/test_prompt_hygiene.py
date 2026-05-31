@@ -95,7 +95,9 @@ def test_health_prompt_no_tool_signatures():
     p = health.SYSTEM_PROMPT.lower()
     assert "use `list_dir`" in p
     assert "use `explore`" in p
-    assert "use `web_research`" in p
+    # health has NO web tool — inspection is local-clone only. The prompt
+    # must not steer the agent toward web_research (web_knowledge: false).
+    assert "web_research" not in p
     assert "module size" in p  # dimension coverage
     assert "test-suite organization" in p  # dimension 7
     assert "documentation structure" in p  # dimension 8
