@@ -142,6 +142,13 @@ gates:
   scope_triage_enabled: true               # cheap scope-violation triage (EXPAND/REJECT/ESCALATE)
 
 # ---------------------------------------------------------------------------
+#  ci — CI retry ceiling for flake-storm prevention
+# ---------------------------------------------------------------------------
+
+ci:
+  max_auto_retries: 3          # consecutive no-change ci-fix cycles before BLOCK (0 = disabled)
+
+# ---------------------------------------------------------------------------
 #  pipeline — merge, rebase, ci-fix, retrospect, prune, archive, memory paths
 # ---------------------------------------------------------------------------
 

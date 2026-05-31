@@ -336,6 +336,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "gates.scope_triage_enabled": "scope_triage_enabled",
     "gates.pr_summary_enabled": "pr_summary_enabled",
     "gates.pr_summary_model": "pr_summary_model",
+    # -- ci --
+    "ci.max_auto_retries": "ci_max_auto_retries",
     # -- pipeline --
     # Post-MILL_*-alias-purge these map directly to Settings field
     # names (no env-var alias on the Field). Keeping a MILL_* value

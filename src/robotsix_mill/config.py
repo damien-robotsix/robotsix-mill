@@ -645,6 +645,13 @@ class Settings(BaseSettings):
     # attempts per ticket before escalating to BLOCKED.
     ci_fix_max_attempts: int = Field(default=2)
 
+    # Maximum consecutive ci-fix cycles that produce no code changes before
+    # escalating to BLOCKED.  A "no-change" cycle is one where the ci-fix
+    # agent reports success but the local HEAD matches the remote (no commits
+    # were produced).  Set to 0 to disable the ceiling (preserves pre-0.32
+    # behaviour of relying solely on ci_fix_max_attempts for the outer bound).
+    ci_max_auto_retries: int = Field(default=3)
+
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(default=2)
 
@@ -1275,6 +1282,13 @@ class Settings(BaseSettings):
     def _validate_ci_fix_max_attempts(cls, v: int) -> int:
         if v < 0:
             raise ValueError("ci_fix_max_attempts must be ≥ 0")
+        return v
+
+    @field_validator("ci_max_auto_retries")
+    @classmethod
+    def _validate_ci_max_auto_retries(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("ci_max_auto_retries must be ≥ 0")
         return v
 
     @field_validator("review_revision_max_attempts")

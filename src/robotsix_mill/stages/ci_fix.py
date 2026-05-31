@@ -27,6 +27,7 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
 
 _CI_FIX_COUNTER = "ci_fix_attempts.txt"
+_CI_NO_CHANGE_COUNTER = "ci_no_change_cycles.txt"
 
 
 def _read_counter(path) -> int:
@@ -200,6 +201,47 @@ class CIFixStage(Stage):
             ok = False
 
         if ok:
+            # Detect no-change cycles: the agent reported success but
+            # produced no commits (local HEAD matches remote).  Track
+            # consecutive no-change cycles in a separate counter so a
+            # flake-storm on a diff that cannot plausibly cause test
+            # failures doesn't retry unboundedly.
+            no_change_counter_path = (
+                ctx.service.workspace(ticket).artifacts_dir / _CI_NO_CHANGE_COUNTER
+            )
+            no_change_cycles = _read_counter(no_change_counter_path)
+
+            try:
+                local = git_ops.head_sha(repo_dir)
+                remote = git_ops.remote_branch_sha(repo_dir, branch)
+            except Exception:  # noqa: BLE001 — be safe: assume changes
+                local, remote = None, "force-push"
+
+            if local is not None and remote == local:
+                # Agent made no commits — count as a no-change cycle.
+                no_change_cycles += 1
+                max_no_change = s.ci_max_auto_retries
+                if max_no_change > 0 and no_change_cycles >= max_no_change:
+                    _write_counter(counter_path, 0)
+                    _write_counter(no_change_counter_path, 0)
+                    return Outcome(
+                        State.BLOCKED,
+                        f"ci fix succeeded but made no code changes "
+                        f"{no_change_cycles} consecutive time(s) — "
+                        f"CI failures are likely infrastructure flakes. "
+                        f"Resume-blocked to retry from human_mr_approval.",
+                    )
+                _write_counter(no_change_counter_path, no_change_cycles)
+                log.info(
+                    "%s: ci fix succeeded but no code changes — no-change cycle %d/%s",
+                    ticket.id,
+                    no_change_cycles,
+                    max_no_change if max_no_change > 0 else float("inf"),
+                )
+            else:
+                # Agent produced commits — reset the no-change counter.
+                _write_counter(no_change_counter_path, 0)
+
             # Fix applied → force-push only the ticket branch.
             try:
                 git_ops.push(
@@ -215,7 +257,7 @@ class CIFixStage(Stage):
                     State.BLOCKED,
                     f"ci fix succeeded but force-push failed: {e}",
                 )
-            # Reset counter on success.
+            # Reset attempt counter on success.
             _write_counter(counter_path, 0)
             log.info("%s: ci fix succeeded, branch force-pushed", ticket.id)
             return Outcome(State.IMPLEMENT_COMPLETE)  # re-check CI on next poll
