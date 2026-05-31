@@ -33,6 +33,8 @@ class RunEntry:
         "copy-paste",
         "copy_paste",
         "cost-reconciliation",
+        "data-dir-audit",
+        "data_dir_audit",
         "epic-breakdown",
         "health",
         "langfuse-cleanup",
