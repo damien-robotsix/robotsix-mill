@@ -58,12 +58,13 @@ def test_provider_pin_set_for_deepseek_pro_forces_xhigh_reasoning():
     assert ms["extra_body"]["reasoning"] == {"effort": "xhigh"}
 
 
-def test_provider_pin_disables_reasoning_for_deepseek_flash():
+def test_provider_pin_forces_xhigh_reasoning_for_deepseek_flash():
     ms: dict = {}
     _inject_provider_pin((), {"model_settings": ms}, "deepseek/deepseek-v4-flash")
     assert ms["extra_body"]["provider"]["only"] == [_PINNED_PROVIDER]
-    # flash never reasons (consistent, cheap) → nothing to round-trip
-    assert ms["extra_body"]["reasoning"] == {"enabled": False}
+    # flash now also uses effort xhigh — enabled=false didn't reliably
+    # suppress thinking, producing the same 400 as pro.
+    assert ms["extra_body"]["reasoning"] == {"effort": "xhigh"}
 
 
 def test_provider_pin_skipped_for_non_deepseek():
@@ -87,37 +88,6 @@ def test_provider_pin_respects_caller_reasoning_override():
 
 def test_provider_pin_noop_when_no_settings():
     _inject_provider_pin((), {}, "deepseek/deepseek-v4-pro")  # must not raise
-
-
-# --- DeepSeek reasoning round-trip 400 → transient retry ----------------
-# Pinned to DeepSeek, deepseek-v4-pro can intermittently 400 demanding the
-# prior turn's reasoning_content. We classify that as transient and retry
-# (to learn if it's intermittent) rather than ship an unproven fix.
-
-
-def test_deepseek_reasoning_roundtrip_400_is_transient():
-    from robotsix_mill.agents.retry import is_transient
-
-    class ModelHTTPError(Exception):
-        def __init__(self):
-            self.status_code = 400
-            super().__init__(
-                "status_code: 400, body: The reasoning_content in the "
-                "thinking mode must be passed back to the API."
-            )
-
-    assert is_transient(ModelHTTPError()) is True
-
-
-def test_other_400_stays_non_transient():
-    from robotsix_mill.agents.retry import is_transient
-
-    class ModelHTTPError(Exception):
-        def __init__(self):
-            self.status_code = 400
-            super().__init__("status_code: 400, body: invalid model name")
-
-    assert is_transient(ModelHTTPError()) is False
 
 
 # --- reasoning_details round-trip backport (pydantic-ai #2701) ----------
@@ -210,6 +180,82 @@ def test_map_model_response_omits_reasoning_on_non_tool_call_turn():
     assert "reasoning_details" not in param
     assert "reasoning" not in param
     assert "reasoning_content" not in param
+
+
+def test_extract_reasoning_details_empty_list():
+    """An empty reasoning_details array must be preserved as [] (not
+    collapsed to None) so the round-trip correctly represents "model
+    returned an empty reasoning block" vs "model didn't reason at all"."""
+    assert _extract_reasoning_details(_FakeResponse(_FakeMsg([]))) == []
+    # model_extra path too
+    assert _extract_reasoning_details(_FakeResponse(_FakeMsg([], in_extra=True))) == []
+
+
+def test_map_model_response_strips_reasoning_when_rd_missing_on_tool_call():
+    """On a tool-call turn where provider_details has NO reasoning_details,
+    the bare reasoning/reasoning_content fields MUST be stripped anyway.
+    Otherwise DeepSeek sees mismatched bare text and rejects with 400."""
+    pytest.importorskip("pydantic_ai.providers.openrouter")
+    from pydantic_ai.messages import ModelResponse, ThinkingPart, ToolCallPart
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from robotsix_mill.agents.openrouter_cost import CostInstrumentedOpenRouterModel
+
+    m = CostInstrumentedOpenRouterModel(
+        "deepseek/deepseek-v4-pro", provider=OpenRouterProvider(api_key="x")
+    )
+    # Tool-call turn with bare reasoning text but NO reasoning_details
+    # (simulates extraction failure or stripped provider_details).
+    resp = ModelResponse(
+        parts=[
+            ThinkingPart(id="reasoning", content="bare text", provider_name=m.system),
+            ToolCallPart("f", {}, tool_call_id="c1"),
+        ],
+        provider_details={},  # empty — no reasoning_details
+    )
+    param = m._map_model_response(resp)
+    # reasoning_details is absent (wasn't there to echo)
+    assert "reasoning_details" not in param
+    # BUT bare reasoning/reasoning_content must be stripped defensively
+    assert "reasoning" not in param
+    assert "reasoning_content" not in param
+    # tool_calls still present
+    assert "tool_calls" in param
+
+
+def test_provider_details_survives_json_roundtrip():
+    """ModelResponse.provider_details with reasoning_details must survive
+    dump_json → validate_json so multi-turn histories stay valid across
+    pause/resume cycles."""
+    pytest.importorskip("pydantic_ai.providers.openrouter")
+    from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse, TextPart
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from robotsix_mill.agents.openrouter_cost import CostInstrumentedOpenRouterModel
+
+    m = CostInstrumentedOpenRouterModel(
+        "deepseek/deepseek-v4-pro", provider=OpenRouterProvider(api_key="x")
+    )
+    rd = [
+        {
+            "type": "reasoning.text",
+            "text": "step 1...",
+            "format": "deepseek",
+            "index": 0,
+        }
+    ]
+    resp = ModelResponse(
+        parts=[TextPart(content="answer")],
+        provider_details={"reasoning_details": rd},
+        model_name=m.system,
+    )
+    json_bytes = ModelMessagesTypeAdapter.dump_json([resp])
+    restored = ModelMessagesTypeAdapter.validate_json(json_bytes)
+    assert len(restored) == 1
+    restored_resp = restored[0]
+    assert isinstance(restored_resp, ModelResponse)
+    assert restored_resp.provider_details is not None
+    assert restored_resp.provider_details["reasoning_details"] == rd
 
 
 # --- record_openrouter_cost guards (hermetic) --------------------------

@@ -37,8 +37,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 # echoes the reasoning *text*, which is insufficient — verified still missing
 # in 1.104). The survey agent's memory tracks the upstream status and will
 # surface a draft when it lands; at that point delete _extract_reasoning_details,
-# the _process_response/_map_model_response overrides here, and the
-# reasoning-roundtrip transient-retry classifier in agents/retry.py.
+# and the _process_response/_map_model_response overrides here.
 #
 # Why it's needed: pinned to DeepSeek first-party, deepseek models run in
 # thinking mode and DeepSeek requires the prior turn's reasoning echoed back
@@ -73,7 +72,7 @@ def _extract_reasoning_details(response: Any) -> Any:
         extra = getattr(msg, "model_extra", None)
         if isinstance(extra, dict):
             rd = extra.get(_REASONING_DETAILS_KEY)
-    return rd or None
+    return rd if rd is not None else None
 
 
 def _get_cost_from_response(response: Any) -> float | None:
@@ -138,6 +137,13 @@ class CostInstrumentedOpenRouterModel(OpenAIChatModel):
                 param.pop("reasoning", None)
                 param.pop("reasoning_content", None)
                 param[_REASONING_DETAILS_KEY] = rd
+            else:
+                # Defensive: if reasoning_details is missing (extraction
+                # failed or was stripped), drop the bare reasoning fields
+                # anyway — DeepSeek will re-derive the CoT rather than
+                # rejecting mismatched text with a deterministic 400.
+                param.pop("reasoning", None)
+                param.pop("reasoning_content", None)
         else:
             # No tool call → omit reasoning entirely.
             param.pop("reasoning", None)
@@ -161,11 +167,11 @@ def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
     The 400 ("reasoning_content must be passed back") is triggered by an
     *inconsistent* mix of reasoning / no-reasoning assistant turns — proven
     by direct test: all-reasoning and all-no-reasoning both pass, the mix
-    fails. So we pin reasoning to one extreme per model tier:
-      * pro   → effort ``xhigh`` (max): reason on every turn, paired with
-                the reasoning_details round-trip in this class. Keeps CoT.
-      * flash → reasoning disabled: never reason → nothing to round-trip.
-                Cheap + consistent (review/doc/periodic; low-stakes).
+    fails. We force reasoning to ``effort: xhigh`` for ALL deepseek models
+    (pro AND flash) because ``enabled: false`` does not reliably suppress
+    thinking on DeepSeek V4 Flash, so disabling it produced the same 400.
+    Consistent reasoning on every turn, paired with the reasoning_details
+    round-trip in this class, eliminates the deterministic error.
 
     No-op for non-DeepSeek models and when a caller already pinned
     ``provider`` (don't trample an explicit override)."""
@@ -179,10 +185,7 @@ def _inject_provider_pin(args: tuple, kwargs: dict, model_name: str) -> None:
         return  # caller set an explicit routing preference — respect it
     extra_body["provider"] = {"only": [_PINNED_PROVIDER], "allow_fallbacks": False}
     if "reasoning" not in extra_body:
-        if "flash" in model_name:
-            extra_body["reasoning"] = {"enabled": False}
-        else:
-            extra_body["reasoning"] = {"effort": "xhigh"}
+        extra_body["reasoning"] = {"effort": "xhigh"}
     settings["extra_body"] = extra_body
 
 
