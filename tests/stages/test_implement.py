@@ -368,6 +368,9 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
         return ("tried", [], "", None, None, False, "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
+    # Bypass the baseline check — this test exercises the per-iteration
+    # test gate, not the pre-flight baseline.
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
     t = _ticket(ctx)
     _write_file_map(ctx, t, "wip.txt")
 
@@ -1949,6 +1952,7 @@ def test_reference_files_reloaded_on_retry(ctx_factory, tmp_path, monkeypatch):
         return ("agent summary", ["wip.txt"], "", None, None, False, "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
 
     t = _ticket(ctx)
     _write_file_map(ctx, t, "wip.txt")
@@ -2007,6 +2011,7 @@ def test_summary_included_in_retry_feedback(ctx_factory, tmp_path, monkeypatch):
         return ("pass-1-summary-abc", ["wip.txt"], "", None, None, False, "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
 
     t = _ticket(ctx)
     _write_file_map(ctx, t, "wip.txt")
@@ -2641,6 +2646,279 @@ def test_binary_artifact_untracked_file_cleanup(ctx_factory, tmp_path, monkeypat
         "untracked binary artifact should be removed from disk"
     )
     assert result.action == "skip_iteration"
+
+
+# --- test-baseline check -------------------------------------------------
+
+
+def test_baseline_check_blocks_on_failure(ctx_factory, tmp_path, monkeypatch):
+    """AC1: pre-existing base-branch test failures block before the loop."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+
+    agent_called = []
+
+    def _fake_agent_run(*a, **kw):
+        agent_called.append(1)
+        return ("done", [], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _fake_agent_run)
+
+    # Force the baseline check to fail.
+    def _failing_test_agent(*, settings, repo_dir, repo_config=None):
+        return False, "tests failed (rc=1); pre-existing failure"
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.implement.run_test_agent", _failing_test_agent
+    )
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "pre-existing test failures" in out.note
+    assert "main" in out.note  # forge_target_branch
+    # The agent loop must never be entered.
+    assert len(agent_called) == 0
+
+    # implement.md artifact must exist.
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    assert (artifacts / "implement.md").exists()
+    content = (artifacts / "implement.md").read_text(encoding="utf-8")
+    assert "BLOCKED" in content
+
+
+def test_baseline_check_proceeds_on_pass(ctx_factory, tmp_path, monkeypatch):
+    """AC2: passing baseline → loop proceeds normally."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+
+    agent_called = []
+
+    def _fake_agent_run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+            previous_attempt_summary,
+        )
+        agent_called.append(1)
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _fake_agent_run)
+
+    # Baseline check passes via fake_sandbox (test_command="true" → rc=0).
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+    assert len(agent_called) == 1
+
+
+def test_baseline_check_no_test_command(ctx_factory, tmp_path, monkeypatch):
+    """AC3: no test_command → baseline passes trivially → loop proceeds."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="",  # empty → run_test_agent returns (True, ...)
+        review_enabled="false",
+    )
+
+    agent_called = []
+
+    def _fake_agent_run(
+        *,
+        settings,
+        repo_dir,
+        spec,
+        feedback=None,
+        reference_files=None,
+        message_history=None,
+        memory="",
+        epic_workspace_path=None,
+        previous_attempt_summary=None,
+        **_kwargs,
+    ):
+        del (
+            settings,
+            spec,
+            feedback,
+            reference_files,
+            message_history,
+            memory,
+            epic_workspace_path,
+            previous_attempt_summary,
+        )
+        agent_called.append(1)
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _fake_agent_run)
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+    assert len(agent_called) == 1
+
+    # Cache must exist with passed=true.
+    cache_path = ctx.service.workspace(t).artifacts_dir / "baseline_check.json"
+    assert cache_path.exists()
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache["passed"] is True
+    assert "no test gate configured" in cache["diagnosis"]
+
+
+def test_baseline_check_cached_on_retry(ctx_factory, tmp_path, monkeypatch):
+    """AC4: cached baseline failure is reused on retry — no re-execution."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+
+    call_count = [0]
+
+    def _counted_test_agent(*, settings, repo_dir, repo_config=None):
+        call_count[0] += 1
+        return False, "pre-existing failure"
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.implement.run_test_agent", _counted_test_agent
+    )
+    monkeypatch.setattr(coding, "run_implement_agent", _fake_agent(None))
+
+    t = _ticket(ctx)
+
+    # First run: baseline check runs, blocks.
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.BLOCKED
+    assert call_count[0] == 1
+
+    # Second run (resume): cache hit, no re-execution.
+    # The ticket is still BLOCKED; we simulate a resume by re-running
+    # (the stage calls _clone_and_branch which will do a fresh clone,
+    # but the cache is still on disk from the first run).
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert call_count[0] == 1  # still 1 — no second invocation
+
+
+def test_baseline_check_sha_invalidation(ctx_factory, tmp_path, monkeypatch):
+    """AC5: cached failure with old SHA → re-runs when base advances."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+
+    call_count = [0]
+    # First call fails, second call passes (simulating operator fix).
+    results = [(False, "old failure"), (True, "all passed")]
+
+    def _counted_test_agent(*, settings, repo_dir, repo_config=None):
+        idx = min(call_count[0], len(results) - 1)
+        passed, diag = results[idx]
+        call_count[0] += 1
+        return passed, diag
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.implement.run_test_agent", _counted_test_agent
+    )
+
+    t = _ticket(ctx)
+
+    # First run: baseline check fails, caches result.
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.BLOCKED
+    assert call_count[0] == 1
+
+    # Tamper with the cache: change the base_sha so it no longer
+    # matches the current remote SHA.  This simulates the base
+    # branch advancing.
+    cache_path = ctx.service.workspace(t).artifacts_dir / "baseline_check.json"
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    cache["base_sha"] = "0000000000000000000000000000000000000000"
+    cache_path.write_text(json.dumps(cache), encoding="utf-8")
+
+    # Now re-run: cache SHA mismatch → re-execute.
+    # Also need to bypass the agent since this time the test passes.
+    monkeypatch.setattr(
+        coding,
+        "run_implement_agent",
+        _fake_agent({"feature.txt": "done"}),
+    )
+
+    out2 = ImplementStage().run(t, ctx)
+    # The second call to _counted_test_agent returned (True, ...) → proceed.
+    assert out2.next_state is State.DOCUMENTING
+    # Baseline re-executed (call 2); per-iteration test gate may add more.
+    assert call_count[0] >= 2  # re-executed
+
+    # Cache updated with new result.
+    cache2 = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache2["passed"] is True
+
+
+def test_baseline_check_sandbox_unavailable(ctx_factory, tmp_path, monkeypatch):
+    """AC6: sandbox unavailable → BLOCKED with diagnostic."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+
+    def _sandbox_error(*, settings, repo_dir, repo_config=None):
+        return False, "sandbox unavailable: Docker daemon not running"
+
+    monkeypatch.setattr("robotsix_mill.stages.implement.run_test_agent", _sandbox_error)
+
+    t = _ticket(ctx)
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "sandbox unavailable" in out.note
+
+    # Result must be cached so retries don't re-attempt.
+    cache_path = ctx.service.workspace(t).artifacts_dir / "baseline_check.json"
+    assert cache_path.exists()
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache["passed"] is False
+    assert "sandbox unavailable" in cache["diagnosis"]
 
 
 # --- misc helper --------------------------------------------------------
