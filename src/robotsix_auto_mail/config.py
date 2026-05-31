@@ -255,6 +255,95 @@ class MailConfig:
         )
 
     @classmethod
+    def _parse_config_dict(
+        cls, data: dict, path: Path, *, validate: bool = True
+    ) -> MailConfig:
+        # -- extract sections ----------------------------------------------
+
+        imap_section = _get_table(data, "imap") or {}
+        smtp_section = _get_table(data, "smtp") or {}
+        auth_section = _get_table(data, "auth") or {}
+
+        # -- read fields with defaults -------------------------------------
+
+        imap_host = _get_str(imap_section, "host", "")
+        imap_port = _get_int(imap_section, "port", 993, path)
+        imap_tls_mode = _get_str(imap_section, "tls_mode", "direct-tls")
+        imap_folder = _get_str(imap_section, "folder", "INBOX")
+
+        smtp_host = _get_str(smtp_section, "host", "")
+        smtp_port = _get_int(smtp_section, "port", 587, path)
+        smtp_tls_mode = _get_str(smtp_section, "tls_mode", "starttls")
+
+        username = _get_str(auth_section, "username", "")
+        password = _get_str(auth_section, "password", "")
+
+        store_section = _get_table(data, "store") or {}
+        db_path = _get_str(store_section, "path", DEFAULT_DB_PATH)
+
+        llm_section = _get_table(data, "llm") or {}
+        llm_api_key = _get_str(llm_section, "api_key", "")
+        llm_model = _get_str(llm_section, "model", DEFAULT_LLM_MODEL)
+
+        ingest_section = _get_table(data, "ingest") or {}
+        ingest_interval_minutes = _get_int(
+            ingest_section,
+            "interval_minutes",
+            DEFAULT_INGEST_INTERVAL_MINUTES,
+            path,
+        )
+
+        # -- validate TLS modes --------------------------------------------
+
+        errors: list[str] = []
+        for label, value in [
+            ("imap.tls_mode", imap_tls_mode),
+            ("smtp.tls_mode", smtp_tls_mode),
+        ]:
+            if value not in _VALID_TLS_MODES:
+                errors.append(
+                    f"{label} must be one of {sorted(_VALID_TLS_MODES)!r}, "
+                    f"got {value!r}"
+                )
+
+        # -- required fields (skipped when validate=False) -----------------
+
+        if validate:
+            missing: list[str] = []
+            for label, value in [
+                ("imap.host", imap_host),
+                ("smtp.host", smtp_host),
+                ("auth.username", username),
+            ]:
+                if not value:
+                    missing.append(label)
+
+            if missing:
+                errors.append(
+                    "Missing required field(s): "
+                    + ", ".join(missing)
+                )
+
+        if errors:
+            raise ConfigurationError("\n".join(errors))
+
+        return cls(
+            imap_host=imap_host,
+            imap_port=imap_port,
+            imap_tls_mode=imap_tls_mode,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_tls_mode=smtp_tls_mode,
+            username=username,
+            password=password,
+            db_path=db_path,
+            imap_folder=imap_folder,
+            llm_api_key=llm_api_key,
+            llm_model=llm_model,
+            ingest_interval_minutes=ingest_interval_minutes,
+        )
+
+    @classmethod
     def from_yaml(
         cls, path: str | Path, *, validate: bool = True
     ) -> MailConfig:
@@ -323,90 +412,7 @@ class MailConfig:
                 f"YAML root must be a mapping, got {type(data).__name__}"
             )
 
-        # -- extract sections ----------------------------------------------
-
-        imap_section = _get_table(data, "imap") or {}
-        smtp_section = _get_table(data, "smtp") or {}
-        auth_section = _get_table(data, "auth") or {}
-
-        # -- read fields with defaults -------------------------------------
-
-        imap_host = _get_str(imap_section, "host", "")
-        imap_port = _get_int(imap_section, "port", 993, path)
-        imap_tls_mode = _get_str(imap_section, "tls_mode", "direct-tls")
-        imap_folder = _get_str(imap_section, "folder", "INBOX")
-
-        smtp_host = _get_str(smtp_section, "host", "")
-        smtp_port = _get_int(smtp_section, "port", 587, path)
-        smtp_tls_mode = _get_str(smtp_section, "tls_mode", "starttls")
-
-        username = _get_str(auth_section, "username", "")
-        password = _get_str(auth_section, "password", "")
-
-        store_section = _get_table(data, "store") or {}
-        db_path = _get_str(store_section, "path", DEFAULT_DB_PATH)
-
-        llm_section = _get_table(data, "llm") or {}
-        llm_api_key = _get_str(llm_section, "api_key", "")
-        llm_model = _get_str(llm_section, "model", DEFAULT_LLM_MODEL)
-
-        ingest_section = _get_table(data, "ingest") or {}
-        ingest_interval_minutes = _get_int(
-            ingest_section,
-            "interval_minutes",
-            DEFAULT_INGEST_INTERVAL_MINUTES,
-            path,
-        )
-
-        # -- validate TLS modes --------------------------------------------
-
-        errors: list[str] = []
-        for label, value in [
-            ("imap.tls_mode", imap_tls_mode),
-            ("smtp.tls_mode", smtp_tls_mode),
-        ]:
-            if value not in _VALID_TLS_MODES:
-                errors.append(
-                    f"{label} must be one of {sorted(_VALID_TLS_MODES)!r}, "
-                    f"got {value!r}"
-                )
-
-        # -- required fields (skipped when validate=False) -----------------
-
-        if validate:
-            missing: list[str] = []
-            for label, value in [
-                ("imap.host", imap_host),
-                ("smtp.host", smtp_host),
-                ("auth.username", username),
-            ]:
-                if not value:
-                    missing.append(label)
-
-            if missing:
-                errors.append(
-                    "Missing required field(s) in YAML: "
-                    + ", ".join(missing)
-                )
-
-        if errors:
-            raise ConfigurationError("\n".join(errors))
-
-        return cls(
-            imap_host=imap_host,
-            imap_port=imap_port,
-            imap_tls_mode=imap_tls_mode,
-            smtp_host=smtp_host,
-            smtp_port=smtp_port,
-            smtp_tls_mode=smtp_tls_mode,
-            username=username,
-            password=password,
-            db_path=db_path,
-            imap_folder=imap_folder,
-            llm_api_key=llm_api_key,
-            llm_model=llm_model,
-            ingest_interval_minutes=ingest_interval_minutes,
-        )
+        return cls._parse_config_dict(data, path, validate=validate)
 
 
 # ---------------------------------------------------------------------------
