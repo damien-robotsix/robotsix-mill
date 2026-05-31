@@ -111,7 +111,7 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
         "--name",
         name,
         "--network",
-        "none",
+        settings.sandbox_network if settings.sandbox_proxy_url else "none",
         "--user",
         f"{os.getuid()}:{os.getgid()}",
         "--pids-limit",
@@ -135,6 +135,16 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
     # validates the image's old code instead of the ticket's edits.
     if (repo_dir / "src").is_dir():
         argv += ["-e", "PYTHONPATH=src"]
+    # Route HTTP/HTTPS through the egress proxy so only allowlisted
+    # domains (PyPI, GitHub) are reachable from the sandbox.
+    if settings.sandbox_proxy_url:
+        proxy = settings.sandbox_proxy_url
+        argv += [
+            "-e", f"HTTP_PROXY={proxy}",
+            "-e", f"HTTPS_PROXY={proxy}",
+            "-e", f"http_proxy={proxy}",
+            "-e", f"https_proxy={proxy}",
+        ]
     # Override the image ENTRYPOINT: images like robotsix/mill have one
     # (it starts the server) which would otherwise swallow our command.
     argv += ["--entrypoint", "sh", settings.sandbox_image, "-lc", command]

@@ -58,9 +58,22 @@ services:
     ports:
       - "127.0.0.1:8077:8077"   # ticket board + API at http://localhost:8077
 
+  sandbox-proxy:
+    image: robotsix/mill-sandbox-proxy:latest
+    container_name: sandbox-proxy
+    restart: unless-stopped
+    networks:
+      - sandbox-int
+      - default
+
   watchtower:
     image: containrrr/watchtower
     restart: unless-stopped
     command: --label-enable --interval 300 --cleanup
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  sandbox-int:
+    name: mill-sandbox-net
+    internal: true
