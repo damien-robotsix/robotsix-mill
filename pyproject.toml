@@ -20,7 +20,9 @@ dependencies = [
 
 [project.optional-dependencies]
 # Layer 2 — OpenRouter transport (OpenAIChatModel over the OpenRouter provider).
-openrouter = ["pydantic-ai-slim[openrouter,openai]>=1.0"]
+# The `openrouter` extra already pulls `openai` transitively (it's what
+# OpenAIChatModel runs on), so listing `openai` explicitly is redundant.
+openrouter = ["pydantic-ai-slim[openrouter]>=1.0"]
 # Layer 3 — derived DeepSeek provider. Chains the openrouter extra.
 openrouter_deepseek = ["robotsix-llmio[openrouter]"]
 # Layer 2 (sibling) — Claude Agent SDK transport. No API key: authenticates via
