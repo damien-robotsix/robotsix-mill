@@ -279,6 +279,13 @@ class ReviewStage(Stage):
             )
         except Exception as e:
             log.exception("%s: review agent error", ticket.id)
+            # Transient model blips (OpenRouter 5xx/429/timeout, the
+            # DeepSeek reasoning-400) should get a fresh stage re-run via
+            # the worker's stage-retry rather than a hard BLOCK needing a
+            # manual resume — same fix as implement.py.
+            from ..runtime.transient_errors import reraise_if_transient
+
+            reraise_if_transient(e)
             return Outcome(
                 State.BLOCKED,
                 f"review agent error — resumable: {e}",
