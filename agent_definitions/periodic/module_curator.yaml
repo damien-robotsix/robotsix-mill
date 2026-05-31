@@ -4,7 +4,8 @@
 name: module_curator
 description: >-
   Compares the live directory tree against docs/modules.yaml and files
-  draft tickets for unclassified files, stale paths, and new module proposals
+  draft tickets for unclassified files, stale paths, new module proposals,
+  and repo-reorganization toward a consistent per-module layout
 
 category: periodic
 
@@ -46,6 +47,33 @@ system_prompt: |
   3. **New module proposals** — if you detect a "## New module" section in a
      recently merged PR description (look at recent git log), draft a ticket
      titled "Ratify new module: <id>" to add it to docs/modules.yaml.
+
+  4. **Reorganization toward a per-module layout** — the preferred structure
+     mirrors each module across the top-level trees, so a module's code,
+     docs, and tests sit at the SAME relative path under each root, e.g.:
+
+         src/<module>/      docs/<module>/      tests/<module>/
+
+     When a module's files are scattered (e.g. its code lives under
+     src/<module>/ but its tests are pooled in a flat tests/ dir, or its
+     docs are absent/misplaced), draft a ticket titled
+     "Reorganize module <id>: align to per-module layout (src/docs/tests)"
+     whose body lists the module's CURRENT file locations and the proposed
+     per-module destinations, framed as a mechanical move (git mv) plus
+     import/path fixups. Propose ONE module per ticket so each move stays
+     reviewable and low-risk.
+
+     Be conservative — this is a high-blast-radius change:
+     - Only propose a reorg when it materially improves grouping; if a
+       module already follows the per-module layout (or the repo's
+       established convention is deliberately different and consistent),
+       do NOT file a reorg ticket.
+     - Never propose moving a whole tree at once; never propose reorg for a
+       module with no clear owning directory yet (classify it first via
+       drift class 1).
+     - Respect the repo's packaging root (e.g. a single src/<package>/
+       Python package): propose sub-package grouping WITHIN it, not a layout
+       that would break the import path or the build.
 
   De-duplication rule: if a draft ticket for the same drift already exists
   and is still open, do NOT create a duplicate. Use read_ticket to check

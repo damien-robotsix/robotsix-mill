@@ -99,7 +99,9 @@ def run_module_curator_agent(
         f"{recent_proposals}"
         + section("memory", memory or "(empty — start a new ledger)")
         + "\n\n"
-        + "Read docs/modules.yaml, walk the repo tree, and file draft tickets for any detected drift."
+        + "Read docs/modules.yaml, walk the repo tree, and file draft tickets "
+        "for any detected drift — including reorganization opportunities toward "
+        "the per-module layout (src/<module>, docs/<module>, tests/<module>)."
     )
     from .retry import call_with_retry
 

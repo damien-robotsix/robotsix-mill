@@ -12,7 +12,7 @@ from robotsix_mill.pass_runner import _GAP_ID_RE
 
 
 def test_module_curator_system_prompt_covers_all_drift_classes():
-    """The module-curator agent prompt must cover all three drift classes."""
+    """The module-curator agent prompt must cover all four drift classes."""
     p = mc_agent.SYSTEM_PROMPT.lower()
     # 1. Unclassified files
     assert "unclassified" in p
@@ -20,6 +20,11 @@ def test_module_curator_system_prompt_covers_all_drift_classes():
     assert "stale path" in p
     # 3. New module proposals
     assert "new module" in p
+    # 4. Reorganization toward a per-module layout (c0fd)
+    assert "reorganiz" in p
+    assert "per-module" in p
+    # The reorg proposal must be conservative / one module per ticket.
+    assert "one module per ticket" in p or "conservative" in p
     # Must be read-only
     assert (
         "read-only" in p
