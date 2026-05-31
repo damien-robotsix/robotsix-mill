@@ -12,7 +12,6 @@ import pytest
 
 from robotsix_mill.periodic_runner import (
     PERIODIC_PASS_CONFIGS,
-    PeriodicPassConfig,
     _clone_token,
     _forge_token,
     run_periodic_pass,
@@ -65,9 +64,7 @@ def test_clone_token_returns_token_on_success(monkeypatch):
     def fake_github_token(settings, repo_config=None):
         return "ghp_fake_token"
 
-    monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.github_token", fake_github_token
-    )
+    monkeypatch.setattr("robotsix_mill.periodic_runner.github_token", fake_github_token)
 
     result = _clone_token(Settings(), _test_repo_config())
     assert result == "ghp_fake_token"
@@ -79,9 +76,7 @@ def test_clone_token_returns_none_on_runtime_error(monkeypatch):
     def fake_github_token(settings, repo_config=None):
         raise RuntimeError("no token")
 
-    monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.github_token", fake_github_token
-    )
+    monkeypatch.setattr("robotsix_mill.periodic_runner.github_token", fake_github_token)
 
     result = _clone_token(Settings(), _test_repo_config())
     assert result is None
@@ -195,9 +190,7 @@ def test_run_periodic_pass_clone_failure_logs_warning(tmp_path, monkeypatch, cap
     assert any("clone failed" in record.message for record in caplog.records)
 
 
-def test_run_periodic_pass_uses_clone_token_fn_when_configured(
-    tmp_path, monkeypatch
-):
+def test_run_periodic_pass_uses_clone_token_fn_when_configured(tmp_path, monkeypatch):
     """For a config with clone_token_fn=_clone_token, verify _clone_token
     is called (not _forge_token). Uses audit config as the test subject."""
     settings = _make_settings(
@@ -221,9 +214,7 @@ def test_run_periodic_pass_uses_clone_token_fn_when_configured(
         github_token_calls.append(True)
         return "ghp_tok"
 
-    monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.github_token", fake_github_token
-    )
+    monkeypatch.setattr("robotsix_mill.periodic_runner.github_token", fake_github_token)
     monkeypatch.setattr(
         "robotsix_mill.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
@@ -265,9 +256,7 @@ def test_run_periodic_pass_uses_forge_token_when_clone_token_fn_none(
         get_secrets_calls.append(True)
         return Secrets(forge_token="ftok")
 
-    monkeypatch.setattr(
-        "robotsix_mill.periodic_runner.get_secrets", fake_get_secrets
-    )
+    monkeypatch.setattr("robotsix_mill.periodic_runner.get_secrets", fake_get_secrets)
     monkeypatch.setattr(
         "robotsix_mill.periodic_runner.run_agent_pass",
         lambda **kw: _fake_agent_pass_result(),
@@ -468,6 +457,4 @@ def test_periodic_pass_configs_each_has_required_fields():
     ]
     for key, cfg in PERIODIC_PASS_CONFIGS.items():
         for field in required:
-            assert getattr(cfg, field, None) is not None, (
-                f"{key}.{field} is None"
-            )
+            assert getattr(cfg, field, None) is not None, f"{key}.{field} is None"

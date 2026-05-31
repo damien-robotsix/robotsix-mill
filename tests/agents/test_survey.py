@@ -1,7 +1,6 @@
 """Tests for the survey agent and runner."""
 
 import json
-import threading
 from pathlib import Path
 
 import pytest
@@ -118,7 +117,9 @@ def test_run_survey_pass_reads_existing_memory(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     memory_file = settings.data_dir / "test-repo" / "survey_memory.md"
     memory_file.parent.mkdir(parents=True, exist_ok=True)
-    memory_file.write_text("# Existing memory\n## Rotation Log\n- entry\n", encoding="utf-8")
+    memory_file.write_text(
+        "# Existing memory\n## Rotation Log\n- entry\n", encoding="utf-8"
+    )
 
     captured_memory = []
 
