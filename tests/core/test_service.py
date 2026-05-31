@@ -1296,3 +1296,56 @@ def test_add_history_note_unknown_ticket_raises(service):
 
     with _pytest.raises(KeyError):
         service.add_history_note("does-not-exist", "irrelevant")
+
+
+# ---------------------------------------------------------------------------
+# unblocks: a solver auto-reopens BLOCKED tickets when it completes
+# ---------------------------------------------------------------------------
+
+
+def test_create_with_unblocks_is_stored(service):
+    t = service.create("solver", unblocks=json.dumps(["a", "b"]))
+    assert json.loads(service.get(t.id).unblocks) == ["a", "b"]
+
+
+def test_set_unblocks_dedups_and_drops_self(service):
+    solver = service.create("solver")
+    t = service.set_unblocks(solver.id, [solver.id, "x", "x", "y"])
+    assert json.loads(t.unblocks) == ["x", "y"]  # self dropped, dups collapsed
+    # empty list clears the field
+    assert service.set_unblocks(solver.id, []).unblocks is None
+
+
+def test_unblocks_fires_on_done(service):
+    solver = service.create("solver")
+    target = service.create("target")
+    service.transition(target.id, State.BLOCKED)
+    service.set_unblocks(solver.id, [target.id])
+
+    service.transition(solver.id, State.DONE)  # DRAFT -> DONE is allowed
+
+    assert service.get(target.id).state is State.DRAFT  # auto-unblocked
+    draft_notes = [e.note for e in service.history(target.id) if e.state is State.DRAFT]
+    assert any(solver.id in (n or "") for n in draft_notes)
+
+
+def test_unblocks_skips_target_that_is_not_blocked(service):
+    solver = service.create("solver")
+    target = service.create("target")
+    service.transition(target.id, State.READY)  # not BLOCKED
+    service.set_unblocks(solver.id, [target.id])
+
+    service.transition(solver.id, State.DONE)
+
+    assert service.get(target.id).state is State.READY  # left untouched
+
+
+def test_unblocks_not_fired_on_non_terminal_transition(service):
+    solver = service.create("solver")
+    target = service.create("target")
+    service.transition(target.id, State.BLOCKED)
+    service.set_unblocks(solver.id, [target.id])
+
+    service.transition(solver.id, State.READY)  # not a completion state
+
+    assert service.get(target.id).state is State.BLOCKED  # still blocked

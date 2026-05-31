@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -81,6 +82,7 @@ def create_ticket(
             body.description,
             source=body.source,
             depends_on=body.depends_on,
+            unblocks=json.dumps(body.unblocks) if body.unblocks else None,
             kind=body.kind,
             parent_id=body.parent_id,
             board_id=board_id or None,
@@ -333,6 +335,31 @@ def transition(
     except TransitionError as e:
         raise HTTPException(409, str(e)) from None
     maybe_enqueue(ticket, worker)  # human unblock re-triggers the chain
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
+@router.post("/tickets/{ticket_id}/unblocks", response_model=TicketRead)
+def set_unblocks(
+    ticket_id: str,
+    body: dict = Body(...),
+    request: Request = None,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Set the list of ticket IDs that *ticket_id* auto-unblocks when it
+    completes (DONE/CLOSED/EPIC_CLOSED). Body: ``{"ticket_ids": [...]}``.
+
+    Each listed ticket that is BLOCKED at that point is transitioned
+    BLOCKED -> DRAFT. Cross-board safe. Returns the updated solver ticket.
+    """
+    raw = body.get("ticket_ids", [])
+    if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
+        raise HTTPException(400, "ticket_ids must be a list of strings")
+    try:
+        ticket = svc.set_unblocks(ticket_id, raw)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 

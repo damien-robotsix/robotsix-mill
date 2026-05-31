@@ -92,6 +92,12 @@ class Ticket(SQLModel, table=True):
     # optional JSON list of ticket IDs that must reach CLOSED/DONE before
     # this ticket can leave READY (implement-stage gate).
     depends_on: str | None = Field(default=None)
+    # optional JSON list of ticket IDs to AUTO-UNBLOCK when THIS ticket
+    # completes (reaches DONE/CLOSED/EPIC_CLOSED). Each listed ticket that is
+    # currently BLOCKED is transitioned BLOCKED -> DRAFT. The inverse of
+    # depends_on, declared on the *solver*: "merging me re-opens these".
+    # Cross-board safe (targets resolved via _board_for).
+    unblocks: str | None = Field(default=None)
     # board_id from RepoConfig — stamped at creation so every ticket
     # is tagged with its repository.  Empty string for legacy rows.
     board_id: str = Field(default="", index=True)
@@ -151,6 +157,9 @@ class TicketCreate(SQLModel):
     title: str
     description: str = ""
     depends_on: str | None = None
+    # Ticket IDs to auto-unblock (BLOCKED -> DRAFT) when this ticket
+    # completes. Accepts a JSON array of IDs.
+    unblocks: list[str] | None = None
     source: str = SourceKind.USER
     kind: str = "task"  # "task", "inquiry", or "epic"
     parent_id: str | None = None
@@ -181,6 +190,8 @@ class TicketRead(SQLModel):
     cumulative_cost: float | None = None
     depends_on: str | None
     unmet_deps: list[str]
+    # Ticket IDs this ticket auto-unblocks on completion (parsed list).
+    unblocks: list[str] = []
     # Resolved per-dependency status for drawer display. Each entry is
     # ``{id, title, state}``; populated by ``enrich_ticket_read`` from
     # the parsed ``depends_on`` list. Empty list when the ticket has
