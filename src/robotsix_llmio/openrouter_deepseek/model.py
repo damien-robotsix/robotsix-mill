@@ -97,22 +97,22 @@ class OpenRouterDeepseekModel(OpenRouterModel):
         # Reasoning-disabled tier: strip ALL reasoning from every turn so the
         # request is consistently reasoning-free (no thinking-mode mix-400).
         if not self.echo_reasoning:
-            param.pop("reasoning", None)
-            param.pop("reasoning_content", None)
-            param.pop(_REASONING_DETAILS_KEY, None)
+            param.pop("reasoning", None)  # type: ignore[typeddict-item]  # DeepSeek-specific field not in OpenAI stubs
+            param.pop("reasoning_content", None)  # type: ignore[typeddict-item]  # DeepSeek-specific field not in OpenAI stubs
+            param.pop(_REASONING_DETAILS_KEY, None)  # type: ignore[typeddict-item,misc]  # DeepSeek-specific field not in OpenAI stubs
             return param
 
         # Reasoning tier: echo reasoning_details ONLY on tool-call turns; omit
         # on non-tool-call turns (DeepSeek thinking-mode rule).
         if param.get("tool_calls"):
             rd = (message.provider_details or {}).get(_REASONING_DETAILS_KEY)
-            param.pop("reasoning", None)
-            param.pop("reasoning_content", None)
+            param.pop("reasoning", None)  # type: ignore[typeddict-item]  # DeepSeek-specific field not in OpenAI stubs
+            param.pop("reasoning_content", None)  # type: ignore[typeddict-item]  # DeepSeek-specific field not in OpenAI stubs
             # Present-but-empty when the model emitted no reasoning this turn,
             # so the sequence stays "all-present" rather than a failing mix.
-            param[_REASONING_DETAILS_KEY] = rd if rd else list(_EMPTY_REASONING)
+            param[_REASONING_DETAILS_KEY] = rd if rd else list(_EMPTY_REASONING)  # type: ignore[literal-required,typeddict-item]  # DeepSeek-specific field not in OpenAI stubs
         else:
-            param.pop("reasoning", None)
-            param.pop("reasoning_content", None)
-            param.pop(_REASONING_DETAILS_KEY, None)
+            param.pop("reasoning", None)  # type: ignore[typeddict-item]  # DeepSeek-specific field not in OpenAI stubs
+            param.pop("reasoning_content", None)  # type: ignore[typeddict-item]  # DeepSeek-specific field not in OpenAI stubs
+            param.pop(_REASONING_DETAILS_KEY, None)  # type: ignore[typeddict-item,misc]  # DeepSeek-specific field not in OpenAI stubs
         return param
