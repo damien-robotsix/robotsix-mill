@@ -24,6 +24,7 @@ import time
 from typing import Callable, TypeVar
 
 from . import constants
+from ._otel import _get_recording_span
 from .cost import flush_current_provider
 
 log = logging.getLogger("robotsix_llmio.retry")
@@ -96,12 +97,8 @@ def _record_rate_limit_span(
     fallback_activated: bool,
 ) -> None:
     """Record rate-limit metrics on the current OTel span; no-op without OTel."""
-    try:
-        from opentelemetry import trace as otel_trace  # type: ignore[import-untyped]
-    except ImportError:
-        return
-    span = otel_trace.get_current_span()
-    if span is None or not span.is_recording():
+    span = _get_recording_span()
+    if span is None:
         return
     span.set_attribute("llmio.rate_limit.count", count)
     span.set_attribute("llmio.rate_limit.backoff_seconds", cumulative_backoff)

@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
+from ._otel import _get_recording_span
+
 
 def record_cost(response: Any, get_cost: Callable[[Any], float | None]) -> None:
     """Pull the USD cost out of *response* via *get_cost* and stamp it onto the
@@ -19,12 +21,8 @@ def record_cost(response: Any, get_cost: Callable[[Any], float | None]) -> None:
     cost = get_cost(response)
     if cost is None:
         return
-    try:
-        from opentelemetry import trace as otel_trace  # type: ignore[import-untyped]
-    except ImportError:
-        return
-    span = otel_trace.get_current_span()
-    if span is None or not span.is_recording():
+    span = _get_recording_span()
+    if span is None:
         return
     span.set_attribute("gen_ai.usage.cost", cost)
     span.set_attribute("gen_ai.operation.name", "chat")

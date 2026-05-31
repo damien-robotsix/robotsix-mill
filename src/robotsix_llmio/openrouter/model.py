@@ -13,6 +13,8 @@ from typing import Any
 
 from pydantic_ai.models.openai import OpenAIChatModel
 
+from robotsix_llmio.core._otel import _get_recording_span
+
 
 def _resolve_model_settings(args: tuple, kwargs: dict) -> Any:
     """Return the mutable ``model_settings`` dict from the parent call.
@@ -64,12 +66,8 @@ def record_openrouter_cost(response: Any) -> None:
     cost = _get_cost_from_response(response)
     if cost is None:
         return
-    try:
-        from opentelemetry import trace as otel_trace  # type: ignore[import-untyped]
-    except ImportError:
-        return
-    span = otel_trace.get_current_span()
-    if span is None or not span.is_recording():
+    span = _get_recording_span()
+    if span is None:
         return
 
     usage_obj = getattr(response, "usage", None)
