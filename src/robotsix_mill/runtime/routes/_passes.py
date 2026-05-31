@@ -143,8 +143,12 @@ def completeness_check_pass(
                     "completeness-check", repo_id=rc.repo_id if rc else ""
                 )
                 session_id = make_session_id("completeness-check")
-                with start_ticket_root_span(session_id, "completeness-check", repo_config=rc):
-                    r = run_completeness_check_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(
+                    session_id, "completeness-check", repo_config=rc
+                ):
+                    r = run_completeness_check_pass(
+                        session_id=session_id, repo_config=rc
+                    )
                 draft_ids = [d["id"] for d in r.drafts_created[:5]]
                 summary = (
                     f"Created {len(r.drafts_created)} drafts: "
@@ -591,8 +595,12 @@ def cost_reconciliation_pass(
                     "cost-reconciliation", repo_id=rc.repo_id if rc else ""
                 )
                 session_id = make_session_id("cost-reconciliation")
-                with start_ticket_root_span(session_id, "cost-reconciliation", repo_config=rc):
-                    r = run_cost_reconciliation_pass(session_id=session_id, repo_config=rc)
+                with start_ticket_root_span(
+                    session_id, "cost-reconciliation", repo_config=rc
+                ):
+                    r = run_cost_reconciliation_pass(
+                        session_id=session_id, repo_config=rc
+                    )
                 # Prefer the runner's own summary (delta or "no overrun");
                 # fall back to generic drafts-list.
                 runner_summary = (getattr(r, "summary", "") or "").strip()
