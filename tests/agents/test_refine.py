@@ -3009,13 +3009,22 @@ class _FakeRunResult:
     """Minimal fake for a pydantic-ai AgentRunResult, exposing only the
     attributes that the continuation guard reads."""
 
-    def __init__(self, *, output, finish_reason, all_messages,
-                 all_messages_json=b"[]", new_messages_json=b"[]"):
+    def __init__(
+        self,
+        *,
+        output,
+        finish_reason,
+        all_messages,
+        all_messages_json=b"[]",
+        new_messages_json=b"[]",
+    ):
         self._output = output
         self._all_messages = all_messages
         self._all_messages_json = all_messages_json
         self._new_messages_json = new_messages_json
-        self.response = _FakeResponse(finish_reason) if finish_reason is not None else None
+        self.response = (
+            _FakeResponse(finish_reason) if finish_reason is not None else None
+        )
 
     @property
     def output(self):
@@ -3064,7 +3073,8 @@ def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
                 return _FakeRunResult(
                     output=expected_spec,
                     finish_reason="stop",
-                    all_messages=first_messages + [{"role": "assistant", "content": "done"}],
+                    all_messages=first_messages
+                    + [{"role": "assistant", "content": "done"}],
                 )
 
         def close(self):
@@ -3073,12 +3083,15 @@ def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
     mock_agent = _MockAgent()
 
     # call_with_retry: pass-through so the lambdas execute directly
-    def pass_through_retry(fn, *, settings, what="model call", sleep=None, fallback_fn=None):
+    def pass_through_retry(
+        fn, *, settings, what="model call", sleep=None, fallback_fn=None
+    ):
         return fn()
 
     monkeypatch.setattr(retry_module, "call_with_retry", pass_through_retry)
-    monkeypatch.setattr(base_module, "build_agent_from_definition",
-                        lambda *a, **kw: mock_agent)
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: mock_agent
+    )
 
     output = refining.run_refine_agent(
         settings=settings,
@@ -3126,10 +3139,14 @@ def test_continuation_guard_not_triggered_on_stop(monkeypatch, settings):
         def close(self):
             pass
 
-    monkeypatch.setattr(retry_module, "call_with_retry",
-                        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn())
-    monkeypatch.setattr(base_module, "build_agent_from_definition",
-                        lambda *a, **kw: _MockAgent())
+    monkeypatch.setattr(
+        retry_module,
+        "call_with_retry",
+        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+    )
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
 
     output = refining.run_refine_agent(
         settings=settings,
@@ -3163,10 +3180,14 @@ def test_continuation_guard_skipped_when_response_missing(monkeypatch, settings)
         def close(self):
             pass
 
-    monkeypatch.setattr(retry_module, "call_with_retry",
-                        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn())
-    monkeypatch.setattr(base_module, "build_agent_from_definition",
-                        lambda *a, **kw: _MockAgent())
+    monkeypatch.setattr(
+        retry_module,
+        "call_with_retry",
+        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+    )
+    monkeypatch.setattr(
+        base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
+    )
 
     output = refining.run_refine_agent(
         settings=settings,

@@ -513,8 +513,7 @@ def run_refine_agent(
         if finish_reason == "tool_call":
             continuation_result = call_with_retry(
                 lambda: agent.run_sync(
-                    "Please synthesise a final answer based on the "
-                    "tool results above.",
+                    "Please synthesise a final answer based on the tool results above.",
                     message_history=result.all_messages(),
                 ),
                 settings=settings,
