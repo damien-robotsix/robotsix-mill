@@ -56,13 +56,19 @@ def create_ticket(
     board_id = ""
     if body.repo_id:
         # Explicit repo_id provided — look up its board_id.
-        if body.repo_id not in repos.repos:
+        if body.repo_id == "meta":
+            # The synthetic cross-repo meta board is not a registered repo
+            # (no clone/forge) but IS a valid ticket target — see GET /repos
+            # and list_tickets, which surface it the same way.
+            board_id = "meta"
+        elif body.repo_id not in repos.repos:
             sorted_keys = sorted(repos.repos.keys())
             raise HTTPException(
                 status_code=400,
                 detail=f"Unknown repo: '{body.repo_id}'. Known repos: {sorted_keys}",
             )
-        board_id = repos.repos[body.repo_id].board_id
+        else:
+            board_id = repos.repos[body.repo_id].board_id
     elif len(repos.repos) == 1:
         # Single-repo mode: default to the sole repo.
         board_id = next(iter(repos.repos.values())).board_id

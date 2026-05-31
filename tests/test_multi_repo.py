@@ -436,3 +436,17 @@ def test_bc_check_repo_isolation(settings, monkeypatch, tmp_path):
     )
 
     _db.reset_engine()
+
+
+def test_create_ticket_on_meta_board(multi_repo_client):
+    """POST /tickets with repo_id=meta creates a ticket on the synthetic
+    meta board (not a registered repo) instead of 400-ing."""
+    r = multi_repo_client.post(
+        "/tickets", json={"title": "Meta proposal via API", "repo_id": "meta"}
+    )
+    assert r.status_code in (200, 201), r.text
+    assert r.json()["board_id"] == "meta"
+    tid = r.json()["id"]
+    # It shows up under ?repo_id=meta.
+    listed = multi_repo_client.get("/tickets?repo_id=meta").json()
+    assert tid in {t["id"] for t in listed}
