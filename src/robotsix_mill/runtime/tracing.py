@@ -174,17 +174,18 @@ def make_session_id(kind: str) -> str:
     return f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
 
 
-def langfuse_trace_url(
-    trace_id: str, repo_config: RepoConfig | None = None
+def _build_langfuse_url(
+    entity_id: str,
+    entity_type: str,
+    repo_config: RepoConfig | None = None,
 ) -> str | None:
-    """Build the Langfuse web-UI URL for a trace.
+    """Build a Langfuse web-UI URL for a session or trace.
 
-    Credential resolution mirrors ``_origin_session_url`` in ``deps.py``:
-    when *repo_config* is provided, its ``langfuse_base_url`` and
+    When *repo_config* is provided, its ``langfuse_base_url`` and
     ``langfuse_project_name`` are used; otherwise the global
     :class:`Secrets` singleton is consulted.
 
-    Returns ``None`` when the base URL or project identifier is missing.
+    Returns ``None`` when any required ingredient is missing.
     """
     if repo_config is not None:
         base = (repo_config.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
@@ -194,10 +195,22 @@ def langfuse_trace_url(
     else:
         secrets = get_secrets()
         base = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-        project_id = secrets.langfuse_project_id
-    if base and project_id:
-        return f"{base}/project/{project_id}/traces/{trace_id}"
+        project_id = secrets.langfuse_project_name or secrets.langfuse_project_id
+    if entity_id and base and project_id:
+        return f"{base}/project/{project_id}/{entity_type}/{entity_id}"
     return None
+
+
+def langfuse_trace_url(
+    trace_id: str, repo_config: RepoConfig | None = None
+) -> str | None:
+    """Build the Langfuse web-UI URL for a trace.
+
+    Delegates to :func:`_build_langfuse_url` with ``entity_type="traces"``.
+    Returns ``None`` when the base URL, project identifier, or trace ID
+    is missing.
+    """
+    return _build_langfuse_url(trace_id, "traces", repo_config=repo_config)
 
 
 def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:

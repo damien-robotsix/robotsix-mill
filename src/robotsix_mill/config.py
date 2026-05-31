@@ -1499,6 +1499,7 @@ class Secrets(BaseModel):
     langfuse_secret_key: str | None = None
     langfuse_base_url: str | None = None
     langfuse_project_id: str | None = None
+    langfuse_project_name: str | None = None
     openrouter_management_key: str | None = None
     ntfy_url: str | None = None
     ntfy_token: str | None = None

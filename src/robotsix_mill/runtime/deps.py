@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Query, Request
 
-from ..config import RepoConfig, ReposRegistry, Settings, get_secrets
+from ..config import RepoConfig, ReposRegistry, Settings
 from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE, State
@@ -96,21 +96,16 @@ def _origin_session_url(
 ) -> str | None:
     """Return a Langfuse web-UI session URL for *ticket*'s origin session.
 
-    Returns ``None`` when any ingredient is missing — no broken links.
-    When *repo_config* is provided, its Langfuse fields are used;
-    otherwise the global :class:`Secrets` singleton is consulted.
+    Delegates to :func:`tracing._build_langfuse_url` with
+    ``entity_type="sessions"``.  Returns ``None`` when any ingredient is
+    missing — no broken links.
     """
+    from .tracing import _build_langfuse_url
+
     origin = ticket.origin_session
-    if repo_config is not None:
-        base = repo_config.langfuse_base_url
-        project_id = repo_config.langfuse_project_name
-    else:
-        secrets = get_secrets()
-        base = secrets.langfuse_base_url
-        project_id = secrets.langfuse_project_id
-    if origin and base and project_id:
-        return f"{base.rstrip('/')}/project/{project_id}/sessions/{origin}"
-    return None
+    if not origin:
+        return None
+    return _build_langfuse_url(origin, "sessions", repo_config=repo_config)
 
 
 def with_cost(
