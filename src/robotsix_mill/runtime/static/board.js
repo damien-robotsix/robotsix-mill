@@ -24,7 +24,7 @@ const ACTIVE_LABEL={
 };
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const renderMD = s => { if (!s) return ""; return marked.parse(s); };
-const SOURCE_CLASS={retrospect:"retrospect",audit:"audit",config_sync:"config-sync","trace-health":"trace-health",health:"health",test_gap:"test-gap",agent:"agent","deep-review":"deep-review",survey:"survey",ci:"ci",agent_check:"agent-check",bc_check:"bc-check",cost_reconciliation:"cost-reconciliation",completeness_check:"completeness-check","trace-review":"trace-review",roadmap_sync:"roadmap-sync"};const srcClass=s=>SOURCE_CLASS[s]||"user";
+const SOURCE_CLASS={retrospect:"retrospect",audit:"audit",config_sync:"config-sync","trace-health":"trace-health",health:"health",test_gap:"test-gap",agent:"agent",survey:"survey",ci:"ci",agent_check:"agent-check",bc_check:"bc-check",cost_reconciliation:"cost-reconciliation",completeness_check:"completeness-check","trace-review":"trace-review",roadmap_sync:"roadmap-sync"};const srcClass=s=>SOURCE_CLASS[s]||"user";
 // History row → artifact that the stage producing this state wrote.
 // Drives the collapsible-history expanded view. States without an
 // entry (draft, blocked, errored, awaiting_user_reply, …) just show
@@ -1355,8 +1355,6 @@ function toggleBody(btn) {
   }
 }
 function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
- if(deepReviewPollTimer){clearInterval(deepReviewPollTimer);deepReviewPollTimer=null}
- deepReviewOpen=false;deepReviewTraceId=null;deepReviewFindings=[];
  candidatesOpen=false;
  document.getElementById("drawer").classList.remove("open")}
 // Cache the last runs payload (sans elapsed) so the 1s auto-refresh
@@ -1365,7 +1363,7 @@ function close_(){sel=null;runsOpen=false;costDashboardOpen=false;
 // every tick so the user doesn't see the panel flash.
 let _runsLastSig=null;
 function _runRowHtml(r,elapsed){
- const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='deep-review'?'#1a2a3b':r.kind==='survey'?'#f59e0b':'#6b7280';
+ const kc=r.kind==='audit'?'#059669':r.kind==='trace-health'?'#0ea5e9':r.kind==='health'?'#0d9488':r.kind==='agent_check'?'#db2777':r.kind==='survey'?'#f59e0b':'#6b7280';
  const sc=r.status==='running'?'#eab308':r.status==='ok'?'#22c55e':'#ef4444';
  const st=r.status==='running'?'running…':r.status;
  // Repo badge: only meaningful when the user is viewing All repos
@@ -1647,15 +1645,7 @@ async function renderCostDashboard(){
 
  document.getElementById("cost-highlights").innerHTML=highlightsHtml;
 }
-// -- deep review --------------------------------------------------------
-let deepReviewOpen=false;
 let candidatesOpen=false;
-let deepReviewTraceId=null;
-let deepReviewPollTimer=null;
-let deepReviewPollCount=0;
-let deepReviewPollStart=0;
-let deepReviewFindings=[];  // [{category, text}] for ticket creation
-let lastReviewsCache=[];
 // --- AGENT.md candidates ----------------------------------------------------
 // Surface AGENT_CANDIDATES.md entries (written by retrospect) as actionable
 // cards. Validate files an audited-repo draft ticket; reject just stamps the
@@ -1664,7 +1654,7 @@ let lastReviewsCache=[];
 
 async function openCandidates(){
  if(candidatesOpen){close_();return}
- if(sel||deepReviewOpen||runsOpen||costDashboardOpen)close_();
+ if(sel||runsOpen||costDashboardOpen)close_();
  candidatesOpen=true;
  document.getElementById("drawer").classList.add("open");
  await renderCandidatesList();
@@ -1749,334 +1739,6 @@ async function rejectCandidate(cid){
  }catch(e){alert("Reject error: "+e)}
 }
 
-async function openDeepReview(){
- if(deepReviewOpen){close_();return}
- if(sel){close_()}
- deepReviewOpen=true; deepReviewTraceId=null; deepReviewPollCount=0;
- deepReviewFindings=[];
- document.getElementById("drawer").classList.add("open");
- // reset filter inputs to defaults
- const lim=document.getElementById("dr-limit");
- const minc=document.getElementById("dr-min-cost");
- const maxc=document.getElementById("dr-max-cost");
- if(lim)lim.value='10';
- if(minc)minc.value='';
- if(maxc)maxc.value='';
- // lazy-load last-reviews count
- jget("/deep-review").then(function(arr){
-  if(Array.isArray(arr)){lastReviewsCache=arr;var el=document.getElementById("lr-count");if(el)el.textContent=arr.length}
- }).catch(function(){var el=document.getElementById("lr-count");if(el)el.textContent='?'});
- await renderTraceList();
-}
-async function renderTraceList(){
- const lim=document.getElementById("dr-limit");
- const minc=document.getElementById("dr-min-cost");
- const maxc=document.getElementById("dr-max-cost");
- const limit=lim?parseInt(lim.value)||10:10;
- const minCost=minc&&minc.value!==''?minc.value:null;
- const maxCost=maxc&&maxc.value!==''?maxc.value:null;
- let url='/traces/recent?limit='+limit;
- if(minCost!==null)url+='&min_cost='+encodeURIComponent(minCost);
- if(maxCost!==null)url+='&max_cost='+encodeURIComponent(maxCost);
- document.getElementById("d").innerHTML='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+'<h3>Deep Review</h3>'+
-  '<button onclick="renderLastReviewsList()" class="dr-btn"'+
-  ' style="font-size:11px;padding:3px 10px;background:#1a2a3b;color:#60c0fa;'+
-  'border:1px solid #2a3a4b;border-radius:4px;cursor:pointer;margin-bottom:10px">'+
-  'Last reviews (<span id="lr-count">…</span>)</button>'+
-  '<div class="dr-filters">'+
-   '<label>Show <input type="number" id="dr-limit" value="'+limit+'" min="1" max="50" style="width:4em"></label>'+
-   '<label>Min cost $ <input type="number" id="dr-min-cost" value="'+(minCost!==null?minCost:'')+'" step="0.0001" placeholder="0.0000" style="width:7em"></label>'+
-   '<label>Max cost $ <input type="number" id="dr-max-cost" value="'+(maxCost!==null?maxCost:'')+'" step="0.0001" placeholder="—" style="width:7em"></label>'+
-  '</div><div id="trace-list">loading traces…</div>';
- // bind filter-change handlers
- ['dr-limit','dr-min-cost','dr-max-cost'].forEach(function(id){
-  const el=document.getElementById(id);if(el){el.oninput=renderTraceList;el.onchange=renderTraceList}
- });
- const traces=await jget(url);
- const costFilterActive=minCost!==null||maxCost!==null;
- if(!traces||!traces.length){
-  document.getElementById("trace-list").innerHTML=
-   '<div class="muted" style="padding:12px 0">'+
-   (costFilterActive?'No traces match your cost filter.':'No recent traces available — check Langfuse connectivity.')+
-   '</div>';
-  return;
- }
- const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
- let html='';
- traces.forEach(t=>{
-  const cost=t.totalCost!=null?'$'+Number(t.totalCost).toFixed(4):'—';
-  const ts=t.timestamp?new Date(t.timestamp).toLocaleString():'—';
-  const sid=t.sessionId||'—';
-  html+=`<div class="trace-row${deepReviewTraceId===t.id?' sel':''}" onclick="selectTrace('${escT(t.id)}')" id="tr-${escT(t.id)}">
-   <div class="trace-name">${escT(t.name||'(unnamed)')}</div>
-   <div class="trace-meta">session: ${escT(sid)} · cost: ${cost} · ${ts}</div>
-  </div>`;
- });
- html+=`<div style="margin-top:12px"><button id="start-dr-btn" class="dr-btn"${deepReviewTraceId?'':' disabled'}`+
-   ` onclick="startDeepReview()" style="font-size:11px;padding:5px 14px;background:#1a2a3b;color:#60c0fa;border:1px solid #2a3a4b;border-radius:4px;cursor:pointer">`+
-   `Start Deep Review</button></div>`;
- document.getElementById("trace-list").innerHTML=html;
-}
-async function renderLastReviewsList(){
- const arr=await jget("/deep-review");
- if(Array.isArray(arr))lastReviewsCache=arr; else lastReviewsCache=[];
- const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
- let html='<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div><h3>Last Deep Reviews</h3><div id="last-reviews-list">';
- if(!lastReviewsCache.length){
-  html+='<div class="muted" style="padding:12px 0">No completed deep reviews yet. Run one from the trace picker.</div>';
- } else {
-  lastReviewsCache.forEach(function(entry){
-   const finished=entry.finished_at?new Date(entry.finished_at).toLocaleString():'—';
-   const n_te=(entry.findings||[]).filter(f=>f.category==="tool_error").length;
-   const n_al=(entry.findings||[]).filter(f=>f.category==="agent_limitation").length;
-   const n_opt=(entry.findings||[]).filter(f=>f.category==="optimization").length;
-   const status=entry.status||'ok';
-   const statusHtml=status==='error'?
-    '<span style="color:#f87171">error</span>':
-    '<span class="src-badge src-deep-review">'+escT(status)+'</span>';
-   html+='<div class="trace-row" onclick="viewStoredReview(\''+escT(entry.trace_id)+'\')">'+
-    '<div class="trace-name">'+escT(entry.source_trace_name||entry.trace_id)+'</div>'+
-    '<div class="trace-meta">'+
-    finished+' · '+n_te+' T / '+n_al+' L / '+n_opt+' O · '+
-    statusHtml+
-    '</div></div>';
-  });
- }
- html+='</div>'+
-  '<button onclick="openDeepReview()"'+
-  ' style="font-size:11px;padding:3px 10px;background:#2a2f3a;color:#aab0bd;'+
-  'border:1px solid #3a3f4a;border-radius:4px;cursor:pointer;margin-top:12px">'+
-  '← Back to trace picker</button>';
- document.getElementById("d").innerHTML=html;
-}
-function viewStoredReview(traceId){
- const entry=lastReviewsCache.find(function(e){return e.trace_id===traceId});
- if(!entry)return;
- deepReviewTraceId=entry.trace_id;
- renderDeepReviewResult(entry, renderLastReviewsList);
-}
-function selectTrace(tid){
- deepReviewTraceId=tid;
- // highlight
- document.querySelectorAll(".trace-row").forEach(r=>r.classList.remove("sel"));
- const row=document.getElementById("tr-"+tid);
- if(row)row.classList.add("sel");
- // enable button
- const btn=document.getElementById("start-dr-btn");
- if(btn){btn.disabled=false;btn.style.cursor="pointer"}
-}
-async function startDeepReview(){
- if(!deepReviewTraceId)return;
- const btn=document.getElementById("start-dr-btn");
- btn.disabled=true; btn.textContent='Reviewing…'; btn.style.cursor='default';
- // jpost returns a fetch-shaped wrapper {ok, status, text(), json()}.
- // ``r.status`` is the HTTP status code (number), NOT the response
- // body's "status" string. We have to parse the JSON body to read
- // the route's signal of "started" vs "unavailable" vs an error.
- const r=await jpost("/traces/"+deepReviewTraceId+"/deep-review");
- if(!r||!r.ok){
-  btn.disabled=false; btn.textContent='Start Deep Review'; btn.style.cursor='pointer';
-  alert("Failed to start deep review (HTTP "+(r?r.status:"unreachable")+")");
-  return;
- }
- const body=await r.json();
- if(body&&body.status==="unavailable"){
-  document.getElementById("trace-list").innerHTML=
-   '<div class="muted" style="color:#f87171;padding:12px 0">Langfuse is not configured — cannot start deep review.</div>';
-  return;
- }
- if(!body||body.status!=="started"){
-  btn.disabled=false; btn.textContent='Start Deep Review'; btn.style.cursor='pointer';
-  alert("Failed to start deep review (unexpected body: "+JSON.stringify(body)+")");
-  return;
- }
- deepReviewPollCount=0;
- // Backoff scheduling rather than fixed 2s interval. A real deep
- // review on a long implement-run trace can take 60-120s; the old
- // 30s hard cutoff was both wrong and operator-hostile (gave up
- // before the answer arrived, then the user had no way to recover
- // because the result is in-process state only).
- //   first 60s: poll every 2s (catches quick results)
- //   60-300s:  poll every 5s
- //   >300s:    show "still running" but stop polling (5 min ceiling)
- deepReviewPollStart=Date.now();
- schedulePollDeepReview(2000);
- pollDeepReviewResult();  // immediate first poll
-}
-function schedulePollDeepReview(ms){
- if(deepReviewPollTimer){clearTimeout(deepReviewPollTimer)}
- deepReviewPollTimer=setTimeout(pollDeepReviewResult, ms);
-}
-async function pollDeepReviewResult(){
- deepReviewPollCount++;
- const elapsed=Math.round((Date.now()-deepReviewPollStart)/1000);
- const HARD_CAP_S=300; // 5 min
- const res=await jget("/deep-review/"+deepReviewTraceId);
- if(res && res.status && res.status!=="running"){
-  // Result ready (ok OR error)
-  if(deepReviewPollTimer){clearTimeout(deepReviewPollTimer);deepReviewPollTimer=null}
-  renderDeepReviewResult(res);
-  return;
- }
- // Still running — update the UI with elapsed time and keep polling
- // unless we've hit the hard cap.
- const stillRunningHtml=
-  '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
-  '<h3>Deep Review</h3>'+
-  '<div class="muted" style="padding:12px 0">'+
-  '⏳ Still analysing… <span style="color:#aab0bd">('+elapsed+'s elapsed)</span>'+
-  '<div style="font-size:11px;margin-top:6px">Deep reviews can take 1-3 minutes on large traces; this window will update when the result arrives.</div>'+
-  '</div>';
- document.getElementById("d").innerHTML=stillRunningHtml;
- if(elapsed >= HARD_CAP_S){
-  // Stop polling but DON'T claim failure — the backend may still
-  // finish. The result will land in app.state.deep_review_results
-  // and can be re-fetched later (e.g. via a "Last Deep Review"
-  // panel — separate ticket).
-  if(deepReviewPollTimer){clearTimeout(deepReviewPollTimer);deepReviewPollTimer=null}
-  document.getElementById("d").innerHTML=
-   '<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div>'+
-   '<h3>Deep Review</h3>'+
-   '<div class="muted" style="color:#eab308;padding:12px 0">'+
-   '⏱ Still running after '+Math.floor(elapsed/60)+'m '+(elapsed%60)+'s — stopped polling but the analysis may still complete in the background.'+
-   '<div style="font-size:11px;margin-top:6px">Click below to keep waiting.</div>'+
-   '<button onclick="resumeDeepReviewPolling()" style="font-size:11px;margin-top:8px;padding:3px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer">Keep polling</button>'+
-   '</div>';
-  return;
- }
- // Backoff: first 60s every 2s, after that every 5s.
- schedulePollDeepReview(elapsed<60 ? 2000 : 5000);
-}
-function resumeDeepReviewPolling(){
- deepReviewPollStart=Date.now()-300000; // reset elapsed window
- schedulePollDeepReview(2000);
- pollDeepReviewResult();
-}
-function renderDeepReviewResult(res, backFn){
- const escT=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
- let html=`<div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div><h3>Deep Review: ${escT(deepReviewTraceId)}</h3>`;
- if(res.status==="error"){
-  html+=`<div class="muted" style="color:#f87171;padding:12px 0">${escT(res.error||'Unknown error')}</div>`;
-  document.getElementById("d").innerHTML=html;
-  return;
- }
- // New schema: res.findings is a list of {category, symptom, root_cause,
- // proposed_solution, confidence}.
- let findings=Array.isArray(res.findings)?res.findings:[];
- deepReviewFindings=findings.slice();
- if(!findings.length){
-  html+=`<div class="muted" style="padding:12px 0">(no issues found in this trace)</div>`;
-  document.getElementById("d").innerHTML=html;
-  return;
- }
- const sectionTitles={"tool_error":"Tool Errors","agent_limitation":"Agent Limitations","optimization":"Optimizations"};
- const sectionCls={"tool_error":"dr-tool-errors","agent_limitation":"dr-limitations","optimization":"dr-optimizations"};
- const confColor={"high":"#22c55e","medium":"#eab308","low":"#7d828c"};
- function renderFinding(f,idx){
-  const conf=f.confidence||"medium";
-  return `<div class="dr-finding-card"><div class="dr-finding-head">`+
-   `<span class="dr-conf" style="background:${confColor[conf]||"#7d828c"};color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;text-transform:uppercase">${escT(conf)}</span>`+
-   `<button class="dr-ticket-btn" onclick="createTicketFromFinding(${idx},event)" style="font-size:10px;padding:2px 8px;background:#2563eb;color:#fff;border:none;border-radius:3px;cursor:pointer;margin-left:auto;flex-shrink:0">+ Ticket</button>`+
-   `</div>`+
-   `<div class="dr-finding-symptom"><b>Symptom.</b> ${escT(f.symptom||"")}</div>`+
-   (f.root_cause?`<div class="dr-finding-rc muted"><b>Root cause.</b> ${escT(f.root_cause)}</div>`:"")+
-   (f.proposed_solution?`<div class="dr-finding-sol"><b>Proposed solution.</b> ${escT(f.proposed_solution)}</div>`:`<div class="muted" style="font-size:11px;font-style:italic">(no proposed solution)</div>`)+
-   `</div>`;
- }
- function renderSectionStructured(cat,items){
-  if(!items.length)return"";
-  const title=sectionTitles[cat]||cat;
-  const cls=sectionCls[cat]||"";
-  let h=`<div class="dr-section ${cls}"><h4>${title} (${items.length})</h4>`;
-  items.forEach(f=>{const idx=deepReviewFindings.indexOf(f);h+=renderFinding(f,idx)});
-  h+=`</div>`;
-  return h;
- }
- const byCat={"tool_error":[],"agent_limitation":[],"optimization":[]};
- findings.forEach(f=>{(byCat[f.category]=byCat[f.category]||[]).push(f)});
- ["tool_error","agent_limitation","optimization"].forEach(cat=>{html+=renderSectionStructured(cat,byCat[cat]||[])});
- const back=backFn || openDeepReview;
- html+=`<div style="margin-top:16px"><button onclick="${back.name}()"`+
-   ` style="font-size:11px;padding:3px 10px;background:#2a2f3a;color:#aab0bd;border:1px solid #3a3f4a;border-radius:4px;cursor:pointer">← Back to traces</button></div>`;
- document.getElementById("d").innerHTML=html;
-}
-function createTicketFromFinding(idx,event){
- if(event)event.stopPropagation();
- const finding=deepReviewFindings[idx];
- if(!finding)return;
- const itemText=finding.symptom||finding.text||"";
- const category=finding.category||"";
-
- // Build modal DOM
- const backdrop=document.createElement("div");
- backdrop.className="modal-backdrop";
- const modal=document.createElement("div");
- modal.className="modal";
- modal.innerHTML=
-  `<h2>New Ticket from Deep Review</h2>
-   <span class="dr-source-badge">🔍 deep review</span>
-   <label class="modal-label">Title <span class="modal-req">*</span></label>
-   <input type="text" class="modal-input" id="modal-title" placeholder="What needs doing?" autocomplete="off">
-   <div class="modal-field-error" id="modal-title-err"></div>
-   <label class="modal-label">Description (auto-generated from findings)</label>
-   <textarea class="modal-textarea" id="modal-desc" rows="8"></textarea>
-   <div class="modal-buttons">
-    <span class="modal-submit-error" id="modal-submit-err"></span>
-    <button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>
-    <button type="button" class="modal-btn-create" id="modal-create">Create</button>
-   </div>`;
- backdrop.appendChild(modal);
- document.body.appendChild(backdrop);
-
- const titleEl=document.getElementById("modal-title");
- const titleErr=document.getElementById("modal-title-err");
- const descEl=document.getElementById("modal-desc");
- const submitErr=document.getElementById("modal-submit-err");
- const createBtn=document.getElementById("modal-create");
-
- titleEl.value="Deep review: "+itemText.substring(0,80);
- descEl.value="**Symptom:** "+(finding.symptom||"")+"\n\n**Root cause:** "+(finding.root_cause||"")+"\n\n**Proposed solution:** "+(finding.proposed_solution||"")+"\n\n**Confidence:** "+(finding.confidence||"medium")+"\n\n**Source trace:** "+deepReviewTraceId;
-
- function close(){
-  document.body.removeChild(backdrop);
- }
-
- function showTitleErr(msg){titleErr.textContent=msg}
- function clearTitleErr(){titleErr.textContent=""}
- function showSubmitErr(msg){submitErr.textContent=msg}
- function clearSubmitErr(){submitErr.textContent=""}
-
- async function doSubmit(){
-  const title=titleEl.value.trim();
-  if(!title){showTitleErr("Title is required");titleEl.focus();return}
-  clearTitleErr();clearSubmitErr();
-  createBtn.disabled=true;createBtn.textContent="Creating…";
-  const r=await jpost("/tickets",{title:title,description:descEl.value,source:"deep-review"});
-  if(!r.ok){const e=await r.text();showSubmitErr("create failed: "+e);
-   createBtn.disabled=false;createBtn.textContent="Create"}
-  else{close();refresh()}
- }
-
- // Backdrop click → close
- backdrop.addEventListener("click",function(e){if(e.target===backdrop)close()});
-
- // Cancel button
- document.getElementById("modal-cancel").addEventListener("click",close);
-
- // Create button
- createBtn.addEventListener("click",doSubmit);
-
- // Keyboard handling
- modal.addEventListener("keydown",function(e){
-  if(e.key==="Escape"){e.preventDefault();close();return}
-  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();doSubmit();return}
-  if(e.key==="Enter"&&e.target===titleEl){e.preventDefault();descEl.focus();return}
- });
-
- // Auto-focus title
- titleEl.focus();
-}
-// -- end deep review ----------------------------------------------------
 // Re-fetch detail sections WITHOUT resetting the drawer to skeleton.
 // The auto-refresh tick used to call open_(sel) every 1s which reset
 // the whole drawer to skeleton placeholders then progressively repainted
@@ -2175,7 +1837,7 @@ async function refreshDetail(id){
  }
  swap("ticket-merge", t.state==="human_mr_approval"&&mi?renderMergeInfo(mi):"");
 }
-refresh();setInterval(()=>{if(runsOpen)renderRuns();else if(sel)refreshDetail(sel);if(deepReviewOpen&&deepReviewPollTimer){}/* poll active */},1000);
+refresh();setInterval(()=>{if(runsOpen)renderRuns();else if(sel)refreshDetail(sel)},1000);
 
 // Shared board rendering — used by both HTTP refresh() and the WebSocket
 // ticket_list handler so the column-building logic lives in one place.
