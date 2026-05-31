@@ -163,9 +163,7 @@ def test_enrich_ticket_read_cost_enrichment(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket()
     settings = MagicMock()
@@ -240,9 +238,7 @@ def test_enrich_ticket_read_unmet_dependencies(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket()
     settings = MagicMock()
@@ -265,9 +261,7 @@ def test_enrich_ticket_read_cumulative_cost_when_children_exist(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket()
     settings = MagicMock()
@@ -291,9 +285,7 @@ def test_enrich_ticket_read_cumulative_cost_none_when_not_higher(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket()
     settings = MagicMock()
@@ -315,9 +307,7 @@ def test_enrich_ticket_read_parent_title_resolved(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket(parent_id="parent-1")
     settings = MagicMock()
@@ -342,9 +332,7 @@ def test_enrich_ticket_read_dependencies_resolved(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket(depends_on='["dep-1", "dep-2"]')
     settings = MagicMock()
@@ -376,11 +364,11 @@ def test_enrich_ticket_read_origin_session_url(monkeypatch):
     )
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url",
-        lambda ticket, settings, repo_config: "https://langfuse.example.com/sessions/abc",
+        lambda ticket, settings, repo_config: (
+            "https://langfuse.example.com/sessions/abc"
+        ),
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket(origin_session="sess-abc")
     settings = MagicMock()
@@ -401,9 +389,7 @@ def test_enrich_ticket_read_depends_on_none(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket(depends_on=None)
     settings = MagicMock()
@@ -424,9 +410,7 @@ def test_enrich_ticket_read_depends_on_invalid_json(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket(depends_on="this is not json")
     settings = MagicMock()
@@ -449,9 +433,7 @@ def test_enrich_ticket_read_blocking_cost_passed_through(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.runtime.deps._origin_session_url", lambda *a, **kw: None
     )
-    monkeypatch.setattr(
-        "robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None
-    )
+    monkeypatch.setattr("robotsix_mill.runtime.deps._pr_url", lambda *a, **kw: None)
 
     ticket = _make_ticket()
     settings = MagicMock()
