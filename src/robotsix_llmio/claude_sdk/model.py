@@ -271,6 +271,11 @@ class ClaudeSDKModel(Model):
         system_text = self._system_text(messages, model_request_parameters)
         prompt = render_prompt(messages)
         text, result = await self._invoke(prompt, system_text)
+        # Stamp the SDK's (estimated) cost onto the active span so the claude_sdk
+        # provider logs cost in traces like the OpenRouter providers do.
+        from ..core.cost import record_cost
+
+        record_cost(result, lambda r: getattr(r, "total_cost_usd", None))
         return ModelResponse(
             parts=[TextPart(content=text)],
             usage=_map_usage(result),

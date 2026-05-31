@@ -29,8 +29,14 @@ openrouter_deepseek = ["robotsix-llmio[openrouter]"]
 # the local `claude login` subscription by spawning the `claude` CLI. Requires
 # Node.js + a logged-in `claude` CLI at runtime (not pip-installable).
 claude_sdk = ["claude-agent-sdk>=0.2"]
-# Optional: emit cost/usage onto the active OpenTelemetry span.
-tracing = ["opentelemetry-api", "opentelemetry-sdk"]
+# Optional: emit cost/usage onto the active OpenTelemetry span AND export the
+# resulting traces to Langfuse (core.setup_langfuse_tracing). Trace export is
+# pure OTLP — no langfuse SDK needed.
+tracing = [
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "bandit", "pip-audit"]
 
 [tool.hatch.build.targets.wheel]

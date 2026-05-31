@@ -101,3 +101,30 @@ agent.close()
 The only knobs are the provider you import and the tier you pass. Everything
 else — reasoning policy, retry/backoff, timeouts, cost instrumentation — is
 fixed at values proven in production.
+
+## Tracing & cost (Langfuse)
+
+Every provider model already stamps per-call cost onto the active OpenTelemetry
+span. To ship those spans — traces **and** cost, for any provider — to a
+[Langfuse](https://langfuse.com) project, call `setup_langfuse_tracing()` once at
+startup. It wires an OTLP exporter to Langfuse and `Agent.instrument_all()`, so
+every subsequent agent run is traced. It's a **no-op** unless
+`LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` are set (`LANGFUSE_BASE_URL`
+defaults to Langfuse Cloud), so it's always safe to call.
+
+```bash
+pip install "robotsix-llmio[tracing]"   # adds the OTLP exporter (no langfuse SDK)
+```
+
+```python
+from robotsix_llmio.core import setup_langfuse_tracing, langfuse_session, flush_tracing
+
+setup_langfuse_tracing()  # reads LANGFUSE_* env; no-op without credentials
+
+with langfuse_session("my-run-id"):       # groups the run's spans under one session
+    result = provider.call_with_retry(lambda: agent.run_sync("..."))
+
+flush_tracing()  # force-export before exit (or after a run you want shipped)
+```
+
+Single-tenant: one Langfuse project per process.
