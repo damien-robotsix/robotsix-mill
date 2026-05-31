@@ -11,6 +11,10 @@ map is baked (overridable at construction for experimentation).
 
 from __future__ import annotations
 
+import asyncio
+import json
+import re
+from dataclasses import dataclass
 from typing import Any
 
 from ..core.provider import LLMProvider, Tier
@@ -20,6 +24,233 @@ from .transient import is_claude_sdk_transient
 # the SDK's ``model`` option (it resolves them to the latest concrete model).
 _DEFAULT_MODEL = "opus"
 _CHEAP_MODEL = "haiku"
+
+# Structured-output instruction template, mirrored from pydantic-ai's
+# ``prompted_output_template`` profile default.
+_JSON_OUTPUT_INSTRUCTION = (
+    "Always respond with a JSON object that's compatible with this schema:\n"
+    "{schema}\n"
+    "Don't include any text or Markdown fencing before or after."
+)
+
+
+def _get_inner_type(output_type: Any) -> Any:
+    """Return the pydantic model class from *output_type*.
+
+    Handles plain ``BaseModel`` subclasses and ``PromptedOutput`` wrappers.
+    """
+    from pydantic_ai import PromptedOutput
+
+    if isinstance(output_type, PromptedOutput):
+        outputs = output_type.outputs
+        if isinstance(outputs, (list, tuple)):
+            return outputs[0]
+        return outputs
+    return output_type
+
+
+def _parse_output(text: str, output_type: Any) -> Any:
+    """Parse final assistant text against *output_type*.
+
+    ``str`` → text as-is.  Otherwise JSON-parse and validate with the inner
+    pydantic model.
+    """
+    if output_type is str:
+        return text
+
+    validator = _get_inner_type(output_type)
+
+    data: Any = None
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group())
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+    if isinstance(data, dict):
+        return validator.model_validate(data)
+    # Fallback: return raw text if JSON extraction failed.
+    return text
+
+
+def _convert_tools(tools: list[Any]) -> tuple[list[str], Any]:
+    """Convert pydantic-ai tools into SDK MCP tools.
+
+    Returns:
+        ``(allowed_tools, mcp_server)`` — the *allowed_tools* entries
+        (``"mcp__milltools__<name>"``) and the MCP server object to pass
+        to ``ClaudeAgentOptions.mcp_servers``.
+    """
+    from claude_agent_sdk import (  # type: ignore[import-not-found]
+        create_sdk_mcp_server,
+    )
+    from claude_agent_sdk import tool as sdk_tool  # type: ignore[import-not-found]
+
+    import pydantic_ai
+
+    wrapped: list[Any] = []
+    allowed: list[str] = []
+
+    for t in tools:
+        # Normalize: plain callables become pydantic_ai.Tool (idempotent).
+        if not isinstance(t, pydantic_ai.Tool):
+            t = pydantic_ai.Tool(t)
+
+        name: str = t.name
+        description: str | None = t.description
+        schema: dict[str, Any] = t.tool_def.parameters_json_schema
+        fn = t.function_schema.function
+        is_async: bool = t.function_schema.is_async
+
+        @sdk_tool(name, description, schema)
+        async def _wrapper(
+            args: dict[str, Any],
+            _fn: Any = fn,
+            _is_async: bool = is_async,
+        ) -> dict[str, Any]:
+            if _is_async:
+                result = await _fn(**args)
+            else:
+                result = _fn(**args)
+            return {"content": [{"type": "text", "text": str(result)}]}
+
+        wrapped.append(_wrapper)
+        allowed.append(f"mcp__milltools__{name}")
+
+    server = create_sdk_mcp_server(name="milltools", tools=wrapped)
+    return allowed, server
+
+
+@dataclass
+class _SdkToolResult:
+    """Minimal result mirroring pydantic-ai's ``AgentRunResult`` interface.
+
+    .. note::
+
+        ``all_messages()`` returns minimal history (a single final
+        ``ModelResponse``) — intermediate ``ToolCallPart`` objects are not
+        surfaced because the SDK owns the agent loop and tool execution.
+    """
+
+    output: Any
+    _messages: list[Any]
+    _usage: dict[str, Any] | None
+
+    def all_messages(self) -> list[Any]:
+        """Best-effort message history (may contain only the final text)."""
+        return self._messages
+
+    @property
+    def usage(self) -> Any:
+        """Aggregate token usage from the final ``ResultMessage``."""
+        from pydantic_ai.usage import RequestUsage
+
+        u = self._usage
+        if not isinstance(u, dict):
+            return RequestUsage()
+        return RequestUsage(
+            input_tokens=int(u.get("input_tokens") or 0),
+            output_tokens=int(u.get("output_tokens") or 0),
+            cache_read_tokens=int(u.get("cache_read_input_tokens") or 0),
+            cache_write_tokens=int(u.get("cache_creation_input_tokens") or 0),
+        )
+
+
+class _SdkToolAgentHandle:
+    """Handle that drives the SDK tool loop directly, bypassing pydantic-ai.
+
+    Satisfies the ``AgentHandle``-compatible contract (``run_sync``,
+    ``close``).  Callers interact with the returned :class:`_SdkToolResult`.
+    """
+
+    def __init__(
+        self,
+        sdk_model: str,
+        system_prompt: str,
+        server: Any,
+        allowed_tools: list[str],
+        output_type: Any = str,
+        max_turns: int = 16,
+    ) -> None:
+        self._sdk_model = sdk_model
+        self._system_prompt = system_prompt
+        self._server = server
+        self._allowed_tools = allowed_tools
+        self._output_type = output_type
+        self._max_turns = max_turns
+
+    def run_sync(
+        self,
+        user_prompt: str,
+        *,
+        model_settings: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> _SdkToolResult:
+        """Run the SDK tool loop synchronously, return ``_SdkToolResult``."""
+        return asyncio.run(self._run(user_prompt))
+
+    async def _run(self, user_prompt: str) -> _SdkToolResult:
+        from claude_agent_sdk import (  # type: ignore[import-not-found]
+            AssistantMessage,
+            ClaudeAgentOptions,
+            ResultMessage,
+            TextBlock,
+            query,
+        )
+
+        system_prompt = self._system_prompt
+        output_type = self._output_type
+
+        # Augment system prompt with JSON schema for structured output.
+        if output_type is not str:
+            inner = _get_inner_type(output_type)
+            schema_json = json.dumps(inner.model_json_schema())
+            system_prompt = f"{system_prompt}\n\n" + _JSON_OUTPUT_INSTRUCTION.format(
+                schema=schema_json
+            )
+
+        options = ClaudeAgentOptions(
+            system_prompt=system_prompt,
+            model=self._sdk_model,
+            max_turns=self._max_turns,
+            mcp_servers={"milltools": self._server},
+            allowed_tools=self._allowed_tools,
+            permission_mode="bypassPermissions",
+            setting_sources=[],
+        )
+
+        chunks: list[str] = []
+        result: Any = None
+        async for message in query(prompt=user_prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        chunks.append(block.text)
+            elif isinstance(message, ResultMessage):
+                result = message
+
+        text = "".join(chunks).strip()
+        if not text and result is not None:
+            text = (getattr(result, "result", None) or "").strip()
+
+        output = _parse_output(text, output_type)
+
+        # Build minimal message history (only the final text is available).
+        from pydantic_ai.messages import ModelResponse, TextPart
+
+        messages: list[Any] = [ModelResponse(parts=[TextPart(content=text)])]
+
+        usage = getattr(result, "usage", None) if result is not None else None
+
+        return _SdkToolResult(output=output, _messages=messages, _usage=usage)
+
+    def close(self) -> None:
+        """No-op — no HTTP client to close."""
+        pass
 
 
 class ClaudeSDKProvider(LLMProvider):
@@ -43,3 +274,40 @@ class ClaudeSDKProvider(LLMProvider):
 
     def _is_transient(self, exc: BaseException) -> bool:
         return is_claude_sdk_transient(exc)
+
+    def build_agent(
+        self,
+        *,
+        tier: Tier = Tier.DEFAULT,
+        system_prompt: str,
+        tools: list | None = None,
+        output_type: Any = str,
+        name: str | None = None,
+        retries: int = 2,
+    ) -> Any:
+        """Build a ready-to-run agent for *tier*.
+
+        When *tools* is non-empty, returns a :class:`_SdkToolAgentHandle` that
+        drives the SDK tool loop directly — intermediate ``ToolCallPart``
+        objects are not surfaced.  When *tools* is empty/``None``, delegates
+        to the standard pydantic-ai ``Agent`` path (unchanged).
+        """
+        if not tools:
+            return super().build_agent(
+                tier=tier,
+                system_prompt=system_prompt,
+                tools=tools,
+                output_type=output_type,
+                name=name,
+                retries=retries,
+            )
+
+        sdk_model = self._models[tier]
+        allowed_tools, server = _convert_tools(tools)
+        return _SdkToolAgentHandle(
+            sdk_model=sdk_model,
+            system_prompt=system_prompt,
+            server=server,
+            allowed_tools=allowed_tools,
+            output_type=output_type,
+        )
