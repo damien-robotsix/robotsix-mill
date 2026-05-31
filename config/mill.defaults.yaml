@@ -97,15 +97,17 @@ forge:
 # ---------------------------------------------------------------------------
 
 sandbox:
-  image: python:3.14-slim       # Docker image for sandbox containers
-  memory: 2g                    # memory limit
-  pids_limit: 512               # PID limit
-  readonly: true                # mount rootfs read-only (except tmpfs /tmp)
-  data_volume: mill_data        # named Docker volume for data (fallback)
-  data_mount: null              # host path for bind-mounted data (overrides data_volume)
-  command_timeout: 1800          # wall-clock cap (seconds) for shell/test commands
-  test_command: ""              # global fallback; per-repo override in repos.yaml.test_command. Empty = PASS short-circuit.
-  skills_dir: skills            # directory of skill docs injected into system prompts
+  image: robotsix/mill-sandbox:latest  # Docker image for sandbox containers (includes uv binary)
+  network: mill-sandbox-net            # Docker network (internal, filtered through proxy)
+  proxy_url: http://sandbox-proxy:8888 # egress proxy URL (empty = no proxy, --network none)
+  memory: 2g                           # memory limit
+  pids_limit: 512                      # PID limit
+  readonly: true                       # mount rootfs read-only (except tmpfs /tmp)
+  data_volume: mill_data               # named Docker volume for data (fallback)
+  data_mount: null                     # host path for bind-mounted data (overrides data_volume)
+  command_timeout: 1800                # wall-clock cap (seconds) for shell/test commands
+  test_command: ""                     # global fallback; per-repo override in repos.yaml.test_command. Empty = PASS short-circuit.
+  skills_dir: skills                   # directory of skill docs injected into system prompts
 
 # ---------------------------------------------------------------------------
 #  web — web search (sub-agent) and fetch (isolated container)

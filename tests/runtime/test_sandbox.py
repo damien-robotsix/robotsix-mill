@@ -23,6 +23,7 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
         data_dir="/data",
         data_volume="mill_data",
         sandbox_image="python:3.14-slim",
+        sandbox_proxy_url="",
     )
     seen = {}
 

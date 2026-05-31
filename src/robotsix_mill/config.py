@@ -379,6 +379,14 @@ class Settings(BaseSettings):
     sandbox_memory: str = Field(default="2g")
     sandbox_pids_limit: int = Field(default=512)
     sandbox_readonly: bool = Field(default=True)
+    # Docker network sandbox containers connect to. The network must be
+    # internal (no direct internet) with a filtering proxy attached —
+    # sandbox commands reach PyPI/GitHub ONLY through the proxy.
+    sandbox_network: str = Field(default="mill-sandbox-net")
+    # URL of the egress proxy. Sandbox containers receive HTTP_PROXY,
+    # HTTPS_PROXY, http_proxy, and https_proxy set to this value.
+    # Set to empty string to disable (restores --network none behavior).
+    sandbox_proxy_url: str = Field(default="http://sandbox-proxy:8888")
     # What the sandbox sibling containers mount at MILL_DATA_DIR. The
     # daemon resolves -v on the host, so this must be a named volume OR
     # the host path of a bind mount. data_volume is the fallback name;

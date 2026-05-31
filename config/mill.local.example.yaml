@@ -32,7 +32,7 @@ service:
   data_dir: /data
 
 sandbox:
-  # The HOST path of ./.data. The sandbox is a sibling container the
+  # HOST path of ./.data. The sandbox is a sibling container the
   # mill spawns via the docker socket; the host docker daemon resolves
   # bind-mounts on its own filesystem, not the mill container's, so
   # the sandbox can't see /data — it needs the host's view of what
@@ -41,12 +41,14 @@ sandbox:
   # absolute host path moves here. Replace with YOUR absolute path.
   data_mount: /ABSOLUTE/PATH/TO/robotsix-mill/.data
 
-  # Pin the sandbox to the local :dev build so the implement test-gate
-  # runs the SAME code you just built. Only needed when you also use
-  # docker-compose.override.yml with `build: .` (the local-build
-  # flow); deployment hosts using the published :latest image can
-  # leave this unset and inherit the default.
+  # Override the sandbox image. The default (robotsix/mill-sandbox:latest)
+  # is a minimal Python + uv image with no mill source. For full toolchain
+  # access (git, pytest, mill source), use robotsix/mill:dev.
   # image: robotsix/mill:dev
+
+  # Override the proxy URL. Set to empty string to disable the proxy and
+  # restore --network none (all network access blocked).
+  # proxy_url: ""
 
 # core:
 #   models:
