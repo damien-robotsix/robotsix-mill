@@ -27,27 +27,22 @@ from robotsix_llmio.openrouter.model import (
 from robotsix_llmio.openrouter_deepseek.model import (
     _PIN_MODEL_PREFIX,
     _PINNED_PROVIDER,
-    _REASONING_DETAILS_KEY,
     OpenRouterDeepseekModel,
-    _extract_reasoning_details,
 )
 
-try:
-    from robotsix_llmio.openrouter_deepseek.model import _EMPTY_REASONING  # noqa: F811
-except ImportError:
-    _EMPTY_REASONING = [{"type": "reasoning.text", "text": "", "format": "unknown"}]
-
+# NOTE: the reasoning_details echo/strip round-trip (_extract_reasoning_details,
+# _REASONING_DETAILS_KEY, _EMPTY_REASONING) was removed from robotsix-llmio —
+# OpenRouter no longer raises the DeepSeek thinking-mode 400 when reasoning is
+# stripped from a tool-call turn, so the backport is obsolete. These names are
+# no longer importable or re-exported.
 __all__ = [
     "CostInstrumentedOpenRouterModel",
     "record_openrouter_cost",
     "_get_cost_from_response",
     "_inject_usage_include",
     "_inject_provider_pin",
-    "_extract_reasoning_details",
     "_PINNED_PROVIDER",
     "_PIN_MODEL_PREFIX",
-    "_REASONING_DETAILS_KEY",
-    "_EMPTY_REASONING",
 ]
 
 _FLASH_MARKER = "flash"
@@ -83,7 +78,5 @@ class CostInstrumentedOpenRouterModel(OpenRouterDeepseekModel):
         super().__init__(model_name, **kwargs)
         if _FLASH_MARKER in str(model_name):
             self.reasoning_setting = {"enabled": False}
-            self.echo_reasoning = False
         else:
             self.reasoning_setting = {"effort": "xhigh"}
-            self.echo_reasoning = True
