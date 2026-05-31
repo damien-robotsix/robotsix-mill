@@ -45,7 +45,7 @@ report_issue: true
 # tokens per call.
 reply_to_thread: false
 close_thread: false
-modules: true
+modules: false
 web_knowledge: true
 
 output_type: RefineResult
