@@ -6,6 +6,10 @@
 # isolation.  This file is NOT merged into the main Settings object — it
 # is loaded by a separate ReposRegistry Pydantic model.
 #
+# There is no longer a board-less default — every repo must define a
+# `board_id`. For single-repo deployments, configure exactly one repo
+# entry below.
+#
 # Override the file path with MILL_REPOS_FILE env var.
 
 repos:

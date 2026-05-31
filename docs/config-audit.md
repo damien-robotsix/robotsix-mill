@@ -109,7 +109,7 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_DATA_DIR` | `data_dir` | `.mill-data` | `Path` | Settings + Dockerfile | identifying | commented-out | §5 | `core/db.py`, `runtime/api.py`, all `*_runner.py`, `cli.py` | Dockerfile overrides to `/data` |
-| `MILL_DEFAULT_REPO_ID` | `default_repo_id` | `""` | `str` | Settings | non-sensitive | default | §6 | `core/service.py` (legacy ticket resolution) | Default repo for legacy tickets lacking a `board_id` |
+| `MILL_DEFAULT_REPO_ID` | `default_repo_id` | `""` | `str` | Settings | non-sensitive | default | §6 | `core/service.py` (legacy ticket resolution) | Backward-compat: auto-assigned board_id for pre-migration tickets |
 | `MILL_API_HOST` | `api_host` | `127.0.0.1` | `str` | Settings + Dockerfile | non-sensitive | commented-out | §5 | `runtime/api.py` | Dockerfile overrides to `0.0.0.0` |
 | `MILL_API_PORT` | `api_port` | `8077` | `int` | Settings | non-sensitive | active (`8077`) | §5 | `runtime/api.py` | |
 | `MILL_API_URL` | `api_url` | `http://127.0.0.1:8077` | `str` | Settings + Dockerfile | identifying | active | §5 | `cli.py` | Dockerfile sets same value |
@@ -259,9 +259,7 @@ other code depends on.
 
 | Property | Derivation | Type | Consumers | Notes |
 |---|---|---|---|---|
-| `db_path` | `data_dir / "mill.db"` | `Path` | `core/db.py`, all DB access | |
 | `epic_workspaces_dir` | `data_dir / "epic_workspaces"` | `Path` | `sandbox.py` | Bind-mount target for epic workspace in sandbox containers |
-| `db_url` | `f"sqlite:///{db_path}"` | `str` | `core/db.py` | |
 | `tracing_enabled` | `bool(get_secrets().langfuse_base_url and get_secrets().langfuse_public_key and get_secrets().langfuse_secret_key)` | `bool` | `runtime/tracing.py`, `runtime/api.py` | Gate: all 3 must be truthy; populated from `RepoConfig` at startup |
 | `retrospect_memory_file` | `retrospect_memory_path or data_dir / "retrospect_memory.md"` | `Path` | `stages/retrospect.py` | |
 | `trace_inspector_memory_file` | `trace_inspector_memory_path or data_dir / "trace_inspector_memory.md"` | `Path` | Trace inspector | |
@@ -495,5 +493,8 @@ This audit was produced by:
    `Settings()` / `load_settings()` to build the consumers column.
 7. Classifying every value by sensitivity (`secret`, `identifying`,
    `non-sensitive`) based on whether it is a token/key/password, a
+   URL/username/hostname, or a tuning knob/feature flag.
+name/hostname, or a tuning knob/feature flag.
+itive`) based on whether it is a token/key/password, a
    URL/username/hostname, or a tuning knob/feature flag.
 name/hostname, or a tuning knob/feature flag.
