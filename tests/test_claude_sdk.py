@@ -374,12 +374,7 @@ def test_live_tool_round_trip():
         pytest.skip("claude CLI not found on PATH")
 
     try:
-        from claude_agent_sdk import (  # type: ignore[import-not-found]
-            AssistantMessage,
-            ResultMessage,
-            TextBlock,
-            query,
-        )
+        import claude_agent_sdk  # type: ignore[import-not-found]  # noqa: F401
     except Exception:
         pytest.skip("claude_agent_sdk import failed (SDK not installed)")
 
