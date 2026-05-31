@@ -23,4 +23,4 @@ modules:
   - id: robotsix_llmio-claude-sdk
     paths:
       - src/robotsix_llmio/claude_sdk/**
-      - tests/test_claude_sdk.py
+      - tests/claude_sdk/test_claude_sdk.py
