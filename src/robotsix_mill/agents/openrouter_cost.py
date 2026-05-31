@@ -25,13 +25,17 @@ from robotsix_llmio.openrouter.model import (
     record_openrouter_cost,
 )
 from robotsix_llmio.openrouter_deepseek.model import (
-    _EMPTY_REASONING,
     _PIN_MODEL_PREFIX,
     _PINNED_PROVIDER,
     _REASONING_DETAILS_KEY,
     OpenRouterDeepseekModel,
     _extract_reasoning_details,
 )
+
+try:
+    from robotsix_llmio.openrouter_deepseek.model import _EMPTY_REASONING  # noqa: F811
+except ImportError:
+    _EMPTY_REASONING = [{"type": "reasoning.text", "text": "", "format": "unknown"}]
 
 __all__ = [
     "CostInstrumentedOpenRouterModel",
