@@ -711,9 +711,7 @@ def test_langfuse_trace_url_empty_base_url_fallback(repo_config):
     repo_config.langfuse_base_url is empty."""
     repo_config.langfuse_base_url = ""
     url = tracing.langfuse_trace_url("trace-1", repo_config=repo_config)
-    assert url == (
-        "https://cloud.langfuse.com/project/test-project/traces/trace-1"
-    )
+    assert url == ("https://cloud.langfuse.com/project/test-project/traces/trace-1")
 
 
 def test_langfuse_trace_url_secrets_fallback(secrets_set):
@@ -736,9 +734,7 @@ def test_langfuse_trace_url_secrets_project_name_preferred(secrets_set):
         langfuse_project_id="id-project",
     )
     url = tracing.langfuse_trace_url("trace-789")
-    assert url == (
-        "https://cloud.langfuse.com/project/name-project/traces/trace-789"
-    )
+    assert url == ("https://cloud.langfuse.com/project/name-project/traces/trace-789")
 
 
 def test_langfuse_trace_url_secrets_project_id_fallback(secrets_set):
@@ -774,6 +770,4 @@ def test_langfuse_trace_url_trailing_slash_stripped(repo_config):
     """langfuse_trace_url strips trailing slashes from the base URL."""
     repo_config.langfuse_base_url = "https://cloud.langfuse.com/"
     url = tracing.langfuse_trace_url("trace-slash", repo_config=repo_config)
-    assert url == (
-        "https://cloud.langfuse.com/project/test-project/traces/trace-slash"
-    )
+    assert url == ("https://cloud.langfuse.com/project/test-project/traces/trace-slash")

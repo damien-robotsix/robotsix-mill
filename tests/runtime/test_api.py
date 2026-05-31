@@ -530,7 +530,9 @@ def test_origin_session_url_empty_base_url_fallback(service, settings, repo_conf
     )
 
 
-def test_origin_session_url_secrets_project_name_preferred(service, settings, secrets_set):
+def test_origin_session_url_secrets_project_name_preferred(
+    service, settings, secrets_set
+):
     """secrets fallback prefers langfuse_project_name over langfuse_project_id."""
     from robotsix_mill.runtime.deps import enrich_ticket_read
 
