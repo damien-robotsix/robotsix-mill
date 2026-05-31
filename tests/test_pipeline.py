@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Generator
 from dataclasses import FrozenInstanceError
 from unittest import mock
 

@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Generator
 from unittest import mock
 
-import pytest
-
 from robotsix_auto_mail.config import MailConfig
-from robotsix_auto_mail.db import get_watermark, init_db, set_watermark
+from robotsix_auto_mail.db import get_watermark, set_watermark
 from robotsix_auto_mail.fetch import fetch_new_messages, update_watermark
 from robotsix_auto_mail.imap import ImapClient
 
