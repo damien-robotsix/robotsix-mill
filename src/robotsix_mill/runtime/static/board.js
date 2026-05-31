@@ -1877,6 +1877,11 @@ function _renderBoard(ts, wantClosed, repoId){
 // the card between columns) and new tickets.
 function _patchTicket(t){
   const repoId=getRepoId();
+  // Ignore ticket updates from repos that don't match the selected repo filter.
+  if(repoId!=="all"){
+    const ticketRepoId=repoIdForBoardId(t.board_id);
+    if(ticketRepoId!==repoId) return;
+  }
   const newState=t.state;
   let card=document.querySelector(`.card[data-id="${t.id}"]`);
   let oldCol=card?card.closest(".col"):null;
@@ -1958,11 +1963,7 @@ function connectWebSocket(){
     try{
       let msg=JSON.parse(evt.data);
       if(msg.type==="ticket_list"){
-        let ts=msg.tickets||[];
-        ++refreshSeq;
-        _renderBoard(ts, showClosed, getRepoId());
-        fetchGates();
-        fetchLangfuseStatus();
+        refresh();
       } else if(msg.type==="ticket_update"){
         _patchTicket(msg.ticket);
       }
