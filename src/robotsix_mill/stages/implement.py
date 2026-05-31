@@ -189,6 +189,14 @@ class ImplementStage(Stage):
             return result
         repo_dir, branch, resuming = result
 
+        # --- test-baseline check: detect pre-existing failures BEFORE
+        # the agent loop so we don't waste cycles on an unfixable base.
+        baseline_outcome = ImplementStage._run_baseline_check(
+            ctx, ticket, repo_dir, branch, resuming, s,
+        )
+        if baseline_outcome is not None:
+            return baseline_outcome
+
         # Phase 2: deterministic, stage-owned implement loop.
         return ImplementStage._implement_loop(
             ctx, ticket, repo_dir, branch, resuming, s
@@ -978,6 +986,97 @@ class ImplementStage(Stage):
             next_action="retry",
             feedback=diag,
             ic=new_ic,
+        )
+
+    # ------------------------------------------------------------------
+    # test-baseline check
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _run_baseline_check(
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        resuming: bool,
+        settings,
+    ) -> Outcome | None:
+        """Run the test gate on the base branch BEFORE the agent loop.
+
+        Returns ``Outcome`` to short-circuit (BLOCKED), or ``None`` to
+        proceed.  The result is cached at ``artifacts/baseline_check.json``
+        keyed by base-branch SHA so retries don't re-execute.
+        """
+        ws = ctx.service.workspace(ticket)
+        cache_path = ws.artifacts_dir / "baseline_check.json"
+
+        # Resolve the current base-branch SHA.
+        base_sha = git_ops.remote_branch_sha(repo_dir, settings.forge_target_branch)
+        if base_sha is None:
+            base_sha = git_ops.head_sha(repo_dir)
+
+        # --- cache lookup ---
+        if cache_path.exists():
+            try:
+                cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                cache = None
+            if isinstance(cache, dict):
+                cached_sha = cache.get("base_sha")
+                cached_passed = cache.get("passed")
+                if cached_sha == base_sha:
+                    # Same base commit → reuse cached result.
+                    if cached_passed:
+                        return None
+                    diag = cache.get("diagnosis", "pre-existing test failures")
+                    return Outcome(
+                        State.BLOCKED,
+                        f"pre-existing test failures on {settings.forge_target_branch} "
+                        f"({base_sha[:8]}): {diag[:400]}",
+                    )
+                if cached_passed:
+                    # Base advanced but cached result was passing — a
+                    # passing baseline stays valid (AC7).
+                    return None
+                # Base advanced AND cached result was failing → re-run
+                # (operator may have fixed the branch between retries).
+
+        # --- execute baseline check ---
+        git_ops.checkout(repo_dir, settings.forge_target_branch)
+        try:
+            passed, diag = run_test_agent(
+                settings=settings,
+                repo_dir=repo_dir,
+                repo_config=ctx.repo_config,
+            )
+        finally:
+            git_ops.checkout(repo_dir, branch)
+
+        cache_data: dict[str, object] = {
+            "passed": passed,
+            "diagnosis": diag,
+            "base_sha": base_sha,
+        }
+        cache_path.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+
+        if passed:
+            return None
+
+        # Write the implement.md artifact so the blocked ticket has a
+        # matching diagnostic (AC8 / existing BLOCKED pattern).
+        ImplementStage._finalize(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            f"pre-existing test failures on {settings.forge_target_branch} "
+            f"({base_sha[:8]}): {diag[:400]}",
+            ok=False,
+        )
+        return Outcome(
+            State.BLOCKED,
+            f"pre-existing test failures on {settings.forge_target_branch} "
+            f"({base_sha[:8]}): {diag[:400]}",
         )
 
     @staticmethod
