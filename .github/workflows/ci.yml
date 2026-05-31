@@ -33,15 +33,15 @@ jobs:
           check-jsonschema --schemafile docs/modules.schema.yaml docs/modules.yaml
 
       - name: Lint (ruff)
-        run: uv run ruff check .
+        run: uv run --frozen ruff check .
 
       - name: Type check (mypy)
-        run: uv run mypy .
+        run: uv run --frozen mypy .
 
       - name: SAST (bandit)
         run: |
           uv pip install 'bandit[toml]'
-          uv run bandit -r src/ -f json -c pyproject.toml
+          uv run --frozen bandit -r src/ -f json -c pyproject.toml
 
       - name: Secret scanning (TruffleHog)
         uses: trufflesecurity/trufflehog@main
@@ -49,7 +49,7 @@ jobs:
           path: ./
 
       - name: Test (pytest)
-        run: uv run pytest
+        run: uv run --frozen pytest
 
       # Audit the FULL locked dependency set (incl. platform-specific
       # packages) rather than only what pip happened to install for this

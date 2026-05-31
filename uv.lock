@@ -1,8 +1,7 @@
 version = 1
 revision = 3
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.15"
 resolution-markers = [
-    "python_full_version >= '3.15'",
     "python_full_version < '3.15'",
 ]
 
@@ -667,6 +666,20 @@ wheels = [
 ]
 
 [[package]]
+name = "robotsix-llmio"
+version = "0.1.0"
+source = { git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=main#c3466a346517f40cdf550dfae6c0b2b0f431181f" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic-ai-slim" },
+]
+
+[package.optional-dependencies]
+openrouter-deepseek = [
+    { name = "pydantic-ai-slim", extra = ["openrouter"] },
+]
+
+[[package]]
 name = "robotsix-auto-mail"
 version = "0.0.0"
 source = { editable = "." }
@@ -680,13 +693,13 @@ dependencies = [
 dev = [
     { name = "hatchling" },
     { name = "mypy" },
-    { name = "pydantic-ai-slim", extra = ["openrouter"] },
+    { name = "robotsix-llmio", extra = ["openrouter-deepseek"] },
     { name = "pytest" },
     { name = "ruff" },
     { name = "types-pyyaml" },
 ]
 llm = [
-    { name = "pydantic-ai-slim", extra = ["openrouter"] },
+    { name = "robotsix-llmio", extra = ["openrouter-deepseek"] },
 ]
 
 [package.metadata]
@@ -694,8 +707,8 @@ requires-dist = [
     { name = "hatchling", marker = "extra == 'dev'" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">=2.0" },
-    { name = "pydantic-ai-slim", extras = ["openrouter"], marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "pydantic-ai-slim", extras = ["openrouter"], marker = "extra == 'llm'", specifier = ">=1.0" },
+    { name = "robotsix-llmio", extras = ["openrouter-deepseek"], marker = "extra == 'dev'" },
+    { name = "robotsix-llmio", extras = ["openrouter-deepseek"], marker = "extra == 'llm'" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'" },
