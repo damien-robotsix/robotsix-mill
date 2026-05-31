@@ -27,7 +27,7 @@ def _isolate_env() -> Generator[None, None, None]:
 @pytest.fixture(autouse=True)
 def _block_network() -> Generator[None, None, None]:
     """Block socket.create_connection so no test accidentally hits the network.
-    
+
     Localhost connections (127.0.0.1 / ::1) are allowed so that tests
     which spin up a local HTTP server (e.g. test_server.py) still work.
     """

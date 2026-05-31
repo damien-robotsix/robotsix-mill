@@ -477,7 +477,7 @@ def provider_from_mx(mx_hosts: list[str]) -> MailProvider | None:
 def provider_to_config(
     provider: MailProvider,
     username: str,
-    password: str = "",
+    password: str = "",  # nosec B107 -- empty default is intentional; provider may not require a password
     db_path: str = DEFAULT_DB_PATH,
 ) -> MailConfig:
     """Convert a ``MailProvider`` + username (+ optional password) into a

@@ -20,8 +20,8 @@ This guide covers both patterns.
 | Git | any recent | `git --version` |
 
 
-Installation guides (do **not** reproduce here):  
-- [Docker Engine install](https://docs.docker.com/engine/install/)  
+Installation guides (do **not** reproduce here):
+- [Docker Engine install](https://docs.docker.com/engine/install/)
 - [Docker Compose install](https://docs.docker.com/compose/install/)
 
 ---
