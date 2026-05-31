@@ -703,3 +703,105 @@ def test_trace_health_result_dataclass():
     assert r.total_traces == 10
     assert r.window_start == "2024-01-01T00:00:00Z"
     assert r.window_end == "2024-01-02T00:00:00Z"
+
+
+# ---------------------------------------------------------------------------
+# 11. ValueError when repo_config is None
+# ---------------------------------------------------------------------------
+
+
+def test_repo_config_none_raises_value_error():
+    """Calling run_trace_health_check(repo_config=None) raises ValueError."""
+    with pytest.raises(ValueError, match="repo_config is required"):
+        run_trace_health_check(repo_config=None)
+
+
+# ---------------------------------------------------------------------------
+# 12. Example cap at 5 unsessioned traces
+# ---------------------------------------------------------------------------
+
+
+def test_examples_capped_at_five(tmp_path, monkeypatch):
+    """When >5 unsessioned traces exist, the ticket body lists exactly 5
+    examples (the [:5] slice) while the title reports the real count."""
+    settings = _settings(tmp_path)
+    _init_db_for_test(settings)
+    traces = _mixed_traces(sessioned=0, unsessioned=8)
+
+    _patch_list_all_traces(monkeypatch, traces)
+    _patch_settings(monkeypatch, settings)
+
+    result = run_trace_health_check(repo_config=_test_repo_config())
+
+    assert result.draft_created is True
+    assert result.unsessioned_count == 8
+    assert result.total_traces == 8
+
+    svc = TicketService(settings, board_id="test-board")
+    tickets = [t for t in svc.list() if t.source == "trace-health"]
+    assert len(tickets) == 1
+
+    t = tickets[0]
+    body = svc.workspace(t).read_description()
+
+    # Title uses the real count, not the cap
+    assert "8/8" in t.title
+
+    # Body contains exactly 5 examples (u-000 … u-004)
+    for i in range(5):
+        assert f"u-{i:03d}" in body
+    # The 6th unsessioned trace (u-005) must NOT appear
+    assert "u-005" not in body
+
+
+# ---------------------------------------------------------------------------
+# 13. Dedup is scoped to board_id (multi-repo isolation)
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_scoped_to_board_id(tmp_path, monkeypatch, two_repo_registry):
+    """A trace-health ticket on board-a does NOT block ticket creation on
+    board-b, and vice versa."""
+    settings = _settings(tmp_path)
+
+    # Initialise separate DBs for both boards
+    db.reset_engine()
+    db.init_db(settings, board_id="board-a")
+    db.init_db(settings, board_id="board-b")
+
+    repo_a = two_repo_registry.repos["repo-a"]
+    repo_b = two_repo_registry.repos["repo-b"]
+
+    traces = _mixed_traces(sessioned=0, unsessioned=3)
+    _patch_list_all_traces(monkeypatch, traces)
+    _patch_settings(monkeypatch, settings)
+
+    # --- Direction 1: seed on board-a, run for board-b ---
+    svc_a = TicketService(settings, board_id="board-a")
+    existing_a = svc_a.create("alert on a", "body a", source="trace-health")
+
+    result_b = run_trace_health_check(repo_config=repo_b)
+    assert result_b.draft_created is True, (
+        "board-b should not be blocked by board-a's ticket"
+    )
+
+    svc_b = TicketService(settings, board_id="board-b")
+    tickets_b = [t for t in svc_b.list() if t.source == "trace-health"]
+    assert len(tickets_b) == 1, "board-b should have exactly one trace-health ticket"
+
+    # --- Direction 2: close board-a's ticket so it doesn't self-block,
+    #     then run for board-a — board-b's open ticket must NOT block ---
+    svc_a.transition(existing_a.id, State.READY, note="auto")
+    svc_a.transition(existing_a.id, State.DELIVERABLE, note="auto")
+    svc_a.transition(existing_a.id, State.IMPLEMENT_COMPLETE, note="auto")
+    svc_a.transition(existing_a.id, State.HUMAN_MR_APPROVAL, note="auto")
+    svc_a.transition(existing_a.id, State.DONE, note="auto")
+    svc_a.transition(existing_a.id, State.CLOSED, note="resolved")
+
+    result_a = run_trace_health_check(repo_config=repo_a)
+    assert result_a.draft_created is True, (
+        "board-a should not be blocked by board-b's ticket"
+    )
+
+    tickets_a = [t for t in svc_a.list() if t.source == "trace-health"]
+    assert len(tickets_a) == 2  # 1 closed + 1 new draft
