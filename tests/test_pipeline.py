@@ -25,22 +25,6 @@ from robotsix_auto_mail.pipeline import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def cfg() -> MailConfig:
-    return MailConfig(
-        imap_host="imap.example.com",
-        smtp_host="smtp.example.com",
-        username="user@example.com",
-        password="s3cret",
-    )
-
-
-@pytest.fixture
-def conn() -> Generator[sqlite3.Connection, None, None]:
-    c = init_db(":memory:")
-    yield c
-    c.close()
-
 
 def _mock_imap_client() -> mock.MagicMock:
     """Return a MagicMock that looks enough like an ImapClient."""

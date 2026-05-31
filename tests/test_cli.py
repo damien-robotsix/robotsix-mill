@@ -24,20 +24,6 @@ from robotsix_auto_mail.smtp_client import SmtpClient
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def env_cfg() -> MailConfig:
-    """A valid MailConfig matching what the env-based mocks will supply."""
-    return MailConfig(
-        imap_host="imap.example.com",
-        imap_port=993,
-        imap_tls_mode="direct-tls",
-        smtp_host="smtp.example.com",
-        smtp_port=587,
-        smtp_tls_mode="starttls",
-        username="user@example.com",
-        password="s3cret",
-    )
-
 
 def _make_mock_imap_ssl() -> mock.MagicMock:
     m = mock.MagicMock(spec=imaplib.IMAP4_SSL)
@@ -72,16 +58,16 @@ def _make_mock_smtp() -> mock.MagicMock:
 # ---------------------------------------------------------------------------
 
 
-def test_imap_client_properties_before_connect(env_cfg: MailConfig) -> None:
+def test_imap_client_properties_before_connect(cfg: MailConfig) -> None:
     """server_greeting / capabilities return safe defaults when not connected."""
-    client = ImapClient(env_cfg)
+    client = ImapClient(cfg)
     assert client.server_greeting is None
     assert client.capabilities == ()
 
 
-def test_smtp_client_properties_before_connect(env_cfg: MailConfig) -> None:
+def test_smtp_client_properties_before_connect(cfg: MailConfig) -> None:
     """ehlo_response / esmtp_features return safe defaults when not connected."""
-    client = SmtpClient(env_cfg)
+    client = SmtpClient(cfg)
     assert client.ehlo_response is None
     assert client.esmtp_features == {}
 
@@ -106,7 +92,7 @@ def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_probe_success(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """probe exits 0 and prints IMAP + SMTP metadata when both succeed."""
     mock_imap = _make_mock_imap_ssl()
@@ -117,7 +103,7 @@ def test_probe_success(
     ), mock.patch(
         "smtplib.SMTP", return_value=mock_smtp
     ), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         rc = main(["probe"])
 
@@ -148,7 +134,7 @@ def test_probe_success(
 
 
 def test_probe_imap_failure_smtp_ok(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """When IMAP fails, SMTP is still probed and exit code is 1."""
     mock_imap = mock.MagicMock(spec=imaplib.IMAP4_SSL)
@@ -164,7 +150,7 @@ def test_probe_imap_failure_smtp_ok(
     ), mock.patch(
         "smtplib.SMTP", return_value=mock_smtp
     ), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         rc = main(["probe"])
 
@@ -187,7 +173,7 @@ def test_probe_imap_failure_smtp_ok(
 
 
 def test_probe_smtp_failure_imap_ok(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """When SMTP fails, IMAP is still probed and exit code is 1."""
     mock_imap = _make_mock_imap_ssl()
@@ -201,7 +187,7 @@ def test_probe_smtp_failure_imap_ok(
     ), mock.patch(
         "smtplib.SMTP", return_value=mock_smtp
     ), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         rc = main(["probe"])
 
@@ -224,7 +210,7 @@ def test_probe_smtp_failure_imap_ok(
 
 
 def test_probe_both_fail(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """When both fail, exit code is 1 and both errors are reported."""
     mock_imap = mock.MagicMock(spec=imaplib.IMAP4_SSL)
@@ -241,7 +227,7 @@ def test_probe_both_fail(
     ), mock.patch(
         "smtplib.SMTP", return_value=mock_smtp
     ), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         rc = main(["probe"])
 
@@ -257,7 +243,7 @@ def test_probe_both_fail(
 
 
 def test_probe_never_calls_send_message(
-    env_cfg: MailConfig,
+    cfg: MailConfig,
 ) -> None:
     """The SMTP mock's send_message is never called."""
     mock_imap = _make_mock_imap_ssl()
@@ -268,7 +254,7 @@ def test_probe_never_calls_send_message(
     ), mock.patch(
         "smtplib.SMTP", return_value=mock_smtp
     ), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         main(["probe"])
 
@@ -281,7 +267,7 @@ def test_probe_never_calls_send_message(
 
 
 def test_probe_imap_connection_refused(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """probe handles IMAP connection-refused gracefully."""
     mock_smtp = _make_mock_smtp()
@@ -290,7 +276,7 @@ def test_probe_imap_connection_refused(
         "imaplib.IMAP4_SSL",
         side_effect=ConnectionRefusedError("Connection refused"),
     ), mock.patch("smtplib.SMTP", return_value=mock_smtp), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         rc = main(["probe"])
 
@@ -306,7 +292,7 @@ def test_probe_imap_connection_refused(
 
 
 def test_probe_smtp_connection_refused(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """probe handles SMTP connection-refused gracefully."""
     mock_imap = _make_mock_imap_ssl()
@@ -317,7 +303,7 @@ def test_probe_smtp_connection_refused(
         "smtplib.SMTP",
         side_effect=ConnectionRefusedError("Connection refused"),
     ), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         rc = main(["probe"])
 
@@ -333,7 +319,7 @@ def test_probe_smtp_connection_refused(
 
 
 def test_probe_imap_tls_failure(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """probe handles IMAP TLS failure gracefully (for STARTTLS)."""
     # Use a config with starttls so we can inject a TLS error
@@ -373,7 +359,7 @@ def test_probe_imap_tls_failure(
 
 
 def test_probe_smtp_tls_failure(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """probe handles SMTP TLS failure gracefully."""
     mock_imap = _make_mock_imap_ssl()
@@ -384,7 +370,7 @@ def test_probe_smtp_tls_failure(
     with mock.patch(
         "imaplib.IMAP4_SSL", return_value=mock_imap
     ), mock.patch("smtplib.SMTP", return_value=mock_smtp), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         rc = main(["probe"])
 
@@ -400,7 +386,7 @@ def test_probe_smtp_tls_failure(
 
 
 def test_probe_imap_auth_failure(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """probe handles IMAP authentication failure gracefully."""
     mock_imap = mock.MagicMock(spec=imaplib.IMAP4_SSL)
@@ -416,7 +402,7 @@ def test_probe_imap_auth_failure(
     ), mock.patch(
         "smtplib.SMTP", return_value=mock_smtp
     ), mock.patch(
-        "robotsix_auto_mail.config.MailConfig.from_env", return_value=env_cfg
+        "robotsix_auto_mail.config.MailConfig.from_env", return_value=cfg
     ):
         rc = main(["probe"])
 
@@ -493,12 +479,12 @@ def test_no_subcommand_prints_help_and_exits_1(
 # ---------------------------------------------------------------------------
 
 
-def test_smtp_client_properties_after_connect(env_cfg: MailConfig) -> None:
+def test_smtp_client_properties_after_connect(cfg: MailConfig) -> None:
     """ehlo_response / esmtp_features reflect the mock after connect."""
     mock_smtp = _make_mock_smtp()
 
     with mock.patch("smtplib.SMTP", return_value=mock_smtp):
-        with SmtpClient(env_cfg) as client:
+        with SmtpClient(cfg) as client:
             assert client.ehlo_response == b"250-smtp.example.com\n250 STARTTLS"
             assert client.esmtp_features == {
                 "STARTTLS": "",
@@ -506,12 +492,12 @@ def test_smtp_client_properties_after_connect(env_cfg: MailConfig) -> None:
             }
 
 
-def test_imap_client_properties_after_connect(env_cfg: MailConfig) -> None:
+def test_imap_client_properties_after_connect(cfg: MailConfig) -> None:
     """server_greeting / capabilities reflect the mock after connect."""
     mock_imap = _make_mock_imap_ssl()
 
     with mock.patch("imaplib.IMAP4_SSL", return_value=mock_imap):
-        with ImapClient(env_cfg) as client:
+        with ImapClient(cfg) as client:
             assert client.server_greeting == b"* OK IMAP4 ready"
             assert client.capabilities == (
                 "IMAP4rev1",
@@ -540,7 +526,7 @@ def test_board_takes_no_extra_args() -> None:
 
 
 def test_board_empty_inbox(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """board prints a friendly message when the database is empty."""
     from robotsix_auto_mail.db import init_db as real_init_db
@@ -549,7 +535,7 @@ def test_board_empty_inbox(
     # Keep conn open — _cmd_board's finally block closes it.
 
     with mock.patch(
-        "robotsix_auto_mail.cli.load", return_value=env_cfg
+        "robotsix_auto_mail.cli.load", return_value=cfg
     ), mock.patch(
         "robotsix_auto_mail.cli.init_db", return_value=conn
     ):
@@ -567,7 +553,7 @@ def test_board_empty_inbox(
 
 
 def test_board_with_records(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """board prints cards with sender, subject, date, body preview and count."""
     from robotsix_auto_mail.db import init_db as real_init_db
@@ -605,7 +591,7 @@ VALUES
     # Keep conn open — _cmd_board's finally block closes it.
 
     with mock.patch(
-        "robotsix_auto_mail.cli.load", return_value=env_cfg
+        "robotsix_auto_mail.cli.load", return_value=cfg
     ), mock.patch(
         "robotsix_auto_mail.cli.init_db", return_value=conn
     ):
@@ -638,7 +624,7 @@ VALUES
 
 
 def test_board_body_preview_truncation(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Body preview truncates at 150 chars with '…' only when longer."""
     from robotsix_auto_mail.db import init_db as real_init_db
@@ -680,7 +666,7 @@ VALUES
     conn.commit()
 
     with mock.patch(
-        "robotsix_auto_mail.cli.load", return_value=env_cfg
+        "robotsix_auto_mail.cli.load", return_value=cfg
     ), mock.patch(
         "robotsix_auto_mail.cli.init_db", return_value=conn
     ):
@@ -717,7 +703,7 @@ def test_board_config_load_failure(
 
 
 def test_board_header_uses_print_header(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """board output includes the _print_header-style header."""
     from robotsix_auto_mail.db import init_db as real_init_db
@@ -726,7 +712,7 @@ def test_board_header_uses_print_header(
     # Keep conn open — _cmd_board's finally block closes it.
 
     with mock.patch(
-        "robotsix_auto_mail.cli.load", return_value=env_cfg
+        "robotsix_auto_mail.cli.load", return_value=cfg
     ), mock.patch(
         "robotsix_auto_mail.cli.init_db", return_value=conn
     ):
@@ -740,7 +726,7 @@ def test_board_header_uses_print_header(
 
 
 def test_board_does_not_mutate_database(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """main(["board"]) must not add, delete, or modify any rows in the database."""
     import os
@@ -1353,7 +1339,7 @@ def test_ingest_watch_parser() -> None:
 
 
 def test_ingest_watch_loops_then_stops_on_interrupt(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Watch mode runs a cycle, then exits 0 when interrupted during sleep."""
     from robotsix_auto_mail.cli import _cmd_ingest
@@ -1363,7 +1349,7 @@ def test_ingest_watch_loops_then_stops_on_interrupt(
     ) as mock_cycle, mock.patch(
         "robotsix_auto_mail.cli.time.sleep", side_effect=KeyboardInterrupt
     ):
-        rc = _cmd_ingest(env_cfg, watch=True)
+        rc = _cmd_ingest(cfg, watch=True)
 
     assert rc == 0
     mock_cycle.assert_called_once()
@@ -1371,7 +1357,7 @@ def test_ingest_watch_loops_then_stops_on_interrupt(
 
 
 def test_ingest_watch_survives_cycle_error(
-    env_cfg: MailConfig, capsys: pytest.CaptureFixture[str]
+    cfg: MailConfig, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A failing cycle is logged and does not abort the watch loop."""
     from robotsix_auto_mail.cli import _cmd_ingest
@@ -1382,14 +1368,14 @@ def test_ingest_watch_survives_cycle_error(
     ), mock.patch(
         "robotsix_auto_mail.cli.time.sleep", side_effect=KeyboardInterrupt
     ):
-        rc = _cmd_ingest(env_cfg, watch=True)
+        rc = _cmd_ingest(cfg, watch=True)
 
     assert rc == 0
     assert "Ingest cycle failed" in capsys.readouterr().err
 
 
 def test_ingest_single_pass_unaffected(
-    env_cfg: MailConfig,
+    cfg: MailConfig,
 ) -> None:
     """Without --watch, _cmd_ingest delegates to a single cycle."""
     from robotsix_auto_mail.cli import _cmd_ingest
@@ -1397,7 +1383,7 @@ def test_ingest_single_pass_unaffected(
     with mock.patch(
         "robotsix_auto_mail.cli._ingest_cycle", return_value=0
     ) as mock_cycle:
-        rc = _cmd_ingest(env_cfg, watch=False)
+        rc = _cmd_ingest(cfg, watch=False)
 
     assert rc == 0
-    mock_cycle.assert_called_once_with(env_cfg, dry_run=False)
+    mock_cycle.assert_called_once_with(cfg, dry_run=False)

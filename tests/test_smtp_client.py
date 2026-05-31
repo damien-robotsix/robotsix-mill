@@ -25,18 +25,6 @@ from robotsix_auto_mail.smtp_client import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def cfg() -> MailConfig:
-    """A valid MailConfig with SMTP fields populated."""
-    return MailConfig(
-        imap_host="imap.example.com",
-        smtp_host="smtp.example.com",
-        smtp_port=587,
-        smtp_tls_mode="starttls",
-        username="user@example.com",
-        password="s3cret",
-    )
-
 
 def _make_mock_smtp_ssl() -> mock.MagicMock:
     """Factory for a mock ``SMTP_SSL`` instance."""

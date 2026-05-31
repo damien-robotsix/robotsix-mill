@@ -25,18 +25,6 @@ from robotsix_auto_mail.imap import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def cfg() -> MailConfig:
-    """A valid MailConfig with IMAP fields populated."""
-    return MailConfig(
-        imap_host="imap.example.com",
-        imap_port=993,
-        imap_tls_mode="direct-tls",
-        smtp_host="smtp.example.com",
-        username="user@example.com",
-        password="s3cret",
-    )
-
 
 def _make_mock_imap_ssl() -> mock.MagicMock:
     """Factory for a mock ``IMAP4_SSL`` instance that behaves correctly."""
