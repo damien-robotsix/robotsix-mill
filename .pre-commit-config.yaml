@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # keep in sync with pyproject.toml dev deps
+    rev: v0.14.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    # keep in sync with pyproject.toml dev deps
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        args: [.]
+        pass_filenames: false
+        additional_dependencies:
+          - pyyaml>=6.0
+          - pydantic>=2.0
+          - urllib3>=2.0
+          - types-PyYAML

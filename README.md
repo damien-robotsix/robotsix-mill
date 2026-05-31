@@ -28,6 +28,15 @@ Configuration keys, precedence rules, and walkthroughs of the `probe`
 diagnostics command, the `ingest` mail-fetching command, and the `board`
 read-only view are documented in [docs/connecting.md](docs/connecting.md).
 
+## Development
+
+This repository uses [pre-commit](https://pre-commit.com) to lint and
+format code before each commit.  After cloning, run:
+
+```sh
+pip install pre-commit && pre-commit install
+```
+
 ## Web Board
 
 Start the read-only kanban board to view ingested mail in a browser:
