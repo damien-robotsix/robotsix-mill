@@ -1,9 +1,32 @@
-"""Tests for the survey agent periodic pass in the worker."""
+"""Tests for the survey agent and runner."""
+
+import json
+from pathlib import Path
 
 import pytest
+import yaml
 
+from robotsix_mill.agents import surveying as survey_agent
+from robotsix_mill.survey_runner import run_survey_pass
+from robotsix_mill.periodic_runner import SurveyPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
+
+
+def _test_repo_config():
+    """Synthetic RepoConfig for periodic-runner tests — the runner now
+    requires one (mono-repo board-less mode is gone)."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
 
 
 def _make_settings(tmp_path, **overrides):
@@ -15,6 +38,433 @@ def _make_settings(tmp_path, **overrides):
     db.reset_engine()
     db.init_db(s, board_id="test-board")
     return s
+
+
+# --- Agent tests ---
+
+
+def test_survey_system_prompt_covers_key_dimensions():
+    """The survey agent prompt (loaded from YAML) must cover the key
+    dimensions: open-source discovery, single-subject focus, proposal
+    generation, rotation log, ask_web_knowledge gateway."""
+    prompt_path = Path("agent_definitions/periodic/survey.yaml")
+    definition = yaml.safe_load(prompt_path.read_text())
+    prompt = definition["system_prompt"].lower()
+
+    for kw in (
+        "open-source",
+        "one specific",
+        "subject per run",
+        "propose",
+        "rotation log",
+        "ask_web_knowledge",
+        "comparable projects",
+        "actionable improvement",
+        "prior proposals",
+        "memory ledger",
+        "one proposal per run",
+    ):
+        assert kw in prompt, f"survey prompt missing key dimension: {kw}"
+
+
+def test_survey_result_model():
+    """SurveyResult has the expected fields and defaults."""
+    result = survey_agent.SurveyResult(
+        updated_memory="memory",
+        draft_titles=["title1"],
+        draft_bodies=["body1"],
+        gap_ids=["gap1"],
+    )
+    assert result.updated_memory == "memory"
+    assert len(result.draft_titles) == 1
+    assert len(result.draft_bodies) == 1
+    assert len(result.gap_ids) == 1
+
+    # Defaults
+    default_result = survey_agent.SurveyResult()
+    assert default_result.updated_memory == ""
+    assert default_result.draft_titles == []
+    assert default_result.draft_bodies == []
+    assert default_result.gap_ids == []
+
+
+# --- Runner tests ---
+
+
+def test_run_survey_pass_empty_memory(tmp_path, monkeypatch):
+    """With no memory file, runner passes empty string to agent."""
+    settings = _make_settings(tmp_path)
+    captured_memory = []
+
+    def mock_agent(**kwargs):
+        captured_memory.append(kwargs.get("memory", ""))
+        return survey_agent.SurveyResult(
+            updated_memory="new memory",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    assert captured_memory == [""]
+
+
+def test_run_survey_pass_reads_existing_memory(tmp_path, monkeypatch):
+    """Runner passes existing memory to agent."""
+    settings = _make_settings(tmp_path)
+    memory_file = settings.data_dir / "test-repo" / "survey_memory.md"
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    memory_file.write_text(
+        "# Existing memory\n## Rotation Log\n- entry\n", encoding="utf-8"
+    )
+
+    captured_memory = []
+
+    def mock_agent(**kwargs):
+        captured_memory.append(kwargs.get("memory", ""))
+        return survey_agent.SurveyResult(
+            updated_memory="# Updated memory\n",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    assert captured_memory == ["# Existing memory\n## Rotation Log\n- entry\n"]
+
+
+def test_run_survey_pass_writes_memory_verbatim(tmp_path, monkeypatch):
+    """Runner writes agent's updated_memory verbatim."""
+    settings = _make_settings(tmp_path)
+    updated = "# Updated memory\n## Rotation Log\n- 2026-03-15: entry\n"
+
+    def mock_agent(**kwargs):
+        return survey_agent.SurveyResult(
+            updated_memory=updated,
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    memory_file = settings.data_dir / "test-repo" / "survey_memory.md"
+    assert memory_file.exists()
+    assert memory_file.read_text(encoding="utf-8") == updated
+
+
+def test_run_survey_pass_creates_draft_tickets(tmp_path, monkeypatch):
+    """Runner creates draft tickets for each proposed gap with
+    source='survey'."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    def mock_agent(**kwargs):
+        return survey_agent.SurveyResult(
+            updated_memory="# Memory\n",
+            draft_titles=["Adopt pattern X", "Improve Y"],
+            draft_bodies=["Body1", "Body2"],
+            gap_ids=["adopt_x", "improve_y"],
+        )
+
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    assert len(result.drafts_created) == 2
+    # Verify tickets are in DB with source="survey"
+    tickets = service.list()
+    survey_tickets = [t for t in tickets if t.source == "survey"]
+    assert len(survey_tickets) == 2
+    assert survey_tickets[0].state == State.DRAFT
+
+
+def test_run_survey_pass_no_drafts_when_empty(tmp_path, monkeypatch):
+    """When agent returns no drafts, none are created."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+
+    def mock_agent(**kwargs):
+        return survey_agent.SurveyResult(
+            updated_memory="# Memory\n",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    assert len(result.drafts_created) == 0
+
+
+def test_run_survey_pass_missing_memory_file(tmp_path, monkeypatch):
+    """Missing memory file -> empty string passed, no error."""
+    settings = _make_settings(tmp_path)
+    memory_file = settings.data_dir / "test-repo" / "survey_memory.md"
+    if memory_file.exists():
+        memory_file.unlink()
+
+    captured_memory = []
+
+    def mock_agent(**kwargs):
+        captured_memory.append(kwargs.get("memory", ""))
+        return survey_agent.SurveyResult(
+            updated_memory="# Memory\n",
+            draft_titles=[],
+            draft_bodies=[],
+            gap_ids=[],
+        )
+
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    assert captured_memory == [""]
+
+
+def test_survey_pass_result_structure(tmp_path, monkeypatch):
+    """SurveyPassResult has correct structure."""
+    settings = _make_settings(tmp_path)
+
+    def mock_agent(**kwargs):
+        return survey_agent.SurveyResult(
+            updated_memory="mem",
+            draft_titles=["t1"],
+            draft_bodies=["b1"],
+            gap_ids=["g1"],
+        )
+
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    assert isinstance(result, SurveyPassResult)
+    assert result.updated_memory == "mem"
+    assert len(result.drafts_created) == 1
+    assert result.drafts_created[0]["title"] == "t1"
+
+
+# --- Langfuse session tests ---
+
+
+def test_run_survey_pass_opens_langfuse_session(tmp_path, monkeypatch):
+    """session_id is passed through to the result."""
+    settings = _make_settings(tmp_path)
+    seen = {}
+
+    def mock_agent(**kwargs):
+        seen["agent_ran"] = True
+        return survey_agent.SurveyResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        )
+
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    res = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+
+    assert res.session_id == "test-sid"
+    assert seen["agent_ran"] is True
+
+
+def test_survey_session_ids_are_unique_per_run(tmp_path, monkeypatch):
+    """Each run gets its own session_id."""
+    settings = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        survey_agent,
+        "run_survey_agent",
+        lambda **k: survey_agent.SurveyResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        ),
+    )
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    a = run_survey_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    ).session_id
+    assert a == "test-sid"
+
+
+# --- Clone tests ---
+
+
+def test_run_survey_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
+    """With a forge configured, the survey run clones the repo locally
+    and hands the agent repo_dir. Idempotent + best-effort."""
+    from robotsix_mill.vcs import git_ops
+
+    settings = _make_settings(
+        tmp_path,
+        FORGE_REMOTE_URL="https://example.test/r.git",
+        FORGE_TARGET_BRANCH="main",
+    )
+    seen = {"clone": 0, "repo_dir": "unset"}
+
+    def fake_clone(url, dest, branch, token):
+        seen["clone"] += 1
+        (dest / ".git").mkdir(parents=True)
+
+    def mock_agent(**kwargs):
+        seen["repo_dir"] = kwargs.get("repo_dir")
+        return survey_agent.SurveyResult(
+            updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+        )
+
+    monkeypatch.setattr(git_ops, "clone", fake_clone)
+    monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+
+    run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    repo = settings.data_dir / "survey_workspace" / "repo"
+    assert seen["clone"] == 1 and seen["repo_dir"] == repo
+
+    seen["clone"] = 0
+    run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    assert seen["clone"] == 0 and seen["repo_dir"] == repo
+
+
+def test_run_survey_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
+    """Without forge_remote_url, repo_dir=None."""
+    settings = _make_settings(tmp_path)  # no FORGE_REMOTE_URL
+    got = {}
+    monkeypatch.setattr(
+        survey_agent,
+        "run_survey_agent",
+        lambda **k: (
+            got.__setitem__("repo_dir", k.get("repo_dir"))
+            or survey_agent.SurveyResult(
+                updated_memory="m", draft_titles=[], draft_bodies=[], gap_ids=[]
+            )
+        ),
+    )
+    monkeypatch.setattr("robotsix_mill.survey_runner.Settings", lambda: settings)
+    run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
+    assert got["repo_dir"] is None
+
+
+# --- Config tests ---
+
+
+def test_survey_config_defaults():
+    """Survey config has correct defaults."""
+    s = Settings()
+    assert s.survey_model == "deepseek/deepseek-v4-pro"
+    assert s.survey_periodic is True
+    assert s.survey_interval_seconds == 86400
+    assert s.survey_memory_path is None
+
+
+def test_survey_memory_file_default(tmp_path):
+    """When survey_memory_path is None, falls back to
+    data_dir/survey_memory.md."""
+    s = _make_settings(tmp_path)
+    expected = s.data_dir / "survey_memory.md"
+    assert s.survey_memory_file == expected
+
+
+def test_survey_memory_file_override(tmp_path):
+    """When survey_memory_path is set, uses that path."""
+    custom_path = tmp_path / "custom_survey.md"
+    s = _make_settings(tmp_path, survey_memory_path=str(custom_path))
+    assert s.survey_memory_file == custom_path
+
+
+def test_survey_periodic_config():
+    """Survey periodic can be enabled."""
+    s = Settings(survey_periodic="true", survey_interval_seconds="43200")
+    assert s.survey_periodic is True
+    assert s.survey_interval_seconds == 43200
+
+
+# --- CLI tests ---
+
+
+def test_survey_cli_command(capsys, tmp_path, monkeypatch):
+    """Test that CLI survey command works."""
+    from robotsix_mill.cli import main
+
+    def mock_run(session_id=None):
+        return SurveyPassResult(
+            updated_memory="mem",
+            drafts_created=[{"id": "123", "title": "Adopt pattern X"}],
+        )
+
+    monkeypatch.setattr("robotsix_mill.survey_runner.run_survey_pass", mock_run)
+
+    result = main(["survey"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "Survey pass complete" in captured.out
+    assert "Adopt pattern X" in captured.out
+
+
+def test_survey_cli_json_output(capsys, tmp_path, monkeypatch):
+    """Test JSON output flag for survey CLI."""
+    from robotsix_mill.cli import main
+
+    def mock_run(session_id=None):
+        return SurveyPassResult(
+            updated_memory="mem",
+            drafts_created=[{"id": "123", "title": "Adopt pattern X"}],
+        )
+
+    monkeypatch.setattr("robotsix_mill.survey_runner.run_survey_pass", mock_run)
+
+    result = main(["survey", "--json"])
+    assert result == 0
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert "memory" in data
+    assert "tickets_created" in data
+    assert data["tickets_created"] == [{"id": "123", "title": "Adopt pattern X"}]
+
+
+def test_survey_cli_no_drafts(capsys, tmp_path, monkeypatch):
+    """CLI survey command when no drafts created."""
+    from robotsix_mill.cli import main
+
+    def mock_run(session_id=None):
+        return SurveyPassResult(
+            updated_memory="mem",
+            drafts_created=[],
+        )
+
+    monkeypatch.setattr("robotsix_mill.survey_runner.run_survey_pass", mock_run)
+
+    result = main(["survey"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "No new draft tickets created" in captured.out
+
+
+def test_survey_cli_failure(capsys, monkeypatch):
+    """CLI survey exits 1 on failure."""
+    from robotsix_mill.cli import main
+
+    def mock_run(session_id=None):
+        raise RuntimeError("agent exploded")
+
+    monkeypatch.setattr("robotsix_mill.survey_runner.run_survey_pass", mock_run)
+
+    result = main(["survey"])
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "survey failed" in captured.err
+
+
+# --- Worker periodic tests ---
 
 
 @pytest.mark.asyncio
