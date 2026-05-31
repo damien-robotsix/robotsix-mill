@@ -234,7 +234,7 @@ class CIFixStage(Stage):
                 _write_counter(no_change_counter_path, no_change_cycles)
                 log.info(
                     "%s: ci fix succeeded but no code changes — "
-                    "no-change cycle %d/%d",
+                    "no-change cycle %d/%s",
                     ticket.id,
                     no_change_cycles,
                     max_no_change if max_no_change > 0 else float("inf"),
