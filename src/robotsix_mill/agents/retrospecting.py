@@ -219,15 +219,21 @@ def run_retrospect_agent(
     # JSON parsing, avoiding the retry loop for this class of error.
     from pydantic_ai.capabilities import Hooks
 
-    agent.root_capability.capabilities.append(
-        Hooks(
-            before_output_validate=lambda ctx, output_context, output: (
-                _repair_memory_field_escaping(output)
-                if isinstance(output, str)
-                else output
+    # The pre-parse repair hook is a pydantic-ai capability AND a DeepSeek-
+    # output-quirk workaround. It only applies on the pydantic-ai/OpenRouter
+    # path; the Claude SDK transport handle has no ``root_capability`` (and
+    # the SDK owns its own loop + emits clean JSON), so skip it there.
+    root_capability = getattr(agent, "root_capability", None)
+    if root_capability is not None:
+        root_capability.capabilities.append(
+            Hooks(
+                before_output_validate=lambda ctx, output_context, output: (
+                    _repair_memory_field_escaping(output)
+                    if isinstance(output, str)
+                    else output
+                )
             )
         )
-    )
 
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
     prompt = (
