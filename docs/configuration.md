@@ -264,7 +264,7 @@ Every setting below shows:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `service.data_dir` | `MILL_DATA_DIR` | `.mill-data` | Data directory for DB, workspaces, and memory ledgers |
-| `service.default_repo_id` | `MILL_DEFAULT_REPO_ID` | `""` | Default repo for legacy tickets that lack a `board_id` |
+| `service.default_repo_id` | `MILL_DEFAULT_REPO_ID` | `""` | Backward-compatibility fallback: board_id assigned to tickets created before the mandatory-board_id migration. Not a substitute for configuring repos.yaml. |
 | `service.api_host` | `MILL_API_HOST` | `127.0.0.1` | FastAPI listen address |
 | `service.api_port` | `MILL_API_PORT` | `8077` | FastAPI listen port |
 | `service.api_url` | `MILL_API_URL` | `http://127.0.0.1:8077` | Base URL the CLI client uses to reach the API |
@@ -433,6 +433,11 @@ Langfuse observability project. It is loaded **separately** from
 `Settings` by a dedicated `ReposRegistry` Pydantic model — it never
 participates in the Settings merge. Access it via `get_repos_config()`
 or `get_repo_config("repo-id")`.
+
+> **There is no longer a board-less default.** Every ticket must carry a
+> `board_id` from `config/repos.yaml`. The legacy `<data_dir>/mill.db`
+> that held tickets without a board_id has been removed. For single-repo
+> deployments, configure exactly one repo entry.
 
 Langfuse credentials are read from ``RepoConfig`` at call time (per
 ticket, per operation) — they are **not** stamped onto the global

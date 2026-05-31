@@ -77,6 +77,10 @@ cp config/secrets.example.yaml config/secrets.yaml       # set openrouter_api_ke
 cp config/repos.example.yaml config/repos.yaml           # edit: add your repo
 ```
 
+> **Note:** `board_id` is mandatory — every ticket must belong to a repo
+> configured in `config/repos.yaml`. There is no longer a board-less
+> default. For single-repo deployments, configure exactly one repo.
+
 ### 2. Start the server
 
 **Docker (recommended):**
