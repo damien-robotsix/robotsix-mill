@@ -33,7 +33,7 @@ from ..agents import coding
 from ..agents.coding import AgentBudgetError, AgentRunError
 from ..agents.coordinating import ValidationResult
 from ..agents.testing import run_test_agent
-from ..core.models import Ticket
+from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge.auth import _resolve_remote_url, github_token
 from ..pass_runner import load_memory, persist_memory
@@ -172,6 +172,14 @@ class ImplementStage(Stage):
                 unmet,
             )
             return Outcome(State.READY)
+
+        # --- meta-board new-repo extraction gate ---
+        if ticket.source == SourceKind.META:
+            params = ImplementStage._parse_new_repo_params_for_implement(
+                ctx, ticket
+            )
+            if params is not None:
+                return ImplementStage._run_repo_scaffold(ctx, ticket, s, params)
 
         remote_url = _resolve_remote_url(s, ctx.repo_config)
         if not remote_url:
@@ -1186,3 +1194,36 @@ class ImplementStage(Stage):
                 )
         ctx.service.set_branch(ticket.id, branch)
         return (repo_dir, branch, resuming)
+
+    # ------------------------------------------------------------------
+    # meta-board new-repo extraction helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_new_repo_params_for_implement(
+        ctx: StageContext, ticket: Ticket
+    ) -> dict | None:
+        """Thin wrapper that reads the ticket description and calls
+        :func:`~robotsix_mill.repo_scaffold.parse_new_repo_params`.
+
+        Lazy-imports the repo_scaffold module to avoid import-time
+        coupling between the implement stage and the scaffold workflow.
+        """
+        from ..repo_scaffold import parse_new_repo_params
+
+        description = ctx.service.workspace(ticket).read_description()
+        return parse_new_repo_params(description)
+
+    @staticmethod
+    def _run_repo_scaffold(
+        ctx: StageContext,
+        ticket: Ticket,
+        s,
+        params: dict,
+    ) -> Outcome:
+        """Resolve the forge, call the scaffold workflow, and return its Outcome."""
+        from ..forge.base import get_forge
+        from ..repo_scaffold import run_repo_scaffold
+
+        forge = get_forge(s, repo_config=None)
+        return run_repo_scaffold(s, ticket, forge, ctx)
