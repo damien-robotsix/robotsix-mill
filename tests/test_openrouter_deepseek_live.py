@@ -50,9 +50,9 @@ def test_pro_basic_text() -> None:
             "What is 2+2? Answer with just the number.",
             model_settings={"max_tokens": 50},
         )
-        assert result.data is not None
-        assert len(str(result.data)) > 0
-        assert "4" in str(result.data)
+        assert result.output is not None
+        assert len(str(result.output)) > 0
+        assert "4" in str(result.output)
     finally:
         agent.close()
 
@@ -72,7 +72,7 @@ def test_pro_tool_usage() -> None:
             "Use the echo tool to repeat the exact text: 'hello world'",
             model_settings={"max_tokens": 200},
         )
-        output = str(result.data).lower()
+        output = str(result.output).lower()
         assert "hello world" in output
 
         # Verify at least one ToolCallPart is present in the message history.
@@ -110,7 +110,7 @@ def test_pro_thinking_tool_mix() -> None:
             "then tell me what you did.",
             model_settings={"max_tokens": 300},
         )
-        output = str(result.data)
+        output = str(result.output)
         assert "Hello from DeepSeek" in output
 
         from pydantic_ai.messages import ModelResponse, ToolCallPart
@@ -158,9 +158,9 @@ def test_flash_basic_text() -> None:
             "What is 2+2? Answer with just the number.",
             model_settings={"max_tokens": 50},
         )
-        assert result.data is not None
-        assert len(str(result.data)) > 0
-        assert "4" in str(result.data)
+        assert result.output is not None
+        assert len(str(result.output)) > 0
+        assert "4" in str(result.output)
     finally:
         agent.close()
 
@@ -184,7 +184,7 @@ def test_flash_tool_usage() -> None:
             "Use the echo tool to repeat the exact text: 'hello from flash'",
             model_settings={"max_tokens": 200},
         )
-        output = str(result.data).lower()
+        output = str(result.output).lower()
         assert "hello from flash" in output
 
         from pydantic_ai.messages import ModelResponse, ToolCallPart
