@@ -175,13 +175,20 @@ class _SdkToolAgentHandle:
         server: Any,
         allowed_tools: list[str],
         output_type: Any = str,
-        max_turns: int = 16,
+        max_turns: int | None = None,
     ) -> None:
         self._sdk_model = sdk_model
         self._system_prompt = system_prompt
         self._server = server
         self._allowed_tools = allowed_tools
         self._output_type = output_type
+        if max_turns is None:
+            # Single source of truth for the runaway cap (see model._MAX_TURNS).
+            # Generous, because an injected-MCP-tool loop legitimately needs many
+            # turns; reaching it is a hard ClaudeSDKTurnLimitError, never retried.
+            from .model import _MAX_TURNS
+
+            max_turns = _MAX_TURNS
         self._max_turns = max_turns
 
     def run_sync(

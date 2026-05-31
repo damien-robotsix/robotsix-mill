@@ -207,6 +207,17 @@ def test_non_turn_limit_runtime_error_unaffected():
     assert is_claude_sdk_turn_limit(RuntimeError("something else")) is False
 
 
+# --- turn cap: single source, generous for injected-MCP-tool loops ---------
+
+
+def test_tool_handle_uses_shared_max_turns_cap():
+    from robotsix_llmio.claude_sdk.model import _MAX_TURNS
+
+    handle = _SdkToolAgentHandle("opus", "sys", None, [], str)
+    assert handle._max_turns == _MAX_TURNS  # single source — paths can't drift
+    assert _MAX_TURNS >= 100  # generous cap so genuine tool loops don't trip it
+
+
 # ---------------------------------------------------------------------------
 # Helpers for tool-loop bridge tests
 # ---------------------------------------------------------------------------

@@ -46,15 +46,20 @@ PROVIDER_NAME = "claude-sdk"
 # tool-based modes ('tool', 'native') need raw tool_use passthrough we can't do.
 _TEXT_OUTPUT_MODES = {"text", "prompted"}
 
-# Turn headroom for the SDK loop. With ``allowed_tools=[]`` the model has no
-# tools to call, so it answers in a single turn and ends with ``end_turn`` well
-# under this cap. The cap is a runaway backstop, not a tuning knob — it must NOT
-# be tight: the SDK *raises* ("Reached maximum number of turns") instead of
-# returning the answer if the budget is hit, so 1 would false-trip on clean
-# answers. If the cap is genuinely reached, that is a HARD failure raised as
-# ``ClaudeSDKTurnLimitError`` and never retried (retrying the identical request
-# would just loop to the cap again) — fail loudly so the real cause shows.
-_MAX_TURNS = 8
+# Runaway backstop for the SDK agent loop — the single cap shared by BOTH
+# transport paths:
+#   * the no-tools Model path below (``allowed_tools=[]``) answers in a single
+#     turn, so the cap is pure headroom; it must NOT be tight, because the SDK
+#     *raises* ("Reached maximum number of turns") instead of returning the
+#     answer if the budget is hit, so a low cap would false-trip on clean
+#     answers;
+#   * the injected-MCP-tools path (``provider._SdkToolAgentHandle``) runs a real
+#     tool loop that legitimately needs many turns to converge.
+# Hence a generous value: high enough that genuine tool loops don't trip it, low
+# enough to stop a true runaway. If the cap IS reached, that is a HARD failure
+# raised as ``ClaudeSDKTurnLimitError`` and never retried (retrying the identical
+# request would just loop to the cap again) — fail loudly so the cause shows.
+_MAX_TURNS = 100
 
 
 class ClaudeSDKTurnLimitError(RuntimeError):
