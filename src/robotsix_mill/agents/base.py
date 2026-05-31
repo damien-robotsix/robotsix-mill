@@ -301,7 +301,12 @@ def build_agent(
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    # lazy: keeps core import-light and the test suite hermetic
+    # lazy: keeps core import-light and the test suite hermetic.
+    # CostInstrumentedOpenRouterModel is now a thin shim over the
+    # robotsix-llmio library's OpenRouterDeepseekModel (it applies the interim
+    # substring tiering at construction); the pin/reasoning/cost plumbing lives
+    # in the library. Construction stays here unchanged so the model-patch test
+    # seam keeps working.
     from pydantic_ai import Agent
     from pydantic_ai.providers.openrouter import OpenRouterProvider
 
