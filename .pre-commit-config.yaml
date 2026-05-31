@@ -51,3 +51,12 @@ repos:
     hooks:
       - id: detect-secrets
         args: ["--baseline", ".secrets.baseline"]
+
+  - repo: local
+    hooks:
+      - id: check-config-sync
+        name: Check config sync
+        entry: uv run --frozen python scripts/check_config_sync.py
+        language: system
+        pass_filenames: false
+        always_run: true
