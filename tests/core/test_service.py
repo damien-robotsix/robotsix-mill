@@ -1325,9 +1325,7 @@ def test_unblocks_fires_on_done(service):
     service.transition(solver.id, State.DONE)  # DRAFT -> DONE is allowed
 
     assert service.get(target.id).state is State.DRAFT  # auto-unblocked
-    draft_notes = [
-        e.note for e in service.history(target.id) if e.state is State.DRAFT
-    ]
+    draft_notes = [e.note for e in service.history(target.id) if e.state is State.DRAFT]
     assert any(solver.id in (n or "") for n in draft_notes)
 
 
