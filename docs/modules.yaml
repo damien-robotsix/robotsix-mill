@@ -163,6 +163,7 @@ modules:
       - tests/test_config_sync_runner.py
       - tests/test_roadmap_sync_runner.py
       - tests/test_trace_review_runner.py
+      - tests/test_langfuse_cleanup_runner.py
       - tests/test_bespoke_runner.py
       - tests/test_verify_runner.py
     dependencies: [config, core, forge, agents, langfuse, sandbox, notify]
