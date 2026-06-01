@@ -54,6 +54,13 @@ warn_unused_configs = true
 module = "robotsix_llmio.openrouter_deepseek.*"
 disable_error_code = ["typeddict-item", "override", "misc", "literal-required"]
 
+[[tool.mypy.overrides]]
+module = [
+    "opentelemetry.sdk.*",
+    "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Live tests are opt-in: deselected by default so a plain `pytest` (and CI)
