@@ -401,9 +401,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             # event_mode='logs' emits each pydantic-ai message as a
             # separate OTel LogRecord, avoiding attribute-size truncation
             # and following OTel GenAI semantic conventions.
-            Agent.instrument_all(
-                InstrumentationSettings(event_mode='logs', version=1)
-            )
+            Agent.instrument_all(InstrumentationSettings(event_mode="logs", version=1))
             _provider = provider
             _provider_ready = True
 
