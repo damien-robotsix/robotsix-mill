@@ -396,9 +396,12 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             provider.add_span_processor(_SessionStampProcessor())
             trace.set_tracer_provider(provider)
 
-            from pydantic_ai.agent import Agent
+            from pydantic_ai.agent import Agent, InstrumentationSettings
 
-            Agent.instrument_all()
+            # event_mode='logs' emits each pydantic-ai message as a
+            # separate OTel LogRecord, avoiding attribute-size truncation
+            # and following OTel GenAI semantic conventions.
+            Agent.instrument_all(InstrumentationSettings(event_mode="logs", version=1))
             _provider = provider
             _provider_ready = True
 
