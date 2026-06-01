@@ -2079,6 +2079,9 @@ class Worker:
         "cost_reconciliation": (
             "robotsix_mill.cost_reconciliation_runner:run_cost_reconciliation_pass"
         ),
+        "data_dir_audit": (
+            "robotsix_mill.data_dir_audit_runner:run_data_dir_audit_pass"
+        ),
     }
 
     def _build_periodic_workflow_runner(self, wf):

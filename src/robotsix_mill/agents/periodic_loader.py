@@ -82,6 +82,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "trace_review": "schedule_only",
     "config_sync": "schedule_only",
     "cost_reconciliation": "schedule_only",
+    "data_dir_audit": "schedule_only",
     # Non-LLM maintenance loops.
     "cost_warmer": "maintenance",
     "langfuse_cleanup": "maintenance",
