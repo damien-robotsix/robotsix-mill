@@ -1,5 +1,7 @@
 """The read-only exploration sub-agent."""
 
+import asyncio
+
 from robotsix_mill.agents import explore
 from robotsix_mill.agents.explore import make_explore_tool
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
@@ -19,7 +21,9 @@ def _settings(tmp_path, **env):
 
 def test_no_key_degrades_not_raises(tmp_path):
     s = _settings(tmp_path, OPENROUTER_API_KEY="")
-    out = explore.run_explore(settings=s, repo_dir=tmp_path, question="where is X?")
+    out = asyncio.run(
+        explore.run_explore(settings=s, repo_dir=tmp_path, question="where is X?")
+    )
     assert "unavailable" in out and "OPENROUTER_API_KEY" in out
 
 
@@ -29,7 +33,9 @@ def test_missing_repo_degrades_not_raises(tmp_path):
     making any HTTP call."""
     missing = tmp_path / "nonexistent"
     s = _settings(tmp_path, OPENROUTER_API_KEY="valid-key")
-    out = explore.run_explore(settings=s, repo_dir=missing, question="where is X?")
+    out = asyncio.run(
+        explore.run_explore(settings=s, repo_dir=missing, question="where is X?")
+    )
     assert "explore unavailable" in out
     assert "workspace repo directory does not exist" in out
     assert "not been cloned yet" in out
@@ -39,7 +45,7 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     seen = {}
 
-    def fake(*, settings, repo_dir, question, extra_roots=None):
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
         seen["q"] = question
         seen["dir"] = repo_dir
         seen["extra_roots"] = extra_roots
@@ -47,9 +53,34 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
 
     monkeypatch.setattr(explore, "run_explore", fake)
     tool = make_explore_tool(s, tmp_path)
-    assert tool("where is the worker?") == "FOUND: where is the worker?"
+    assert asyncio.run(tool("where is the worker?")) == "FOUND: where is the worker?"
     assert seen["q"] == "where is the worker?" and seen["dir"] == tmp_path
     assert seen["extra_roots"] is None
+
+
+def test_explore_tool_runs_inside_an_active_event_loop(tmp_path, monkeypatch):
+    """Regression: under the Claude SDK backend the explore tool callback
+    fires INSIDE the SDK's already-running event loop. The old sync tool
+    called ``run_sync`` → ``asyncio.run`` there, raising "this event loop
+    is already running" (caught and degraded to "explore failed: …"), so
+    the coordinator never got an answer. The tool must be a coroutine fn
+    that awaits its seam, composing with whatever loop is driving it."""
+    import inspect
+
+    s = _settings(tmp_path)
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        return f"OK: {question}"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = make_explore_tool(s, tmp_path)
+    assert inspect.iscoroutinefunction(tool), "explore tool must be async"
+
+    async def driver():
+        # We are now on a running loop — exactly like the SDK tool callback.
+        return await tool("where is the worker?")
+
+    assert asyncio.run(driver()) == "OK: where is the worker?"
 
 
 def test_explore_subagent_is_read_only_and_uses_explore_model(tmp_path, monkeypatch):
@@ -77,7 +108,7 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(tmp_path, monkeypa
             cap["name"] = kw.get("name")
             cap["model_settings"] = kw.get("model_settings")
 
-        def run_sync(self, q, *, usage_limits=None):
+        async def run(self, q, *, usage_limits=None):
             cap["limit"] = usage_limits.request_limit
             return type("R", (), {"output": "answer"})()
 
@@ -89,7 +120,7 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(tmp_path, monkeypa
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
 
-    out = explore.run_explore(settings=s, repo_dir=tmp_path, question="q")
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
     assert out == "answer"
     assert cap["model"] == "explore/cheap"  # its own model, not coordinator
     assert cap["tools"] == [
@@ -148,7 +179,7 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
                     )
                 )
 
-        def run_sync(self, q, *, usage_limits=None):
+        async def run(self, q, *, usage_limits=None):
             if self._name == "explore":
                 primary_agent_calls.append(1)
                 raise _FakeUsageLimitExceeded("budget cap")
@@ -166,7 +197,7 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
 
-    out = explore.run_explore(settings=s, repo_dir=tmp_path, question="q")
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
     assert out == "retry-answer"
     assert len(primary_agent_calls) == 1
     assert len(retry_agent_calls) == 1
@@ -197,7 +228,7 @@ def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
         def __init__(self, **kw):
             self._name = kw.get("name", "")
 
-        def run_sync(self, q, *, usage_limits=None):
+        async def run(self, q, *, usage_limits=None):
             raise _FakeUsageLimitExceeded("budget cap")
 
     import pydantic_ai
@@ -213,7 +244,7 @@ def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
 
     # Reset sentinel before test
     explore.reset_explore_budget_exhausted()
-    out = explore.run_explore(settings=s, repo_dir=tmp_path, question="q")
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
     assert "explore failed" in out
     assert explore.is_explore_budget_exhausted() is True
     # Reset after test

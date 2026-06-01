@@ -19,6 +19,8 @@ The sub-agent runs to completion (or hits its own budget) inside one
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from robotsix_mill.agents import spawn_subtask as _ss
@@ -55,7 +57,7 @@ class TestRunSpawnSubtask:
             output = "moved 3 files, updated 5 imports"
 
         class _FakeAgent:
-            def run_sync(self, user_prompt, *, usage_limits=None):
+            async def run(self, user_prompt, *, usage_limits=None):
                 captured["user_prompt"] = user_prompt
                 captured["usage_limits"] = usage_limits
                 return _FakeResult()
@@ -67,12 +69,14 @@ class TestRunSpawnSubtask:
 
         monkeypatch.setattr(_base, "build_agent", lambda *a, **kw: _FakeAgent())
 
-        out = _ss.run_spawn_subtask(
-            settings=settings,
-            repo_dir=repo_dir,
-            name="move-runners",
-            prompt="Move every *_runner.py into runners/.",
-            files_in_scope=["src/robotsix_mill/audit_runner.py"],
+        out = asyncio.run(
+            _ss.run_spawn_subtask(
+                settings=settings,
+                repo_dir=repo_dir,
+                name="move-runners",
+                prompt="Move every *_runner.py into runners/.",
+                files_in_scope=["src/robotsix_mill/audit_runner.py"],
+            )
         )
 
         assert out == "moved 3 files, updated 5 imports"
@@ -97,7 +101,7 @@ class TestRunSpawnSubtask:
         from pydantic_ai.exceptions import UsageLimitExceeded
 
         class _FakeAgent:
-            def run_sync(self, user_prompt, *, usage_limits=None):
+            async def run(self, user_prompt, *, usage_limits=None):
                 raise UsageLimitExceeded("budget cap")
 
             def close(self):
@@ -107,11 +111,13 @@ class TestRunSpawnSubtask:
 
         monkeypatch.setattr(_base, "build_agent", lambda *a, **kw: _FakeAgent())
 
-        out = _ss.run_spawn_subtask(
-            settings=settings,
-            repo_dir=repo_dir,
-            name="too-big-subtask",
-            prompt="...",
+        out = asyncio.run(
+            _ss.run_spawn_subtask(
+                settings=settings,
+                repo_dir=repo_dir,
+                name="too-big-subtask",
+                prompt="...",
+            )
         )
 
         assert out.startswith("subtask incomplete: budget cap reached")
@@ -132,7 +138,7 @@ class TestRunSpawnSubtask:
         catch ad-hoc."""
 
         class _FakeAgent:
-            def run_sync(self, user_prompt, *, usage_limits=None):
+            async def run(self, user_prompt, *, usage_limits=None):
                 raise RuntimeError("LLM upstream 503")
 
             def close(self):
@@ -142,11 +148,13 @@ class TestRunSpawnSubtask:
 
         monkeypatch.setattr(_base, "build_agent", lambda *a, **kw: _FakeAgent())
 
-        out = _ss.run_spawn_subtask(
-            settings=settings,
-            repo_dir=repo_dir,
-            name="x",
-            prompt="...",
+        out = asyncio.run(
+            _ss.run_spawn_subtask(
+                settings=settings,
+                repo_dir=repo_dir,
+                name="x",
+                prompt="...",
+            )
         )
 
         assert out.startswith("subtask failed: ")
@@ -168,7 +176,7 @@ class TestRunSpawnSubtask:
             output = ""
 
         class _FakeAgent:
-            def run_sync(self, user_prompt, *, usage_limits=None):
+            async def run(self, user_prompt, *, usage_limits=None):
                 return _FakeResult()
 
             def close(self):
@@ -178,11 +186,13 @@ class TestRunSpawnSubtask:
 
         monkeypatch.setattr(_base, "build_agent", lambda *a, **kw: _FakeAgent())
 
-        out = _ss.run_spawn_subtask(
-            settings=settings,
-            repo_dir=repo_dir,
-            name="x",
-            prompt="...",
+        out = asyncio.run(
+            _ss.run_spawn_subtask(
+                settings=settings,
+                repo_dir=repo_dir,
+                name="x",
+                prompt="...",
+            )
         )
 
         assert "empty summary" in out

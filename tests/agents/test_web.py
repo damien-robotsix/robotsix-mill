@@ -1,3 +1,4 @@
+import asyncio
 import subprocess
 
 
@@ -60,13 +61,13 @@ def test_web_research_tool_delegates_to_seam(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     seen = {}
 
-    def fake(*, settings, query):
+    async def fake(*, settings, query):
         seen["query"] = query
         return f"CONCLUSION about {query}"
 
     monkeypatch.setattr(wr, "run_web_research", fake)
     tool = make_web_research_tool(s)
-    assert tool("python 3.14 release date") == (
+    assert asyncio.run(tool("python 3.14 release date")) == (
         "CONCLUSION about python 3.14 release date"
     )
     assert seen["query"] == "python 3.14 release date"
@@ -75,7 +76,7 @@ def test_web_research_tool_delegates_to_seam(tmp_path, monkeypatch):
 def test_web_research_no_key_degrades(tmp_path):
     # No OPENROUTER_API_KEY -> a short message, never an exception.
     s = _settings(tmp_path, OPENROUTER_API_KEY="")
-    out = wr.run_web_research(settings=s, query="anything")
+    out = asyncio.run(wr.run_web_research(settings=s, query="anything"))
     assert "unavailable" in out and "OPENROUTER_API_KEY" in out
 
 
@@ -98,7 +99,7 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
         def __init__(self, **kw):
             captured["name"] = kw.get("name")
 
-        def run_sync(self, query, *, usage_limits=None):
+        async def run(self, query, *, usage_limits=None):
             captured["limit"] = usage_limits.request_limit
             captured["query"] = query
             return type("R", (), {"output": "ok"})()
@@ -111,7 +112,7 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
 
-    out = wr.run_web_research(settings=s, query="q")
+    out = asyncio.run(wr.run_web_research(settings=s, query="q"))
     assert out == "ok"
     assert captured["model"] == "cheap/mini:online"
     assert captured["limit"] == 5

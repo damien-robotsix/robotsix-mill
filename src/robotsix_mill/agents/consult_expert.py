@@ -50,7 +50,7 @@ class ExpertConsultResult(BaseModel):
     )
 
 
-def run_consult_expert(
+async def run_consult_expert(
     *,
     settings: Settings,
     repo_dir: Path,
@@ -77,7 +77,7 @@ def run_consult_expert(
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _close_async_client, timeout_http_client
+    from .base import _aclose_async_client, timeout_http_client
     from .fs_tools import build_fs_tools
     from .openrouter_cost import CostInstrumentedOpenRouterModel
 
@@ -161,17 +161,17 @@ def run_consult_expert(
     )
     limits = UsageLimits(request_limit=settings.consult_request_limit)
     try:
-        from .retry import call_with_retry
+        from .retry import acall_with_retry
 
-        result = call_with_retry(
-            lambda: agent.run_sync(question, usage_limits=limits),
+        result = await acall_with_retry(
+            lambda: agent.run(question, usage_limits=limits),
             settings=settings,
             what=f"consult:{domain}",
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the coordinator
         return f"consult {domain} failed: {e}"
     finally:
-        _close_async_client(client)
+        await _aclose_async_client(client)
 
     output = result.output
     if not isinstance(output, ExpertConsultResult):
@@ -199,7 +199,7 @@ def make_consult_expert_tool(settings: Settings, repo_dir: Path, board_id: str =
     """Build the ``consult_expert`` tool exposed to the coordinator. It
     only ever returns the expert sub-agent's answer string."""
 
-    def consult_expert(domain: str, question: str) -> str:
+    async def consult_expert(domain: str, question: str) -> str:
         """Consult a domain expert sub-agent about a specific codebase
         question. Use when the ticket touches a domain you're less
         familiar with (e.g. Python backend internals). The expert has
@@ -207,7 +207,7 @@ def make_consult_expert_tool(settings: Settings, repo_dir: Path, board_id: str =
         gotchas — ask focused questions and use the answer to guide
         your edits. Available domains match expert_definitions/*.yaml
         (e.g. 'python-backend')."""
-        return run_consult_expert(
+        return await run_consult_expert(
             settings=settings,
             repo_dir=repo_dir,
             domain=domain,

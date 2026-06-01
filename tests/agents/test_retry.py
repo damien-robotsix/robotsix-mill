@@ -339,3 +339,76 @@ def test_rate_limit_fallback_not_called_for_transient(tmp_path):
 # Trace-flush-on-retry now happens inside robotsix-llmio (best-effort OTel
 # force_flush), no longer via mill's runtime.tracing.flush_tracing — so the
 # former flush-hook tests moved out with the retry logic.
+
+
+# --- async retry (acall_with_retry) -------------------------------------
+#
+# acall_with_retry is the seam the sub-agent tools (explore/consult_expert/
+# web_research/web_knowledge) use so they can ``await agent.run(...)`` on the
+# parent coordinator's running event loop — instead of ``run_sync`` →
+# ``asyncio.run`` which is illegal inside the Claude SDK's loop. It must
+# mirror the sync schedule: retry transient, never retry UsageLimitExceeded
+# (except via a fallback once).
+
+
+def test_async_transient_then_success(tmp_path):
+    import asyncio
+
+    from robotsix_mill.agents.retry import acall_with_retry
+
+    slept, calls = [], {"n": 0}
+
+    async def fn():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise ModelHTTPError(429, "hy3")
+        return "ok"
+
+    async def fake_sleep(d):
+        slept.append(d)
+
+    out = asyncio.run(acall_with_retry(fn, sleep=fake_sleep))
+    assert out == "ok" and calls["n"] == 3
+    assert len(slept) == 2  # two backoffs before the 3rd, successful call
+
+
+def test_async_non_transient_not_retried(tmp_path):
+    import asyncio
+
+    from robotsix_mill.agents.retry import acall_with_retry
+
+    calls = {"n": 0}
+
+    async def fn():
+        calls["n"] += 1
+        raise ValueError("bug")
+
+    async def fake_sleep(d):
+        pass
+
+    with pytest.raises(ValueError):
+        asyncio.run(acall_with_retry(fn, sleep=fake_sleep))
+    assert calls["n"] == 1  # raised immediately, no retry
+
+
+def test_async_rate_limit_activates_fallback_once(tmp_path):
+    import asyncio
+
+    from robotsix_mill.agents.retry import acall_with_retry
+
+    calls, fb = {"n": 0}, {"n": 0}
+
+    async def fn():
+        calls["n"] += 1
+        raise _FakeUsageLimitExceeded("cap")
+
+    async def fallback():
+        fb["n"] += 1
+        return "fallback-answer"
+
+    async def fake_sleep(d):
+        pass
+
+    out = asyncio.run(acall_with_retry(fn, sleep=fake_sleep, fallback_fn=fallback))
+    assert out == "fallback-answer"
+    assert calls["n"] == 1 and fb["n"] == 1

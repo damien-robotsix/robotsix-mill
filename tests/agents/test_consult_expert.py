@@ -1,11 +1,22 @@
 """The domain expert consultation sub-agent."""
 
+import asyncio
+
 from robotsix_mill.agents import consult_expert
 from robotsix_mill.agents.consult_expert import (
     make_consult_expert_tool,
-    run_consult_expert,
+)
+from robotsix_mill.agents.consult_expert import (
+    run_consult_expert as _arun_consult_expert,
 )
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
+
+
+def run_consult_expert(**kwargs):
+    """Sync test shim: ``run_consult_expert`` is now a coroutine (it awaits
+    the expert sub-agent's ``agent.run`` so it composes with the Claude SDK's
+    running loop). Drive it to completion for these synchronous unit tests."""
+    return asyncio.run(_arun_consult_expert(**kwargs))
 
 
 def _settings(tmp_path, **env):
@@ -46,7 +57,7 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     s = _settings(tmp_path)
     seen = {}
 
-    def fake(*, settings, repo_dir, domain, question, board_id=""):
+    async def fake(*, settings, repo_dir, domain, question, board_id=""):
         seen["domain"] = domain
         seen["question"] = question
         seen["dir"] = repo_dir
@@ -55,7 +66,7 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
 
     monkeypatch.setattr(consult_expert, "run_consult_expert", fake)
     tool = make_consult_expert_tool(s, tmp_path)
-    result = tool("python-backend", "where is the Settings class defined?")
+    result = asyncio.run(tool("python-backend", "where is the Settings class defined?"))
     assert result == "ANSWER: python-backend -> where is the Settings class defined?"
     assert seen["domain"] == "python-backend"
     assert seen["question"] == "where is the Settings class defined?"
@@ -131,7 +142,7 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
             cap["name"] = kw.get("name")
             cap["output_type"] = kw.get("output_type")
 
-        def run_sync(self, prompt, **kw):
+        async def run(self, prompt, **kw):
             class R:
                 output = "expert answer"
 
@@ -216,7 +227,7 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
         def __init__(self, **kw):
             pass
 
-        def run_sync(self, prompt, **kw):
+        async def run(self, prompt, **kw):
             class R:
                 output = ExpertConsultResult(
                     answer="here is the answer",
@@ -287,7 +298,7 @@ def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
         def __init__(self, **kw):
             pass
 
-        def run_sync(self, prompt, **kw):
+        async def run(self, prompt, **kw):
             class R:
                 output = ExpertConsultResult(answer="ok", updated_memory="")
 
