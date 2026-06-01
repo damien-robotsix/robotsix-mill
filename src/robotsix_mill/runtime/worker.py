@@ -822,6 +822,7 @@ class Worker:
         self._survey_task: asyncio.Task | None = None
         self._config_sync_task: asyncio.Task | None = None
         self._cost_reconciliation_task: asyncio.Task | None = None
+        self._data_dir_audit_task: asyncio.Task | None = None
         self._langfuse_cleanup_task: asyncio.Task | None = None
         self._timeout_escalation_task: asyncio.Task | None = None
         self._meta_task: asyncio.Task | None = None
@@ -2078,6 +2079,9 @@ class Worker:
         "cost_reconciliation": (
             "robotsix_mill.cost_reconciliation_runner:run_cost_reconciliation_pass"
         ),
+        "data_dir_audit": (
+            "robotsix_mill.data_dir_audit_runner:run_data_dir_audit_pass"
+        ),
     }
 
     def _build_periodic_workflow_runner(self, wf):
@@ -2641,6 +2645,7 @@ class Worker:
             "_survey_task",
             "_config_sync_task",
             "_cost_reconciliation_task",
+            "_data_dir_audit_task",
             "_langfuse_cleanup_task",
             "_timeout_escalation_task",
             "_meta_task",

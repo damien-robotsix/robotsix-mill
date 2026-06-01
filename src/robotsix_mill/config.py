@@ -939,6 +939,23 @@ class Settings(BaseSettings):
     # in the worker loop.
     cost_reconciliation_interval_seconds: int = Field(default=86400)
 
+    # --- data-dir audit agent (.data/ monotonic growth survey) ---
+    # Model for the data-dir audit agent. Defaults to flash —
+    # the agent does file listing + size checks, not deep reasoning.
+    # Override with MILL_DATA_DIR_AUDIT_MODEL.
+    data_dir_audit_model: str = Field(default="deepseek/deepseek-v4-flash")
+    # Path to the data-dir audit agent's Markdown memory ledger.
+    # Override to pin a specific path; unset (default) derives
+    # <data_dir>/data_dir_audit_memory.md.
+    data_dir_audit_memory_path: Path | None = Field(default=None)
+    # Master switch for the periodic data-dir audit pass.
+    # Default True — the agent is harmless when idle (no findings).
+    data_dir_audit_periodic: bool = Field(default=True)
+    # Seconds between periodic data-dir audit passes when
+    # MILL_DATA_DIR_AUDIT_PERIODIC=true. Minimum enforced at 60 s
+    # in the worker loop.
+    data_dir_audit_interval_seconds: int = Field(default=86400)
+
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same
     # capable model as other read-only periodic agents. Override with
@@ -1145,6 +1162,13 @@ class Settings(BaseSettings):
         if self.cost_reconciliation_memory_path is not None:
             return self.cost_reconciliation_memory_path
         return self.data_dir / "cost_reconciliation_memory.md"
+
+    @property
+    def data_dir_audit_memory_file(self) -> Path:
+        """Resolved path to the agent-maintained data-dir audit memory ledger."""
+        if self.data_dir_audit_memory_path is not None:
+            return self.data_dir_audit_memory_path
+        return self.data_dir / "data_dir_audit_memory.md"
 
     @property
     def completeness_check_memory_file(self) -> Path:
