@@ -159,6 +159,7 @@ modules:
       - src/robotsix_mill/periodic_runner.py
       - src/robotsix_mill/verify_runner.py
       - tests/core/test_pass_runner.py
+      - tests/core/test_periodic_runner.py
       - tests/test_cost_reconciliation_runner.py
       - tests/test_config_sync_runner.py
       - tests/test_roadmap_sync_runner.py
