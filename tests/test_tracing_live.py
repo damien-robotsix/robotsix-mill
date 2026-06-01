@@ -192,7 +192,9 @@ def test_langfuse_trace_tool_and_subagent() -> None:
 
     trace = traces[0]
     trace_id = trace.get("id")
-    obs_body = _langfuse_get("/api/public/observations", {"traceId": trace_id, "limit": 100})
+    obs_body = _langfuse_get(
+        "/api/public/observations", {"traceId": trace_id, "limit": 100}
+    )
     observations = (obs_body or {}).get("data", [])
     by_type: dict[str, int] = {}
     for o in observations:
@@ -216,7 +218,9 @@ def test_langfuse_trace_tool_and_subagent() -> None:
     # Tool + subagent => several observations incl. >1 generation (outer + inner).
     assert len(observations) >= 3, f"expected a rich trace, got {by_type}"
     generations = by_type.get("GENERATION", 0)
-    assert generations >= 2, f"expected >=2 generations (outer + subagent), got {by_type}"
+    assert generations >= 2, (
+        f"expected >=2 generations (outer + subagent), got {by_type}"
+    )
 
 
 def _require_claude() -> None:
@@ -264,9 +268,7 @@ def test_langfuse_trace_roundtrip_claude_sdk_has_cost() -> None:
     )
     try:
         with langfuse_session(session_id):
-            result = provider.call_with_retry(
-                lambda: agent.run_sync("What is 2+2?")
-            )
+            result = provider.call_with_retry(lambda: agent.run_sync("What is 2+2?"))
         assert "4" in str(result.output)
     finally:
         agent.close()
@@ -365,7 +367,12 @@ def test_langfuse_trace_claude_sdk_tool_and_subagent() -> None:
     assert traces, f"no Langfuse trace for session {session_id!r} after polling"
 
     trace = traces[0]
-    obs = (_langfuse_get("/api/public/observations", {"traceId": trace["id"], "limit": 100}) or {}).get("data", [])
+    obs = (
+        _langfuse_get(
+            "/api/public/observations", {"traceId": trace["id"], "limit": 100}
+        )
+        or {}
+    ).get("data", [])
     by_id = {o["id"]: o for o in obs}
     names = {o.get("name") for o in obs}
     types: dict[str, int] = {}
@@ -459,7 +466,12 @@ def test_langfuse_trace_claude_sdk_nested_tool_agent() -> None:
     assert traces, f"no Langfuse trace for session {session_id!r} after polling"
 
     trace = traces[0]
-    obs = (_langfuse_get("/api/public/observations", {"traceId": trace["id"], "limit": 100}) or {}).get("data", [])
+    obs = (
+        _langfuse_get(
+            "/api/public/observations", {"traceId": trace["id"], "limit": 100}
+        )
+        or {}
+    ).get("data", [])
     by_id = {o["id"]: o for o in obs}
     names = {o.get("name") for o in obs}
     assert {"consult_expert", "subagent-with-tool", "lookup"} <= names, names
@@ -502,7 +514,9 @@ def test_langfuse_trace_url_resolves_to_real_trace() -> None:
     _, _, base = _langfuse_creds()
 
     provider = OpenRouterDeepseekProvider()
-    agent = provider.build_agent(tier=Tier.CHEAP, system_prompt="Concise.", name="url-test")
+    agent = provider.build_agent(
+        tier=Tier.CHEAP, system_prompt="Concise.", name="url-test"
+    )
     trace_id: str | None = None
     try:
         with start_trace("url-trace", session_id=make_session_id("urltest")) as root:
@@ -528,3 +542,51 @@ def test_langfuse_trace_url_resolves_to_real_trace() -> None:
             break
         time.sleep(4)
     assert found and found.get("id") == trace_id, "URL points at a missing trace"
+
+
+@pytest.mark.live
+def test_claude_sdk_workspace_confinement_blocks_out_of_scope_edit(tmp_path) -> None:
+    """A tool-bearing claude_sdk agent built with ``workspace_root`` must be
+    unable to edit files OUTSIDE that workspace, while edits inside succeed.
+
+    This is the live repro for the confinement fix: without it, the SDK's
+    built-in Edit/Write tools (under ``bypassPermissions``) wrote to the host
+    app's own source. The PreToolUse hook should deny the out-of-scope write.
+    """
+    _require_claude()  # claude CLI + claude_agent_sdk (+ LANGFUSE_* gate)
+
+    from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
+    from robotsix_llmio.core.provider import Tier
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.txt"  # sibling of the workspace, off-limits
+    inside = workspace / "inside.txt"
+
+    def note(text: str) -> str:
+        """A trivial tool so build_agent takes the tool (confinement) path."""
+        return "ok"
+
+    agent = ClaudeSDKProvider().build_agent(
+        tier=Tier.CHEAP,
+        system_prompt="You edit files with your built-in tools. Be terse.",
+        tools=[note],
+        name="confine-livetest",
+        workspace_root=workspace,
+    )
+    try:
+        agent.run_sync(
+            "Do exactly two things with your built-in file tools, then stop:\n"
+            f"1. Write the file {inside} with the text 'in'.\n"
+            f"2. Write the file {outside} with the text 'out'.\n"
+            "Use absolute paths exactly as given."
+        )
+    finally:
+        agent.close()
+
+    # The out-of-workspace write must have been refused by the PreToolUse hook.
+    assert not outside.exists(), (
+        f"confinement breach: agent wrote {outside} outside its workspace"
+    )
+    # The in-workspace write should have gone through (sanity: tools still work).
+    assert inside.exists(), "agent could not write inside its own workspace"
