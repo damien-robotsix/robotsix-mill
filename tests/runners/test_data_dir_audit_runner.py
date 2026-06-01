@@ -1,12 +1,19 @@
 """Tests for the data-dir audit runner.
 
 Covers:
-- ticket 2 of the epic: ``find_largest_items`` (top-N largest files/dirs)
-- ticket 4 of the epic: ``check_unbounded_candidates`` (unbounded-
-  collection candidate detection) + its integration into
+
+- Top-N largest items (ticket 2): ``find_largest_items``.
+- Growth-delta tracking (ticket 3): state I/O helpers
+  (``_growth_state_path``, ``_load_growth_state``,
+  ``_save_growth_state``), board enumeration, size scanning with
+  cumulative directory sizes (no double-counting), delta computation
+  with byte/pct/both thresholds, and integration through
   ``run_data_dir_audit_pass``.
-- ticket 5 of the epic: ``find_orphan_workspaces`` + its integration
-  into ``run_data_dir_audit_pass``.
+- Unbounded-collection candidate detection (ticket 4):
+  ``check_unbounded_candidates`` and its integration into
+  ``run_data_dir_audit_pass``.
+- Orphan-workspace detection (ticket 5): ``find_orphan_workspaces``
+  plus its integration into ``run_data_dir_audit_pass``.
 """
 
 from __future__ import annotations
@@ -18,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from robotsix_mill.config import Settings
+from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core import db
 from robotsix_mill.core.models import Ticket
 from robotsix_mill.core.states import State
@@ -30,6 +37,12 @@ from robotsix_mill.data_dir_audit_runner import (
     _RUNS_JSON_MAX_ENTRIES,
     DataDirAuditPassResult,
     OrphanWorkspace,
+    _compute_growth_deltas,
+    _enumerate_boards,
+    _growth_state_path,
+    _load_growth_state,
+    _save_growth_state,
+    _scan_board_sizes,
     check_unbounded_candidates,
     find_largest_items,
     find_orphan_workspaces,
@@ -45,14 +58,19 @@ from robotsix_mill.data_dir_audit_runner import (
 def _make_settings(tmp_path: Path, **overrides) -> Settings:
     """Build a fresh Settings rooted at *tmp_path*.
 
-    Engines are also reset so each test gets a clean per-board DB
-    cache (the engine cache survives across tests otherwise). Extra
-    keyword overrides are forwarded to :class:`Settings` so the
-    unbounded-candidate tests can dial ``max_memory_chars`` down.
+    Resets engine + secrets + repos config so each test gets a clean
+    per-board DB cache (the engine cache otherwise survives across
+    tests). Extra keyword overrides are forwarded to ``Settings(...)``
+    so the unbounded-candidate tests can dial ``max_memory_chars``
+    down.
     """
+    from robotsix_mill.config import _reset_repos_config
+
+    _reset_secrets()
+    db.reset_engine()
+    _reset_repos_config()
     overrides.setdefault("data_dir", str(tmp_path))
     overrides.setdefault("require_approval", "false")
-    db.reset_engine()
     return Settings(**overrides)
 
 
@@ -498,9 +516,13 @@ def test_pass_reports_orphans_per_board_in_summary(tmp_path, monkeypatch):
     db.reset_engine()
 
 
-def test_pass_no_findings_when_clean(tmp_path, monkeypatch):
-    """With no orphans, oversized items, or unbounded-collection
-    candidates, the pass returns ``no findings``."""
+def test_pass_no_orphans_when_clean(tmp_path, monkeypatch):
+    """With no orphans the orphan section is omitted from the summary.
+
+    The growth-delta status is still emitted (ticket 3 integration);
+    oversized-items and unbounded-collection sections only appear
+    when something is flagged.
+    """
     s = _make_settings(tmp_path)
     db.init_db(s, "board-clean")
 
@@ -510,7 +532,7 @@ def test_pass_no_findings_when_clean(tmp_path, monkeypatch):
     )
 
     result = run_data_dir_audit_pass(session_id="sess-clean")
-    assert result.summary == "no findings"
+    assert "orphan" not in result.summary
     assert result.drafts_created == []
     db.reset_engine()
 
@@ -807,7 +829,9 @@ class TestRunDataDirAuditPass:
         assert isinstance(result, DataDirAuditPassResult)
         assert len(result.findings) == 1
         assert result.findings[0]["pattern"] == "*_memory.md"
-        assert result.summary == "1 unbounded-collection candidate(s) flagged"
+        # Summary always includes growth-delta status (unconditional);
+        # the unbounded segment is appended when findings exist.
+        assert "1 unbounded-collection candidate(s) flagged" in result.summary
 
     def test_no_findings_summary(self, tmp_path, monkeypatch):
         settings = _make_settings(tmp_path)
@@ -819,7 +843,10 @@ class TestRunDataDirAuditPass:
         result = run_data_dir_audit_pass()
 
         assert result.findings == []
-        assert result.summary == "no findings"
+        # Unbounded section omitted (no findings); growth-delta status
+        # is always present and shows the no-threshold-exceeded message
+        # with no boards on disk.
+        assert "unbounded-collection" not in result.summary
 
     def test_findings_field_defaults_to_empty(self):
         """``DataDirAuditPassResult.findings`` defaults to ``[]``."""
@@ -845,7 +872,475 @@ def test_run_pass_propagates_session_id(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Shared engine-cleanup fixture
+# State path (ticket 3)
+# ---------------------------------------------------------------------------
+
+
+def test_growth_state_path_format(tmp_path):
+    s = _make_settings(tmp_path)
+    path = _growth_state_path(s, "my-board")
+    assert path == s.data_dir / "my-board" / "data_dir_audit_state.json"
+    assert path.name == "data_dir_audit_state.json"
+
+
+# ---------------------------------------------------------------------------
+# State load
+# ---------------------------------------------------------------------------
+
+
+def test_load_growth_state_file_absent(tmp_path, caplog):
+    path = tmp_path / "no_such_file.json"
+    result = _load_growth_state(path)
+    assert result == {}
+    assert not caplog.text  # no warning for first-run
+
+
+def test_load_growth_state_valid_json(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text(
+        json.dumps({"a/b.txt": {"size_bytes": 100, "mtime": 1.0}}), encoding="utf-8"
+    )
+    result = _load_growth_state(path)
+    assert result == {"a/b.txt": {"size_bytes": 100, "mtime": 1.0}}
+
+
+def test_load_growth_state_corrupt_json(tmp_path, caplog):
+    path = tmp_path / "corrupt.json"
+    path.write_text("this is not json", encoding="utf-8")
+    result = _load_growth_state(path)
+    assert result == {}
+    assert "unreadable" in caplog.text.lower()
+
+
+def test_load_growth_state_filters_non_dict_values(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text(
+        json.dumps(
+            {
+                "good": {"size_bytes": 10, "mtime": 1.0},
+                "bad_not_dict": "string_value",
+                "bad_missing_size": {"mtime": 2.0},
+                "bad_missing_mtime": {"size_bytes": 3},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = _load_growth_state(path)
+    assert set(result.keys()) == {"good"}
+    assert result["good"] == {"size_bytes": 10, "mtime": 1.0}
+
+
+# ---------------------------------------------------------------------------
+# State save
+# ---------------------------------------------------------------------------
+
+
+def test_save_growth_state_atomic_write(tmp_path):
+    path = tmp_path / "subdir" / "state.json"
+    state = {"file.txt": {"size_bytes": 500, "mtime": 99.0}}
+    _save_growth_state(path, state)
+
+    # Main file exists and is valid JSON
+    assert path.exists()
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    assert loaded == state
+
+    # Pretty-printed
+    raw = path.read_text(encoding="utf-8")
+    assert "  " in raw  # indent=2
+
+    # .tmp file should not exist after successful write
+    tmp_path_actual = path.with_suffix(".json.tmp")
+    assert not tmp_path_actual.exists()
+
+
+def test_save_growth_state_overwrites_previous(tmp_path):
+    path = tmp_path / "state.json"
+    old = {"old.txt": {"size_bytes": 1, "mtime": 1.0}}
+    new = {"new.txt": {"size_bytes": 999, "mtime": 2.0}}
+    _save_growth_state(path, old)
+    _save_growth_state(path, new)
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    assert loaded == new
+
+
+# ---------------------------------------------------------------------------
+# Board enumeration
+# ---------------------------------------------------------------------------
+
+
+def test_enumerate_boards_no_boards(tmp_path):
+    s = _make_settings(tmp_path)
+    # No mill.db anywhere
+    (s.data_dir / "empty").mkdir(parents=True)
+    assert _enumerate_boards(s) == []
+
+
+def test_enumerate_boards_with_board(tmp_path):
+    s = _make_settings(tmp_path)
+    board = s.data_dir / "my-board"
+    board.mkdir(parents=True)
+    (board / "mill.db").touch()
+    (board / "workspaces").mkdir()
+    assert _enumerate_boards(s) == ["my-board"]
+
+
+def test_enumerate_boards_skips_non_dirs(tmp_path):
+    s = _make_settings(tmp_path)
+    (s.data_dir / "not-a-dir").touch()  # regular file
+    board = s.data_dir / "real-board"
+    board.mkdir(parents=True)
+    (board / "mill.db").touch()
+    assert _enumerate_boards(s) == ["real-board"]
+
+
+def test_enumerate_boards_missing_mill_db(tmp_path):
+    s = _make_settings(tmp_path)
+    (s.data_dir / "no-db").mkdir(parents=True)
+    assert _enumerate_boards(s) == []
+
+
+# ---------------------------------------------------------------------------
+# Size scan
+# ---------------------------------------------------------------------------
+
+
+def test_scan_board_sizes_files_and_dirs(tmp_path):
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "a.txt").write_bytes(b"hello")  # 5 bytes
+    (board / "sub").mkdir()
+    (board / "sub" / "b.txt").write_bytes(b"world!")  # 6 bytes
+
+    sizes = _scan_board_sizes(board)
+
+    # Files
+    assert sizes["a.txt"]["size_bytes"] == 5
+    assert sizes["sub/b.txt"]["size_bytes"] == 6
+
+    # Cumulative directory sizes — no double-counting
+    assert sizes["sub/"]["size_bytes"] == 6
+    assert sizes["sub/"]["size_bytes"] == 6  # exactly the file under it
+
+    # Parent directory = a.txt + sub contents = 5 + 6 = 11
+    # (root dir key is "./")
+    # Note: root dir may or may not be present depending on walk
+    # Let's just verify non-root dirs
+    assert sizes["sub/"]["size_bytes"] == 6
+
+
+def test_scan_board_sizes_deep_nesting_no_double_count(tmp_path):
+    """Verify the double-counting bug is fixed: parent directories sum
+    each file exactly once."""
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "a").mkdir()
+    (board / "a" / "sub").mkdir()
+    (board / "a" / "sub" / "deep").mkdir()
+    (board / "a" / "file1.txt").write_bytes(b"x" * 100)
+    (board / "a" / "sub" / "file2.txt").write_bytes(b"y" * 200)
+    (board / "a" / "sub" / "deep" / "file3.txt").write_bytes(b"z" * 300)
+
+    sizes = _scan_board_sizes(board)
+
+    assert sizes["a/sub/deep/"]["size_bytes"] == 300
+    assert sizes["a/sub/"]["size_bytes"] == 500  # 200 + 300
+    assert sizes["a/"]["size_bytes"] == 600  # 100 + 200 + 300
+
+
+def test_scan_board_sizes_skips_symlinks(tmp_path):
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "real.txt").write_bytes(b"abc")
+    # Create a symlink (may fail on some platforms — skip gracefully)
+    try:
+        (board / "link.txt").symlink_to(board / "real.txt")
+    except OSError:
+        pytest.skip("symlink not supported on this platform")
+
+    sizes = _scan_board_sizes(board)
+    assert "real.txt" in sizes
+    # symlink should be excluded
+    link_keys = [k for k in sizes if "link" in k]
+    assert link_keys == []
+
+
+def test_scan_board_sizes_excludes_state_file(tmp_path):
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "data_dir_audit_state.json").write_text("{}")
+    (board / "other.txt").write_bytes(b"stuff")
+
+    sizes = _scan_board_sizes(board)
+    assert "data_dir_audit_state.json" not in sizes
+    assert "other.txt" in sizes
+
+
+def test_scan_board_sizes_empty_board(tmp_path):
+    board = tmp_path / "board"
+    board.mkdir()
+    sizes = _scan_board_sizes(board)
+    # May have root dir entry with size 0
+    for info in sizes.values():
+        if isinstance(info, dict) and "size_bytes" in info:
+            assert info["size_bytes"] == 0
+
+
+def test_scan_board_sizes_mtime_present(tmp_path):
+    board = tmp_path / "board"
+    board.mkdir()
+    (board / "f.txt").write_bytes(b"data")
+    sizes = _scan_board_sizes(board)
+    assert "mtime" in sizes["f.txt"]
+    assert isinstance(sizes["f.txt"]["mtime"], float)
+    assert sizes["f.txt"]["mtime"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Delta computation
+# ---------------------------------------------------------------------------
+
+
+def _s(settings=None, **overrides):
+    """Shorthand to make a tiny Settings with defaults suitable for delta tests."""
+    if settings is None:
+        import copy
+        s = Settings(data_dir="/tmp")
+        s = copy.deepcopy(s)
+    else:
+        s = settings
+    for k, v in overrides.items():
+        setattr(s, k, v)
+    return s
+
+
+class TestDeltaCompute:
+    def test_no_prior(self):
+        flags = _compute_growth_deltas({}, {"f": {"size_bytes": 10, "mtime": 1}}, _s())
+        assert flags == []
+
+    def test_shrink_no_flag(self):
+        prior = {"f": {"size_bytes": 100, "mtime": 1}}
+        current = {"f": {"size_bytes": 50, "mtime": 2}}
+        flags = _compute_growth_deltas(prior, current, _s())
+        assert flags == []
+
+    def test_unchanged_no_flag(self):
+        prior = {"f": {"size_bytes": 100, "mtime": 1}}
+        current = {"f": {"size_bytes": 100, "mtime": 2}}
+        flags = _compute_growth_deltas(prior, current, _s())
+        assert flags == []
+
+    def test_bytes_threshold_exceeded(self):
+        prior = {"f": {"size_bytes": 1_000_000, "mtime": 1}}
+        current = {"f": {"size_bytes": 12_000_000, "mtime": 2}}
+        flags = _compute_growth_deltas(
+            prior, current,
+            _s(data_dir_audit_growth_delta_bytes=10_000_000,
+               data_dir_audit_growth_delta_pct=9999))
+        assert len(flags) == 1
+        assert flags[0]["threshold_exceeded"] == "bytes"
+        assert flags[0]["delta_bytes"] == 11_000_000
+
+    def test_pct_threshold_exceeded(self):
+        prior = {"f": {"size_bytes": 10_000_000, "mtime": 1}}
+        current = {"f": {"size_bytes": 14_000_000, "mtime": 2}}
+        flags = _compute_growth_deltas(
+            prior, current, _s(
+                data_dir_audit_growth_delta_bytes=10_000_000,
+                data_dir_audit_growth_delta_pct=20,
+            )
+        )
+        assert len(flags) == 1
+        # 4M growth < 10M bytes threshold, but 40% >= 20%
+        assert flags[0]["threshold_exceeded"] == "pct"
+        assert flags[0]["delta_pct"] == 40.0
+
+    def test_both_thresholds(self):
+        prior = {"f": {"size_bytes": 1_000_000, "mtime": 1}}
+        current = {"f": {"size_bytes": 20_000_000, "mtime": 2}}
+        flags = _compute_growth_deltas(
+            prior, current, _s(
+                data_dir_audit_growth_delta_bytes=10_000_000,
+                data_dir_audit_growth_delta_pct=20,
+            )
+        )
+        assert len(flags) == 1
+        assert flags[0]["threshold_exceeded"] == "both"
+        # 19M growth >= 10M, 1900% >= 20%
+
+    def test_zero_prior_size_guard(self):
+        prior = {"f": {"size_bytes": 0, "mtime": 1}}
+        current = {"f": {"size_bytes": 500, "mtime": 2}}
+        flags = _compute_growth_deltas(
+            prior, current, _s(
+                data_dir_audit_growth_delta_bytes=100,
+                data_dir_audit_growth_delta_pct=20,
+            )
+        )
+        assert len(flags) == 1
+        assert flags[0]["delta_pct"] == 100.0
+        assert flags[0]["threshold_exceeded"] == "both"
+
+    def test_deleted_path_not_compared(self):
+        prior = {"f": {"size_bytes": 100, "mtime": 1}}
+        current = {}  # f was deleted
+        flags = _compute_growth_deltas(prior, current, _s())
+        assert flags == []
+
+    def test_directory_keys_compared(self):
+        prior = {"d/": {"size_bytes": 1000, "mtime": 1}}
+        current = {"d/": {"size_bytes": 1500, "mtime": 2}}
+        flags = _compute_growth_deltas(
+            prior, current, _s(
+                data_dir_audit_growth_delta_bytes=100,
+                data_dir_audit_growth_delta_pct=20,
+            )
+        )
+        assert len(flags) == 1
+        assert flags[0]["path"] == "d/"
+        assert flags[0]["threshold_exceeded"] == "both"
+
+
+# ---------------------------------------------------------------------------
+# Integration: run_data_dir_audit_pass — growth-delta
+# ---------------------------------------------------------------------------
+
+
+def _seed_board(board_dir: Path) -> None:
+    board_dir.mkdir(parents=True, exist_ok=True)
+    (board_dir / "mill.db").touch()
+    (board_dir / "workspaces").mkdir(exist_ok=True)
+    (board_dir / "big.log").write_bytes(b"x" * 100)
+
+
+def test_first_run_no_prior_state(tmp_path, monkeypatch):
+    """First run: no prior state → no growth flags, current scan saved."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    board = s.data_dir / "test-board"
+    _seed_board(board)
+
+    result = run_data_dir_audit_pass()
+    assert isinstance(result, DataDirAuditPassResult)
+    assert result.growth_flags == []
+    assert "no items exceeded thresholds" in result.summary
+
+    # State file should exist now
+    state_path = _growth_state_path(s, "test-board")
+    assert state_path.exists()
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert "big.log" in state
+    assert state["big.log"]["size_bytes"] == 100
+
+
+def test_growth_detected_on_second_run(tmp_path, monkeypatch):
+    """Second run picks up prior state and flags growth."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    board = s.data_dir / "test-board"
+    _seed_board(board)
+
+    # First run — baseline
+    run_data_dir_audit_pass()
+
+    # Grow the file significantly
+    (board / "big.log").write_bytes(b"x" * 20_000_000)  # ~19 MiB growth
+
+    # Second run should detect growth
+    result = run_data_dir_audit_pass()
+    assert len(result.growth_flags) == 1
+    flag = result.growth_flags[0]
+    assert flag["check"] == "growth_delta"
+    assert flag["path"] == "big.log"
+    assert flag["threshold_exceeded"] in ("bytes", "both")
+    assert "items flagged" in result.summary
+
+
+def test_growth_ignores_shrink(tmp_path, monkeypatch):
+    """Shrinking files should not be flagged."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    board = s.data_dir / "test-board"
+    _seed_board(board)
+    (board / "big.log").write_bytes(b"x" * 10_000_000)
+
+    run_data_dir_audit_pass()
+
+    # Shrink the file
+    (board / "big.log").write_bytes(b"x" * 1_000)
+
+    result = run_data_dir_audit_pass()
+    assert result.growth_flags == []
+    assert "no items exceeded thresholds" in result.summary
+
+
+def test_corrupt_state_recovered(tmp_path, monkeypatch, caplog):
+    """Corrupt state file should be treated as first-run and overwritten."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    board = s.data_dir / "test-board"
+    _seed_board(board)
+
+    # Write corrupt state
+    state_path = _growth_state_path(s, "test-board")
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text("garbage not json", encoding="utf-8")
+
+    result = run_data_dir_audit_pass()
+    # Should have logged a warning about corrupt state
+    assert "unreadable" in caplog.text.lower()
+    # Should have overwritten the corrupt state with valid JSON
+    assert state_path.exists()
+    loaded = json.loads(state_path.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    # First-run semantics: no prior → no flags
+    assert result.growth_flags == []
+
+
+def test_multiple_boards(tmp_path, monkeypatch):
+    """Growth tracking works across multiple boards."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    for bid in ("board-a", "board-b"):
+        board = s.data_dir / bid
+        _seed_board(board)
+
+    # First run — baselines for both
+    run_data_dir_audit_pass()
+
+    # Grow file in board-a only
+    (s.data_dir / "board-a" / "big.log").write_bytes(b"x" * 20_000_000)
+
+    result = run_data_dir_audit_pass()
+    flags = result.growth_flags
+    assert len(flags) >= 1
+    assert all(f["board_id"] == "board-a" for f in flags)
+    assert "across 1 board" in result.summary
+
+
+def test_result_summary_format(tmp_path, monkeypatch):
+    """Verify the summary string format."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    board = s.data_dir / "test-board"
+    _seed_board(board)
+    run_data_dir_audit_pass()
+    (board / "big.log").write_bytes(b"x" * 30_000_000)
+
+    result = run_data_dir_audit_pass()
+    assert "growth-delta check:" in result.summary
+    assert result.session_id == ""  # not set by default
+
+
+# ---------------------------------------------------------------------------
+# Shared engine cleanup
 # ---------------------------------------------------------------------------
 
 

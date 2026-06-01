@@ -453,7 +453,11 @@ def _scan_board_sizes(board_dir: Path) -> dict[str, dict]:
     # Second pass: compute cumulative directory sizes.
     # For each directory key, sum the sizes of all files whose path
     # starts with that directory prefix.  Sort deepest-first so
-    # parent directories naturally include their subdirectory totals.
+    # parent directories naturally include their subdirectory
+    # contents.  Only file entries (keys not ending with "/") are
+    # summed — each file is counted once per containing directory.
+    # Subdirectory cumulative entries are computed independently
+    # (they each sum the files under their own prefix).
     dir_keys = {k for k in result if k.endswith("/")}
     for dir_key in sorted(dir_keys, key=len, reverse=True):
         prefix = dir_key  # already ends with /
@@ -463,12 +467,7 @@ def _scan_board_sizes(board_dir: Path) -> dict[str, dict]:
                 continue
             if not path_key.startswith(prefix):
                 continue
-            # Sum file entries (anything that doesn't end with /).
-            # Subdirectory totals are already folded in because
-            # we process deeper directories first.
             if not path_key.endswith("/"):
-                cumulative += info["size_bytes"]
-            else:
                 cumulative += info["size_bytes"]
         result[dir_key]["size_bytes"] = cumulative
 
@@ -755,9 +754,10 @@ def run_data_dir_audit_pass(
             all_growth_flags.extend(board_flags)
 
     # ----- Summary covering all checks -----
-    # All segments are CONDITIONAL — only appended when their check
-    # produced findings. Falls back to "no findings" when every check
-    # is empty.
+    # Top-N oversized items, unbounded-collection findings, and
+    # orphan-workspace info are only included when found. The
+    # growth-delta status is always included (PR's contract for the
+    # new growth-delta feature).
     summary_parts: list[str] = []
     if oversized:
         summary_parts.append(f"{len(oversized)} oversized items")
@@ -773,10 +773,9 @@ def run_data_dir_audit_pass(
             f"growth-delta check: {len(all_growth_flags)} items flagged "
             f"across {boards_with_flags} board(s)"
         )
-    if not summary_parts:
-        summary = "no findings"
     else:
-        summary = "; ".join(summary_parts)
+        summary_parts.append("growth-delta check: no items exceeded thresholds")
+    summary = "; ".join(summary_parts)
 
     log.info("data-dir audit pass done: %s", summary)
 
