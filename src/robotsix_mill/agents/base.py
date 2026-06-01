@@ -403,8 +403,10 @@ def build_agent(
         from robotsix_llmio.claude_sdk.provider import ClaudeSDKProvider
         from robotsix_llmio.core.provider import Tier
 
+        from .claude_concurrency import bound_claude_handle
+
         tier = Tier.CHEAP if "flash" in effective_model else Tier.DEFAULT
-        return ClaudeSDKProvider().build_agent(
+        handle = ClaudeSDKProvider().build_agent(
             tier=tier,
             system_prompt=composed_system,
             tools=all_tools,
@@ -412,6 +414,9 @@ def build_agent(
             name=name,
             retries=retries,
         )
+        # Bound concurrent CLI-subprocess spawns process-wide so a worker
+        # fanning out many runs at startup can't stall on spawn contention.
+        return bound_claude_handle(handle, settings.claude_max_concurrency)
 
     # --- DeepSeek / OpenRouter (default) ---------------------------------
     # CostInstrumentedOpenRouterModel is a thin shim over robotsix-llmio's

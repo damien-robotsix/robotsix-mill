@@ -64,7 +64,9 @@ class TestBuildAgentRouting:
         handle, cap = self._build_routed(
             s, name="auto-approve", model_name="deepseek/deepseek-v4-flash"
         )
-        assert handle == "CLAUDE_HANDLE"
+        # The handle is wrapped by the global Claude-run concurrency bound; the
+        # wrapper delegates to the underlying provider handle.
+        assert handle._handle == "CLAUDE_HANDLE"
         assert cap["tier"] == Tier.CHEAP  # flash → cheap tier
         assert cap["system_prompt"] == "sys"
         assert cap["name"] == "auto-approve"

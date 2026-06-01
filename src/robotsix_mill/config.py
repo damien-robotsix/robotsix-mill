@@ -154,6 +154,15 @@ class Settings(BaseSettings):
     # (pro→DEFAULT/opus, flash→CHEAP/haiku) when Claude SDK is selected.
     llm_backend: str = Field(default="deepseek")
     claude_sdk_agents: list[str] = Field(default_factory=list)
+    # Process-wide cap on how many Claude Agent SDK runs may execute at once.
+    # Each run spawns a ``claude`` CLI subprocess; spawning many simultaneously
+    # (worker startup contention) can stall a run. A global semaphore (see
+    # ``agents.claude_concurrency``) bounds concurrent runs to smooth the spawn
+    # storm. Only takes effect when ``llm_backend``/``claude_sdk_agents`` routes
+    # work to the Claude SDK; the DeepSeek path is unaffected. Must be ≥ 1.
+    claude_max_concurrency: int = Field(
+        default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY"
+    )
     model: str = Field(default="deepseek/deepseek-v4-pro")
     explore_model: str = Field(default="deepseek/deepseek-v4-flash")
     test_model: str = Field(default="deepseek/deepseek-v4-flash")
@@ -1225,6 +1234,13 @@ class Settings(BaseSettings):
     def _validate_transient_retries(cls, v: int) -> int:
         if v < 0:
             raise ValueError("transient_retries must be ≥ 0")
+        return v
+
+    @field_validator("claude_max_concurrency")
+    @classmethod
+    def _validate_claude_max_concurrency(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("claude_max_concurrency must be ≥ 1")
         return v
 
     @field_validator("transient_backoff_base")
