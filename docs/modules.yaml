@@ -44,13 +44,18 @@ modules:
 
   - id: config
     description: >-
-      Configuration loading (YAML file + env), config template.
+      Configuration loading (YAML file + env), config template,
+      and the drift-detection script that keeps the MailConfig
+      dataclass, env example, YAML example, and connecting docs
+      in sync.
     paths:
       - src/robotsix_auto_mail/config.py
       - tests/test_config.py
       - .env.example
       - config/.gitkeep
       - config/mail.local.example.yaml
+      - scripts/check_config_sync.py
+      - tests/test_config_sync.py
 
   - id: db
     description: >-
