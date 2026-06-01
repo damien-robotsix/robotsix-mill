@@ -21,7 +21,6 @@ from pydantic import BaseModel, model_validator
 
 from ..config import Settings
 
-from . import history_compress
 
 log = logging.getLogger(__name__)
 
@@ -373,16 +372,11 @@ def run_coordinator(
                 # pydantic-ai doesn't append a duplicate.
                 run_user_prompt = None
 
-        # Compress older tool outputs if the estimated token count
-        # exceeds the configured budget (default: 80 % of 128 K).
-        if final_message_history is not None:
-            from .history_compress import compress_history
-
-            final_message_history = compress_history(
-                final_message_history,
-                max_tokens=settings.history_max_tokens,
-                keep_last=settings.history_keep_last,
-            )
+        # History is passed through verbatim — NO compression. Dropping messages
+        # from the front orphans a tool_call/tool_return pair or leaves a pending
+        # tool-result the model must continue from without its reasoning_content
+        # — both 400 on the DeepSeek capable tier. pydantic-ai round-trips
+        # reasoning natively when the history is left intact.
 
         result = run_agent(
             agent,
@@ -731,21 +725,12 @@ def run_coordinator_with_experts(
                 request_limit=settings.coordinator_request_limit,
             )
             try:
-                compressed_history = (
-                    history_compress.compress_history(
-                        preseed_history,
-                        max_tokens=settings.history_max_tokens,
-                        keep_last=settings.history_keep_last,
-                    )
-                    if preseed_history
-                    else None
-                )
                 run_result = run_agent(
                     agent,
                     lambda h: h.run_sync(
                         user_prompt,
                         usage_limits=limits,
-                        message_history=compressed_history,
+                        message_history=preseed_history or None,
                     ),
                     settings=settings,
                     what=f"expert:{domain}",

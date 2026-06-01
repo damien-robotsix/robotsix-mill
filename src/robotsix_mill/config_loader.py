@@ -285,8 +285,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.rate_limit_backoff_base": "rate_limit_backoff_base",
     "core.limits.rate_limit_backoff_cap": "rate_limit_backoff_cap",
     "core.limits.rate_limit_fallback_retries": "rate_limit_fallback_retries",
-    "core.limits.history_max_tokens": "history_max_tokens",
-    "core.limits.history_keep_last": "history_keep_last",
     # -- core.memory --
     "core.memory.max_memory_chars": "max_memory_chars",
     "core.memory.reference_files_max_count": "reference_files_max_count",
