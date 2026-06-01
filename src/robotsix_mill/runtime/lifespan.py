@@ -33,14 +33,21 @@ def setup_logging() -> None:
     docker logs — masking failures (e.g. a silently-crashing /audit
     background thread).  Idempotent.
     """
-    root = logging.getLogger("robotsix_mill")
-    if any(getattr(h, "_mill", False) for h in root.handlers):
-        return
-    h = logging.StreamHandler(sys.stdout)
-    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-    h._mill = True  # marker for idempotency
-    root.addHandler(h)
-    root.setLevel(logging.INFO)
+    # Configure both mill's own logger AND robotsix_llmio's, so the
+    # extracted LLM-I/O library's logs (esp. the claude_sdk per-turn stream
+    # feedback) surface in docker logs instead of vanishing at a handler-less
+    # root.
+    for logger_name in ("robotsix_mill", "robotsix_llmio"):
+        lg = logging.getLogger(logger_name)
+        if any(getattr(h, "_mill", False) for h in lg.handlers):
+            continue
+        h = logging.StreamHandler(sys.stdout)
+        h.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        h._mill = True  # marker for idempotency
+        lg.addHandler(h)
+        lg.setLevel(logging.INFO)
     # keep propagate=True: uvicorn leaves the real root handler-less so
     # there's no double-logging, and pytest's caplog needs propagation.
 
