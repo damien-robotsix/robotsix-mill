@@ -297,12 +297,12 @@ def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intention
             log.warning("web_knowledge append_general failed: %s", e)
             return f"(write error: {e!s})"
 
-    def web_search(query: str) -> str:
+    async def web_search(query: str) -> str:
         """Search the web for *query*. Use sparingly — prefer the
         cached files when they cover the question. Returns the
         web-research sub-agent's distilled conclusion (it has already
         read pages for you)."""
-        return run_web_research(settings=settings, query=query)
+        return await run_web_research(settings=settings, query=query)
 
     return [
         list_knowledge_files,
