@@ -111,7 +111,9 @@ def test_semaphore_bounds_concurrent_run_sync():
 
     wrapped = bound_claude_handle(_SlowHandle(), limit=limit)
 
-    threads = [threading.Thread(target=wrapped.run_sync, args=("go",)) for _ in range(8)]
+    threads = [
+        threading.Thread(target=wrapped.run_sync, args=("go",)) for _ in range(8)
+    ]
     for t in threads:
         t.start()
     for t in threads:

@@ -160,9 +160,7 @@ class Settings(BaseSettings):
     # ``agents.claude_concurrency``) bounds concurrent runs to smooth the spawn
     # storm. Only takes effect when ``llm_backend``/``claude_sdk_agents`` routes
     # work to the Claude SDK; the DeepSeek path is unaffected. Must be ≥ 1.
-    claude_max_concurrency: int = Field(
-        default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY"
-    )
+    claude_max_concurrency: int = Field(default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY")
     model: str = Field(default="deepseek/deepseek-v4-pro")
     explore_model: str = Field(default="deepseek/deepseek-v4-flash")
     test_model: str = Field(default="deepseek/deepseek-v4-flash")
