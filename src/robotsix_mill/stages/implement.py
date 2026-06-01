@@ -944,7 +944,10 @@ class ImplementStage(Stage):
                     next_action="return",
                     outcome=Outcome(State.DONE, f"no change needed — {short}"),
                 )
-            if not ImplementStage._any_repo_has_changes(repo_dir, extra_roots) and not resuming:
+            if (
+                not ImplementStage._any_repo_has_changes(repo_dir, extra_roots)
+                and not resuming
+            ):
                 # Silent no-change on a fresh run (agent didn't signal):
                 # BLOCK so the operator can investigate. Capture the
                 # agent's own narrative so they have something to
@@ -1255,9 +1258,8 @@ class ImplementStage(Stage):
             for repo_path in extra_roots:
                 if repo_path == repo_dir:
                     continue
-                if (
-                    git_ops.has_changes(repo_path)
-                    or git_ops.branch_is_ahead_of_main(repo_path)
+                if git_ops.has_changes(repo_path) or git_ops.branch_is_ahead_of_main(
+                    repo_path
                 ):
                     return True
         return False
@@ -1311,8 +1313,8 @@ class ImplementStage(Stage):
                 exc_info=True,
             )
         # Commit message format — identical for all repos.
-        commit_message = (
-            f"mill: {ticket.title} ({ticket.id})" + ("" if ok else " [WIP]")
+        commit_message = f"mill: {ticket.title} ({ticket.id})" + (
+            "" if ok else " [WIP]"
         )
         # Per-repo commit for extra_roots (multi-repo meta tickets).
         # Write a touched_repos.json artifact listing every repo that

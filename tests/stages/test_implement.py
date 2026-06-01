@@ -3104,7 +3104,9 @@ def test_multi_repo_happy_path_two_repos_both_touched(
     )
 
     monkeypatch.setattr(
-        mt, "required_repos_for", lambda *, settings, spec: ["test-repo-0", "test-repo-1"]
+        mt,
+        "required_repos_for",
+        lambda *, settings, spec: ["test-repo-0", "test-repo-1"],
     )
     monkeypatch.setattr(
         mw,
@@ -3116,7 +3118,7 @@ def test_multi_repo_happy_path_two_repos_both_touched(
         del kw
         # Write to BOTH repos so both get a commit.
         (Path(repo_dir) / "feature.txt").write_text("primary edit")
-        for rp in (extra_roots or []):
+        for rp in extra_roots or []:
             (Path(rp) / "feature.txt").write_text("extra edit")
         return ("cross-repo done", ["feature.txt"], "", None, None, False, "")
 
@@ -3131,7 +3133,8 @@ def test_multi_repo_happy_path_two_repos_both_touched(
     for rp in extra_roots:
         head = subprocess.run(
             ["git", "-C", str(rp), "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         assert head == branch, f"{rp.name} should be on {branch}, got {head}"
 
@@ -3139,7 +3142,8 @@ def test_multi_repo_happy_path_two_repos_both_touched(
     for rp in extra_roots:
         log = subprocess.run(
             ["git", "-C", str(rp), "log", "-1", "--pretty=%s"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout
         assert "Cross-repo change" in log, f"{rp.name} missing commit"
         assert "[WIP]" not in log, f"{rp.name} should not have WIP suffix"
@@ -3157,9 +3161,7 @@ def test_multi_repo_happy_path_two_repos_both_touched(
         assert Path(entry["repo_path"]).exists()
 
 
-def test_multi_repo_partial_edit_one_of_two_touched(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_multi_repo_partial_edit_one_of_two_touched(ctx_factory, tmp_path, monkeypatch):
     """AC1 partial: N=2 repos, only one modified → only that one gets a
     commit, but both get branches. touched_repos.json lists only the
     touched repo."""
@@ -3180,7 +3182,9 @@ def test_multi_repo_partial_edit_one_of_two_touched(
     )
 
     monkeypatch.setattr(
-        mt, "required_repos_for", lambda *, settings, spec: ["test-repo-0", "test-repo-1"]
+        mt,
+        "required_repos_for",
+        lambda *, settings, spec: ["test-repo-0", "test-repo-1"],
     )
     monkeypatch.setattr(
         mw,
@@ -3205,20 +3209,23 @@ def test_multi_repo_partial_edit_one_of_two_touched(
     for rp in extra_roots:
         head = subprocess.run(
             ["git", "-C", str(rp), "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         assert head == branch, f"{rp.name} should be on {branch}, got {head}"
 
     # Primary has a commit; extra root does NOT.
     primary_log = subprocess.run(
         ["git", "-C", str(repo_dir), "log", "-1", "--pretty=%s"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout
     assert "Partial cross-repo" in primary_log
 
     extra_log = subprocess.run(
         ["git", "-C", str(extra_roots[1]), "log", "-1", "--pretty=%s"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout
     # The extra root should have only its initial commit (or none beyond
     # the clone), NOT a mill: commit.
@@ -3248,9 +3255,7 @@ def test_single_repo_meta_regression(ctx_factory, tmp_path, monkeypatch):
     t.board_id = "meta"
     _write_file_map(ctx, t, "feature.txt")
 
-    repo_dir, extra_roots = _build_multi_repo_clones(
-        tmp_path, [remote], ctx, t
-    )
+    repo_dir, extra_roots = _build_multi_repo_clones(tmp_path, [remote], ctx, t)
 
     monkeypatch.setattr(
         mt, "required_repos_for", lambda *, settings, spec: ["test-repo-0"]
@@ -3275,13 +3280,15 @@ def test_single_repo_meta_regression(ctx_factory, tmp_path, monkeypatch):
     branch = f"mill/{t.id}"
     head = subprocess.run(
         ["git", "-C", str(repo_dir), "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
     assert head == branch
 
     log = subprocess.run(
         ["git", "-C", str(repo_dir), "log", "-1", "--pretty=%s"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout
     assert "Single-repo meta" in log
 
@@ -3312,15 +3319,14 @@ def test_non_meta_ticket_no_touched_repos_json(ctx_factory, tmp_path, monkeypatc
 
     ws = ctx.service.workspace(t)
     tr_path = ws.artifacts_dir / "touched_repos.json"
-    assert not tr_path.exists(), (
-        "non-meta tickets must not produce touched_repos.json"
-    )
+    assert not tr_path.exists(), "non-meta tickets must not produce touched_repos.json"
 
     # Primary repo still committed as before.
     repo = ws.dir / "repo"
     log = subprocess.run(
         ["git", "-C", str(repo), "log", "-1", "--pretty=%s"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout
     assert "Add feature" in log
     assert "[WIP]" not in log
@@ -3347,7 +3353,9 @@ def test_multi_repo_resume_after_blocked(ctx_factory, tmp_path, monkeypatch):
     )
 
     monkeypatch.setattr(
-        mt, "required_repos_for", lambda *, settings, spec: ["test-repo-0", "test-repo-1"]
+        mt,
+        "required_repos_for",
+        lambda *, settings, spec: ["test-repo-0", "test-repo-1"],
     )
     monkeypatch.setattr(
         mw,
@@ -3366,7 +3374,7 @@ def test_multi_repo_resume_after_blocked(ctx_factory, tmp_path, monkeypatch):
             raise coding.AgentBudgetError("cap hit", [])
         # Resume pass: write to BOTH repos.
         (Path(repo_dir) / "second.txt").write_text("resumed work")
-        for rp in (extra_roots or []):
+        for rp in extra_roots or []:
             if rp != repo_dir:
                 (rp / "second.txt").write_text("extra resumed work")
         return ("done on resume", [], "", None, None, False, "")
@@ -3383,12 +3391,14 @@ def test_multi_repo_resume_after_blocked(ctx_factory, tmp_path, monkeypatch):
     branch = f"mill/{t.id}"
     primary_log = subprocess.run(
         ["git", "-C", str(repo_dir), "log", "--pretty=%s"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout
     assert "WIP" in primary_log
     extra_log = subprocess.run(
         ["git", "-C", str(extra_roots[1]), "log", "--pretty=%s"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout
     assert "mill:" not in extra_log  # no commit on the untouched extra repo
 
@@ -3406,13 +3416,16 @@ def test_multi_repo_resume_after_blocked(ctx_factory, tmp_path, monkeypatch):
     for rp in extra_roots:
         head = subprocess.run(
             ["git", "-C", str(rp), "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         assert head == branch
 
     # Both repos have commits from the resume pass.
     ws = ctx.service.workspace(t2)
-    tr = json.loads((ws.artifacts_dir / "touched_repos.json").read_text(encoding="utf-8"))
+    tr = json.loads(
+        (ws.artifacts_dir / "touched_repos.json").read_text(encoding="utf-8")
+    )
     assert len(tr) == 2
 
 
@@ -3439,7 +3452,9 @@ def test_no_change_needed_guard_multi_repo_extra_has_changes(
     )
 
     monkeypatch.setattr(
-        mt, "required_repos_for", lambda *, settings, spec: ["test-repo-0", "test-repo-1"]
+        mt,
+        "required_repos_for",
+        lambda *, settings, spec: ["test-repo-0", "test-repo-1"],
     )
     monkeypatch.setattr(
         mw,
@@ -3476,14 +3491,14 @@ def test_no_change_needed_guard_multi_repo_extra_has_changes(
 
     # touched_repos.json lists the extra root.
     ws = ctx.service.workspace(t)
-    tr = json.loads((ws.artifacts_dir / "touched_repos.json").read_text(encoding="utf-8"))
+    tr = json.loads(
+        (ws.artifacts_dir / "touched_repos.json").read_text(encoding="utf-8")
+    )
     assert len(tr) == 1
     assert tr[0]["repo_id"] == "test-repo-1"
 
 
-def test_silent_no_change_guard_multi_repo(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_silent_no_change_guard_multi_repo(ctx_factory, tmp_path, monkeypatch):
     """AC6: agent edits an extra repo but does NOT set no_change_needed
     and does NOT set the flag. The BLOCKED guard fires only if NO repo
     has changes — with an extra-root change it proceeds normally."""
@@ -3504,7 +3519,9 @@ def test_silent_no_change_guard_multi_repo(
     )
 
     monkeypatch.setattr(
-        mt, "required_repos_for", lambda *, settings, spec: ["test-repo-0", "test-repo-1"]
+        mt,
+        "required_repos_for",
+        lambda *, settings, spec: ["test-repo-0", "test-repo-1"],
     )
     monkeypatch.setattr(
         mw,
@@ -3533,9 +3550,7 @@ def test_silent_no_change_guard_multi_repo(
     assert out.next_state is State.DOCUMENTING
 
 
-def test_touched_repos_json_content_validation(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_touched_repos_json_content_validation(ctx_factory, tmp_path, monkeypatch):
     """AC5 variant: verify touched_repos.json has correct schema —
     repo_id, branch, repo_path — and each repo_path points to an
     existing directory."""
@@ -3556,7 +3571,9 @@ def test_touched_repos_json_content_validation(
     )
 
     monkeypatch.setattr(
-        mt, "required_repos_for", lambda *, settings, spec: ["test-repo-0", "test-repo-1"]
+        mt,
+        "required_repos_for",
+        lambda *, settings, spec: ["test-repo-0", "test-repo-1"],
     )
     monkeypatch.setattr(
         mw,
@@ -3567,7 +3584,7 @@ def test_touched_repos_json_content_validation(
     def _agent(*, repo_dir, extra_roots, **kw):
         del kw
         (Path(repo_dir) / "feature.txt").write_text("edit A")
-        for rp in (extra_roots or []):
+        for rp in extra_roots or []:
             if rp != repo_dir:
                 (rp / "feature.txt").write_text("edit B")
         return ("done", ["feature.txt"], "", None, None, False, "")
@@ -3595,9 +3612,7 @@ def test_touched_repos_json_content_validation(
         assert (Path(entry["repo_path"]) / ".git").exists()
 
 
-def test_touched_repos_json_empty_on_no_change(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_touched_repos_json_empty_on_no_change(ctx_factory, tmp_path, monkeypatch):
     """On the no-change-needed path (no commits anywhere), touched_repos.json
     is written as an empty list."""
     import robotsix_mill.agents.meta_triage as mt
@@ -3617,7 +3632,9 @@ def test_touched_repos_json_empty_on_no_change(
     )
 
     monkeypatch.setattr(
-        mt, "required_repos_for", lambda *, settings, spec: ["test-repo-0", "test-repo-1"]
+        mt,
+        "required_repos_for",
+        lambda *, settings, spec: ["test-repo-0", "test-repo-1"],
     )
     monkeypatch.setattr(
         mw,
