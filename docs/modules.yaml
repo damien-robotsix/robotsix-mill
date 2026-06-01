@@ -341,6 +341,31 @@ modules:
     dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, langfuse, sandbox]
 
   # -------------------------------------------------------------------
+  # Meta-pass (cross-repo analysis)
+  # -------------------------------------------------------------------
+
+  - id: meta
+    description: >-
+      Meta-pass cross-repo analysis infrastructure.  Hosts the meta-agent
+      reasoning core (surveys every registered repo and emits extraction
+      and alignment proposals), the meta repo-triage agent (decides which
+      repos a meta-board ticket touches), the multi-repo workspace builder
+      used by refine/implement on meta tickets, and the meta-pass
+      integration runner that wires everything together (clone-all,
+      meta-agent, board routing, cross-repo memory ledger, mill-pinned
+      tracing).
+    paths:
+      - src/robotsix_mill/agents/meta.py
+      - src/robotsix_mill/agents/meta_triage.py
+      - src/robotsix_mill/meta_runner.py
+      - src/robotsix_mill/meta_workspace.py
+      - tests/agents/test_meta_agent_build.py
+      - tests/agents/test_meta_triage.py
+      - tests/test_meta_runner.py
+      - tests/test_meta_workspace.py
+    dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, runtime]
+
+  # -------------------------------------------------------------------
   # Support services
   # -------------------------------------------------------------------
 
