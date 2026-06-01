@@ -237,8 +237,12 @@ class ClaudeSDKModel(Model):
 
         chunks: list[str] = []
         result: Any = None
+        from .provider import _log_stream_message  # live per-turn feedback
+
+        turn = [0]
         try:
             async for message in query(prompt=prompt, options=options):
+                _log_stream_message(message, turn, f"claude:{self._model_name}")
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock):

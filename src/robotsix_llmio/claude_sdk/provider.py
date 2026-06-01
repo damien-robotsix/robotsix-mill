@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -20,6 +21,71 @@ from typing import Any
 from ..core._otel import get_tracer, start_span
 from ..core.provider import LLMProvider, Tier
 from .transient import is_claude_sdk_transient
+
+log = logging.getLogger("robotsix_llmio.claude_sdk")
+
+
+def _short(value: Any, limit: int = 200) -> str:
+    """One-line, length-capped repr of a tool input / text for logging."""
+    s = value if isinstance(value, str) else json.dumps(value, default=str)
+    s = " ".join(s.split())
+    return s if len(s) <= limit else s[:limit] + "…"
+
+
+def _log_stream_message(message: Any, turn: list[int], label: str) -> None:
+    """Emit a concise INFO line for one streamed Claude SDK message.
+
+    Gives live feedback on what the agent is doing — turns, tool calls, tool
+    results, the final result — even when Langfuse spans haven't flushed yet
+    (a stuck agent never completes its span, so this is the only signal).
+    *turn* is a 1-element list used as a mutable counter across the loop.
+    """
+    cls = type(message).__name__
+    try:
+        if cls == "AssistantMessage":
+            turn[0] += 1
+            for block in getattr(message, "content", []) or []:
+                bcls = type(block).__name__
+                if bcls == "TextBlock":
+                    txt = getattr(block, "text", "") or ""
+                    if txt.strip():
+                        log.info("%s turn %d: text — %s", label, turn[0], _short(txt))
+                elif bcls == "ToolUseBlock":
+                    log.info(
+                        "%s turn %d: tool_use %s(%s)",
+                        label,
+                        turn[0],
+                        getattr(block, "name", "?"),
+                        _short(getattr(block, "input", {})),
+                    )
+                elif bcls == "ThinkingBlock":
+                    log.info(
+                        "%s turn %d: thinking (%d chars)",
+                        label,
+                        turn[0],
+                        len(getattr(block, "thinking", "") or ""),
+                    )
+        elif cls in ("UserMessage", "ToolResultMessage"):
+            for block in getattr(message, "content", []) or []:
+                if type(block).__name__ == "ToolResultBlock":
+                    is_err = bool(getattr(block, "is_error", False))
+                    log.info(
+                        "%s tool_result%s — %s",
+                        label,
+                        " [ERROR]" if is_err else "",
+                        _short(getattr(block, "content", "")),
+                    )
+        elif cls == "ResultMessage":
+            log.info(
+                "%s result: subtype=%s is_error=%s turns=%d duration_ms=%s",
+                label,
+                getattr(message, "subtype", "?"),
+                getattr(message, "is_error", "?"),
+                turn[0],
+                getattr(message, "duration_ms", "?"),
+            )
+    except Exception:  # noqa: BLE001 — logging must never break the agent loop
+        pass
 
 _TRACER_NAME = "robotsix_llmio.claude_sdk"
 
@@ -281,7 +347,10 @@ class _SdkToolAgentHandle:
                 "langfuse.observation.input": user_prompt,
             },
         ) as root:
+            turn = [0]
+            log.info("%s: starting (model=%s, max_turns=%d)", self._name, self._sdk_model, self._max_turns)
             async for message in query(prompt=user_prompt, options=options):
+                _log_stream_message(message, turn, self._name)
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock):
