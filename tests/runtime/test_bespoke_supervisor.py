@@ -143,7 +143,7 @@ class TestBespokeSupervisor:
             "bespoke_discovery_interval_seconds",
             60,
         )
-        task = asyncio.create_task(worker._bespoke_supervisor(repo_config))
+        task = asyncio.create_task(worker._periodic_supervisor(repo_config))
         # Let the discovery + spawn happen.
         for _ in range(20):
             if spawned:
@@ -215,7 +215,7 @@ class TestBespokeSupervisor:
 
         monkeypatch.setattr(_w_mod.asyncio, "sleep", fast_sleep)
 
-        task = asyncio.create_task(worker._bespoke_supervisor(repo_config))
+        task = asyncio.create_task(worker._periodic_supervisor(repo_config))
         # Wait until first cycle ran (loop spawned) — give a few ticks.
         await real_sleep(0.05)
         # Remove the YAML and let another cycle happen.
@@ -282,7 +282,7 @@ class TestBespokeSupervisor:
 
         monkeypatch.setattr(_w_mod.asyncio, "sleep", fast_sleep)
 
-        task = asyncio.create_task(worker._bespoke_supervisor(repo_config))
+        task = asyncio.create_task(worker._periodic_supervisor(repo_config))
         await real_sleep(0.05)
         # Mutate the YAML body in place.
         _write_yaml(
@@ -342,7 +342,7 @@ class TestBespokeSupervisor:
             raising=True,
         )
 
-        task = asyncio.create_task(worker._bespoke_supervisor(repo_config))
+        task = asyncio.create_task(worker._periodic_supervisor(repo_config))
         for _ in range(30):
             if len(running_children) >= 3:
                 break
@@ -360,3 +360,77 @@ class TestBespokeSupervisor:
             "supervisor cancellation did NOT propagate to child bespoke "
             "loops; per-bespoke LLM invocations would leak past stop()"
         )
+
+
+# ---------------------------------------------------------------------------
+#  Unified periodic-workflow path (.robotsix-mill/periodic/<name>.yaml)
+# ---------------------------------------------------------------------------
+
+
+class TestPeriodicSupervisorWorkflows:
+    @pytest.mark.asyncio
+    async def test_presence_file_schedules_llm_agent_loop(
+        self, tmp_path, monkeypatch, worker, repo_config
+    ):
+        """An `audit` presence file under .robotsix-mill/periodic/ makes the
+        supervisor schedule a periodic-workflow loop (llm_agent kind) with the
+        merged definition."""
+        _stub_clone_helpers(monkeypatch)
+        clone = _make_clone(tmp_path, repo_config.board_id)
+        _write_yaml(
+            clone / ".robotsix-mill" / "periodic" / "audit.yaml",
+            {"name": "audit", "interval_seconds": 4242},
+        )
+
+        scheduled = []
+
+        async def fake_loop(self, rc, wf, clone_dir):
+            scheduled.append(wf)
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(
+            Worker, "_run_periodic_workflow_loop", fake_loop, raising=True
+        )
+        monkeypatch.setattr(
+            worker.ctx.settings, "bespoke_discovery_interval_seconds", 60
+        )
+
+        task = asyncio.create_task(worker._periodic_supervisor(repo_config))
+        for _ in range(30):
+            if scheduled:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        assert len(scheduled) == 1
+        assert scheduled[0].name == "audit"
+        assert scheduled[0].kind == "llm_agent"
+        assert scheduled[0].interval_seconds == 4242
+
+    def test_has_periodic_presence(self, tmp_path, worker, repo_config):
+        clone = _make_clone(tmp_path, repo_config.board_id)
+        assert worker._has_periodic_presence(repo_config, "audit") is False
+        _write_yaml(
+            clone / ".robotsix-mill" / "periodic" / "audit.yaml", {"name": "audit"}
+        )
+        assert worker._has_periodic_presence(repo_config, "audit") is True
+        # hyphen→underscore normalization
+        _write_yaml(
+            clone / ".robotsix-mill" / "periodic" / "copy_paste.yaml",
+            {"name": "copy_paste"},
+        )
+        assert worker._has_periodic_presence(repo_config, "copy-paste") is True
+
+    def test_build_runner_by_kind(self, worker):
+        from types import SimpleNamespace
+
+        llm = SimpleNamespace(kind="llm_agent", name="audit", definition=object())
+        assert callable(worker._build_periodic_workflow_runner(llm))
+        sched = SimpleNamespace(kind="schedule_only", name="trace_review")
+        assert callable(worker._build_periodic_workflow_runner(sched))
+        maint = SimpleNamespace(kind="maintenance", name="cost_warmer")
+        assert worker._build_periodic_workflow_runner(maint) is None
