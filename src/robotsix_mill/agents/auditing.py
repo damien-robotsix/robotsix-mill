@@ -41,6 +41,7 @@ def run_audit_agent(
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
+    definition_override=None,
 ) -> AuditResult:
     """Run the meta-audit pass.
 
@@ -92,6 +93,7 @@ def run_audit_agent(
     return run_periodic_agent(
         settings=settings,
         definition_name="audit",
+        definition_override=definition_override,
         model_setting=settings.audit_model,
         max_gaps=MAX_GAPS,
         repo_dir=repo_dir,

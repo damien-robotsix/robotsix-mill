@@ -44,6 +44,7 @@ def run_test_gap_agent(
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
+    definition_override=None,
 ) -> TestGapResult:
     """Run the test-gap coverage inspection pass.
 
@@ -89,6 +90,7 @@ def run_test_gap_agent(
     return run_periodic_agent(
         settings=settings,
         definition_name="test_gap",
+        definition_override=definition_override,
         model_setting=settings.test_gap_model,
         max_gaps=MAX_GAPS,
         repo_dir=repo_dir,

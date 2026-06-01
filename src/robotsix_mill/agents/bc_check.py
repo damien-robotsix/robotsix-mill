@@ -44,6 +44,7 @@ def run_bc_check_agent(
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
+    definition_override=None,
 ) -> BcCheckResult:
     """Run the backward-compatibility inspection pass.
 
@@ -79,6 +80,7 @@ def run_bc_check_agent(
     return run_periodic_agent(
         settings=settings,
         definition_name="bc_check",
+        definition_override=definition_override,
         model_setting=settings.bc_check_model,
         max_gaps=MAX_GAPS,
         repo_dir=repo_dir,

@@ -35,6 +35,7 @@ def run_module_curator_agent(
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
+    definition_override=None,
 ) -> ModuleCuratorResult:
     """Run the module-curator pass.
 
@@ -60,15 +61,19 @@ def run_module_curator_agent(
         clipped to ``MAX_DRAFTS`` (20) entries, plus the updated memory
         ledger.
     """
-    from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / "module_curator.yaml"
-    )
+    if definition_override is not None:
+        definition = definition_override
+    else:
+        from .yaml_loader import load_agent_definition
+
+        definition = load_agent_definition(
+            Path(__file__).parent.parent.parent.parent
+            / "agent_definitions"
+            / "periodic"
+            / "module_curator.yaml"
+        )
 
     tools: list = []
     if repo_dir is not None:
@@ -82,12 +87,15 @@ def run_module_curator_agent(
         ]
         tools = [make_explore_tool(settings, repo_dir), *ro]
 
-    from .overlays import apply_overlay, load_overlay
+    if definition_override is not None:
+        system_prompt = definition.system_prompt
+    else:
+        from .overlays import apply_overlay, load_overlay
 
-    system_prompt = apply_overlay(
-        definition.system_prompt,
-        load_overlay(repo_dir, "module_curator"),
-    )
+        system_prompt = apply_overlay(
+            definition.system_prompt,
+            load_overlay(repo_dir, "module_curator"),
+        )
     agent = build_agent_from_definition(
         settings,
         definition,

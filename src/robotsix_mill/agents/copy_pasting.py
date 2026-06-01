@@ -45,6 +45,7 @@ def run_copy_paste_agent(
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
+    definition_override=None,
 ) -> CopyPasteResult:
     """Run the copy-paste detection pass.
 
@@ -79,6 +80,7 @@ def run_copy_paste_agent(
     return run_periodic_agent(
         settings=settings,
         definition_name="copy_paste",
+        definition_override=definition_override,
         model_setting=settings.copy_paste_model,
         max_gaps=MAX_GAPS,
         repo_dir=repo_dir,

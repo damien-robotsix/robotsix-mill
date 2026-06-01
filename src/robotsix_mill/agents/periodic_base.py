@@ -30,6 +30,7 @@ def run_periodic_agent(
     include_run_command: bool = False,
     extra_roots: list[Path] | None = None,
     usage_limits: Any = None,
+    definition_override: Any = None,
 ) -> Any:
     """Run a periodic agent through the standard 7-step pipeline.
 
@@ -80,17 +81,25 @@ def run_periodic_agent(
         *max_gaps*.
     """
     # ------------------------------------------------------------------
-    # Step 1 — load the YAML agent definition
+    # Step 1 — resolve the agent definition
     # ------------------------------------------------------------------
-    from .yaml_loader import load_agent_definition
+    # When the per-repo periodic supervisor resolved a merged definition
+    # (partial-override + in-file prompt overlay from
+    # .robotsix-mill/periodic/<name>.yaml), use it verbatim — its prompt
+    # and model already reflect the repo's overrides. Otherwise fall back
+    # to the shipped built-in yaml (legacy / direct-call path).
+    if definition_override is not None:
+        definition = definition_override
+    else:
+        from .yaml_loader import load_agent_definition
 
-    yaml_path = (
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / f"{definition_name}.yaml"
-    )
-    definition = load_agent_definition(yaml_path)
+        yaml_path = (
+            Path(__file__).parent.parent.parent.parent
+            / "agent_definitions"
+            / "periodic"
+            / f"{definition_name}.yaml"
+        )
+        definition = load_agent_definition(yaml_path)
 
     # ------------------------------------------------------------------
     # Step 2 — conditionally build the tool list
@@ -123,14 +132,20 @@ def run_periodic_agent(
         tools.extend(ro)
 
     # ------------------------------------------------------------------
-    # Step 3 — apply the per-repo overlay
+    # Step 3 — resolve the system prompt
     # ------------------------------------------------------------------
-    from .overlays import apply_overlay, load_overlay
+    # The merged override already applied any in-file prompt_overlay /
+    # system_prompt, so use its prompt directly. Only the legacy built-in
+    # path consults the deprecated .robotsix-mill/agent_overlays/<name>.md.
+    if definition_override is not None:
+        system_prompt = definition.system_prompt
+    else:
+        from .overlays import apply_overlay, load_overlay
 
-    system_prompt = apply_overlay(
-        definition.system_prompt,
-        load_overlay(repo_dir, definition_name),
-    )
+        system_prompt = apply_overlay(
+            definition.system_prompt,
+            load_overlay(repo_dir, definition_name),
+        )
 
     # ------------------------------------------------------------------
     # Step 4 — build the agent

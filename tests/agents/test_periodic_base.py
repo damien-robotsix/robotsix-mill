@@ -512,3 +512,41 @@ def test_definition_model_overrides_model_setting(settings, monkeypatch, tmp_pat
 
     _, build_kwargs = mocks["build_agent_from_definition"].call_args
     assert build_kwargs["model_name"] == "yaml-model"
+
+
+# ---------------------------------------------------------------------------
+# definition_override seam (per-repo .robotsix-mill/periodic/<name>.yaml)
+# ---------------------------------------------------------------------------
+
+
+def test_definition_override_bypasses_builtin_load_and_overlay(
+    settings, monkeypatch, tmp_path
+):
+    """When the supervisor passes a resolved override, run_periodic_agent must
+    use it verbatim — NOT load the built-in yaml, NOT apply the legacy .md
+    overlay — and build the agent with the override's prompt + model."""
+    mocks = _setup_patches(monkeypatch)
+
+    override = _default_definition()
+    override.system_prompt = "MERGED REPO PROMPT"
+    override.model = "repo-model"
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="audit",
+        model_setting=settings.audit_model,
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="",
+        recent_proposals="",
+        prompt_tail="go",
+        definition_override=override,
+    )
+
+    # built-in yaml NOT loaded; legacy overlay NOT consulted
+    mocks["load_agent_definition"].assert_not_called()
+    mocks["load_overlay"].assert_not_called()
+    # agent built from the override, with its prompt + model
+    _, kwargs = mocks["build_agent_from_definition"].call_args
+    assert kwargs["system_prompt"] == "MERGED REPO PROMPT"
+    assert kwargs["model_name"] == "repo-model"

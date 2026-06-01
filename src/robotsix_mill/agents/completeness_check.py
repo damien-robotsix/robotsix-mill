@@ -43,6 +43,7 @@ def run_completeness_check_agent(
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
+    definition_override=None,
 ) -> CompletenessCheckResult:
     """Run the feature-completeness inspection pass.
 
@@ -79,6 +80,7 @@ def run_completeness_check_agent(
     return run_periodic_agent(
         settings=settings,
         definition_name="completeness_check",
+        definition_override=definition_override,
         model_setting=settings.completeness_check_model,
         max_gaps=MAX_GAPS,
         repo_dir=repo_dir,
