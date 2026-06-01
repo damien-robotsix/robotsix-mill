@@ -191,6 +191,7 @@ modules:
       - src/robotsix_mill/stages/ci_fix.py
       - src/robotsix_mill/stages/pause.py
       - src/robotsix_mill/stages/retrospect.py
+      - tests/stages/test_registry.py
       - tests/stages/test_implement.py
       - tests/stages/test_deliver.py
       - tests/stages/test_document.py
