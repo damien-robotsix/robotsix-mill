@@ -118,6 +118,10 @@ modules:
       - tests/runtime/test_recent_traces.py
       - tests/runtime/test_bespoke_supervisor.py
       - tests/runtime/test_transient_errors.py
+      - tests/runtime/test_candidates_routes.py
+      - tests/runtime/test_deps.py
+      - tests/runtime/test_lifespan.py
+      - tests/runtime/test_stage_retry.py
       - src/robotsix_mill/agent_candidates.py
       - tests/test_agent_candidates.py
     dependencies: [config, core, forge, stages]
