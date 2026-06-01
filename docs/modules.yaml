@@ -219,6 +219,7 @@ modules:
       - src/robotsix_mill/agents/retry.py
       - src/robotsix_mill/agents/openrouter_cost.py
       - src/robotsix_mill/agents/overlays.py
+      - src/robotsix_mill/agents/periodic_base.py
       - tests/agents/test_build_agent_from_definition.py
       - tests/agents/test_yaml_loader.py
       - tests/agents/test_expert_loader.py
@@ -230,6 +231,7 @@ modules:
       - tests/agents/test_agent_double_emit.py
       - tests/agents/test_agents_rework.py
       - tests/agents/test_overlays.py
+      - tests/agents/test_periodic_base.py
     dependencies: [config, core, sandbox]
 
   - id: agent-tools
