@@ -973,6 +973,14 @@ class Settings(BaseSettings):
     # threshold are reported as oversized.  Default 100 MiB.
     # Override with MILL_DATA_DIR_AUDIT_SIZE_THRESHOLD_BYTES.
     data_dir_audit_size_threshold_bytes: int = Field(default=104_857_600)
+    # If a file or directory grew by at least this many bytes since
+    # the last audit pass, flag it for growth.  Default 10 MiB.
+    # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_BYTES.
+    data_dir_audit_growth_delta_bytes: int = Field(default=10485760)
+    # If a file or directory grew by at least this percentage since
+    # the last audit pass, flag it for growth.  Default 20 (%).
+    # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_PCT.
+    data_dir_audit_growth_delta_pct: int = Field(default=20)
 
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same
