@@ -246,6 +246,7 @@ modules:
       - src/robotsix_mill/agents/web_tools.py
       - src/robotsix_mill/agents/explore.py
       - src/robotsix_mill/agents/web_research.py
+      - src/robotsix_mill/agents/web_knowledge.py
       - src/robotsix_mill/agents/report_issue.py
       - src/robotsix_mill/agents/jscpd_tool.py
       - src/robotsix_mill/agents/ci_patterns.py
