@@ -312,6 +312,52 @@ def compose_prompt(
     return prompt
 
 
+def _build_deepseek_handle(
+    settings: Settings,
+    *,
+    effective_model: str,
+    composed_system: str,
+    all_tools: list,
+    output_type: Any,
+    name: str | None,
+    retries: int,
+) -> AgentHandle:
+    """Build the DeepSeek/OpenRouter ``AgentHandle`` for an agent.
+
+    Factored out of :func:`build_agent` so it backs both the default path AND
+    the Claude→DeepSeek fallback (which needs to build the same agent on the
+    OpenRouter backend on demand). ``CostInstrumentedOpenRouterModel`` is a thin
+    shim over robotsix-llmio's ``OpenRouterDeepseekModel``; construction stays
+    here so the model-patch test seam keeps working."""
+    if not get_secrets().openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+
+    from pydantic_ai import Agent
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    from .openrouter_cost import CostInstrumentedOpenRouterModel
+
+    http_client = timeout_http_client(settings)
+    model = CostInstrumentedOpenRouterModel(
+        effective_model,
+        provider=OpenRouterProvider(
+            api_key=get_secrets().openrouter_api_key,
+            http_client=http_client,
+        ),
+    )
+    agent_kwargs: dict[str, Any] = dict(
+        model=model,
+        system_prompt=composed_system,
+        output_type=output_type,
+        tools=all_tools,
+        retries=retries,
+    )
+    if name is not None:
+        agent_kwargs["name"] = name
+    agent = Agent(**agent_kwargs)
+    return AgentHandle(agent, http_client)
+
+
 def build_agent(
     settings: Settings,
     *,
@@ -442,36 +488,38 @@ def build_agent(
         )
         # Bound concurrent CLI-subprocess spawns process-wide so a worker
         # fanning out many runs at startup can't stall on spawn contention.
-        return bound_claude_handle(handle, settings.claude_max_concurrency)
+        primary = bound_claude_handle(handle, settings.claude_max_concurrency)
+
+        # Resilience: if the Claude run terminally fails (after its local
+        # retries), fall back to the equivalent DeepSeek build of THIS agent —
+        # same prompt/tools/output, same tier-resolved model (effective_model).
+        # Lazily built (only on an actual fallback) and only when an OpenRouter
+        # key exists, so the no-key Claude-only setup is unaffected. run_agent()
+        # drives the retry-then-fallback; see agents/fallback.py.
+        if settings.claude_fallback_to_deepseek and get_secrets().openrouter_api_key:
+            from .fallback import FallbackAgentHandle
+
+            return FallbackAgentHandle(
+                primary,
+                lambda: _build_deepseek_handle(
+                    settings,
+                    effective_model=effective_model,
+                    composed_system=composed_system,
+                    all_tools=all_tools,
+                    output_type=output_type,
+                    name=name,
+                    retries=retries,
+                ),
+            )
+        return primary
 
     # --- DeepSeek / OpenRouter (default) ---------------------------------
-    # CostInstrumentedOpenRouterModel is a thin shim over robotsix-llmio's
-    # OpenRouterDeepseekModel; construction stays here so the model-patch
-    # test seam keeps working.
-    if not get_secrets().openrouter_api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is not set")
-
-    from pydantic_ai import Agent
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
-
-    from .openrouter_cost import CostInstrumentedOpenRouterModel
-
-    http_client = timeout_http_client(settings)
-    model = CostInstrumentedOpenRouterModel(
-        effective_model,
-        provider=OpenRouterProvider(
-            api_key=get_secrets().openrouter_api_key,
-            http_client=http_client,
-        ),
-    )
-    agent_kwargs: dict[str, Any] = dict(
-        model=model,
-        system_prompt=composed_system,
+    return _build_deepseek_handle(
+        settings,
+        effective_model=effective_model,
+        composed_system=composed_system,
+        all_tools=all_tools,
         output_type=output_type,
-        tools=all_tools,
+        name=name,
         retries=retries,
     )
-    if name is not None:
-        agent_kwargs["name"] = name
-    agent = Agent(**agent_kwargs)
-    return AgentHandle(agent, http_client)

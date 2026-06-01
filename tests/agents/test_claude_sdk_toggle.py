@@ -60,7 +60,11 @@ class TestBuildAgentRouting:
     def test_routes_opted_in_agent_to_claude(self):
         from robotsix_llmio.core.provider import Tier
 
-        s = _settings(claude_sdk_agents=["auto-approve"])
+        # Fallback off so build_agent returns the bound handle directly (this
+        # test asserts on its delegation, not the fallback wrapper).
+        s = _settings(
+            claude_sdk_agents=["auto-approve"], claude_fallback_to_deepseek=False
+        )
         handle, cap = self._build_routed(
             s, name="auto-approve", model_name="deepseek/deepseek-v4-flash"
         )

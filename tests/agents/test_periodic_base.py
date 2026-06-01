@@ -123,10 +123,10 @@ def _setup_patches(monkeypatch, **overrides):
     mocks["_safe_close"] = mock_safe_close
     monkeypatch.setattr(base, "_safe_close", mock_safe_close)
 
-    # call_with_retry
-    mock_retry = MagicMock(side_effect=lambda fn, **kw: fn())
-    mocks["call_with_retry"] = mock_retry
-    monkeypatch.setattr(retry, "call_with_retry", mock_retry)
+    # run_agent: run make_run on the (mock) handle, return its result
+    mock_run_agent = MagicMock(side_effect=lambda agent, make_run, **kw: make_run(agent))
+    mocks["run_agent"] = mock_run_agent
+    monkeypatch.setattr(retry, "run_agent", mock_run_agent)
 
     return mocks
 
@@ -171,7 +171,7 @@ def test_basic_pipeline(settings, monkeypatch, tmp_path):
     assert "some memory" in call_arg
 
     # what= label
-    assert mocks["call_with_retry"].call_args[1]["what"] == "audit"
+    assert mocks["run_agent"].call_args[1]["what"] == "audit"
 
 
 # ---------------------------------------------------------------------------

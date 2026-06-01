@@ -309,10 +309,11 @@ def run_trace_inspector(
         + section("trace", trimmed)
     )
     try:
-        from .retry import call_with_retry
+        from .retry import run_agent
 
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt, usage_limits=limits),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt, usage_limits=limits),
             settings=settings,
             what="trace_inspector",
         )

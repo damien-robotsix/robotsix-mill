@@ -206,7 +206,7 @@ def triage_refine(
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent / "agent_definitions" / "triage.yaml"
@@ -222,8 +222,9 @@ def triage_refine(
     user_prompt = section("title", title) + "\n" + section("draft", draft)
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(user_prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(user_prompt),
             settings=settings,
             what="triage",
         )
@@ -252,7 +253,7 @@ def triage_auto_approve(
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
@@ -270,8 +271,9 @@ def triage_auto_approve(
     user_prompt = section("spec", spec)
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(user_prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(user_prompt),
             settings=settings,
             what="auto-approve triage",
         )
@@ -297,7 +299,7 @@ def review_spec_for_conciseness(
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
@@ -315,8 +317,9 @@ def review_spec_for_conciseness(
     user_prompt = section("spec", spec_markdown)
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(user_prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(user_prompt),
             settings=settings,
             what="spec review",
         )
@@ -564,7 +567,7 @@ def run_refine_agent(
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
@@ -616,8 +619,9 @@ def run_refine_agent(
         )
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(
                 user_prompt,
                 message_history=message_history,
             ),
@@ -634,8 +638,9 @@ def run_refine_agent(
             getattr(result, "response", None), "finish_reason", None
         )
         if finish_reason == "tool_call":
-            continuation_result = call_with_retry(
-                lambda: agent.run_sync(
+            continuation_result = run_agent(
+                agent,
+                lambda h: h.run_sync(
                     "Please synthesise a final answer based on the tool results above.",
                     message_history=result.all_messages(),
                 ),

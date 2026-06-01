@@ -205,7 +205,7 @@ def run_coordinator(
     from .base import build_agent_from_definition, _safe_close
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
@@ -384,8 +384,9 @@ def run_coordinator(
                 keep_last=settings.history_keep_last,
             )
 
-        result = call_with_retry(
-            lambda: agent.run_sync(
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(
                 run_user_prompt,
                 message_history=final_message_history,
                 usage_limits=limits,
@@ -614,7 +615,7 @@ def run_coordinator_with_experts(
     """
     from .expert_manager import ExpertManager
     from ..pass_runner import load_memory, persist_memory
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     def _fallback(reason: str) -> ImplementResult:
         log.info("run_coordinator_with_experts: falling back (%s)", reason)
@@ -739,8 +740,9 @@ def run_coordinator_with_experts(
                     if preseed_history
                     else None
                 )
-                run_result = call_with_retry(
-                    lambda: agent.run_sync(
+                run_result = run_agent(
+                    agent,
+                    lambda h: h.run_sync(
                         user_prompt,
                         usage_limits=limits,
                         message_history=compressed_history,

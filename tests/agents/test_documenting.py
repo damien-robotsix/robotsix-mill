@@ -72,8 +72,8 @@ def _patch_build_agent_from_definition(monkeypatch, agent_factory):
         agent_factory,
     )
     monkeypatch.setattr(
-        "robotsix_mill.agents.retry.call_with_retry",
-        lambda fn, **kw: fn(),
+        "robotsix_mill.agents.retry.run_agent",
+        lambda agent, make_run, **kw: make_run(agent),
     )
 
 
@@ -380,8 +380,8 @@ class TestRunDocClassifier:
         # call_with_retry must also be mocked so the lazy import
         # inside run_doc_classifier resolves.
         monkeypatch.setattr(
-            "robotsix_mill.agents.retry.call_with_retry",
-            lambda fn, **kw: fn(),
+            "robotsix_mill.agents.retry.run_agent",
+            lambda agent, make_run, **kw: make_run(agent),
         )
 
         with pytest.raises(RuntimeError, match="agent build failed"):

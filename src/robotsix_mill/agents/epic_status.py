@@ -50,7 +50,7 @@ def run_epic_status_agent(
     """
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
@@ -77,8 +77,9 @@ def run_epic_status_agent(
         + "Evaluate the epic's status and return your decision."
     )
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt),
             settings=settings,
             what="epic-status",
         )

@@ -579,13 +579,13 @@ def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
     def fake_build_agent(*args, **kwargs):
         return FakeAgent()
 
-    def fake_call_with_retry(fn, *, settings=None, what=""):
-        return fn()
+    def fake_run_agent(agent, make_run, *, settings=None, what=""):
+        return make_run(agent)
 
     monkeypatch.setattr(fs_tools, "build_fs_tools", fake_build_fs_tools)
     monkeypatch.setattr(explore, "make_explore_tool", fake_explore_tool)
     monkeypatch.setattr(base, "build_agent_from_definition", fake_build_agent)
-    monkeypatch.setattr(retry, "call_with_retry", fake_call_with_retry)
+    monkeypatch.setattr(retry, "run_agent", fake_run_agent)
 
     agent_check.run_agent_check_agent(
         settings=settings,

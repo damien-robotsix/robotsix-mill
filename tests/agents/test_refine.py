@@ -3082,13 +3082,11 @@ def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
 
     mock_agent = _MockAgent()
 
-    # call_with_retry: pass-through so the lambdas execute directly
-    def pass_through_retry(
-        fn, *, settings, what="model call", sleep=None, fallback_fn=None
-    ):
-        return fn()
+    # run_agent: pass-through so the run executes directly on the handle
+    def pass_through_retry(agent, make_run, *, settings, what="model call", sleep=None):
+        return make_run(agent)
 
-    monkeypatch.setattr(retry_module, "call_with_retry", pass_through_retry)
+    monkeypatch.setattr(retry_module, "run_agent", pass_through_retry)
     monkeypatch.setattr(
         base_module, "build_agent_from_definition", lambda *a, **kw: mock_agent
     )
@@ -3141,8 +3139,10 @@ def test_continuation_guard_not_triggered_on_stop(monkeypatch, settings):
 
     monkeypatch.setattr(
         retry_module,
-        "call_with_retry",
-        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+        "run_agent",
+        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+            agent
+        ),
     )
     monkeypatch.setattr(
         base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
@@ -3182,8 +3182,10 @@ def test_continuation_guard_skipped_when_response_missing(monkeypatch, settings)
 
     monkeypatch.setattr(
         retry_module,
-        "call_with_retry",
-        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+        "run_agent",
+        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+            agent
+        ),
     )
     monkeypatch.setattr(
         base_module, "build_agent_from_definition", lambda *a, **kw: _MockAgent()
@@ -3422,8 +3424,10 @@ def test_run_refine_agent_no_match_proceeds_to_llm(monkeypatch, settings):
     )
     monkeypatch.setattr(
         retry_module,
-        "call_with_retry",
-        lambda fn, *, settings, what="model call", sleep=None, fallback_fn=None: fn(),
+        "run_agent",
+        lambda agent, make_run, *, settings, what="model call", sleep=None: make_run(
+            agent
+        ),
     )
 
     result = refining.run_refine_agent(

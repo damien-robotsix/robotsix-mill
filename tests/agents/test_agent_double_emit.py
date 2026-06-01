@@ -52,8 +52,8 @@ def _collect_build_agent_kwargs(
 
     monkeypatch.setattr(
         retry_mod,
-        "call_with_retry",
-        lambda fn, **_: fn(),
+        "run_agent",
+        lambda agent, make_run, **_: make_run(agent),
     )
 
     from robotsix_mill.config import Settings

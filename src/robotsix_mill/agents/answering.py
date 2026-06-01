@@ -106,7 +106,7 @@ def run_answer_agent(
     """
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent / "agent_definitions" / "answer.yaml"
@@ -138,8 +138,9 @@ def run_answer_agent(
     user_prompt = f"<title>{title}</title>\n<question>\n{question}\n</question>\n\nAnswer the question above. Cite all sources."
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(user_prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(user_prompt),
             settings=settings,
             what="answer",
         )

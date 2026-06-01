@@ -187,8 +187,8 @@ def test_audit_agent_omits_report_issue(settings, monkeypatch, secrets_set):
     )
     # Stub call_with_retry to avoid executing the agent
     monkeypatch.setattr(
-        "robotsix_mill.agents.retry.call_with_retry",
-        lambda fn, *a, **k: None,
+        "robotsix_mill.agents.retry.run_agent",
+        lambda agent, make_run, *a, **k: None,
     )
     secrets_set(openrouter_api_key="k")
 

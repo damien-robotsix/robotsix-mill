@@ -51,7 +51,7 @@ def test_required_repos_validates_against_registry(monkeypatch):
         patch(
             "robotsix_mill.agents.base.build_agent_from_definition", return_value=handle
         ),
-        patch("robotsix_mill.agents.retry.call_with_retry", lambda fn, **k: fn()),
+        patch("robotsix_mill.agents.retry.run_agent", lambda agent, make_run, **k: make_run(agent)),
     ):
         out = meta_triage.required_repos_for(settings=MagicMock(), spec="extract X")
     assert out == ["mill", "auto"]  # "ghost" (unknown) dropped
@@ -65,7 +65,7 @@ def test_required_repos_falls_back_to_all_when_empty(monkeypatch):
         patch(
             "robotsix_mill.agents.base.build_agent_from_definition", return_value=handle
         ),
-        patch("robotsix_mill.agents.retry.call_with_retry", lambda fn, **k: fn()),
+        patch("robotsix_mill.agents.retry.run_agent", lambda agent, make_run, **k: make_run(agent)),
     ):
         out = meta_triage.required_repos_for(settings=MagicMock(), spec="vague")
     assert out == ["auto", "mill"]  # fallback: all clonable, sorted

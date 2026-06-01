@@ -181,11 +181,12 @@ def run_meta_agent(
     # ------------------------------------------------------------------
     # Run with retry
     # ------------------------------------------------------------------
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt),
             settings=settings,
             what="meta-agent",
         )
