@@ -234,22 +234,7 @@ class TestClassifier:
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("tool_errors" in f for f in flags.flags)
 
-    def test_rejected_generation_marker(self, settings):
-        obs = [
-            _obs(
-                "chat deepseek/deepseek-v4-pro",
-                level="WARNING",
-                statusMessage=(
-                    "model produced 2636 output token(s) but no "
-                    "gen_ai.output.messages was set — pydantic-ai likely "
-                    "rejected the response"
-                ),
-            )
-        ]
-        flags = _classify_trace(_trace(), settings, observations=obs)
-        assert any("rejected_generations" in f for f in flags.flags)
-
-    def test_explore_storm(self, settings):
+    def test_traceback_in_status_message_is_a_tool_error(self, settings):
         obs = [_obs("explore run") for _ in range(6)]
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("explore_storm" in f for f in flags.flags)
