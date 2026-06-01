@@ -118,12 +118,12 @@ def test_render_card_body_truncation() -> None:
         body_plain="A" * 200,
     )
     html = _render_card(record)
-    # Should contain exactly 100 chars of "A" then "…"
-    assert ("A" * 100 + "\u2026") in html
+    # Should contain exactly 150 chars of "A" then "…"
+    assert ("A" * 150 + "\u2026") in html
 
 
 def test_render_card_body_exactly_limit() -> None:
-    body = "B" * 100
+    body = "B" * 150
     record = MailRecord(
         message_id="abc",
         sender="x",
@@ -133,7 +133,7 @@ def test_render_card_body_exactly_limit() -> None:
     )
     html = _render_card(record)
     assert body in html
-    # No ellipsis for exact 100
+    # No ellipsis for exact 150
     assert "\u2026" not in html
 
 
@@ -313,7 +313,7 @@ def test_build_board_html_body_preview_truncated() -> None:
     fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     try:
-        long_body = "X" * 150
+        long_body = "X" * 200
         _populate_db(
             db_path,
             [
@@ -329,9 +329,9 @@ def test_build_board_html_body_preview_truncated() -> None:
         )
 
         html = _build_board_html(db_path)
-        # The body preview should be exactly 100 chars + "…"
-        assert ("X" * 100 + "\u2026") in html
-        assert ("X" * 101) not in html
+        # The body preview should be exactly 150 chars + "…"
+        assert ("X" * 150 + "\u2026") in html
+        assert ("X" * 151) not in html
     finally:
         os.unlink(db_path)
 

@@ -18,7 +18,7 @@ from robotsix_auto_mail.status import STATUS_ORDER, VALID_STATUSES
 
 _BOARD_COLUMNS = STATUS_ORDER
 
-_BODY_PREVIEW_LIMIT = 100
+_BODY_PREVIEW_LIMIT = 150
 
 _CSS = """\
 * { box-sizing: border-box; margin: 0; padding: 0; }
