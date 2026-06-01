@@ -22,6 +22,14 @@ services:
   mill:
     image: robotsix/mill:latest
     restart: unless-stopped
+    # Reap orphaned subprocesses. entrypoint.sh execs `runuser`, which
+    # becomes PID 1 but is NOT an init — it never wait()s reparented
+    # orphans. The transient `claude` CLI runs `git` via its Bash tool
+    # and exits; its git children then reparent to PID 1 and pile up as
+    # zombies (observed: 16 defunct `git` under runuser). `init: true`
+    # puts Docker's tini at PID 1 (entrypoint runs under it); orphans
+    # reparent to tini and get reaped.
+    init: true
     # Match Settings.shutdown_grace_seconds (default 1800). The worker
     # waits for in-flight periodic passes (survey, audit, health, …)
     # to finish on SIGTERM; docker's default 10s would SIGKILL before
