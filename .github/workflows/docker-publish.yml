@@ -81,7 +81,7 @@ jobs:
         # failed build leaves scan-ref empty and trivy defaults to `.`, then
         # fails with a misleading "could not parse reference: ." that masks
         # the real build error.
-        if: always() && steps.scan-ref.outputs.image != ''
+        if: ${{ always() && steps.scan-ref.outputs.image != '' }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan-ref.outputs.image }}
@@ -184,7 +184,7 @@ jobs:
         # failed build leaves scan-ref empty and trivy defaults to `.`, then
         # fails with a misleading "could not parse reference: ." that masks
         # the real build error.
-        if: always() && steps.scan-ref.outputs.image != ''
+        if: ${{ always() && steps.scan-ref.outputs.image != '' }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan-ref.outputs.image }}
@@ -291,7 +291,7 @@ jobs:
         # failed build leaves scan-ref empty and trivy defaults to `.`, then
         # fails with a misleading "could not parse reference: ." that masks
         # the real build error.
-        if: always() && steps.scan-ref.outputs.image != ''
+        if: ${{ always() && steps.scan-ref.outputs.image != '' }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan-ref.outputs.image }}
