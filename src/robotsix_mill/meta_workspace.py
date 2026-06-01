@@ -14,10 +14,15 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .config import Settings, get_repos_config
 from .forge.auth import github_token
 from .vcs import git_ops
+
+if TYPE_CHECKING:
+    from .core.models import Ticket
+    from .stages.base import Outcome, StageContext
 
 log = logging.getLogger("robotsix_mill.meta_workspace")
 
@@ -73,3 +78,60 @@ def build_meta_workspace(
 
     repo_dir = clones[0] if clones else None
     return repo_dir, clones
+
+
+def build_triaged_meta_workspace(
+    ctx: "StageContext",
+    ticket: "Ticket",
+    ws,
+    spec: str,
+    *,
+    author: str,
+) -> tuple[Path | None, list[Path] | None, "Outcome | None"]:
+    """Build the multi-repo workspace for a meta-board ticket.
+
+    Runs the repo-triage agent over *spec* to pick the required
+    registered repos, clones them fresh into ``ws.dir/repos/<id>``, and
+    returns ``(repo_dir, extra_roots, None)``. On failure (triage error
+    or no repo cloned) returns ``(None, None, Outcome(BLOCKED))``.
+
+    The ``author`` argument is the comment author label used for the
+    BLOCKED comments (e.g. ``"refine"`` or ``"implement"``) so the
+    operator can see which stage hit the failure.
+    """
+    from .agents.meta_triage import required_repos_for
+    from .core.states import State
+    from .stages.base import Outcome
+
+    try:
+        repo_ids = required_repos_for(settings=ctx.settings, spec=spec)
+    except Exception:
+        log.warning("%s: meta repo-triage failed", ticket.id, exc_info=True)
+        ctx.service.add_comment(
+            ticket.id,
+            "[BLOCKED] meta repo-triage failed — could not determine which "
+            "repositories this cross-repo proposal requires.",
+            author=author,
+        )
+        return None, None, Outcome(State.BLOCKED, "meta repo-triage failed")
+
+    repo_dir, extra_roots = build_meta_workspace(ctx.settings, ws, repo_ids)
+    if repo_dir is None:
+        ctx.service.add_comment(
+            ticket.id,
+            "[BLOCKED] meta workspace: none of the required repos "
+            f"({', '.join(repo_ids) or 'none'}) could be cloned.",
+            author=author,
+        )
+        return (
+            None,
+            None,
+            Outcome(State.BLOCKED, "meta workspace: no repos could be cloned"),
+        )
+    log.info(
+        "%s: meta workspace built — %d repo(s): %s",
+        ticket.id,
+        len(extra_roots),
+        ", ".join(p.name for p in extra_roots),
+    )
+    return repo_dir, extra_roots, None

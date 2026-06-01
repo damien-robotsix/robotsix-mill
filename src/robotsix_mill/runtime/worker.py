@@ -747,7 +747,7 @@ class Worker:
     _DEFAULT_BOARD = ""
     # The synthetic cross-repo meta board is not a registered repo, but its
     # tickets ARE worked (refine builds a multi-repo workspace via triage —
-    # see RefineStage._build_meta_workspace). Consume it like a board.
+    # see meta_workspace.build_triaged_meta_workspace). Consume it like a board.
     _META_BOARD = "meta"
 
     # Stage-rank by ticket state — used as a secondary sort key in the

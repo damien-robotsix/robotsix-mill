@@ -199,8 +199,10 @@ class RefineStage(Stage):
         # is the normal single-repo clone.
         extra_roots: list[Path] | None = None
         if ticket.board_id == "meta":
-            repo_dir, extra_roots, outcome = RefineStage._build_meta_workspace(
-                ctx, ticket, ws, draft
+            from ..meta_workspace import build_triaged_meta_workspace
+
+            repo_dir, extra_roots, outcome = build_triaged_meta_workspace(
+                ctx, ticket, ws, draft, author="refine"
             )
             if outcome is not None:
                 return outcome
@@ -219,53 +221,6 @@ class RefineStage(Stage):
         return RefineStage._run_refine_agent(
             ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
         )
-
-    @staticmethod
-    def _build_meta_workspace(
-        ctx: StageContext, ticket: Ticket, ws, spec: str
-    ) -> tuple[Path | None, list[Path] | None, Outcome | None]:
-        """Build the multi-repo workspace for a meta-board ticket.
-
-        Runs the repo-triage agent over *spec* to pick the required
-        registered repos, clones them fresh into ``ws.dir/repos/<id>``, and
-        returns ``(repo_dir, extra_roots, None)``. On failure (triage error
-        or no repo cloned) returns ``(None, None, Outcome(BLOCKED))``.
-        """
-        from ..agents.meta_triage import required_repos_for
-        from ..meta_workspace import build_meta_workspace
-
-        try:
-            repo_ids = required_repos_for(settings=ctx.settings, spec=spec)
-        except Exception:
-            log.warning("%s: meta repo-triage failed", ticket.id, exc_info=True)
-            ctx.service.add_comment(
-                ticket.id,
-                "[BLOCKED] meta repo-triage failed — could not determine which "
-                "repositories this cross-repo proposal requires.",
-                author="refine",
-            )
-            return None, None, Outcome(State.BLOCKED, "meta repo-triage failed")
-
-        repo_dir, extra_roots = build_meta_workspace(ctx.settings, ws, repo_ids)
-        if repo_dir is None:
-            ctx.service.add_comment(
-                ticket.id,
-                "[BLOCKED] meta workspace: none of the required repos "
-                f"({', '.join(repo_ids) or 'none'}) could be cloned.",
-                author="refine",
-            )
-            return (
-                None,
-                None,
-                Outcome(State.BLOCKED, "meta workspace: no repos could be cloned"),
-            )
-        log.info(
-            "%s: meta workspace built — %d repo(s): %s",
-            ticket.id,
-            len(extra_roots),
-            ", ".join(p.name for p in extra_roots),
-        )
-        return repo_dir, extra_roots, None
 
     @staticmethod
     def _clone_or_resume(

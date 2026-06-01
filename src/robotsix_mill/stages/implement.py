@@ -181,29 +181,45 @@ class ImplementStage(Stage):
 
         # --- meta-board cross-repo implement gate ---
         # A meta ticket that isn't a new-repo scaffold needs edits across the
-        # triaged repos AND a multi-repo delivery (one PR per touched repo) —
-        # neither is supported here yet. refine already builds the triaged
-        # multi-repo workspace (RefineStage._build_meta_workspace); the
-        # implement + deliver half is a tracked follow-up. BLOCK with a clear
-        # note rather than cloning the wrong (global) repo or crashing on the
-        # board-less memory ledger.
+        # triaged repos. Run the same triage→clone flow refine uses, then
+        # branch the first clone and dive into the standard implement loop
+        # with extra_roots threaded through so the agent can read/write
+        # across all cloned repos. Per-repo branching and multi-repo PR
+        # delivery are sibling children in the same epic — out of scope
+        # here.
+        extra_roots: list[Path] | None = None
         if ticket.board_id == "meta":
-            return Outcome(
-                State.BLOCKED,
-                "meta cross-repo implement/delivery not yet supported — refine "
-                "builds the multi-repo workspace; the implement+deliver half is "
-                "a follow-up. The refined spec is ready for a human to action.",
+            from ..meta_workspace import build_triaged_meta_workspace
+
+            ws = ctx.service.workspace(ticket)
+            spec = ws.read_description()
+            repo_dir, extra_roots, outcome = build_triaged_meta_workspace(
+                ctx, ticket, ws, spec, author="implement"
             )
+            if outcome is not None:
+                return outcome
+            branch = f"{s.branch_prefix}{ticket.id}"
+            # Resume semantics: a prior implement pass may have committed
+            # WIP on this branch in this clone. Checkout instead of
+            # create_branch when that's the case. No rebase: the clone is
+            # fresh from forge_target_branch by construction.
+            if git_ops.branch_exists(repo_dir, branch):
+                git_ops.checkout(repo_dir, branch)
+                resuming = True
+            else:
+                git_ops.create_branch(repo_dir, branch)
+                resuming = False
+            ctx.service.set_branch(ticket.id, branch)
+        else:
+            remote_url = _resolve_remote_url(s, ctx.repo_config)
+            if not remote_url:
+                return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
 
-        remote_url = _resolve_remote_url(s, ctx.repo_config)
-        if not remote_url:
-            return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
-
-        # Phase 1: clone and branch (or resume)
-        result = ImplementStage._clone_and_branch(ctx, ticket, s)
-        if isinstance(result, Outcome):
-            return result
-        repo_dir, branch, resuming = result
+            # Phase 1: clone and branch (or resume)
+            result = ImplementStage._clone_and_branch(ctx, ticket, s)
+            if isinstance(result, Outcome):
+                return result
+            repo_dir, branch, resuming = result
 
         # --- test-baseline check: detect pre-existing failures BEFORE
         # the agent loop so we don't waste cycles on an unfixable base.
@@ -220,7 +236,7 @@ class ImplementStage(Stage):
 
         # Phase 2: deterministic, stage-owned implement loop.
         return ImplementStage._implement_loop(
-            ctx, ticket, repo_dir, branch, resuming, s
+            ctx, ticket, repo_dir, branch, resuming, s, extra_roots=extra_roots
         )
 
     # ------------------------------------------------------------------
@@ -244,7 +260,7 @@ class ImplementStage(Stage):
         memory_text = load_memory(
             settings.memory_file_for(
                 "implement",
-                ctx.repo_config.board_id if ctx.repo_config else "",
+                ImplementStage._memory_board_id(ctx, ticket),
             ),
         )
 
@@ -638,9 +654,11 @@ class ImplementStage(Stage):
         max_iters: int,
         resume_history: list | None,
         resuming: bool,
+        extra_roots: list[Path] | None = None,
     ) -> _SinglePassResult:
         """Run one iteration of the fix loop: agent → guardrail → test gate."""
         ws = ctx.service.workspace(ticket)
+        memory_board_id = ImplementStage._memory_board_id(ctx, ticket)
 
         # Resolve per-repo language instructions for the implement agent.
         language_instructions = ""
@@ -677,9 +695,10 @@ class ImplementStage(Stage):
                 reference_files=ic.reference_files,
                 previous_attempt_summary=ic.previous_attempt_summary,
                 file_map=ic.file_map,
-                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                board_id=memory_board_id,
                 message_history=resume_history,
                 language_instructions=language_instructions,
+                extra_roots=extra_roots,
             )
         except AgentBudgetError as e:
             ImplementStage._finalize(
@@ -756,10 +775,7 @@ class ImplementStage(Stage):
         # --- persistence ---
         if updated_memory:
             persist_memory(
-                settings.memory_file_for(
-                    "implement",
-                    ctx.repo_config.board_id if ctx.repo_config else "",
-                ),
+                settings.memory_file_for("implement", memory_board_id),
                 updated_memory,
             )
 
@@ -1101,7 +1117,26 @@ class ImplementStage(Stage):
         )
 
     @staticmethod
-    def _implement_loop(ctx, ticket, repo_dir, branch, resuming, settings):
+    def _memory_board_id(ctx: StageContext, ticket: Ticket) -> str:
+        """Resolve the board_id used to key the implement memory ledger.
+
+        Meta-board tickets have no registered ``repo_config``; their
+        ledger is keyed on the ticket's own ``board_id`` (``"meta"``).
+        Every other board uses ``ctx.repo_config.board_id``. This must
+        match :class:`Settings.memory_file_for`'s non-empty requirement.
+        """
+        return ctx.repo_config.board_id if ctx.repo_config else ticket.board_id
+
+    @staticmethod
+    def _implement_loop(
+        ctx,
+        ticket,
+        repo_dir,
+        branch,
+        resuming,
+        settings,
+        extra_roots: list[Path] | None = None,
+    ):
         """Run the bounded fix loop: edit pass → test gate → route.
 
         The implement agent does ONE edit pass per iteration; the test
@@ -1151,6 +1186,7 @@ class ImplementStage(Stage):
                 max_iters,
                 resume_history,
                 resuming,
+                extra_roots=extra_roots,
             )
 
             if result.next_action == "return":
