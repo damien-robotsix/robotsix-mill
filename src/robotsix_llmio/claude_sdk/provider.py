@@ -276,31 +276,63 @@ class _SdkToolAgentHandle:
             max_turns = _MAX_TURNS
         self._max_turns = max_turns
 
+    def _warn_dropped_run_kwargs(
+        self, model_settings: Any, kwargs: dict[str, Any]
+    ) -> None:
+        """Loudly flag run arguments this transport can't honor, instead of
+        silently dropping them. The SDK owns the agent loop, so pydantic-ai run
+        knobs (``model_settings``, ``usage_limits``, ``deps``, …) have no effect
+        here — and a silently-ignored ``usage_limits`` or the like is a real
+        footgun. ``message_history`` IS honored (folded into the prompt), so it
+        is consumed as a named parameter and never reaches here."""
+        dropped = list(kwargs)
+        if model_settings is not None:
+            dropped.append("model_settings")
+        if dropped:
+            log.warning(
+                "%s: the Claude SDK tool path ignores these run arguments "
+                "(the SDK runs its own agent loop): %s. Only user_prompt and "
+                "message_history are honored.",
+                self._name,
+                ", ".join(sorted(dropped)),
+            )
+
     def run_sync(
         self,
         user_prompt: str,
         *,
         model_settings: dict[str, Any] | None = None,
+        message_history: list[Any] | None = None,
         **kwargs: Any,
     ) -> _SdkToolResult:
-        """Run the SDK tool loop synchronously, return ``_SdkToolResult``."""
-        return asyncio.run(self._run(user_prompt))
+        """Run the SDK tool loop synchronously, return ``_SdkToolResult``.
+
+        *message_history* (pydantic-ai ``ModelMessage`` list) is honored: it is
+        rendered into the prompt so a multi-turn caller (e.g. a review loop)
+        keeps its context. Other pydantic-ai run kwargs can't be honored by the
+        SDK loop and are warned about rather than silently dropped."""
+        self._warn_dropped_run_kwargs(model_settings, kwargs)
+        return asyncio.run(self._run(user_prompt, message_history=message_history))
 
     async def run(
         self,
         user_prompt: str,
         *,
         model_settings: dict[str, Any] | None = None,
+        message_history: list[Any] | None = None,
         **kwargs: Any,
     ) -> _SdkToolResult:
         """Async entry point — awaits the SDK tool loop on the current event
         loop (unlike :meth:`run_sync`, which calls ``asyncio.run``). This lets a
         tool-bearing agent be used as a subagent from inside another agent's
         tool: ``await subagent.run(...)``. Its spans then nest under the calling
-        tool's span."""
-        return await self._run(user_prompt)
+        tool's span. *message_history* is honored as in :meth:`run_sync`."""
+        self._warn_dropped_run_kwargs(model_settings, kwargs)
+        return await self._run(user_prompt, message_history=message_history)
 
-    async def _run(self, user_prompt: str) -> _SdkToolResult:
+    async def _run(
+        self, user_prompt: str, message_history: list[Any] | None = None
+    ) -> _SdkToolResult:
         from claude_agent_sdk import (  # type: ignore[import-not-found]
             AssistantMessage,
             ClaudeAgentOptions,
@@ -311,6 +343,18 @@ class _SdkToolAgentHandle:
 
         system_prompt = self._system_prompt
         output_type = self._output_type
+
+        # Honor message_history: the SDK query is stateless per call, so fold any
+        # prior pydantic-ai conversation into the prompt as a labelled transcript
+        # (same rendering the no-tools ClaudeSDKModel path uses) and append the
+        # new turn. Without this the tool path silently lost a caller's context.
+        prompt = user_prompt
+        if message_history:
+            from .model import render_prompt
+
+            history_text = render_prompt(message_history)
+            if history_text:
+                prompt = f"{history_text}\n\nUser: {user_prompt}"
 
         # Augment system prompt with JSON schema for structured output.
         if output_type is not str:
@@ -344,7 +388,7 @@ class _SdkToolAgentHandle:
                 "gen_ai.operation.name": "invoke_agent",
                 "gen_ai.system": "anthropic",
                 "gen_ai.request.model": self._sdk_model,
-                "langfuse.observation.input": user_prompt,
+                "langfuse.observation.input": prompt,
             },
         ) as root:
             turn = [0]
@@ -352,7 +396,7 @@ class _SdkToolAgentHandle:
 
             async def _consume() -> None:
                 nonlocal result
-                async for message in query(prompt=user_prompt, options=options):
+                async for message in query(prompt=prompt, options=options):
                     _log_stream_message(message, turn, self._name)
                     if isinstance(message, AssistantMessage):
                         for block in message.content:
@@ -396,7 +440,7 @@ class _SdkToolAgentHandle:
                     "gen_ai.operation.name": "chat",
                     "gen_ai.system": "anthropic",
                     "gen_ai.request.model": self._sdk_model,
-                    "langfuse.observation.input": user_prompt,
+                    "langfuse.observation.input": prompt,
                     "langfuse.observation.output": text,
                 },
             ) as gen:
