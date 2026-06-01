@@ -54,6 +54,10 @@ warn_unused_configs = true
 module = "robotsix_llmio.openrouter_deepseek.*"
 disable_error_code = ["typeddict-item", "override", "misc", "literal-required"]
 
+# The opentelemetry SDK / OTLP exporter packages are only installed via the
+# optional `tracing` extra; CI installs the slim extras set, so mypy cannot
+# resolve these lazy imports inside core/tracing.py. Documented exception
+# (gate not weakened — runtime behavior unchanged; only type-checker stubs).
 [[tool.mypy.overrides]]
 module = [
     "opentelemetry.sdk.*",
