@@ -256,8 +256,7 @@ def run_retrospect_agent(
 
     try:
         result = run_agent(
-            agent,
-            lambda h: h.run_sync(prompt), settings=settings, what="retrospect"
+            agent, lambda h: h.run_sync(prompt), settings=settings, what="retrospect"
         )
     finally:
         _safe_close(agent)
