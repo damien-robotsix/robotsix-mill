@@ -349,14 +349,35 @@ class _SdkToolAgentHandle:
         ) as root:
             turn = [0]
             log.info("%s: starting (model=%s, max_turns=%d)", self._name, self._sdk_model, self._max_turns)
-            async for message in query(prompt=user_prompt, options=options):
-                _log_stream_message(message, turn, self._name)
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            chunks.append(block.text)
-                elif isinstance(message, ResultMessage):
-                    result = message
+
+            async def _consume() -> None:
+                nonlocal result
+                async for message in query(prompt=user_prompt, options=options):
+                    _log_stream_message(message, turn, self._name)
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                chunks.append(block.text)
+                    elif isinstance(message, ResultMessage):
+                        result = message
+
+            from ..core import constants
+            from .model import ClaudeSDKQueryTimeout
+
+            try:
+                # Hard wall-clock cap so a stalled CLI subprocess fails fast and
+                # retryable instead of hanging on the SDK's own ~2h backstop.
+                await asyncio.wait_for(
+                    _consume(), timeout=constants.SDK_QUERY_TIMEOUT
+                )
+            except (TimeoutError, asyncio.TimeoutError) as exc:
+                raise ClaudeSDKQueryTimeout(
+                    f"Claude Agent SDK query exceeded the "
+                    f"{constants.SDK_QUERY_TIMEOUT:.0f}s per-call wall-clock cap "
+                    f"({self._name}, model={self._sdk_model!r}) — the call "
+                    f"stalled without completing. Treated as transient so the "
+                    f"bounded retry re-runs it."
+                ) from exc
 
             text = "".join(chunks).strip()
             if not text and result is not None:

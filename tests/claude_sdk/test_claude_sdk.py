@@ -5,6 +5,7 @@ tool round-trip tests are exercised separately (need the ``claude`` CLI
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from types import SimpleNamespace
 from typing import Any
@@ -205,6 +206,65 @@ def test_turn_limit_error_type_detected_and_not_transient():
 
 def test_non_turn_limit_runtime_error_unaffected():
     assert is_claude_sdk_turn_limit(RuntimeError("something else")) is False
+
+
+# --- per-call wall-clock timeout: stalled run fails fast + is retryable ------
+
+
+def test_query_timeout_is_transient_but_not_turn_limit():
+    from robotsix_llmio.claude_sdk.model import ClaudeSDKQueryTimeout
+
+    e = ClaudeSDKQueryTimeout("stalled")
+    # A stall re-runs cleanly, so it must be retried...
+    assert is_claude_sdk_transient(e) is True
+    # ...but it is NOT the (never-retried) turn-cap hard failure.
+    assert is_claude_sdk_turn_limit(e) is False
+
+
+def test_tool_loop_query_timeout_raises_claude_sdk_query_timeout(monkeypatch):
+    """A query() that stalls past SDK_QUERY_TIMEOUT raises ClaudeSDKQueryTimeout
+    (the tool-loop path), instead of hanging on the SDK's own backstop."""
+    from robotsix_llmio.claude_sdk.model import ClaudeSDKQueryTimeout
+    from robotsix_llmio.core import constants
+
+    fake = _install_fake_sdk(monkeypatch)
+
+    async def _hanging_query(*, prompt, options):
+        await asyncio.sleep(30)  # never completes within the cap
+        yield fake.ResultMessage()  # pragma: no cover — cancelled first
+
+    fake.query = _hanging_query
+    monkeypatch.setattr(constants, "SDK_QUERY_TIMEOUT", 0.05)
+
+    provider = ClaudeSDKProvider()
+    handle = provider.build_agent(
+        tier=Tier.CHEAP,
+        system_prompt="sys",
+        tools=[PydanticTool(_echo_sync, name="echo_sync")],
+    )
+    with pytest.raises(ClaudeSDKQueryTimeout):
+        handle.run_sync("do something")
+    handle.close()
+
+
+def test_single_turn_invoke_query_timeout_raises(monkeypatch):
+    """The no-tools single-turn path (ClaudeSDKModel._invoke) also enforces the
+    per-call wall-clock cap."""
+    from robotsix_llmio.claude_sdk.model import ClaudeSDKModel, ClaudeSDKQueryTimeout
+    from robotsix_llmio.core import constants
+
+    fake = _install_fake_sdk(monkeypatch)
+
+    async def _hanging_query(*, prompt, options):
+        await asyncio.sleep(30)
+        yield fake.ResultMessage()  # pragma: no cover — cancelled first
+
+    fake.query = _hanging_query
+    monkeypatch.setattr(constants, "SDK_QUERY_TIMEOUT", 0.05)
+
+    model = ClaudeSDKModel("haiku")
+    with pytest.raises(ClaudeSDKQueryTimeout):
+        asyncio.run(model._invoke("hi", None))
 
 
 # --- turn cap: single source, generous for injected-MCP-tool loops ---------
@@ -440,4 +500,36 @@ def test_live_tool_round_trip():
 
     result = handle.run_sync("Use the echo tool to repeat: hello42")
     assert "hello42" in str(result.output).lower()
+    handle.close()
+
+
+@pytest.mark.live
+def test_live_query_timeout_fires_against_real_cli(monkeypatch):
+    """Live: a real ``query()`` against the ``claude`` CLI subprocess that is
+    capped at a sub-spawn-time wall clock raises ``ClaudeSDKQueryTimeout`` (not
+    a hang) — proving the asyncio.wait_for cancellation path works end-to-end
+    against the real subprocess, not just the offline fake."""
+    import shutil
+
+    if shutil.which("claude") is None:
+        pytest.skip("claude CLI not found on PATH")
+
+    from robotsix_llmio.claude_sdk.model import ClaudeSDKQueryTimeout
+    from robotsix_llmio.core import constants
+
+    # 1ms cap — far below the time to even spawn the CLI, so it must trip.
+    monkeypatch.setattr(constants, "SDK_QUERY_TIMEOUT", 0.001)
+
+    provider = ClaudeSDKProvider()
+
+    def _echo(text: str) -> str:
+        return text
+
+    handle = provider.build_agent(
+        tier=Tier.CHEAP,
+        system_prompt="You are a QA bot.",
+        tools=[PydanticTool(_echo)],
+    )
+    with pytest.raises(ClaudeSDKQueryTimeout):
+        handle.run_sync("Use the echo tool to repeat: hello42")
     handle.close()

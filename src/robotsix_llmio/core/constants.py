@@ -15,6 +15,16 @@ from __future__ import annotations
 MODEL_REQUEST_TIMEOUT: float = 900.0
 CONNECT_TIMEOUT: float = 15.0
 
+# Claude Agent SDK — hard per-call wall-clock cap on a single ``query()`` (the
+# whole agent loop: subprocess spawn + every turn). The SDK has no equivalent of
+# the HTTP timeout above; a stalled CLI subprocess (e.g. startup contention when
+# many runs spawn at once) otherwise blocks until the SDK's own ~2h backstop,
+# turning one stuck run into a multi-hour hang. Capping it here makes a stall
+# fail fast as a ``ClaudeSDKQueryTimeout`` that the bounded retry treats as
+# transient — so the work re-runs in minutes instead of hanging. Generous enough
+# that a genuine multi-turn tool loop (max_turns=100, ~minutes) doesn't trip it.
+SDK_QUERY_TIMEOUT: float = 1200.0  # 20 minutes
+
 # Transient retry (429 / 5xx / timeout / malformed-JSON / upstream-error):
 # short exponential backoff with jitter.
 TRANSIENT_RETRIES: int = 4

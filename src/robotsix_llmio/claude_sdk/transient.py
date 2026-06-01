@@ -16,6 +16,7 @@ _SDK_TRANSIENT_NAMES = {
     "CLIJSONDecodeError",  # CLI emitted a malformed JSON frame
     "ProcessError",  # the CLI process exited non-zero
     "ProcessLookupError",  # the subprocess vanished mid-stream
+    "ClaudeSDKQueryTimeout",  # our per-call wall-clock cap tripped (stalled run)
 }
 
 # The SDK's wording when its agent loop exhausts ``max_turns`` without producing

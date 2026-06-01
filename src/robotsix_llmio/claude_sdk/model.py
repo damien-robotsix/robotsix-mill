@@ -21,6 +21,7 @@ Runtime requirements (beyond the ``claude_sdk`` extra): Node.js and the
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from pydantic_ai.exceptions import UserError
@@ -38,6 +39,7 @@ from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
+from ..core import constants
 from .transient import is_claude_sdk_turn_limit
 
 PROVIDER_NAME = "claude-sdk"
@@ -70,6 +72,17 @@ class ClaudeSDKTurnLimitError(RuntimeError):
     identical request would just loop to the cap again — so it is never treated
     as transient (see
     :func:`~robotsix_llmio.claude_sdk.transient.is_claude_sdk_transient`)."""
+
+
+class ClaudeSDKQueryTimeout(TimeoutError):
+    """A single Claude Agent SDK ``query()`` exceeded the per-call wall-clock cap
+    (:data:`~robotsix_llmio.core.constants.SDK_QUERY_TIMEOUT`).
+
+    Unlike the turn-limit failure, a timeout is a *stall* (the subprocess made no
+    progress — often startup contention), not a non-converging loop. Re-running
+    usually clears it, so it is treated as **transient** and retried by the
+    bounded retry (matched by name in
+    :data:`~robotsix_llmio.claude_sdk.transient._SDK_TRANSIENT_NAMES`)."""
 
 
 def _content_to_text(content: Any) -> str:
@@ -240,7 +253,9 @@ class ClaudeSDKModel(Model):
         from .provider import _log_stream_message  # live per-turn feedback
 
         turn = [0]
-        try:
+
+        async def _consume() -> None:
+            nonlocal result
             async for message in query(prompt=prompt, options=options):
                 _log_stream_message(message, turn, f"claude:{self._model_name}")
                 if isinstance(message, AssistantMessage):
@@ -249,6 +264,18 @@ class ClaudeSDKModel(Model):
                             chunks.append(block.text)
                 elif isinstance(message, ResultMessage):
                     result = message
+
+        try:
+            # Hard wall-clock cap so a stalled CLI subprocess fails fast and
+            # retryable instead of hanging on the SDK's own ~2h backstop.
+            await asyncio.wait_for(_consume(), timeout=constants.SDK_QUERY_TIMEOUT)
+        except (TimeoutError, asyncio.TimeoutError) as exc:
+            raise ClaudeSDKQueryTimeout(
+                f"Claude Agent SDK query exceeded the "
+                f"{constants.SDK_QUERY_TIMEOUT:.0f}s per-call wall-clock cap "
+                f"(model={self._model_name!r}) — the call stalled without "
+                f"completing. Treated as transient so the bounded retry re-runs it."
+            ) from exc
         except Exception as exc:  # noqa: BLE001 — re-raised (converted or as-is)
             if is_claude_sdk_turn_limit(exc):
                 raise ClaudeSDKTurnLimitError(
