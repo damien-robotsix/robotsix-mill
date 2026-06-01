@@ -19,6 +19,7 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from ..config import RepoConfig, get_repos_config
 from ..langfuse_client import session_cost
@@ -827,7 +828,7 @@ class Worker:
         # board_id -> per-repo bespoke supervisor task. The supervisor
         # itself owns each repo's per-bespoke child tasks; cancelling
         # the supervisor cancels its children.
-        self._bespoke_supervisor_tasks: dict[str, asyncio.Task] = {}
+        self._periodic_supervisor_tasks: dict[str, asyncio.Task] = {}
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
@@ -1348,6 +1349,12 @@ class Worker:
 
                 for repo_config in repo_configs:
                     board_id = repo_config.repo_id if repo_config else ""
+                    # Presence wins over flag: if the repo ships a
+                    # .robotsix-mill/periodic/<label>.yaml the periodic
+                    # supervisor owns this agent for this repo — skip here so
+                    # it never double-fires during the migration window.
+                    if self._has_periodic_presence(repo_config, label):
+                        continue
                     enabled, interval = self._resolve_periodic_schedule(
                         label,
                         repo_config,
@@ -1687,7 +1694,7 @@ class Worker:
             repo_configs = [
                 rc
                 for rc in repos.repos.values()
-                if getattr(rc, "cost_warmer_periodic", True)
+                if self._maintenance_enabled_for(rc, "cost_warmer")
             ]
             sem = asyncio.Semaphore(concurrency)
 
@@ -1811,28 +1818,30 @@ class Worker:
             )
             await asyncio.sleep(max(0.0, interval - cycle_secs))
 
-    async def _bespoke_supervisor(self, repo_config: RepoConfig) -> None:
-        """Per-repo bespoke-agent supervisor loop.
+    async def _periodic_supervisor(self, repo_config: RepoConfig) -> None:
+        """Per-repo periodic-workflow supervisor loop.
 
         Owns a clone of the managed repo at
-        ``<data_dir>/<board_id>/bespoke_workspace/repo`` and reconciles
-        the set of running per-bespoke loop tasks against the YAMLs
-        present under ``<clone>/.robotsix-mill/agents/`` on each cycle:
+        ``<data_dir>/<board_id>/bespoke_workspace/repo`` and reconciles the
+        set of running per-workflow loop tasks against the files the repo
+        ships, on each cycle:
 
-        - new YAML appears   -> spawn a periodic loop on its
-                                ``interval_seconds``
-        - YAML disappears    -> cancel the loop
-        - YAML body changed  -> cancel + respawn so the new prompt /
-                                model / interval / web flag take effect
-                                without operator intervention
+        - ``<clone>/.robotsix-mill/periodic/<name>.yaml`` (the unified
+          per-repo periodic-workflow path): presence enables the workflow;
+          it partial-merges over the built-in of the same name. ``llm_agent``
+          and ``schedule_only`` kinds are scheduled here; ``maintenance`` is
+          handled by the global poll loops; brand-new ``bespoke`` workflows
+          via this dir are deferred to the legacy bespoke path below.
+        - ``<clone>/.robotsix-mill/agents/<name>.yaml`` (legacy bespoke path,
+          gated on ``settings.bespoke_periodic``): brand-new repo agents.
 
-        Cancelling the supervisor also cancels every child loop it
-        spawned — that's the worker.stop() contract.
+        Reconcile semantics per file: appear -> spawn a loop on its interval;
+        disappear -> cancel; body change -> cancel + respawn (so the new
+        prompt/model/interval take effect without operator intervention).
+        Cancelling the supervisor cancels every child loop (worker.stop()).
         """
-        from ..agents.bespoke_loader import (
-            BespokeAgentDefinition,
-            load_bespoke_definitions,
-        )
+        from ..agents.bespoke_loader import load_bespoke_definitions
+        from ..agents.periodic_loader import discover_periodic_workflows
         from ..audit_runner import _clone_token
         from ..vcs import git_ops
 
@@ -1844,8 +1853,10 @@ class Worker:
             settings.data_dir / repo_config.repo_id / "bespoke_workspace" / "repo"
         )
 
-        # name -> (task, definition)
-        running: dict[str, tuple[asyncio.Task, BespokeAgentDefinition]] = {}
+        # namespaced key -> (task, comparison object). The comparison object
+        # (a ResolvedPeriodicWorkflow or BespokeAgentDefinition) drives
+        # respawn-on-change via ``==``.
+        running: dict[str, tuple[asyncio.Task, Any]] = {}
 
         def _cancel_running() -> None:
             for task, _ in running.values():
@@ -1905,47 +1916,77 @@ class Worker:
                                 board_id,
                             )
 
-                    definitions = {
-                        d.name: d for d in load_bespoke_definitions(clone_dir)
-                    }
+                    # Build the DESIRED set of loops keyed by a namespaced
+                    # id, each carrying a comparison object (for respawn) and
+                    # a zero-arg spawn closure.
+                    desired: dict[str, tuple[Any, Any]] = {}
 
-                    # Drop tasks whose YAML disappeared.
-                    for name in list(running):
-                        if name not in definitions:
-                            task, _ = running.pop(name)
-                            task.cancel()
-                            log.info(
-                                "bespoke %s/%s: YAML removed — cancelled",
+                    # (a) Unified per-repo periodic workflows.
+                    for wf in discover_periodic_workflows(clone_dir):
+                        if not wf.enabled:
+                            continue
+                        if wf.kind in ("llm_agent", "schedule_only"):
+                            # Global per-agent kill-switch (fleet-wide off).
+                            if not getattr(settings, f"{wf.name}_periodic", True):
+                                continue
+                            key = f"periodic:{wf.name}"
+                            desired[key] = (
+                                wf,
+                                (
+                                    lambda wf=wf: self._run_periodic_workflow_loop(
+                                        repo_config, wf, clone_dir
+                                    )
+                                ),
+                            )
+                        elif wf.kind == "bespoke":
+                            # Brand-new agent via the unified dir — deferred to
+                            # the legacy bespoke path for now (bespoke
+                            # unification into .robotsix-mill/periodic/ is a
+                            # follow-up).
+                            log.debug(
+                                "periodic %s/%s: bespoke kind via periodic dir "
+                                "not yet scheduled here — use .robotsix-mill/"
+                                "agents/ for now",
                                 board_id,
-                                name,
+                                wf.name,
+                            )
+                        # maintenance kind: handled by the global poll loops.
+
+                    # (b) Legacy bespoke definitions (gated on the master switch).
+                    if settings.bespoke_periodic:
+                        for defn in load_bespoke_definitions(clone_dir):
+                            key = f"bespoke:{defn.name}"
+                            desired[key] = (
+                                defn,
+                                (
+                                    lambda defn=defn: self._run_bespoke_loop(
+                                        repo_config, defn, clone_dir
+                                    )
+                                ),
                             )
 
-                    # Spawn / respawn tasks for current YAMLs.
-                    for name, defn in definitions.items():
-                        existing = running.get(name)
-                        if existing is not None and existing[1] == defn:
+                    # Drop tasks whose source file disappeared.
+                    for key in list(running):
+                        if key not in desired:
+                            task, _ = running.pop(key)
+                            task.cancel()
+                            log.info(
+                                "periodic %s/%s: removed — cancelled", board_id, key
+                            )
+
+                    # Spawn / respawn tasks for the current desired set.
+                    for key, (cmp_obj, spawn) in desired.items():
+                        existing = running.get(key)
+                        if existing is not None and existing[1] == cmp_obj:
                             continue  # unchanged
                         if existing is not None:
                             existing[0].cancel()
                             log.info(
-                                "bespoke %s/%s: YAML changed — respawning",
-                                board_id,
-                                name,
+                                "periodic %s/%s: changed — respawning", board_id, key
                             )
-                        task = asyncio.create_task(
-                            self._run_bespoke_loop(
-                                repo_config,
-                                defn,
-                                clone_dir,
-                            )
-                        )
-                        running[name] = (task, defn)
-                        log.info(
-                            "bespoke %s/%s: scheduled (interval=%ds)",
-                            board_id,
-                            name,
-                            defn.interval_seconds,
-                        )
+                        task = asyncio.create_task(spawn())
+                        running[key] = (task, cmp_obj)
+                        log.info("periodic %s/%s: scheduled", board_id, key)
                 except Exception:  # noqa: BLE001
                     log.exception(
                         "bespoke supervisor (%s) cycle failed",
@@ -2027,6 +2068,106 @@ class Worker:
                     self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
 
+    # Schedule-only periodic workflows (no prompt yaml / own runner). Their
+    # module-level ``run_<name>_pass(session_id, repo_config)`` stub is used
+    # directly — no definition override is applicable.
+    _SCHEDULE_ONLY_RUNNERS: dict[str, str] = {
+        "trace_review": "robotsix_mill.trace_review_runner:run_trace_review_pass",
+        "config_sync": "robotsix_mill.config_sync_runner:run_config_sync_pass",
+        "cost_reconciliation": (
+            "robotsix_mill.cost_reconciliation_runner:run_cost_reconciliation_pass"
+        ),
+    }
+
+    def _build_periodic_workflow_runner(self, wf):
+        """Return a ``runner_fn(session_id, repo_config)`` for *wf*, or None.
+
+        ``llm_agent`` → a closure that runs the matching periodic pass with
+        the merged definition threaded in as ``definition_override``.
+        ``schedule_only`` → the workflow's module-level pass stub.
+        """
+        if wf.kind == "llm_agent":
+            from ..config import Settings
+            from ..periodic_runner import PERIODIC_PASS_CONFIGS, run_periodic_pass
+
+            cfg = PERIODIC_PASS_CONFIGS.get(wf.name)
+            if cfg is None:
+                return None
+            definition = wf.definition
+
+            def _run(*, session_id, repo_config):
+                return run_periodic_pass(
+                    session_id,
+                    repo_config,
+                    cfg,
+                    settings=Settings(),
+                    definition_override=definition,
+                )
+
+            return _run
+        if wf.kind == "schedule_only":
+            import importlib
+
+            path = self._SCHEDULE_ONLY_RUNNERS.get(wf.name)
+            if path is None:
+                return None
+            mod_path, attr = path.rsplit(":", 1)
+            return getattr(importlib.import_module(mod_path), attr)
+        return None
+
+    async def _run_periodic_workflow_loop(self, repo_config, wf, clone_dir) -> None:
+        """Periodic loop for one resolved per-repo periodic workflow.
+
+        Sleeps the resolved interval (file override > Settings fallback) and
+        fires the matching runner. Failures log + continue; exits only via
+        cancellation by the supervisor.
+        """
+        settings = self.ctx.settings
+        label = wf.name
+        interval = wf.interval_seconds
+        if interval is None:
+            interval = getattr(settings, f"{wf.name}_interval_seconds", 86400)
+        interval = max(60, int(interval or 86400))
+
+        runner_fn = self._build_periodic_workflow_runner(wf)
+        if runner_fn is None:
+            log.warning(
+                "periodic workflow %s (%s): no runner for kind %r — not scheduling",
+                wf.name,
+                repo_config.repo_id,
+                wf.kind,
+            )
+            return
+
+        await asyncio.sleep(self._initial_delay(label, interval))
+        while True:
+            await self._fire_periodic_pass(label, runner_fn, repo_config)
+            await asyncio.sleep(interval)
+
+    def _maintenance_enabled_for(self, repo_config, name: str) -> bool:
+        """Whether a non-LLM maintenance loop (cost_warmer / langfuse_cleanup)
+        runs for *repo_config*. Presence-OR-flag bridge: a
+        ``.robotsix-mill/periodic/<name>.yaml`` presence file enables it, and
+        the legacy ``RepoConfig.<name>_periodic`` flag (default on) is still
+        honored so nothing regresses before repos commit presence files.
+        """
+        if self._has_periodic_presence(repo_config, name):
+            return True
+        return bool(getattr(repo_config, f"{name}_periodic", True))
+
+    def _has_periodic_presence(self, repo_config, label: str) -> bool:
+        """True when *repo_config*'s clone ships ``.robotsix-mill/periodic/
+        <label>.yaml`` — meaning the periodic supervisor owns that workflow
+        for this repo and the legacy flag-based loop must NOT also fire it.
+        """
+        from ..agents.periodic_loader import PERIODIC_DIR
+
+        clone = self._find_config_clone_dir(repo_config)
+        if clone is None:
+            return False
+        name = label.replace("-", "_")
+        return clone.joinpath(*PERIODIC_DIR, f"{name}.yaml").is_file()
+
     async def _langfuse_cleanup_poll_loop(self) -> None:
         """Periodic Langfuse trace cleanup: keeps each repo's project at
         most ``langfuse_cleanup_max_traces`` rows by deleting the oldest.
@@ -2049,7 +2190,7 @@ class Worker:
                 repo_configs = [
                     rc
                     for rc in repo_configs
-                    if getattr(rc, "langfuse_cleanup_periodic", True)
+                    if self._maintenance_enabled_for(rc, "langfuse_cleanup")
                 ]
             for repo_config in repo_configs:
                 label = repo_config.repo_id if repo_config else "default"
@@ -2520,22 +2661,22 @@ class Worker:
                 )
                 log.info("CI monitor enabled (per-repo config)")
 
-        # --- Bespoke supervisors (unique: iterates repos + guards board_id) ---
-        if self.ctx.settings.bespoke_periodic:
-            for rc in get_repos_config().repos.values():
-                if (
-                    not rc.bespoke_periodic
-                    or rc.board_id in self._bespoke_supervisor_tasks
-                ):
-                    continue
-                self._bespoke_supervisor_tasks[rc.board_id] = asyncio.create_task(
-                    self._bespoke_supervisor(rc)
-                )
-                log.info(
-                    "Bespoke supervisor enabled for repo %s (discovery interval %ds)",
-                    rc.repo_id,
-                    self.ctx.settings.bespoke_discovery_interval_seconds,
-                )
+        # --- Periodic supervisors: one per repo (owns the clone; discovers
+        # .robotsix-mill/periodic/ presence files AND legacy bespoke files).
+        # Always spawned — the unified periodic-workflow path does not depend
+        # on the bespoke master switch (that switch still gates legacy bespoke
+        # files inside the supervisor).
+        for rc in get_repos_config().repos.values():
+            if rc.board_id in self._periodic_supervisor_tasks:
+                continue
+            self._periodic_supervisor_tasks[rc.board_id] = asyncio.create_task(
+                self._periodic_supervisor(rc)
+            )
+            log.info(
+                "Periodic supervisor enabled for repo %s (discovery interval %ds)",
+                rc.repo_id,
+                self.ctx.settings.bespoke_discovery_interval_seconds,
+            )
 
     async def stop(self) -> None:
         # Wait for periodic passes that are mid-run (survey, audit,
@@ -2589,11 +2730,11 @@ class Worker:
             if t is not None:
                 tasks.append(t)
                 setattr(self, attr, None)
-        # Bespoke supervisors: cancelling each one cancels its child
-        # per-bespoke loop tasks via the supervisor's ``finally``.
-        for t in self._bespoke_supervisor_tasks.values():
+        # Periodic supervisors: cancelling each one cancels its child
+        # per-workflow loop tasks via the supervisor's ``finally``.
+        for t in self._periodic_supervisor_tasks.values():
             tasks.append(t)
-        self._bespoke_supervisor_tasks.clear()
+        self._periodic_supervisor_tasks.clear()
         for t in tasks:
             t.cancel()
         for t in tasks:
