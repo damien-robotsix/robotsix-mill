@@ -199,16 +199,17 @@ class ImplementStage(Stage):
             if outcome is not None:
                 return outcome
             branch = f"{s.branch_prefix}{ticket.id}"
-            # Resume semantics: a prior implement pass may have committed
-            # WIP on this branch in this clone. Checkout instead of
-            # create_branch when that's the case. No rebase: the clone is
-            # fresh from forge_target_branch by construction.
-            if git_ops.branch_exists(repo_dir, branch):
-                git_ops.checkout(repo_dir, branch)
-                resuming = True
-            else:
-                git_ops.create_branch(repo_dir, branch)
-                resuming = False
+            # Create/checkout the feature branch in EVERY workspace
+            # repo, not just the first clone. Deliver needs per-repo
+            # branches to open one PR per touched repo.
+            for repo_path in extra_roots:
+                if git_ops.branch_exists(repo_path, branch):
+                    git_ops.checkout(repo_path, branch)
+                else:
+                    git_ops.create_branch(repo_path, branch)
+            # resuming is true iff the primary repo already had the
+            # branch from a prior implement pass.
+            resuming = git_ops.branch_exists(repo_dir, branch)
             ctx.service.set_branch(ticket.id, branch)
         else:
             remote_url = _resolve_remote_url(s, ctx.repo_config)
@@ -454,6 +455,7 @@ class ImplementStage(Stage):
                 summary,
                 ok=False,
                 reference_files=ref_files,
+                extra_roots=None,
             )
             return _ScopeGuardrailResult(
                 action="return",
@@ -600,6 +602,7 @@ class ImplementStage(Stage):
                 summary,
                 ok=False,
                 reference_files=ref_files,
+                extra_roots=None,
             )
             # Files listed in backticks so the same-pattern dedup
             # loop (line ~340) keeps working when this REJECT event
@@ -629,6 +632,7 @@ class ImplementStage(Stage):
             summary,
             ok=False,
             reference_files=ref_files,
+            extra_roots=None,
         )
         file_list = ", ".join(f"`{f}`" for f in out_of_scope)
         # The reason becomes the transition note; the out-of-scope
@@ -718,6 +722,7 @@ class ImplementStage(Stage):
                 branch,
                 f"budget cap hit: {e}",
                 ok=False,
+                extra_roots=extra_roots,
             )
             return _SinglePassResult(
                 next_action="return",
@@ -734,6 +739,7 @@ class ImplementStage(Stage):
                 branch,
                 f"agent error: {e}",
                 ok=False,
+                extra_roots=extra_roots,
             )
             # If the original cause is a transient infra failure
             # (OpenRouter timeout, 5xx, 429), re-raise the typed cause
@@ -767,6 +773,7 @@ class ImplementStage(Stage):
                 summary or "paused",
                 ok=False,
                 reference_files=ref_files,
+                extra_roots=extra_roots,
             )
             ctx.service.transition(
                 ticket.id,
@@ -886,6 +893,7 @@ class ImplementStage(Stage):
                 summary,
                 ok=False,
                 reference_files=ref_files,
+                extra_roots=extra_roots,
             )
             return _SinglePassResult(
                 next_action="return",
@@ -916,8 +924,7 @@ class ImplementStage(Stage):
             # Treat that as a normal proceed instead of a no-change
             # bypass; deliver will pick it up.
             if (
-                not git_ops.has_changes(repo_dir)
-                and not git_ops.branch_is_ahead_of_main(repo_dir)
+                not ImplementStage._any_repo_has_changes(repo_dir, extra_roots)
                 and no_change_needed
                 and no_change_rationale.strip()
             ):
@@ -931,12 +938,16 @@ class ImplementStage(Stage):
                     f"no change needed — {rationale}",
                     ok=True,
                     reference_files=ref_files,
+                    extra_roots=extra_roots,
                 )
                 return _SinglePassResult(
                     next_action="return",
                     outcome=Outcome(State.DONE, f"no change needed — {short}"),
                 )
-            if not git_ops.has_changes(repo_dir) and not resuming:
+            if (
+                not ImplementStage._any_repo_has_changes(repo_dir, extra_roots)
+                and not resuming
+            ):
                 # Silent no-change on a fresh run (agent didn't signal):
                 # BLOCK so the operator can investigate. Capture the
                 # agent's own narrative so they have something to
@@ -965,6 +976,7 @@ class ImplementStage(Stage):
                     "treated it as already-completed work.",
                     ok=False,
                     reference_files=ref_files,
+                    extra_roots=extra_roots,
                 )
                 return _SinglePassResult(
                     next_action="return",
@@ -981,6 +993,7 @@ class ImplementStage(Stage):
                 summary,
                 ok=True,
                 reference_files=ref_files,
+                extra_roots=extra_roots,
             )
             next_state = (
                 State.CODE_REVIEW if settings.review_enabled else State.DOCUMENTING
@@ -1017,6 +1030,7 @@ class ImplementStage(Stage):
                 summary,
                 ok=False,
                 reference_files=ref_files,
+                extra_roots=extra_roots,
             )
             return _SinglePassResult(
                 next_action="escalate",
@@ -1119,6 +1133,7 @@ class ImplementStage(Stage):
             f"pre-existing test failures on {settings.forge_target_branch} "
             f"({base_sha[:8]}): {diag[:400]}",
             ok=False,
+            extra_roots=None,
         )
         return Outcome(
             State.BLOCKED,
@@ -1219,6 +1234,7 @@ class ImplementStage(Stage):
             "",
             ok=False,
             reference_files=ic.reference_files,
+            extra_roots=extra_roots,
         )
         return Outcome(
             State.BLOCKED,
@@ -1230,6 +1246,25 @@ class ImplementStage(Stage):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _any_repo_has_changes(repo_dir: Path, extra_roots: list[Path] | None) -> bool:
+        """Return True if any repo has uncommitted changes or is ahead of main.
+
+        Used by the two exit-path guards so multi-repo tickets don't
+        misroute to DONE/BLOCKED when only the primary repo was checked.
+        """
+        if git_ops.has_changes(repo_dir) or git_ops.branch_is_ahead_of_main(repo_dir):
+            return True
+        if extra_roots:
+            for repo_path in extra_roots:
+                if repo_path == repo_dir:
+                    continue
+                if git_ops.has_changes(repo_path) or git_ops.branch_is_ahead_of_main(
+                    repo_path
+                ):
+                    return True
+        return False
+
+    @staticmethod
     def _finalize(
         ctx,
         ticket,
@@ -1239,6 +1274,7 @@ class ImplementStage(Stage):
         *,
         ok: bool,
         reference_files: list[str] | None = None,
+        extra_roots: list[Path] | None = None,
     ) -> None:
         ws = ctx.service.workspace(ticket)
         (ws.artifacts_dir / "implement.md").write_text(
@@ -1276,11 +1312,59 @@ class ImplementStage(Stage):
                 ticket.id,
                 exc_info=True,
             )
+        # Commit message format — identical for all repos.
+        commit_message = f"mill: {ticket.title} ({ticket.id})" + (
+            "" if ok else " [WIP]"
+        )
+        # Per-repo commit for extra_roots (multi-repo meta tickets).
+        # Write a touched_repos.json artifact listing every repo that
+        # received a commit so the downstream deliver stage knows which
+        # repos to open PRs for.
+        touched_repos: list[dict] = []
+        if extra_roots is not None:
+            # Check all repos for changes BEFORE committing any, so
+            # has_changes returns the correct answer for every repo.
+            if git_ops.has_changes(repo_dir):
+                touched_repos.append(
+                    {
+                        "repo_id": repo_dir.name,
+                        "branch": branch,
+                        "repo_path": str(repo_dir),
+                    }
+                )
+            for repo_path in extra_roots:
+                if repo_path == repo_dir:
+                    continue
+                if git_ops.has_changes(repo_path):
+                    touched_repos.append(
+                        {
+                            "repo_id": repo_path.name,
+                            "branch": branch,
+                            "repo_path": str(repo_path),
+                        }
+                    )
+        # Commit primary repo (always — regardless of extra_roots).
         if git_ops.has_changes(repo_dir):
-            git_ops.commit_all(
-                repo_dir,
-                f"mill: {ticket.title} ({ticket.id})" + ("" if ok else " [WIP]"),
-            )
+            git_ops.commit_all(repo_dir, commit_message)
+        # Commit extra repos (skip primary — already done above).
+        if extra_roots is not None:
+            for repo_path in extra_roots:
+                if repo_path == repo_dir:
+                    continue
+                if git_ops.has_changes(repo_path):
+                    git_ops.commit_all(repo_path, commit_message)
+            # Write the artifact — even if empty (no-change-needed path).
+            try:
+                (ws.artifacts_dir / "touched_repos.json").write_text(
+                    json.dumps(touched_repos, indent=2),
+                    encoding="utf-8",
+                )
+            except OSError:
+                log.warning(
+                    "%s: failed to write touched_repos.json",
+                    ticket.id,
+                    exc_info=True,
+                )
 
     @staticmethod
     def _clone_and_branch(ctx, ticket, settings):
