@@ -71,6 +71,63 @@ class TestBuildAgentRouting:
         assert cap["system_prompt"] == "sys"
         assert cap["name"] == "auto-approve"
 
+    def test_repo_dir_threaded_as_workspace_root(self, tmp_path):
+        """build_agent forwards repo_dir as workspace_root so the SDK confines
+        its built-in Write/Edit tools to the ticket clone (not the host /app)."""
+        captured: dict = {}
+        provider = MagicMock()
+
+        def _build(**kw):
+            captured.update(kw)
+            return "CLAUDE_HANDLE"
+
+        provider.build_agent.side_effect = _build
+        s = _settings(llm_backend="claude_sdk")
+        with patch(
+            "robotsix_llmio.claude_sdk.provider.ClaudeSDKProvider",
+            return_value=provider,
+        ):
+            base.build_agent(
+                s,
+                system_prompt="sys",
+                name="implement",
+                model_name="deepseek/deepseek-v4-pro",
+                repo_dir=tmp_path,
+                report_issue=False,
+                reply_to_thread=False,
+                close_thread=False,
+                ask_user=False,
+            )
+        assert captured["workspace_root"] == tmp_path
+
+    def test_no_repo_dir_leaves_workspace_root_none(self):
+        """A board-less agent (no repo_dir) confines nothing — workspace_root
+        is None, preserving prior behavior."""
+        captured: dict = {}
+        provider = MagicMock()
+
+        def _build(**kw):
+            captured.update(kw)
+            return "CLAUDE_HANDLE"
+
+        provider.build_agent.side_effect = _build
+        s = _settings(llm_backend="claude_sdk")
+        with patch(
+            "robotsix_llmio.claude_sdk.provider.ClaudeSDKProvider",
+            return_value=provider,
+        ):
+            base.build_agent(
+                s,
+                system_prompt="sys",
+                name="refine",
+                model_name="deepseek/deepseek-v4-pro",
+                report_issue=False,
+                reply_to_thread=False,
+                close_thread=False,
+                ask_user=False,
+            )
+        assert captured["workspace_root"] is None
+
     def test_pro_model_maps_to_default_tier(self):
         from robotsix_llmio.core.provider import Tier
 

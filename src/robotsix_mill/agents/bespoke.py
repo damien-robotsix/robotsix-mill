@@ -107,6 +107,7 @@ def run_bespoke_agent(
         output_type=PromptedOutput(BespokeResult),
         retries=2,
         skills=[],
+        repo_dir=repo_dir,  # confine SDK built-in edits to the workspace clone
     )
 
     forge_url = settings.forge_remote_url or "(not configured)"
