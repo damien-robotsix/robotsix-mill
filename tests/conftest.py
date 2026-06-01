@@ -5,6 +5,7 @@ import socket
 import sqlite3
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -33,7 +34,7 @@ def _block_network() -> Generator[None, None, None]:
     """
     original = socket.create_connection
 
-    def _blocked(address: object, *args: object, **kwargs: object) -> object:
+    def _blocked(address: Any, *args: Any, **kwargs: Any) -> Any:
         # Allow localhost connections for tests that run a local server.
         if isinstance(address, tuple) and address[0] in ("127.0.0.1", "::1"):
             return original(address, *args, **kwargs)
@@ -42,7 +43,7 @@ def _block_network() -> Generator[None, None, None]:
             "Mock the IMAP/SMTP client instead."
         )
 
-    socket.create_connection = _blocked  # type: ignore[assignment]
+    socket.create_connection = _blocked
     yield
     socket.create_connection = original
 

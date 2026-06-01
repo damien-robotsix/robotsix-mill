@@ -151,7 +151,7 @@ def _get_nested(data: dict[str, Any], path: str) -> Any:
         val = data.get(key, _MISSING_SENTINEL)
         if val is _MISSING_SENTINEL:
             return _MISSING_SENTINEL
-        data = val  # type: ignore[assignment]
+        data = val
     return data
 
 

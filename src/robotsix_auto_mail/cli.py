@@ -11,7 +11,9 @@ import errno
 import getpass
 import sys
 import time
-from typing import TextIO
+from collections.abc import Callable
+from pathlib import Path
+from typing import TYPE_CHECKING, TextIO
 
 from robotsix_auto_mail import __version__
 from robotsix_auto_mail.config import MailConfig, load
@@ -24,6 +26,9 @@ from robotsix_auto_mail.smtp_client import (
     SmtpClient,
     SmtpError,
 )
+
+if TYPE_CHECKING:
+    from robotsix_auto_mail.detect import MailProvider
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -467,12 +472,12 @@ def _get_password(args: argparse.Namespace) -> str | None:
 def _detect_settings(
     email: str,
     api_key: str | None,
-    autoconfig_lookup: object,
-    mx_lookup: object,
-    provider_from_mx: object,
-    detect_provider: object,
-    _detection_error: type,
-) -> tuple[object | None, list[str]]:
+    autoconfig_lookup: Callable[[str], "MailProvider | None"],
+    mx_lookup: Callable[[str], list[str]],
+    provider_from_mx: Callable[[list[str]], "MailProvider | None"],
+    detect_provider: Callable[..., "MailProvider"],
+    _detection_error: type[Exception],
+) -> tuple["MailProvider | None", list[str]]:
     """Run the provider-detection ladder for *email*.
 
     Tries, in order:
@@ -528,19 +533,19 @@ def _detect_settings(
 
 
 def _verify_and_refine(
-    provider: object,
+    provider: "MailProvider",
     *,
     email: str,
     api_key: str | None,
     mx_hosts: list[str],
-    output_path: object,
+    output_path: Path,
     password: str | None,
     password_from_args: str | None,
     no_verify: bool,
-    provider_to_config: object,
-    render_config: object,
-    detect_provider: object,
-    _detection_error: type,
+    provider_to_config: Callable[..., MailConfig],
+    render_config: Callable[[MailConfig], str],
+    detect_provider: Callable[..., "MailProvider"],
+    _detection_error: type[Exception],
 ) -> int:
     """Verify *config* by connecting, refining on failure.
 
@@ -565,8 +570,8 @@ def _verify_and_refine(
         except (ConfigurationError, OSError):
             prev = None
 
-    def _build(prov: object, pw: str | None) -> MailConfig:
-        cfg = provider_to_config(prov, email, password=pw or "")  # type: ignore[arg-type]
+    def _build(prov: "MailProvider", pw: str | None) -> MailConfig:
+        cfg = provider_to_config(prov, email, password=pw or "")
         if prev is not None:
             cfg = dataclasses.replace(
                 cfg,
@@ -692,7 +697,6 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             "Install it with: pip install robotsix-auto-mail[dev]\n"
         )
         return 1
-    from pathlib import Path
 
     from robotsix_auto_mail.config import load_llm
     api_key, _ = load_llm()
@@ -705,7 +709,7 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     if password is None:
         return 1
     if args.stdout:
-        config = provider_to_config(provider, args.email, password=password or "")  # type: ignore[arg-type]
+        config = provider_to_config(provider, args.email, password=password or "")
         sys.stderr.write(
             f"# Detected settings for {args.email} — verify before using.\n"
             "# Save this as config/mail.local.yaml.\n"
