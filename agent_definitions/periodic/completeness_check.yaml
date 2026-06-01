@@ -34,7 +34,7 @@ retries: 4
 # Module path for the agent and its output type.
 module: completeness_check
 
-skills: []
+skills: [board-read]
 
 system_prompt: |
   You are a feature-completeness checker agent for an autonomous
