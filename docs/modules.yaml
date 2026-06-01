@@ -229,6 +229,7 @@ modules:
       - tests/agents/test_expert_manager.py
       - tests/agents/test_tool_registry.py
       - tests/agents/test_retry.py
+      - tests/agents/test_claude_sdk_toggle.py
       - tests/agents/test_prompt_hygiene.py
       - tests/agents/test_skills.py
       - tests/agents/test_agent_double_emit.py
@@ -319,6 +320,7 @@ modules:
       - src/robotsix_mill/agents/module_curator.py
       - tests/agents/test_coordinating.py
       - tests/agents/test_module_curator.py
+      - tests/agents/test_documenting.py
       - tests/agents/test_answering.py
       - tests/agents/test_review_revision.py
       - tests/agents/test_coding.py
