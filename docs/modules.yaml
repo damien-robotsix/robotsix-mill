@@ -130,7 +130,11 @@ modules:
 
   - id: ci
     description: >-
-      GitHub Actions CI pipeline.
+      CI and developer-side quality-gate tooling: GitHub Actions
+      pipeline, dependency updates, and local pre-commit hooks
+      (including the detect-secrets baseline).
     paths:
       - .github/dependabot.yml
       - .github/workflows/ci.yml
+      - .pre-commit-config.yaml
+      - .secrets.baseline
