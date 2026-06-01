@@ -395,12 +395,56 @@ def run_coordinator(
             # text into a result — without this, the setattr below raises
             # "'str' object has no attribute 'conversation_state'" AND the
             # except branch re-raises it, blocking the ticket.
-            log.warning(
-                "implement: output did not parse as ImplementResult (got %s); "
-                "coercing raw text into summary",
-                type(output).__name__,
-            )
-            output = ImplementResult(summary=str(output).strip() or "(no summary)")
+            raw_output = str(output)
+            # ── Prose-only guard ──────────────────────────────────────────
+            # When the model spent 10K+ tokens producing prose with zero tool
+            # calls, re-prompt once to use edit_file/write_file.  This
+            # recovers from the known "all prose, no tools" failure mode
+            # without blocking the ticket or burning a full stage retry.
+            if len(raw_output) > 10_000:
+                try:
+                    messages = result.all_messages()
+                except Exception:
+                    messages = []
+                has_tool_call = any(
+                    getattr(part, "part_kind", "") in ("tool-call", "tool-return")
+                    for msg in messages
+                    for part in getattr(msg, "parts", [])
+                )
+                if not has_tool_call:
+                    log.warning(
+                        "implement: prose-only response (%d chars) with no "
+                        "tool calls detected; re-prompting agent to use tools",
+                        len(raw_output),
+                    )
+                    try:
+                        result = run_agent(
+                            agent,
+                            lambda h: h.run_sync(
+                                "Your last response was all prose and no tool "
+                                "calls. Pick the first file change and use "
+                                "edit_file or write_file now.",
+                                message_history=result.all_messages(),
+                                usage_limits=limits,
+                            ),
+                            settings=settings,
+                            what="implement (re-prompt after prose-only)",
+                        )
+                        output = result.output
+                    except Exception as reprompt_exc:
+                        log.warning(
+                            "implement: re-prompt after prose-only failed (%s); "
+                            "coercing original output",
+                            reprompt_exc,
+                        )
+            # ── End prose-only guard ──────────────────────────────────────
+            if not isinstance(output, ImplementResult):
+                log.warning(
+                    "implement: output did not parse as ImplementResult (got %s); "
+                    "coercing raw text into summary",
+                    type(output).__name__,
+                )
+                output = ImplementResult(summary=str(output).strip() or "(no summary)")
         try:
             output.conversation_state = result.all_messages_json()
         except AttributeError:
