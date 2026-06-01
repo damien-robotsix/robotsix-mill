@@ -131,10 +131,12 @@ modules:
   - id: ci
     description: >-
       CI and developer-side quality-gate tooling: GitHub Actions
-      pipeline, dependency updates, and local pre-commit hooks
-      (including the detect-secrets baseline).
+      workflows (main pipeline and uv.lock auto-update), dependency
+      updates, and local pre-commit hooks (including the
+      detect-secrets baseline).
     paths:
       - .github/dependabot.yml
       - .github/workflows/ci.yml
+      - .github/workflows/lockfile.yml
       - .pre-commit-config.yaml
       - .secrets.baseline
