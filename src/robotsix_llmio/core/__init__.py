@@ -5,7 +5,12 @@ from __future__ import annotations
 from .agent import AgentHandle, build_agent
 from .http import timeout_http_client
 from .provider import LLMProvider, Tier
-from .retry import call_with_retry, is_rate_limited, is_transient
+from .retry import (
+    call_with_retry,
+    call_with_retry_and_fallback,
+    is_rate_limited,
+    is_transient,
+)
 from .tracing import (
     TraceSpan,
     current_session,
@@ -26,6 +31,7 @@ __all__ = [
     "LLMProvider",
     "Tier",
     "call_with_retry",
+    "call_with_retry_and_fallback",
     "is_rate_limited",
     "is_transient",
     "setup_langfuse_tracing",

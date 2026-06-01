@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import httpx
 
+import pytest
+
 from robotsix_llmio.core.retry import (
     _status,
     call_with_retry,
+    call_with_retry_and_fallback,
     is_rate_limited,
     is_transient,
 )
@@ -99,3 +102,131 @@ def test_call_with_retry_uses_provider_transient_predicate():
     )
     assert out == "ok"
     assert calls["n"] == 2
+
+
+# --- retry-then-fallback ----------------------------------------------------
+
+
+def _noop_sleep(_d: float) -> None:
+    return None
+
+
+def test_fallback_not_used_when_primary_succeeds():
+    calls = {"primary": 0, "fallback": 0}
+
+    def primary():
+        calls["primary"] += 1
+        return "primary-ok"
+
+    def fallback():
+        calls["fallback"] += 1
+        return "fallback-ok"
+
+    out = call_with_retry_and_fallback(
+        primary, fallback, sleep=_noop_sleep
+    )
+    assert out == "primary-ok"
+    assert calls == {"primary": 1, "fallback": 0}
+
+
+def test_fallback_only_after_primary_local_retries_exhausted():
+    """The primary must burn its FULL transient-retry budget before the fallback
+    is tried — retry locally first, fall back only when that failed."""
+    calls = {"primary": 0, "fallback": 0}
+
+    def primary():
+        calls["primary"] += 1
+        raise _HTTPErr(503)  # always transient → exhausts retries
+
+    def fallback():
+        calls["fallback"] += 1
+        return "fallback-ok"
+
+    out = call_with_retry_and_fallback(primary, fallback, sleep=_noop_sleep)
+    assert out == "fallback-ok"
+    # 1 initial + TRANSIENT_RETRIES attempts, all on the primary, THEN fallback.
+    assert calls["primary"] > 1
+    assert calls["fallback"] == 1
+
+
+def test_fallback_on_non_transient_terminal_error():
+    def primary():
+        raise _HTTPErr(400)  # non-transient → terminal immediately
+
+    out = call_with_retry_and_fallback(
+        primary, lambda: "fallback-ok", sleep=_noop_sleep
+    )
+    assert out == "fallback-ok"
+
+
+def test_no_fallback_reraises_primary():
+    def primary():
+        raise _HTTPErr(400)
+
+    with pytest.raises(_HTTPErr):
+        call_with_retry_and_fallback(primary, None, sleep=_noop_sleep)
+
+
+def test_should_fallback_false_reraises_primary_without_fallback():
+    calls = {"fallback": 0}
+
+    def primary():
+        raise ValueError("nope")
+
+    def fallback():
+        calls["fallback"] += 1
+        return "fallback-ok"
+
+    with pytest.raises(ValueError):
+        call_with_retry_and_fallback(
+            primary, fallback, sleep=_noop_sleep, should_fallback=lambda _e: False
+        )
+    assert calls["fallback"] == 0
+
+
+def test_both_fail_raises_fallback_chained_to_primary():
+    class PrimaryErr(Exception):
+        pass
+
+    class FallbackErr(Exception):
+        pass
+
+    def primary():
+        raise PrimaryErr("primary")
+
+    def fallback():
+        raise FallbackErr("fallback")
+
+    with pytest.raises(FallbackErr) as ei:
+        call_with_retry_and_fallback(primary, fallback, sleep=_noop_sleep)
+    # The primary cause is chained so the original failure isn't lost.
+    assert isinstance(ei.value.__cause__, PrimaryErr)
+
+
+def test_each_side_uses_its_own_transient_predicate():
+    """Primary retries on ITS classifier; the fallback retries on its own."""
+    calls = {"primary": 0, "fallback": 0}
+
+    class PrimaryTransient(Exception):
+        pass
+
+    def primary():
+        calls["primary"] += 1
+        raise PrimaryTransient("only primary classifier knows this")
+
+    def fallback():
+        calls["fallback"] += 1
+        if calls["fallback"] < 2:
+            raise _HTTPErr(503)  # generic transient
+        return "fallback-ok"
+
+    out = call_with_retry_and_fallback(
+        primary,
+        fallback,
+        sleep=_noop_sleep,
+        is_transient_primary=lambda e: isinstance(e, PrimaryTransient),
+        is_transient_fallback=is_transient,
+    )
+    assert out == "fallback-ok"
+    assert calls["primary"] > 1  # primary retried on its own predicate
+    assert calls["fallback"] == 2  # fallback retried on the generic predicate

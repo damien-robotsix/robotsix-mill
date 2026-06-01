@@ -187,6 +187,56 @@ def call_with_retry(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
+def call_with_retry_and_fallback(
+    primary: Callable[[], T],
+    fallback: Callable[[], T] | None,
+    *,
+    what: str = "model call",
+    sleep: Callable[[float], None] = time.sleep,
+    is_transient_primary: Callable[[BaseException], bool] = is_transient,
+    is_transient_fallback: Callable[[BaseException], bool] = is_transient,
+    should_fallback: Callable[[BaseException], bool] = lambda _e: True,
+) -> T:
+    """Retry *primary* locally, then fall back to a different model.
+
+    *primary* runs through :func:`call_with_retry` — its own bounded transient
+    retries. Only when that whole session fails (retries exhausted, or a
+    non-transient/terminal error) AND *fallback* is provided AND
+    *should_fallback* of the error is true is *fallback* run, itself through a
+    fresh :func:`call_with_retry` session.
+
+    This is "retry locally first, fall back only when local retries failed": the
+    fallback model is never tried *instead* of the primary's retries, only
+    *after* they are exhausted. *is_transient_primary*/*is_transient_fallback*
+    let each model retry on its own provider's transient signatures.
+    """
+    try:
+        return call_with_retry(
+            primary, what=what, sleep=sleep, is_transient_fn=is_transient_primary
+        )
+    except Exception as primary_exc:  # noqa: BLE001 — re-raised when no fallback
+        if fallback is None or not should_fallback(primary_exc):
+            raise
+        log.warning(
+            "%s: primary failed after local retries (%s) — falling back to the "
+            "secondary model",
+            what,
+            type(primary_exc).__name__,
+        )
+        _safe_flush()
+        try:
+            return call_with_retry(
+                fallback,
+                what=f"{what} (fallback)",
+                sleep=sleep,
+                is_transient_fn=is_transient_fallback,
+            )
+        except Exception as fallback_exc:  # noqa: BLE001
+            # Chain the primary cause so the original failure isn't lost when the
+            # fallback also fails.
+            raise fallback_exc from primary_exc
+
+
 def _safe_flush() -> None:
     try:
         flush_current_provider()
