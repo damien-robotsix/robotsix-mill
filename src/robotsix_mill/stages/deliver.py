@@ -120,6 +120,7 @@ class DeliverStage(Stage):
     traced = False
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Push the implemented branch to the remote forge and open (or update) a pull/merge request, transitioning the ticket toward review."""
         s = ctx.settings
         remote_url = _resolve_remote_url(s, ctx.repo_config)
         if s.forge_kind == "none":

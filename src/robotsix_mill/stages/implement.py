@@ -159,6 +159,7 @@ class ImplementStage(Stage):
     input_state = State.READY
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Process a READY ticket: gate on dependencies, clone the repo, create the feature branch, and drive the implementation agent loop to produce code changes."""
         s = ctx.settings
 
         # --- dependency gate: refuse to implement until all deps are

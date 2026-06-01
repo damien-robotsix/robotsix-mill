@@ -90,6 +90,7 @@ class CIFixStage(Stage):
     traced = False
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:  # noqa: C901  # TODO: split counter, clone, and agent phases (ticket: split_ci_fix_stage)
+        """Process a FIXING_CI ticket: poll forge CI status on the ticket branch and, on failure, run the automated CI-fix agent to push corrective commits."""
         s = ctx.settings
 
         # Guard: forge configured.
