@@ -28,7 +28,7 @@ answer. If you cannot find a reliable answer, say so briefly.
 """
 
 
-def run_web_research(*, settings: Settings, query: str) -> str:
+async def run_web_research(*, settings: Settings, query: str) -> str:
     """Run the cheap research sub-agent for ``query`` and return only
     its conclusion string. Bounded by ``web_research_request_limit``.
     Never raises out — research failure degrades to a short message so
@@ -41,7 +41,7 @@ def run_web_research(*, settings: Settings, query: str) -> str:
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _close_async_client, timeout_http_client
+    from .base import _aclose_async_client, timeout_http_client
     from .openrouter_cost import CostInstrumentedOpenRouterModel
     from .web_tools import make_web_fetch
 
@@ -63,17 +63,17 @@ def run_web_research(*, settings: Settings, query: str) -> str:
     )
     limits = UsageLimits(request_limit=settings.web_research_request_limit)
     try:
-        from .retry import call_with_retry
+        from .retry import acall_with_retry
 
-        result = call_with_retry(
-            lambda: agent.run_sync(query, usage_limits=limits),
+        result = await acall_with_retry(
+            lambda: agent.run(query, usage_limits=limits),
             settings=settings,
             what="web_research",
         )
     except Exception as e:  # noqa: BLE001 — degrade, never break the caller
         return f"web research failed: {e}"
     finally:
-        _close_async_client(client)
+        await _aclose_async_client(client)
     return str(result.output)
 
 
@@ -81,13 +81,13 @@ def make_web_research_tool(settings: Settings):
     """Build the ``web_research`` tool exposed to the main agent. It
     only ever returns the sub-agent's conclusion string."""
 
-    def web_research(query: str) -> str:
+    async def web_research(query: str) -> str:
         """Research a question on the web and return a concise factual
         conclusion with inline source URLs. Use for current docs, API
         details, versions, best practices — anything not already in the
         repo. A cheaper model does the searching; you get only the
         answer."""
-        return run_web_research(settings=settings, query=query)
+        return await run_web_research(settings=settings, query=query)
 
     from .tool_registry import ToolInfo, ToolRegistry
 

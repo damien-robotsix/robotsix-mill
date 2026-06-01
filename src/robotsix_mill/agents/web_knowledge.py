@@ -323,7 +323,7 @@ class _WebKnowledgeResult(BaseModel):
     answer: str
 
 
-def run_web_knowledge(
+async def run_web_knowledge(
     *,
     settings: Settings,
     question: str,
@@ -341,9 +341,9 @@ def run_web_knowledge(
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _close_async_client, timeout_http_client
+    from .base import _aclose_async_client, timeout_http_client
     from .openrouter_cost import CostInstrumentedOpenRouterModel
-    from .retry import call_with_retry
+    from .retry import acall_with_retry
 
     client = timeout_http_client(settings)
     model = CostInstrumentedOpenRouterModel(
@@ -366,8 +366,8 @@ def run_web_knowledge(
 
     limits = UsageLimits(request_limit=settings.web_knowledge_request_limit)
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(question, usage_limits=limits),
+        result = await acall_with_retry(
+            lambda: agent.run(question, usage_limits=limits),
             settings=settings,
             what="web_knowledge",
         )
@@ -376,7 +376,7 @@ def run_web_knowledge(
         log.warning("web_knowledge failed: %s", e)
         return f"web_knowledge failed: {e}"
     finally:
-        _close_async_client(client)
+        await _aclose_async_client(client)
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +389,7 @@ def make_ask_web_knowledge_tool(settings: Settings):
     their single gateway to the internet. Other agents do NOT receive
     a direct ``web_search`` tool — only this gateway."""
 
-    def ask_web_knowledge(question: str) -> str:
+    async def ask_web_knowledge(question: str) -> str:
         """Ask the web-knowledge agent ONE focused question about a
         library, framework, API, or technical fact.
 
@@ -410,7 +410,7 @@ def make_ask_web_knowledge_tool(settings: Settings):
                 figures out which library file (if any) to read and
                 whether to refresh from the web.
         """
-        return run_web_knowledge(settings=settings, question=question)
+        return await run_web_knowledge(settings=settings, question=question)
 
     from .tool_registry import ToolInfo, ToolRegistry
 

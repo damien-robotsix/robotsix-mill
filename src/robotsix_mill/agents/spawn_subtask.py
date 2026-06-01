@@ -31,7 +31,7 @@ from ..config import Settings
 log = logging.getLogger("robotsix_mill.spawn_subtask")
 
 
-def run_spawn_subtask(
+async def run_spawn_subtask(
     *,
     settings: Settings,
     repo_dir: Path,
@@ -139,7 +139,7 @@ def run_spawn_subtask(
 
     limits = UsageLimits(request_limit=settings.subtask_request_limit)
     try:
-        result = agent.run_sync(user_prompt, usage_limits=limits)
+        result = await agent.run(user_prompt, usage_limits=limits)
     except UsageLimitExceeded as exc:
         log.warning(
             "subtask %r exceeded its %d-request budget: %s",
@@ -166,7 +166,7 @@ def make_spawn_subtask_tool(settings: Settings, repo_dir: Path):
     """Build the ``spawn_subtask`` tool exposed to the implement
     coordinator. Returns a callable the agent invokes by name."""
 
-    def spawn_subtask(
+    async def spawn_subtask(
         name: str,
         prompt: str,
         files_in_scope: list[str] | None = None,
@@ -196,7 +196,7 @@ def make_spawn_subtask_tool(settings: Settings, repo_dir: Path):
             The sub-agent's 1-3 sentence summary. On budget cap or
             failure, a "subtask incomplete: …" string you can act on.
         """
-        return run_spawn_subtask(
+        return await run_spawn_subtask(
             settings=settings,
             repo_dir=repo_dir,
             name=name,

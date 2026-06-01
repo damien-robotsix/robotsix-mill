@@ -105,7 +105,7 @@ SCOPE DISCIPLINE — always follow these limits:
 """
 
 
-def run_explore(
+async def run_explore(
     *,
     settings: Settings,
     repo_dir: Path,
@@ -114,7 +114,13 @@ def run_explore(
 ) -> str:
     """Run the read-only exploration sub-agent against ``repo_dir`` and
     return its concise findings. Degrades to a short message instead of
-    raising so the driver can react."""
+    raising so the driver can react.
+
+    Async so it composes with whichever event loop is driving the parent
+    coordinator: under the Claude SDK backend the ``explore`` tool callback
+    fires inside the SDK's already-running loop, so the sub-agent is awaited
+    via pydantic-ai's async ``agent.run`` rather than ``run_sync`` (which
+    would call ``asyncio.run`` and raise "event loop is already running")."""
     if not get_secrets().openrouter_api_key:
         return "explore unavailable: OPENROUTER_API_KEY is not set"
     if not repo_dir.exists():
@@ -135,7 +141,7 @@ def run_explore(
         t for t in all_fs if t.__name__ in ("read_file", "list_dir", "run_command")
     ]
 
-    from .base import _close_async_client, timeout_http_client
+    from .base import _aclose_async_client, timeout_http_client
 
     main_client = timeout_http_client(settings)
     model = CostInstrumentedOpenRouterModel(  # dedicated cheap explore model
@@ -159,7 +165,7 @@ def run_explore(
     try:
         from pydantic_ai.exceptions import UsageLimitExceeded
 
-        from .retry import call_with_retry
+        from .retry import acall_with_retry
 
         # Build fallback agent if a fallback model is configured
         fallback_fn = None
@@ -180,13 +186,13 @@ def run_explore(
                 name="explore-fallback",
                 model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
             )
-            fallback_fn = lambda: fallback_agent.run_sync(  # noqa: E731
+            fallback_fn = lambda: fallback_agent.run(  # noqa: E731
                 question, usage_limits=limits
             )
 
         try:
-            result = call_with_retry(
-                lambda: agent.run_sync(question, usage_limits=limits),
+            result = await acall_with_retry(
+                lambda: agent.run(question, usage_limits=limits),
                 settings=settings,
                 what="explore",
                 fallback_fn=fallback_fn,
@@ -209,7 +215,7 @@ def run_explore(
             )
             retry_limits = UsageLimits(request_limit=2)
             try:
-                retry_result = retry_agent.run_sync(
+                retry_result = await retry_agent.run(
                     question,
                     usage_limits=retry_limits,
                 )
@@ -225,7 +231,7 @@ def run_explore(
             getattr(result, "response", None), "finish_reason", None
         )
         if finish_reason == "length":
-            continuation_result = agent.run_sync(
+            continuation_result = await agent.run(
                 "Continue exactly from where you were cut off. "
                 "Do not repeat anything already said. "
                 "Start from the last incomplete sentence.",
@@ -237,9 +243,9 @@ def run_explore(
     except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
         return f"explore failed: {e}"
     finally:
-        _close_async_client(main_client)
+        await _aclose_async_client(main_client)
         if fallback_client is not None:
-            _close_async_client(fallback_client)
+            await _aclose_async_client(fallback_client)
 
 
 def make_explore_tool(
@@ -252,7 +258,7 @@ def make_explore_tool(
     itself in ``ToolRegistry`` so agents can discover it.
     """
 
-    def explore(question: str) -> str:
+    async def explore(question: str) -> str:
         """Ask a fresh, context-isolated sub-agent a complex, multi-step
         question about the repository — questions that would require
         navigating several files to answer. For simple, single-step
@@ -260,7 +266,7 @@ def make_explore_tool(
         list_dir directly instead. Returns concise paths/symbols/
         line-ranges, never whole files. Batch related questions into a
         single call where possible."""
-        return run_explore(
+        return await run_explore(
             settings=settings,
             repo_dir=repo_dir,
             question=question,

@@ -34,6 +34,21 @@ def _close_async_client(client: "httpx.AsyncClient") -> None:
         pass
 
 
+async def _aclose_async_client(client: "httpx.AsyncClient") -> None:
+    """Close an httpx.AsyncClient from inside the loop it lives on.
+
+    Sub-agent tools run on the parent coordinator's event loop (under the
+    Claude SDK backend that loop is already running), so ``aclose`` must be
+    awaited directly here — :func:`_close_async_client`'s spin-up of a fresh
+    loop via ``run_until_complete`` is illegal while another loop runs on the
+    thread (it would be swallowed, leaking the client's connections). Errors
+    are swallowed so cleanup never breaks the caller."""
+    try:
+        await client.aclose()
+    except Exception:
+        pass
+
+
 def _safe_close(agent: Any) -> None:
     """Close an agent's HTTP client if it has a close method.
 
