@@ -577,63 +577,42 @@ def test_run_health_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_health_task_created_when_periodic(
+async def test_worker_spawns_periodic_supervisor_per_repo(
     tmp_path, monkeypatch, repo_config
 ):
-    """Worker._health_task is created when health_periodic=true."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
-
-    settings = _make_settings(
-        tmp_path,
-        health_periodic="true",
-        health_interval_seconds="1",
-    )
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
-
-    # Patch _run_periodic_pass_per_repo to a no-op so the task hangs
-    # without actually invoking the health runner.
+    """Periodic agents (incl. health) no longer get a static per-agent task;
+    they run via the per-repo periodic supervisor, which start() spawns once
+    per registered repo. The supervisor reads .robotsix-mill/periodic/ presence
+    files from each repo's clone to decide what runs."""
     import asyncio as asyncio_mod
 
-    async def noop_periodic(self, *a, **kw):
-        await asyncio_mod.sleep(3600)
-
-    monkeypatch.setattr(
-        Worker,
-        "_run_periodic_pass_per_repo",
-        noop_periodic,
-    )
-
-    worker = Worker(ctx)
-    worker.start()
-
-    assert worker._health_task is not None
-    assert not worker._health_task.done()
-
-    await worker.stop()
-
-
-@pytest.mark.asyncio
-async def test_worker_health_task_not_created_when_periodic_false(
-    tmp_path, monkeypatch, repo_config
-):
-    """Worker._health_task is NOT created when health_periodic=false."""
-    from robotsix_mill.stages import StageContext
+    from robotsix_mill.config import ReposRegistry
     from robotsix_mill.runtime.worker import Worker
+    from robotsix_mill.stages import StageContext
 
-    settings = _make_settings(tmp_path, health_periodic="false")
+    settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
     service = TicketService(settings, board_id="test-board")
     ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
 
+    # Park the supervisor so it doesn't clone/network during the test.
+    async def noop_supervisor(self, rc):
+        await asyncio_mod.sleep(3600)
+
+    monkeypatch.setattr(Worker, "_periodic_supervisor", noop_supervisor)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.get_repos_config",
+        lambda: ReposRegistry(repos={repo_config.repo_id: repo_config}),
+    )
+
     worker = Worker(ctx)
     worker.start()
 
-    assert worker._health_task is None
+    assert repo_config.board_id in worker._periodic_supervisor_tasks
+    assert not worker._periodic_supervisor_tasks[repo_config.board_id].done()
+    # No static per-agent health task exists anymore.
+    assert getattr(worker, "_health_task", None) is None
 
     await worker.stop()
 

@@ -3,7 +3,6 @@
 import json
 import threading
 
-import pytest
 from pathlib import Path
 
 from robotsix_mill.agents import test_gap as test_gap_agent
@@ -502,68 +501,6 @@ def test_run_test_gap_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 
 
 # --- Worker periodic tests ---
-
-
-@pytest.mark.asyncio
-async def test_worker_test_gap_task_created_when_periodic(
-    tmp_path, monkeypatch, repo_config
-):
-    """Worker._test_gap_task is created when test_gap_periodic=true."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
-
-    settings = _make_settings(
-        tmp_path,
-        test_gap_periodic="true",
-        test_gap_interval_seconds="1",
-    )
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
-
-    # Patch _run_periodic_pass_per_repo to a no-op so the task hangs
-    # without actually invoking the test-gap runner.
-    import asyncio as asyncio_mod
-
-    async def noop_periodic(self, *a, **kw):
-        await asyncio_mod.sleep(3600)
-
-    monkeypatch.setattr(
-        Worker,
-        "_run_periodic_pass_per_repo",
-        noop_periodic,
-    )
-
-    worker = Worker(ctx)
-    worker.start()
-
-    assert worker._test_gap_task is not None
-    assert not worker._test_gap_task.done()
-
-    await worker.stop()
-
-
-@pytest.mark.asyncio
-async def test_worker_test_gap_task_not_created_when_periodic_false(
-    tmp_path, monkeypatch, repo_config
-):
-    """Worker._test_gap_task is NOT created when test_gap_periodic=false."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
-
-    settings = _make_settings(tmp_path, test_gap_periodic="false")
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
-
-    worker = Worker(ctx)
-    worker.start()
-
-    assert worker._test_gap_task is None
-
-    await worker.stop()
 
 
 # --- API endpoint tests ---

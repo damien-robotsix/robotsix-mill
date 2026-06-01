@@ -1466,53 +1466,46 @@ class TestFlattenYamlConfig:
         assert result["web_research_model"] == "model-b"
 
 
-class TestPeriodicOptIn:
-    """9cc9: per-repo periodic agents are opt-in (default off); they run
-    only when explicitly enabled in repos.yaml ``periodic.<name>.enabled``."""
+class TestPeriodicPresenceModel:
+    """Per-repo periodic enablement moved from repos.yaml ``periodic:`` flags
+    to per-repo ``.robotsix-mill/periodic/<name>.yaml`` file presence. The
+    RepoConfig ``*_periodic`` flags + ``_periodic_flags_from_yaml`` are gone."""
 
-    @staticmethod
-    def _rc(**overrides):
+    def test_repoconfig_has_no_periodic_flags(self):
         from robotsix_mill.config import RepoConfig
 
-        kw = dict(
+        rc = RepoConfig(
             repo_id="r",
             board_id="b",
             langfuse_project_name="p",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
         )
-        kw.update(overrides)
-        return RepoConfig(**kw)
+        for name in ("audit", "health", "module_curator", "cost_warmer"):
+            assert not hasattr(rc, f"{name}_periodic")
 
-    def test_repoconfig_periodic_flags_default_off(self):
-        from robotsix_mill.config import _PERIODIC_FLAG_NAMES
+    def test_periodic_flags_helpers_removed(self):
+        import robotsix_mill.config as cfg
 
-        rc = self._rc()
-        for name in _PERIODIC_FLAG_NAMES:
-            assert getattr(rc, f"{name}_periodic") is False, (
-                f"{name}_periodic must default to False (opt-in)"
-            )
+        assert not hasattr(cfg, "_periodic_flags_from_yaml")
+        assert not hasattr(cfg, "_PERIODIC_FLAG_NAMES")
 
-    def test_periodic_flags_from_yaml_explicit_only(self):
-        from robotsix_mill.config import _periodic_flags_from_yaml
+    def test_repos_yaml_periodic_block_is_ignored(self, tmp_path):
+        """A stray ``periodic:`` block in repos.yaml no longer errors — the
+        loader never forwards it to RepoConfig."""
+        from robotsix_mill.config import load_repos_config
 
-        flags = _periodic_flags_from_yaml(
-            {
-                "periodic": {
-                    "audit": {"enabled": True},
-                    "health": {"enabled": False},
-                }
-            }
+        f = tmp_path / "repos.yaml"
+        f.write_text(
+            "repos:\n"
+            "  r:\n"
+            "    board_id: b\n"
+            "    langfuse:\n"
+            "      project_name: p\n"
+            "      public_key: pk\n"
+            "      secret_key: sk\n"
+            "    periodic:\n"
+            "      audit: { enabled: true }\n"
         )
-        # Only explicitly-listed agents appear; unlisted ones are left to
-        # the RepoConfig default (now False).
-        assert flags == {"audit_periodic": True, "health_periodic": False}
-
-    def test_repoconfig_opt_in_via_yaml_flags(self):
-        from robotsix_mill.config import _periodic_flags_from_yaml
-
-        repo_data = {"periodic": {"module_curator": {"enabled": True}}}
-        rc = self._rc(**_periodic_flags_from_yaml(repo_data))
-        assert rc.module_curator_periodic is True
-        # Anything not listed stays off.
-        assert rc.audit_periodic is False
+        rr = load_repos_config(str(f))
+        assert "r" in rr.repos and rr.repos["r"].repo_id == "r"

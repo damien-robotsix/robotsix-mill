@@ -30,19 +30,15 @@ repos:
     #                             #   gets its own consumer pool, so a
     #                             #   busy repo can't block another.
     # language: python             # optional — auto-injects language conventions into implement agent
-    # periodic:                    # optional — per-repo periodic agents.
-    #                              #   OPT-IN: every agent defaults to OFF
-    #                              #   (9cc9). List only the ones this repo
-    #                              #   should run; anything omitted stays off.
-    #   audit: { enabled: true }            # codebase audit → draft tickets
-    #   health: { enabled: true }           # health check of the clone
-    #   module_curator: { enabled: true }   # docs/modules.yaml drift check
-    #   trace_review: { enabled: true }     # review recent agent traces
-    #   cost_warmer: { enabled: true }      # warm the prompt cache (cost)
-    #   langfuse_cleanup: { enabled: true } # cap trace-store disk usage
-    #   # others (opt-in, default off): trace_health, test_gap, agent_check,
-    #   # bc_check, completeness_check, copy_paste, survey,
-    #   # cost_reconciliation, config_sync, bespoke
+    # NOTE: periodic agents are NO LONGER enabled here. A periodic workflow
+    # runs for a repo iff that repo ships a presence file at
+    #   <repo>/.robotsix-mill/periodic/<name>.yaml
+    # (committed in the MANAGED repo, not here). A name-only file inherits the
+    # built-in workflow; add prompt_overlay:/model:/interval_seconds: to
+    # override. A name matching no built-in defines a brand-new agent (needs
+    # system_prompt). Known names: audit, health, module_curator, trace_review,
+    # bc_check, completeness_check, copy_paste, survey, test_gap, agent_check,
+    # config_sync, cost_reconciliation, cost_warmer, langfuse_cleanup.
 
   # Meta board — synthetic board for cross-repo proposals.
   # Uncomment and copy into config/repos.yaml to enable the meta-agent.

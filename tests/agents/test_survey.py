@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 
-import pytest
 import yaml
 
 from robotsix_mill.agents import surveying as survey_agent
@@ -465,64 +464,3 @@ def test_survey_cli_failure(capsys, monkeypatch):
 
 
 # --- Worker periodic tests ---
-
-
-@pytest.mark.asyncio
-async def test_worker_survey_task_created_when_periodic(
-    tmp_path, monkeypatch, repo_config
-):
-    """Worker._survey_task is created when survey_periodic=true."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
-    from robotsix_mill.core import db
-    from robotsix_mill.core.service import TicketService
-
-    settings = _make_settings(
-        tmp_path,
-        survey_periodic="true",
-        survey_interval_seconds="1",
-    )
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
-
-    # Patch _run_periodic_pass to be a no-op to avoid running immediately
-    async def noop_periodic(self, label, runner_fn, interval):
-        import asyncio
-
-        await asyncio.sleep(3600)
-
-    monkeypatch.setattr(Worker, "_run_periodic_pass", noop_periodic)
-
-    worker = Worker(ctx)
-    worker.start()
-
-    assert worker._survey_task is not None
-    assert not worker._survey_task.done()
-
-    await worker.stop()
-
-
-@pytest.mark.asyncio
-async def test_worker_survey_task_not_created_when_periodic_false(
-    tmp_path, monkeypatch, repo_config
-):
-    """Worker._survey_task is NOT created when survey_periodic=false."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
-    from robotsix_mill.core import db
-    from robotsix_mill.core.service import TicketService
-
-    settings = _make_settings(tmp_path)
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
-
-    worker = Worker(ctx)
-    worker.start()
-
-    assert worker._survey_task is None
-
-    await worker.stop()

@@ -2,7 +2,6 @@
 
 import json
 
-import pytest
 
 from robotsix_mill.agents import completeness_check as cc_agent
 from robotsix_mill.completeness_check_runner import (
@@ -584,60 +583,3 @@ def test_run_completeness_check_pass_clips_to_max_gaps(tmp_path, monkeypatch):
 
 
 # --- Worker periodic tests ---
-
-
-@pytest.mark.asyncio
-async def test_worker_completeness_check_task_created_when_periodic(
-    tmp_path, monkeypatch, repo_config
-):
-    """Worker._completeness_check_task is created when completeness_check_periodic=true."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
-
-    settings = _make_settings(
-        tmp_path,
-        completeness_check_periodic="true",
-        completeness_check_interval_seconds="1",
-    )
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
-
-    # Patch _run_periodic_pass to be a no-op (avoid running immediately)
-    async def noop_periodic(self, label, runner_fn, interval):
-        import asyncio as asyncio_mod
-
-        await asyncio_mod.sleep(3600)
-
-    monkeypatch.setattr(Worker, "_run_periodic_pass", noop_periodic)
-
-    worker = Worker(ctx)
-    worker.start()
-
-    assert worker._completeness_check_task is not None
-    assert not worker._completeness_check_task.done()
-
-    await worker.stop()
-
-
-@pytest.mark.asyncio
-async def test_worker_completeness_check_task_not_created_when_periodic_false(
-    tmp_path, monkeypatch, repo_config
-):
-    """Worker._completeness_check_task is NOT created when completeness_check_periodic=false."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
-
-    settings = _make_settings(tmp_path, completeness_check_periodic="false")
-    db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
-    ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
-
-    worker = Worker(ctx)
-    worker.start()
-
-    assert worker._completeness_check_task is None
-
-    await worker.stop()

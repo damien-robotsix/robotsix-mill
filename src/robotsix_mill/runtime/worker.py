@@ -1599,7 +1599,7 @@ class Worker:
                 repo_configs = [
                     rc
                     for rc in repo_configs
-                    if getattr(rc, "trace_health_periodic", True)
+                    if self._has_periodic_presence(rc, "trace_health")
                 ]
             for repo_config in repo_configs:
                 repo_label = repo_config.repo_id if repo_config else "default"
@@ -1780,7 +1780,8 @@ class Worker:
             repos = get_repos_config()
             warmed = 0
             for repo_config in repos.repos.values():
-                if not getattr(repo_config, "cost_warmer_periodic", True):
+                # cost_warmer_fast shares the cost_warmer presence file.
+                if not self._has_periodic_presence(repo_config, "cost_warmer"):
                     continue
                 try:
                     svc = TicketService(settings, board_id=repo_config.board_id)
@@ -2146,14 +2147,12 @@ class Worker:
 
     def _maintenance_enabled_for(self, repo_config, name: str) -> bool:
         """Whether a non-LLM maintenance loop (cost_warmer / langfuse_cleanup)
-        runs for *repo_config*. Presence-OR-flag bridge: a
-        ``.robotsix-mill/periodic/<name>.yaml`` presence file enables it, and
-        the legacy ``RepoConfig.<name>_periodic`` flag (default on) is still
-        honored so nothing regresses before repos commit presence files.
+        runs for *repo_config*: enabled iff the repo ships a
+        ``.robotsix-mill/periodic/<name>.yaml`` presence file. (The legacy
+        ``RepoConfig.<name>_periodic`` flags were removed — presence is the
+        single source of truth.)
         """
-        if self._has_periodic_presence(repo_config, name):
-            return True
-        return bool(getattr(repo_config, f"{name}_periodic", True))
+        return self._has_periodic_presence(repo_config, name)
 
     def _has_periodic_presence(self, repo_config, label: str) -> bool:
         """True when *repo_config*'s clone ships ``.robotsix-mill/periodic/
@@ -2513,91 +2512,11 @@ class Worker:
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
 
-        # --- Pattern A: per-repo periodic passes ---
-        self._start_periodic_pass(
-            "audit",
-            "robotsix_mill.audit_runner:run_audit_pass",
-            "audit_interval_seconds",
-            "audit_periodic",
-            "_audit_task",
-        )
-        self._start_periodic_pass(
-            "health",
-            "robotsix_mill.health_runner:run_health_pass",
-            "health_interval_seconds",
-            "health_periodic",
-            "_health_task",
-        )
-        self._start_periodic_pass(
-            "agent_check",
-            "robotsix_mill.agent_check_runner:run_agent_check_pass",
-            "agent_check_interval_seconds",
-            "agent_check_periodic",
-            "_agent_check_task",
-        )
-        self._start_periodic_pass(
-            "bc_check",
-            "robotsix_mill.bc_check_runner:run_bc_check_pass",
-            "bc_check_interval_seconds",
-            "bc_check_periodic",
-            "_bc_check_task",
-        )
-        self._start_periodic_pass(
-            "trace_review",
-            "robotsix_mill.trace_review_runner:run_trace_review_pass",
-            "trace_review_interval_seconds",
-            "trace_review_periodic",
-            "_trace_review_task",
-        )
-        self._start_periodic_pass(
-            "completeness_check",
-            "robotsix_mill.completeness_check_runner:run_completeness_check_pass",
-            "completeness_check_interval_seconds",
-            "completeness_check_periodic",
-            "_completeness_check_task",
-        )
-        self._start_periodic_pass(
-            "copy-paste",
-            "robotsix_mill.copy_paste_runner:run_copy_paste_pass",
-            "copy_paste_interval_seconds",
-            "copy_paste_periodic",
-            "_copy_paste_task",
-        )
-        self._start_periodic_pass(
-            "module_curator",
-            "robotsix_mill.module_curator_runner:run_module_curator_pass",
-            "module_curator_interval_seconds",
-            "module_curator_periodic",
-            "_module_curator_task",
-        )
-        self._start_periodic_pass(
-            "test-gap",
-            "robotsix_mill.test_gap_runner:run_test_gap_pass",
-            "test_gap_interval_seconds",
-            "test_gap_periodic",
-            "_test_gap_task",
-        )
-        self._start_periodic_pass(
-            "survey",
-            "robotsix_mill.survey_runner:run_survey_pass",
-            "survey_interval_seconds",
-            "survey_periodic",
-            "_survey_task",
-        )
-        self._start_periodic_pass(
-            "config-sync",
-            "robotsix_mill.config_sync_runner:run_config_sync_pass",
-            "config_sync_interval_seconds",
-            "config_sync_periodic",
-            "_config_sync_task",
-        )
-        self._start_periodic_pass(
-            "cost-reconciliation",
-            "robotsix_mill.cost_reconciliation_runner:run_cost_reconciliation_pass",
-            "cost_reconciliation_interval_seconds",
-            "cost_reconciliation_periodic",
-            "_cost_reconciliation_task",
-        )
+        # --- Per-repo periodic LLM agents + schedule-only passes ---
+        # These now run via the per-repo periodic supervisor (spawned
+        # below), driven by .robotsix-mill/periodic/<name>.yaml presence
+        # files in each managed repo. The legacy repos.yaml enable-flags
+        # + static _start_periodic_pass registrations were removed.
 
         # --- Pattern B: dedicated poll-loop tasks ---
         self._start_poll_loop_pass(
