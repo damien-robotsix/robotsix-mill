@@ -363,7 +363,7 @@ modules:
       - tests/agents/test_meta_triage.py
       - tests/test_meta_runner.py
       - tests/test_meta_workspace.py
-    dependencies: [config, core, agent-infra, forge, vcs, runners, runtime]
+    dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, runtime]
 
   # -------------------------------------------------------------------
   # Support services
