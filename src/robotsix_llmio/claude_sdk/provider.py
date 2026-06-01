@@ -14,8 +14,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from ..core._otel import get_tracer, start_span
@@ -86,6 +88,7 @@ def _log_stream_message(message: Any, turn: list[int], label: str) -> None:
             )
     except Exception:  # noqa: BLE001 — logging must never break the agent loop
         pass
+
 
 _TRACER_NAME = "robotsix_llmio.claude_sdk"
 
@@ -227,6 +230,62 @@ def _convert_tools(tools: list[Any]) -> tuple[list[str], Any]:
     return allowed, server
 
 
+# Built-in tools whose input names a file the agent is about to write. The
+# hook confines these to the workspace; reads/exploration are left free.
+_EDIT_TOOLS = "Write|Edit|MultiEdit|NotebookEdit"
+_EDIT_PATH_KEYS = ("file_path", "notebook_path", "path")
+
+
+def _is_within(root: str, target: str) -> bool:
+    """True if *target* (resolved, relative paths joined to *root*) is inside
+    *root*. ``realpath`` collapses ``..`` and symlinks so escapes are caught."""
+    p = target if os.path.isabs(target) else os.path.join(root, target)
+    rp = os.path.realpath(p)
+    return rp == root or rp.startswith(root + os.sep)
+
+
+def _make_confine_hook(workspace_root: str):
+    """Build a ``PreToolUse`` hook that denies built-in edits outside
+    *workspace_root*.
+
+    ``permission_mode="bypassPermissions"`` lets the SDK's built-in
+    Write/Edit/etc. write anywhere the process can reach, so a tool-bearing
+    agent working on a self-referential ticket can edit the host app's own
+    source instead of its checkout. A PreToolUse hook is the one gate the SDK
+    consults on *every* call regardless of permission mode (``can_use_tool``
+    is skipped under bypass), so it is where confinement must live."""
+    root = os.path.realpath(workspace_root)
+
+    async def _hook(
+        input: dict[str, Any], tool_use_id: str | None, context: Any
+    ) -> dict[str, Any]:
+        tool_input = input.get("tool_input") or {}
+        target = next(
+            (tool_input[k] for k in _EDIT_PATH_KEYS if tool_input.get(k)), None
+        )
+        if not target or _is_within(root, str(target)):
+            return {}  # no path, or inside the workspace → allow
+        log.warning(
+            "%s: denied out-of-workspace edit to %s (confined to %s)",
+            input.get("tool_name", "edit"),
+            target,
+            root,
+        )
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    f"Refused: edits are confined to the ticket workspace "
+                    f"{root}. {target!r} resolves outside it — edit the "
+                    f"corresponding file inside the workspace checkout instead."
+                ),
+            }
+        }
+
+    return _hook
+
+
 @dataclass
 class _SdkToolResult:
     """Minimal result mirroring pydantic-ai's ``AgentRunResult`` interface.
@@ -278,6 +337,7 @@ class _SdkToolAgentHandle:
         output_type: Any = str,
         name: str | None = None,
         max_turns: int | None = None,
+        workspace_root: str | Path | None = None,
     ) -> None:
         self._sdk_model = sdk_model
         self._system_prompt = system_prompt
@@ -285,6 +345,7 @@ class _SdkToolAgentHandle:
         self._allowed_tools = allowed_tools
         self._output_type = output_type
         self._name = name or "claude_sdk agent"
+        self._workspace_root = str(workspace_root) if workspace_root else None
         if max_turns is None:
             # Single source of truth for the runaway cap (see model._MAX_TURNS).
             # Generous, because an injected-MCP-tool loop legitimately needs many
@@ -382,6 +443,23 @@ class _SdkToolAgentHandle:
                 schema=schema_json
             )
 
+        # Confine built-in edits to the workspace when a root is set: run the
+        # SDK there (so relative paths + Bash default into it) and gate every
+        # Write/Edit/MultiEdit/NotebookEdit through a PreToolUse hook.
+        extra: dict[str, Any] = {}
+        if self._workspace_root:
+            from claude_agent_sdk import HookMatcher  # type: ignore[import-not-found]
+
+            extra["cwd"] = self._workspace_root
+            extra["hooks"] = {
+                "PreToolUse": [
+                    HookMatcher(
+                        matcher=_EDIT_TOOLS,
+                        hooks=[_make_confine_hook(self._workspace_root)],
+                    )
+                ]
+            }
+
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
             model=self._sdk_model,
@@ -390,6 +468,7 @@ class _SdkToolAgentHandle:
             allowed_tools=self._allowed_tools,
             permission_mode="bypassPermissions",
             setting_sources=[],
+            **extra,
         )
 
         from ..core.cost import record_cost
@@ -415,7 +494,12 @@ class _SdkToolAgentHandle:
             },
         ) as root:
             turn = [0]
-            log.info("%s: starting (model=%s, max_turns=%d)", self._name, self._sdk_model, self._max_turns)
+            log.info(
+                "%s: starting (model=%s, max_turns=%d)",
+                self._name,
+                self._sdk_model,
+                self._max_turns,
+            )
 
             async def _consume() -> None:
                 nonlocal result
@@ -434,9 +518,7 @@ class _SdkToolAgentHandle:
             try:
                 # Hard wall-clock cap so a stalled CLI subprocess fails fast and
                 # retryable instead of hanging on the SDK's own ~2h backstop.
-                await asyncio.wait_for(
-                    _consume(), timeout=constants.SDK_QUERY_TIMEOUT
-                )
+                await asyncio.wait_for(_consume(), timeout=constants.SDK_QUERY_TIMEOUT)
             except (TimeoutError, asyncio.TimeoutError) as exc:
                 raise ClaudeSDKQueryTimeout(
                     f"Claude Agent SDK query exceeded the "
@@ -528,6 +610,7 @@ class ClaudeSDKProvider(LLMProvider):
         output_type: Any = str,
         name: str | None = None,
         retries: int = 2,
+        workspace_root: str | Path | None = None,
     ) -> Any:
         """Build a ready-to-run agent for *tier*.
 
@@ -535,7 +618,16 @@ class ClaudeSDKProvider(LLMProvider):
         drives the SDK tool loop directly — intermediate ``ToolCallPart``
         objects are not surfaced.  When *tools* is empty/``None``, delegates
         to the standard pydantic-ai ``Agent`` path (unchanged).
-        """
+
+        *workspace_root* confines the agent's built-in file-mutating tools
+        (``Write``/``Edit``/``MultiEdit``/``NotebookEdit``) to that directory:
+        the SDK runs with ``cwd=workspace_root`` and a ``PreToolUse`` hook
+        denies any edit whose target resolves outside it. Without it a
+        tool-bearing agent can edit files anywhere the process reaches (e.g.
+        the host app's own source) because ``permission_mode`` is
+        ``bypassPermissions``. All built-in tools stay available — only
+        out-of-scope *writes* are refused. Ignored on the no-tools path
+        (no tools → nothing to confine)."""
         if not tools:
             return super().build_agent(
                 tier=tier,
@@ -555,4 +647,5 @@ class ClaudeSDKProvider(LLMProvider):
             allowed_tools=allowed_tools,
             output_type=output_type,
             name=name,
+            workspace_root=workspace_root,
         )
