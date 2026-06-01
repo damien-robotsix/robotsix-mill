@@ -17,6 +17,7 @@ modules:
       - src/robotsix_auto_mail/__init__.py
       - src/robotsix_auto_mail/format.py
       - pyproject.toml
+      - uv.lock
       - .gitignore
       - .python-version
       - LICENSE
