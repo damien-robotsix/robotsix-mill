@@ -33,6 +33,7 @@ def run_survey_agent(
     memory: str = "",
     recent_proposals: str = "",
     repo_dir=None,
+    definition_override=None,
 ) -> SurveyResult:
     """Run the survey pass.
 
@@ -77,6 +78,7 @@ def run_survey_agent(
     return run_periodic_agent(
         settings=settings,
         definition_name="survey",
+        definition_override=definition_override,
         model_setting=settings.survey_model,
         max_gaps=MAX_GAPS,
         repo_dir=repo_dir,

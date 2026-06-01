@@ -214,6 +214,7 @@ def run_periodic_pass(
     config: PeriodicPassConfig,
     *,
     settings,
+    definition_override: Any = None,
 ) -> Any:
     """Execute one full periodic pass.
 
@@ -315,6 +316,11 @@ def run_periodic_pass(
         max_drafts = config.max_drafts_fn(settings)
 
     agent_fn_callable = getattr(agent_module, config.agent_fn_name)
+    # Thread the per-repo merged definition (resolved by the periodic
+    # supervisor from .robotsix-mill/periodic/<name>.yaml) into the agent fn
+    # when present; agent fns ignore it when None (legacy built-in path).
+    if definition_override is not None:
+        extra_kwargs["definition_override"] = definition_override
     agent_fn = partial(agent_fn_callable, repo_dir=repo_dir, **extra_kwargs)
     result = run_agent_pass(
         agent_fn=agent_fn,

@@ -39,6 +39,7 @@ def run_agent_check_agent(
     *,
     settings: Settings,
     repo_dir=None,
+    definition_override=None,
     memory_dir: Path | None = None,
     memory: str = "",
     recent_proposals: str = "",
@@ -70,6 +71,7 @@ def run_agent_check_agent(
     return run_periodic_agent(
         settings=settings,
         definition_name="agent_check",
+        definition_override=definition_override,
         model_setting=settings.agent_check_model,
         max_gaps=MAX_GAPS,
         repo_dir=repo_dir,
