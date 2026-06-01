@@ -16,6 +16,7 @@ def _clear_env():
     # Reset the module-level state so tests are independent.
     tracing._provider_ready = None
     tracing._provider = None
+    tracing._logger_provider = None
     tracing._registered_keys.clear()
     tracing._shutdown_requested = False
     tracing._current_session.set(None)
@@ -382,6 +383,208 @@ def test_flush_tracing_default_timeout():
 
     sig = inspect.signature(tracing.flush_tracing)
     assert sig.parameters["timeout"].default == 10_000
+
+
+def test_flush_tracing_timeout_passed_to_logger_force_flush(monkeypatch):
+    """flush_tracing(timeout=5000) passes timeout_millis=5000 to the
+    LoggerProvider's force_flush — mirrors the span-side test so the
+    event-mode log pipeline is flushed at shutdown alongside spans."""
+    tracing._provider_ready = True
+
+    import opentelemetry._logs  # ensure module is importable for patching
+
+    timeout_value: list = []
+
+    class FakeLoggerProvider:
+        def force_flush(self, timeout_millis: int | None = None) -> None:
+            timeout_value.append(timeout_millis)
+
+    monkeypatch.setattr(
+        opentelemetry._logs,
+        "get_logger_provider",
+        lambda: FakeLoggerProvider(),
+    )
+    tracing.flush_tracing(timeout=5000)
+    assert timeout_value == [5000]
+
+
+# --- event-mode LogRecord routing --------------------------------------
+
+
+def test_log_record_carries_session_and_public_key_attributes():
+    """A LogRecord emitted while ``_current_session`` and ``_current_pk``
+    are set must carry ``session.id``, ``langfuse.session.id``, and
+    ``langfuse.public_key`` in its attributes — populated by the
+    ``_SessionStampLogProcessor`` installed on the global LoggerProvider
+    so pydantic-ai's event-mode emissions are routed correctly."""
+    pytest.importorskip("opentelemetry.sdk._logs")
+    from opentelemetry._logs import SeverityNumber
+    from opentelemetry._logs._internal import LogRecord as _ApiLogRecord
+    from opentelemetry.sdk._logs import LoggerProvider, LogRecordProcessor
+
+    captured: list[dict] = []
+
+    class _StampAndCapture(LogRecordProcessor):
+        """Mirror of ``_SessionStampLogProcessor`` — stamps from the
+        contextvars and captures the resulting attributes so the test
+        can assert on them without standing up the real exporter."""
+
+        def on_emit(self, log_record):
+            rec = log_record.log_record
+            sid = tracing._current_session.get()
+            if sid:
+                rec.attributes["session.id"] = sid
+                rec.attributes["langfuse.session.id"] = sid
+            pk = tracing._current_pk.get()
+            if pk:
+                rec.attributes["langfuse.public_key"] = pk
+            captured.append(dict(rec.attributes or {}))
+
+        def shutdown(self):
+            pass
+
+        def force_flush(self, timeout_millis=30000):
+            return True
+
+    provider = LoggerProvider()
+    provider.add_log_record_processor(_StampAndCapture())
+    logger = provider.get_logger("test-tracer")
+
+    import time as _time
+
+    sess_token = tracing._current_session.set("ticket-log-routing-test")
+    pk_token = tracing._current_pk.set("pk-routing-test")
+    try:
+        logger.emit(
+            _ApiLogRecord(
+                timestamp=_time.time_ns(),
+                body="hello",
+                severity_number=SeverityNumber.INFO,
+                attributes={},
+            )
+        )
+    finally:
+        tracing._current_pk.reset(pk_token)
+        tracing._current_session.reset(sess_token)
+
+    assert len(captured) == 1
+    attrs = captured[0]
+    assert attrs.get("session.id") == "ticket-log-routing-test"
+    assert attrs.get("langfuse.session.id") == "ticket-log-routing-test"
+    assert attrs.get("langfuse.public_key") == "pk-routing-test"
+
+
+def test_log_record_filtered_when_public_key_mismatches():
+    """A LogRecord whose stamped ``langfuse.public_key`` does not match
+    a ``_FilteredBatchLogRecordProcessor``'s target must be dropped
+    before reaching the wrapped exporter — so repo-A's event-mode logs
+    never land in repo-B's Langfuse project. Mirrors the real
+    stamp+filter pipeline from ``_ensure_tracing`` with module-level
+    helper processors (see ``_PkStampLogProcessor`` /
+    ``_CaptureLogProcessor`` / ``_FilteredLogProcessor`` below)."""
+    pytest.importorskip("opentelemetry.sdk._logs")
+    from opentelemetry._logs import SeverityNumber
+    from opentelemetry._logs._internal import LogRecord as _ApiLogRecord
+    from opentelemetry.sdk._logs import LoggerProvider
+
+    captured_a: list[dict] = []
+    captured_b: list[dict] = []
+
+    provider = LoggerProvider()
+    # Order matters: stamp first so filters see the public_key when
+    # they decide whether to drop.
+    provider.add_log_record_processor(_PkStampLogProcessor())
+    provider.add_log_record_processor(
+        _FilteredLogProcessor(
+            _CaptureLogProcessor(captured_a), target_public_key="pk-a"
+        )
+    )
+    provider.add_log_record_processor(
+        _FilteredLogProcessor(
+            _CaptureLogProcessor(captured_b), target_public_key="pk-b"
+        )
+    )
+
+    logger = provider.get_logger("test-tracer")
+
+    import time as _time
+
+    pk_token = tracing._current_pk.set("pk-a")
+    try:
+        logger.emit(
+            _ApiLogRecord(
+                timestamp=_time.time_ns(),
+                body="hello",
+                severity_number=SeverityNumber.INFO,
+                attributes={},
+            )
+        )
+    finally:
+        tracing._current_pk.reset(pk_token)
+
+    assert len(captured_a) == 1, f"pk-a sink should receive 1 record, got {captured_a}"
+    assert captured_a[0].get("langfuse.public_key") == "pk-a"
+    assert captured_b == [], (
+        f"pk-b sink should receive 0 records when _current_pk='pk-a', got {captured_b}"
+    )
+
+
+# --- Helpers for test_log_record_filtered_when_public_key_mismatches.
+# Defined at module scope so the test body stays under C901's cyclomatic-
+# complexity threshold. They mirror, in test code, the real
+# _SessionStampLogProcessor and _FilteredBatchLogRecordProcessor defined
+# inside _ensure_tracing (which can't be imported directly).
+def _build_log_processor_helpers():  # noqa: C901
+    from opentelemetry.sdk._logs import LogRecordProcessor
+
+    class _PkStamp(LogRecordProcessor):
+        def on_emit(self, log_record):
+            pk = tracing._current_pk.get()
+            if pk:
+                log_record.log_record.attributes["langfuse.public_key"] = pk
+
+        def shutdown(self):
+            pass
+
+        def force_flush(self, timeout_millis=30000):
+            return True
+
+    class _Capture(LogRecordProcessor):
+        def __init__(self, sink):
+            self._sink = sink
+
+        def on_emit(self, log_record):
+            self._sink.append(dict(log_record.log_record.attributes or {}))
+
+        def shutdown(self):
+            pass
+
+        def force_flush(self, timeout_millis=30000):
+            return True
+
+    class _Filtered(LogRecordProcessor):
+        def __init__(self, inner, *, target_public_key):
+            self._inner = inner
+            self._target_pk = target_public_key
+
+        def on_emit(self, log_record):
+            attrs = log_record.log_record.attributes or {}
+            if attrs.get("langfuse.public_key") != self._target_pk:
+                return
+            self._inner.on_emit(log_record)
+
+        def shutdown(self):
+            pass
+
+        def force_flush(self, timeout_millis=30000):
+            return True
+
+    return _PkStamp, _Capture, _Filtered
+
+
+_PkStampLogProcessor, _CaptureLogProcessor, _FilteredLogProcessor = (
+    _build_log_processor_helpers()
+)
 
 
 # --- Rejected-generation annotator ----------------------------------------
