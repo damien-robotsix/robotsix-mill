@@ -668,12 +668,12 @@ class TestGuardClause:
 
         db.reset_engine()
 
-    def test_meta_ticket_without_marker_blocks_as_cross_repo(
+    def test_meta_ticket_without_marker_enters_cross_repo_path(
         self, tmp_path, monkeypatch
     ):
-        """A META ticket without the new-repo marker is NOT scaffolded; it
-        BLOCKs at the cross-repo implement gate (the multi-repo implement +
-        deliver half isn't built yet) with a clear note."""
+        """A META ticket without the new-repo marker is NOT scaffolded;
+        it enters the cross-repo meta workspace path. When triage fails
+        (no LLM in unit tests), it BLOCKs with a clear note."""
         settings = _make_settings(tmp_path)
         db.reset_engine()
         db.init_db(settings, board_id="meta")
@@ -690,8 +690,14 @@ class TestGuardClause:
         stage = ImplementStage()
         outcome = stage.run(ticket, ctx)
 
+        # Not scaffolded — reached the cross-repo meta workspace gate.
+        # Without a real LLM the triage may fail or return no repos;
+        # either path BLOCKs.
         assert outcome.next_state == State.BLOCKED
-        assert "meta cross-repo" in (outcome.note or "")
+        assert (
+            "meta repo-triage failed" in (outcome.note or "")
+            or "no repos could be cloned" in (outcome.note or "")
+        )
 
         db.reset_engine()
 

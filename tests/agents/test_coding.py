@@ -466,3 +466,72 @@ def test_default_parameters_passthrough(settings, tmp_path, monkeypatch):
     assert kw["previous_attempt_summary"] is None
     assert kw["board_id"] == ""
     assert kw["language_instructions"] == ""
+
+
+def test_extra_roots_forwards_to_run_coordinator(
+    settings, tmp_path, monkeypatch
+):
+    """``extra_roots`` is forwarded to the inner ``run_coordinator``
+    calls (both the primary path and the deepseek-fallback path)."""
+    calls: list[dict] = []
+    result = _make_result()
+
+    def _fake_run_coordinator(**kw):
+        calls.append(kw)
+        return result
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.coordinating.run_coordinator",
+        _fake_run_coordinator,
+    )
+
+    roots = [tmp_path / "clone_a", tmp_path / "clone_b"]
+    run_implement_agent(
+        settings=settings,
+        repo_dir=tmp_path,
+        spec="do X",
+        extra_roots=roots,
+    )
+
+    # Primary path captured extra_roots.
+    assert len(calls) == 1
+    assert calls[0]["extra_roots"] == roots
+
+
+def test_extra_roots_forwards_on_fallback(
+    settings, tmp_path, monkeypatch
+):
+    """When the primary model raises ``UnexpectedModelBehavior``,
+    the fallback ``run_coordinator`` call also receives ``extra_roots``."""
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    calls: list[dict] = []
+    result = _make_result()
+
+    call_count = 0
+
+    def _fake_run_coordinator(**kw):
+        nonlocal call_count
+        calls.append(kw)
+        call_count += 1
+        if call_count == 1:
+            raise UnexpectedModelBehavior("output retries exhausted")
+        return result
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.coordinating.run_coordinator",
+        _fake_run_coordinator,
+    )
+
+    roots = [tmp_path / "clone_c"]
+    run_implement_agent(
+        settings=settings,
+        repo_dir=tmp_path,
+        spec="do X",
+        extra_roots=roots,
+    )
+
+    assert len(calls) == 2
+    # Both primary and fallback calls receive extra_roots.
+    assert calls[0]["extra_roots"] == roots
+    assert calls[1]["extra_roots"] == roots

@@ -316,6 +316,15 @@ def test_meta_ticket_builds_multi_repo_workspace(
         check=True,
         capture_output=True,
     )
+    # Match git_ops.clone's identity setup so commits work.
+    subprocess.run(
+        ["git", "-C", str(primary), "config", "user.email", "mill@robotsix.local"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(primary), "config", "user.name", "robotsix-mill"],
+        check=True,
+    )
     extra = [primary]
 
     monkeypatch.setattr(
