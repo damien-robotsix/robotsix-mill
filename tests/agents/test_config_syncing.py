@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from robotsix_mill.agents import config_syncing
 
 
-def _wrap_retry(fn, **kwargs):
-    """Simulate call_with_retry returning an object with .output."""
-    return SimpleNamespace(output=fn())
+def _wrap_retry(agent, make_run, **kwargs):
+    """Simulate run_agent: run make_run on the (mock) handle, wrap in .output."""
+    return SimpleNamespace(output=make_run(agent))
 
 
 # --- Agent tests ---
@@ -90,7 +90,7 @@ def test_run_config_sync_agent_web_false(monkeypatch):
         return mock_agent
 
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
-    monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", _wrap_retry)
 
     s = Settings(data_dir="/tmp/test_config_sync")
     config_syncing.run_config_sync_agent(settings=s, memory="")
@@ -118,7 +118,7 @@ def test_run_config_sync_agent_max_gaps_clipping(monkeypatch):
         return mock_agent
 
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
-    monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", _wrap_retry)
 
     s = Settings(data_dir="/tmp/test_config_sync")
     result = config_syncing.run_config_sync_agent(settings=s, memory="")
@@ -143,7 +143,7 @@ def test_run_config_sync_agent_no_repo_dir_no_tools(monkeypatch):
         return mock_agent
 
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
-    monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", _wrap_retry)
 
     s = Settings(data_dir="/tmp/test_config_sync")
     config_syncing.run_config_sync_agent(settings=s, memory="")
@@ -167,7 +167,7 @@ def test_run_config_sync_agent_with_repo_dir_adds_tools(monkeypatch, tmp_path):
         return mock_agent
 
     monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
-    monkeypatch.setattr("robotsix_mill.agents.retry.call_with_retry", _wrap_retry)
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", _wrap_retry)
 
     # Create a minimal repo structure so build_fs_tools doesn't fail.
     repo = tmp_path / "repo"

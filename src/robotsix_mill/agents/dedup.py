@@ -115,7 +115,7 @@ def run_dedup_check(
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent / "agent_definitions" / "dedup.yaml"
@@ -144,8 +144,9 @@ def run_dedup_check(
     # stop. Mirrors coordinating/explore/testing.
     limits = UsageLimits(request_limit=settings.dedup_request_limit)
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(
                 _build_prompt(
                     draft_title=draft_title,
                     draft_body=draft_body,

@@ -55,7 +55,7 @@ def run_test_agent(
     from .base import build_agent_from_definition, _safe_close
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     from pydantic_ai.usage import UsageLimits
 
@@ -77,8 +77,9 @@ def run_test_agent(
     )
     limits = UsageLimits(request_limit=settings.test_request_limit)
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(
                 f"<test_output rc={rc}>\n{tail}\n</test_output>",
                 usage_limits=limits,
             ),

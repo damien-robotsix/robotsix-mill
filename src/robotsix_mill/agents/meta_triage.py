@@ -59,7 +59,7 @@ def required_repos_for(*, settings: Settings, spec: str) -> list[str]:
         return []
 
     from .base import _safe_close, build_agent_from_definition
-    from .retry import call_with_retry
+    from .retry import run_agent
     from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(
@@ -78,8 +78,9 @@ def required_repos_for(*, settings: Settings, spec: str) -> list[str]:
         "proposal", spec
     )
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt),
             settings=settings,
             what="meta-triage",
         )

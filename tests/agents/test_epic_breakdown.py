@@ -72,8 +72,8 @@ def test_comments_parameter_appended_to_prompt(monkeypatch):
         lambda *args, **kw: FakeAgent(),
     )
     monkeypatch.setattr(
-        "robotsix_mill.agents.retry.call_with_retry",
-        lambda fn, **kw: fn(),
+        "robotsix_mill.agents.retry.run_agent",
+        lambda agent, make_run, **kw: make_run(agent),
     )
     monkeypatch.setattr(
         "robotsix_mill.agents.base._safe_close",

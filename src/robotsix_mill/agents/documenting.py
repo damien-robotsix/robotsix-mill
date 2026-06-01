@@ -83,7 +83,7 @@ def run_doc_classifier(
     from pydantic_ai.usage import UsageLimits
 
     from .base import _safe_close, build_agent_from_definition
-    from .retry import call_with_retry
+    from .retry import run_agent
     from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(
@@ -103,8 +103,9 @@ def run_doc_classifier(
 
         user_prompt = section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
         limits = UsageLimits(request_limit=settings.doc_classifier_request_limit)
-        result = call_with_retry(
-            lambda: agent.run_sync(user_prompt, usage_limits=limits),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(user_prompt, usage_limits=limits),
             settings=settings,
             what="doc classifier",
         )
@@ -147,7 +148,7 @@ def run_doc_agent(
     from .base import build_agent_from_definition, _safe_close
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
-    from .retry import call_with_retry
+    from .retry import run_agent
     from ..pass_runner import load_memory, persist_memory
 
     definition = load_agent_definition(
@@ -219,8 +220,9 @@ def run_doc_agent(
                 run_kwargs["message_history"] = preseed
                 run_user_prompt = None
 
-        result = call_with_retry(
-            lambda: agent.run_sync(run_user_prompt, **run_kwargs),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(run_user_prompt, **run_kwargs),
             settings=settings,
             what="document",
         )

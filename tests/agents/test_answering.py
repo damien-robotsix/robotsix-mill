@@ -184,11 +184,11 @@ def test_run_answer_agent_without_repo_dir(tmp_path, monkeypatch):
 
         return FakeAgent()
 
-    def fake_retry(fn, *, settings, what):
-        return fn()
+    def fake_retry(agent, make_run, *, settings, what):
+        return make_run(agent)
 
     monkeypatch.setattr(bmod, "build_agent_from_definition", fake_build_agent)
-    monkeypatch.setattr(rmod, "call_with_retry", fake_retry)
+    monkeypatch.setattr(rmod, "run_agent", fake_retry)
     # Stub langfuse tools to avoid real imports
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost", lambda settings, sid: 0.0
@@ -244,11 +244,11 @@ def test_run_answer_agent_with_repo_dir(tmp_path, monkeypatch):
 
         return FakeAgent()
 
-    def fake_retry(fn, *, settings, what):
-        return fn()
+    def fake_retry(agent, make_run, *, settings, what):
+        return make_run(agent)
 
     monkeypatch.setattr(bmod, "build_agent_from_definition", fake_build_agent)
-    monkeypatch.setattr(rmod, "call_with_retry", fake_retry)
+    monkeypatch.setattr(rmod, "run_agent", fake_retry)
     # Stub langfuse tools
     monkeypatch.setattr(
         "robotsix_mill.langfuse_client.session_cost", lambda settings, sid: 0.0

@@ -161,6 +161,15 @@ class Settings(BaseSettings):
     # storm. Only takes effect when ``llm_backend``/``claude_sdk_agents`` routes
     # work to the Claude SDK; the DeepSeek path is unaffected. Must be ≥ 1.
     claude_max_concurrency: int = Field(default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY")
+    # Resilience: when a Claude-SDK agent run terminally fails (after its local
+    # retries are exhausted), fall back to the equivalent DeepSeek/OpenRouter
+    # build of the same agent. Only takes effect for Claude-routed agents AND
+    # when an OpenRouter key is configured (no key → no fallback, unchanged).
+    # The fallback uses the same tier-resolved model the agent would have run on
+    # DeepSeek. Set False to make a Claude failure surface directly.
+    claude_fallback_to_deepseek: bool = Field(
+        default=True, alias="MILL_CLAUDE_FALLBACK_TO_DEEPSEEK"
+    )
     model: str = Field(default="deepseek/deepseek-v4-pro")
     explore_model: str = Field(default="deepseek/deepseek-v4-flash")
     test_model: str = Field(default="deepseek/deepseek-v4-flash")

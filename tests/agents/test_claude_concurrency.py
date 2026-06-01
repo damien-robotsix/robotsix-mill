@@ -138,7 +138,13 @@ def test_build_agent_wraps_claude_handle_with_the_bound(monkeypatch):
     sized from settings.claude_max_concurrency."""
     from unittest.mock import MagicMock, patch
 
-    s = _settings(llm_backend="claude_sdk", claude_max_concurrency=3)
+    # Disable the Claude→DeepSeek fallback wrapper so build_agent returns the
+    # bound handle directly (this test asserts on that type).
+    s = _settings(
+        llm_backend="claude_sdk",
+        claude_max_concurrency=3,
+        claude_fallback_to_deepseek=False,
+    )
 
     provider = MagicMock()
     provider.build_agent.side_effect = lambda **kw: "RAW_HANDLE"

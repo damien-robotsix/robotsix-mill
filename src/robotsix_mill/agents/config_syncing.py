@@ -217,11 +217,12 @@ def run_config_sync_agent(
         + "\n\n"
         + "Perform the config-sync drift inspection and return your result."
     )
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt), settings=settings, what="config-sync"
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt), settings=settings, what="config-sync"
         )
     finally:
         _safe_close(agent)

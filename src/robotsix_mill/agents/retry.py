@@ -19,18 +19,37 @@ import asyncio
 import logging
 import random
 import time
-from typing import Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar
 
+from robotsix_llmio.claude_sdk.transient import (
+    is_claude_sdk_transient as _is_claude_sdk_transient,
+)
 from robotsix_llmio.core import call_with_retry as _lib_call_with_retry
+from robotsix_llmio.core import (
+    call_with_retry_and_fallback as _lib_call_with_retry_and_fallback,
+)
 from robotsix_llmio.core import constants as _constants
 from robotsix_llmio.core import is_rate_limited
 from robotsix_llmio.core.retry import _status
 from robotsix_llmio.openrouter.transient import (
-    is_openrouter_transient as is_transient,
+    is_openrouter_transient as _is_openrouter_transient,
 )
 from robotsix_llmio.openrouter.transient import (
     is_openrouter_upstream_error as _is_openrouter_upstream_error,
 )
+
+
+def is_transient(exc: BaseException) -> bool:
+    """Transient if EITHER backend's classifier says so.
+
+    mill runs both the OpenRouter/DeepSeek and the Claude SDK transports, so a
+    single retry predicate must recognise both families: OpenRouter
+    429/5xx/upstream on the DeepSeek path, and Claude SDK subprocess/connection/
+    query-timeout failures on the Claude path. The two sets don't overlap in
+    practice, so OR-ing them keeps local retries correct for whichever backend
+    actually ran — previously only OpenRouter errors were retried, so a Claude
+    CLI hiccup or query timeout skipped local retry entirely."""
+    return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)
 
 # NOTE: is_deepseek_reasoning_roundtrip_error was removed from robotsix-llmio
 # (OpenRouter no longer raises the DeepSeek thinking-mode 400 when reasoning is
@@ -43,6 +62,8 @@ log = logging.getLogger("robotsix_mill.agents.retry")
 __all__ = [
     "call_with_retry",
     "acall_with_retry",
+    "run_agent",
+    "arun_agent",
     "is_transient",
     "is_rate_limited",
     "_status",
@@ -129,3 +150,75 @@ async def acall_with_retry(
             # non-retryable
             raise
     raise AssertionError("unreachable")  # pragma: no cover
+
+
+def run_agent(
+    agent: Any,
+    make_run: Callable[[Any], T],
+    *,
+    settings: object | None = None,
+    what: str = "model call",
+    sleep: Callable[[float], None] = time.sleep,
+) -> T:
+    """Run *agent* with bounded local retry, then model fallback.
+
+    *make_run* takes a handle and performs the actual run, e.g.
+    ``lambda h: h.run_sync(prompt, message_history=hist, usage_limits=limits)``.
+    It is invoked on the primary handle; only if the primary fails after its
+    local retries are exhausted is it invoked again on a lazily-built fallback
+    handle (when *agent* carries one — a :class:`~robotsix_mill.agents.fallback.
+    FallbackAgentHandle`). A plain handle just gets the usual bounded retry.
+
+    This is the single chokepoint for "retry locally, then fall back": passing
+    *agent* (not a pre-bound lambda) is what lets the same run be replayed on the
+    fallback model. *settings* is accepted for call-site parity and unused."""
+    builder = getattr(agent, "fallback_builder", None)
+    if builder is None:
+        return _lib_call_with_retry(
+            lambda: make_run(agent),
+            what=what,
+            sleep=sleep,
+            is_transient_fn=is_transient,
+        )
+    return _lib_call_with_retry_and_fallback(
+        lambda: make_run(agent),
+        lambda: make_run(agent.build_fallback()),
+        what=what,
+        sleep=sleep,
+        is_transient_primary=is_transient,
+        is_transient_fallback=is_transient,
+        should_fallback=lambda _e: True,
+    )
+
+
+async def arun_agent(
+    agent: Any,
+    make_run: Callable[[Any], Awaitable[T]],
+    *,
+    settings: object | None = None,
+    what: str = "model call",
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> T:
+    """Async sibling of :func:`run_agent`. *make_run* returns an awaitable, e.g.
+    ``lambda h: h.run(prompt, ...)``. Retries the primary on the running event
+    loop, then — on terminal failure — the lazily-built fallback handle."""
+    builder = getattr(agent, "fallback_builder", None)
+    if builder is None:
+        return await acall_with_retry(lambda: make_run(agent), what=what, sleep=sleep)
+    try:
+        return await acall_with_retry(lambda: make_run(agent), what=what, sleep=sleep)
+    except Exception as primary_exc:  # noqa: BLE001 — re-raised, chained below
+        log.warning(
+            "%s: primary failed after local retries (%s) — falling back to the "
+            "secondary model",
+            what,
+            type(primary_exc).__name__,
+        )
+        try:
+            return await acall_with_retry(
+                lambda: make_run(agent.build_fallback()),
+                what=f"{what} (fallback)",
+                sleep=sleep,
+            )
+        except Exception as fb_exc:  # noqa: BLE001
+            raise fb_exc from primary_exc

@@ -76,7 +76,7 @@ def run_bespoke_agent(
 
     from .base import build_agent, _safe_close
     from .prompt_blocks import section
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     tools: list = []
     if repo_dir is not None:
@@ -121,8 +121,9 @@ def run_bespoke_agent(
     )
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt),
             settings=settings,
             what=f"bespoke:{definition.name}",
         )

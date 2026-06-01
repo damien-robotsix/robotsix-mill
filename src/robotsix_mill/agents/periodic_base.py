@@ -177,15 +177,16 @@ def run_periodic_agent(
     # ------------------------------------------------------------------
     # Step 6 — run with retry
     # ------------------------------------------------------------------
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     _run_kwargs: dict[str, Any] = {}
     if usage_limits is not None:
         _run_kwargs["usage_limits"] = usage_limits
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt, **_run_kwargs),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt, **_run_kwargs),
             settings=settings,
             what=definition_name,
         )

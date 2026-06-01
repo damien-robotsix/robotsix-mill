@@ -90,7 +90,7 @@ def run_cost_reconciliation_agent(
     from .base import build_agent_from_definition, _safe_close
     from pydantic_ai.usage import UsageLimits
     from .yaml_loader import load_agent_definition
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     definition = load_agent_definition(
         Path(__file__).parent.parent.parent.parent
@@ -108,8 +108,9 @@ def run_cost_reconciliation_agent(
     limits = UsageLimits(request_limit=4)
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(
                 _build_prompt(
                     openrouter_total=openrouter_total,
                     langfuse_total=langfuse_total,

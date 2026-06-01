@@ -74,7 +74,7 @@ def test_expand_for_new_test_file(monkeypatch):
     scope_triage.load_agent_definition = MagicMock(
         return_value=type("D", (), {"model": None})()
     )
-    scope_triage.call_with_retry = lambda fn, **kw: fn()
+    scope_triage.run_agent = lambda agent, make_run, **kw: make_run(agent)
 
     result = run_scope_triage_agent(
         settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
@@ -115,7 +115,7 @@ def test_reject_for_unrelated_module(monkeypatch):
     scope_triage.load_agent_definition = MagicMock(
         return_value=type("D", (), {"model": None})()
     )
-    scope_triage.call_with_retry = lambda fn, **kw: fn()
+    scope_triage.run_agent = lambda agent, make_run, **kw: make_run(agent)
 
     result = run_scope_triage_agent(
         settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
@@ -155,7 +155,7 @@ def test_escalate_for_ambiguous(monkeypatch):
     scope_triage.load_agent_definition = MagicMock(
         return_value=type("D", (), {"model": None})()
     )
-    scope_triage.call_with_retry = lambda fn, **kw: fn()
+    scope_triage.run_agent = lambda agent, make_run, **kw: make_run(agent)
 
     result = run_scope_triage_agent(
         settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),
@@ -198,7 +198,7 @@ def test_prompt_includes_all_sections(monkeypatch):
     scope_triage.load_agent_definition = MagicMock(
         return_value=type("D", (), {"model": None})()
     )
-    scope_triage.call_with_retry = lambda fn, **kw: fn()
+    scope_triage.run_agent = lambda agent, make_run, **kw: make_run(agent)
 
     run_scope_triage_agent(
         settings=Settings(data_dir="/tmp", scope_triage_model="test/model"),

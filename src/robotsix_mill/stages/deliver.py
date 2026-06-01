@@ -21,7 +21,7 @@ import logging
 import subprocess
 
 from ..agents.base import build_agent
-from ..agents.retry import call_with_retry
+from ..agents.retry import run_agent
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
@@ -95,8 +95,9 @@ def generate_pr_description(
             spec=spec[:4000],
             diff=diff_text,
         )
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt),
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt),
             settings=settings,
             what="PR summary generation",
         )

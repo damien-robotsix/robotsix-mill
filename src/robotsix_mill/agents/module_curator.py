@@ -111,11 +111,12 @@ def run_module_curator_agent(
         "for any detected drift — including reorganization opportunities toward "
         "the per-module layout (src/<module>, docs/<module>, tests/<module>)."
     )
-    from .retry import call_with_retry
+    from .retry import run_agent
 
     try:
-        result = call_with_retry(
-            lambda: agent.run_sync(prompt), settings=settings, what="module_curator"
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt), settings=settings, what="module_curator"
         )
     finally:
         _safe_close(agent)
