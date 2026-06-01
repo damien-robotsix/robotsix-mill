@@ -406,7 +406,12 @@ class _SdkToolAgentHandle:
                 "gen_ai.operation.name": "invoke_agent",
                 "gen_ai.system": "anthropic",
                 "gen_ai.request.model": self._sdk_model,
-                "langfuse.observation.input": prompt,
+                # This span becomes the trace, so render system + user as chat
+                # messages here too — the system prompt then shows at the trace
+                # root, not only on the child generation.
+                "langfuse.observation.input": _chat_messages_input(
+                    system_prompt, prompt
+                ),
             },
         ) as root:
             turn = [0]

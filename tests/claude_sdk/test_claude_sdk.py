@@ -585,11 +585,25 @@ def test_generation_span_input_includes_system_prompt(monkeypatch):
     handle.run_sync("USER_MARKER hi")
     handle.close()
 
-    chat_spans = [s for s in exporter.get_finished_spans() if s.name.startswith("chat ")]
-    assert chat_spans, f"no chat span found in {[s.name for s in exporter.get_finished_spans()]}"
-    msgs = json.loads(chat_spans[0].attributes["langfuse.observation.input"])
-    assert msgs[0]["role"] == "system" and "SYS_MARKER" in msgs[0]["content"]
-    assert msgs[1]["role"] == "user" and "USER_MARKER" in msgs[1]["content"]
+    spans = exporter.get_finished_spans()
+
+    def _input_messages(predicate) -> list:
+        matched = [s for s in spans if predicate(s)]
+        assert matched, f"no matching span in {[s.name for s in spans]}"
+        return json.loads(matched[0].attributes["langfuse.observation.input"])
+
+    # The child generation span carries system + user...
+    chat = _input_messages(lambda s: s.name.startswith("chat "))
+    assert chat[0]["role"] == "system" and "SYS_MARKER" in chat[0]["content"]
+    assert chat[1]["role"] == "user" and "USER_MARKER" in chat[1]["content"]
+
+    # ...and so does the root agent-run span (which becomes the trace), so the
+    # system prompt is visible at the trace root, not only on the generation.
+    root = _input_messages(
+        lambda s: s.attributes.get("gen_ai.operation.name") == "invoke_agent"
+    )
+    assert root[0]["role"] == "system" and "SYS_MARKER" in root[0]["content"]
+    assert root[1]["role"] == "user" and "USER_MARKER" in root[1]["content"]
 
 
 def test_notools_path_returns_agent_handle():
