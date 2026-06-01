@@ -677,6 +677,15 @@ class ImplementStage(Stage):
                 )
 
         # --- agent invocation ---
+        # Gating heuristic: when the previous attempt already concluded
+        # ``no_change_needed`` (the summary or feedback carries that
+        # signal), the retry is a pure re-check — use the cheaper
+        # ``no_change_model`` instead of the primary model.
+        agent_model: str | None = None
+        _prev = (ic.previous_attempt_summary or "") + (ic.feedback or "")
+        if "no change needed" in _prev.lower():
+            agent_model = settings.no_change_model
+
         try:
             (
                 summary,
@@ -699,6 +708,7 @@ class ImplementStage(Stage):
                 message_history=resume_history,
                 language_instructions=language_instructions,
                 extra_roots=extra_roots,
+                model_name=agent_model,
             )
         except AgentBudgetError as e:
             ImplementStage._finalize(
