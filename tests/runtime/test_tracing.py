@@ -384,7 +384,7 @@ def test_flush_tracing_default_timeout():
     assert sig.parameters["timeout"].default == 10_000
 
 
-# --- Langfuse chat-IO flattener ----------------------------------------
+# --- Rejected-generation annotator ----------------------------------------
 
 
 class TestCheckRejectedGeneration:

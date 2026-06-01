@@ -6,8 +6,12 @@ at module level — everything is lazy behind ``_ensure_tracing()``.
 When per-repo Langfuse credentials are available via ``RepoConfig``
 (stamped onto ``Secrets`` at startup), we configure a global
 ``TracerProvider`` with an ``OTLPSpanExporter`` pointing to Langfuse's
-OTLP endpoint, call ``Agent.instrument_all()`` so every pydantic-ai
-agent run is automatically recorded, and expose context managers for
+OTLP endpoint, call
+``Agent.instrument_all(InstrumentationSettings(event_mode='logs', version=1))``
+so every pydantic-ai agent run is automatically recorded — message
+content (prompts, tool calls, responses) is emitted as separate OTel
+``LogRecord`` events under the GenAI semantic conventions rather than
+being packed into span attributes, and expose context managers for
 root ticket spans and pipeline stage spans.
 
 When the credentials are absent, every function is a cheap no-op.
@@ -279,22 +283,10 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
 
     # --- heavy imports: gated behind the env-var check ---
     try:
-        # Pydantic-ai stamps full prompt / message content into span
-        # attributes — multi-MB strings are routine. Langfuse self-hosted
-        # nginx ingresses cap request bodies (~1 MB by default), so big
-        # spans return 413 Request Entity Too Large and the whole batch
-        # is dropped. Truncate attribute values aggressively so spans
-        # stay shippable. Caller can override via env if they really
-        # need more.
-        # No per-attribute length cap. Earlier we set
-        # OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT=8192 to keep batches under
-        # the self-hosted Langfuse nginx body cap, but 8 KB sliced
-        # pydantic-ai's gen_ai.input.messages mid-string into invalid
-        # JSON for any non-trivial conversation — Langfuse couldn't
-        # parse and rendered only the system bubble. With the server
-        # nginx cap raised, the cap is no longer needed; let
-        # pydantic-ai's full attributes flow through. Operator can
-        # still override via env if needed.
+        # Bulky message content (prompts, tool calls, responses) is
+        # carried by OTel LogRecord events under event_mode='logs'
+        # (configured below) rather than span attributes, so the
+        # default OTel attribute size limits are sufficient.
 
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
@@ -398,9 +390,14 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
 
             from pydantic_ai.agent import Agent, InstrumentationSettings
 
-            # event_mode='logs' emits each pydantic-ai message as a
-            # separate OTel LogRecord, avoiding attribute-size truncation
-            # and following OTel GenAI semantic conventions.
+            # event_mode='logs' emits each pydantic-ai message (system
+            # prompt, user turn, tool call, model response) as a separate
+            # OTel LogRecord under the GenAI semantic conventions, rather
+            # than packing the whole chat into span attributes. Avoids
+            # the attribute-size truncation that the earlier strategy of
+            # stamping message content into span attributes suffered
+            # from, and gives Langfuse one observation per message for
+            # cleaner rendering.
             Agent.instrument_all(InstrumentationSettings(event_mode="logs", version=1))
             _provider = provider
             _provider_ready = True
