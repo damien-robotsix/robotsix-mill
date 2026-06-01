@@ -1,27 +1,22 @@
 """Data-dir audit runner — periodic survey of ``.data/`` monotonic growth.
 
-This is the scaffold (ticket 1 of the epic) for a daily periodic agent
-that surveys ``.data/`` for monotonic growth and files draft tickets
-when it finds problems. The actual inspection logic (top-N largest
-items, growth deltas, unbounded-collection candidates, orphan
-workspaces, ticket filing & dedup, rich summary) is added by child
-tickets 2–7.
-
-Until those land, ``run_data_dir_audit_pass`` is a no-op that simply
-returns a ``DataDirAuditPassResult`` with empty findings.
+Inspection checks (top-N largest items, growth deltas, unbounded-
+collection candidates, orphan workspaces, ticket filing & dedup, rich
+summary) are added by child tickets 2–7 of the epic.
 
 Seam: tests monkeypatch ``robotsix_mill.data_dir_audit_runner.Settings``
 to inject fake settings instances. The :class:`Settings` import below
-is kept (``# noqa: F401`` is not needed since :class:`Settings` is
-also instantiated at runtime) precisely to expose that attribute on
-the module namespace for monkeypatching.
+is kept precisely to expose that attribute on the module namespace for
+monkeypatching.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import re
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlmodel import select
@@ -55,12 +50,71 @@ class OrphanWorkspace:
     dir_size_bytes: int
 
 
+def find_largest_items(
+    data_dir: Path,
+    top_n: int = 10,
+    threshold_bytes: int = 100 * 1024 * 1024,
+) -> list[dict]:
+    """Return top-N items under *data_dir* whose size ≥ *threshold_bytes*.
+
+    Returns a list of dicts, each with keys ``path`` (str, relative to
+    *data_dir*), ``size_bytes`` (int), and ``is_directory`` (bool).
+    """
+    if not data_dir.is_dir():
+        return []
+
+    file_sizes: dict[str, int] = {}
+    dir_totals: defaultdict[str, int] = defaultdict(int)
+
+    for dirpath_str, dirnames, filenames in os.walk(data_dir, followlinks=False):
+        for fname in filenames:
+            fp = os.path.join(dirpath_str, fname)
+            if os.path.islink(fp):
+                continue
+            try:
+                size = os.path.getsize(fp)
+            except OSError as err:
+                log.warning("Cannot access %s: %s", fp, err)
+                continue
+            if size == 0:
+                continue
+            rel = os.path.relpath(fp, data_dir)
+            file_sizes[rel] = size
+
+            # Add to ancestor directories
+            ancestor = os.path.dirname(fp)
+            while ancestor != str(data_dir):
+                parent_rel = os.path.relpath(ancestor, data_dir)
+                dir_totals[parent_rel] += size
+                ancestor = os.path.dirname(ancestor)
+
+    results: list[dict] = []
+
+    # Collect files
+    for rel, size in file_sizes.items():
+        if size >= threshold_bytes:
+            results.append({"path": rel, "size_bytes": size, "is_directory": False})
+
+    # Collect directories (exclude root)
+    for rel, size in dir_totals.items():
+        if rel == "." or rel == "":
+            continue
+        if size >= threshold_bytes:
+            results.append({"path": rel, "size_bytes": size, "is_directory": True})
+
+    # Sort descending by size, then path for determinism
+    results.sort(key=lambda r: (-r["size_bytes"], r["path"]))
+    return results[:top_n]
+
+
 @dataclass
 class DataDirAuditPassResult:
     """Result of running a data-dir audit pass."""
 
     drafts_created: list[dict]  # [{"id": ..., "title": ...}]
     summary: str
+    oversized_items: list[dict] = field(default_factory=list)
+    # [{"path": "relative/path", "size_bytes": 123456, "is_directory": false}, …]
     updated_memory: str = ""
     session_id: str = ""
 
@@ -185,21 +239,24 @@ def run_data_dir_audit_pass(
 ) -> DataDirAuditPassResult:
     """Execute one data-dir audit pass.
 
-    This scaffold returns an empty result. Inspection logic is added
-    by child tickets 2–7 of the epic.
-
     Args:
         session_id: Langfuse session id from the poll loop (optional).
         repo_config: Per-repo config (optional).
 
     Returns:
-        ``DataDirAuditPassResult`` with empty findings.
+        ``DataDirAuditPassResult`` with findings.
     """
-    # Settings is intentionally instantiated even though the scaffold
-    # has no inspection logic yet — this preserves the monkeypatch
-    # seam (tests stub ``robotsix_mill.data_dir_audit_runner.Settings``)
-    # and surfaces any environment-variable parsing errors early.
+    # Settings is intentionally instantiated so tests can stub
+    # ``robotsix_mill.data_dir_audit_runner.Settings`` via monkeypatch,
+    # and so any environment-variable parsing errors surface early.
     settings = Settings()
+
+    # Top-N largest items detection (ticket 2 of the epic).
+    oversized = find_largest_items(
+        data_dir=settings.data_dir,
+        top_n=10,
+        threshold_bytes=settings.data_dir_audit_size_threshold_bytes,
+    )
 
     # Orphan-workspace detection (ticket 5 of the epic).
     # Iterate over every board with a ``mill.db`` on disk; ticket
@@ -230,16 +287,20 @@ def run_data_dir_audit_pass(
                     o.dir_size_bytes,
                 )
 
-    if total_orphans == 0:
-        summary = "no findings"
-    else:
+    # Compose summary covering both checks.
+    parts: list[str] = []
+    if oversized:
+        parts.append(f"{len(oversized)} oversized items")
+    if total_orphans > 0:
         per_board = ", ".join(
             f"{board}={len(items)}" for board, items in sorted(orphans_by_board.items())
         )
-        summary = f"orphan workspaces: {total_orphans} ({per_board})"
+        parts.append(f"orphan workspaces: {total_orphans} ({per_board})")
+    summary = "; ".join(parts) if parts else "no findings"
 
     return DataDirAuditPassResult(
         drafts_created=[],
+        oversized_items=oversized,
         summary=summary,
         updated_memory="",
         session_id=session_id,
