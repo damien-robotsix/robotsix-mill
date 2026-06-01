@@ -174,6 +174,11 @@ class Settings(BaseSettings):
     explore_model: str = Field(default="deepseek/deepseek-v4-flash")
     test_model: str = Field(default="deepseek/deepseek-v4-flash")
     refine_model: str = Field(default="deepseek/deepseek-v4-pro")
+    # Model for implement agent runs where the task is likely a no-change
+    # investigation (the previous pass returned ``no_change_needed=True``
+    # or the feedback indicates no edits are needed). Flash-class keeps
+    # these re-check / resume passes cheap.
+    no_change_model: str = Field(default="deepseek/deepseek-v4-flash")
     answer_model: str = Field(default="deepseek/deepseek-v4-pro")
     retrospect_model: str = Field(default="deepseek/deepseek-v4-pro")
     audit_model: str = Field(default="deepseek/deepseek-v4-flash")

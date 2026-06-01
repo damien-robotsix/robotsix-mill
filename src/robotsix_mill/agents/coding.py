@@ -68,6 +68,7 @@ def run_implement_agent(
     board_id: str = "",
     language_instructions: str = "",
     extra_roots: list[Path] | None = None,
+    model_name: str | None = None,
 ) -> tuple[str, list[str], str, bytes | None, bytes | None, bool, str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory, conversation_state,
@@ -110,6 +111,7 @@ def run_implement_agent(
             spec=spec,
             memory=memory,
             feedback=feedback,
+            model_name=model_name,
             epic_context=epic_context,
             reference_files=reference_files,
             message_history=message_history,
