@@ -171,6 +171,7 @@ class RefineStage(Stage):
     input_state = State.DRAFT
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Process a DRAFT ticket: gate on dependencies, refine the draft into a self-contained engineering spec (or split into children / promote to epic) via the refining agent."""
         ws = ctx.service.workspace(ticket)
         draft = ws.read_description().strip()
         epic_ctx = ctx.service.get_epic_context(ticket)

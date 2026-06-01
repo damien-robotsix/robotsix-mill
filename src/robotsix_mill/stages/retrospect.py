@@ -555,6 +555,7 @@ class RetrospectStage(Stage):
     # ------------------------------------------------------------------
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Run a retrospective over a DONE ticket's history, comments, and description; emit findings and optionally spawn follow-up draft tickets."""
         s = ctx.settings
         ws = ctx.service.workspace(ticket)
 

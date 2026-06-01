@@ -52,6 +52,7 @@ class DocumentStage(Stage):
     traced = True
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Run the documentation agent against the post-implement clone to update project docs reflecting the code changes on the ticket branch."""
         s = ctx.settings
 
         ws = ctx.service.workspace(ticket)

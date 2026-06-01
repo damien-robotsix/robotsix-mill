@@ -103,6 +103,7 @@ class MergeStage(Stage):
     traced = False
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Drive a ticket through the merge pipeline: poll CI / mergeability, dispatch to rebase or review-revision handlers based on the current state, and auto-merge when all gates are green."""
         s = ctx.settings
         if s.forge_kind == "none" or not s.forge_remote_url:
             return Outcome(State.BLOCKED, "forge not configured")

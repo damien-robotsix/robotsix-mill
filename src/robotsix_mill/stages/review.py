@@ -212,6 +212,7 @@ class ReviewStage(Stage):
     traced = True
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Process a CODE_REVIEW ticket: refresh the clone, check out the ticket branch, and run the automated reviewer agent against the diff."""
         s = ctx.settings
 
         ws = ctx.service.workspace(ticket)

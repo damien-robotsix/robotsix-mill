@@ -28,6 +28,7 @@ class AnswerStage(Stage):
     input_state = State.ASKED
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Answer an ASKED inquiry: clone the repo for grounding, run the answering agent against the question, write the answer into description.md, and transition to ANSWERED (or BLOCKED on failure)."""
         ws = ctx.service.workspace(ticket)
         question = ws.read_description().strip()
         epic_ctx = ctx.service.get_epic_context(ticket)
