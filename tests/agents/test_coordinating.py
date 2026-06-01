@@ -265,6 +265,49 @@ class TestRunCoordinator:
         defaults.update(kwargs)
         return run_coordinator(**defaults)
 
+    # -- str-output fallback (claude_sdk) --------------------------------
+
+    def test_str_output_is_coerced_not_crashed(self, settings, tmp_path, monkeypatch):
+        """When the model's final message doesn't parse as ImplementResult,
+        llmio returns the raw string. run_coordinator must coerce it into an
+        ImplementResult(summary=text) — NOT crash with "'str' object has no
+        attribute 'conversation_state'" (the bug that blocked 5ed1/0da9).
+        Also covers a result lacking all_messages_json/new_messages_json
+        (the claude_sdk _SdkToolResult shape)."""
+        from robotsix_mill.agents import base as _base
+
+        def _fake_build_agent(*a, **kw):
+            class _R:
+                output = "raw model text, not JSON"  # the parse-fallback case
+
+                # _SdkToolResult-like: no all_messages_json/new_messages_json
+                @staticmethod
+                def all_messages_json():
+                    raise AttributeError("no history")
+
+                @staticmethod
+                def new_messages_json():
+                    raise AttributeError("no history")
+
+            class _FakeAgent:
+                @staticmethod
+                def run_sync(prompt, *, usage_limits=None, message_history=None):
+                    return _R()
+
+                @staticmethod
+                def close():
+                    pass
+
+            return _FakeAgent()
+
+        monkeypatch.setattr(_base, "build_agent", _fake_build_agent)
+
+        result = self._run(settings, tmp_path)
+        assert isinstance(result, ImplementResult)
+        assert result.summary == "raw model text, not JSON"
+        assert result.conversation_state is None
+        assert result.new_messages is None
+
     # -- feedback paths --------------------------------------------------
 
     def test_feedback_as_test_failure(self, settings, tmp_path):
