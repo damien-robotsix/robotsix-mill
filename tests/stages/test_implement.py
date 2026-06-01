@@ -290,17 +290,116 @@ def test_blocked_without_remote(ctx_factory):
     assert "FORGE_REMOTE_URL" in out.note
 
 
-def test_meta_ticket_blocks_at_implement_with_clear_note(ctx_factory):
-    """A meta-board ticket (cross-repo) is refined into a multi-repo
-    workspace by refine, but the implement+deliver half isn't built yet:
-    implement must BLOCK with an explicit note rather than clone the global
-    repo or crash on the board-less memory ledger."""
-    ctx = ctx_factory(test_command="true")
+def test_meta_ticket_builds_multi_repo_workspace(ctx_factory, tmp_path, monkeypatch):
+    """A meta-board ticket runs the repo-triage + multi-repo workspace
+    build, threads ``extra_roots`` to ``run_implement_agent``, and keys
+    its memory ledger on the meta board (not crash on an empty board_id).
+    """
+    import robotsix_mill.agents.meta_triage as mt
+    import robotsix_mill.meta_workspace as mw
+
+    ctx = ctx_factory(test_command="true", review_enabled="false")
+    ctx.repo_config = None  # meta board is not a registered repo
     t = _ticket(ctx)
     t.board_id = "meta"
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Build a real, on-disk clone so the implement loop's git_ops calls
+    # (branch_exists, create_branch, checkout, …) work end-to-end.
+    remote = make_bare_repo(tmp_path)
+    primary = tmp_path / "meta-clones" / "robotsix-mill"
+    primary.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "clone", "-q", remote, str(primary)],
+        check=True,
+        capture_output=True,
+    )
+    # Match git_ops.clone's identity setup so commits work.
+    subprocess.run(
+        ["git", "-C", str(primary), "config", "user.email", "mill@robotsix.local"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(primary), "config", "user.name", "robotsix-mill"],
+        check=True,
+    )
+    extra = [primary]
+
+    monkeypatch.setattr(
+        mt,
+        "required_repos_for",
+        lambda *, settings, spec: ["robotsix-mill"],
+    )
+    monkeypatch.setattr(
+        mw,
+        "build_meta_workspace",
+        lambda settings, ws, repo_ids: (primary, extra),
+    )
+
+    captured: dict = {}
+
+    def _capture(*, settings, repo_dir, spec, **kw):
+        captured["extra_roots"] = kw.get("extra_roots")
+        captured["board_id"] = kw.get("board_id")
+        (Path(repo_dir) / "feature.txt").write_text("x")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _capture)
+    # Bypass the baseline check — fakes don't need to pass a real suite.
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    out = ImplementStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+    assert captured["extra_roots"] == extra
+    # Memory ledger keyed on the ticket's own board ("meta"), not "".
+    assert captured["board_id"] == "meta"
+    # memory_file_for("implement", "meta") must resolve without raising
+    # — call it directly to prove the fallback works.
+    assert ctx.settings.memory_file_for("implement", "meta")
+
+
+def test_meta_ticket_blocks_when_no_repos_clonable(ctx_factory, monkeypatch):
+    """If the triaged workspace yields no clone, implement BLOCKs the
+    meta ticket with the same note refine uses."""
+    import robotsix_mill.agents.meta_triage as mt
+    import robotsix_mill.meta_workspace as mw
+
+    ctx = ctx_factory(test_command="true")
+    ctx.repo_config = None
+    t = _ticket(ctx)
+    t.board_id = "meta"
+
+    monkeypatch.setattr(mt, "required_repos_for", lambda *, settings, spec: [])
+    monkeypatch.setattr(
+        mw,
+        "build_meta_workspace",
+        lambda settings, ws, repo_ids: (None, []),
+    )
+
     out = ImplementStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
-    assert "meta cross-repo" in out.note
+    assert "no repos could be cloned" in out.note
+
+
+def test_meta_ticket_blocks_when_triage_fails(ctx_factory, monkeypatch):
+    """If ``required_repos_for`` raises, implement BLOCKs the meta ticket
+    with a clear "meta repo-triage failed" note."""
+    import robotsix_mill.agents.meta_triage as mt
+
+    ctx = ctx_factory(test_command="true")
+    ctx.repo_config = None
+    t = _ticket(ctx)
+    t.board_id = "meta"
+
+    def _boom(*, settings, spec):
+        raise RuntimeError("triage exploded")
+
+    monkeypatch.setattr(mt, "required_repos_for", _boom)
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "meta repo-triage failed" in out.note
 
 
 def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):

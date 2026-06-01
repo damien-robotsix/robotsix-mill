@@ -226,6 +226,7 @@ class TestRunCoordinator:
 
         def _fake_build_fs_tools(root, settings, *, pre_seeded=None, extra_roots=None):
             self.captured["fs_pre_seeded"] = pre_seeded
+            self.captured["fs_extra_roots"] = extra_roots
 
             # Return a single read_file tool so the filtering in
             # run_coordinator doesn't blow up.
@@ -241,6 +242,8 @@ class TestRunCoordinator:
         from robotsix_mill.agents import explore as _expl
 
         def _fake_make_explore_tool(settings, repo_dir, extra_roots=None):
+            self.captured["explore_extra_roots"] = extra_roots
+
             def _explore(question):
                 return "explored"
 
@@ -384,6 +387,20 @@ class TestRunCoordinator:
         assert "````memory" in prompt
         assert "(empty — start a new ledger)" in prompt
         assert "````\n<!-- /memory -->" in prompt
+
+    # -- extra_roots forwarding -----------------------------------------
+
+    def test_extra_roots_forwards_to_build_fs_tools_and_explore(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """``extra_roots`` is forwarded to both ``build_fs_tools``
+        and ``make_explore_tool``."""
+        roots = [tmp_path / "clone_a", tmp_path / "clone_b"]
+        self._run(settings, tmp_path, extra_roots=roots)
+        assert self.captured["fs_extra_roots"] == roots
+        assert self.captured["explore_extra_roots"] == roots
 
     # -- reference_files / message_history ------------------------------
 

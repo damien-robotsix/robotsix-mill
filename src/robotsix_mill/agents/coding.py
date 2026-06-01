@@ -67,6 +67,7 @@ def run_implement_agent(
     file_map: set[str] | None = None,
     board_id: str = "",
     language_instructions: str = "",
+    extra_roots: list[Path] | None = None,
 ) -> tuple[str, list[str], str, bytes | None, bytes | None, bool, str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory, conversation_state,
@@ -89,6 +90,9 @@ def run_implement_agent(
     ``previous_attempt_summary`` — the coordinator's summary from a
     prior pass, injected as a ``<previous_attempt>`` block on retries
     so the model doesn't undo its prior correct work.
+    ``extra_roots`` — additional repo roots forwarded to the coordinator
+    so the agent can read/write across multiple cloned repos
+    (meta-board tickets).
     ``file_map`` — kept on the signature for backward compatibility
     with the stage runner (which loads it from ``file_map.json`` for
     *scope enforcement*); not used for routing. The implement agent
@@ -112,6 +116,7 @@ def run_implement_agent(
             previous_attempt_summary=previous_attempt_summary,
             board_id=board_id,
             language_instructions=language_instructions,
+            extra_roots=extra_roots,
         )
 
     try:
@@ -138,6 +143,7 @@ def run_implement_agent(
                 previous_attempt_summary=previous_attempt_summary,
                 board_id=board_id,
                 language_instructions=language_instructions,
+                extra_roots=extra_roots,
             )
         except Exception as fallback_e:
             raise AgentRunError(

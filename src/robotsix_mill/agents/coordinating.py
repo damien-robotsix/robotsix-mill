@@ -188,6 +188,7 @@ def run_coordinator(
     previous_attempt_summary: str | None = None,
     board_id: str = "",
     language_instructions: str = "",
+    extra_roots: list[Path] | None = None,
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -234,8 +235,6 @@ def run_coordinator(
                     "reference_files: %s not found on disk, skipping",
                     rf["path"],
                 )
-
-    extra_roots: list[Path] | None = None
 
     fs = build_fs_tools(
         repo_dir, settings, pre_seeded=pre_seeded, extra_roots=extra_roots

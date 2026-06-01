@@ -124,7 +124,9 @@ def _setup_patches(monkeypatch, **overrides):
     monkeypatch.setattr(base, "_safe_close", mock_safe_close)
 
     # run_agent: run make_run on the (mock) handle, return its result
-    mock_run_agent = MagicMock(side_effect=lambda agent, make_run, **kw: make_run(agent))
+    mock_run_agent = MagicMock(
+        side_effect=lambda agent, make_run, **kw: make_run(agent)
+    )
     mocks["run_agent"] = mock_run_agent
     monkeypatch.setattr(retry, "run_agent", mock_run_agent)
 

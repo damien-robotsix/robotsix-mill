@@ -116,7 +116,9 @@ def run_module_curator_agent(
     try:
         result = run_agent(
             agent,
-            lambda h: h.run_sync(prompt), settings=settings, what="module_curator"
+            lambda h: h.run_sync(prompt),
+            settings=settings,
+            what="module_curator",
         )
     finally:
         _safe_close(agent)
