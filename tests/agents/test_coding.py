@@ -468,9 +468,7 @@ def test_default_parameters_passthrough(settings, tmp_path, monkeypatch):
     assert kw["language_instructions"] == ""
 
 
-def test_extra_roots_forwards_to_run_coordinator(
-    settings, tmp_path, monkeypatch
-):
+def test_extra_roots_forwards_to_run_coordinator(settings, tmp_path, monkeypatch):
     """``extra_roots`` is forwarded to the inner ``run_coordinator``
     calls (both the primary path and the deepseek-fallback path)."""
     calls: list[dict] = []
@@ -498,9 +496,7 @@ def test_extra_roots_forwards_to_run_coordinator(
     assert calls[0]["extra_roots"] == roots
 
 
-def test_extra_roots_forwards_on_fallback(
-    settings, tmp_path, monkeypatch
-):
+def test_extra_roots_forwards_on_fallback(settings, tmp_path, monkeypatch):
     """When the primary model raises ``UnexpectedModelBehavior``,
     the fallback ``run_coordinator`` call also receives ``extra_roots``."""
     from pydantic_ai.exceptions import UnexpectedModelBehavior

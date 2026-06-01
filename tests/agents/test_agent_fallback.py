@@ -178,7 +178,10 @@ def test_build_agent_no_fallback_when_no_openrouter_key(monkeypatch):
 
 def test_config_default_is_on_and_overridable():
     assert _settings().claude_fallback_to_deepseek is True
-    assert _settings(claude_fallback_to_deepseek=False).claude_fallback_to_deepseek is False
+    assert (
+        _settings(claude_fallback_to_deepseek=False).claude_fallback_to_deepseek
+        is False
+    )
 
 
 @pytest.mark.parametrize("flag", [True, False])

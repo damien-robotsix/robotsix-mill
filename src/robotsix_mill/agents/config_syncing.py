@@ -221,8 +221,7 @@ def run_config_sync_agent(
 
     try:
         result = run_agent(
-            agent,
-            lambda h: h.run_sync(prompt), settings=settings, what="config-sync"
+            agent, lambda h: h.run_sync(prompt), settings=settings, what="config-sync"
         )
     finally:
         _safe_close(agent)

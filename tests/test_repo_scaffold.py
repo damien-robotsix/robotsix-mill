@@ -694,10 +694,9 @@ class TestGuardClause:
         # Without a real LLM the triage may fail or return no repos;
         # either path BLOCKs.
         assert outcome.next_state == State.BLOCKED
-        assert (
-            "meta repo-triage failed" in (outcome.note or "")
-            or "no repos could be cloned" in (outcome.note or "")
-        )
+        assert "meta repo-triage failed" in (
+            outcome.note or ""
+        ) or "no repos could be cloned" in (outcome.note or "")
 
         db.reset_engine()
 

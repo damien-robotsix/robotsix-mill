@@ -290,9 +290,7 @@ def test_blocked_without_remote(ctx_factory):
     assert "FORGE_REMOTE_URL" in out.note
 
 
-def test_meta_ticket_builds_multi_repo_workspace(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_meta_ticket_builds_multi_repo_workspace(ctx_factory, tmp_path, monkeypatch):
     """A meta-board ticket runs the repo-triage + multi-repo workspace
     build, threads ``extra_roots`` to ``run_implement_agent``, and keys
     its memory ledger on the meta board (not crash on an empty board_id).
