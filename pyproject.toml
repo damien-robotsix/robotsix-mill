@@ -54,6 +54,11 @@ warn_unused_configs = true
 module = "robotsix_llmio.openrouter_deepseek.*"
 disable_error_code = ["typeddict-item", "override", "misc", "literal-required"]
 
+# Optional `tracing` extra — opentelemetry-sdk + the OTLP HTTP exporter are
+# only installed when the user opts into the `tracing` extra (see
+# [project.optional-dependencies].tracing). CI installs the lean dev set and
+# never sees these modules, so silence mypy's missing-stub errors here rather
+# than forcing the heavy extra into the dev install.
 [[tool.mypy.overrides]]
 module = [
     "opentelemetry.sdk.*",
