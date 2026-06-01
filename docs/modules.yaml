@@ -23,6 +23,7 @@ modules:
       - LICENSE
       - README.md
       - ROADMAP.md
+      - tests/conftest.py
       - tests/test_stub.py
 
   - id: docker
