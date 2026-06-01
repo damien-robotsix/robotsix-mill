@@ -76,27 +76,28 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
 
 
 def test_mill_ships_an_audit_overlay():
-    """Mill's own audit overlay is git-tracked at
-    .robotsix-mill/agent_overlays/audit.md so a fresh mill deploy keeps
-    the DEFAULT MECHANISM RULE behaviour (propose dedicated standing
-    checker agents for recurring quality dimensions) without operator
-    bootstrap.
+    """Mill's own audit overlay is git-tracked as a ``prompt_overlay:`` in its
+    per-repo periodic-workflow file .robotsix-mill/periodic/audit.yaml, so a
+    fresh mill deploy keeps the DEFAULT MECHANISM RULE behaviour (propose
+    dedicated standing checker agents for recurring quality dimensions)
+    without operator bootstrap. (Folded in from the former
+    .robotsix-mill/agent_overlays/audit.md during the presence-file migration.)
 
-    Guards against a future hand-edit that removes mill's own file
-    and silently drops the mill-only meta-agent guidance."""
-    overlay_path = (
+    Guards against a future hand-edit that drops the mill-only meta-agent
+    guidance — verified by resolving the merged definition."""
+    from robotsix_mill.agents.periodic_loader import resolve_periodic_workflow
+
+    audit_yaml = (
         Path(__file__).parent.parent.parent
         / ".robotsix-mill"
-        / "agent_overlays"
-        / "audit.md"
+        / "periodic"
+        / "audit.yaml"
     )
-    assert overlay_path.exists(), (
-        f"Expected mill's audit overlay at {overlay_path} — phase-2 of the "
-        "periodic-agent reorg moved overlays from <data_dir>/<board_id>/ to "
-        "<clone>/.robotsix-mill/agent_overlays/."
-    )
-    body = overlay_path.read_text()
-    # The DEFAULT MECHANISM RULE is the load-bearing content.
+    assert audit_yaml.exists(), f"Expected mill's audit presence file at {audit_yaml}"
+    resolved = resolve_periodic_workflow(audit_yaml)
+    assert resolved is not None and resolved.kind == "llm_agent"
+    body = resolved.definition.system_prompt  # built-in prompt + folded overlay
+    # The DEFAULT MECHANISM RULE is the load-bearing overlay content.
     assert "DEFAULT MECHANISM RULE" in body
     assert "dedicated quality-checking agent" in body.lower() or (
         "dedicated standing" in body.lower()

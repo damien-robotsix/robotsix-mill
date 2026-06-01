@@ -53,9 +53,6 @@ def settings(tmp_path, monkeypatch):
                 langfuse_project_name="test-project",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
-                # Periodic agents are opt-in (9cc9, default off); this
-                # suite exercises the warmer running, so enable it.
-                cost_warmer_periodic=True,
             )
         }
     )
@@ -84,6 +81,11 @@ async def _run_one_cycle(worker: Worker, monkeypatch):
         "_initial_delay",
         lambda kind, interval: 0,
     )
+    # Enablement is now presence-based (.robotsix-mill/periodic/cost_warmer.yaml);
+    # default the warming-logic tests to "enabled for every repo". Tests that
+    # exercise the gating itself override this before calling.
+    if not getattr(worker, "_presence_overridden", False):
+        monkeypatch.setattr(worker, "_has_periodic_presence", lambda rc, name: True)
     task = asyncio.create_task(worker._cost_warmer_loop())
     # Yield repeatedly to let the cycle progress; cancel as soon as
     # the loop pauses on its end-of-cycle sleep.
@@ -204,20 +206,18 @@ def test_cost_warmer_survives_listing_failure(
     assert seen == []  # listing failed, no tickets to warm
 
 
-def test_cost_warmer_skips_repo_with_flag_off(
+def test_cost_warmer_skips_repo_without_presence_file(
     settings,
     worker,
     monkeypatch,
 ):
-    """A repo whose ``RepoConfig.cost_warmer_periodic`` is False is
-    skipped, while peers continue to be warmed. Without the per-repo
-    flag, an operator who opts out of cost warming in repos.yaml would
-    still pay the Langfuse hit on every cycle."""
+    """A repo WITHOUT a .robotsix-mill/periodic/cost_warmer.yaml presence file
+    is skipped, while peers that ship one continue to be warmed. Without this,
+    a repo that never opted into cost warming would still pay the Langfuse hit
+    on every cycle."""
     import robotsix_mill.config as _cfg
     from robotsix_mill.config import RepoConfig, ReposRegistry
 
-    # Two repos: one opted in (explicit, since opt-in defaults off per
-    # 9cc9), one opted out.
     _cfg._repos_config = ReposRegistry(
         repos={
             "kept": RepoConfig(
@@ -226,7 +226,6 @@ def test_cost_warmer_skips_repo_with_flag_off(
                 langfuse_project_name="kept",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
-                cost_warmer_periodic=True,
             ),
             "skipped": RepoConfig(
                 repo_id="skipped",
@@ -234,7 +233,6 @@ def test_cost_warmer_skips_repo_with_flag_off(
                 langfuse_project_name="skipped",
                 langfuse_public_key="pk2",
                 langfuse_secret_key="sk2",
-                cost_warmer_periodic=False,
             ),
         }
     )
@@ -251,11 +249,19 @@ def test_cost_warmer_skips_repo_with_flag_off(
         lambda settings, ticket_id, repo_config=None: visited.append(ticket_id) or 0.0,
     )
 
+    # Presence file only for "kept" → only it is warmed.
+    monkeypatch.setattr(
+        worker,
+        "_has_periodic_presence",
+        lambda rc, name: rc is not None and rc.repo_id == "kept",
+    )
+    worker._presence_overridden = True  # tell _run_one_cycle not to override
+
     try:
         asyncio.run(_run_one_cycle(worker, monkeypatch))
     finally:
         _cfg._reset_repos_config()
 
-    # Only the kept repo's ticket was visited; the skipped repo was
+    # Only the kept repo's ticket was visited; the presence-less repo was
     # filtered out before TicketService.list() even ran.
     assert visited == [k.id]

@@ -1647,31 +1647,12 @@ class RepoConfig(BaseModel):
     test_command: str = ""
     # Per-repo periodic-agent enable flags. Default FALSE for every
     # one — a repo opts IN by setting the flag to true in repos.yaml
-    # under ``periodic.<name>.enabled``. Unlisted ⇒ off. (Opt-in model,
-    # ticket 9cc9: previously default-on, which silently ran agents a
-    # repo never asked for.) The global Settings.<name>_periodic is the
-    # master switch (off → the task isn't spawned at all); when on, the
-    # per-task fan-out filters by this flag, so a repo runs an agent
-    # only when it has explicitly enabled it here.
-    audit_periodic: bool = False
-    trace_health_periodic: bool = False
-    health_periodic: bool = False
-    test_gap_periodic: bool = False
-    agent_check_periodic: bool = False
-    bc_check_periodic: bool = False
-    completeness_check_periodic: bool = False
-    copy_paste_periodic: bool = False
-    survey_periodic: bool = False
-    cost_reconciliation_periodic: bool = False
-    config_sync_periodic: bool = False
-    trace_review_periodic: bool = False
-    langfuse_cleanup_periodic: bool = False
-    cost_warmer_periodic: bool = False
-    module_curator_periodic: bool = False
-    # Opt-in (default False): bespoke agents discovered under
-    # ``<clone>/.robotsix-mill/agents/`` are scheduled for THIS repo
-    # only when enabled in repos.yaml under ``periodic.bespoke.enabled``.
-    bespoke_periodic: bool = False
+    # NOTE: the per-repo ``*_periodic`` enable flags were REMOVED. A periodic
+    # workflow now runs for a repo iff the repo ships
+    # ``.robotsix-mill/periodic/<name>.yaml`` (file presence = enabled; see
+    # agents/periodic_loader.py + the worker's periodic supervisor). The
+    # global ``Settings.<name>_periodic`` switches remain as fleet-wide
+    # kill-switches.
     language: str | None = None
 
     @field_validator("repo_id", "board_id")
@@ -1694,46 +1675,6 @@ class RepoConfig(BaseModel):
         if v < 1:
             raise ValueError("max_concurrency must be ≥ 1")
         return v
-
-
-_PERIODIC_FLAG_NAMES = (
-    "audit",
-    "trace_health",
-    "health",
-    "test_gap",
-    "agent_check",
-    "bc_check",
-    "completeness_check",
-    "copy_paste",
-    "survey",
-    "cost_reconciliation",
-    "config_sync",
-    "trace_review",
-    "langfuse_cleanup",
-    "cost_warmer",
-    "module_curator",
-    "bespoke",
-)
-
-
-def _periodic_flags_from_yaml(repo_data: Any) -> dict[str, bool]:
-    """Resolve per-repo periodic-enable flags from the ``periodic:``
-    sub-block of a repos.yaml repo entry.
-
-    Each agent has a ``periodic.<name>.enabled`` key; missing entries
-    keep the RepoConfig field default (False — opt-in; see 9cc9).
-    """
-    if not isinstance(repo_data, dict):
-        return {}
-    block = repo_data.get("periodic", {})
-    if not isinstance(block, dict):
-        return {}
-    out: dict[str, bool] = {}
-    for name in _PERIODIC_FLAG_NAMES:
-        sub = block.get(name)
-        if isinstance(sub, dict) and "enabled" in sub:
-            out[f"{name}_periodic"] = bool(sub["enabled"])
-    return out
 
 
 class ReposRegistry(BaseModel):
@@ -1793,7 +1734,6 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(repo_data, dict)
             else "",
             language=repo_data.get("language") if isinstance(repo_data, dict) else None,
-            **_periodic_flags_from_yaml(repo_data),
         )
     return ReposRegistry(repos=repos)
 
