@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..agents import dedup
+from ..agents import freshness
 from ..agents import refining
 from ..core.datetime_utils import _as_utc
 from ..core.models import Ticket
@@ -212,12 +213,19 @@ class RefineStage(Stage):
                 return result
             repo_dir = result
 
-        # Phase 2: dedup guard
+        # Phase 2: freshness gate — verify cited evidence against HEAD
+        # before spending any LLM budget on refine.  Runs before the
+        # dedup guard because it is deterministic (no LLM call).
+        stale = RefineStage._run_freshness_gate(ctx, ticket, draft, repo_dir, s)
+        if stale is not None:
+            return stale
+
+        # Phase 3: dedup guard
         dup = RefineStage._run_dedup_guard(ctx, ticket, draft, repo_dir, s)
         if dup is not None:
             return dup
 
-        # Phase 3: refine agent + result handling
+        # Phase 4: refine agent + result handling
         return RefineStage._run_refine_agent(
             ctx, ticket, draft, repo_dir, epic_ctx, title, ws, s, extra_roots
         )
@@ -400,6 +408,73 @@ class RefineStage(Stage):
                 State.DONE,
                 f"already implemented in {verdict['already_done']}: {verdict.get('reason', 'no reason')}",
             )
+        return None
+
+    @staticmethod
+    def _run_freshness_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        s,
+    ) -> Outcome | None:
+        """Run the deterministic freshness gate (best-effort).
+
+        Returns ``None`` when the cited evidence is confirmed fresh or
+        the gate is disabled / not applicable, signalling that refine
+        should proceed.  Returns ``Outcome(State.DONE, ...)`` when the
+        cited evidence cannot be verified on HEAD — the ticket is stale
+        or hallucinated and should be short-circuited.
+
+        The gate is gated behind ``freshness_gate_enabled`` (default
+        ``False``, opt-in).  When enabled, it extracts file paths from
+        the draft and verifies them against the cloned repo.  If the
+        draft cites multiple files and the majority cannot be found,
+        the ticket is likely stale.
+        """
+        if not s.freshness_gate_enabled:
+            return None
+
+        if not draft or len(draft) < 50:
+            log.debug(
+                "%s: trivial draft (%d chars), skipping freshness gate",
+                ticket.id,
+                len(draft),
+            )
+            return None
+
+        try:
+            result = freshness.run_freshness_check(
+                draft=draft,
+                repo_dir=repo_dir,
+            )
+        except Exception:
+            log.warning(
+                "%s: freshness check failed, proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        if result.get("stale"):
+            reason = result.get("reason", "cited evidence not found on HEAD")
+            log.info(
+                "%s: freshness gate flagged as stale — %s",
+                ticket.id,
+                reason,
+            )
+            # Discarded drafts go to DONE so retrospect still analyses
+            # them — same pattern as the dedup guard.
+            return Outcome(
+                State.DONE,
+                f"stale or invalid finding — {reason}",
+            )
+
+        log.debug(
+            "%s: freshness gate passed — %s",
+            ticket.id,
+            result.get("reason", ""),
+        )
         return None
 
     @staticmethod

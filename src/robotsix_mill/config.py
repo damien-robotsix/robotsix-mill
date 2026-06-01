@@ -513,6 +513,13 @@ class Settings(BaseSettings):
     # implementation-ready skip the full refine — saving cost & latency.
     # Set False to force full refine for all tickets without a deploy.
     refine_triage_enabled: bool = Field(default=True)
+    # When True, a deterministic pre-refine gate verifies that file paths
+    # and line ranges cited in the ticket draft still exist on the
+    # working branch's HEAD.  When the cited evidence has gone stale
+    # (upstream rewrite, sibling commit, or hallucinated finding) the
+    # ticket is short-circuited to DONE before the expensive refine
+    # agent runs.  Default False (opt-in).
+    freshness_gate_enabled: bool = Field(default=False)
     # When True, the refine stage runs a post-refinement review pass that
     # strips verbose exploratory narrative from the spec, producing a
     # concise version while saving the verbose original as an artifact.
