@@ -48,6 +48,13 @@ _registered_keys: set[str] = set()
 # before us. Set inside the one-time init block in ``_ensure_tracing``.
 _provider: object | None = None
 
+# The LoggerProvider we built and own. Same rationale as ``_provider``
+# above — OTel's one-shot ``set_logger_provider`` guard applies
+# symmetrically, so a ``ProxyLoggerProvider`` lookup at registration
+# time can return an object without ``add_log_record_processor``. Set
+# inside the one-time init block in ``_ensure_tracing``.
+_logger_provider: object | None = None
+
 _shutdown_requested: bool = False  # set by signal handlers to prevent double-flush
 
 # The session id (ticket id / audit id) currently in scope. A
@@ -243,7 +250,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
     When *repo_config* is ``None``, the global :class:`Secrets`
     singleton's langfuse keys are used (single-repo / legacy mode).
     """
-    global _provider, _provider_ready
+    global _provider, _provider_ready, _logger_provider
     # Only short-circuit on the global-disable flag when the caller has
     # no per-repo credentials to offer (repo_config is None).  When a
     # RepoConfig IS provided, always re-evaluate _tracing_enabled even
@@ -289,8 +296,17 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         # default OTel attribute size limits are sufficient.
 
         from opentelemetry import trace
+        from opentelemetry._logs import get_logger_provider, set_logger_provider
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import (
+            OTLPLogExporter,
+        )
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
             OTLPSpanExporter,
+        )
+        from opentelemetry.sdk._logs import LoggerProvider, LogRecordProcessor
+        from opentelemetry.sdk._logs.export import (
+            BatchLogRecordProcessor,
+            LogExportResult,
         )
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
@@ -340,6 +356,43 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
                     clear_export_failures_for(self._project_label)
                 return result
 
+        class _ReportingLogExporter(OTLPLogExporter):
+            """OTLPLogExporter wrapper that records failures so the
+            UI can surface "Langfuse log export broken" the same way
+            ``_ReportingExporter`` surfaces span-side failures."""
+
+            def __init__(self, *args, project_label: str = "", **kw):
+                super().__init__(*args, **kw)
+                self._project_label = project_label
+
+            def export(self, batch):  # noqa: ANN001
+                try:
+                    result = super().export(batch)
+                except Exception as e:  # noqa: BLE001
+                    record_export_failure(
+                        project=self._project_label,
+                        error=f"{type(e).__name__}: {e}",
+                    )
+                    log.warning(
+                        "Langfuse log export raised for %s: %s",
+                        self._project_label,
+                        e,
+                    )
+                    return LogExportResult.FAILURE
+                if result != LogExportResult.SUCCESS:
+                    record_export_failure(
+                        project=self._project_label,
+                        error="OTLP log export returned FAILURE — "
+                        "see worker logs for details",
+                    )
+                    log.warning(
+                        "Langfuse log export FAILURE for %s",
+                        self._project_label,
+                    )
+                else:
+                    clear_export_failures_for(self._project_label)
+                return result
+
         endpoint = f"{base_url}/api/public/otel/v1/traces"
         exporter = _ReportingExporter(
             endpoint=endpoint,
@@ -381,12 +434,44 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
                 def force_flush(self, timeout_millis: int = 30000):
                     return True
 
+            class _SessionStampLogProcessor(LogRecordProcessor):
+                """Stamp ``session.id`` (+ Langfuse alias) and the
+                in-scope ``langfuse.public_key`` onto every emitted
+                LogRecord, from contextvars. Logs do NOT inherit
+                attributes from the active span, so without this every
+                pydantic-ai event-mode LogRecord would lack the
+                session/project tags needed for Langfuse routing.
+                Read at emit time by :class:`_FilteredBatchLogRecordProcessor`
+                for per-repo routing."""
+
+                def on_emit(self, log_record):  # noqa: ANN001
+                    rec = log_record.log_record
+                    sid = _current_session.get()
+                    if sid:
+                        rec.attributes["session.id"] = sid
+                        rec.attributes["langfuse.session.id"] = sid
+                    pk = _current_pk.get()
+                    if pk:
+                        rec.attributes["langfuse.public_key"] = pk
+
+                def shutdown(self):
+                    pass
+
+                def force_flush(self, timeout_millis: int = 30000):
+                    return True
+
             resource_attrs: dict[str, str] = {SERVICE_NAME: "robotsix-mill"}
             provider = TracerProvider(
                 resource=Resource.create(resource_attrs),
             )
             provider.add_span_processor(_SessionStampProcessor())
             trace.set_tracer_provider(provider)
+
+            logger_provider = LoggerProvider(
+                resource=Resource.create(resource_attrs),
+            )
+            logger_provider.add_log_record_processor(_SessionStampLogProcessor())
+            set_logger_provider(logger_provider)
 
             from pydantic_ai.agent import Agent, InstrumentationSettings
 
@@ -400,6 +485,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             # cleaner rendering.
             Agent.instrument_all(InstrumentationSettings(event_mode="logs", version=1))
             _provider = provider
+            _logger_provider = logger_provider
             _provider_ready = True
 
         # --- register this repo's filtered exporter ---------------------
@@ -447,6 +533,51 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         target_provider.add_span_processor(
             _FilteredBatchSpanProcessor(exporter, target_public_key=public_key)
         )
+
+        class _FilteredBatchLogRecordProcessor(BatchLogRecordProcessor):
+            """Forward LogRecords to a Langfuse project's OTLP endpoint
+            only when their stamped ``langfuse.public_key`` attribute
+            matches — otherwise drop. The log analogue of
+            :class:`_FilteredBatchSpanProcessor`, so each repo's event-
+            mode logs land in its own Langfuse project."""
+
+            def __init__(self, exp, *, target_public_key: str):
+                super().__init__(exp)
+                self._target_pk = target_public_key
+
+            def on_emit(self, log_record):  # noqa: ANN001
+                attrs = log_record.log_record.attributes or {}
+                if attrs.get("langfuse.public_key") != self._target_pk:
+                    return
+                super().on_emit(log_record)
+
+        # Use the LoggerProvider WE built (stored at init), not the OTel
+        # global lookup — same rationale as the tracer-side comment above.
+        target_logger_provider = (
+            _logger_provider if _logger_provider is not None else get_logger_provider()
+        )
+        if hasattr(target_logger_provider, "add_log_record_processor"):
+            log_exporter = _ReportingLogExporter(
+                endpoint=f"{base_url}/api/public/otel/v1/logs",
+                project_label=project_name or public_key,
+                headers={
+                    "Authorization": "Basic "
+                    + _b64encode(f"{public_key}:{secret_key}".encode()).decode(),
+                },
+            )
+            target_logger_provider.add_log_record_processor(
+                _FilteredBatchLogRecordProcessor(
+                    log_exporter, target_public_key=public_key
+                )
+            )
+        else:
+            log.warning(
+                "tracing: LoggerProvider lacks add_log_record_processor — "
+                "skipping log exporter registration for project %s (type=%s).",
+                project_name or public_key,
+                type(target_logger_provider).__name__,
+            )
+
         _registered_keys.add(public_key)
         # project_name is informational; routing is by public_key.
         del project_name
@@ -474,10 +605,17 @@ def flush_tracing(timeout: int = 10_000) -> None:
     if _provider_ready is not True:
         return
     from opentelemetry import trace
+    from opentelemetry._logs import get_logger_provider
 
     provider = _provider if _provider is not None else trace.get_tracer_provider()
     if hasattr(provider, "force_flush"):
         provider.force_flush(timeout_millis=timeout)  # type: ignore[union-attr]
+
+    logger_provider = (
+        _logger_provider if _logger_provider is not None else get_logger_provider()
+    )
+    if hasattr(logger_provider, "force_flush"):
+        logger_provider.force_flush(timeout_millis=timeout)  # type: ignore[union-attr]
 
 
 def install_signal_handlers() -> None:
