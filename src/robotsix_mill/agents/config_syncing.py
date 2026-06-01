@@ -206,6 +206,7 @@ def run_config_sync_agent(
         read_ticket=True,
         model_name=settings.config_sync_model,
         name="config-sync",
+        repo_dir=repo_dir,  # confine SDK built-in edits to the workspace clone
     )
     forge_url = settings.forge_remote_url or "(not configured)"
     prompt = (

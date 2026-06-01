@@ -152,6 +152,9 @@ def build_agent_from_definition(
     )
     kwargs.update(overrides)
     kwargs["tools"] = tools
+    # Forward the workspace so build_agent can confine the Claude SDK's
+    # built-in edit tools to the ticket clone (see build_agent docstring).
+    kwargs.setdefault("repo_dir", repo_dir)
 
     # Inject AGENT.md conventions when available
     if definition.inject_agent_md and repo_dir is not None:
@@ -327,6 +330,7 @@ def build_agent(
     skills: list[str] | None = None,
     modules: bool = False,
     board_id: str = "",
+    repo_dir: "Path | None" = None,
 ):
     """Construct a pydantic-ai Agent on an OpenRouter model. Each agent
     role passes its own ``model_name`` (see Settings per-agent models);
@@ -428,6 +432,13 @@ def build_agent(
             output_type=output_type,
             name=name,
             retries=retries,
+            # Confine the SDK's built-in Write/Edit tools to the ticket's
+            # workspace clone. Without this, an agent on a mill-board ticket
+            # edited the container's own /app source (which shadows the
+            # workspace) instead of its checkout, producing no valid diff.
+            # repo_dir is None for board-less agents (e.g. meta refine before
+            # a workspace exists) → no confinement, unchanged behavior.
+            workspace_root=repo_dir,
         )
         # Bound concurrent CLI-subprocess spawns process-wide so a worker
         # fanning out many runs at startup can't stall on spawn contention.

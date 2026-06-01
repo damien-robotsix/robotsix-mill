@@ -124,6 +124,7 @@ async def run_spawn_subtask(
         ask_user=False,
         retries=1,
         skills=[],
+        repo_dir=repo_dir,  # confine SDK built-in edits to the workspace clone
     )
 
     scope_block = ""

@@ -186,6 +186,8 @@ class TestRunCoordinator:
             retries=2,
             skills=None,
             modules=False,
+            repo_dir=None,
+            **_extra,
         ):
             self.captured["system_prompt"] = system_prompt
             self.captured["output_type"] = output_type
@@ -193,6 +195,7 @@ class TestRunCoordinator:
             self.captured["web_knowledge"] = web_knowledge
             self.captured["name"] = name
             self.captured["model_name"] = model_name
+            self.captured["repo_dir"] = repo_dir
 
             class _FakeAgent:
                 @staticmethod
