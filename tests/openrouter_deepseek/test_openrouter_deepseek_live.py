@@ -199,3 +199,66 @@ def test_flash_tool_usage() -> None:
         assert thinking == [], "Cheap tier disables reasoning; expected no thinking"
     finally:
         agent.close()
+
+
+# ---------------------------------------------------------------------------
+# Regression: resume from a pending tool result (the reasoning round-trip 400)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.live
+def test_pro_resume_from_pending_tool_return_does_not_400() -> None:
+    """Resuming a thinking-mode conversation from a PENDING tool result must not
+    raise DeepSeek's ``reasoning_content`` 400.
+
+    Repro of mill ticket 64e6 ("The `reasoning_content` in the thinking mode
+    must be passed back to the API", model deepseek/deepseek-v4-pro). The
+    capable tier runs in thinking mode; when ``message_history`` ends with an
+    assistant ``tool_call`` followed by its ``tool_return`` and the run
+    continues (no new user prompt), DeepSeek requires the assistant tool-call
+    message to carry ``reasoning_content``. pydantic-ai does not send it back in
+    this reconstructed-history shape, so the request 400s — captured live both
+    with and without a ``ThinkingPart`` on the reconstructed assistant turn.
+
+    mill produces exactly this shape whenever it replays/compacts/pre-seeds a
+    history that ends at a tool_return (pause-and-resume mid tool-loop,
+    ``conversation_state`` replay, history compaction). FAILS today; the fix is
+    to restore the DeepSeek reasoning round-trip in the openrouter_deepseek
+    layer so the assistant tool-call message carries reasoning_content.
+    """
+    _require_key()
+    from pydantic_ai.messages import (
+        ModelRequest,
+        ModelResponse,
+        ToolCallPart,
+        ToolReturnPart,
+        UserPromptPart,
+    )
+
+    provider = _make_provider()
+    agent = provider.build_agent(
+        tier=Tier.DEFAULT,
+        system_prompt="Use the echo tool when asked.",
+        tools=[_echo],
+    )
+    history = [
+        ModelRequest(parts=[UserPromptPart(content="Echo the word 'ping'.")]),
+        ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name="_echo", args={"text": "ping"}, tool_call_id="c1"
+                )
+            ]
+        ),
+        ModelRequest(
+            parts=[ToolReturnPart(tool_name="_echo", content="ping", tool_call_id="c1")]
+        ),
+    ]
+    try:
+        # Continue from the pending tool result (prompt=None). Must NOT 400.
+        result = agent.run_sync(
+            None, message_history=history, model_settings={"max_tokens": 200}
+        )
+        assert result.output is not None
+    finally:
+        agent.close()
