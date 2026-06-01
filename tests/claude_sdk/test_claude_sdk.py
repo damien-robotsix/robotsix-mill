@@ -6,6 +6,7 @@ tool round-trip tests are exercised separately (need the ``claude`` CLI
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sys
 from types import SimpleNamespace
@@ -37,6 +38,7 @@ from robotsix_llmio.claude_sdk.provider import (
     ClaudeSDKProvider,
     _SdkToolAgentHandle,
     _SdkToolResult,
+    _chat_messages_input,
     _convert_tools,
 )
 from robotsix_llmio.claude_sdk.transient import (
@@ -531,6 +533,63 @@ def test_tool_async_run_honors_message_history(monkeypatch):
     assert "earlier ctx" in captured["prompt"]
     assert captured["prompt"].endswith("User: now")
     handle.close()
+
+
+# ---------------------------------------------------------------------------
+# Tracing: the system prompt (sent to the SDK) is surfaced on the generation
+# ---------------------------------------------------------------------------
+
+
+def test_chat_messages_input_renders_system_and_user():
+    raw = _chat_messages_input("be terse", "hello there")
+    msgs = json.loads(raw)
+    assert msgs == [
+        {"role": "system", "content": "be terse"},
+        {"role": "user", "content": "hello there"},
+    ]
+
+
+def test_generation_span_input_includes_system_prompt(monkeypatch):
+    """End-to-end: the ``chat`` generation span records system + user as chat
+    messages, so the system prompt is visible in the trace (not just input)."""
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    import robotsix_llmio.claude_sdk.provider as prov
+
+    exporter = InMemorySpanExporter()
+    provider_obj = TracerProvider()
+    provider_obj.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider_obj.get_tracer("test")
+    # Route the module's spans to our isolated, recording provider (the offline
+    # suite installs no global TracerProvider).
+    monkeypatch.setattr(prov, "get_tracer", lambda _name: tracer)
+
+    fake = _install_fake_sdk(monkeypatch)
+
+    async def _fake_query(*, prompt, options):
+        yield fake.AssistantMessage("the answer")
+        yield fake.ResultMessage({"input_tokens": 1, "output_tokens": 1})
+
+    fake.query = _fake_query
+
+    handle = ClaudeSDKProvider().build_agent(
+        tier=Tier.CHEAP,
+        system_prompt="SYS_MARKER stay precise",
+        tools=[PydanticTool(_echo_sync, name="echo_sync")],
+    )
+    handle.run_sync("USER_MARKER hi")
+    handle.close()
+
+    chat_spans = [s for s in exporter.get_finished_spans() if s.name.startswith("chat ")]
+    assert chat_spans, f"no chat span found in {[s.name for s in exporter.get_finished_spans()]}"
+    msgs = json.loads(chat_spans[0].attributes["langfuse.observation.input"])
+    assert msgs[0]["role"] == "system" and "SYS_MARKER" in msgs[0]["content"]
+    assert msgs[1]["role"] == "user" and "USER_MARKER" in msgs[1]["content"]
 
 
 def test_notools_path_returns_agent_handle():

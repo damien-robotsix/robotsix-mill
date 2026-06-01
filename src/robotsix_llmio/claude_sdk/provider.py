@@ -146,6 +146,24 @@ def _parse_output(text: str, output_type: Any) -> Any:
     return text
 
 
+def _chat_messages_input(system_prompt: str, user_text: str) -> str:
+    """JSON ``{role, content}`` message list (system + user) for a generation
+    span's Langfuse input.
+
+    The system prompt IS sent to the SDK (``ClaudeAgentOptions.system_prompt``),
+    but the span previously recorded only the user prompt — so traces showed the
+    input without the system. Rendering both as chat messages surfaces the
+    system prompt in Langfuse (which parses the JSON and shows the roles), the
+    same shape the OpenRouter/pydantic-ai path produces."""
+    return json.dumps(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_text},
+        ],
+        default=str,
+    )
+
+
 def _convert_tools(tools: list[Any]) -> tuple[list[str], Any]:
     """Convert pydantic-ai tools into SDK MCP tools.
 
@@ -440,7 +458,12 @@ class _SdkToolAgentHandle:
                     "gen_ai.operation.name": "chat",
                     "gen_ai.system": "anthropic",
                     "gen_ai.request.model": self._sdk_model,
-                    "langfuse.observation.input": prompt,
+                    # Record system + user as chat messages so the system prompt
+                    # (sent to the SDK, but previously absent from traces) shows
+                    # up on the generation in Langfuse.
+                    "langfuse.observation.input": _chat_messages_input(
+                        system_prompt, prompt
+                    ),
                     "langfuse.observation.output": text,
                 },
             ) as gen:
