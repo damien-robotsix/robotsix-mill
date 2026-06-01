@@ -394,6 +394,19 @@ def run_coordinator(
             what="implement",
         )
         output: ImplementResult = result.output
+        if not isinstance(output, ImplementResult):
+            # The model's final message didn't parse as ImplementResult JSON, so
+            # llmio's structured-output path returned raw text (more likely on
+            # the claude_sdk backend, which parses output itself). Coerce the
+            # text into a result — without this, the setattr below raises
+            # "'str' object has no attribute 'conversation_state'" AND the
+            # except branch re-raises it, blocking the ticket.
+            log.warning(
+                "implement: output did not parse as ImplementResult (got %s); "
+                "coercing raw text into summary",
+                type(output).__name__,
+            )
+            output = ImplementResult(summary=str(output).strip() or "(no summary)")
         try:
             output.conversation_state = result.all_messages_json()
         except AttributeError:

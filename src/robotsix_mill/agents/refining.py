@@ -14,6 +14,7 @@ repo (no forge configured) it falls back to draft-only as before.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -23,6 +24,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from ..config import Settings
 from .prompt_blocks import section
+
+log = logging.getLogger(__name__)
 
 # Pre-LLM memory guard: skip the model call when a recent prior refine
 # run already concluded no_change_needed for the same topic.
@@ -486,6 +489,25 @@ def _check_memory_for_no_change(  # noqa: C901 — Jaccard guard with date-cutof
     return None
 
 
+def _coerce_refine_output(output: object) -> "RefineResult":
+    """Return *output* as a ``RefineResult``.
+
+    When the model's final message doesn't parse as ``RefineResult`` JSON,
+    llmio's structured-output path returns the raw string (more likely on the
+    claude_sdk backend, which parses output itself). Wrap that text into a
+    result so the caller's ``output.conversation_state = …`` setattr — and its
+    ``except AttributeError`` branch — don't blow up with "'str' object has no
+    attribute 'conversation_state'" (the bug that blocked tickets like 0da9)."""
+    if isinstance(output, RefineResult):
+        return output
+    log.warning(
+        "refine: output did not parse as RefineResult (got %s); "
+        "coercing raw text into spec_markdown",
+        type(output).__name__,
+    )
+    return RefineResult(spec_markdown=str(output).strip() or None)
+
+
 def run_refine_agent(
     *,
     settings: Settings,
@@ -622,7 +644,7 @@ def run_refine_agent(
             )
             result = continuation_result
 
-        output: RefineResult = result.output
+        output: RefineResult = _coerce_refine_output(result.output)
         try:
             output.conversation_state = result.all_messages_json()
         except AttributeError:
