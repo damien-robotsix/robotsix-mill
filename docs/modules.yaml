@@ -137,6 +137,16 @@ modules:
       calls agents.  Each runner is a self-contained script that the worker
       invokes for periodic maintenance or stage execution.  Includes the
       shared pass_runner subroutine used by several agent-family runners.
+      Runners deliberately live at ``src/robotsix_mill/`` root (not under
+      ``agents/``): they are the orchestration layer above agents, share
+      infrastructure (``pass_runner``, ``periodic_runner``) that is not
+      per-agent, and are registered by string path from
+      ``runtime/worker.py`` and monkeypatched by string path from tests,
+      so co-locating them with agents would fragment the orchestration
+      layer without simplifying any caller.  The tight ``meta`` family
+      (``meta_runner.py`` + ``agents/meta*.py``) is the documented
+      exception where a runner is grouped with its agents under the
+      ``meta`` module.
     paths:
       - src/robotsix_mill/pass_runner.py
       - src/robotsix_mill/agent_check_runner.py
