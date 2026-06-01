@@ -1,0 +1,322 @@
+"""Per-repo periodic-workflow discovery + override resolution.
+
+A managed repo declares which periodic *workflows* run against it by
+committing files into its own source tree at:
+
+    <repo_root>/.robotsix-mill/periodic/<name>.yaml
+
+The PRESENCE of a file enables that workflow for the repo — there is no
+separate enable flag. A "periodic workflow" is the umbrella; an LLM agent
+is one *kind* of workflow (see ``WorkflowKind``). "Agent" is reserved for
+the ``llm_agent`` kind.
+
+Resolution by name:
+  * The name matches a built-in workflow → the file PARTIAL-MERGES over the
+    built-in: only the fields present override; absent fields inherit. A
+    name-only file just enables the built-in with its shipped parameters.
+    The prompt overlay is handled in-file: ``prompt_overlay:`` appends to
+    the built-in system prompt, ``system_prompt:`` fully replaces it (the
+    two are mutually exclusive).
+  * The name matches NO built-in → it defines a brand-new repo-specific
+    agent (``bespoke`` kind); it must carry a ``system_prompt``.
+
+Malformed files are skipped with a ``log.warning`` (never raised): a
+managed repo MUST NOT be able to crash mill by committing a broken file.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+
+from .overlays import apply_overlay
+from .yaml_loader import AgentDefinition, _resolve_env_vars, load_agent_definition
+
+log = logging.getLogger("robotsix_mill.periodic_loader")
+
+# Per-repo periodic-workflow directory, relative to the repo clone root.
+PERIODIC_DIR = (".robotsix-mill", "periodic")
+
+# Name slug shared by the ticket ``source`` string and memory filenames for
+# bespoke workflows — no path separators or colons. Allows snake_case (built-in
+# names like cost_warmer, agent_check) and kebab-case (bespoke slugs).
+_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+
+
+# ---------------------------------------------------------------------------
+# Workflow kinds + the canonical built-in kind map
+# ---------------------------------------------------------------------------
+
+# kind values (kept as plain strings for trivial serialization/compare):
+#   "llm_agent"     — built-in LLM periodic agent with a prompt yaml in
+#                     agent_definitions/periodic/<name>.yaml; the per-repo
+#                     file partial-merges over it.
+#   "schedule_only" — built-in pass with NO prompt yaml (or a deterministic
+#                     runner): the per-repo file only carries presence +
+#                     interval_seconds/enabled; prompt fields are ignored.
+#   "maintenance"   — non-LLM maintenance loop (no prompt): presence +
+#                     interval only.
+#   "bespoke"       — brand-new repo-specific agent (name matches no
+#                     built-in); requires system_prompt.
+#   "global_only"   — recognized built-in that is NOT per-repo presence
+#                     managed (cross-repo or always-on infra); a per-repo
+#                     file for it is ignored with a warning.
+_BUILTIN_KINDS: dict[str, str] = {
+    # LLM periodic agents (prompt yaml + partial-merge override).
+    "audit": "llm_agent",
+    "health": "llm_agent",
+    "agent_check": "llm_agent",
+    "bc_check": "llm_agent",
+    "completeness_check": "llm_agent",
+    "copy_paste": "llm_agent",
+    "survey": "llm_agent",
+    "test_gap": "llm_agent",
+    "module_curator": "llm_agent",
+    # Schedule-only passes (no prompt yaml / deterministic runner).
+    "trace_review": "schedule_only",
+    "config_sync": "schedule_only",
+    "cost_reconciliation": "schedule_only",
+    # Non-LLM maintenance loops.
+    "cost_warmer": "maintenance",
+    "langfuse_cleanup": "maintenance",
+    # Recognized but NOT per-repo-presence managed (cross-repo / always-on).
+    "meta": "global_only",
+    "cost_warmer_fast": "global_only",
+    "timeout_escalation": "global_only",
+    "trace_health": "global_only",
+}
+
+
+def kind_for(name: str) -> str:
+    """Return the workflow kind for *name* (``"bespoke"`` when unknown)."""
+    return _BUILTIN_KINDS.get(name, "bespoke")
+
+
+# ---------------------------------------------------------------------------
+# Per-repo override file schema
+# ---------------------------------------------------------------------------
+
+
+class PeriodicWorkflowFile(BaseModel):
+    """A per-repo ``.robotsix-mill/periodic/<name>.yaml`` file.
+
+    Only ``name`` is required; every other field is optional and, when
+    present, overrides the built-in of the same name (partial merge). For
+    a brand-new (bespoke) workflow whose name matches no built-in,
+    ``system_prompt`` is required (validated in :func:`resolve_periodic_workflow`,
+    not here, so discovery can report a clear per-file reason).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    # Prompt knobs — mutually exclusive. ``prompt_overlay`` appends to the
+    # built-in prompt; ``system_prompt`` replaces it.
+    prompt_overlay: str | None = None
+    system_prompt: str | None = None
+    # Everything below mirrors AgentDefinition (all optional here).
+    description: str | None = None
+    category: str | None = None
+    model: str | None = None
+    tools: list[str] | None = None
+    web_knowledge: bool | None = None
+    report_issue: bool | None = None
+    read_ticket: bool | None = None
+    reply_to_thread: bool | None = None
+    close_thread: bool | None = None
+    ask_user: bool | None = None
+    output_type: str | None = None
+    retries: int | None = None
+    module: str | None = None
+    skills: list[str] | None = None
+    modules: bool | None = None
+    inject_agent_md: bool | None = None
+    interval_seconds: int | None = None
+    enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def _prompt_xor(self) -> "PeriodicWorkflowFile":
+        if self.prompt_overlay is not None and self.system_prompt is not None:
+            raise ValueError(
+                "set at most one of 'prompt_overlay' (append) or "
+                "'system_prompt' (replace), not both"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _name_slug(self) -> "PeriodicWorkflowFile":
+        if not _NAME_RE.match(self.name):
+            raise ValueError(
+                f"name {self.name!r} must match {_NAME_RE.pattern} "
+                "(kebab-case ASCII, starts with a letter, <= 64 chars)"
+            )
+        return self
+
+
+@dataclass
+class ResolvedPeriodicWorkflow:
+    """One discovered + resolved per-repo periodic workflow."""
+
+    name: str
+    kind: str  # one of the _BUILTIN_KINDS values, or "bespoke"
+    # The fully-resolved agent definition for ``llm_agent``/``bespoke``;
+    # ``None`` for ``schedule_only``/``maintenance`` (no prompt).
+    definition: AgentDefinition | None
+    interval_seconds: int | None  # file override; None → caller's default
+    enabled: bool  # presence implies True unless the file sets enabled: false
+
+
+# ---------------------------------------------------------------------------
+# Resolution
+# ---------------------------------------------------------------------------
+
+# Fields that exist on PeriodicWorkflowFile but are handled specially / are
+# not AgentDefinition fields when merging.
+_NON_MERGE_FIELDS = frozenset({"name", "prompt_overlay", "system_prompt"})
+
+
+def _builtin_definition(name: str) -> AgentDefinition:
+    """Load the shipped ``agent_definitions/periodic/<name>.yaml``."""
+    builtin = (
+        Path(__file__).parent.parent.parent.parent
+        / "agent_definitions"
+        / "periodic"
+        / f"{name}.yaml"
+    )
+    return load_agent_definition(builtin)
+
+
+def _merge_over_builtin(
+    builtin: AgentDefinition, pwf: PeriodicWorkflowFile
+) -> AgentDefinition:
+    """Partial-merge the set fields of *pwf* over *builtin* + resolve prompt."""
+    data: dict[str, Any] = builtin.model_dump()
+    provided = pwf.model_dump(exclude_unset=True)
+    for key, value in provided.items():
+        if key in _NON_MERGE_FIELDS:
+            continue
+        if key == "model" and isinstance(value, str):
+            value = _resolve_env_vars(value)
+        data[key] = value
+    # Resolve the prompt: replace > overlay > inherit.
+    if pwf.system_prompt is not None:
+        data["system_prompt"] = pwf.system_prompt
+    elif pwf.prompt_overlay is not None:
+        data["system_prompt"] = apply_overlay(builtin.system_prompt, pwf.prompt_overlay)
+    return AgentDefinition.model_validate(data)
+
+
+def _bespoke_definition(pwf: PeriodicWorkflowFile) -> AgentDefinition:
+    """Build a full AgentDefinition for a brand-new (unmatched-name) agent."""
+    if pwf.system_prompt is None:
+        raise ValueError(
+            f"periodic workflow {pwf.name!r} matches no built-in, so it "
+            "defines a new agent and MUST set 'system_prompt'"
+        )
+    data = pwf.model_dump(exclude_unset=True)
+    data.pop("prompt_overlay", None)
+    model = data.get("model") or ""
+    if isinstance(model, str):
+        model = _resolve_env_vars(model)
+    # model may be "" → build_agent falls back to settings.bespoke_default_model.
+    data["model"] = model
+    return AgentDefinition.model_validate(data)
+
+
+def resolve_periodic_workflow(
+    path: Path,
+) -> ResolvedPeriodicWorkflow | None:
+    """Parse + resolve a single ``.robotsix-mill/periodic/<name>.yaml`` file.
+
+    Returns a :class:`ResolvedPeriodicWorkflow`, or ``None`` when the file is
+    malformed / unsupported (a ``global_only`` name). Never raises — a bad
+    file is logged and skipped so a managed repo can't take mill down.
+    """
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        log.warning("periodic workflow %s: read/parse error — skipping (%s)", path, exc)
+        return None
+    if not isinstance(raw, dict):
+        log.warning(
+            "periodic workflow %s: top-level must be a mapping — skipping", path
+        )
+        return None
+    # Default name from the filename stem when the file omits it.
+    raw.setdefault("name", path.stem)
+    try:
+        pwf = PeriodicWorkflowFile.model_validate(raw)
+    except ValidationError as exc:
+        log.warning("periodic workflow %s: schema error — skipping (%s)", path, exc)
+        return None
+
+    kind = kind_for(pwf.name)
+    if kind == "global_only":
+        log.warning(
+            "periodic workflow %s: %r is a global/cross-repo workflow and is "
+            "not per-repo presence-managed — ignoring this file",
+            path,
+            pwf.name,
+        )
+        return None
+
+    enabled = True if pwf.enabled is None else bool(pwf.enabled)
+
+    definition: AgentDefinition | None = None
+    try:
+        if kind == "llm_agent":
+            definition = _merge_over_builtin(_builtin_definition(pwf.name), pwf)
+        elif kind == "bespoke":
+            definition = _bespoke_definition(pwf)
+        # schedule_only / maintenance carry no prompt; definition stays None.
+    except (FileNotFoundError, ValidationError, ValueError) as exc:
+        log.warning(
+            "periodic workflow %s: resolution failed — skipping (%s)", path, exc
+        )
+        return None
+
+    return ResolvedPeriodicWorkflow(
+        name=pwf.name,
+        kind=kind,
+        definition=definition,
+        interval_seconds=pwf.interval_seconds,
+        enabled=enabled,
+    )
+
+
+def discover_periodic_workflows(
+    repo_dir: Path | None,
+) -> list[ResolvedPeriodicWorkflow]:
+    """Return every well-formed workflow under ``<repo_dir>/.robotsix-mill/periodic/``.
+
+    Empty list when *repo_dir* is None or the directory is absent. Malformed
+    / unsupported files are skipped with a warning. Duplicate names: first
+    file (alphabetical) wins.
+    """
+    if repo_dir is None:
+        return []
+    pdir = Path(repo_dir).joinpath(*PERIODIC_DIR)
+    if not pdir.is_dir():
+        return []
+    out: list[ResolvedPeriodicWorkflow] = []
+    seen: set[str] = set()
+    for path in sorted(pdir.glob("*.yaml")):
+        resolved = resolve_periodic_workflow(path)
+        if resolved is None:
+            continue
+        if resolved.name in seen:
+            log.warning(
+                "periodic workflow %s: duplicate name %r — skipping",
+                path,
+                resolved.name,
+            )
+            continue
+        seen.add(resolved.name)
+        out.append(resolved)
+    return out
