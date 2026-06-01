@@ -51,6 +51,7 @@ def is_transient(exc: BaseException) -> bool:
     CLI hiccup or query timeout skipped local retry entirely."""
     return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)
 
+
 # NOTE: is_deepseek_reasoning_roundtrip_error was removed from robotsix-llmio
 # (OpenRouter no longer raises the DeepSeek thinking-mode 400 when reasoning is
 # stripped from a tool-call turn), so it is no longer imported or re-exported.
