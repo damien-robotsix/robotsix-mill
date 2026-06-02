@@ -86,6 +86,127 @@ async def process_ticket(
     await _process_ticket_inner(ticket_id, ctx, active_map=active_map)
 
 
+async def _block_ticket_and_notify(
+    ticket_id: str,
+    ctx: StageContext,
+    stage_name: str,
+    note: str,
+    trace_id: str | None,
+) -> None:
+    """Post the trace breadcrumb, transition to BLOCKED, and notify.
+
+    Used by every error path inside :func:`_process_ticket_inner`
+    (timeout, transient-exhausted, fatal) so the block-and-notify
+    sequence lives in exactly one place.
+    """
+    _post_trace_event(ctx, ticket_id, trace_id, stage_name)
+    ctx.service.transition(ticket_id, State.BLOCKED, note=note[:200])
+    ticket = ctx.service.get(ticket_id)
+    if ticket is not None:
+        send_notification(ticket, State.BLOCKED, note[:200], ctx.settings)
+
+
+async def _handle_stage_error(
+    ticket_id: str,
+    ctx: StageContext,
+    stage_name: str,
+    error: BaseException,
+    trace_id: str | None,
+) -> None:
+    """Absorb the ``except Exception`` body of :func:`_process_ticket_inner`.
+
+    Logs the exception, classifies it via
+    :func:`~.transient_errors.classify_stage_error`, and either schedules
+    a retry (transient, attempts remaining) or escalates to BLOCKED via
+    :func:`_block_ticket_and_notify` (transient-exhausted or fatal).
+    """
+    log.exception("%s: %s failed", stage_name, ticket_id)
+    from .transient_errors import classify_stage_error
+    from .stage_retry import compute_retry_delay
+
+    classification = classify_stage_error(error)
+    if classification == "transient":
+        ticket = ctx.service.get(ticket_id)
+        if ticket is None:
+            return
+        attempt = ticket.retry_attempt + 1
+        max_attempts = ctx.settings.stage_retry_max_attempts
+        if attempt <= max_attempts:
+            delay = compute_retry_delay(
+                attempt,
+                base=ctx.settings.stage_retry_base_delay,
+                cap=ctx.settings.stage_retry_max_delay,
+            )
+            next_at = datetime.now(timezone.utc).timestamp() + delay
+            next_at_dt = datetime.fromtimestamp(next_at, tz=timezone.utc)
+            ctx.service.set_retry_state(
+                ticket_id,
+                retry_attempt=attempt,
+                last_transient_error=repr(error)[:200],
+                next_retry_at=next_at_dt,
+            )
+            log.warning(
+                "%s: %s transient error (attempt %d/%d) — retry in %.0fs",
+                stage_name,
+                ticket_id,
+                attempt,
+                max_attempts,
+                delay,
+            )
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
+            return
+        # Retries exhausted — block.
+        note = (
+            f"Transient: {type(error).__name__} persisted after "
+            f"{max_attempts} attempts — last: {error}"
+        )[:200]
+        await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
+    else:
+        # FATAL — block immediately.
+        note = f"Fatal: {type(error).__name__}: {error}"[:200]
+        await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
+
+
+def _maybe_reevaluate_epic(
+    ticket_id: str, ctx: StageContext, next_state: State
+) -> None:
+    """After a ticket reaches a terminal-ish state, re-evaluate its
+    parent epic (if any).
+
+    ``_spawn_epic_reeval`` fires-and-forgets a daemon thread, so this
+    helper does not need to be ``async``.
+    """
+    if next_state in (State.DONE, State.CLOSED, State.ANSWERED):
+        ticket = ctx.service.get(ticket_id)
+        if ticket is not None and ticket.parent_id is not None:
+            parent = ctx.service.get(ticket.parent_id)
+            if parent is not None and parent.kind == "epic":
+                _spawn_epic_reeval(parent.id, ctx)
+
+
+def _root_input_summary(ticket, ticket_id: str, stage_name: str) -> dict:
+    """Build the input-summary dict attached to the Langfuse root span."""
+    return {
+        "ticket_id": ticket_id,
+        "title": ticket.title,
+        "state": ticket.state.value,
+        "stage": stage_name,
+        "source": ticket.source,
+        "priority": bool(getattr(ticket, "priority", False)),
+    }
+
+
+def _root_output_summary(outcome, ticket) -> dict:
+    """Build the output-summary dict attached to the Langfuse root span."""
+    return {
+        "next_state": outcome.next_state.value
+        if outcome and outcome.next_state
+        else None,
+        "note": (outcome.note or "") if outcome else "",
+        "no_op": bool(outcome and outcome.next_state == ticket.state),
+    }
+
+
 async def _process_ticket_inner(
     ticket_id: str, ctx: StageContext, active_map: dict | None = None
 ) -> None:
@@ -154,14 +275,7 @@ async def _process_ticket_inner(
                     # without drilling into children. Output is set
                     # below, once the stage returns.
                     root_io.set_input(
-                        {
-                            "ticket_id": ticket_id,
-                            "title": ticket.title,
-                            "state": ticket.state.value,
-                            "stage": stage_name,
-                            "source": ticket.source,
-                            "priority": bool(getattr(ticket, "priority", False)),
-                        }
+                        _root_input_summary(ticket, ticket_id, stage_name)
                     )
                     trace_id = root_io.trace_id if root_io is not None else None
                 # stage.run is sync (LLM/tool) — keep the loop responsive
@@ -185,17 +299,7 @@ async def _process_ticket_inner(
                 # Attach the outcome to the root span — visible at the
                 # top of the trace in Langfuse alongside the input.
                 if root_io is not None:
-                    root_io.set_output(
-                        {
-                            "next_state": outcome.next_state.value
-                            if outcome and outcome.next_state
-                            else None,
-                            "note": (outcome.note or "") if outcome else "",
-                            "no_op": bool(
-                                outcome and outcome.next_state == ticket.state
-                            ),
-                        }
-                    )
+                    root_io.set_output(_root_output_summary(outcome, ticket))
         except asyncio.TimeoutError:
             timeout = ctx.settings.stage_timeout_overrides.get(
                 stage_name, ctx.settings.stage_timeout_seconds
@@ -206,12 +310,8 @@ async def _process_ticket_inner(
                 ticket_id,
                 timeout,
             )
-            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             note = f"stage {stage_name} timed out after {timeout}s"[:200]
-            ctx.service.transition(ticket_id, State.BLOCKED, note=note)
-            ticket = ctx.service.get(ticket_id)
-            if ticket is not None:
-                send_notification(ticket, State.BLOCKED, note, ctx.settings)
+            await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
             return
         except NotImplementedError as e:
             log.warning(
@@ -224,59 +324,7 @@ async def _process_ticket_inner(
             _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
         except Exception as e:  # noqa: BLE001 — any failure fails the ticket
-            log.exception("%s: %s failed", stage_name, ticket_id)
-            from .transient_errors import classify_stage_error
-            from .stage_retry import compute_retry_delay
-
-            classification = classify_stage_error(e)
-            if classification == "transient":
-                ticket = ctx.service.get(ticket_id)
-                if ticket is None:
-                    return
-                attempt = ticket.retry_attempt + 1
-                max_attempts = ctx.settings.stage_retry_max_attempts
-                if attempt <= max_attempts:
-                    delay = compute_retry_delay(
-                        attempt,
-                        base=ctx.settings.stage_retry_base_delay,
-                        cap=ctx.settings.stage_retry_max_delay,
-                    )
-                    next_at = datetime.now(timezone.utc).timestamp() + delay
-                    next_at_dt = datetime.fromtimestamp(next_at, tz=timezone.utc)
-                    ctx.service.set_retry_state(
-                        ticket_id,
-                        retry_attempt=attempt,
-                        last_transient_error=repr(e)[:200],
-                        next_retry_at=next_at_dt,
-                    )
-                    log.warning(
-                        "%s: %s transient error (attempt %d/%d) — retry in %.0fs",
-                        stage_name,
-                        ticket_id,
-                        attempt,
-                        max_attempts,
-                        delay,
-                    )
-                    _post_trace_event(ctx, ticket_id, trace_id, stage_name)
-                    return
-                # Retries exhausted — block.
-                _post_trace_event(ctx, ticket_id, trace_id, stage_name)
-                note = (
-                    f"Transient: {type(e).__name__} persisted after "
-                    f"{max_attempts} attempts — last: {e}"
-                )[:200]
-                ctx.service.transition(ticket_id, State.BLOCKED, note=note)
-                ticket = ctx.service.get(ticket_id)
-                if ticket is not None:
-                    send_notification(ticket, State.BLOCKED, note, ctx.settings)
-            else:
-                # FATAL — block immediately.
-                _post_trace_event(ctx, ticket_id, trace_id, stage_name)
-                note = f"Fatal: {type(e).__name__}: {e}"[:200]
-                ctx.service.transition(ticket_id, State.BLOCKED, note=note)
-                ticket = ctx.service.get(ticket_id)
-                if ticket is not None:
-                    send_notification(ticket, State.BLOCKED, note, ctx.settings)
+            await _handle_stage_error(ticket_id, ctx, stage_name, e, trace_id)
             return
         # Stage finished without raising — any prior transient-retry
         # breadcrumbs are stale and must clear now, even when the outcome
@@ -333,12 +381,7 @@ async def _process_ticket_inner(
                 )
 
         # After a ticket reaches a terminal state, re-evaluate its parent epic if any.
-        if outcome.next_state in (State.DONE, State.CLOSED, State.ANSWERED):
-            ticket = ctx.service.get(ticket_id)
-            if ticket is not None and ticket.parent_id is not None:
-                parent = ctx.service.get(ticket.parent_id)
-                if parent is not None and parent.kind == "epic":
-                    _spawn_epic_reeval(parent.id, ctx)
+        _maybe_reevaluate_epic(ticket_id, ctx, outcome.next_state)
 
 
 def _spawn_epic_reeval(epic_id: str, ctx: StageContext) -> None:
