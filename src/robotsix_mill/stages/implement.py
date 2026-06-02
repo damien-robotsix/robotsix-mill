@@ -39,6 +39,7 @@ from ..forge.auth import _resolve_remote_url, github_token
 from ..pass_runner import load_memory, persist_memory
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
+from . import short_circuit_verify
 from .pause import (
     check_for_pause,
     save_conversation_state,
@@ -929,6 +930,51 @@ class ImplementStage(Stage):
                 and no_change_needed
                 and no_change_rationale.strip()
             ):
+                # Edit-claim contradiction guard: the agent signalled
+                # ``no_change_needed`` (with a rationale) yet the working
+                # tree is empty. If the run actually INVOKED file-mutating
+                # tools, the edits never persisted (reverted, workspace
+                # reset mid-run, or written outside the clone) — closing as
+                # DONE would silently lose real work and falsely complete the
+                # ticket. This is exactly how ticket 904a (the ticket that
+                # was meant to ADD this guard) was lost. BLOCK for inspection
+                # instead of short-circuiting.
+                edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
+                    has_changes=False, new_messages=new_msgs
+                )
+                if edit_tools:
+                    tool_list = ", ".join(edit_tools)
+                    diag = (
+                        f"{no_change_rationale.strip() or summary}\n\n"
+                        "[Diagnostic] implement was about to close this ticket "
+                        "as ``no_change_needed`` because ``git diff`` is empty "
+                        f"— but the agent invoked file-mutating tools "
+                        f"({tool_list}) during the run. An empty diff after "
+                        "real edit calls means the work did NOT persist (edits "
+                        "reverted, workspace reset mid-run, or written outside "
+                        "the clone). Closing as no-change would silently lose "
+                        "that work, so the ticket is BLOCKED for inspection. "
+                        "Re-run implement; if the spec genuinely needs no "
+                        "change, the agent must reach that conclusion WITHOUT "
+                        "calling write_file/edit_file/Write/Edit."
+                    )
+                    ImplementStage._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            "edit-claim contradiction (empty diff after edit calls)",
+                        ),
+                    )
                 rationale = no_change_rationale.strip()
                 short = rationale[:400] + ("…" if len(rationale) > 400 else "")
                 ImplementStage._finalize(

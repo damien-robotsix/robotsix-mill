@@ -256,6 +256,43 @@ def branch_is_ahead_of_main(repo: Path) -> bool:
         return True
 
 
+def branch_has_net_diff(repo: Path) -> bool:
+    """Return True when HEAD has a non-empty content diff vs ``origin/main``.
+
+    Uses the three-dot ``git diff --quiet origin/main...HEAD`` semantic
+    (compare HEAD against the merge-base), which is exactly what the forge
+    evaluates when opening a PR. This is distinct from
+    :func:`branch_is_ahead_of_main`, which counts *commits*: a branch can carry
+    a commit that is not on main by SHA (ahead by commit count) yet whose net
+    content is identical to main — e.g. main independently landed the same
+    change, or the commit was a no-op. The forge rejects such a PR with a 422
+    "No commits between main and branch", so deliver must check the net diff,
+    not just the commit count, before opening one.
+
+    Fetches ``origin main`` first so the local ref is current. A fetch or diff
+    failure returns True (assume there IS a diff) so delivery proceeds — we
+    would rather hit the forge API than silently DONE a real change.
+    """
+    try:
+        _git(repo, "fetch", "origin", "main")
+    except subprocess.CalledProcessError:
+        return True
+
+    # `git diff --quiet` exits 0 when there is NO diff, 1 when there is one.
+    result = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--quiet", "origin/main...HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return False
+    if result.returncode == 1:
+        return True
+    # Any other exit code is an error (bad ref, etc.) — assume a diff so we
+    # don't wrongly route a real change to DONE.
+    return True
+
+
 def branch_is_behind_main(repo: Path) -> bool:
     """Return True when ``origin/main`` has commits not on HEAD.
 
