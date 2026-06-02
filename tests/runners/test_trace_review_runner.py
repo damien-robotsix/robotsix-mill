@@ -749,3 +749,199 @@ class TestTargetRepoRouting:
 
         # Clean up the pinned registry so other tests don't see it.
         _reset_repos_config()
+
+
+class TestPreFilingDedup:
+    """Pre-filing dedup helper ``_find_prior_matching_ticket`` and its
+    integration into ``run_trace_review_pass``."""
+
+    _TARGET_PATH = "src/robotsix_mill/foo.py"
+    _FINDING_SYMPTOM = "wrapper at src/robotsix_mill/foo.py raised on tool error"
+
+    def _patch_seams(self, monkeypatch, finding):
+        """Wire up langfuse + inspector seams so a single flagged trace
+        produces the given finding."""
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse_client.list_all_traces_since",
+            lambda *a, **kw: [_trace(totalCost=0.10)],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse_client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(findings=[finding]),
+        )
+
+    def _finding(self, target_files=None, symptom=None):
+        return TraceFinding(
+            category="tool_error",
+            symptom=symptom if symptom is not None else self._FINDING_SYMPTOM,
+            root_cause="x",
+            proposed_solution=f"fix the wrapper in {self._TARGET_PATH}",
+            target_files=(
+                target_files if target_files is not None else [self._TARGET_PATH]
+            ),
+            confidence="medium",
+        )
+
+    def _seed_prior_ticket(
+        self,
+        settings,
+        title,
+        body,
+    ):
+        svc = TicketService(settings, board_id="test-board")
+        ticket = svc.create(
+            title=title,
+            description=body,
+            source=SourceKind.TRACE_REVIEW,
+        )
+        return svc, ticket
+
+    def test_skip_when_prior_ticket_is_done(self, settings, monkeypatch, caplog):
+        svc, ticket = self._seed_prior_ticket(
+            settings,
+            title="trace-review: tool_error — earlier wrapper bug",
+            body=f"prior body mentioning {self._TARGET_PATH}",
+        )
+        from robotsix_mill.core.states import State
+
+        svc.transition(ticket.id, State.DONE, note="merged")
+
+        self._patch_seams(monkeypatch, self._finding())
+
+        import logging
+
+        caplog.set_level(logging.INFO, logger="robotsix_mill.trace_review")
+        result = run_trace_review_pass(
+            session_id="sess-dedup-done",
+            repo_config=_test_repo_config(),
+        )
+        assert result.drafts_created == []
+        # Prior ticket id mentioned in the skip log.
+        assert any(ticket.id in rec.getMessage() for rec in caplog.records)
+
+    def test_skip_when_prior_ticket_is_draft(self, settings, monkeypatch):
+        self._seed_prior_ticket(
+            settings,
+            title="trace-review: tool_error — earlier wrapper bug",
+            body=f"prior body mentioning {self._TARGET_PATH}",
+        )
+        # Leave it in DRAFT (default state after service.create).
+        self._patch_seams(monkeypatch, self._finding())
+        result = run_trace_review_pass(
+            session_id="sess-dedup-draft",
+            repo_config=_test_repo_config(),
+        )
+        assert result.drafts_created == []
+
+    def test_file_when_no_prior_match(self, settings, monkeypatch):
+        # No seed at all.
+        self._patch_seams(monkeypatch, self._finding())
+        result = run_trace_review_pass(
+            session_id="sess-no-prior",
+            repo_config=_test_repo_config(),
+        )
+        assert len(result.drafts_created) == 1
+
+    def test_file_when_only_match_is_closed_declined(self, settings, monkeypatch):
+        svc, ticket = self._seed_prior_ticket(
+            settings,
+            title="trace-review: tool_error — earlier wrapper bug",
+            body=f"prior body mentioning {self._TARGET_PATH}",
+        )
+        from robotsix_mill.core.states import State
+
+        # DRAFT → CLOSED directly (no DONE in history) = declined draft.
+        svc.transition(ticket.id, State.CLOSED, note="declined as noise")
+
+        self._patch_seams(monkeypatch, self._finding())
+        result = run_trace_review_pass(
+            session_id="sess-closed-declined",
+            repo_config=_test_repo_config(),
+        )
+        # A fresh draft IS filed — the closed/declined ticket should not suppress.
+        assert len(result.drafts_created) == 1
+
+    def test_skip_when_match_is_closed_after_done(self, settings, monkeypatch):
+        svc, ticket = self._seed_prior_ticket(
+            settings,
+            title="trace-review: tool_error — earlier wrapper bug",
+            body=f"prior body mentioning {self._TARGET_PATH}",
+        )
+        from robotsix_mill.core.states import State
+
+        # DRAFT → DONE → CLOSED (merged then closed).
+        svc.transition(ticket.id, State.DONE, note="merged")
+        svc.transition(ticket.id, State.CLOSED, note="retrospected")
+
+        self._patch_seams(monkeypatch, self._finding())
+        result = run_trace_review_pass(
+            session_id="sess-closed-done",
+            repo_config=_test_repo_config(),
+        )
+        assert result.drafts_created == []
+
+    def test_recency_window_excludes_older_matches(self, settings, monkeypatch):
+        from datetime import timedelta
+
+        svc, ticket = self._seed_prior_ticket(
+            settings,
+            title="trace-review: tool_error — earlier wrapper bug",
+            body=f"prior body mentioning {self._TARGET_PATH}",
+        )
+        from robotsix_mill.core.states import State
+
+        svc.transition(ticket.id, State.DONE, note="merged")
+
+        # Backdate the ticket's created_at to 30 days ago — well outside
+        # the default 7-day window.
+        from robotsix_mill.core.db import session as db_session
+        from robotsix_mill.core.models import Ticket as _Ticket
+        from sqlmodel import select as _select
+
+        old = datetime.now(timezone.utc) - timedelta(days=30)
+        with db_session(settings, "test-board") as s:
+            row = s.exec(_select(_Ticket).where(_Ticket.id == ticket.id)).first()
+            assert row is not None
+            row.created_at = old
+            s.add(row)
+            s.commit()
+
+        self._patch_seams(monkeypatch, self._finding())
+        result = run_trace_review_pass(
+            session_id="sess-recency",
+            repo_config=_test_repo_config(),
+        )
+        # Older-than-window match is ignored; a fresh draft is filed.
+        assert len(result.drafts_created) == 1
+
+    def test_symptom_fingerprint_matches_without_file_path(self, settings, monkeypatch):
+        # Seed a ticket whose title carries the symptom fingerprint, but
+        # whose body does NOT mention the candidate's target file (n/a
+        # here since target_files=[]).
+        self._seed_prior_ticket(
+            settings,
+            title=(
+                "trace-review: tool_error — claude code returned an "
+                "error result success"
+            ),
+            body="unrelated body that does not name any code locus",
+        )
+        finding = self._finding(
+            target_files=[],
+            symptom="Claude Code returned an error result: success",
+        )
+        self._patch_seams(monkeypatch, finding)
+        result = run_trace_review_pass(
+            session_id="sess-fingerprint",
+            repo_config=_test_repo_config(),
+        )
+        # The fingerprint substring match suppresses the new draft.
+        assert result.drafts_created == []

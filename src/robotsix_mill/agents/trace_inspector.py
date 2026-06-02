@@ -81,6 +81,11 @@ For each finding, output four fields:
   "tighten the docstring on ``read_file`` to clarify N", "add an
   early-return guard before line M". The implement agent should be
   able to act on this directly.
+- ``target_files``: the repo-relative file paths cited in
+  ``proposed_solution`` (e.g. ``["src/robotsix_llmio/claude_sdk/wrapper.py"]``).
+  Used by the trace-review runner's pre-filing dedup check to detect
+  recurring findings against the same code locus. Empty list is
+  acceptable when the finding has no code locus.
 - ``confidence``: "high" if you both saw the symptom in the trace AND
   confirmed the cause in the code; "medium" if you have a strong
   hypothesis from trace evidence alone; "low" if it's a guess worth
@@ -129,6 +134,7 @@ class TraceFinding(BaseModel):
     symptom: str
     root_cause: str
     proposed_solution: str
+    target_files: list[str] = Field(default_factory=list)
     confidence: Confidence = "medium"
 
 
