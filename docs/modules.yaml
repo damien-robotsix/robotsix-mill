@@ -107,7 +107,6 @@ modules:
       - src/robotsix_mill/runtime/transient_errors.py
       - src/robotsix_mill/runtime/board_html.py
       - src/robotsix_mill/runtime/broadcaster.py
-      - src/robotsix_mill/runtime/deep_review_store.py
       - src/robotsix_mill/runtime/run_registry.py
       - src/robotsix_mill/runtime/stage_retry.py
       - src/robotsix_mill/runtime/static/*
