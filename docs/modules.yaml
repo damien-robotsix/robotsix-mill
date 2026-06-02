@@ -96,7 +96,7 @@ modules:
     paths:
       - src/robotsix_mill/runtime/__init__.py
       - src/robotsix_mill/runtime/api.py
-      - src/robotsix_mill/runtime/routes.py
+      - src/robotsix_mill/runtime/routes/**/*.py
       - src/robotsix_mill/runtime/worker.py
       - src/robotsix_mill/runtime/deps.py
       - src/robotsix_mill/runtime/lifespan.py
