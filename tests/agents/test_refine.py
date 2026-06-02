@@ -2129,8 +2129,10 @@ def test_memory_prompt_forbids_per_ticket_diary():
     `## Refine run for <ticket-id>` sections in refine_memory.md."""
     from robotsix_mill.agents.refining import SYSTEM_PROMPT, REVIEWER_SENDBACK_PROMPT
 
-    for label, prompt in (("SYSTEM_PROMPT", SYSTEM_PROMPT),
-                          ("REVIEWER_SENDBACK_PROMPT", REVIEWER_SENDBACK_PROMPT)):
+    for label, prompt in (
+        ("SYSTEM_PROMPT", SYSTEM_PROMPT),
+        ("REVIEWER_SENDBACK_PROMPT", REVIEWER_SENDBACK_PROMPT),
+    ):
         # Forbidden phrasings from the old prompt.
         assert "ticket-ID-qualified" not in prompt, label
         assert "split/bundle decisions and their rationale" not in prompt, label
