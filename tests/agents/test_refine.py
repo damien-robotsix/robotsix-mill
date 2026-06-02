@@ -2122,6 +2122,26 @@ def test_sendback_prompt_includes_reviewer_feedback_reference():
     assert "backend↔frontend boundary" not in REVIEWER_SENDBACK_PROMPT
 
 
+def test_memory_prompt_forbids_per_ticket_diary():
+    """The refine system prompt and reviewer-sendback prompt must
+    instruct the agent to record general repo knowledge only — not
+    per-ticket diaries. Regression: the previous wording produced
+    `## Refine run for <ticket-id>` sections in refine_memory.md."""
+    from robotsix_mill.agents.refining import SYSTEM_PROMPT, REVIEWER_SENDBACK_PROMPT
+
+    for label, prompt in (
+        ("SYSTEM_PROMPT", SYSTEM_PROMPT),
+        ("REVIEWER_SENDBACK_PROMPT", REVIEWER_SENDBACK_PROMPT),
+    ):
+        # Forbidden phrasings from the old prompt.
+        assert "ticket-ID-qualified" not in prompt, label
+        assert "split/bundle decisions and their rationale" not in prompt, label
+        # Required new framing: explicit prohibition.
+        assert "NOT a per-ticket diary" in prompt, label
+        # Required: ticket IDs called out as forbidden ledger content.
+        assert "Ticket IDs" in prompt, label
+
+
 # --- epic context -------------------------------------------------------
 
 
