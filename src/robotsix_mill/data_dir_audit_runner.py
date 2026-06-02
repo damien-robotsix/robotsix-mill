@@ -670,6 +670,68 @@ def find_orphan_workspaces(
 # ---------------------------------------------------------------------------
 
 
+def _scan_orphan_workspaces(
+    settings: Settings,
+) -> tuple[dict[str, list[OrphanWorkspace]], int]:
+    """Scan every board with a ``mill.db`` for orphan workspaces.
+
+    Returns ``(orphans_by_board, total_orphans)``. Per-board failures
+    are logged and skipped (the pass continues across boards).
+    """
+    orphans_by_board: dict[str, list[OrphanWorkspace]] = {}
+    total_orphans = 0
+    for board_id in _boards_from_disk(settings):
+        try:
+            found = find_orphan_workspaces(settings, board_id)
+        except Exception:
+            log.warning(
+                "data_dir_audit: board=%r — orphan workspace scan failed",
+                board_id,
+                exc_info=True,
+            )
+            continue
+        if not found:
+            continue
+        orphans_by_board[board_id] = found
+        total_orphans += len(found)
+        for o in found:
+            log.info(
+                "data_dir_audit: orphan workspace board=%r ticket=%s path=%s size=%dB",
+                board_id,
+                o.ticket_id,
+                o.path,
+                o.dir_size_bytes,
+            )
+    return orphans_by_board, total_orphans
+
+
+def _scan_growth_deltas(settings: Settings) -> tuple[list[dict], int]:
+    """Scan every board for size deltas against persisted prior-pass state.
+
+    Returns ``(all_growth_flags, boards_with_flags)``. Current scan
+    is persisted per-board, naturally pruning deleted paths.
+    """
+    all_growth_flags: list[dict] = []
+    boards_with_flags = 0
+    for board_id in _enumerate_boards(settings):
+        state_path = _growth_state_path(settings, board_id)
+        prior = _load_growth_state(state_path)
+        board_dir = settings.data_dir / board_id
+        current = _scan_board_sizes(board_dir)
+        board_flags = _compute_growth_deltas(
+            prior, current, settings, board_id=board_id
+        )
+
+        # Persist current scan as new state (prunes deleted paths
+        # naturally — only currently-existing paths are written).
+        _save_growth_state(state_path, current)
+
+        if board_flags:
+            boards_with_flags += 1
+            all_growth_flags.extend(board_flags)
+    return all_growth_flags, boards_with_flags
+
+
 def run_data_dir_audit_pass(
     session_id: str = "",
     repo_config: RepoConfig | None = None,
@@ -713,55 +775,13 @@ def run_data_dir_audit_pass(
     # Unbounded-collection candidate detection (ticket 4 of the epic).
     findings = check_unbounded_candidates(settings.data_dir, settings)
 
-    # ----- Orphan-workspace detection (ticket 5 of the epic) -----
-    # Iterate over every board with a ``mill.db`` on disk; ticket
-    # filing is intentionally out of scope (ticket 6 consumes these
-    # findings via the memory-ledger dedup path).
-    orphans_by_board: dict[str, list[OrphanWorkspace]] = {}
-    total_orphans = 0
-    for board_id in _boards_from_disk(settings):
-        try:
-            found = find_orphan_workspaces(settings, board_id)
-        except Exception:
-            log.warning(
-                "data_dir_audit: board=%r — orphan workspace scan failed",
-                board_id,
-                exc_info=True,
-            )
-            continue
-        if found:
-            orphans_by_board[board_id] = found
-            total_orphans += len(found)
-            for o in found:
-                log.info(
-                    "data_dir_audit: orphan workspace board=%r ticket=%s "
-                    "path=%s size=%dB",
-                    board_id,
-                    o.ticket_id,
-                    o.path,
-                    o.dir_size_bytes,
-                )
+    # Orphan-workspace detection (ticket 5 of the epic). Ticket filing
+    # is intentionally out of scope (ticket 6 consumes these findings
+    # via the memory-ledger dedup path).
+    orphans_by_board, total_orphans = _scan_orphan_workspaces(settings)
 
-    # ----- Growth-delta detection (ticket 3 of the epic) -----
-    all_growth_flags: list[dict] = []
-    boards_with_flags = 0
-
-    for board_id in _enumerate_boards(settings):
-        state_path = _growth_state_path(settings, board_id)
-        prior = _load_growth_state(state_path)
-        board_dir = settings.data_dir / board_id
-        current = _scan_board_sizes(board_dir)
-        board_flags = _compute_growth_deltas(
-            prior, current, settings, board_id=board_id
-        )
-
-        # Persist current scan as new state (prunes deleted paths
-        # naturally — only currently-existing paths are written).
-        _save_growth_state(state_path, current)
-
-        if board_flags:
-            boards_with_flags += 1
-            all_growth_flags.extend(board_flags)
+    # Growth-delta detection (ticket 3 of the epic).
+    all_growth_flags, boards_with_flags = _scan_growth_deltas(settings)
 
     # ----- Summary covering all checks -----
     # Top-N oversized items, unbounded-collection findings, and
@@ -772,7 +792,9 @@ def run_data_dir_audit_pass(
     if oversized:
         summary_parts.append(f"{len(oversized)} oversized items")
     if findings:
-        summary_parts.append(f"{len(findings)} unbounded-collection candidate(s) flagged")
+        summary_parts.append(
+            f"{len(findings)} unbounded-collection candidate(s) flagged"
+        )
     if total_orphans:
         per_board = ", ".join(
             f"{board}={len(items)}" for board, items in sorted(orphans_by_board.items())
