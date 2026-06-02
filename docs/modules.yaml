@@ -41,7 +41,7 @@ modules:
       CLI entry point exposing probe and ingest subcommands.
     paths:
       - src/robotsix_auto_mail/cli.py
-      - tests/test_cli.py
+      - tests/cli/test_cli.py
 
   - id: config
     description: >-
