@@ -179,3 +179,32 @@ def test_request_limit_from_settings_not_hardcoded(tmp_path, monkeypatch):
     assert isinstance(usage_limits, UsageLimits)
     assert "request_limit" not in kwargs
     assert usage_limits.request_limit == 42  # from settings, not 20
+
+
+# --- _coerce_verdict: parse-fallback must not crash the review stage --------
+
+
+def test_coerce_verdict_passthrough():
+    from robotsix_mill.agents.reviewing import ReviewVerdict, _coerce_verdict
+
+    v = ReviewVerdict(verdict="APPROVE", comments="ok")
+    assert _coerce_verdict(v) is v
+
+
+def test_coerce_verdict_str_degrades_to_needs_discussion():
+    # 402b crash: review agent returned a bare str, the stage did
+    # verdict.verdict -> AttributeError -> Fatal BLOCK. Degrade to
+    # NEEDS_DISCUSSION (never APPROVE — must not auto-merge unreviewed code).
+    from robotsix_mill.agents.reviewing import ReviewVerdict, _coerce_verdict
+
+    v = _coerce_verdict("raw model text, not JSON")
+    assert isinstance(v, ReviewVerdict)
+    assert v.verdict == "NEEDS_DISCUSSION"
+    assert v.auto_merge_eligible is False
+    assert "could not be parsed" in v.comments
+
+
+def test_coerce_verdict_none_degrades():
+    from robotsix_mill.agents.reviewing import _coerce_verdict
+
+    assert _coerce_verdict(None).verdict == "NEEDS_DISCUSSION"
