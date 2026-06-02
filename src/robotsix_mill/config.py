@@ -650,6 +650,13 @@ class Settings(BaseSettings):
     trace_review_restart_correlation_window_seconds: int = Field(
         default=60,
     )
+    # Recency window (days) for the pre-filing duplicate check in the
+    # trace-review runner.  A candidate prior ticket is considered for
+    # dedup when its created_at is within this window of `now`.  Default
+    # 7 mirrors `dedup_lookback_days` (used by the refine-stage dedup
+    # guard) but is independent because the two checks live at different
+    # stages and may want different policies.
+    trace_review_dedup_lookback_days: int = Field(default=7)
     # Memory ledger for the trace inspector.
     # Unset (default) derives <data_dir>/trace_inspector_memory.md.
     trace_inspector_memory_path: Path | None = Field(default=None)
