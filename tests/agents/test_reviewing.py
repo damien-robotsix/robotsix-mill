@@ -208,3 +208,82 @@ def test_coerce_verdict_none_degrades():
     from robotsix_mill.agents.reviewing import _coerce_verdict
 
     assert _coerce_verdict(None).verdict == "NEEDS_DISCUSSION"
+
+
+# --- Shared structured-output guard: re-prompt before terminal coercion -----
+
+
+class _StubAgentRunResult:
+    def __init__(self, output):
+        self.output = output
+
+    def all_messages(self):
+        return []
+
+
+def test_run_review_agent_reprompts_once_on_unstructured_output(tmp_path, monkeypatch):
+    """When the first call returns a raw 12K-char string, the shared
+    guard re-prompts once via ``run_agent``; the structured second-call
+    result is returned, ``_coerce_verdict`` is NOT engaged."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        calls.append(what)
+        if len(calls) == 1:
+            return _StubAgentRunResult("x" * 12_000)
+        return _StubAgentRunResult(
+            ReviewVerdict(
+                verdict="APPROVE",
+                comments="lgtm",
+                auto_merge_eligible=False,
+            )
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x",
+        spec="Fix x",
+    )
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "APPROVE"
+    assert len(calls) == 2
+    assert calls[0] == "review"
+    assert "re-prompt" in calls[1]
+
+
+def test_run_review_agent_degrades_to_needs_discussion_after_two_failures(
+    tmp_path, monkeypatch
+):
+    """Two consecutive raw-string returns: the shared guard re-prompts
+    once, the re-prompt also returns raw text, ``_coerce_verdict``
+    degrades the final answer to NEEDS_DISCUSSION. ``run_agent`` is
+    called exactly twice (initial + one re-prompt)."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        calls.append(what)
+        return _StubAgentRunResult("x" * 12_000)
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x",
+        spec="Fix x",
+    )
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "NEEDS_DISCUSSION"
+    assert verdict.auto_merge_eligible is False
+    assert len(calls) == 2
