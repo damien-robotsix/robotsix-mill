@@ -7,6 +7,7 @@ the stage has a clear spawn decision.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +15,8 @@ from pydantic import BaseModel, model_validator
 
 from ..config import Settings
 from .prompt_blocks import section
+
+log = logging.getLogger(__name__)
 
 # Per-trace deep inspection formerly gated by `_DEEP_ANALYSIS_ADDENDUM`
 # was removed — trace / cost evaluation is now handled by the
@@ -260,4 +263,29 @@ def run_retrospect_agent(
         )
     finally:
         _safe_close(agent)
-    return result.output
+    return _coerce_result(result.output)
+
+
+def _coerce_result(output: object) -> RetrospectResult:
+    """Return *output* as a :class:`RetrospectResult`, degrading safely.
+
+    pydantic-ai can fall back to raw text when the structured-output parse
+    fails even after the ``_repair_memory_field_escaping`` hook. Returning that
+    bare str would crash the retrospect STAGE on ``res.updated_memory``
+    ("'str' object has no attribute 'updated_memory'") and knock an already-DONE
+    ticket back to BLOCKED — retrospect runs last and is advisory, so a parse
+    blip must never undo a completed ticket. On a non-model output we degrade to
+    an empty result: no memory update, no drift check, no spawned draft — the
+    stage proceeds harmlessly.
+    """
+    if isinstance(output, RetrospectResult):
+        return output
+    log.warning(
+        "retrospect: agent returned non-structured output (%s); "
+        "skipping memory update for this run",
+        type(output).__name__,
+    )
+    return RetrospectResult(
+        findings="(retrospect output could not be parsed)",
+        conclusion="retrospect skipped — agent returned unstructured output",
+    )

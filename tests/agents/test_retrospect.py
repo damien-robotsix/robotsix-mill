@@ -1175,3 +1175,30 @@ def test_sibling_title_truncated_at_80_chars(tmp_path, monkeypatch):
     assert "AAAA" in sc
     assert "..." in sc
     assert "suffix" not in sc  # truncated away
+
+
+# --- _coerce_result: parse-fallback must not crash the retrospect stage -----
+
+
+def test_coerce_result_passes_through_model():
+    from robotsix_mill.agents.retrospecting import RetrospectResult, _coerce_result
+
+    r = RetrospectResult(findings="f", conclusion="c", updated_memory="kept")
+    assert _coerce_result(r) is r
+
+
+def test_coerce_result_degrades_str_to_empty():
+    # The c361 crash: pydantic-ai returned a bare str, the stage did
+    # res.updated_memory → AttributeError → an already-DONE ticket got
+    # knocked to BLOCKED. Degrade to an empty result instead.
+    from robotsix_mill.agents.retrospecting import RetrospectResult, _coerce_result
+
+    out = _coerce_result("raw text the parser could not coerce")
+    assert isinstance(out, RetrospectResult)
+    assert out.updated_memory == ""
+
+
+def test_coerce_result_degrades_none_to_empty():
+    from robotsix_mill.agents.retrospecting import RetrospectResult, _coerce_result
+
+    assert isinstance(_coerce_result(None), RetrospectResult)
