@@ -63,7 +63,7 @@ modules:
       SQLite datastore: schema, MailRecord, insert, watermark.
     paths:
       - src/robotsix_auto_mail/db.py
-      - tests/test_db.py
+      - tests/db/test_db.py
 
   - id: status
     description: >-
