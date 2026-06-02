@@ -59,6 +59,7 @@ def test_sourcekind_member_count():
         "AGENT_CHECK",
         "BC_CHECK",
         "COST_RECONCILIATION",
+        "DATA_DIR_AUDIT",
         "COMPLETENESS_CHECK",
         "COPY_PASTE",
         "TRACE_HEALTH",
