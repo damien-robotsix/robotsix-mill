@@ -988,6 +988,11 @@ class Settings(BaseSettings):
     # the last audit pass, flag it for growth.  Default 20 (%).
     # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_PCT.
     data_dir_audit_growth_delta_pct: int = Field(default=20)
+    # Maximum number of drafts created per data-dir audit pass.
+    # Findings beyond this cap are dropped and re-considered on the
+    # next scheduled pass. Mirrors trace_review_max_drafts_per_run.
+    # Override with MILL_DATA_DIR_AUDIT_MAX_DRAFTS_PER_PASS.
+    data_dir_audit_max_drafts_per_pass: int = Field(default=5)
 
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same

@@ -15,6 +15,8 @@ This module currently implements:
   (:func:`check_unbounded_candidates`).
 - Ticket 5: orphan-workspace detection
   (:func:`find_orphan_workspaces`).
+- Ticket 6: filing logic with cross-pass dedup via gap-id markers
+  (:func:`_file_findings_as_tickets`).
 
 Seam: tests monkeypatch ``robotsix_mill.data_dir_audit_runner.Settings``
 to inject fake settings instances. The :class:`Settings` import below
@@ -36,7 +38,8 @@ from sqlmodel import select
 
 from .config import RepoConfig, Settings
 from .core import db
-from .core.models import Ticket
+from .core.models import SourceKind, Ticket
+from .core.service import TicketService
 
 log = logging.getLogger("robotsix_mill.data_dir_audit")
 
@@ -666,6 +669,275 @@ def find_orphan_workspaces(
 
 
 # ---------------------------------------------------------------------------
+# Filing logic (ticket 6)
+# ---------------------------------------------------------------------------
+
+
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _human_bytes(n: int) -> str:
+    """Return a binary-unit string for *n* bytes (``"1.2 GiB"``).
+
+    Uses powers of 1024 to match ``.data/`` accounting conventions.
+    Negative values are formatted with a leading minus sign.
+    """
+    if n < 0:
+        return "-" + _human_bytes(-n)
+    size = float(n)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB", "PiB"):
+        if size < 1024.0 or unit == "PiB":
+            if unit == "B":
+                return f"{int(size)} B"
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} PiB"  # unreachable but appeases type checkers
+
+
+def _sanitize_gap_segment(s: str) -> str:
+    """Replace any whitespace in *s* with ``_`` so the gap_id matches
+    ``\\S+`` (no whitespace runs)."""
+    return _WHITESPACE_RE.sub("_", s)
+
+
+def _build_oversized_finding(item: dict) -> tuple[str, str, str]:
+    """Return ``(gap_id, title, body)`` for an oversized-item finding."""
+    path = item["path"]
+    size = int(item["size_bytes"])
+    is_dir = bool(item.get("is_directory"))
+    gap_id = f"oversized:{_sanitize_gap_segment(path)}"
+    kind = "directory" if is_dir else "file"
+    title = f"data-dir audit: oversized {path} ({_human_bytes(size)})"
+    body = (
+        "_Filed by the periodic data-dir audit pass._\n\n"
+        "## Finding\n\n"
+        f"- **Path:** `{path}` ({kind})\n"
+        f"- **Current size:** {_human_bytes(size)} ({size} bytes)\n"
+        "- **Threshold:** "
+        f"{_human_bytes(100 * 1024 * 1024)} (default oversized threshold)\n\n"
+        "Consider capping this file or scheduling a sweep.\n"
+    )
+    return gap_id, title, body
+
+
+def _build_growth_finding(flag: dict) -> tuple[str, str, str]:
+    """Return ``(gap_id, title, body)`` for a growth-delta finding."""
+    path = flag["path"]
+    board_id = flag.get("board_id", "")
+    delta_bytes = int(flag["delta_bytes"])
+    delta_pct = flag["delta_pct"]
+    current_size = int(flag["current_size_bytes"])
+    prior_size = int(flag["prior_size_bytes"])
+    threshold_exceeded = flag.get("threshold_exceeded", "")
+    gap_id = (
+        f"growth:{_sanitize_gap_segment(board_id)}:{_sanitize_gap_segment(path)}"
+    )
+    title = (
+        f"data-dir audit: growth {path} "
+        f"(+{_human_bytes(delta_bytes)}, +{delta_pct}%)"
+    )
+    body = (
+        "_Filed by the periodic data-dir audit pass._\n\n"
+        "## Finding\n\n"
+        f"- **Board:** `{board_id}`\n"
+        f"- **Path:** `{path}`\n"
+        f"- **Prior size:** {_human_bytes(prior_size)} ({prior_size} bytes)\n"
+        f"- **Current size:** {_human_bytes(current_size)} "
+        f"({current_size} bytes)\n"
+        f"- **Delta:** +{_human_bytes(delta_bytes)} ({delta_bytes} bytes), "
+        f"+{delta_pct}%\n"
+        f"- **Threshold exceeded:** {threshold_exceeded}\n\n"
+        f"Investigate why this path grew by {_human_bytes(delta_bytes)} "
+        "since the last audit pass.\n"
+    )
+    return gap_id, title, body
+
+
+def _build_unbounded_finding(finding: dict) -> tuple[str, str, str]:
+    """Return ``(gap_id, title, body)`` for an unbounded-collection finding."""
+    path = finding["path"]
+    current_size = int(finding["current_size"])
+    cap_bytes = int(finding["cap_size"])
+    cap_detail = finding.get("cap_detail", "")
+    pattern = finding.get("pattern", "")
+    record_count = finding.get("record_count")
+    record_max = finding.get("record_max")
+    gap_id = f"unbounded:{_sanitize_gap_segment(path)}"
+    title = (
+        f"data-dir audit: unbounded {path} (>{_human_bytes(cap_bytes)})"
+    )
+    body_lines = [
+        "_Filed by the periodic data-dir audit pass._",
+        "",
+        "## Finding",
+        "",
+        f"- **Path:** `{path}`",
+        f"- **Current size:** {_human_bytes(current_size)} "
+        f"({current_size} bytes)",
+        f"- **Cap:** {cap_detail} ({_human_bytes(cap_bytes)})",
+        f"- **Pattern:** `{pattern}`",
+    ]
+    if record_count is not None and record_max is not None:
+        body_lines.append(
+            f"- **Record count:** {record_count} (max {record_max})"
+        )
+    body_lines.append("")
+    body_lines.append(
+        f"This file exceeds its documented cap ({cap_detail}); "
+        "consider pruning or capping.\n"
+    )
+    body = "\n".join(body_lines)
+    return gap_id, title, body
+
+
+def _build_orphan_finding(orphan: OrphanWorkspace) -> tuple[str, str, str]:
+    """Return ``(gap_id, title, body)`` for an orphan-workspace finding."""
+    board_id = orphan.board_id
+    ticket_id = orphan.ticket_id
+    size = orphan.dir_size_bytes
+    gap_id = (
+        f"orphan:{_sanitize_gap_segment(board_id)}:"
+        f"{_sanitize_gap_segment(ticket_id)}"
+    )
+    title = (
+        f"data-dir audit: orphan workspace {board_id}/{ticket_id} "
+        f"({_human_bytes(size)})"
+    )
+    body = (
+        "_Filed by the periodic data-dir audit pass._\n\n"
+        "## Finding\n\n"
+        f"- **Board:** `{board_id}`\n"
+        f"- **Ticket id:** `{ticket_id}`\n"
+        f"- **Path:** `{orphan.path}`\n"
+        f"- **Dir size:** {_human_bytes(size)} ({size} bytes)\n\n"
+        "This workspace dir belongs to a ticket no longer in the DB; "
+        "consider removing it.\n"
+    )
+    return gap_id, title, body
+
+
+def _order_findings(
+    oversized: list[dict],
+    growth_flags: list[dict],
+    unbounded: list[dict],
+    orphans_by_board: dict[str, list[OrphanWorkspace]],
+) -> list[tuple[str, str, str]]:
+    """Order findings deterministically and return ``[(gap_id, title, body)]``.
+
+    Filing priority: orphans → growth (delta_bytes desc) → oversized
+    (size_bytes desc) → unbounded (current_size desc).
+    """
+    ordered: list[tuple[str, str, str]] = []
+
+    # 1. Orphans: sort by board_id, then ticket_id.
+    for board_id in sorted(orphans_by_board):
+        for orphan in sorted(
+            orphans_by_board[board_id], key=lambda o: o.ticket_id
+        ):
+            ordered.append(_build_orphan_finding(orphan))
+
+    # 2. Growth flags: delta_bytes desc, then path for ties.
+    for flag in sorted(
+        growth_flags,
+        key=lambda f: (-int(f.get("delta_bytes", 0)), f.get("path", "")),
+    ):
+        ordered.append(_build_growth_finding(flag))
+
+    # 3. Oversized: size_bytes desc, then path for ties.
+    for item in sorted(
+        oversized,
+        key=lambda i: (-int(i.get("size_bytes", 0)), i.get("path", "")),
+    ):
+        ordered.append(_build_oversized_finding(item))
+
+    # 4. Unbounded: current_size desc, then path for ties.
+    for finding in sorted(
+        unbounded,
+        key=lambda f: (-int(f.get("current_size", 0)), f.get("path", "")),
+    ):
+        ordered.append(_build_unbounded_finding(finding))
+
+    return ordered
+
+
+def _file_findings_as_tickets(
+    settings: Settings,
+    service: TicketService,
+    oversized: list[dict],
+    growth_flags: list[dict],
+    unbounded: list[dict],
+    orphans_by_board: dict[str, list[OrphanWorkspace]],
+    session_id: str = "",
+) -> list[dict]:
+    """File draft tickets for findings, dedup'd via gap-id markers.
+
+    Returns ``[{"id": ticket.id, "title": ticket.title}, ...]`` for
+    every draft actually created. Findings whose gap-id matches an
+    *in-flight* prior draft are silently skipped; findings beyond
+    ``settings.data_dir_audit_max_drafts_per_pass`` are dropped.
+
+    Filing target: every draft is created on the service the caller
+    passes in — typically the scheduling board's ``TicketService``.
+    When the periodic audit is enabled on multiple boards, each board
+    scans the entire ``.data/`` and would race to file overlapping
+    findings. Cross-pass dedup catches re-runs within one board's
+    history but does NOT prevent cross-board duplication on the first
+    pass. Acceptable trade-off — operators are expected to enable
+    ``data_dir_audit_periodic`` on a single (maintenance) board.
+    """
+    from .pass_runner import _verify_prior_proposals
+
+    prior = _verify_prior_proposals(service, settings, SourceKind.DATA_DIR_AUDIT)
+    in_flight: set[str] = {
+        gid for gid, info in prior.items() if info["resolution"] == "in-flight"
+    }
+
+    ordered = _order_findings(
+        oversized, growth_flags, unbounded, orphans_by_board
+    )
+
+    cap = settings.data_dir_audit_max_drafts_per_pass
+    created: list[dict] = []
+    for gap_id, title, body in ordered:
+        if cap > 0 and len(created) >= cap:
+            log.info(
+                "data_dir_audit: hit per-pass cap of %d drafts — "
+                "remaining findings dropped (will be reconsidered next pass)",
+                cap,
+            )
+            break
+        if gap_id in in_flight:
+            log.debug(
+                "data_dir_audit: skipping finding — in-flight ticket "
+                "already filed for gap_id=%s",
+                gap_id,
+            )
+            continue
+        marker = f"<!-- data_dir_audit-gap-id: {gap_id} -->"
+        body_with_marker = body.rstrip() + "\n\n" + marker
+        try:
+            ticket = service.create(
+                title=title,
+                description=body_with_marker,
+                source=SourceKind.DATA_DIR_AUDIT,
+                origin_session=session_id or None,
+            )
+            created.append({"id": ticket.id, "title": ticket.title})
+            in_flight.add(gap_id)
+            log.info(
+                "data_dir_audit: created draft %s — %s",
+                ticket.id,
+                title,
+            )
+        except Exception:
+            log.exception(
+                "data_dir_audit: failed to create draft ticket: %s",
+                title,
+            )
+    return created
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -783,6 +1055,24 @@ def run_data_dir_audit_pass(
     # Growth-delta detection (ticket 3 of the epic).
     all_growth_flags, boards_with_flags = _scan_growth_deltas(settings)
 
+    # ----- Filing logic (ticket 6 of the epic) -----
+    # Resolve a TicketService against the scheduling board. With no
+    # repo_config or an empty board_id there is no board to file
+    # against — skip filing entirely (still return the inspection
+    # results so the runs panel can show what was found).
+    drafts_created: list[dict] = []
+    if repo_config is not None and repo_config.board_id:
+        service = TicketService(settings, board_id=repo_config.board_id)
+        drafts_created = _file_findings_as_tickets(
+            settings,
+            service,
+            oversized,
+            all_growth_flags,
+            findings,
+            orphans_by_board,
+            session_id=session_id,
+        )
+
     # ----- Summary covering all checks -----
     # Top-N oversized items, unbounded-collection findings, and
     # orphan-workspace info are only included when found. The
@@ -807,12 +1097,14 @@ def run_data_dir_audit_pass(
         )
     else:
         summary_parts.append("growth-delta check: no items exceeded thresholds")
+    if drafts_created:
+        summary_parts.append(f"{len(drafts_created)} drafts filed")
     summary = "; ".join(summary_parts)
 
     log.info("data-dir audit pass done: %s", summary)
 
     return DataDirAuditPassResult(
-        drafts_created=[],
+        drafts_created=drafts_created,
         oversized_items=oversized,
         summary=summary,
         updated_memory="",

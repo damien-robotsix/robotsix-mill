@@ -35,6 +35,7 @@ class SourceKind(StrEnum):
     AGENT_CHECK = "agent_check"
     BC_CHECK = "bc_check"
     COST_RECONCILIATION = "cost_reconciliation"
+    DATA_DIR_AUDIT = "data_dir_audit"
     COMPLETENESS_CHECK = "completeness_check"
     COPY_PASTE = "copy_paste"
     TRACE_HEALTH = "trace-health"

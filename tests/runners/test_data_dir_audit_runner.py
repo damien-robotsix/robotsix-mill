@@ -27,7 +27,8 @@ import pytest
 
 from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core import db
-from robotsix_mill.core.models import Ticket
+from robotsix_mill.core.models import SourceKind, Ticket
+from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.data_dir_audit_runner import (
     _CI_MONITOR_STATE_CAP_BYTES,
@@ -48,6 +49,7 @@ from robotsix_mill.data_dir_audit_runner import (
     find_orphan_workspaces,
     run_data_dir_audit_pass,
 )
+from robotsix_mill.pass_runner import _GAP_ID_RE
 
 
 # ---------------------------------------------------------------------------
@@ -552,18 +554,22 @@ def test_pass_integrates_find_largest_items(tmp_path, monkeypatch):
         "robotsix_mill.data_dir_audit_runner.Settings", lambda: settings
     )
 
+    db.init_db(settings, "test-board")
     result = run_data_dir_audit_pass(
         session_id="test-sid", repo_config=_test_repo_config()
     )
 
     assert isinstance(result, DataDirAuditPassResult)
-    assert result.drafts_created == []
     assert result.session_id == "test-sid"
     assert len(result.oversized_items) == 1
     assert result.oversized_items[0]["path"] == "huge.bin"
     assert result.oversized_items[0]["size_bytes"] == 200 * 1024 * 1024
     assert result.oversized_items[0]["is_directory"] is False
     assert "1 oversized items" in result.summary
+    # Filing logic (ticket 6) now creates one draft for the oversized
+    # file when a board is available.
+    assert len(result.drafts_created) == 1
+    assert "data-dir audit: oversized huge.bin" in result.drafts_created[0]["title"]
 
 
 # ---------------------------------------------------------------------------
@@ -1350,6 +1356,328 @@ def test_result_summary_format(tmp_path, monkeypatch):
     result = run_data_dir_audit_pass()
     assert "growth-delta check:" in result.summary
     assert result.session_id == ""  # not set by default
+
+
+# ---------------------------------------------------------------------------
+# ticket 6 — Filing & cross-pass dedup via gap-id markers
+# ---------------------------------------------------------------------------
+
+
+class TestFilingAndDedup:
+    """Filing logic + dedup behaviour for ``_file_findings_as_tickets``
+    and its integration through ``run_data_dir_audit_pass``."""
+
+    def _seed_one_of_each_finding(self, s: Settings):
+        """Plant one oversized file, one unbounded ``runs.json``, one
+        orphan workspace, and one growth scenario under ``s.data_dir``.
+
+        Pre-seeds the growth-state file so the growth check fires on
+        the FIRST pass (no warm-up run needed).
+
+        Returns the board id used for orphan + growth setup.
+        """
+        board_id = "test-board"
+        db.init_db(s, board_id)
+
+        # Oversized file: 200 MiB > 100 MiB threshold.
+        fd = os.open(str(s.data_dir / "huge.bin"), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd, 200 * 1024 * 1024)
+        finally:
+            os.close(fd)
+
+        # Unbounded runs.json: 60 entries > MAX_ENTRIES (50).
+        runs = s.data_dir / "runs.json"
+        runs.write_text(json.dumps([{"id": i} for i in range(60)]))
+
+        # Orphan workspace under board with no DB row.
+        _make_workspace_dir(s, board_id, "20260101T000000Z-orph-aa11")
+
+        # Growth scenario: write the file at its CURRENT (grown) size,
+        # then pre-seed the state file with a small prior size so the
+        # growth check fires on the first pass.
+        big = s.data_dir / board_id / "big.log"
+        big.parent.mkdir(parents=True, exist_ok=True)
+        big.write_bytes(b"x" * 20_000_000)
+        state_path = _growth_state_path(s, board_id)
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps({"big.log": {"size_bytes": 100, "mtime": 1.0}}),
+            encoding="utf-8",
+        )
+        return board_id
+
+    def _run_with_filing(self, s, monkeypatch, *, session_id=""):
+        monkeypatch.setattr(
+            "robotsix_mill.data_dir_audit_runner.Settings", lambda: s
+        )
+        return run_data_dir_audit_pass(
+            session_id=session_id, repo_config=_test_repo_config()
+        )
+
+    def test_each_finding_produces_one_draft(self, tmp_path, monkeypatch):
+        """One oversized + one unbounded + one orphan + one growth →
+        at least 4 drafts created, with at least one per issue type."""
+        s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=20)
+        self._seed_one_of_each_finding(s)
+
+        result = self._run_with_filing(s, monkeypatch)
+
+        titles = [d["title"] for d in result.drafts_created]
+        prefixes = {
+            "data-dir audit: orphan workspace",
+            "data-dir audit: growth",
+            "data-dir audit: oversized",
+            "data-dir audit: unbounded",
+        }
+        seen = set()
+        for title in titles:
+            for prefix in prefixes:
+                if title.startswith(prefix):
+                    seen.add(prefix)
+        assert seen == prefixes, titles
+        # Exactly one per issue type (plus possibly a couple of incidental
+        # growth flags from the workspaces/ dir as it accrues content).
+        oversized_count = sum(
+            1 for t in titles if t.startswith("data-dir audit: oversized")
+        )
+        unbounded_count = sum(
+            1 for t in titles if t.startswith("data-dir audit: unbounded")
+        )
+        orphan_count = sum(
+            1 for t in titles if t.startswith("data-dir audit: orphan")
+        )
+        assert oversized_count == 1, titles
+        assert unbounded_count == 1, titles
+        assert orphan_count == 1, titles
+        db.reset_engine()
+
+    def test_second_pass_dedups_in_flight_tickets(self, tmp_path, monkeypatch):
+        """Same findings → second pass files no new drafts; no
+        duplicate gap_ids land in the DB."""
+        s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=10)
+        db.init_db(s, "test-board")
+        # Plant a single oversized file (simplest finding).
+        fd = os.open(str(s.data_dir / "huge.bin"), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd, 200 * 1024 * 1024)
+        finally:
+            os.close(fd)
+
+        first = self._run_with_filing(s, monkeypatch)
+        assert len(first.drafts_created) == 1
+
+        second = self._run_with_filing(s, monkeypatch)
+        assert second.drafts_created == []
+
+        # Confirm only one ticket for this gap_id in the DB.
+        service = TicketService(s, board_id="test-board")
+        gap_ids: list[str] = []
+        for t in service.list():
+            if t.source != SourceKind.DATA_DIR_AUDIT:
+                continue
+            body = service.workspace(t).read_description()
+            for m in _GAP_ID_RE.finditer(body):
+                if m.group(1) == "data_dir_audit":
+                    gap_ids.append(m.group(2))
+        assert gap_ids == ["oversized:huge.bin"]
+        db.reset_engine()
+
+    def test_resolved_ticket_allows_refile(self, tmp_path, monkeypatch):
+        """Closed/declined tickets do NOT block refiling when the
+        on-disk finding still exists."""
+        s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=10)
+        db.init_db(s, "test-board")
+        fd = os.open(str(s.data_dir / "huge.bin"), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd, 200 * 1024 * 1024)
+        finally:
+            os.close(fd)
+
+        first = self._run_with_filing(s, monkeypatch)
+        assert len(first.drafts_created) == 1
+        first_id = first.drafts_created[0]["id"]
+
+        # Close the ticket directly (DRAFT → CLOSED = declined).
+        service = TicketService(s, board_id="test-board")
+        service.transition(first_id, State.CLOSED, note="declined as noise")
+
+        # Finding still on disk → a new draft should be filed.
+        second = self._run_with_filing(s, monkeypatch)
+        assert len(second.drafts_created) == 1
+        assert second.drafts_created[0]["id"] != first_id
+        db.reset_engine()
+
+    def test_disappeared_finding_does_not_refile(self, tmp_path, monkeypatch):
+        """A finding that no longer reproduces produces no draft on
+        the next pass (vacuously dedup'd)."""
+        s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=10)
+        db.init_db(s, "test-board")
+        huge = s.data_dir / "huge.bin"
+        fd = os.open(str(huge), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd, 200 * 1024 * 1024)
+        finally:
+            os.close(fd)
+
+        first = self._run_with_filing(s, monkeypatch)
+        assert len(first.drafts_created) == 1
+
+        huge.unlink()
+
+        second = self._run_with_filing(s, monkeypatch)
+        assert second.drafts_created == []
+        db.reset_engine()
+
+    def test_per_pass_cap_enforced(self, tmp_path, monkeypatch):
+        """With 10 oversized files and a cap of 3, exactly 3 drafts are
+        filed — the three largest, in size-desc order."""
+        s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=3)
+        db.init_db(s, "test-board")
+        sizes = []
+        for i in range(10):
+            size = (200 + i) * 1024 * 1024  # 200..209 MiB
+            fp = s.data_dir / f"big_{i:02d}.bin"
+            fd = os.open(str(fp), os.O_CREAT | os.O_WRONLY)
+            try:
+                os.ftruncate(fd, size)
+            finally:
+                os.close(fd)
+            sizes.append((f"big_{i:02d}.bin", size))
+
+        result = self._run_with_filing(s, monkeypatch)
+
+        assert len(result.drafts_created) == 3
+        # Top-N largest items is 10 here, so all 10 are candidates;
+        # the 3 chosen must be the largest in size_bytes desc.
+        chosen = [d["title"] for d in result.drafts_created]
+        # Three biggest filenames: big_09 (209 MiB), big_08, big_07.
+        assert any("big_09.bin" in t for t in chosen), chosen
+        assert any("big_08.bin" in t for t in chosen), chosen
+        assert any("big_07.bin" in t for t in chosen), chosen
+        db.reset_engine()
+
+    def test_gap_id_marker_present_in_body(self, tmp_path, monkeypatch):
+        """Each created ticket body contains a parseable gap-id
+        marker matching ``_GAP_ID_RE`` with label ``data_dir_audit``."""
+        s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=10)
+        db.init_db(s, "test-board")
+        fd = os.open(str(s.data_dir / "huge.bin"), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd, 200 * 1024 * 1024)
+        finally:
+            os.close(fd)
+
+        result = self._run_with_filing(s, monkeypatch)
+        assert len(result.drafts_created) == 1
+        service = TicketService(s, board_id="test-board")
+        ticket = service.get(result.drafts_created[0]["id"])
+        assert ticket is not None
+        body = service.workspace(ticket).read_description()
+        match = _GAP_ID_RE.search(body)
+        assert match is not None
+        assert match.group(1) == "data_dir_audit"
+        assert match.group(2) == "oversized:huge.bin"
+        db.reset_engine()
+
+    def test_no_repo_config_skips_filing(self, tmp_path, monkeypatch):
+        """When ``repo_config`` is None, findings are produced but no
+        filing happens — the summary still describes them."""
+        s = _make_settings(tmp_path)
+        fd = os.open(str(s.data_dir / "huge.bin"), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd, 200 * 1024 * 1024)
+        finally:
+            os.close(fd)
+
+        monkeypatch.setattr(
+            "robotsix_mill.data_dir_audit_runner.Settings", lambda: s
+        )
+
+        result = run_data_dir_audit_pass(repo_config=None)
+
+        assert result.drafts_created == []
+        assert len(result.oversized_items) == 1
+        assert "1 oversized items" in result.summary
+        db.reset_engine()
+
+    def test_create_failure_does_not_abort_pass(self, tmp_path, monkeypatch):
+        """A failing ``TicketService.create`` is logged via
+        ``log.exception`` but the loop continues to the next finding."""
+        s = _make_settings(tmp_path, data_dir_audit_max_drafts_per_pass=10)
+        db.init_db(s, "test-board")
+        # Three oversized files → three filing attempts.
+        for i in range(3):
+            size = (200 + i) * 1024 * 1024
+            fp = s.data_dir / f"big_{i:02d}.bin"
+            fd = os.open(str(fp), os.O_CREAT | os.O_WRONLY)
+            try:
+                os.ftruncate(fd, size)
+            finally:
+                os.close(fd)
+
+        # Make every other create() raise so we exercise both branches:
+        # the first succeeds, the second raises (logged), the third
+        # succeeds. The pass must return both successful tickets, not
+        # abort on the failure.
+        real_create = TicketService.create
+        call_count = {"n": 0}
+
+        def flaky_create(self, *a, **kw):
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise RuntimeError("synthetic create failure")
+            return real_create(self, *a, **kw)
+
+        monkeypatch.setattr(TicketService, "create", flaky_create)
+
+        with caplog_at_level_module(s, monkeypatch) as caplog:
+            result = self._run_with_filing(s, monkeypatch)
+
+        # 3 attempts, 1 failure → 2 successful drafts.
+        assert call_count["n"] == 3
+        assert len(result.drafts_created) == 2
+        assert any(
+            "failed to create draft ticket" in rec.message
+            for rec in caplog.records
+        )
+        db.reset_engine()
+
+
+class _CaplogCM:
+    """Tiny caplog-like context manager — pytest's caplog fixture is
+    function-scoped and can't be cleanly injected into a class helper,
+    so we attach a handler ourselves."""
+
+    def __init__(self):
+        self.records: list[logging.LogRecord] = []
+        self._logger = logging.getLogger("robotsix_mill.data_dir_audit")
+        self._handler: logging.Handler | None = None
+        self._prev_level = self._logger.level
+
+    def __enter__(self):
+        class _H(logging.Handler):
+            def __init__(self, sink):
+                super().__init__()
+                self.sink = sink
+
+            def emit(self, record):
+                self.sink.records.append(record)
+
+        self._handler = _H(self)
+        self._logger.addHandler(self._handler)
+        self._logger.setLevel(logging.DEBUG)
+        return self
+
+    def __exit__(self, *exc):
+        if self._handler is not None:
+            self._logger.removeHandler(self._handler)
+        self._logger.setLevel(self._prev_level)
+
+
+def caplog_at_level_module(_s, _monkeypatch):
+    """Module-scope caplog substitute for inside-class use."""
+    return _CaplogCM()
 
 
 # ---------------------------------------------------------------------------
