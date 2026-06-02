@@ -545,6 +545,47 @@ def test_initial_delay_waits_when_recent(ctx, tmp_path):
     assert 86000 < delay <= 86400  # nearly the whole interval remains
 
 
+def test_initial_delay_is_per_repo_scoped(ctx, tmp_path):
+    """A recent audit on ONE repo must NOT delay another repo's first run.
+
+    Regression for: audit never ran on robotsix-llmio because _initial_delay
+    queried most_recent("audit") with no repo_id, inheriting mill's daily audit
+    timestamp — so llmio waited a near-full 24h every restart and never fired.
+    With repo scoping, a repo that has never run the agent fires ~immediately.
+    """
+    import json
+    from datetime import datetime, timezone
+
+    from robotsix_mill.runtime.run_registry import RunRegistry
+    from robotsix_mill.runtime.worker import Worker
+
+    db_path = tmp_path / "runs.json"
+    recent = datetime.now(timezone.utc).isoformat()
+    db_path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "a1",
+                    "kind": "audit",
+                    "repo_id": "robotsix-mill",
+                    "started_at": recent,
+                    "finished_at": recent,
+                    "status": "ok",
+                    "summary": "",
+                    "error": None,
+                }
+            ]
+        )
+    )
+    w = Worker(ctx, run_registry=RunRegistry(db_path))
+    # mill ran audit just now, but llmio never has → llmio fires soon.
+    assert w._initial_delay("audit", 86400, repo_id="robotsix-llmio") == 1.0
+    # mill itself still sees its own recent run and waits.
+    assert w._initial_delay("audit", 86400, repo_id="robotsix-mill") > 86000
+    # legacy any-repo call (no repo_id) keeps the old behaviour.
+    assert w._initial_delay("audit", 86400) > 86000
+
+
 # --- transient-error retry at stage-runner level -----------------------
 
 
