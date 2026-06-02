@@ -269,8 +269,8 @@ def test_explore_max_tokens_validator_rejects_zero_or_negative():
 
     with pytest.raises(ValidationError) as exc_info:
         _settings(Path("."), explore_max_tokens="0")
-    assert "explore_max_tokens must be ≥ 1" in str(exc_info.value)
+    assert "Input should be greater than or equal to 1" in str(exc_info.value)
 
     with pytest.raises(ValidationError) as exc_info:
         _settings(Path("."), explore_max_tokens="-1")
-    assert "explore_max_tokens must be ≥ 1" in str(exc_info.value)
+    assert "Input should be greater than or equal to 1" in str(exc_info.value)

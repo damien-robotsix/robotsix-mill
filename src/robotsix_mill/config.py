@@ -160,7 +160,9 @@ class Settings(BaseSettings):
     # ``agents.claude_concurrency``) bounds concurrent runs to smooth the spawn
     # storm. Only takes effect when ``llm_backend``/``claude_sdk_agents`` routes
     # work to the Claude SDK; the DeepSeek path is unaffected. Must be ≥ 1.
-    claude_max_concurrency: int = Field(default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY")
+    claude_max_concurrency: int = Field(
+        default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY", ge=1
+    )
     # Resilience: when a Claude-SDK agent run terminally fails (after its local
     # retries are exhausted), fall back to the equivalent DeepSeek/OpenRouter
     # build of the same agent. Only takes effect for Claude-routed agents AND
@@ -227,7 +229,7 @@ class Settings(BaseSettings):
     # deepseek-v4-pro + complex tickets: a medium ticket (53de) used
     # ~49 implement calls, so 200 leaves generous headroom; raising it
     # only matters if a ticket genuinely needs more steps.
-    coordinator_request_limit: int = Field(default=200)
+    coordinator_request_limit: int = Field(default=200, ge=1)
     # Per-subtask request budget when the coordinator delegates via
     # ``spawn_subtask``. The parent's ``coordinator_request_limit``
     # still bounds the outer loop; this cap bounds each individual
@@ -243,10 +245,10 @@ class Settings(BaseSettings):
     # nearly as many tool calls). The yaml value wins at runtime via
     # _YAML_PATH_TO_ALIAS; this just stops the dry-Settings() default
     # from contradicting it on machines without a yaml override.
-    test_request_limit: int = Field(default=8)
+    test_request_limit: int = Field(default=8, ge=1)
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
-    max_fix_iterations: int = Field(default=8)
+    max_fix_iterations: int = Field(default=8, ge=0)
     # Bounded retry for TRANSIENT model/network failures (HTTP 429,
     # HTTP 5xx, connection/read timeouts) — used by every model call
     # and the ntfy POST. Non-transient errors (other 4xx, budget caps)
@@ -259,10 +261,10 @@ class Settings(BaseSettings):
     # tickets push higher. 900s comfortably clears that while still
     # bounding a real hang. On timeout the call raises -> transient ->
     # retry/backoff rides it out (or it BLOCKs visibly).
-    model_request_timeout: float = Field(default=900.0)
-    transient_retries: int = Field(default=4)
-    transient_backoff_base: float = Field(default=2.0)
-    transient_backoff_cap: float = Field(default=30.0)
+    model_request_timeout: float = Field(default=900.0, gt=0)
+    transient_retries: int = Field(default=4, ge=0)
+    transient_backoff_base: float = Field(default=2.0, gt=0)
+    transient_backoff_cap: float = Field(default=30.0, gt=0)
     # Retry policy for stage-level transient errors (httpx.ConnectError,
     # etc.).  These control how many times a stage is re-attempted and
     # the exponential-backoff delay between attempts inside the worker
@@ -277,19 +279,19 @@ class Settings(BaseSettings):
     # rate_limit_fallback_model is set, call_with_retry switches to
     # that model after rate_limit_fallback_retries consecutive
     # UsageLimitExceeded failures.
-    rate_limit_backoff_base: float = Field(default=30.0)
-    rate_limit_backoff_cap: float = Field(default=120.0)
-    rate_limit_fallback_retries: int = Field(default=3)
+    rate_limit_backoff_base: float = Field(default=30.0, gt=0)
+    rate_limit_backoff_cap: float = Field(default=120.0, gt=0)
+    rate_limit_fallback_retries: int = Field(default=3, ge=0)
     rate_limit_fallback_model: str = Field(default="")
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the
     # coordinator uses when it needs domain-specific advice.
-    consult_request_limit: int = Field(default=15)
-    explore_request_limit: int = Field(default=100)
-    explore_max_tokens: int = Field(default=600)
+    consult_request_limit: int = Field(default=15, ge=1)
+    explore_request_limit: int = Field(default=100, ge=1)
+    explore_max_tokens: int = Field(default=600, ge=1)
     # Per-call cap for the dedup check — one cheap call, so keep it tight.
-    dedup_request_limit: int = Field(default=4)
+    dedup_request_limit: int = Field(default=4, ge=1)
     doc_request_limit: int = Field(default=8)
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")
@@ -298,7 +300,7 @@ class Settings(BaseSettings):
     # When the file exceeds this, the oldest entries are dropped (read-side
     # only — persist_memory is unchanged).  Applies to all memory ledgers
     # (refine, audit, health, agent-check, etc.).
-    max_memory_chars: int = Field(default=8000)
+    max_memory_chars: int = Field(default=8000, ge=0)
     # Maximum number of files whose full content the refine stage stores
     # as reference_files.json for the implement coordinator to pre-load.
     reference_files_max_count: int = Field(default=5)
@@ -312,7 +314,7 @@ class Settings(BaseSettings):
     # Maximum number of candidates to pass to the dedup LLM after
     # similarity-based pre-filtering.  Caps the token budget regardless
     # of repo size.  ≥ 1 enforced by validator.
-    dedup_max_candidates: int = Field(default=8)
+    dedup_max_candidates: int = Field(default=8, ge=1)
     # Local-dev default: ``.data`` — the same path the docker-compose
     # volume mounts at /data, so host CLI invocations and the container
     # share state instead of leaking a separate sibling tree. The
@@ -330,7 +332,7 @@ class Settings(BaseSettings):
     api_host: str = Field(default="127.0.0.1")
     api_port: int = Field(default=8077)
     # Base URL the CLI client talks to.
-    api_url: str = Field(default="http://127.0.0.1:8077")
+    api_url: str = Field(default="http://127.0.0.1:8077", pattern=r"^https?://")
 
     # --- forge delivery (only used by the deliver stage) ---
     forge_kind: Literal["github", "gitlab", "none"] = Field(
@@ -351,9 +353,11 @@ class Settings(BaseSettings):
         default=None, alias="GITHUB_APP_PRIVATE_KEY_PATH"
     )
     # GitHub API base (override for GitHub Enterprise).
-    github_api_url: str = Field(default="https://api.github.com")
+    github_api_url: str = Field(default="https://api.github.com", pattern=r"^https?://")
     # GitLab API base (override for self-hosted GitLab instances).
-    gitlab_api_url: str = Field(default="https://gitlab.com/api/v4")
+    gitlab_api_url: str = Field(
+        default="https://gitlab.com/api/v4", pattern=r"^https?://"
+    )
 
     # --- implement stage ---
     # Command run to verify the implementation; empty string skips the
@@ -367,13 +371,13 @@ class Settings(BaseSettings):
     branch_prefix: str = Field(default="mill/")
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.
-    command_timeout: int = Field(default=1800)
+    command_timeout: int = Field(default=1800, gt=0)
     # Safety net: if a ticket re-enters the *same* model-driven stage
     # this many times without ever progressing (e.g. its run keeps being
     # interrupted, or a stage churns), the worker escalates it to BLOCKED
     # + notifies instead of silently re-billing the LLM forever. Poll
     # stages (merge/deliver) are exempt — human_mr_approval legitimately waits.
-    max_stuck_cycles: int = Field(default=3)
+    max_stuck_cycles: int = Field(default=3, ge=0)
     # Dollar-cap safety net: if a ticket's cumulative Langfuse-traced
     # LLM spend exceeds this value (across all stages), the worker
     # escalates it to BLOCKED. 0.0 disables the cap entirely.
@@ -439,13 +443,13 @@ class Settings(BaseSettings):
     web_research_model: str = Field(
         default="deepseek/deepseek-v4-flash",
     )
-    web_research_request_limit: int = Field(default=8)
+    web_research_request_limit: int = Field(default=8, ge=1)
     # web_fetch runs in its OWN container: network ON, but NO repo/data
     # mount, non-root, read-only, fixed curl. Trade-off accepted: an
     # agent could encode data into a fetched URL. http(s) only.
     fetch_image: str = Field(default="curlimages/curl:8.17.0")
-    web_fetch_max_bytes: int = Field(default=2_000_000)
-    web_fetch_timeout: int = Field(default=30)
+    web_fetch_max_bytes: int = Field(default=2_000_000, ge=0)
+    web_fetch_timeout: int = Field(default=30, gt=0)
     # Post-extraction cap, applied AFTER HTML→text stripping. The
     # network-level ``web_fetch_max_bytes`` bounds raw bytes; this
     # bounds what the agent ACTUALLY sees in its context. Default
@@ -555,7 +559,7 @@ class Settings(BaseSettings):
     # round-trips before escalating to DELIVERABLE for human merge approval.
     # A value ≤ 0 means escalate on the first REQUEST_CHANGES (the loop is
     # effectively disabled). Default 3.
-    review_max_rounds: int = Field(default=3)
+    review_max_rounds: int = Field(default=3, ge=0)
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
     # 40 is the empirical floor for a medium PR (4-6 files): read_file
@@ -665,7 +669,7 @@ class Settings(BaseSettings):
     retrospect_memory_path: Path | None = Field(default=None)
     # human_mr_approval (PR open) re-check cadence. mill has no scheduler; this
     # timer exists only to observe the external merge event.
-    merge_poll_seconds: int = Field(default=120)
+    merge_poll_seconds: int = Field(default=120, gt=0)
     # When true (default), the workspace's clone (repo/) is removed on
     # close to save disk space.
     prune_clone_on_close: bool = Field(default=True)
@@ -674,31 +678,31 @@ class Settings(BaseSettings):
     # state and the total exceeds this cap, the oldest terminal tickets
     # (by created_at) are purged — unless they are the parent of an
     # active (non-terminal) child.  Set to 0 to disable purging.
-    max_archived_tickets: int = Field(default=100)
+    max_archived_tickets: int = Field(default=100, ge=0)
 
     # --- merge stage: auto-rebase of stale PRs ---
     # When a PR in human_mr_approval becomes conflicting (other PRs merged to
     # the target branch), the merge stage invokes the rebase agent to
     # resolve conflicts automatically.  This is the max number of
     # rebase attempts per ticket before escalating to BLOCKED.
-    rebase_max_attempts: int = Field(default=3)
+    rebase_max_attempts: int = Field(default=3, ge=0)
 
     # --- merge stage: auto-fix of failing remote CI ---
     # When a PR in human_mr_approval has failing CI checks, the merge stage
     # transitions to fixing_ci and invokes the ci-fix agent to resolve
     # the failures automatically.  This is the max number of ci-fix
     # attempts per ticket before escalating to BLOCKED.
-    ci_fix_max_attempts: int = Field(default=2)
+    ci_fix_max_attempts: int = Field(default=2, ge=0)
 
     # Maximum consecutive ci-fix cycles that produce no code changes before
     # escalating to BLOCKED.  A "no-change" cycle is one where the ci-fix
     # agent reports success but the local HEAD matches the remote (no commits
     # were produced).  Set to 0 to disable the ceiling (preserves pre-0.32
     # behaviour of relying solely on ci_fix_max_attempts for the outer bound).
-    ci_max_auto_retries: int = Field(default=3)
+    ci_max_auto_retries: int = Field(default=3, ge=0)
 
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
-    review_revision_max_attempts: int = Field(default=2)
+    review_revision_max_attempts: int = Field(default=2, ge=1)
 
     # --- target-branch CI monitor ---
     # CI monitor enabled/interval are now per-repo fields on RepoConfig
@@ -979,7 +983,7 @@ class Settings(BaseSettings):
     # Files and directories whose cumulative size reaches this
     # threshold are reported as oversized.  Default 100 MiB.
     # Override with MILL_DATA_DIR_AUDIT_SIZE_THRESHOLD_BYTES.
-    data_dir_audit_size_threshold_bytes: int = Field(default=104_857_600)
+    data_dir_audit_size_threshold_bytes: int = Field(default=104_857_600, ge=0)
     # If a file or directory grew by at least this many bytes since
     # the last audit pass, flag it for growth.  Default 10 MiB.
     # Override with MILL_DATA_DIR_AUDIT_GROWTH_DELTA_BYTES.
@@ -1279,247 +1283,6 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     #  Validators
     # ------------------------------------------------------------------
-
-    # -- range checks --------------------------------------------------
-
-    @field_validator("model_request_timeout")
-    @classmethod
-    def _validate_model_request_timeout(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError("model_request_timeout must be > 0")
-        return v
-
-    @field_validator("transient_retries")
-    @classmethod
-    def _validate_transient_retries(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("transient_retries must be ≥ 0")
-        return v
-
-    @field_validator("claude_max_concurrency")
-    @classmethod
-    def _validate_claude_max_concurrency(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("claude_max_concurrency must be ≥ 1")
-        return v
-
-    @field_validator("transient_backoff_base")
-    @classmethod
-    def _validate_transient_backoff_base(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError("transient_backoff_base must be > 0")
-        return v
-
-    @field_validator("transient_backoff_cap")
-    @classmethod
-    def _validate_transient_backoff_cap(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError("transient_backoff_cap must be > 0")
-        return v
-
-    @field_validator("rate_limit_backoff_base")
-    @classmethod
-    def _validate_rate_limit_backoff_base(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError("rate_limit_backoff_base must be > 0")
-        return v
-
-    @field_validator("rate_limit_backoff_cap")
-    @classmethod
-    def _validate_rate_limit_backoff_cap(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError("rate_limit_backoff_cap must be > 0")
-        return v
-
-    @field_validator("rate_limit_fallback_retries")
-    @classmethod
-    def _validate_rate_limit_fallback_retries(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("rate_limit_fallback_retries must be ≥ 0")
-        return v
-
-    @field_validator("max_fix_iterations")
-    @classmethod
-    def _validate_max_fix_iterations(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("max_fix_iterations must be ≥ 0")
-        return v
-
-    @field_validator("command_timeout")
-    @classmethod
-    def _validate_command_timeout(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("command_timeout must be > 0")
-        return v
-
-    @field_validator("merge_poll_seconds")
-    @classmethod
-    def _validate_merge_poll_seconds(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("merge_poll_seconds must be > 0")
-        return v
-
-    @field_validator("review_max_rounds")
-    @classmethod
-    def _validate_review_max_rounds(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("review_max_rounds must be ≥ 0")
-        return v
-
-    @field_validator("max_stuck_cycles")
-    @classmethod
-    def _validate_max_stuck_cycles(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("max_stuck_cycles must be ≥ 0")
-        return v
-
-    @field_validator("rebase_max_attempts")
-    @classmethod
-    def _validate_rebase_max_attempts(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("rebase_max_attempts must be ≥ 0")
-        return v
-
-    @field_validator("ci_fix_max_attempts")
-    @classmethod
-    def _validate_ci_fix_max_attempts(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("ci_fix_max_attempts must be ≥ 0")
-        return v
-
-    @field_validator("ci_max_auto_retries")
-    @classmethod
-    def _validate_ci_max_auto_retries(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("ci_max_auto_retries must be ≥ 0")
-        return v
-
-    @field_validator("review_revision_max_attempts")
-    @classmethod
-    def _validate_review_revision_max_attempts(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("review_revision_max_attempts must be ≥ 1")
-        return v
-
-    @field_validator("max_archived_tickets")
-    @classmethod
-    def _validate_max_archived_tickets(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("max_archived_tickets must be ≥ 0")
-        return v
-
-    @field_validator("max_memory_chars")
-    @classmethod
-    def _validate_max_memory_chars(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("max_memory_chars must be ≥ 0")
-        return v
-
-    @field_validator("consult_request_limit")
-    @classmethod
-    def _validate_consult_request_limit(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("consult_request_limit must be ≥ 1")
-        return v
-
-    @field_validator("explore_request_limit")
-    @classmethod
-    def _validate_explore_request_limit(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("explore_request_limit must be ≥ 1")
-        return v
-
-    @field_validator("explore_max_tokens")
-    @classmethod
-    def _validate_explore_max_tokens(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("explore_max_tokens must be ≥ 1")
-        return v
-
-    @field_validator("dedup_request_limit")
-    @classmethod
-    def _validate_dedup_request_limit(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("dedup_request_limit must be ≥ 1")
-        return v
-
-    @field_validator("dedup_max_candidates")
-    @classmethod
-    def _validate_dedup_max_candidates(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("dedup_max_candidates must be ≥ 1")
-        return v
-
-    @field_validator("web_research_request_limit")
-    @classmethod
-    def _validate_web_research_request_limit(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("web_research_request_limit must be ≥ 1")
-        return v
-
-    @field_validator("test_request_limit")
-    @classmethod
-    def _validate_test_request_limit(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("test_request_limit must be ≥ 1")
-        return v
-
-    @field_validator("coordinator_request_limit")
-    @classmethod
-    def _validate_coordinator_request_limit(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("coordinator_request_limit must be ≥ 1")
-        return v
-
-    @field_validator("web_fetch_timeout")
-    @classmethod
-    def _validate_web_fetch_timeout(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("web_fetch_timeout must be > 0")
-        return v
-
-    @field_validator("web_fetch_max_bytes")
-    @classmethod
-    def _validate_web_fetch_max_bytes(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("web_fetch_max_bytes must be ≥ 0")
-        return v
-
-    @field_validator("data_dir_audit_size_threshold_bytes")
-    @classmethod
-    def _validate_data_dir_audit_size_threshold_bytes(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("data_dir_audit_size_threshold_bytes must be ≥ 0")
-        return v
-
-    # -- format checks -------------------------------------------------
-
-    @field_validator("api_url")
-    @classmethod
-    def _validate_api_url_format(cls, v: str) -> str:
-        if not v.startswith(("http://", "https://")):
-            raise ValueError(
-                "api_url must be an HTTP(S) URL starting with http:// or https://"
-            )
-        return v
-
-    @field_validator("github_api_url")
-    @classmethod
-    def _validate_github_api_url_format(cls, v: str) -> str:
-        if not v.startswith(("http://", "https://")):
-            raise ValueError(
-                "github_api_url must be an HTTP(S) URL starting with http:// or https://"
-            )
-        return v
-
-    @field_validator("gitlab_api_url")
-    @classmethod
-    def _validate_gitlab_api_url_format(cls, v: str) -> str:
-        if not v.startswith(("http://", "https://")):
-            raise ValueError(
-                "gitlab_api_url must be an HTTP(S) URL starting with http:// or https://"
-            )
-        return v
 
     # -- interval minimums ---------------------------------------------
 
