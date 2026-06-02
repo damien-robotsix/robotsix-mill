@@ -8,6 +8,7 @@ APPROVE / REQUEST_CHANGES / NEEDS_DISCUSSION.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -16,6 +17,8 @@ from ..config import Settings
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
+
+log = logging.getLogger(__name__)
 
 _SYSPROMPT_PATH = (
     Path(__file__).parent.parent.parent.parent / "agent_definitions" / "review.yaml"
@@ -210,4 +213,35 @@ def run_review_agent(
         )
     finally:
         _safe_close(agent)
-    return result.output
+    return _coerce_verdict(result.output)
+
+
+def _coerce_verdict(output: object) -> ReviewVerdict:
+    """Return *output* as a :class:`ReviewVerdict`, degrading safely.
+
+    pydantic-ai can fall back to raw text when the structured-output parse
+    fails even after its output retries. Returning that bare str would crash
+    the review STAGE on ``verdict.verdict`` ("'str' object has no attribute
+    'verdict'") and hard-BLOCK the ticket with a Fatal — even though implement
+    already succeeded and reached review. Degrade an unparseable review to
+    NEEDS_DISCUSSION (never APPROVE — that could auto-merge unreviewed code):
+    the stage routes it to AWAITING_USER_REPLY so a human makes the call,
+    instead of a crash that needs a manual unblock.
+    """
+    if isinstance(output, ReviewVerdict):
+        return output
+    log.warning(
+        "review: agent returned non-structured output (%s); "
+        "degrading to NEEDS_DISCUSSION for human review",
+        type(output).__name__,
+    )
+    text = output if isinstance(output, str) else ""
+    return ReviewVerdict(
+        verdict="NEEDS_DISCUSSION",
+        comments=(
+            "The review agent's structured output could not be parsed, so an "
+            "automated verdict is unavailable — a human should review this PR "
+            "directly. Raw model output (truncated):\n\n" + text[:1500]
+        ),
+        auto_merge_eligible=False,
+    )
