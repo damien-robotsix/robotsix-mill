@@ -4,6 +4,13 @@ Inspection checks (top-N largest items, growth deltas, unbounded-
 collection candidates, orphan workspaces, ticket filing & dedup, rich
 summary) are added by child tickets 2–7 of the epic.
 
+Ticket 4 (this file's current contribution) implements
+unbounded-collection candidate detection: ``check_unbounded_candidates``
+walks ``data_dir`` looking for files that exceed the documented caps
+of known unbounded patterns (``*_memory.md``, ``runs.json``,
+``ci_patterns.json``, ``ci_monitor_state.json``, generic ``*.json``)
+and returns finding dicts on ``DataDirAuditPassResult.findings``.
+
 Seam: tests monkeypatch ``robotsix_mill.data_dir_audit_runner.Settings``
 to inject fake settings instances. The :class:`Settings` import below
 is kept precisely to expose that attribute on the module namespace for
@@ -402,16 +409,28 @@ def run_data_dir_audit_pass(
 ) -> DataDirAuditPassResult:
     """Execute one data-dir audit pass.
 
+    Runs the top-N largest-items check (ticket 2), the
+    unbounded-collection candidate check (ticket 4) over
+    ``settings.data_dir``, and the orphan-workspace check (ticket 5)
+    over every board with a ``mill.db`` on disk. Inspection logic for
+    the remaining checks (growth deltas, filing & dedup, rich summary)
+    is added by child tickets 3, 6 and 7.
+
     Args:
         session_id: Langfuse session id from the poll loop (optional).
         repo_config: Per-repo config (optional).
 
     Returns:
-        ``DataDirAuditPassResult`` with findings.
+        ``DataDirAuditPassResult`` whose ``oversized_items`` list
+        contains items above the configured size threshold, whose
+        ``findings`` list contains the flagged unbounded-collection
+        candidates (empty when nothing exceeds its cap), and whose
+        ``summary`` reflects the per-check counts.
     """
-    # Settings is intentionally instantiated so tests can stub
-    # ``robotsix_mill.data_dir_audit_runner.Settings`` via monkeypatch,
-    # and so any environment-variable parsing errors surface early.
+    # Settings is instantiated here so that any environment-variable
+    # parsing errors surface early, and so tests can monkeypatch
+    # ``robotsix_mill.data_dir_audit_runner.Settings`` to inject a
+    # tmp_path-rooted instance.
     settings = Settings()
 
     # Top-N largest items detection (ticket 2 of the epic).
