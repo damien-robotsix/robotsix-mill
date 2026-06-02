@@ -213,6 +213,43 @@ def fetch_trace_detail(
     )
 
 
+def fetch_trace_observations(
+    settings: Settings,
+    trace_id: str,
+    repo_config: RepoConfig | None = None,
+) -> list[dict] | None:
+    """Return the list of observations for a trace, filtered to
+    the fields relevant for event-mode validation.
+
+    Each observation dict contains:
+    ``type`` (e.g. ``"GENERATION"``, ``"SPAN"``),
+    ``level``, ``statusMessage``, ``input``, ``output``,
+    ``model``, ``usage`` (token counts), ``costDetails``,
+    ``name``, ``startTime``, ``endTime``.
+
+    Returns ``None`` when Langfuse is unconfigured / unreachable,
+    or the trace is not found.
+    """
+    detail = fetch_trace_detail(settings, trace_id, repo_config=repo_config)
+    if detail is None:
+        return None
+    observations = detail.get("observations") or []
+    _fields = (
+        "type",
+        "level",
+        "statusMessage",
+        "input",
+        "output",
+        "model",
+        "usage",
+        "costDetails",
+        "name",
+        "startTime",
+        "endTime",
+    )
+    return [{k: obs.get(k) for k in _fields} for obs in observations]
+
+
 def fetch_session_summary(
     settings: Settings, session_id: str, repo_config: RepoConfig | None = None
 ) -> str | None:
