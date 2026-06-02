@@ -13,6 +13,7 @@ modules:
     paths:
       - src/robotsix_llmio/openrouter/**
       - tests/openrouter/test_openrouter.py
+      - docs/openrouter/
   - id: robotsix_llmio-openrouter-deepseek
     description: >
       Derived DeepSeek layer that pins the generic OpenRouter transport
