@@ -19,7 +19,7 @@ from __future__ import annotations
 from ..config import Settings
 from ..core.models import SourceKind
 from ..core.service import TicketService
-from ..core.text_noop import is_noop_report
+from ..core.text_noop import is_completion_announcement, is_noop_report
 from ..runtime import tracing as _tracing
 
 # Tickets in these states are "done with"; an identical title may be
@@ -44,6 +44,11 @@ def _validate_title(title: str) -> str | None:
     title = title.strip()
     if not title:
         return "report_issue: a non-empty title is required"
+    if is_completion_announcement(title):
+        return (
+            "report_issue: completion announcement suppressed — "
+            "not filed (return your structured result instead)"
+        )
     if is_noop_report(title):
         return "report_issue: no actionable issue — not filed (clean/no-op report)"
     return None
