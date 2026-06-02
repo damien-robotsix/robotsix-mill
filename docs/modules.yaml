@@ -540,6 +540,5 @@ modules:
       - LICENSE
       - SECURITY.md
       - AGENT.md
-      - _epic
       - .gitignore
     dependencies: []
