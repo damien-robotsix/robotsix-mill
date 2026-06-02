@@ -8,8 +8,6 @@ from the refine-stage integration.
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from robotsix_mill.agents.freshness import extract_cited_paths, run_freshness_check
 
 

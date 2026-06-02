@@ -25,9 +25,26 @@ log = logging.getLogger("robotsix_mill.agents.freshness")
 # — we only want to match paths that look like real source files, not
 # prose fragments that happen to contain a dot.
 _SOURCE_EXTENSIONS = (
-    "py", "md", "yaml", "yml", "json", "toml", "cfg", "ini",
-    "txt", "js", "ts", "jsx", "tsx", "css", "html", "rst", "sh",
-    "sql", "graphql", "proto",
+    "py",
+    "md",
+    "yaml",
+    "yml",
+    "json",
+    "toml",
+    "cfg",
+    "ini",
+    "txt",
+    "js",
+    "ts",
+    "jsx",
+    "tsx",
+    "css",
+    "html",
+    "rst",
+    "sh",
+    "sql",
+    "graphql",
+    "proto",
 )
 
 # Match backtick-quoted strings: `...`
@@ -46,9 +63,7 @@ _BARE_PATH_RE = re.compile(
 _LINE_RANGE_RE = re.compile(r":(\d+)(?:-(\d+))?$")
 
 
-def _resolve_path(
-    raw: str, repo_dir: Path
-) -> tuple[str, bool, int | None, int | None]:
+def _resolve_path(raw: str, repo_dir: Path) -> tuple[str, bool, int | None, int | None]:
     """Resolve a single cited path against *repo_dir*.
 
     Returns ``(raw, exists, start_line, end_line)``.  *start_line*
@@ -106,6 +121,46 @@ def _count_lines(path: Path) -> int:
     return count
 
 
+def _looks_like_source_path(raw: str) -> bool:
+    """Return True when *raw* ends with a known source extension.
+
+    Accepts both bare extensions (``foo.py``) and extensions followed
+    by a line-range suffix (``foo.py:42``).
+    """
+    return any(
+        raw.endswith("." + ext) or f".{ext}:" in raw for ext in _SOURCE_EXTENSIONS
+    )
+
+
+def _path_base(raw: str) -> str:
+    """Strip the line-range suffix from *raw* for dedup purposes."""
+    m = _LINE_RANGE_RE.search(raw)
+    return raw[: m.start()] if m else raw
+
+
+def _scan_backtick_paths(draft: str) -> list[str]:
+    """Return backtick-quoted strings from *draft* that look like file paths."""
+    out: list[str] = []
+    for m in _BACKTICK_RE.finditer(draft):
+        raw = m.group(1).strip()
+        # Must contain a directory separator and a known extension.
+        if "/" not in raw or not _looks_like_source_path(raw):
+            continue
+        out.append(raw)
+    return out
+
+
+def _scan_bare_paths(draft: str) -> list[str]:
+    """Return bare (non-backtick) file-path-looking strings from *draft*."""
+    out: list[str] = []
+    for m in _BARE_PATH_RE.finditer(draft):
+        raw = m.group(1).strip()
+        if "/" not in raw:
+            continue
+        out.append(raw)
+    return out
+
+
 def extract_cited_paths(draft: str) -> list[str]:
     """Extract cited file-like paths from *draft*.
 
@@ -116,45 +171,22 @@ def extract_cited_paths(draft: str) -> list[str]:
     """
     seen: set[str] = set()  # raw strings already emitted
     seen_base: set[str] = set()  # base paths (without line range) already covered
-
-    def _base(raw: str) -> str:
-        """Strip line-range suffix for dedup."""
-        m = _LINE_RANGE_RE.search(raw)
-        return raw[: m.start()] if m else raw
-
-    def _add(raw: str) -> bool:
-        """Add *raw* if not already covered. Returns True if added."""
-        if raw in seen:
-            return False
-        base = _base(raw)
-        if base in seen_base:
-            # A more specific form (with line range) already covers this.
-            return False
-        seen.add(raw)
-        seen_base.add(base)
-        return True
-
     paths: list[str] = []
 
-    # Priority 1: backtick-quoted strings that look like file paths.
-    for m in _BACKTICK_RE.finditer(draft):
-        raw = m.group(1).strip()
-        # Must contain a directory separator and a known extension.
-        if "/" not in raw:
+    # Priority 1: backtick-quoted file paths.
+    # Priority 2: bare paths.  Concatenating preserves the
+    # priority ordering used by the dedup logic below.
+    candidates = _scan_backtick_paths(draft) + _scan_bare_paths(draft)
+    for raw in candidates:
+        if raw in seen:
             continue
-        if not any(raw.endswith("." + ext) or f".{ext}:" in raw for ext in _SOURCE_EXTENSIONS):
+        base = _path_base(raw)
+        if base in seen_base:
+            # A more specific form (with line range) already covers this.
             continue
-        if _add(raw):
-            paths.append(raw)
-
-    # Priority 2: bare paths (not already captured inside backticks).
-    for m in _BARE_PATH_RE.finditer(draft):
-        raw = m.group(1).strip()
-        # Require at least one directory separator.
-        if "/" not in raw:
-            continue
-        if _add(raw):
-            paths.append(raw)
+        seen.add(raw)
+        seen_base.add(base)
+        paths.append(raw)
 
     return paths
 
@@ -186,7 +218,10 @@ def run_freshness_check(
         # Too few cited paths to make a reliable staleness call.
         # A single missing path is more likely a typo than a stale
         # finding.
-        return {"stale": False, "reason": f"only {len(cited)} cited path(s) — insufficient for staleness check"}
+        return {
+            "stale": False,
+            "reason": f"only {len(cited)} cited path(s) — insufficient for staleness check",
+        }
 
     verified = 0
     missing: list[str] = []

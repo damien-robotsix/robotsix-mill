@@ -1023,7 +1023,10 @@ def test_freshness_gate_disabled_by_default(ctx, service, monkeypatch):
 
 
 def test_freshness_gate_enabled_stale_draft_all_missing(
-    ctx, service, settings, monkeypatch,
+    ctx,
+    service,
+    settings,
+    monkeypatch,
 ):
     """Gate enabled, draft cites ≥3 files, none exist → DONE."""
     settings.freshness_gate_enabled = True
@@ -1111,7 +1114,10 @@ def test_freshness_gate_enabled_fresh_draft(ctx, service, settings, monkeypatch)
 
 
 def test_freshness_gate_enabled_trivial_draft_skipped(
-    ctx, service, settings, monkeypatch,
+    ctx,
+    service,
+    settings,
+    monkeypatch,
 ):
     """Gate enabled but draft <50 chars → freshness gate skipped."""
     settings.freshness_gate_enabled = True
@@ -1135,7 +1141,10 @@ def test_freshness_gate_enabled_trivial_draft_skipped(
 
 
 def test_freshness_gate_failure_degrades_gracefully(
-    ctx, service, settings, monkeypatch,
+    ctx,
+    service,
+    settings,
+    monkeypatch,
 ):
     """Freshness check raises → refine proceeds normally (best-effort)."""
     settings.freshness_gate_enabled = True
