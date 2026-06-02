@@ -287,9 +287,7 @@ class RetrospectStage(Stage):
             draft_target = "mill"
         if draft_target == "mill":
             target_service = (
-                resolve_mill_service(
-                    settings, ctx.service, caller_label="retrospect"
-                )
+                resolve_mill_service(settings, ctx.service, caller_label="retrospect")
                 or ctx.service
             )
         else:
@@ -344,9 +342,7 @@ class RetrospectStage(Stage):
             follow_up_target = "mill"
         if follow_up_target == "mill":
             target_service = (
-                resolve_mill_service(
-                    settings, ctx.service, caller_label="retrospect"
-                )
+                resolve_mill_service(settings, ctx.service, caller_label="retrospect")
                 or ctx.service
             )
         else:
