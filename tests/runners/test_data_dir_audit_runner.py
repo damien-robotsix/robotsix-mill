@@ -1408,9 +1408,7 @@ class TestFilingAndDedup:
         return board_id
 
     def _run_with_filing(self, s, monkeypatch, *, session_id=""):
-        monkeypatch.setattr(
-            "robotsix_mill.data_dir_audit_runner.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
         return run_data_dir_audit_pass(
             session_id=session_id, repo_config=_test_repo_config()
         )
@@ -1444,9 +1442,7 @@ class TestFilingAndDedup:
         unbounded_count = sum(
             1 for t in titles if t.startswith("data-dir audit: unbounded")
         )
-        orphan_count = sum(
-            1 for t in titles if t.startswith("data-dir audit: orphan")
-        )
+        orphan_count = sum(1 for t in titles if t.startswith("data-dir audit: orphan"))
         assert oversized_count == 1, titles
         assert unbounded_count == 1, titles
         assert orphan_count == 1, titles
@@ -1590,9 +1586,7 @@ class TestFilingAndDedup:
         finally:
             os.close(fd)
 
-        monkeypatch.setattr(
-            "robotsix_mill.data_dir_audit_runner.Settings", lambda: s
-        )
+        monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
 
         result = run_data_dir_audit_pass(repo_config=None)
 
@@ -1638,8 +1632,7 @@ class TestFilingAndDedup:
         assert call_count["n"] == 3
         assert len(result.drafts_created) == 2
         assert any(
-            "failed to create draft ticket" in rec.message
-            for rec in caplog.records
+            "failed to create draft ticket" in rec.message for rec in caplog.records
         )
         db.reset_engine()
 

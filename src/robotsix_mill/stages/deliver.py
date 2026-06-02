@@ -202,7 +202,7 @@ class DeliverStage(Stage):
         if touched_path.exists():
             try:
                 touched_repos = json.loads(touched_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 return Outcome(
                     State.BLOCKED,
                     "touched_repos.json corrupted — resumable",
@@ -245,9 +245,8 @@ class DeliverStage(Stage):
             # phrase verbatim. Detect it here and re-route to DONE — the
             # same conclusion the local ahead-of-main guard reaches —
             # rather than looping forever in BLOCKED-resumable.
-            if (
-                sub_outcome.next_state is State.BLOCKED
-                and "No commits between" in (sub_outcome.note or "")
+            if sub_outcome.next_state is State.BLOCKED and "No commits between" in (
+                sub_outcome.note or ""
             ):
                 log.info(
                     "%s: forge reports no commits between %s and the branch — "
