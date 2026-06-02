@@ -353,9 +353,7 @@ class Settings(BaseSettings):
         default=None, alias="GITHUB_APP_PRIVATE_KEY_PATH"
     )
     # GitHub API base (override for GitHub Enterprise).
-    github_api_url: str = Field(
-        default="https://api.github.com", pattern=r"^https?://"
-    )
+    github_api_url: str = Field(default="https://api.github.com", pattern=r"^https?://")
     # GitLab API base (override for self-hosted GitLab instances).
     gitlab_api_url: str = Field(
         default="https://gitlab.com/api/v4", pattern=r"^https?://"
