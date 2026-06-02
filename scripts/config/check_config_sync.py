@@ -24,7 +24,7 @@ import yaml
 # ---------------------------------------------------------------------------
 # Make src/ importable both when run directly and when imported by tests.
 # ---------------------------------------------------------------------------
-_SRC = Path(__file__).resolve().parent.parent / "src"
+_SRC = Path(__file__).resolve().parent.parent.parent / "src"
 sys.path.insert(0, str(_SRC))
 
 from robotsix_auto_mail.config import MailConfig  # noqa: E402
@@ -713,7 +713,7 @@ def check_docs_connecting(
 
 def _repo_root() -> Path:
     """Return the repo root (parent of the ``scripts/`` directory)."""
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def run_checks(

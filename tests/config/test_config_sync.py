@@ -1,4 +1,4 @@
-"""Tests for ``scripts/check_config_sync.py``."""
+"""Tests for ``scripts/config/check_config_sync.py``."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 # Make the script importable.
-_SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+_SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts" / "config"
 sys.path.insert(0, str(_SCRIPTS))
 
 from check_config_sync import (  # noqa: E402

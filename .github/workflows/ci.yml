@@ -55,7 +55,7 @@ jobs:
         run: uv run --frozen pytest
 
       - name: Check config sync
-        run: uv run --frozen python scripts/check_config_sync.py
+        run: uv run --frozen python scripts/config/check_config_sync.py
 
       # Audit the FULL locked dependency set (incl. platform-specific
       # packages) rather than only what pip happened to install for this

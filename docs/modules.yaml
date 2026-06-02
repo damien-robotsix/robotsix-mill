@@ -50,13 +50,13 @@ modules:
       dataclass, env example, YAML example, and connecting docs
       in sync.
     paths:
-      - src/robotsix_auto_mail/config.py
-      - tests/test_config.py
+      - src/robotsix_auto_mail/config/__init__.py
+      - tests/config/test_config.py
       - .env.example
       - config/.gitkeep
       - config/mail.local.example.yaml
-      - scripts/check_config_sync.py
-      - tests/test_config_sync.py
+      - scripts/config/check_config_sync.py
+      - tests/config/test_config_sync.py
 
   - id: db
     description: >-
