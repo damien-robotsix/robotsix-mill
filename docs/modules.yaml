@@ -165,6 +165,7 @@ modules:
       - src/robotsix_mill/langfuse_cleanup_runner.py
       - src/robotsix_mill/bespoke_runner.py
       - src/robotsix_mill/copy_paste_runner.py
+      - src/robotsix_mill/data_dir_audit_runner.py
       - src/robotsix_mill/module_curator_runner.py
       - src/robotsix_mill/periodic_runner.py
       - src/robotsix_mill/verify_runner.py
