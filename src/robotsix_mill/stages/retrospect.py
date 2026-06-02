@@ -18,125 +18,15 @@ from .. import langfuse_client
 from ..agents import retrospecting
 from ..config import Settings
 from ..core.models import SourceKind, Ticket
-from ..core.service import TicketService
 from ..core.states import State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
+from ..draft_target import looks_like_mill_internal, resolve_mill_service
 from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
-
-
-# Token signals that strongly suggest the proposed draft is about
-# mill-pipeline internals (and so belongs on the mill maintenance
-# board, not the audited repo's board). Matched case-insensitively
-# against ``<title>\n<body>``. Two or more hits on a draft the agent
-# wanted to route to ``"current"`` overrides to ``"mill"`` — the
-# audited repo's refining agent has no clone of the mill source
-# tree, so a mill-internal draft on the audited board can't be
-# implemented.
-_MILL_SIGNAL_TERMS: frozenset[str] = frozenset(
-    {
-        "src/robotsix_mill/",
-        "agent_definitions/",
-        "scope-triage",
-        "scope_triage",
-        "refine agent",
-        "refining.py",
-        "implement stage",
-        "implement.py",
-        "deliver stage",
-        "deliver.py",
-        "merge stage",
-        "merge.py",
-        "retrospect stage",
-        "retrospect.py",
-        "review stage",
-        "periodic_runner",
-        "pass_runner",
-        "the mill pipeline",
-        "mill pipeline",
-        "mill's pipeline",
-        "stages/",
-        "agents/",
-        "runtime/",
-        "agent_check",
-        "config_sync",
-        "trace-review",
-        "trace_review",
-        "trace-health",
-        "trace_health",
-        "TicketService",
-        "RepoConfig",
-        "TicketEvent",
-    }
-)
-
-
-def _looks_like_mill_internal(title: str | None, body: str | None) -> bool:
-    """Heuristic: True when the draft's title+body name enough mill-
-    internal symbols / files that routing to the audited repo would
-    leave the fix on a codebase that can't implement it.
-
-    Catches the retrospect-agent misclassification observed on c57b
-    (scope-triage loop bug filed on robotsix-auto-mail because the
-    parent ticket was on auto-mail — but every proposed file change
-    lived under ``src/robotsix_mill/``).
-    """
-    hay = f"{title or ''}\n{body or ''}".lower()
-    hits = sum(1 for term in _MILL_SIGNAL_TERMS if term.lower() in hay)
-    return hits >= 2
-
-
-def _service_for_target(
-    target: str,
-    default_service: TicketService,
-    settings: Settings,
-) -> TicketService:
-    """Return the :class:`TicketService` to file a retrospect draft on.
-
-    ``"current"`` (default) → use ``default_service`` (the ticket's own
-    repo's service), so most drafts stay scoped to the codebase the
-    ticket lives on.
-
-    ``"mill"`` → resolve ``settings.trace_review_target_repo_id`` to
-    a repo config and return a service bound to its board. Reuses the
-    same setting trace-review already uses for routing meta-pipeline
-    tickets to the mill maintenance board; one knob, two consumers.
-
-    Any failure (unset setting, unknown repo_id, lookup error) falls
-    back to ``default_service`` with a warning, so a misconfigured
-    target can't lose a draft.
-    """
-    if target != "mill":
-        return default_service
-    target_repo_id = settings.trace_review_target_repo_id
-    if not target_repo_id:
-        log.warning(
-            "retrospect draft requested mill routing but "
-            "trace_review_target_repo_id is unset — filing on the "
-            "current repo instead",
-        )
-        return default_service
-    try:
-        from ..config import get_repos_config
-
-        rc = get_repos_config().repos.get(target_repo_id)
-    except Exception:  # noqa: BLE001 — fallback must always work
-        log.exception(
-            "retrospect: target-repo lookup failed; using current repo",
-        )
-        return default_service
-    if rc is None:
-        log.warning(
-            "retrospect: configured mill target %r not in repos.yaml — "
-            "filing on the current repo instead",
-            target_repo_id,
-        )
-        return default_service
-    return TicketService(settings, board_id=rc.board_id)
 
 
 # States that count as "done with" for dedup purposes — ticket titles
@@ -384,9 +274,9 @@ class RetrospectStage(Stage):
             body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
         # Safety net: override ``"current"`` → ``"mill"`` when the
         # draft's title+body names mill internals. See
-        # _looks_like_mill_internal docstring for the rationale.
+        # looks_like_mill_internal docstring for the rationale.
         draft_target = res.draft_target
-        if draft_target == "current" and _looks_like_mill_internal(
+        if draft_target == "current" and looks_like_mill_internal(
             res.draft_title, body
         ):
             log.info(
@@ -395,11 +285,15 @@ class RetrospectStage(Stage):
                 ticket.id,
             )
             draft_target = "mill"
-        target_service = _service_for_target(
-            draft_target,
-            ctx.service,
-            settings,
-        )
+        if draft_target == "mill":
+            target_service = (
+                resolve_mill_service(
+                    settings, ctx.service, caller_label="retrospect"
+                )
+                or ctx.service
+            )
+        else:
+            target_service = ctx.service
         draft = target_service.create(
             res.draft_title,
             body,
@@ -439,7 +333,7 @@ class RetrospectStage(Stage):
         # Same auto-correction as the draft path: a follow-up that
         # names mill internals belongs on the mill board.
         follow_up_target = res.follow_up_target
-        if follow_up_target == "current" and _looks_like_mill_internal(
+        if follow_up_target == "current" and looks_like_mill_internal(
             follow_up_title, follow_up_body
         ):
             log.info(
@@ -448,11 +342,15 @@ class RetrospectStage(Stage):
                 ticket.id,
             )
             follow_up_target = "mill"
-        target_service = _service_for_target(
-            follow_up_target,
-            ctx.service,
-            settings,
-        )
+        if follow_up_target == "mill":
+            target_service = (
+                resolve_mill_service(
+                    settings, ctx.service, caller_label="retrospect"
+                )
+                or ctx.service
+            )
+        else:
+            target_service = ctx.service
 
         # Dedup: skip if an open (non-closed, non-done) ticket with the
         # same case-insensitive title already exists ON THE TARGET

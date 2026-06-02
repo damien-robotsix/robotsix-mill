@@ -1,0 +1,161 @@
+"""Shared draft-routing helpers.
+
+The mill pipeline runs against an audited repo, but some drafts that
+periodic / retrospect agents propose are actually about the mill's
+own source tree — those belong on the **mill maintenance board**, not
+on the audited repo's board (whose refining agent has no clone of the
+mill source and so cannot implement the fix).
+
+This module owns:
+
+- :data:`MILL_SIGNAL_TERMS`: the substring-based heuristic terms that
+  indicate a draft is mill-internal.
+- :func:`looks_like_mill_internal`: the ≥2-hit detector.
+- :func:`resolve_mill_service`: resolve the mill maintenance board's
+  :class:`TicketService` from settings, returning *None* on any
+  failure so callers must explicitly handle the fallback.
+
+The detection lives here (rather than in ``stages/retrospect.py``)
+because it is shared by **both** the retrospect stage's
+``draft_target``/``follow_up_target`` auto-correction AND the
+periodic-pass runner (``pass_runner.run_agent_pass``) — the periodic
+agents have no ``draft_target`` field, so the heuristic alone decides
+routing for them.
+
+Imports are deliberately minimal (``Settings`` + ``TicketService``
+only) to avoid circular imports back to ``retrospect.py`` /
+``pass_runner.py`` / any ``stages/`` module.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from .config import Settings
+from .core.service import TicketService
+
+log = logging.getLogger("robotsix_mill.draft_target")
+
+
+# Token signals that strongly suggest the proposed draft is about
+# mill-pipeline internals (and so belongs on the mill maintenance
+# board, not the audited repo's board). Matched case-insensitively
+# against ``<title>\n<body>``. Two or more hits override the routing
+# to the mill board — the audited repo's refining agent has no clone
+# of the mill source tree, so a mill-internal draft on the audited
+# board can't be implemented.
+MILL_SIGNAL_TERMS: frozenset[str] = frozenset(
+    {
+        "src/robotsix_mill/",
+        "agent_definitions/",
+        "scope-triage",
+        "scope_triage",
+        "refine agent",
+        "refining.py",
+        "implement stage",
+        "implement.py",
+        "deliver stage",
+        "deliver.py",
+        "merge stage",
+        "merge.py",
+        "retrospect stage",
+        "retrospect.py",
+        "review stage",
+        "periodic_runner",
+        "pass_runner",
+        "the mill pipeline",
+        "mill pipeline",
+        "mill's pipeline",
+        "stages/",
+        "agents/",
+        "runtime/",
+        "agent_check",
+        "config_sync",
+        "trace-review",
+        "trace_review",
+        "trace-health",
+        "trace_health",
+        "TicketService",
+        "RepoConfig",
+        "TicketEvent",
+        "config/mill.defaults.yaml",
+        "mill.defaults",
+        "mill.defaults.yaml",
+    }
+)
+
+
+def looks_like_mill_internal(title: str | None, body: str | None) -> bool:
+    """Heuristic: True when the draft's title+body name enough mill-
+    internal symbols / files that routing to the audited repo would
+    leave the fix on a codebase that can't implement it.
+
+    Catches the retrospect-agent misclassification observed on c57b
+    (scope-triage loop bug filed on robotsix-auto-mail because the
+    parent ticket was on auto-mail — but every proposed file change
+    lived under ``src/robotsix_mill/``).
+    """
+    hay = f"{title or ''}\n{body or ''}".lower()
+    hits = sum(1 for term in MILL_SIGNAL_TERMS if term.lower() in hay)
+    return hits >= 2
+
+
+def resolve_mill_service(
+    settings: Settings,
+    default_service: TicketService,
+    *,
+    caller_label: str = "",
+) -> TicketService | None:
+    """Resolve the mill maintenance board's :class:`TicketService`.
+
+    Reads ``settings.trace_review_target_repo_id`` and looks it up in
+    the repos registry. On success, returns a fresh ``TicketService``
+    bound to that repo's board. On any failure (unset setting, unknown
+    repo_id, lookup error, missing ``board_id``), returns ``None`` —
+    callers must explicitly handle the fallback to ``default_service``.
+
+    *default_service* is accepted so the warning messages can identify
+    the audited board the draft would otherwise fall back to; it is
+    not returned by this function.
+
+    *caller_label* is interpolated into log messages (e.g. ``"retrospect"``,
+    ``"audit"``) so periodic-pass and retrospect-stage call sites are
+    distinguishable in logs.
+    """
+    target_repo_id = settings.trace_review_target_repo_id
+    if not target_repo_id:
+        log.warning(
+            "%s: mill routing requested but "
+            "trace_review_target_repo_id is unset — caller should fall "
+            "back to the current repo",
+            caller_label or "draft_target",
+        )
+        return None
+    try:
+        from .config import get_repos_config
+
+        rc = get_repos_config().repos.get(target_repo_id)
+    except Exception:  # noqa: BLE001 — fallback must always work
+        log.exception(
+            "%s: target-repo lookup failed; caller should fall back "
+            "to the current repo",
+            caller_label or "draft_target",
+        )
+        return None
+    if rc is None:
+        log.warning(
+            "%s: configured mill target %r not in repos.yaml — caller "
+            "should fall back to the current repo",
+            caller_label or "draft_target",
+            target_repo_id,
+        )
+        return None
+    if not rc.board_id:
+        log.warning(
+            "%s: configured mill target %r has no board_id — caller "
+            "should fall back to the current repo",
+            caller_label or "draft_target",
+            target_repo_id,
+        )
+        return None
+    return TicketService(settings, board_id=rc.board_id)
