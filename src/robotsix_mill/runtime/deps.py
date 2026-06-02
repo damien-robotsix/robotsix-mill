@@ -197,6 +197,47 @@ def _parse_str_id_list(raw: str | None) -> list[str]:
     return [x for x in parsed if isinstance(x, str)] if isinstance(parsed, list) else []
 
 
+def _pr_urls_for_multi_repo(
+    ticket: Ticket,
+    service: TicketService,
+) -> str | None:
+    """Return the multi-repo ``pr_url`` string for *ticket* from
+    ``pr_urls.json`` (comma-joined ``"url1, url2"``), or ``None`` when
+    the file is absent / corrupt / empty.
+
+    No forge call is made — the URLs in the manifest are authoritative
+    once the deliver stage has written them.  The joined string is
+    capped at 1000 chars so the API read path stays bounded.
+
+    Read-time enrichment must never crash the API — any unexpected
+    error (mock-injected workspace, OS error, decode error) silently
+    falls back to ``None`` so the caller can use the single-repo path.
+    """
+    import json as _json
+
+    try:
+        ws = service.workspace(ticket)
+        path = ws.artifacts_dir / "pr_urls.json"
+        if not path.exists():
+            return None
+        data = _json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, list) or not data:
+        return None
+    urls = [
+        str(e["url"])
+        for e in data
+        if isinstance(e, dict) and isinstance(e.get("url"), str)
+    ]
+    if not urls:
+        return None
+    joined = ", ".join(urls)
+    if len(joined) > 1000:
+        joined = joined[:1000]
+    return joined
+
+
 def enrich_ticket_read(
     ticket: Ticket,
     settings: Settings,
@@ -246,6 +287,14 @@ def enrich_ticket_read(
         if parent:
             parent_title = parent.title
 
+    # Prefer the multi-repo manifest (deliver wrote one URL per
+    # touched repo) over the single-repo forge lookup.  ``pr_urls.json``
+    # is the multi-repo discriminator and its URLs are authoritative —
+    # no forge call needed.
+    multi_pr_urls: str | None = None
+    if fetch_pr_url:
+        multi_pr_urls = _pr_urls_for_multi_repo(ticket, service)
+
     # Resolve each declared dependency to {id, title, state} so the
     # drawer can render a readable list instead of opaque IDs.
     import json as _json
@@ -287,9 +336,15 @@ def enrich_ticket_read(
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
         dependencies=dependencies,
-        pr_url=_pr_url(ticket, settings, repo_config=repo_config)
-        if fetch_pr_url
-        else None,
+        pr_url=(
+            multi_pr_urls
+            if multi_pr_urls is not None
+            else (
+                _pr_url(ticket, settings, repo_config=repo_config)
+                if fetch_pr_url
+                else None
+            )
+        ),
         retry_attempt=ticket.retry_attempt,
         last_transient_error=ticket.last_transient_error,
         next_retry_at=ticket.next_retry_at,

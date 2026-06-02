@@ -46,6 +46,8 @@ from pathlib import Path
 
 from ..agents.rebasing import run_rebase_agent
 from ..agents.review_revision import run_review_revision_agent
+from ..config import RepoConfig, get_repo_config
+from ..config_loader import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
@@ -60,6 +62,36 @@ log = logging.getLogger("robotsix_mill.stages.merge")
 _REBASE_COUNTER = "rebase_attempts.txt"
 _MERGE_REASON = "merge_reason.txt"
 _REV_REV_COUNTER = "review_revision_attempts.txt"
+
+
+def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
+    """Read ``pr_urls.json``.
+
+    Returns the list when present + parseable, ``None`` when the file
+    is absent (single-repo path), or raises ``ValueError`` on a
+    corrupt file so the caller can BLOCK-resumable.
+
+    The schema mirrors what :func:`deliver._write_pr_urls` writes::
+
+        [{"repo_id": str, "branch": str, "url": str}, ...]
+    """
+    path = ws_artifacts_dir / "pr_urls.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"pr_urls.json could not be parsed: {e}")
+    if not isinstance(data, list):
+        raise ValueError("pr_urls.json is not a JSON list")
+    return data
+
+
+def _repo_config_for_entry(entry: dict) -> RepoConfig:
+    """Resolve a per-repo :class:`RepoConfig` from a ``pr_urls.json``
+    entry. Propagates :class:`ConfigError` when the ``repo_id`` is not
+    registered so the caller can translate to a BLOCKED outcome."""
+    return get_repo_config(entry["repo_id"])
 
 
 def _read_counter(path) -> int:
@@ -112,6 +144,29 @@ class MergeStage(Stage):
         except RuntimeError as e:
             return Outcome(State.BLOCKED, f"forge auth not configured: {e}")
 
+        # Multi-repo mode (meta-board tickets). When the deliver stage
+        # wrote ``pr_urls.json`` we drive aggregation across every
+        # touched repo via the dedicated aggregator. Single-repo
+        # tickets fall through to the existing dispatch unchanged.
+        ws = ctx.service.workspace(ticket)
+        try:
+            pr_entries = _load_pr_urls(ws.artifacts_dir)
+        except ValueError as e:
+            return Outcome(
+                State.BLOCKED,
+                f"pr_urls.json corrupted — resumable: {e}",
+            )
+        if pr_entries is not None:
+            # An empty list is unreachable today — deliver routes to
+            # DONE before writing the file when every repo is skipped.
+            # Treat the impossible-empty case as a corrupt manifest.
+            if not pr_entries:
+                return Outcome(
+                    State.BLOCKED,
+                    "pr_urls.json corrupted — resumable: empty manifest",
+                )
+            return self._run_multi_repo(ticket, ctx, pr_entries)
+
         # IMPLEMENT_COMPLETE path: poll gates (CI + mergeability).
         if ticket.state is State.IMPLEMENT_COMPLETE:
             return self._poll_implement_complete(ticket, ctx)
@@ -130,6 +185,182 @@ class MergeStage(Stage):
 
         # HUMAN_MR_APPROVAL path: poll PR status.
         return self._handle_human_mr_approval(ticket, ctx)
+
+    def _run_multi_repo(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        pr_entries: list[dict],
+    ) -> Outcome:
+        """Aggregate per-repo PR status into one ticket-level outcome.
+
+        For every entry in ``pr_urls.json``, resolve the per-repo
+        :class:`RepoConfig` via :func:`get_repo_config` and query
+        ``pr_status`` / ``check_status`` against that repo's forge.
+
+        Per-repo statuses are classified as ``merged`` / ``open`` /
+        ``closed_unmerged`` / ``conflicting`` / ``failing_ci`` /
+        ``green`` / ``pending``, then aggregated in priority order:
+
+        * Any ``closed_unmerged`` → BLOCKED.
+        * Any ``conflicting`` or ``failing_ci`` → BLOCKED (per-repo
+          auto-recovery — rebase / ci_fix / auto-merge — is NOT yet
+          wired for multi-repo tickets; this is parked for a
+          follow-up ticket).
+        * All ``merged`` → write ``merge.md`` and transition to
+          ``DONE``.
+        * Otherwise (mix of green / pending / merged) → same-state
+          no-op so the next poll re-checks.
+
+        The poll states ``REBASING``, ``FIXING_CI``,
+        ``WAITING_AUTO_MERGE`` and ``ADDRESSING_REVIEW`` are
+        unreachable from this aggregator by design — only single-repo
+        tickets enter those states.
+        """
+        s = ctx.settings
+
+        # Per-repo status records.
+        statuses: list[dict] = []
+        for entry in pr_entries:
+            repo_id = entry.get("repo_id", "")
+            branch = entry.get("branch", "")
+            url = entry.get("url", "")
+
+            try:
+                rc = _repo_config_for_entry(entry)
+            except ConfigError:
+                return Outcome(
+                    State.BLOCKED,
+                    f"unknown repo_id '{repo_id}' in pr_urls.json — resumable",
+                )
+
+            try:
+                pr = get_forge(s, repo_config=rc).pr_status(source_branch=branch)
+            except Exception as e:  # noqa: BLE001 — transient: re-poll next cycle
+                log.warning(
+                    "%s: pr_status failed for %s (retry): %s",
+                    ticket.id,
+                    repo_id,
+                    e,
+                )
+                statuses.append({"repo_id": repo_id, "url": url, "status": "pending"})
+                continue
+
+            if pr is None:
+                statuses.append({"repo_id": repo_id, "url": url, "status": "pending"})
+                continue
+            if pr.get("merged"):
+                statuses.append(
+                    {
+                        "repo_id": repo_id,
+                        "url": pr.get("url", url),
+                        "status": "merged",
+                    }
+                )
+                continue
+            if pr.get("state") == "closed":
+                statuses.append(
+                    {
+                        "repo_id": repo_id,
+                        "url": pr.get("url", url),
+                        "status": "closed_unmerged",
+                    }
+                )
+                continue
+
+            # PR is open — classify mergeability and CI.
+            if pr.get("mergeable") is False:
+                statuses.append(
+                    {
+                        "repo_id": repo_id,
+                        "url": pr.get("url", url),
+                        "status": "conflicting",
+                    }
+                )
+                continue
+
+            try:
+                ci = get_forge(s, repo_config=rc).check_status(source_branch=branch)
+            except Exception as e:  # noqa: BLE001 — transient
+                log.warning(
+                    "%s: check_status failed for %s (retry): %s",
+                    ticket.id,
+                    repo_id,
+                    e,
+                )
+                statuses.append(
+                    {
+                        "repo_id": repo_id,
+                        "url": pr.get("url", url),
+                        "status": "pending",
+                    }
+                )
+                continue
+
+            conclusion = (ci or {}).get("conclusion")
+            if conclusion == "failure":
+                statuses.append(
+                    {
+                        "repo_id": repo_id,
+                        "url": pr.get("url", url),
+                        "status": "failing_ci",
+                    }
+                )
+            elif conclusion == "success":
+                statuses.append(
+                    {
+                        "repo_id": repo_id,
+                        "url": pr.get("url", url),
+                        "status": "green",
+                    }
+                )
+            else:
+                statuses.append(
+                    {
+                        "repo_id": repo_id,
+                        "url": pr.get("url", url),
+                        "status": "pending",
+                    }
+                )
+
+        # Aggregate to a single ticket-level outcome in priority order.
+        closed_unmerged = [r for r in statuses if r["status"] == "closed_unmerged"]
+        if closed_unmerged:
+            first = closed_unmerged[0]
+            return Outcome(
+                State.BLOCKED,
+                f"PR closed without merge in {first['repo_id']}: "
+                f"{first['url']} — resumable",
+            )
+
+        broken = [
+            r for r in statuses if r["status"] in ("conflicting", "failing_ci")
+        ]
+        if broken:
+            first = broken[0]
+            return Outcome(
+                State.BLOCKED,
+                f"PR for {first['repo_id']} {first['status']}: {first['url']} — "
+                "resumable (per-repo auto-recovery is not yet wired for "
+                "multi-repo tickets)",
+            )
+
+        if all(r["status"] == "merged" for r in statuses):
+            lines = ["# Merge (multi-repo)", "repos:"]
+            for r in statuses:
+                lines.append(f"  - {r['repo_id']}: merged: {r['url']}")
+            ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                "merge.md"
+            ).write_text("\n".join(lines) + "\n", encoding="utf-8")
+            urls = ", ".join(r["url"] for r in statuses)
+            log.info("%s: all %d PRs merged → done", ticket.id, len(statuses))
+            return Outcome(
+                State.DONE,
+                f"all {len(statuses)} PRs merged: {urls}",
+            )
+
+        # Mix of green / pending / merged — same-state no-op.
+        return Outcome(ticket.state)
 
     def _handle_human_mr_approval(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status from HUMAN_MR_APPROVAL: merged/closed/conflicting/CI/auto-merge."""

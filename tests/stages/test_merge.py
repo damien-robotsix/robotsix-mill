@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from robotsix_mill.agents.rebasing import RebaseResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -2317,3 +2321,473 @@ def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert "gates no longer pass" in out.note
+
+
+# ============================================================
+# Multi-repo PR aggregation
+# ============================================================
+
+
+def _install_multirepo_registry(entries: list[tuple[str, str]]) -> None:
+    """Populate the global ``_repos_config`` for multi-repo tests."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
+    import robotsix_mill.config as _cfg
+
+    _reset_repos_config()
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            rid: RepoConfig(
+                repo_id=rid,
+                board_id="meta",
+                langfuse_project_name=f"p-{rid}",
+                langfuse_public_key=f"pk-{rid}",
+                langfuse_secret_key=f"sk-{rid}",
+                forge_remote_url=url,
+            )
+            for rid, url in entries
+        }
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_multirepo_registry_after_each_test():
+    """Drop any test-installed ReposRegistry so module-global state
+    never leaks between tests."""
+    yield
+    from robotsix_mill.config import _reset_repos_config
+
+    _reset_repos_config()
+
+
+def _write_pr_urls(ctx, ticket, entries: list[dict]) -> None:
+    """Write a ``pr_urls.json`` manifest into the ticket's workspace."""
+    ws = ctx.service.workspace(ticket)
+    (ws.artifacts_dir / "pr_urls.json").write_text(
+        json.dumps(entries, indent=2), encoding="utf-8"
+    )
+
+
+def _make_meta_ticket(ctx, *, state=State.IMPLEMENT_COMPLETE):
+    """Create a ticket and transition it to *state* (default
+    ``IMPLEMENT_COMPLETE`` — the multi-repo aggregator's first
+    polling state)."""
+    t = ctx.service.create("Cross-repo feature", "do x in many repos")
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        ctx.service.transition(t.id, st)
+    if state is not State.IMPLEMENT_COMPLETE:
+        ctx.service.transition(t.id, state)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    return ctx.service.get(t.id)
+
+
+def _route_by_remote(monkeypatch, *, pr_responses: dict, ci_responses: dict | None = None):
+    """Monkeypatch the GitHub forge's ``pr_status`` + ``check_status``
+    so each call returns the response keyed by ``self._remote_url``.
+
+    *pr_responses* / *ci_responses* are ``{remote_url: response | Exception}``.
+    A value can be a callable taking no args, an Exception (raised), or a
+    plain dict / None (returned).
+    """
+    seen_pr: list[dict] = []
+    seen_ci: list[dict] = []
+
+    def fake_pr_status(self, *, source_branch):
+        seen_pr.append({"remote": self._remote_url, "branch": source_branch})
+        resp = pr_responses.get(self._remote_url)
+        if isinstance(resp, Exception):
+            raise resp
+        return resp
+
+    monkeypatch.setattr(github.GitHubForge, "pr_status", fake_pr_status)
+
+    if ci_responses is not None:
+        def fake_check_status(self, *, source_branch):
+            seen_ci.append({"remote": self._remote_url, "branch": source_branch})
+            resp = ci_responses.get(self._remote_url)
+            if isinstance(resp, Exception):
+                raise resp
+            return resp
+
+        monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
+
+    return seen_pr, seen_ci
+
+
+def test_multi_repo_all_prs_merged_transitions_to_done(tmp_path, monkeypatch):
+    """All N per-repo PRs merged → DONE; ``merge.md`` is the multi-line
+    multi-repo header with one entry per repo."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/a/pull/1",
+            },
+            remote_b: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/b/pull/2",
+            },
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert "https://github.com/o/a/pull/1" in out.note
+    assert "https://github.com/o/b/pull/2" in out.note
+
+    merge_md = (ctx.service.workspace(t).artifacts_dir / "merge.md").read_text(
+        encoding="utf-8"
+    )
+    assert merge_md.startswith("# Merge (multi-repo)")
+    assert "repo-a" in merge_md
+    assert "repo-b" in merge_md
+    assert "https://github.com/o/a/pull/1" in merge_md
+    assert "https://github.com/o/b/pull/2" in merge_md
+
+
+def test_multi_repo_partial_merge_stays_same_state(tmp_path, monkeypatch):
+    """One PR merged, one PR open with green CI → same-state no-op."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/a/pull/1",
+            },
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+                "mergeable": True,
+            },
+        },
+        ci_responses={
+            remote_b: {"conclusion": "success", "failing": []},
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    # Same-state no-op (ticket sits in IMPLEMENT_COMPLETE).
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert not (ctx.service.workspace(t).artifacts_dir / "merge.md").exists()
+
+
+def test_multi_repo_one_pr_closed_unmerged_blocks(tmp_path, monkeypatch):
+    """One PR merged, one PR closed-unmerged → BLOCKED with repo_id + url."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/a/pull/1",
+            },
+            remote_b: {
+                "merged": False,
+                "state": "closed",
+                "url": "https://github.com/o/b/pull/2",
+            },
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "repo-b" in out.note
+    assert "https://github.com/o/b/pull/2" in out.note
+
+
+def test_multi_repo_one_pr_conflicting_blocks(tmp_path, monkeypatch):
+    """One PR green, one open + mergeable=False → BLOCKED naming the
+    conflicting repo and referencing the parked auto-recovery."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/a/pull/1",
+                "mergeable": True,
+            },
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+                "mergeable": False,
+            },
+        },
+        ci_responses={
+            remote_a: {"conclusion": "success", "failing": []},
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "repo-b" in out.note
+    assert "per-repo auto-recovery is not yet wired" in out.note
+
+
+def test_multi_repo_one_pr_failing_ci_blocks(tmp_path, monkeypatch):
+    """One PR green, one PR open + CI failure → BLOCKED naming the
+    failing repo."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/a/pull/1",
+                "mergeable": True,
+            },
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+                "mergeable": True,
+            },
+        },
+        ci_responses={
+            remote_a: {"conclusion": "success", "failing": []},
+            remote_b: {"conclusion": "failure", "failing": []},
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "repo-b" in out.note
+    assert "per-repo auto-recovery is not yet wired" in out.note
+
+
+def test_multi_repo_unknown_repo_id_blocks(tmp_path, monkeypatch):
+    """A repo_id not in ReposRegistry → BLOCKED with 'unknown repo_id'."""
+    ctx = _gh(tmp_path)
+    _install_multirepo_registry(
+        [("repo-a", "https://github.com/o/a.git")],
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "ghost-repo",
+                "branch": branch,
+                "url": "https://github.com/o/ghost/pull/9",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "unknown repo_id" in out.note
+
+
+def test_multi_repo_corrupt_pr_urls_blocks(tmp_path):
+    """Invalid JSON in pr_urls.json → BLOCKED with 'corrupted'."""
+    ctx = _gh(tmp_path)
+    t = _make_meta_ticket(ctx)
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "pr_urls.json").write_text(
+        "{not valid json", encoding="utf-8"
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "corrupted" in out.note
+
+
+def test_multi_repo_per_repo_forge_called_with_correct_remote(tmp_path, monkeypatch):
+    """pr_status is invoked once per repo with that repo's _remote_url."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    seen_pr, _ = _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/a/pull/1",
+            },
+            remote_b: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/b/pull/2",
+            },
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    MergeStage().run(t, ctx)
+    assert len(seen_pr) == 2
+    remotes_called = {entry["remote"] for entry in seen_pr}
+    assert remotes_called == {remote_a, remote_b}
+
+
+def test_single_repo_unchanged_when_no_pr_urls_json(tmp_path, monkeypatch):
+    """When pr_urls.json is absent, the existing single-repo dispatch
+    runs and ``merge.md`` is the byte-identical single-line shape."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": True,
+            "state": "closed",
+            "url": "https://github.com/o/r/pull/77",
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    # Sanity: pr_urls.json must NOT exist
+    assert not (ctx.service.workspace(t).artifacts_dir / "pr_urls.json").exists()
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    merge_md = (ctx.service.workspace(t).artifacts_dir / "merge.md").read_text(
+        encoding="utf-8"
+    )
+    assert merge_md == "merged: https://github.com/o/r/pull/77\n"

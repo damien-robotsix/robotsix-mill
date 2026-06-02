@@ -16,13 +16,15 @@ import re
 
 from .. import langfuse_client
 from ..agents import retrospecting
-from ..config import Settings
+from ..config import Settings, get_repo_config
+from ..config_loader import ConfigError
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
 from ..draft_target import looks_like_mill_internal, resolve_mill_service
+from ..forge import get_forge
 from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
 
@@ -452,6 +454,45 @@ class RetrospectStage(Stage):
         """Run a retrospective over a DONE ticket's history, comments, and description; emit findings and optionally spawn follow-up draft tickets."""
         s = ctx.settings
         ws = ctx.service.workspace(ticket)
+
+        # Defensive multi-repo verification: the merge stage's
+        # aggregator already gated this — but a manual BLOCKED→DONE
+        # override could skip it.  When ``pr_urls.json`` exists,
+        # re-confirm every listed PR is actually merged before the
+        # retrospect agent runs.  Forge-call exceptions during this
+        # check do NOT block — transient retry is the merge stage's
+        # job, not retrospect's.
+        from ..stages.merge import _load_pr_urls
+
+        try:
+            pr_entries = _load_pr_urls(ws.artifacts_dir)
+        except ValueError as e:
+            return Outcome(
+                State.BLOCKED,
+                f"pr_urls.json corrupted in retrospect — resumable: {e}",
+            )
+        if pr_entries:
+            unmerged: list[str] = []
+            for entry in pr_entries:
+                try:
+                    rc = get_repo_config(entry["repo_id"])
+                except ConfigError:
+                    unmerged.append(f"{entry['repo_id']} (unknown repo)")
+                    continue
+                try:
+                    pr = get_forge(s, repo_config=rc).pr_status(
+                        source_branch=entry["branch"]
+                    )
+                except Exception:  # noqa: BLE001 — transient is merge's job
+                    continue
+                if pr is None or not pr.get("merged"):
+                    unmerged.append(f"{entry['repo_id']}: {entry['url']}")
+            if unmerged:
+                return Outcome(
+                    State.BLOCKED,
+                    f"retrospect refusing to close — {len(unmerged)} PR(s) "
+                    "not merged: " + "; ".join(unmerged),
+                )
 
         history = ctx.service.history(ticket.id)
         history_text = "\n".join(
