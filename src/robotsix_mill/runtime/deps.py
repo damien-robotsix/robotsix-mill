@@ -192,7 +192,7 @@ def _parse_str_id_list(raw: str | None) -> list[str]:
 
     try:
         parsed = _json.loads(raw)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return []
     return [x for x in parsed if isinstance(x, str)] if isinstance(parsed, list) else []
 
@@ -303,7 +303,7 @@ def enrich_ticket_read(
     if ticket.depends_on:
         try:
             dep_ids = _json.loads(ticket.depends_on)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             dep_ids = []
         if isinstance(dep_ids, list):
             for dep_id in dep_ids:

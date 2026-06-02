@@ -89,15 +89,23 @@ def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
 
 def _repo_config_for_entry(entry: dict) -> RepoConfig:
     """Resolve a per-repo :class:`RepoConfig` from a ``pr_urls.json``
-    entry. Propagates :class:`ConfigError` when the ``repo_id`` is not
-    registered so the caller can translate to a BLOCKED outcome."""
-    return get_repo_config(entry["repo_id"])
+    entry. Propagates :class:`ConfigError` when the ``repo_id`` is
+    missing, non-string, empty, or not registered so the caller's
+    existing ``except ConfigError`` arm translates to a BLOCKED
+    outcome (instead of bubbling a ``KeyError`` from ``entry['repo_id']``
+    when the manifest is malformed)."""
+    repo_id = entry.get("repo_id")
+    if not isinstance(repo_id, str) or not repo_id:
+        raise ConfigError(
+            "pr_urls.json entry is missing a non-empty string 'repo_id'"
+        )
+    return get_repo_config(repo_id)
 
 
 def _read_counter(path) -> int:
     try:
         return int(path.read_text(encoding="utf-8").strip())
-    except FileNotFoundError, ValueError:
+    except (FileNotFoundError, ValueError):
         return 0
 
 
@@ -813,7 +821,7 @@ class MergeStage(Stage):
 
         try:
             feedback = json.loads(feedback_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError, OSError:
+        except (json.JSONDecodeError, OSError):
             return Outcome(
                 State.HUMAN_MR_APPROVAL,
                 "review_feedback.json corrupted — re-polling from human_mr_approval",

@@ -2791,3 +2791,33 @@ def test_single_repo_unchanged_when_no_pr_urls_json(tmp_path, monkeypatch):
         encoding="utf-8"
     )
     assert merge_md == "merged: https://github.com/o/r/pull/77\n"
+
+
+def test_multi_repo_entry_missing_repo_id_blocks(tmp_path):
+    """A malformed ``pr_urls.json`` entry (missing/empty/non-string
+    ``repo_id``) must NOT bubble a ``KeyError`` past the caller's narrow
+    ``except ConfigError`` arm — it must BLOCK cleanly.
+
+    Pins ``_repo_config_for_entry`` raising ``ConfigError`` for the
+    missing / empty / non-string-``repo_id`` cases so the aggregator's
+    existing arm catches it."""
+    ctx = _gh(tmp_path)
+    _install_multirepo_registry([("repo-a", "https://github.com/o/a.git")])
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    # Entry has no ``repo_id`` key at all.
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "unknown repo_id" in out.note
