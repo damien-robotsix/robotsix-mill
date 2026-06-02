@@ -416,7 +416,7 @@ modules:
       ``config/repos.yaml``.
     paths:
       - src/robotsix_mill/repo_scaffold.py
-      - tests/test_repo_scaffold.py
+      - tests/repo_scaffold/test_repo_scaffold.py
     dependencies: [config, forge, vcs]
 
   - id: sandbox
