@@ -426,7 +426,7 @@ modules:
       limits.  Consumed by agent-tools, not by agents directly.
     paths:
       - src/robotsix_mill/sandbox.py
-      - tests/runtime/test_sandbox.py
+      - tests/sandbox/test_sandbox.py
       - sandbox/**/*
     dependencies: [config]
 
