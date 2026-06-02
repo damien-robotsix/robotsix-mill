@@ -13,15 +13,51 @@ Anything that isn't success is BLOCKED-resumable (move back to
 DELIVERABLE to retry) — never terminal FAILED, so a transient forge/
 network problem doesn't lose the implemented branch. The PR URL is
 recorded in history + an artifact.
+
+Multi-repo delivery (meta-board tickets)
+----------------------------------------
+
+When the implement stage produced a multi-repo workspace, it writes a
+``touched_repos.json`` manifest into ``artifacts/`` listing every
+repo that received a commit::
+
+    [
+      {"repo_id": str, "branch": str, "repo_path": str},
+      ...
+    ]
+
+The deliver stage detects that manifest and iterates it, pushing each
+repo's branch and opening one PR per repo via that repo's
+``RepoConfig``.  The resulting PR URLs are written to a second
+artifact, ``pr_urls.json``, with the schema::
+
+    [
+      {"repo_id": str, "branch": str, "url": str},
+      ...
+    ]
+
+``pr_urls.json`` is the seam downstream stages (merge polling,
+``_pr_url`` enrichment) will consume to find all PRs opened for a
+single meta ticket.  It is written ONLY in the multi-repo branch and
+ONLY after at least one PR succeeds; its presence is the multi-repo
+discriminator for downstream stages.  The file is rewritten atomically
+(``.json.tmp`` → ``os.replace``) after every successful PR so a
+mid-loop BLOCKED leaves a consistent partial manifest the resume run
+can read.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import subprocess
+from pathlib import Path
 
 from ..agents.base import build_agent
 from ..agents.retry import run_agent
+from ..config import get_repo_config
+from ..config_loader import ConfigError
 from ..core.models import Ticket
 from ..core.states import State
 from ..forge import get_forge
@@ -112,6 +148,26 @@ def generate_pr_description(
         return spec
 
 
+def _write_pr_urls(artifacts_dir: Path, entries: list[dict]) -> None:
+    """Atomically (re)write the ``pr_urls.json`` manifest.
+
+    Uses ``.json.tmp`` → :func:`os.replace` so a mid-loop crash never
+    leaves a half-written file on disk.  Called after every successful
+    PR in the multi-repo branch.
+
+    Schema::
+
+        [
+          {"repo_id": str, "branch": str, "url": str},
+          ...
+        ]
+    """
+    target = artifacts_dir / "pr_urls.json"
+    tmp = artifacts_dir / "pr_urls.json.tmp"
+    tmp.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    os.replace(tmp, target)
+
+
 class DeliverStage(Stage):
     """Push the implemented branch to the remote forge for review."""
 
@@ -122,18 +178,52 @@ class DeliverStage(Stage):
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Push the implemented branch to the remote forge and open (or update) a pull/merge request, transitioning the ticket toward review."""
         s = ctx.settings
-        remote_url = _resolve_remote_url(s, ctx.repo_config)
         if s.forge_kind == "none":
             return Outcome(State.BLOCKED, "FORGE_KIND not configured")
+
+        # Global remote/token gate: in the multi-repo branch each repo
+        # is re-resolved per entry, but we still need a valid forge
+        # configuration to even attempt delivery.  Use the
+        # ctx.repo_config for the early-exit guards so the existing
+        # single-repo error messages are unchanged.
+        remote_url = _resolve_remote_url(s, ctx.repo_config)
         if not remote_url:
             return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
         try:
-            token = github_token(
+            github_token(
                 s, repo_config=ctx.repo_config
             )  # PAT or minted App installation token
         except RuntimeError as e:
             return Outcome(State.BLOCKED, f"forge auth not configured: {e}")
 
+        ws = ctx.service.workspace(ticket)
+        touched_path = ws.artifacts_dir / "touched_repos.json"
+
+        if touched_path.exists():
+            try:
+                touched_repos = json.loads(touched_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return Outcome(
+                    State.BLOCKED,
+                    "touched_repos.json corrupted — resumable",
+                )
+            return DeliverStage._run_multi_repo(ctx, ticket, s, touched_repos)
+
+        return DeliverStage._run_single_repo(ctx, ticket, s)
+
+    # ------------------------------------------------------------------
+    # Single-repo branch (unchanged behaviour — the existing code path).
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _run_single_repo(ctx: StageContext, ticket: Ticket, s) -> Outcome:
+        """The existing, single-repo delivery path.
+
+        Routes one branch in the workspace clone at ``ws.dir/"repo"``
+        through the per-repo helper.  Preserves the byte-identical
+        outcome notes / artifact format that downstream consumers and
+        tests rely on.
+        """
         ws = ctx.service.workspace(ticket)
         repo_dir = ws.dir / "repo"
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
@@ -145,37 +235,38 @@ class DeliverStage(Stage):
                 "no implemented branch to deliver (re-run implement)",
             )
 
-        try:
-            git_ops.push(repo_dir, branch, remote_url, token)
-        except subprocess.CalledProcessError as e:
-            return Outcome(
-                State.BLOCKED,
-                f"push failed — resumable: {(e.stderr or '')[:300]}",
-            )
+        url, sub_outcome = DeliverStage._deliver_one_repo(
+            ctx, ticket, s, repo_dir, branch, ctx.repo_config
+        )
 
-        # Guard: skip PR creation when the branch has no NET diff relative to
-        # origin/main. This avoids a 422 "No commits between main and branch"
-        # from GitHub. Two distinct cases both produce that 422 and both must
-        # route to DONE here:
-        #   1. the branch carries no commits ahead of main at all
-        #      (``branch_is_ahead_of_main`` is False); and
-        #   2. the branch carries a commit (ahead by commit count) whose net
-        #      content is identical to main — e.g. main independently landed
-        #      the same change, or the commit is a no-op. ``branch_is_ahead``
-        #      is True here, but the forge still sees "no commits between", so
-        #      ``branch_has_net_diff`` is the check that actually matches the
-        #      forge's own emptiness test.
-        #
-        # Route to DONE rather than BLOCKED: the implement stage's own
-        # ``no_change_needed`` gate (and its silent-no-change BLOCK on fresh
-        # runs) has already filtered out the cases where there *should* have
-        # been a diff. By the time we reach deliver with an empty branch, the
-        # conclusion is "the spec is already satisfied; there is nothing to
-        # ship." Mirrors refine's ``no_change_needed`` bypass — same shape,
-        # just one stage later.
-        if not git_ops.branch_is_ahead_of_main(
-            repo_dir
-        ) or not git_ops.branch_has_net_diff(repo_dir):
+        if sub_outcome is not None:
+            # The helper translates a 422 "No commits between" from the
+            # forge into a BLOCKED outcome whose note carries that
+            # phrase verbatim. Detect it here and re-route to DONE — the
+            # same conclusion the local ahead-of-main guard reaches —
+            # rather than looping forever in BLOCKED-resumable.
+            if (
+                sub_outcome.next_state is State.BLOCKED
+                and "No commits between" in (sub_outcome.note or "")
+            ):
+                log.info(
+                    "%s: forge reports no commits between %s and the branch — "
+                    "routing to DONE (nothing to deliver)",
+                    ticket.id,
+                    s.forge_target_branch,
+                )
+                return Outcome(
+                    State.DONE,
+                    "no change needed — the forge reports no commits between "
+                    f"{s.forge_target_branch} and the branch; there is nothing "
+                    "to deliver",
+                )
+            return sub_outcome
+
+        if url is None:
+            # Skipped by the ahead-of-main / net-diff guard. Mirrors
+            # refine's ``no_change_needed`` bypass — same shape, just
+            # one stage later.
             return Outcome(
                 State.DONE,
                 "no change needed — branch contains no new commits vs "
@@ -183,7 +274,200 @@ class DeliverStage(Stage):
                 "by the current codebase",
             )
 
+        (ws.artifacts_dir / "deliver.md").write_text(
+            f"# Deliver (passed)\nbranch: {branch}\nPR: {url}\n",
+            encoding="utf-8",
+        )
+        log.info("%s: delivered → %s", ticket.id, url)
+        # PR opened — gates not yet verified; merge stage will poll
+        return Outcome(State.IMPLEMENT_COMPLETE, f"PR: {url}")
+
+    # ------------------------------------------------------------------
+    # Multi-repo branch (meta-board tickets with N≥1 touched repos).
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _run_multi_repo(
+        ctx: StageContext,
+        ticket: Ticket,
+        s,
+        touched_repos: list[dict],
+    ) -> Outcome:
+        """Iterate the touched-repos manifest, opening one PR per repo.
+
+        Writes ``pr_urls.json`` incrementally (atomic replace) after
+        every successful PR so a mid-loop BLOCKED leaves a consistent
+        partial manifest the resume run can read.
+
+        An empty manifest (``[]``) means implement determined no repo
+        needed changes — route straight to DONE without touching the
+        forge.
+        """
+        ws = ctx.service.workspace(ticket)
+
+        if not touched_repos:
+            return Outcome(
+                State.DONE,
+                "no change needed — no repos were modified by implement",
+            )
+
+        opened: list[dict] = []
+        skipped: list[str] = []
+
+        for entry in touched_repos:
+            repo_id = entry.get("repo_id", "")
+            branch = entry.get("branch", "")
+            repo_path_str = entry.get("repo_path", "")
+            repo_dir = Path(repo_path_str)
+
+            # Per-repo config lookup.
+            try:
+                rc = get_repo_config(repo_id)
+            except ConfigError as e:
+                return Outcome(
+                    State.BLOCKED,
+                    f"unknown repo_id '{repo_id}' in touched_repos.json — "
+                    f"resumable: {e}",
+                )
+
+            # Workspace clone must still be present from implement's pass.
+            if not (repo_dir / ".git").exists() or not git_ops.branch_exists(
+                repo_dir, branch
+            ):
+                return Outcome(
+                    State.BLOCKED,
+                    f"no implemented branch in {repo_id} — re-run implement",
+                )
+
+            url, sub_outcome = DeliverStage._deliver_one_repo(
+                ctx, ticket, s, repo_dir, branch, rc
+            )
+
+            if sub_outcome is not None:
+                # BLOCKED outcome from the helper — any partial
+                # pr_urls.json entries already written for earlier
+                # repos are preserved on disk by the atomic-replace
+                # write below.
+                return sub_outcome
+
+            if url is None:
+                # Skipped by the ahead-of-main / net-diff guard — no
+                # commits to ship for this repo. Record so the
+                # summary artifact can name it.
+                skipped.append(repo_id)
+                log.info(
+                    "%s: skipped %s — no commits ahead of %s",
+                    ticket.id,
+                    repo_id,
+                    s.forge_target_branch,
+                )
+                continue
+
+            opened.append({"repo_id": repo_id, "branch": branch, "url": url})
+            # Atomic-replace incremental write after every successful PR
+            # so a mid-loop failure preserves the partial manifest.
+            _write_pr_urls(ws.artifacts_dir, opened)
+            log.info("%s: delivered %s → %s", ticket.id, repo_id, url)
+
+        if not opened:
+            # Every touched repo was skipped — nothing to ship. Do NOT
+            # write pr_urls.json (an empty file would confuse
+            # downstream).
+            return Outcome(
+                State.DONE,
+                "no change needed — all touched repos already at "
+                f"{s.forge_target_branch}",
+            )
+
+        # Build the deliver.md summary with one line per touched repo.
+        lines = ["# Deliver (passed)", "repos:"]
+        opened_by_id = {entry["repo_id"]: entry for entry in opened}
+        for entry in touched_repos:
+            rid = entry.get("repo_id", "")
+            if rid in opened_by_id:
+                br = opened_by_id[rid]["branch"]
+                url = opened_by_id[rid]["url"]
+                lines.append(f"  - {rid}: branch={br}, PR={url}")
+            elif rid in skipped:
+                lines.append(
+                    f"  - {rid}: SKIPPED (no commits vs {s.forge_target_branch})"
+                )
+        (ws.artifacts_dir / "deliver.md").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+
+        urls = [entry["url"] for entry in opened]
+        return Outcome(State.IMPLEMENT_COMPLETE, f"PRs: {', '.join(urls)}")
+
+    # ------------------------------------------------------------------
+    # Per-repo helper shared by both branches.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _deliver_one_repo(
+        ctx: StageContext,
+        ticket: Ticket,
+        s,
+        repo_dir: Path,
+        branch: str,
+        repo_config,
+    ) -> tuple[str | None, Outcome | None]:
+        """Push *branch* and open one PR for the repo at *repo_dir*.
+
+        Returns ``(pr_url, None)`` on success, ``(None, None)`` when
+        the ahead-of-main / net-diff guard fires (skipped — nothing
+        to deliver for this repo), or ``(None, Outcome(BLOCKED, ...))``
+        on a real failure.
+
+        The caller decides how to translate each shape into a stage
+        outcome / manifest entry.  This helper writes ``pr_urls.json``
+        in neither case — that's the multi-repo caller's job (see
+        :func:`_write_pr_urls`).
+
+        ``pr_urls.json`` schema (written by the caller)::
+
+            [
+              {"repo_id": str, "branch": str, "url": str},
+              ...
+            ]
+        """
+        repo_label = repo_config.repo_id if repo_config is not None else "default"
+
+        # Per-repo forge inputs.
+        remote_url = _resolve_remote_url(s, repo_config)
+        try:
+            token = github_token(s, repo_config=repo_config)
+        except RuntimeError as e:
+            return None, Outcome(
+                State.BLOCKED,
+                f"forge auth not configured for {repo_label}: {e}",
+            )
+
+        # Guard: skip when the branch has no NET diff relative to
+        # origin/main. This avoids a 422 "No commits between main and
+        # branch" from GitHub. Two distinct cases both produce that 422:
+        #   1. the branch carries no commits ahead of main at all
+        #      (``branch_is_ahead_of_main`` is False); and
+        #   2. the branch carries a commit (ahead by commit count)
+        #      whose net content is identical to main — e.g. main
+        #      independently landed the same change, or the commit is
+        #      a no-op. ``branch_has_net_diff`` is what actually
+        #      matches the forge's own emptiness test.
+        if not git_ops.branch_is_ahead_of_main(
+            repo_dir
+        ) or not git_ops.branch_has_net_diff(repo_dir):
+            return None, None
+
+        try:
+            git_ops.push(repo_dir, branch, remote_url, token)
+        except subprocess.CalledProcessError as e:
+            return None, Outcome(
+                State.BLOCKED,
+                f"push failed for {repo_label} — resumable: {(e.stderr or '')[:300]}",
+            )
+
         title = f"mill: {ticket.title} ({ticket.id})"
+        ws = ctx.service.workspace(ticket)
         spec = ws.read_description()
 
         # Generate a structured PR body from the diff when enabled.
@@ -213,40 +497,14 @@ class DeliverStage(Stage):
             )
 
         try:
-            url = get_forge(s, repo_config=ctx.repo_config).open_merge_request(
+            url = get_forge(s, repo_config=repo_config).open_merge_request(
                 source_branch=branch, title=title, body=body
             )
         except Exception as e:  # noqa: BLE001 — resumable, don't lose branch
-            # A 422 "No commits between <base> and <branch>" means the head
-            # branch has no net diff vs the base — there is nothing to merge.
-            # This is the same empty-branch condition the branch_has_net_diff
-            # guard above catches, but that guard fail-opens when the workspace
-            # clone is absent (its ``git fetch`` errors out) or its local
-            # origin/main ref is stale, so the empty branch slips through to
-            # here. Treat the forge's OWN emptiness verdict as authoritative
-            # and route to DONE — the same conclusion the guard reaches — rather
-            # than looping forever in BLOCKED-resumable (every resume re-pushes
-            # the empty branch and re-hits the identical 422).
-            if "No commits between" in str(e):
-                log.info(
-                    "%s: forge reports no commits between %s and the branch — "
-                    "routing to DONE (nothing to deliver)",
-                    ticket.id,
-                    s.forge_target_branch,
-                )
-                return Outcome(
-                    State.DONE,
-                    "no change needed — the forge reports no commits between "
-                    f"{s.forge_target_branch} and the branch; there is nothing "
-                    "to deliver",
-                )
-            log.exception("%s: open PR failed", ticket.id)
-            return Outcome(State.BLOCKED, f"open PR failed — resumable: {e}")
+            log.exception("%s: open PR failed for %s", ticket.id, repo_label)
+            return None, Outcome(
+                State.BLOCKED,
+                f"open PR failed for {repo_label} — resumable: {e}",
+            )
 
-        (ws.artifacts_dir / "deliver.md").write_text(
-            f"# Deliver (passed)\nbranch: {branch}\nPR: {url}\n",
-            encoding="utf-8",
-        )
-        log.info("%s: delivered → %s", ticket.id, url)
-        # PR opened — gates not yet verified; merge stage will poll
-        return Outcome(State.IMPLEMENT_COMPLETE, f"PR: {url}")
+        return url, None
