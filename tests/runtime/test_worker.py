@@ -1034,3 +1034,44 @@ async def test_stop_grace_timeout_does_not_hang(ctx, monkeypatch):
     # The shielded call is still running in the background. Cancel
     # the wrapper task so we don't leak it past the test.
     call_task.cancel()
+
+
+def test_periodic_pass_uses_per_repo_registry(ctx, tmp_path):
+    """Periodic passes record into — and read cadence from — the repo's OWN
+    registry, so a run shows in that repo's /runs list (not the lead repo's).
+    Regression: audit ran for robotsix-llmio but landed in mill's runs.json, so
+    the per-repo /runs API (which reads <board>/runs.json) showed 0 audit runs.
+    """
+    from types import SimpleNamespace
+
+    from robotsix_mill.runtime.run_registry import RunRegistry
+    from robotsix_mill.runtime.worker import Worker
+
+    mill_reg = RunRegistry(tmp_path / "mill.json")
+    llmio_reg = RunRegistry(tmp_path / "llmio.json")
+    w = Worker(
+        ctx,
+        mill_reg,
+        run_registries={
+            "robotsix-mill": mill_reg,
+            "robotsix-llmio": llmio_reg,
+        },
+    )
+    rc_llmio = SimpleNamespace(board_id="robotsix-llmio", repo_id="robotsix-llmio")
+
+    # _registry_for routes by board_id; unknown board / None → default.
+    assert w._registry_for(rc_llmio) is llmio_reg
+    assert w._registry_for(None) is mill_reg
+    assert w._registry_for(SimpleNamespace(board_id="x", repo_id="x")) is mill_reg
+
+    # A run recorded for llmio lands in llmio's registry, not mill's.
+    rid = llmio_reg.start("audit", repo_id="robotsix-llmio")
+    llmio_reg.finish_ok(rid, "ok")
+    assert llmio_reg.most_recent("audit", repo_id="robotsix-llmio") is not None
+    assert mill_reg.most_recent("audit", repo_id="robotsix-llmio") is None
+
+    # Cadence reads the per-repo store: llmio's own fresh run → "recent".
+    delay = w._initial_delay(
+        "audit", 86400, repo_id="robotsix-llmio", registry=w._registry_for(rc_llmio)
+    )
+    assert delay > 86000
