@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from robotsix_mill.agents import dedup
+from robotsix_mill.agents import freshness
 from robotsix_mill.agents import refining
 from robotsix_mill.agents.refining import ChildSpec, FileMapEntry, RefineResult
 from robotsix_mill.config import Settings
@@ -982,6 +983,208 @@ def test_dedup_candidate_cap_enforced(ctx, service, monkeypatch):
     assert section_count <= 8, (
         f"expected at most 8 candidate sections, got {section_count}"
     )
+
+
+# --- freshness gate tests ---
+
+# A draft body long enough to pass the trivial-draft guard (≥50 chars)
+# and that cites multiple file paths for freshness verification.
+_FRESHNESS_BODY = (
+    "The following files contain issues that need fixing:\n\n"
+    "- `src/robotsix_mill/core/models.py` — missing type hints\n"
+    "- `src/robotsix_mill/config.py` — undocumented settings\n"
+    "- `src/robotsix_mill/stages/refine.py` — overlong method\n"
+    "- `docs/nonexistent.md` — missing documentation\n"
+    "- `tests/test_nonexistent.py` — missing test coverage\n"
+)
+
+
+def test_freshness_gate_disabled_by_default(ctx, service, monkeypatch):
+    """Freshness gate is off by default — draft with missing paths
+    still proceeds through refine normally."""
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+
+    freshness_called = False
+
+    def fake_freshness(*, draft, repo_dir):
+        nonlocal freshness_called
+        freshness_called = True
+        return {"stale": True, "reason": "none of 5 cited paths exist"}
+
+    monkeypatch.setattr(freshness, "run_freshness_check", fake_freshness)
+
+    t = service.create("Fix multiple issues", _FRESHNESS_BODY)
+    out = RefineStage().run(t, ctx)
+
+    # Gate is disabled by default — refine proceeds normally.
+    assert out.next_state is State.READY
+    assert not freshness_called
+
+
+def test_freshness_gate_enabled_stale_draft_all_missing(
+    ctx,
+    service,
+    settings,
+    monkeypatch,
+):
+    """Gate enabled, draft cites ≥3 files, none exist → DONE."""
+    settings.freshness_gate_enabled = True
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+
+    def fake_freshness(*, draft, repo_dir):
+        return {"stale": True, "reason": "none of 5 cited file paths exist on HEAD"}
+
+    monkeypatch.setattr(freshness, "run_freshness_check", fake_freshness)
+
+    refine_called = False
+    orig_refine = refining.run_refine_agent
+
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
+        nonlocal refine_called
+        refine_called = True
+        return orig_refine(
+            settings=settings, title=title, draft=draft, repo_dir=repo_dir
+        )
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Fix multiple issues", _FRESHNESS_BODY)
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.DONE
+    assert "stale or invalid finding" in out.note
+    assert "none of 5 cited file paths exist on HEAD" in out.note
+    assert not refine_called
+
+
+def test_freshness_gate_enabled_fresh_draft(ctx, service, settings, monkeypatch):
+    """Gate enabled, draft cites files that all exist → refine proceeds."""
+    settings.freshness_gate_enabled = True
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+
+    def fake_freshness(*, draft, repo_dir):
+        return {"stale": False, "reason": "5/5 cited paths verified on HEAD"}
+
+    monkeypatch.setattr(freshness, "run_freshness_check", fake_freshness)
+
+    refine_called = False
+    orig_refine = refining.run_refine_agent
+
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
+        nonlocal refine_called
+        refine_called = True
+        return orig_refine(
+            settings=settings, title=title, draft=draft, repo_dir=repo_dir
+        )
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Fix multiple issues", _FRESHNESS_BODY)
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_called
+
+
+def test_freshness_gate_enabled_trivial_draft_skipped(
+    ctx,
+    service,
+    settings,
+    monkeypatch,
+):
+    """Gate enabled but draft <50 chars → freshness gate skipped."""
+    settings.freshness_gate_enabled = True
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+
+    freshness_called = False
+
+    def fake_freshness(*, draft, repo_dir):
+        nonlocal freshness_called
+        freshness_called = True
+        return {"stale": False, "reason": "ok"}
+
+    monkeypatch.setattr(freshness, "run_freshness_check", fake_freshness)
+
+    t = service.create("Short", "x")  # 1 char — below threshold
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert not freshness_called
+
+
+def test_freshness_gate_failure_degrades_gracefully(
+    ctx,
+    service,
+    settings,
+    monkeypatch,
+):
+    """Freshness check raises → refine proceeds normally (best-effort)."""
+    settings.freshness_gate_enabled = True
+    spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+
+    def fake_freshness(*, draft, repo_dir):
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(freshness, "run_freshness_check", fake_freshness)
+
+    refine_called = False
+    orig_refine = refining.run_refine_agent
+
+    def spy_refine(
+        *,
+        settings,
+        title,
+        draft,
+        repo_dir=None,
+        reviewer_comments=None,
+        memory="",
+        epic_context="",
+        extra_roots=None,
+        message_history=None,
+        board_id="",
+    ):
+        nonlocal refine_called
+        refine_called = True
+        return orig_refine(
+            settings=settings, title=title, draft=draft, repo_dir=repo_dir
+        )
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    t = service.create("Fix multiple issues", _FRESHNESS_BODY)
+    out = RefineStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert refine_called
 
 
 # --- datetime timezone-awareness round-trip tests ---
