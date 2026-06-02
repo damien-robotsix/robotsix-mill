@@ -367,18 +367,34 @@ blocking issues only.
 ## Memory
 
 You are given a `<memory>` block containing a Markdown ledger of
-observations from your past refine runs. It records:
+general repo-level observations from your past refine runs — for
+cross-cutting knowledge that helps you do your job better over time.
+It records:
 - Recurring reviewer feedback patterns (e.g. "acceptance criteria
   must be testable")
 - Split-vs-bundle heuristics for this codebase
 - Repo-specific conventions discovered during past refinements
 
+It is NOT a per-ticket diary. DO NOT record in memory:
+- Ticket IDs or per-ticket section headings (e.g. "## Refine run
+  for <id>")
+- Per-ticket decisions (what you chose for one specific draft)
+- Anything that is a log of "what I refined this run"
+
+Ticket history lives in the DB; memory is for cross-cutting
+knowledge only.
+
+General-vs-per-ticket discriminator example:
+- Good (general rule): "Shared libs live in standalone external
+  repos consumed via git+https in pyproject.toml; layout
+  src/<pkg>/, Hatchling."
+- Bad (per-ticket decision): "On ticket X I chose single-spec
+  because the lib was a prerequisite."
+
 Reference the memory when deciding how to structure the spec. After
 refining, update the memory in your `updated_memory` field:
 - Record any new reviewer feedback themes you observed
-- Note split/bundle decisions and their rationale
 - Record repo-specific conventions you discovered
-- Keep entries concise and ticket-ID-qualified
 - If nothing new was learned, return the incoming memory unchanged
 
 ## Output format
