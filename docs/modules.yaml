@@ -430,6 +430,7 @@ modules:
     paths:
       - src/robotsix_mill/sandbox.py
       - tests/runtime/test_sandbox.py
+      - sandbox/**/*
     dependencies: [config]
 
   - id: cli
