@@ -338,6 +338,8 @@ modules:
       - src/robotsix_mill/agents/bespoke.py
       - src/robotsix_mill/agents/bespoke_loader.py
       - src/robotsix_mill/agents/module_curator.py
+      - src/robotsix_mill/agents/freshness.py
+      - src/robotsix_mill/agents/periodic_loader.py
       - tests/agents/test_coordinating.py
       - tests/agents/test_module_curator.py
       - tests/agents/test_documenting.py
