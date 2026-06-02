@@ -18,11 +18,16 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..core._otel import get_tracer, start_span
 from ..core.provider import LLMProvider, Tier
 from .transient import is_claude_sdk_transient
+
+if TYPE_CHECKING:  # pragma: no cover — types-only; runtime imports stay lazy
+    from claude_agent_sdk import (  # type: ignore[import-not-found]
+        ClaudeAgentOptions,
+    )
 
 log = logging.getLogger("robotsix_llmio.claude_sdk")
 
@@ -477,19 +482,16 @@ class _SdkToolAgentHandle:
         self._warn_dropped_run_kwargs(model_settings, kwargs)
         return await self._run(user_prompt, message_history=message_history)
 
-    async def _run(
-        self, user_prompt: str, message_history: list[Any] | None = None
-    ) -> _SdkToolResult:
-        from claude_agent_sdk import (  # type: ignore[import-not-found]
-            AssistantMessage,
-            ClaudeAgentOptions,
-            ResultMessage,
-            TextBlock,
-            query,
-        )
+    def _prepare_prompt(
+        self, user_prompt: str, message_history: list[Any] | None
+    ) -> tuple[str, str]:
+        """Fold *message_history* into the prompt and augment the system prompt
+        with the JSON-schema directive when ``output_type`` is structured.
 
+        Returns ``(prompt, system_prompt)``; pure function of inputs + the
+        handle's ``_system_prompt`` and ``_output_type`` attributes.
+        """
         system_prompt = self._system_prompt
-        output_type = self._output_type
 
         # Honor message_history: the SDK query is stateless per call, so fold any
         # prior pydantic-ai conversation into the prompt as a labelled transcript
@@ -504,12 +506,22 @@ class _SdkToolAgentHandle:
                 prompt = f"{history_text}\n\nUser: {user_prompt}"
 
         # Augment system prompt with JSON schema for structured output.
-        if output_type is not str:
-            inner = _get_inner_type(output_type)
+        if self._output_type is not str:
+            inner = _get_inner_type(self._output_type)
             schema_json = json.dumps(inner.model_json_schema())
             system_prompt = f"{system_prompt}\n\n" + _JSON_OUTPUT_INSTRUCTION.format(
                 schema=schema_json
             )
+
+        return prompt, system_prompt
+
+    def _build_options(self, system_prompt: str) -> ClaudeAgentOptions:
+        """Build the ``ClaudeAgentOptions`` for the SDK call, wiring in the
+        workspace-confinement ``PreToolUse`` hook when a workspace root is set.
+        """
+        from claude_agent_sdk import (  # type: ignore[import-not-found]
+            ClaudeAgentOptions,
+        )
 
         # Confine built-in edits to the workspace when a root is set: run the
         # SDK there (so relative paths + Bash default into it) and gate every
@@ -528,7 +540,7 @@ class _SdkToolAgentHandle:
                 ]
             }
 
-        options = ClaudeAgentOptions(
+        return ClaudeAgentOptions(
             system_prompt=system_prompt,
             model=self._sdk_model,
             max_turns=self._max_turns,
@@ -539,108 +551,129 @@ class _SdkToolAgentHandle:
             **extra,
         )
 
-        from ..core.cost import record_cost
+    async def _invoke_query(
+        self, prompt: str, options: ClaudeAgentOptions
+    ) -> tuple[str, Any]:
+        """Run the SDK streaming loop under the per-call wall-clock cap.
+
+        Returns ``(text, result)`` — joined assistant text (with the
+        ``ResultMessage.result`` fallback) and the captured ``ResultMessage``.
+        Converts a wall-clock timeout into :class:`ClaudeSDKQueryTimeout`.
+        """
+        from claude_agent_sdk import (  # type: ignore[import-not-found]
+            AssistantMessage,
+            ResultMessage,
+            TextBlock,
+            query,
+        )
+
+        from ..core import constants
+        from .model import ClaudeSDKQueryTimeout
 
         chunks: list[str] = []
         result: Any = None
-        # Root agent-run span (becomes the trace). Tool spans (from the tool
-        # wrapper) nest under it; a child generation span holds the model I/O,
-        # token usage, and cost.
+        turn = [0]
+
+        async def _consume() -> None:
+            nonlocal result
+            async for message in query(prompt=prompt, options=options):
+                _log_stream_message(message, turn, self._name)
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            chunks.append(block.text)
+                elif isinstance(message, ResultMessage):
+                    result = message
+
+        try:
+            # Hard wall-clock cap so a stalled CLI subprocess fails fast and
+            # retryable instead of hanging on the SDK's own ~2h backstop.
+            await asyncio.wait_for(_consume(), timeout=constants.SDK_QUERY_TIMEOUT)
+        except (TimeoutError, asyncio.TimeoutError) as exc:
+            raise ClaudeSDKQueryTimeout(
+                f"Claude Agent SDK query exceeded the "
+                f"{constants.SDK_QUERY_TIMEOUT:.0f}s per-call wall-clock cap "
+                f"({self._name}, model={self._sdk_model!r}) — the call "
+                f"stalled without completing. Treated as transient so the "
+                f"bounded retry re-runs it."
+            ) from exc
+
+        text = "".join(chunks).strip()
+        if not text and result is not None:
+            text = (getattr(result, "result", None) or "").strip()
+        return text, result
+
+    def _record_generation_span(
+        self, system_prompt: str, prompt: str, text: str, result: Any
+    ) -> None:
+        """Open the child ``chat {model}`` generation span and stamp token
+        usage + the SDK cost estimate on it.
+
+        Cost MUST sit on this child observation to roll up — a root span
+        becomes the trace, not a summable observation.
+        """
+        from ..core.cost import record_cost
+
+        # Child generation span: the model exchange. Carries input/output +
+        # token usage + the SDK cost estimate. Cost must sit on a child
+        # observation to roll up — a root span becomes the trace, not summed.
+        usage_obj = getattr(result, "usage", None) if result is not None else None
         with start_span(
             get_tracer(_TRACER_NAME),
-            self._name,
+            f"chat {self._sdk_model}",
             {
-                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.operation.name": "chat",
                 "gen_ai.system": "anthropic",
                 "gen_ai.request.model": self._sdk_model,
-                # This span becomes the trace, so render system + user as chat
-                # messages here too — the system prompt then shows at the trace
-                # root, not only on the child generation.
+                # Record system + user as chat messages so the system prompt
+                # (sent to the SDK, but previously absent from traces) shows
+                # up on the generation in Langfuse.
                 "langfuse.observation.input": _chat_messages_input(
                     system_prompt, prompt
                 ),
+                "langfuse.observation.output": text,
             },
-        ) as root:
-            turn = [0]
+        ) as gen:
+            if gen is not None and isinstance(usage_obj, dict):
+                in_tok = usage_obj.get("input_tokens")
+                out_tok = usage_obj.get("output_tokens")
+                if in_tok is not None:
+                    gen.set_attribute("gen_ai.usage.input_tokens", int(in_tok))
+                if out_tok is not None:
+                    gen.set_attribute("gen_ai.usage.output_tokens", int(out_tok))
+            record_cost(result, lambda r: getattr(r, "total_cost_usd", None))
+
+    async def _run(
+        self, user_prompt: str, message_history: list[Any] | None = None
+    ) -> _SdkToolResult:
+        prompt, system_prompt = self._prepare_prompt(user_prompt, message_history)
+        options = self._build_options(system_prompt)
+        root_attrs = {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.system": "anthropic",
+            "gen_ai.request.model": self._sdk_model,
+            # This span becomes the trace, so render system + user as chat messages
+            # here too — system prompt then shows at the trace root, not just child.
+            "langfuse.observation.input": _chat_messages_input(system_prompt, prompt),
+        }
+        with start_span(get_tracer(_TRACER_NAME), self._name, root_attrs) as root:
             log.info(
                 "%s: starting (model=%s, max_turns=%d)",
                 self._name,
                 self._sdk_model,
                 self._max_turns,
             )
-
-            async def _consume() -> None:
-                nonlocal result
-                async for message in query(prompt=prompt, options=options):
-                    _log_stream_message(message, turn, self._name)
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock):
-                                chunks.append(block.text)
-                    elif isinstance(message, ResultMessage):
-                        result = message
-
-            from ..core import constants
-            from .model import ClaudeSDKQueryTimeout
-
-            try:
-                # Hard wall-clock cap so a stalled CLI subprocess fails fast and
-                # retryable instead of hanging on the SDK's own ~2h backstop.
-                await asyncio.wait_for(_consume(), timeout=constants.SDK_QUERY_TIMEOUT)
-            except (TimeoutError, asyncio.TimeoutError) as exc:
-                raise ClaudeSDKQueryTimeout(
-                    f"Claude Agent SDK query exceeded the "
-                    f"{constants.SDK_QUERY_TIMEOUT:.0f}s per-call wall-clock cap "
-                    f"({self._name}, model={self._sdk_model!r}) — the call "
-                    f"stalled without completing. Treated as transient so the "
-                    f"bounded retry re-runs it."
-                ) from exc
-
-            text = "".join(chunks).strip()
-            if not text and result is not None:
-                text = (getattr(result, "result", None) or "").strip()
-
+            text, result = await self._invoke_query(prompt, options)
             if root is not None:
                 root.set_attribute("langfuse.observation.output", text)
-            # Child generation span: the model exchange. Carries input/output +
-            # token usage + the SDK cost estimate. Cost must sit on a child
-            # observation to roll up — a root span becomes the trace, not summed.
-            usage_obj = getattr(result, "usage", None) if result is not None else None
-            with start_span(
-                get_tracer(_TRACER_NAME),
-                f"chat {self._sdk_model}",
-                {
-                    "gen_ai.operation.name": "chat",
-                    "gen_ai.system": "anthropic",
-                    "gen_ai.request.model": self._sdk_model,
-                    # Record system + user as chat messages so the system prompt
-                    # (sent to the SDK, but previously absent from traces) shows
-                    # up on the generation in Langfuse.
-                    "langfuse.observation.input": _chat_messages_input(
-                        system_prompt, prompt
-                    ),
-                    "langfuse.observation.output": text,
-                },
-            ) as gen:
-                if gen is not None and isinstance(usage_obj, dict):
-                    in_tok = usage_obj.get("input_tokens")
-                    out_tok = usage_obj.get("output_tokens")
-                    if in_tok is not None:
-                        gen.set_attribute("gen_ai.usage.input_tokens", int(in_tok))
-                    if out_tok is not None:
-                        gen.set_attribute("gen_ai.usage.output_tokens", int(out_tok))
-                record_cost(result, lambda r: getattr(r, "total_cost_usd", None))
-
-        output = _parse_output(text, output_type)
-
-        # Build minimal message history (only the final text is available).
+            self._record_generation_span(system_prompt, prompt, text, result)
         from pydantic_ai.messages import ModelResponse, TextPart
 
-        messages: list[Any] = [ModelResponse(parts=[TextPart(content=text)])]
-
-        usage = getattr(result, "usage", None) if result is not None else None
-
-        return _SdkToolResult(output=output, _messages=messages, _usage=usage)
+        return _SdkToolResult(
+            output=_parse_output(text, self._output_type),
+            _messages=[ModelResponse(parts=[TextPart(content=text)])],
+            _usage=getattr(result, "usage", None) if result is not None else None,
+        )
 
     def close(self) -> None:
         """No-op — no HTTP client to close."""
