@@ -52,3 +52,12 @@ repos:
         args: ["--schemafile", "docs/modules.schema.yaml"]
         files: ^docs/modules\.ya?ml$
         types_or: [yaml, json]
+  - repo: local
+    hooks:
+      - id: validate-module-paths
+        name: Validate module paths exist on disk
+        entry: python scripts/validate_module_paths.py
+        language: python
+        additional_dependencies: ["pyyaml>=6"]
+        files: ^docs/modules\.ya?ml$
+        pass_filenames: false

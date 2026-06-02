@@ -520,6 +520,7 @@ modules:
       - dev/**/*
       - tests/__init__.py
       - tests/conftest.py
+      - tests/test_modules_yaml_paths.py
     dependencies: []
 
   # -------------------------------------------------------------------
