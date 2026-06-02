@@ -2429,51 +2429,6 @@ class Worker:
 
             await asyncio.sleep(min_interval)
 
-    # ------------------------------------------------------------------
-    # Periodic-pass start helpers
-    # ------------------------------------------------------------------
-
-    def _start_periodic_pass(
-        self,
-        label: str,
-        import_path: str,
-        settings_interval_attr: str,
-        per_repo_flag: str,
-        task_attr: str,
-        settings_enabled_attr: str | None = None,
-    ) -> None:
-        """Start a per-repo periodic pass if its settings flag is on and
-        the corresponding task attribute is still ``None``.
-
-        *import_path* is a ``"module.path:attr_name"`` string resolved
-        lazily via ``importlib`` so monkeypatching in tests still works.
-        """
-        import importlib
-
-        if settings_enabled_attr is None:
-            settings_enabled_attr = per_repo_flag
-        if (
-            getattr(self.ctx.settings, settings_enabled_attr)
-            and getattr(self, task_attr) is None
-        ):
-            mod_path, attr_name = import_path.rsplit(":", 1)
-            mod = importlib.import_module(mod_path)
-            runner_fn = getattr(mod, attr_name)
-            setattr(
-                self,
-                task_attr,
-                asyncio.create_task(
-                    self._run_periodic_pass_per_repo(
-                        label,
-                        runner_fn,
-                        settings_interval_attr=settings_interval_attr,
-                        settings_enabled_attr=settings_enabled_attr,
-                        per_repo_flag=per_repo_flag,
-                    )
-                ),
-            )
-            log.info("Periodic %s enabled (per-repo schedule)", label.replace("_", "-"))
-
     def _start_poll_loop_pass(
         self,
         label: str,
@@ -2520,7 +2475,7 @@ class Worker:
         # These now run via the per-repo periodic supervisor (spawned
         # below), driven by .robotsix-mill/periodic/<name>.yaml presence
         # files in each managed repo. The legacy repos.yaml enable-flags
-        # + static _start_periodic_pass registrations were removed.
+        # were removed.
 
         # --- Pattern B: dedicated poll-loop tasks ---
         self._start_poll_loop_pass(

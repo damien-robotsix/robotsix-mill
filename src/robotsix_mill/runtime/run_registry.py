@@ -20,8 +20,7 @@ class RunEntry:
     # The codebase mixes hyphens (older callers) with underscores
     # (newer callers); both styles are intentionally accepted here
     # rather than forcing a global rename. Keep this list in sync
-    # with grep ``registry.start("`` and the worker
-    # ``_start_periodic_pass`` label arguments.
+    # with grep ``registry.start("``.
     kind: Literal[
         "audit",
         "agent_check",
