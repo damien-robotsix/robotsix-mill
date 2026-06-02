@@ -1204,18 +1204,27 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("reconcile sweep failed")
 
-    def _initial_delay(self, kind: str, interval: int) -> float:
+    def _initial_delay(self, kind: str, interval: int, repo_id: str = "") -> float:
         """Return the seconds to sleep before the first periodic pass.
 
-        Queries ``RunRegistry.most_recent(kind)`` to decide:
+        Queries ``RunRegistry.most_recent(kind, repo_id)`` to decide:
         - No registry → full ``interval`` (preserves current behaviour).
         - Never run (``None``) → 1.0 s.
         - Last run overdue (elapsed >= interval) → 1.0 s.
         - Otherwise → ``interval - elapsed`` (remaining time).
+
+        *repo_id* scopes the lookup to one repo's own history. Per-repo loops
+        (the periodic-workflow + bespoke supervisors) MUST pass it: without it
+        ``most_recent`` returns the newest run of *kind* across ALL repos, so a
+        repo that has never run the agent inherits another repo's recent
+        timestamp and waits a near-full interval before its first run — every
+        restart resetting that wait. With a 24 h interval + frequent restarts
+        the first run then never fires (the symptom: audit never ran on
+        robotsix-llmio because mill's daily audit kept the shared clock warm).
         """
         if self.run_registry is None:
             return float(interval)
-        entry = self.run_registry.most_recent(kind)
+        entry = self.run_registry.most_recent(kind, repo_id=repo_id or None)
         if entry is None:
             return 1.0
         try:
@@ -2063,8 +2072,10 @@ class Worker:
         interval = max(60, definition.interval_seconds)
         label = f"bespoke:{definition.name}"
         # Honour the persisted last-run timestamp so a restarted mill
-        # doesn't re-fire every bespoke immediately.
-        initial = self._initial_delay(label, interval)
+        # doesn't re-fire every bespoke immediately. Scope to this repo so a
+        # repo that has never run this bespoke fires promptly instead of
+        # inheriting another repo's recent timestamp.
+        initial = self._initial_delay(label, interval, repo_id=repo_config.repo_id)
         await asyncio.sleep(initial)
         while True:
             run_id = None
@@ -2187,7 +2198,9 @@ class Worker:
             )
             return
 
-        await asyncio.sleep(self._initial_delay(label, interval))
+        await asyncio.sleep(
+            self._initial_delay(label, interval, repo_id=repo_config.repo_id)
+        )
         while True:
             await self._fire_periodic_pass(label, runner_fn, repo_config)
             await asyncio.sleep(interval)
