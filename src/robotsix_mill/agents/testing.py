@@ -72,6 +72,7 @@ def run_test_agent(
     agent = build_agent_from_definition(
         settings,
         definition,
+        repo_dir=repo_dir,  # confine the SDK's built-in Bash/Read to the clone
         tools=[*ro_fs_tools, explore_tool],
         model_name=definition.model or settings.test_model,
     )

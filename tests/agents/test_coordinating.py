@@ -311,6 +311,20 @@ class TestRunCoordinator:
         assert result.conversation_state is None
         assert result.new_messages is None
 
+    # -- workspace confinement (claude_sdk) ------------------------------
+
+    def test_repo_dir_forwarded_to_builder_for_sdk_confinement(
+        self, settings, tmp_path
+    ):
+        """run_coordinator MUST forward ``repo_dir`` to the agent builder so the
+        Claude SDK confines its built-in Edit/Write/Bash to the ticket clone
+        (``cwd=repo_dir``). Without it the SDK defaulted to the worker's own
+        ``/app`` source tree: edits + test runs hit ``/app``, the clone stayed
+        pristine, and the ticket blocked with "no changes produced" while the
+        agent reported success (the systemic claude_sdk work-loss)."""
+        self._run(settings, tmp_path)
+        assert self.captured["repo_dir"] == tmp_path
+
     # -- feedback paths --------------------------------------------------
 
     def test_feedback_as_test_failure(self, settings, tmp_path):

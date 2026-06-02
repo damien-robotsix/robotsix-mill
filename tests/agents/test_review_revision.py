@@ -106,7 +106,7 @@ def test_memory_passthrough(settings, tmp_path, monkeypatch, secrets_set):
     captured_user_prompt.append("")
 
     def fake_build_agent_from_definition(
-        settings, definition, tools=None, system_prompt=None
+        settings, definition, tools=None, system_prompt=None, **kwargs
     ):
         return FakeAgent(
             ReviewRevisionResult(

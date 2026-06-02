@@ -273,6 +273,13 @@ def run_coordinator(
     agent = build_agent_from_definition(
         settings,
         definition,
+        # Confine the Claude SDK's built-in Edit/Write/Bash to the ticket
+        # clone. Without this the SDK runs them with cwd=the worker's own
+        # source tree (/app, no .git): the agent edits /app and runs tests
+        # there, the clone stays pristine, and the ticket blocks with "no
+        # changes produced" while the agent reports success. (#578 wired
+        # workspace_root into build_agent; the caller must feed it repo_dir.)
+        repo_dir=repo_dir,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
             make_consult_expert_tool(settings, repo_dir, board_id=board_id),

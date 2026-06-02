@@ -70,6 +70,7 @@ def run_rebase_agent(
     agent = build_agent_from_definition(
         settings,
         definition,
+        repo_dir=Path(repo_dir),  # confine SDK built-in edit tools to the clone
         tools=tools,
         system_prompt=system_prompt,
     )
