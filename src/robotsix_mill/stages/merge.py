@@ -520,6 +520,27 @@ class MergeStage(Stage):
 
         conclusion = ci_status.get("conclusion")
         if conclusion == "failure":
+            # Rebase BEFORE ci_fix when the branch is behind main. A repo-wide
+            # gate (ruff/mypy/lint over the whole tree) often fails on code that
+            # isn't this ticket's diff — the branch was cut from an older main
+            # and main has since gained the fix. ci_fix can't repair non-ticket
+            # code, but a rebase onto current main can. Self-gating: after one
+            # rebase the branch is no longer behind, so a still-failing CI then
+            # routes to ci_fix (a genuine, ticket-owned failure). Skipped when
+            # the workspace clone is gone (None) — fall straight to ci_fix.
+            repo_dir = _workspace_repo_dir(ctx, ticket)
+            if repo_dir is not None and git_ops.branch_is_behind_main(Path(repo_dir)):
+                log.info(
+                    "%s: CI failing on a stale base (branch behind main) → "
+                    "REBASING before ci_fix",
+                    ticket.id,
+                )
+                return Outcome(
+                    State.REBASING,
+                    "CI failing and branch is behind main; rebasing onto current "
+                    "main before ci_fix (the failure may be pre-existing repo-wide "
+                    "debt the branch lacks the fix for)",
+                )
             log.info("%s: CI failing → FIXING_CI", ticket.id)
             return Outcome(State.FIXING_CI)
 
