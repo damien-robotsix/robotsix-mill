@@ -1,12 +1,15 @@
-"""Tests for orphan-workspace detection in data_dir_audit_runner.
+"""Tests for the data-dir audit runner.
 
-Covers ticket 5 of the data-dir audit epic: ``find_orphan_workspaces``
-plus its integration into ``run_data_dir_audit_pass``.
+Covers:
+- ticket 2 of the epic: ``find_largest_items`` (top-N largest files/dirs)
+- ticket 5 of the epic: ``find_orphan_workspaces`` + its integration
+  into ``run_data_dir_audit_pass``.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 
 import pytest
 
@@ -15,7 +18,9 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import Ticket
 from robotsix_mill.core.states import State
 from robotsix_mill.data_dir_audit_runner import (
+    DataDirAuditPassResult,
     OrphanWorkspace,
+    find_largest_items,
     find_orphan_workspaces,
     run_data_dir_audit_pass,
 )
@@ -26,14 +31,29 @@ from robotsix_mill.data_dir_audit_runner import (
 # ---------------------------------------------------------------------------
 
 
-def _make_settings(tmp_path) -> Settings:
+def _make_settings(tmp_path, **overrides) -> Settings:
     """Build a fresh Settings rooted at *tmp_path*.
 
     Engines are also reset so each test gets a clean per-board DB
     cache (the engine cache survives across tests otherwise).
     """
+    overrides.setdefault("data_dir", str(tmp_path))
+    overrides.setdefault("require_approval", "false")
     db.reset_engine()
-    return Settings(data_dir=str(tmp_path), require_approval="false")
+    return Settings(**overrides)
+
+
+def _test_repo_config():
+    """Synthetic RepoConfig for periodic-runner tests."""
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="test-repo",
+        board_id="test-board",
+        langfuse_project_name="test-project",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
 
 
 def _make_workspace_dir(settings: Settings, board_id: str, ticket_id: str):
@@ -59,6 +79,240 @@ def _insert_ticket(settings: Settings, board_id: str, ticket_id: str) -> None:
             )
         )
         s.commit()
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for find_largest_items
+# ---------------------------------------------------------------------------
+
+
+def test_no_data_dir(tmp_path):
+    """Returns [] when data_dir doesn't exist."""
+    data_dir = tmp_path / "nope"
+    result = find_largest_items(data_dir)
+    assert result == []
+
+
+def test_empty_data_dir(tmp_path):
+    """Returns [] when data_dir exists but is empty."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    result = find_largest_items(data_dir)
+    assert result == []
+
+
+def test_all_below_threshold(tmp_path):
+    """Returns [] when all items are below threshold."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "small.txt").write_bytes(b"x" * 50_000_000)  # 50 MB
+    result = find_largest_items(data_dir, threshold_bytes=100 * 1024 * 1024)
+    assert result == []
+
+
+def test_single_oversized_file(tmp_path):
+    """A single 200 MB file is reported correctly."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    fp = data_dir / "big.bin"
+    fd = os.open(str(fp), os.O_CREAT | os.O_WRONLY)
+    try:
+        os.ftruncate(fd, 200 * 1024 * 1024)
+    finally:
+        os.close(fd)
+
+    result = find_largest_items(data_dir, threshold_bytes=100 * 1024 * 1024)
+    assert len(result) == 1
+    item = result[0]
+    assert item["path"] == "big.bin"
+    assert item["size_bytes"] == 200 * 1024 * 1024
+    assert item["is_directory"] is False
+
+
+def test_oversized_directory(tmp_path):
+    """A directory with 3×50 MB files is reported with cumulative size."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    sub = data_dir / "subdir"
+    sub.mkdir()
+    for i in range(3):
+        fp = sub / f"f{i}.bin"
+        fd = os.open(str(fp), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd, 50 * 1024 * 1024)
+        finally:
+            os.close(fd)
+
+    result = find_largest_items(data_dir, threshold_bytes=100 * 1024 * 1024)
+    assert len(result) == 1
+    item = result[0]
+    assert item["path"] == "subdir"
+    assert item["size_bytes"] == 150 * 1024 * 1024
+    assert item["is_directory"] is True
+
+
+def test_top_n_limit(tmp_path):
+    """Only top_n (10) items are returned when many oversized items exist."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    sizes_bytes = []
+    for i in range(15):
+        fp = data_dir / f"big_{i:02d}.bin"
+        size = (15 - i) * 50 * 1024 * 1024  # descending actual sizes
+        fd = os.open(str(fp), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd, size)
+        finally:
+            os.close(fd)
+        sizes_bytes.append(size)
+
+    result = find_largest_items(data_dir, top_n=10, threshold_bytes=0)
+    assert len(result) == 10
+    # Verify descending by size
+    for prev, cur in zip(result, result[1:]):
+        assert prev["size_bytes"] >= cur["size_bytes"]
+
+
+def test_top_n_tie_breaking(tmp_path):
+    """Equal-size items are tie-broken by path lexicographically."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    # Create two files with same size
+    (data_dir / "b_file.bin").write_bytes(b"x" * 100)
+    (data_dir / "a_file.bin").write_bytes(b"x" * 100)
+
+    result = find_largest_items(data_dir, top_n=10, threshold_bytes=0)
+    # Filter to just the two tie entries
+    paths = [r["path"] for r in result if r["path"] in ("a_file.bin", "b_file.bin")]
+    assert paths == ["a_file.bin", "b_file.bin"]
+
+
+def test_symlink_skipped(tmp_path):
+    """Symlinks are skipped and do not appear in results."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    target = data_dir / "real_big.bin"
+    fd = os.open(str(target), os.O_CREAT | os.O_WRONLY)
+    try:
+        os.ftruncate(fd, 200 * 1024 * 1024)
+    finally:
+        os.close(fd)
+
+    link = data_dir / "link_to_big.bin"
+    os.symlink(str(target), str(link))
+
+    result = find_largest_items(data_dir, threshold_bytes=100 * 1024 * 1024)
+    paths = [r["path"] for r in result]
+    assert "link_to_big.bin" not in paths
+    # The target may or may not be walked — with followlinks=False,
+    # os.walk through the symlink won't include the target, but the
+    # target is still inside data_dir and will be found by normal
+    # directory traversal
+    if "real_big.bin" in paths:
+        # it's fine if the real file is found via normal walk
+        pass
+    else:
+        # also fine — the key is the symlink is skipped
+        pass
+
+
+def test_permission_error_graceful(tmp_path, caplog, monkeypatch):
+    """Permission errors log a warning and don't crash the pass."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    # Create a readable oversized file
+    (data_dir / "good.bin").write_bytes(b"x" * (200 * 1024 * 1024))
+    # Create a file that will trigger OSError from getsize
+    (data_dir / "bad.bin").write_bytes(b"x" * 100_000_000)
+
+    # Monkeypatch os.path.getsize to raise OSError for the bad file.
+    # (chmod 0o000 does NOT block stat on Linux for the file owner, so
+    # we simulate the fault path directly.)
+    original_getsize = os.path.getsize
+
+    def mock_getsize(path):
+        if path.endswith("bad.bin"):
+            raise OSError("Permission denied")
+        return original_getsize(path)
+
+    monkeypatch.setattr(os.path, "getsize", mock_getsize)
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.data_dir_audit"):
+        result = find_largest_items(data_dir, threshold_bytes=100 * 1024 * 1024)
+
+    # The good file should still be reported
+    assert len(result) >= 1
+    paths = [r["path"] for r in result]
+    assert "good.bin" in paths
+    assert "bad.bin" not in paths
+    # A warning should have been logged
+    assert any("Cannot access" in rec.message for rec in caplog.records)
+
+
+def test_threshold_zero(tmp_path):
+    """threshold_bytes=0 returns every non-empty file (up to top_n)."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    for i in range(5):
+        (data_dir / f"f{i}.txt").write_bytes(b"x" * (i + 1))
+
+    result = find_largest_items(data_dir, top_n=10, threshold_bytes=0)
+    assert len(result) == 5  # all non-empty files
+    paths = {r["path"] for r in result}
+    for i in range(5):
+        assert f"f{i}.txt" in paths
+
+
+def test_mixed_files_and_dirs(tmp_path):
+    """Both oversized files and oversized directories appear together."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    # Oversized file
+    fd = os.open(str(data_dir / "big_file.bin"), os.O_CREAT | os.O_WRONLY)
+    try:
+        os.ftruncate(fd, 200 * 1024 * 1024)
+    finally:
+        os.close(fd)
+    # Oversized directory
+    sub = data_dir / "big_dir"
+    sub.mkdir()
+    for i in range(3):
+        fp = sub / f"f{i}.bin"
+        fd2 = os.open(str(fp), os.O_CREAT | os.O_WRONLY)
+        try:
+            os.ftruncate(fd2, 50 * 1024 * 1024)
+        finally:
+            os.close(fd2)
+
+    result = find_largest_items(data_dir, threshold_bytes=100 * 1024 * 1024)
+    paths = {r["path"] for r in result}
+    assert "big_file.bin" in paths
+    assert "big_dir" in paths
+    # Sorted by size: file (200 MB) before dir (150 MB)
+    assert result[0]["size_bytes"] >= result[1]["size_bytes"]
+
+
+def test_root_data_dir_excluded(tmp_path):
+    """The root data_dir itself is never in results."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    # Put a huge file deep to make root huge
+    sub = data_dir / "a" / "b" / "c"
+    sub.mkdir(parents=True)
+    fd = os.open(str(sub / "big.bin"), os.O_CREAT | os.O_WRONLY)
+    try:
+        os.ftruncate(fd, 200 * 1024 * 1024)
+    finally:
+        os.close(fd)
+
+    result = find_largest_items(data_dir, threshold_bytes=100 * 1024 * 1024)
+    paths = [r["path"] for r in result]
+    assert "." not in paths
+    assert "" not in paths
+    # The subdirectories should appear (they inherited the size)
+    for r in result:
+        assert r["path"] != "."
+        assert r["path"] != ""
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +480,7 @@ def test_pass_reports_orphans_per_board_in_summary(tmp_path, monkeypatch):
 
 
 def test_pass_no_findings_when_clean(tmp_path, monkeypatch):
-    """With no orphans the pass returns the legacy ``no findings`` summary."""
+    """With no orphans or oversized items, the pass returns ``no findings``."""
     s = _make_settings(tmp_path)
     db.init_db(s, "board-clean")
 
@@ -239,6 +493,35 @@ def test_pass_no_findings_when_clean(tmp_path, monkeypatch):
     assert result.summary == "no findings"
     assert result.drafts_created == []
     db.reset_engine()
+
+
+def test_pass_integrates_find_largest_items(tmp_path, monkeypatch):
+    """run_data_dir_audit_pass wires find_largest_items and populates
+    oversized_items."""
+    settings = _make_settings(tmp_path)
+    # Place an oversized file in data_dir
+    fd = os.open(str(settings.data_dir / "huge.bin"), os.O_CREAT | os.O_WRONLY)
+    try:
+        os.ftruncate(fd, 200 * 1024 * 1024)
+    finally:
+        os.close(fd)
+
+    monkeypatch.setattr(
+        "robotsix_mill.data_dir_audit_runner.Settings", lambda: settings
+    )
+
+    result = run_data_dir_audit_pass(
+        session_id="test-sid", repo_config=_test_repo_config()
+    )
+
+    assert isinstance(result, DataDirAuditPassResult)
+    assert result.drafts_created == []
+    assert result.session_id == "test-sid"
+    assert len(result.oversized_items) == 1
+    assert result.oversized_items[0]["path"] == "huge.bin"
+    assert result.oversized_items[0]["size_bytes"] == 200 * 1024 * 1024
+    assert result.oversized_items[0]["is_directory"] is False
+    assert "1 oversized items" in result.summary
 
 
 @pytest.fixture(autouse=True)

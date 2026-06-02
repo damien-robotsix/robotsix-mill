@@ -961,6 +961,11 @@ class Settings(BaseSettings):
     # MILL_DATA_DIR_AUDIT_PERIODIC=true. Minimum enforced at 60 s
     # in the worker loop.
     data_dir_audit_interval_seconds: int = Field(default=86400)
+    # Threshold (bytes) for the top-N largest-items check.
+    # Files and directories whose cumulative size reaches this
+    # threshold are reported as oversized.  Default 100 MiB.
+    # Override with MILL_DATA_DIR_AUDIT_SIZE_THRESHOLD_BYTES.
+    data_dir_audit_size_threshold_bytes: int = Field(default=104_857_600)
 
     # --- completeness_check agent (feature-wiring completeness) ---
     # Model for the completeness-check agent. Defaults to the same
@@ -1451,6 +1456,13 @@ class Settings(BaseSettings):
     def _validate_web_fetch_max_bytes(cls, v: int) -> int:
         if v < 0:
             raise ValueError("web_fetch_max_bytes must be ≥ 0")
+        return v
+
+    @field_validator("data_dir_audit_size_threshold_bytes")
+    @classmethod
+    def _validate_data_dir_audit_size_threshold_bytes(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("data_dir_audit_size_threshold_bytes must be ≥ 0")
         return v
 
     # -- format checks -------------------------------------------------
