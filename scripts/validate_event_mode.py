@@ -24,12 +24,10 @@ Returns exit code 0 on success (agent conversation completed).
 
 from __future__ import annotations
 
-import logging
 import os
 import sys
 import tempfile
 import time
-from pathlib import Path
 
 
 def main() -> int:
@@ -107,9 +105,7 @@ def main() -> int:
     # --- run the agent inside a traced session --------------------------
     trace_id: str | None = None
     try:
-        with start_ticket_root_span(
-            session_id, "validate-event-mode"
-        ) as root:
+        with start_ticket_root_span(session_id, "validate-event-mode") as root:
             trace_id = root.trace_id
             print(f"session_id: {session_id}")
             print(f"trace_id:   {trace_id}")
@@ -152,10 +148,16 @@ def main() -> int:
         print("\n✓ No export failures recorded.")
 
     if trace_id:
-        langfuse_host = (os.environ.get("LANGFUSE_HOST") or "https://cloud.langfuse.com").rstrip("/")
-        langfuse_project = secrets.langfuse_project_name or secrets.langfuse_project_id or ""
+        langfuse_host = (
+            os.environ.get("LANGFUSE_HOST") or "https://cloud.langfuse.com"
+        ).rstrip("/")
+        langfuse_project = (
+            secrets.langfuse_project_name or secrets.langfuse_project_id or ""
+        )
         if langfuse_host and langfuse_project:
-            print(f"\nLangfuse trace URL: {langfuse_host}/project/{langfuse_project}/traces/{trace_id}")
+            print(
+                f"\nLangfuse trace URL: {langfuse_host}/project/{langfuse_project}/traces/{trace_id}"
+            )
         print(f"\nInspect with: python scripts/inspect_trace.py {trace_id}")
 
     print("\nPASS: agent conversation completed successfully.")
