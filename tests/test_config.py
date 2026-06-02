@@ -1266,22 +1266,22 @@ class TestValidationInvalid:
 
     def test_model_request_timeout_zero_raises(self):
         """``model_request_timeout=0`` raises ValidationError."""
-        with pytest.raises(ValidationError, match="model_request_timeout must be > 0"):
+        with pytest.raises(ValidationError, match="Input should be greater than 0"):
             Settings(model_request_timeout=0)
 
     def test_api_url_invalid_format_raises(self):
         """``api_url`` not starting with http(s) raises ValidationError."""
-        with pytest.raises(ValidationError, match="api_url must be an HTTP"):
+        with pytest.raises(ValidationError, match="String should match pattern"):
             Settings(api_url="not-a-url")
 
     def test_github_api_url_invalid_format_raises(self):
         """``github_api_url`` not starting with http(s) raises."""
-        with pytest.raises(ValidationError, match="github_api_url must be an HTTP"):
+        with pytest.raises(ValidationError, match="String should match pattern"):
             Settings(github_api_url="ftp://bad")
 
     def test_gitlab_api_url_invalid_format_raises(self):
         """``gitlab_api_url`` not starting with http(s) raises."""
-        with pytest.raises(ValidationError, match="gitlab_api_url must be an HTTP"):
+        with pytest.raises(ValidationError, match="String should match pattern"):
             Settings(gitlab_api_url="ftp://bad")
 
     def test_trace_health_interval_too_low_raises(self):
@@ -1321,7 +1321,9 @@ class TestValidationInvalid:
 
     def test_explore_request_limit_zero_raises(self):
         """``explore_request_limit=0`` raises ValidationError."""
-        with pytest.raises(ValidationError, match="explore_request_limit must be ≥ 1"):
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 1"
+        ):
             Settings(explore_request_limit=0)
 
 

@@ -130,7 +130,7 @@ def test_semaphore_bounds_concurrent_run_sync():
 def test_config_default_and_validation():
     assert _settings().claude_max_concurrency == 4
     assert _settings(claude_max_concurrency=1).claude_max_concurrency == 1
-    with pytest.raises(ValidationError, match="claude_max_concurrency"):
+    with pytest.raises(ValidationError, match="Input should be greater than or equal to 1"):
         _settings(claude_max_concurrency=0)
 
 
