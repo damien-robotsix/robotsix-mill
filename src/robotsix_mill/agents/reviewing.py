@@ -172,6 +172,9 @@ def run_review_agent(
     agent = build_agent_from_definition(
         settings,
         definition,
+        # Confine the SDK's built-in Read/Bash to the clone so review reasons
+        # about the ticket's code, not the worker's own /app source.
+        repo_dir=repo_dir,
         tools=tools,
         **overrides,
     )

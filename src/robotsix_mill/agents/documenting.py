@@ -186,6 +186,7 @@ def run_doc_agent(
     agent = build_agent_from_definition(
         settings,
         definition,
+        repo_dir=repo_dir,  # confine SDK built-in edit tools to the clone
         system_prompt=system_prompt,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
