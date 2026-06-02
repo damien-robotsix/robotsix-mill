@@ -1138,14 +1138,24 @@ class ImplementStage(Stage):
         memory_board_id = ImplementStage._memory_board_id(ctx, ticket)
 
         language_instructions = ImplementStage._resolve_language_instructions(
-            ctx, ticket, settings,
+            ctx,
+            ticket,
+            settings,
         )
         agent_model = ImplementStage._select_agent_model(ic, settings)
 
         agent_result = ImplementStage._invoke_implement_agent(
-            ctx, ticket, repo_dir, branch, settings, ic,
-            language_instructions, agent_model, resume_history,
-            extra_roots, memory_board_id,
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            language_instructions,
+            agent_model,
+            resume_history,
+            extra_roots,
+            memory_board_id,
         )
         if agent_result.failure is not None:
             return agent_result.failure
@@ -1160,26 +1170,49 @@ class ImplementStage(Stage):
         ) = agent_result.success
 
         pause = ImplementStage._maybe_handle_pause(
-            ctx, ticket, repo_dir, branch, ws, summary, ref_files,
-            conv_state, new_msgs, extra_roots,
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            ws,
+            summary,
+            ref_files,
+            conv_state,
+            new_msgs,
+            extra_roots,
         )
         if pause is not None:
             return pause
 
         updated_ref_files, updated_prev_summary = (
             ImplementStage._persist_pass_artifacts(
-                ws, ticket, ic, summary, ref_files, updated_memory,
-                settings, memory_board_id,
+                ws,
+                ticket,
+                ic,
+                summary,
+                ref_files,
+                updated_memory,
+                settings,
+                memory_board_id,
             )
         )
 
         guardrail = ImplementStage._run_scope_guardrail(
-            ctx, ticket, repo_dir, branch, summary, ref_files,
-            ic.file_map, settings, ic.spec, ic.feedback,
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            summary,
+            ref_files,
+            ic.file_map,
+            settings,
+            ic.spec,
+            ic.feedback,
         )
         if guardrail.action == "return":
             return _SinglePassResult(
-                next_action="return", outcome=guardrail.outcome,
+                next_action="return",
+                outcome=guardrail.outcome,
             )
 
         new_file_map = (
@@ -1201,14 +1234,29 @@ class ImplementStage(Stage):
         )
         if guardrail.action == "continue":
             return _SinglePassResult(
-                next_action="retry", feedback=None, ic=new_ic,
+                next_action="retry",
+                feedback=None,
+                ic=new_ic,
             )
 
         # guardrail.action == "skip_iteration" — fall through to test gate.
         return ImplementStage._evaluate_test_results(
-            ctx, ticket, repo_dir, branch, settings, ic, new_ic, summary,
-            ref_files, new_msgs, no_change_needed, no_change_rationale,
-            resuming, attempt, max_iters, extra_roots,
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            new_ic,
+            summary,
+            ref_files,
+            new_msgs,
+            no_change_needed,
+            no_change_rationale,
+            resuming,
+            attempt,
+            max_iters,
+            extra_roots,
         )
 
     # ------------------------------------------------------------------
