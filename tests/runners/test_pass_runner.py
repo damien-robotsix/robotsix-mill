@@ -1694,3 +1694,40 @@ def test_mill_routing_falls_back_when_target_unset(tmp_path, caplog):
     assert "trace_review_target_repo_id is unset" in caplog.text
 
     db.reset_engine()
+
+
+# --- strip_ephemeral_proposal_sections (memory ledger hygiene) --------------
+
+
+def test_strip_removes_prior_proposals_table():
+    from robotsix_mill.pass_runner import strip_ephemeral_proposal_sections
+
+    mem = (
+        "## Project layout\n\nStages live in stages/.\n\n"
+        "## Prior proposals — verified state\n\n"
+        "| gap_id | ticket_id | state | resolution |\n"
+        "|--------|-----------|-------|------------|\n"
+        "| foo | 20260530Tc57b | CLOSED | merged |\n\n"
+        "## Testing conventions\n\nUse pytest.\n"
+    )
+    out = strip_ephemeral_proposal_sections(mem)
+    assert "Prior proposals" not in out
+    assert "20260530Tc57b" not in out
+    assert "## Project layout" in out and "## Testing conventions" in out
+
+
+def test_strip_table_at_end_of_memory():
+    from robotsix_mill.pass_runner import strip_ephemeral_proposal_sections
+
+    mem = "## Patterns\n\nfoo\n\n## Prior proposals — verified state\n\n| a | b |\n"
+    out = strip_ephemeral_proposal_sections(mem)
+    assert "Prior proposals" not in out and "## Patterns" in out
+
+
+def test_strip_noop_without_table():
+    from robotsix_mill.pass_runner import strip_ephemeral_proposal_sections
+
+    assert strip_ephemeral_proposal_sections("## Patterns\nfoo\n").strip() == (
+        "## Patterns\nfoo"
+    )
+    assert strip_ephemeral_proposal_sections("") == ""
