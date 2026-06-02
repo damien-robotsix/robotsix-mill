@@ -1378,7 +1378,7 @@ function _runRowHtml(r,elapsed){
    background:${sc};color:#fff;font-size:10px">${st}</span>
   <span style="color:#7d828c;font-size:10px;margin-left:6px">${r.started_at}</span>
   <span class="run-elapsed" style="color:#7d828c;font-size:10px;margin-left:3px">${elapsed}</span>
-  <div style="font-size:11px;color:#aab0bd;margin-top:3px">${esc(r.summary||'')}</div>
+  <div style="font-size:11px;color:#aab0bd;margin-top:3px;white-space:pre-wrap">${esc(r.summary||'')}</div>
   ${r.error?`<div style="font-size:11px;color:#f87171;margin-top:2px">${esc(r.error)}</div>`:''}
  </div>`;
 }

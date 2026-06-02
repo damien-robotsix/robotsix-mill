@@ -511,10 +511,8 @@ def test_pass_reports_orphans_per_board_in_summary(tmp_path, monkeypatch):
 
     assert result.session_id == "sess-1"
     assert result.drafts_created == []
-    assert "orphan workspaces" in result.summary
-    assert "2" in result.summary  # total
-    assert "board-a=1" in result.summary
-    assert "board-b=1" in result.summary
+    assert "2 orphan workspaces" in result.summary
+    assert result.summary.startswith("Scanned ")
     db.reset_engine()
 
 
@@ -534,7 +532,12 @@ def test_pass_no_orphans_when_clean(tmp_path, monkeypatch):
     )
 
     result = run_data_dir_audit_pass(session_id="sess-clean")
-    assert "orphan" not in result.summary
+    # No findings at all → header + zero-finding short-circuit. The
+    # board's mill.db file is below the oversized threshold and the
+    # other checks have nothing to flag.
+    assert result.summary.startswith("Scanned ")
+    assert "No issues found." in result.summary
+    assert "\n" not in result.summary  # single line short-circuit
     assert result.drafts_created == []
     db.reset_engine()
 
@@ -565,7 +568,7 @@ def test_pass_integrates_find_largest_items(tmp_path, monkeypatch):
     assert result.oversized_items[0]["path"] == "huge.bin"
     assert result.oversized_items[0]["size_bytes"] == 200 * 1024 * 1024
     assert result.oversized_items[0]["is_directory"] is False
-    assert "1 oversized items" in result.summary
+    assert "1 oversized item " in result.summary
     # Filing logic (ticket 6) now creates one draft for the oversized
     # file when a board is available.
     assert len(result.drafts_created) == 1
@@ -835,9 +838,8 @@ class TestRunDataDirAuditPass:
         assert isinstance(result, DataDirAuditPassResult)
         assert len(result.findings) == 1
         assert result.findings[0]["pattern"] == "*_memory.md"
-        # Summary always includes growth-delta status (unconditional);
-        # the unbounded segment is appended when findings exist.
-        assert "1 unbounded-collection candidate(s) flagged" in result.summary
+        # The unbounded segment is appended when findings exist.
+        assert "1 unbounded candidate " in result.summary
 
     def test_no_findings_summary(self, tmp_path, monkeypatch):
         settings = _make_settings(tmp_path)
@@ -849,15 +851,66 @@ class TestRunDataDirAuditPass:
         result = run_data_dir_audit_pass()
 
         assert result.findings == []
-        # Unbounded section omitted (no findings); growth-delta status
-        # is always present and shows the no-threshold-exceeded message
-        # with no boards on disk.
-        assert "unbounded-collection" not in result.summary
+        # No findings of any kind → zero-finding short-circuit.
+        assert "unbounded" not in result.summary
+        assert result.summary == "Scanned 0 B in 0 files. No issues found."
 
     def test_findings_field_defaults_to_empty(self):
         """``DataDirAuditPassResult.findings`` defaults to ``[]``."""
         r = DataDirAuditPassResult(drafts_created=[], summary="no findings")
         assert r.findings == []
+
+
+# ---------------------------------------------------------------------------
+# ticket 7 — Summary output (header line, short-circuit, trimming)
+# ---------------------------------------------------------------------------
+
+
+def test_summary_header_includes_total_bytes_and_file_count(tmp_path, monkeypatch):
+    """Header line reports total bytes and (non-zero) file count."""
+    s = _make_settings(tmp_path)
+    # Seed three non-zero files of known sizes (10/20/30 bytes).
+    (s.data_dir / "a.txt").write_bytes(b"x" * 10)
+    (s.data_dir / "b.txt").write_bytes(b"y" * 20)
+    (s.data_dir / "c.txt").write_bytes(b"z" * 30)
+
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    # No board_id in the repo_config → no filing path is reached.
+    result = run_data_dir_audit_pass()
+    # 60 B total across 3 files; zero findings → single-line short-circuit.
+    assert result.summary.startswith("Scanned 60 B in 3 files.")
+
+
+def test_summary_zero_finding_short_circuit(tmp_path, monkeypatch):
+    """Empty data_dir + no findings → single-line short-circuit."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    result = run_data_dir_audit_pass()
+    assert result.summary == "Scanned 0 B in 0 files. No issues found."
+
+
+def test_summary_truncates_long_paths(tmp_path, monkeypatch):
+    """An oversized file with a long flat name gets middle-elided."""
+    s = _make_settings(tmp_path)
+    # Build a single top-level filename whose ``.data/<rel>`` form
+    # exceeds 80 chars — a flat-name oversized file is the only
+    # finding, so it's guaranteed to be the largest item picked.
+    long_name = "very_long_" + "x" * 100 + ".bin"
+    huge = s.data_dir / long_name
+    fd = os.open(str(huge), os.O_CREAT | os.O_WRONLY)
+    try:
+        os.ftruncate(fd, 200 * 1024 * 1024)
+    finally:
+        os.close(fd)
+
+    monkeypatch.setattr("robotsix_mill.data_dir_audit_runner.Settings", lambda: s)
+
+    result = run_data_dir_audit_pass()
+    assert "…" in result.summary
+    # Sanity: the un-trimmed path should NOT appear verbatim.
+    assert long_name not in result.summary
 
 
 # ---------------------------------------------------------------------------
@@ -1244,7 +1297,8 @@ def test_first_run_no_prior_state(tmp_path, monkeypatch):
     result = run_data_dir_audit_pass()
     assert isinstance(result, DataDirAuditPassResult)
     assert result.growth_flags == []
-    assert "no items exceeded thresholds" in result.summary
+    # First run + no other findings → zero-finding short-circuit.
+    assert "No issues found." in result.summary
 
     # State file should exist now
     state_path = _growth_state_path(s, "test-board")
@@ -1275,7 +1329,8 @@ def test_growth_detected_on_second_run(tmp_path, monkeypatch):
     assert flag["check"] == "growth_delta"
     assert flag["path"] == "big.log"
     assert flag["threshold_exceeded"] in ("bytes", "both")
-    assert "items flagged" in result.summary
+    assert "1 growth flag " in result.summary
+    assert " grew by " in result.summary
 
 
 def test_growth_ignores_shrink(tmp_path, monkeypatch):
@@ -1294,7 +1349,8 @@ def test_growth_ignores_shrink(tmp_path, monkeypatch):
 
     result = run_data_dir_audit_pass()
     assert result.growth_flags == []
-    assert "no items exceeded thresholds" in result.summary
+    # No findings of any kind after the shrink → zero-finding short-circuit.
+    assert "No issues found." in result.summary
 
 
 def test_corrupt_state_recovered(tmp_path, monkeypatch, caplog):
@@ -1340,7 +1396,9 @@ def test_multiple_boards(tmp_path, monkeypatch):
     flags = result.growth_flags
     assert len(flags) >= 1
     assert all(f["board_id"] == "board-a" for f in flags)
-    assert "across 1 board" in result.summary
+    # Growth line uses the new shape: count + parenthetical largest.
+    assert " growth flag" in result.summary
+    assert " grew by " in result.summary
 
 
 def test_result_summary_format(tmp_path, monkeypatch):
@@ -1354,7 +1412,10 @@ def test_result_summary_format(tmp_path, monkeypatch):
     (board / "big.log").write_bytes(b"x" * 30_000_000)
 
     result = run_data_dir_audit_pass()
-    assert "growth-delta check:" in result.summary
+    # New layout: multi-line summary headed by "Scanned ..." with the
+    # growth category contributing a per-line entry.
+    assert result.summary.startswith("Scanned ")
+    assert "\n" in result.summary
     assert result.session_id == ""  # not set by default
 
 
@@ -1592,7 +1653,7 @@ class TestFilingAndDedup:
 
         assert result.drafts_created == []
         assert len(result.oversized_items) == 1
-        assert "1 oversized items" in result.summary
+        assert "1 oversized item " in result.summary
         db.reset_engine()
 
     def test_create_failure_does_not_abort_pass(self, tmp_path, monkeypatch):
