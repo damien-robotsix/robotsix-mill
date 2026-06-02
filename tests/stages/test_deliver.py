@@ -483,7 +483,6 @@ def test_multi_repo_happy_path_opens_one_pr_per_repo(tmp_path, monkeypatch):
         [("repo-a", remote_a), ("repo-b", remote_b)],
     )
 
-    pr_urls_by_branch_remote: dict[tuple, str] = {}
     calls = []
 
     def fake_pr(self, *, source_branch, title, body):
