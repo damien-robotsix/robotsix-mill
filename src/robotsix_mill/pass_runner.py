@@ -117,6 +117,32 @@ def _render_verified_table(verified: dict[str, dict]) -> str:
     return "\n".join(lines)
 
 
+# The verified-state table (above) is injected fresh into the agent prompt every
+# run as an EPHEMERAL block. When an agent copies it into its ``updated_memory``
+# output it bakes per-ticket state (gap_id/ticket_id/state) into the cross-run
+# ledger, which then accretes stale ticket rows forever. Memory is for
+# cross-ticket patterns + things to monitor, not a per-ticket diary — ticket
+# history lives in the DB. Strip the section on persist so the invariant holds
+# regardless of whether the agent obeyed the prompt.
+_EPHEMERAL_MEMORY_SECTION_RE = re.compile(
+    r"(?ms)^##\s*Prior proposals\b.*?(?=^##\s|\Z)"
+)
+
+
+def strip_ephemeral_proposal_sections(memory_text: str) -> str:
+    """Remove the DB-derived ``## Prior proposals — verified state`` table from
+    a memory document before it is persisted to the cross-run ledger."""
+    # Fast path: leave text byte-for-byte unchanged when there is nothing to
+    # strip (the vast majority of memory documents) — only normalise whitespace
+    # when a section is actually removed.
+    if not memory_text or "## Prior proposals" not in memory_text:
+        return memory_text
+    cleaned = _EPHEMERAL_MEMORY_SECTION_RE.sub("", memory_text)
+    # collapse the blank-line gap a removed section leaves behind
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned + "\n" if cleaned else ""
+
+
 def _format_recent_proposals(tickets: list[Ticket]) -> str:
     """Format a ``<recent_proposals>`` block for agent prompt injection.
 
@@ -171,7 +197,14 @@ def load_memory(memory_file: Path, max_chars: int | None = None) -> str:
 
 
 def persist_memory(memory_file: Path, text: str) -> None:
-    """Write *text* to *memory_file*, creating parent dirs as needed."""
+    """Write *text* to *memory_file*, creating parent dirs as needed.
+
+    Strips the ephemeral ``## Prior proposals — verified state`` table an agent
+    may have copied back into its memory output — that block is injected fresh
+    each run from the DB and must never accrete in the cross-run ledger (memory
+    is for cross-ticket patterns + things to monitor, not a per-ticket diary).
+    """
+    text = strip_ephemeral_proposal_sections(text)
     if text or not memory_file.exists():
         try:
             memory_file.parent.mkdir(parents=True, exist_ok=True)

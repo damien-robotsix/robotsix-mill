@@ -557,11 +557,16 @@ class RetrospectStage(Stage):
         for w in drift_warnings:
             log.warning("%s: %s", ticket.id, w)
 
-        # Persist the agent's updated memory verbatim.
+        # Persist the agent's updated memory, stripping the ephemeral
+        # verified-state table if the agent copied it back in (it is injected
+        # fresh each run from the DB and must never accrete in the ledger).
         if res.updated_memory:
+            from ..pass_runner import strip_ephemeral_proposal_sections
+
+            persisted_memory = strip_ephemeral_proposal_sections(res.updated_memory)
             try:
                 memory_file.parent.mkdir(parents=True, exist_ok=True)
-                memory_file.write_text(res.updated_memory, encoding="utf-8")
+                memory_file.write_text(persisted_memory, encoding="utf-8")
             except OSError:
                 log.warning(
                     "%s: could not write memory file %s", ticket.id, memory_file
