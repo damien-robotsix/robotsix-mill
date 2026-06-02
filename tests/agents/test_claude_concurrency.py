@@ -9,6 +9,7 @@ import threading
 import time
 
 import pytest
+from pydantic import ValidationError
 
 from robotsix_mill.agents import base
 from robotsix_mill.agents.claude_concurrency import (
@@ -129,7 +130,7 @@ def test_semaphore_bounds_concurrent_run_sync():
 def test_config_default_and_validation():
     assert _settings().claude_max_concurrency == 4
     assert _settings(claude_max_concurrency=1).claude_max_concurrency == 1
-    with pytest.raises(ValueError, match="claude_max_concurrency must be"):
+    with pytest.raises(ValidationError, match="claude_max_concurrency"):
         _settings(claude_max_concurrency=0)
 
 
