@@ -150,7 +150,7 @@ _FIELD_SPECS: Final[tuple[_FieldSpec, ...]] = (
 # on the single dot.  Validated once at import time so a typo here fails
 # immediately rather than at first use.
 for _s in _FIELD_SPECS:
-    assert _s.yaml_path.count(".") == 1, (  # noqa: S101
+    assert _s.yaml_path.count(".") == 1, (  # noqa: S101  # nosec B101
         f"_FieldSpec.yaml_path must have exactly one dot, "
         f"got {_s.yaml_path!r}"
     )
@@ -415,7 +415,7 @@ class MailConfig:
 
 _spec_names = {s.field_name for s in _FIELD_SPECS}
 _dc_names = {f.name for f in dataclasses.fields(MailConfig)}
-assert _spec_names == _dc_names, (  # noqa: S101
+assert _spec_names == _dc_names, (  # noqa: S101  # nosec B101
     f"_FIELD_SPECS / MailConfig drift: "
     f"missing from specs={_dc_names - _spec_names}, "
     f"missing from dataclass={_spec_names - _dc_names}"
