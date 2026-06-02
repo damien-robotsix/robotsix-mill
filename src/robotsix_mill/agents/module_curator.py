@@ -1,3 +1,18 @@
+"""The module-curator agent: codebase-organization oversight.
+
+Compares the live directory tree against ``docs/modules.yaml`` and
+emits draft tickets for detected drift — unclassified files, stale
+paths, and new-module proposals — including reorganization
+opportunities toward the per-module layout
+(``src/<module>``, ``docs/<module>``, ``tests/<module>``). System
+prompt and schema are loaded from
+``agent_definitions/periodic/module_curator.yaml``.
+
+Seam: tests monkeypatch ``run_module_curator_agent``. Structured
+output (``ModuleCuratorResult``) so the runner has a clear result
+to work with; draft lists are clipped to ``MAX_DRAFTS`` (20).
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
