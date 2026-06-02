@@ -234,7 +234,7 @@ class TestClassifier:
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("tool_errors" in f for f in flags.flags)
 
-    def test_traceback_in_status_message_is_a_tool_error(self, settings):
+    def test_explore_storm(self, settings):
         obs = [_obs("explore run") for _ in range(6)]
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("explore_storm" in f for f in flags.flags)
