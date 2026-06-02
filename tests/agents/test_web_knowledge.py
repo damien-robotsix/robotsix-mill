@@ -68,16 +68,16 @@ class TestHelpers:
     @pytest.mark.parametrize(
         "raw, expected",
         [
-            ("imaplib", "imaplib"),                  # kebab-case passthrough
-            ("FastAPI", "fastapi"),                  # mixed case → lowercase
-            ("Open Router", "open-router"),          # spaces → hyphens
-            ("pydantic-ai", "pydantic-ai"),          # hyphens preserved
-            ("scikit_learn", "scikit_learn"),        # underscore preserved
-            ("foo!@#bar", "foo-bar"),                # special chars stripped → hyphen
+            ("imaplib", "imaplib"),  # kebab-case passthrough
+            ("FastAPI", "fastapi"),  # mixed case → lowercase
+            ("Open Router", "open-router"),  # spaces → hyphens
+            ("pydantic-ai", "pydantic-ai"),  # hyphens preserved
+            ("scikit_learn", "scikit_learn"),  # underscore preserved
+            ("foo!@#bar", "foo-bar"),  # special chars stripped → hyphen
             ("--leading-and-trailing--", "leading-and-trailing"),  # trims hyphens
-            ("", "unknown"),                         # empty → "unknown"
-            ("   ", "unknown"),                      # whitespace-only → "unknown"
-            ("!!!", "unknown"),                      # all-special → "unknown"
+            ("", "unknown"),  # empty → "unknown"
+            ("   ", "unknown"),  # whitespace-only → "unknown"
+            ("!!!", "unknown"),  # all-special → "unknown"
         ],
     )
     def test_slug_normalisation(self, raw, expected):
@@ -249,8 +249,17 @@ class _FakeAgent:
     """Stand-in for ``pydantic_ai.Agent`` — captures construction
     kwargs and returns a synthetic result from ``run()``."""
 
-    def __init__(self, *, model=None, system_prompt="", output_type=str,
-                 tools=None, name="", retries=0, **_):
+    def __init__(
+        self,
+        *,
+        model=None,
+        system_prompt="",
+        output_type=str,
+        tools=None,
+        name="",
+        retries=0,
+        **_,
+    ):
         self.model = model
         self.system_prompt = system_prompt
         self.output_type = output_type
@@ -423,9 +432,7 @@ class TestMakeTool:
             seen["question"] = question
             return "delegated answer"
 
-        monkeypatch.setattr(
-            web_knowledge, "run_web_knowledge", fake_run_web_knowledge
-        )
+        monkeypatch.setattr(web_knowledge, "run_web_knowledge", fake_run_web_knowledge)
         tool = make_ask_web_knowledge_tool(s)
         out = asyncio.run(tool("how does X behave on Y?"))
         assert out == "delegated answer"
