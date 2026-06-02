@@ -111,7 +111,8 @@ def test_build_agent_attaches_report_issue_by_default(
 
 def test_noop_title_not_filed(settings):
     """A 'nothing to report' self-report is dropped (no ticket), with a
-    friendly non-error string — shares the retrospect no-op detector."""
+    friendly non-error string — shares the retrospect no-op detector.
+    Completion-announcement suppression is tested separately."""
     tool = make_report_issue_tool(settings, board_id="test-board")
     for t in (
         "No notable issues - clean run",
@@ -123,6 +124,20 @@ def test_noop_title_not_filed(settings):
     assert (
         TicketService(settings, board_id="test-board").list() == []
     )  # zero tickets created
+
+
+def test_completion_announcement_title_not_filed(settings):
+    """Completion-announcement titles are suppressed with a distinct
+    message telling the agent to return its structured result instead."""
+    tool = make_report_issue_tool(settings, board_id="test-board")
+    for t in (
+        "Refine complete: cap rebase-agent retries at 3",
+        "spec produced — refine stage complete",
+    ):
+        out = tool(t, "done")
+        assert "completion announcement suppressed" in out
+        assert "not filed" in out
+    assert TicketService(settings, board_id="test-board").list() == []
 
 
 def test_genuine_terse_title_still_filed(settings):

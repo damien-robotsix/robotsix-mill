@@ -29,6 +29,23 @@ NOOP_MARKERS: tuple[str, ...] = (
 )
 
 
+# Lower-case substrings that mark a title as a completion-announcement
+# no-op — the agent is declaring it's finished, not filing an issue.
+COMPLETION_ANNOUNCEMENT_MARKERS: tuple[str, ...] = (
+    "refine complete",
+    "spec produced",
+    "refinement complete",
+)
+
+
+def is_completion_announcement(title: str | None) -> bool:
+    """True if *title* is a completion-announcement no-op."""
+    t = (title or "").strip().lower()
+    if not t:
+        return False
+    return any(m in t for m in COMPLETION_ANNOUNCEMENT_MARKERS)
+
+
 def is_noop_report(title: str | None) -> bool:
     """True if *title* is an empty or 'nothing to report' no-op."""
     t = (title or "").strip().lower()
