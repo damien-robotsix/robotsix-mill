@@ -133,6 +133,57 @@ def test_implement_complete_ci_failing_transitions_to_fixing_ci(tmp_path, monkey
     assert out.next_state is State.FIXING_CI
 
 
+def _ci_failing_mergeable(monkeypatch):
+    """Patch the forge so the PR is open+mergeable with failing CI."""
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "failure", "failing": []},
+    )
+
+
+def test_implement_complete_ci_failing_behind_main_rebases_before_ci_fix(
+    tmp_path, monkeypatch
+):
+    """CI failing + branch behind main → REBASING (not FIXING_CI).
+
+    A repo-wide gate often fails on code that isn't the ticket's because the
+    branch was cut from an older main. Rebase onto current main first; ci_fix
+    can't fix non-ticket code."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _ci_failing_mergeable(monkeypatch)
+    # Workspace clone present + behind main.
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(merge_mod.git_ops, "branch_is_behind_main", lambda repo: True)
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.REBASING
+
+
+def test_implement_complete_ci_failing_up_to_date_goes_to_ci_fix(tmp_path, monkeypatch):
+    """CI failing + branch NOT behind main → FIXING_CI (genuine failure;
+    a rebase would be a no-op, so don't loop)."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    _ci_failing_mergeable(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(merge_mod.git_ops, "branch_is_behind_main", lambda repo: False)
+    out = MergeStage().run(_implement_complete(ctx), ctx)
+    assert out.next_state is State.FIXING_CI
+
+
 def test_implement_complete_conflicting_transitions_to_rebasing(tmp_path, monkeypatch):
     """PR conflicting → REBASING."""
     ctx = _gh(tmp_path)

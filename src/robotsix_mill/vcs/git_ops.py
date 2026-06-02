@@ -256,6 +256,37 @@ def branch_is_ahead_of_main(repo: Path) -> bool:
         return True
 
 
+def branch_is_behind_main(repo: Path) -> bool:
+    """Return True when ``origin/main`` has commits not on HEAD.
+
+    Counts commits on ``origin/main`` that are NOT on HEAD (the
+    ``rev-list HEAD..origin/main`` semantic) — i.e. HEAD was cut from an older
+    main and main has advanced since. The merge stage uses this to rebase a
+    stale PR branch onto current main BEFORE handing a CI failure to ci_fix: a
+    repo-wide gate (ruff/mypy) often fails on code that isn't the ticket's
+    because main gained a fix the branch lacks; a rebase fixes it, ci_fix can't.
+
+    Fetches ``origin main`` first so the local ref is current. A fetch or
+    rev-list failure returns False — don't trigger a pointless rebase on a
+    transient git error; the genuine-failure path (ci_fix) runs instead.
+    """
+    try:
+        _git(repo, "fetch", "origin", "main")
+    except subprocess.CalledProcessError:
+        return False
+    result = subprocess.run(
+        ["git", "-C", str(repo), "rev-list", "--count", "HEAD..origin/main"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    try:
+        return int(result.stdout.strip()) > 0
+    except ValueError:
+        return False
+
+
 def changed_files(repo: Path, target_branch: str) -> list[str]:
     """Return every file that would land in the next commit vs
     ``origin/<target_branch>`` — including untracked new files.
