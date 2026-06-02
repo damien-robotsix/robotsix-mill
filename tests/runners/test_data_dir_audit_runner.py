@@ -1105,6 +1105,7 @@ def _s(settings=None, **overrides):
     """Shorthand to make a tiny Settings with defaults suitable for delta tests."""
     if settings is None:
         import copy
+
         s = Settings(data_dir="/tmp")
         s = copy.deepcopy(s)
     else:
@@ -1135,9 +1136,13 @@ class TestDeltaCompute:
         prior = {"f": {"size_bytes": 1_000_000, "mtime": 1}}
         current = {"f": {"size_bytes": 12_000_000, "mtime": 2}}
         flags = _compute_growth_deltas(
-            prior, current,
-            _s(data_dir_audit_growth_delta_bytes=10_000_000,
-               data_dir_audit_growth_delta_pct=9999))
+            prior,
+            current,
+            _s(
+                data_dir_audit_growth_delta_bytes=10_000_000,
+                data_dir_audit_growth_delta_pct=9999,
+            ),
+        )
         assert len(flags) == 1
         assert flags[0]["threshold_exceeded"] == "bytes"
         assert flags[0]["delta_bytes"] == 11_000_000
@@ -1146,10 +1151,12 @@ class TestDeltaCompute:
         prior = {"f": {"size_bytes": 10_000_000, "mtime": 1}}
         current = {"f": {"size_bytes": 14_000_000, "mtime": 2}}
         flags = _compute_growth_deltas(
-            prior, current, _s(
+            prior,
+            current,
+            _s(
                 data_dir_audit_growth_delta_bytes=10_000_000,
                 data_dir_audit_growth_delta_pct=20,
-            )
+            ),
         )
         assert len(flags) == 1
         # 4M growth < 10M bytes threshold, but 40% >= 20%
@@ -1160,10 +1167,12 @@ class TestDeltaCompute:
         prior = {"f": {"size_bytes": 1_000_000, "mtime": 1}}
         current = {"f": {"size_bytes": 20_000_000, "mtime": 2}}
         flags = _compute_growth_deltas(
-            prior, current, _s(
+            prior,
+            current,
+            _s(
                 data_dir_audit_growth_delta_bytes=10_000_000,
                 data_dir_audit_growth_delta_pct=20,
-            )
+            ),
         )
         assert len(flags) == 1
         assert flags[0]["threshold_exceeded"] == "both"
@@ -1173,10 +1182,12 @@ class TestDeltaCompute:
         prior = {"f": {"size_bytes": 0, "mtime": 1}}
         current = {"f": {"size_bytes": 500, "mtime": 2}}
         flags = _compute_growth_deltas(
-            prior, current, _s(
+            prior,
+            current,
+            _s(
                 data_dir_audit_growth_delta_bytes=100,
                 data_dir_audit_growth_delta_pct=20,
-            )
+            ),
         )
         assert len(flags) == 1
         assert flags[0]["delta_pct"] == 100.0
@@ -1192,10 +1203,12 @@ class TestDeltaCompute:
         prior = {"d/": {"size_bytes": 1000, "mtime": 1}}
         current = {"d/": {"size_bytes": 1500, "mtime": 2}}
         flags = _compute_growth_deltas(
-            prior, current, _s(
+            prior,
+            current,
+            _s(
                 data_dir_audit_growth_delta_bytes=100,
                 data_dir_audit_growth_delta_pct=20,
-            )
+            ),
         )
         assert len(flags) == 1
         assert flags[0]["path"] == "d/"

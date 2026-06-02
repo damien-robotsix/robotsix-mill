@@ -372,9 +372,7 @@ def _load_growth_state(state_path: Path) -> dict[str, dict]:
             }
         return {}
     except Exception:  # noqa: BLE001 — corrupt state = first-run
-        log.warning(
-            "data_dir_audit_state.json unreadable at %s — ignoring", state_path
-        )
+        log.warning("data_dir_audit_state.json unreadable at %s — ignoring", state_path)
         return {}
 
 
@@ -418,6 +416,49 @@ def _enumerate_boards(settings: Settings) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _record_entry(entry: Path, board_dir: Path, result: dict[str, dict]) -> None:
+    """Add a single filesystem *entry* to *result* if it qualifies.
+
+    Symlinks, unreadable entries, and the audit state file itself are
+    skipped silently.
+    """
+    if entry.is_symlink():
+        return
+    try:
+        stat = entry.stat()
+    except OSError:
+        return
+    rel = entry.relative_to(board_dir).as_posix()
+    if rel == "data_dir_audit_state.json":
+        return
+    if entry.is_file():
+        result[rel] = {"size_bytes": stat.st_size, "mtime": stat.st_mtime}
+    elif entry.is_dir():
+        # Append trailing '/' so directory keys are distinguishable
+        # from file keys when computing cumulative sizes.
+        result[rel + "/"] = {"size_bytes": 0, "mtime": stat.st_mtime}
+
+
+def _compute_cumulative_dir_sizes(result: dict[str, dict]) -> None:
+    """Fill in cumulative directory sizes in *result* (in place).
+
+    For each directory key, sum the sizes of all files whose path
+    starts with that directory prefix. Sort deepest-first so parent
+    directories naturally include their subdirectory contents. Only
+    file entries (keys not ending with "/") are summed — each file is
+    counted once per containing directory.
+    """
+    dir_keys = {k for k in result if k.endswith("/")}
+    for dir_key in sorted(dir_keys, key=len, reverse=True):
+        cumulative = 0
+        for path_key, info in result.items():
+            if path_key == dir_key or not path_key.startswith(dir_key):
+                continue
+            if not path_key.endswith("/"):
+                cumulative += info["size_bytes"]
+        result[dir_key]["size_bytes"] = cumulative
+
+
 def _scan_board_sizes(board_dir: Path) -> dict[str, dict]:
     """Walk *board_dir* and record file sizes + cumulative directory sizes.
 
@@ -433,43 +474,10 @@ def _scan_board_sizes(board_dir: Path) -> dict[str, dict]:
     result: dict[str, dict] = {}
     # First pass: collect all file entries (skipping symlinks + state file).
     for entry in board_dir.rglob("*"):
-        if entry.is_symlink():
-            continue
-        try:
-            stat = entry.stat()
-        except OSError:
-            continue
-        rel = entry.relative_to(board_dir).as_posix()
-        # Exclude the state file from tracking
-        if rel == "data_dir_audit_state.json":
-            continue
-        if entry.is_file():
-            result[rel] = {"size_bytes": stat.st_size, "mtime": stat.st_mtime}
-        elif entry.is_dir():
-            # Append trailing '/' so directory keys are distinguishable
-            # from file keys when computing cumulative sizes.
-            result[rel + "/"] = {"size_bytes": 0, "mtime": stat.st_mtime}
+        _record_entry(entry, board_dir, result)
 
     # Second pass: compute cumulative directory sizes.
-    # For each directory key, sum the sizes of all files whose path
-    # starts with that directory prefix.  Sort deepest-first so
-    # parent directories naturally include their subdirectory
-    # contents.  Only file entries (keys not ending with "/") are
-    # summed — each file is counted once per containing directory.
-    # Subdirectory cumulative entries are computed independently
-    # (they each sum the files under their own prefix).
-    dir_keys = {k for k in result if k.endswith("/")}
-    for dir_key in sorted(dir_keys, key=len, reverse=True):
-        prefix = dir_key  # already ends with /
-        cumulative = 0
-        for path_key, info in result.items():
-            if path_key == dir_key:
-                continue
-            if not path_key.startswith(prefix):
-                continue
-            if not path_key.endswith("/"):
-                cumulative += info["size_bytes"]
-        result[dir_key]["size_bytes"] = cumulative
+    _compute_cumulative_dir_sizes(result)
 
     return result
 
@@ -743,7 +751,9 @@ def run_data_dir_audit_pass(
         prior = _load_growth_state(state_path)
         board_dir = settings.data_dir / board_id
         current = _scan_board_sizes(board_dir)
-        board_flags = _compute_growth_deltas(prior, current, settings, board_id=board_id)
+        board_flags = _compute_growth_deltas(
+            prior, current, settings, board_id=board_id
+        )
 
         # Persist current scan as new state (prunes deleted paths
         # naturally — only currently-existing paths are written).
