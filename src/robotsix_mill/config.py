@@ -681,7 +681,7 @@ class Settings(BaseSettings):
     # the target branch), the merge stage invokes the rebase agent to
     # resolve conflicts automatically.  This is the max number of
     # rebase attempts per ticket before escalating to BLOCKED.
-    rebase_max_attempts: int = Field(default=5)
+    rebase_max_attempts: int = Field(default=3)
 
     # --- merge stage: auto-fix of failing remote CI ---
     # When a PR in human_mr_approval has failing CI checks, the merge stage
