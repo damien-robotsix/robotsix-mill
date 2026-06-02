@@ -22,7 +22,6 @@ from robotsix_mill.trace_review_runner import (
     _Baselines,
     _classify_trace,
     _compute_baselines,
-    _find_prior_matching_ticket,
     _load_watermark,
     _median,
     _normalize,
@@ -757,9 +756,7 @@ class TestPreFilingDedup:
     integration into ``run_trace_review_pass``."""
 
     _TARGET_PATH = "src/robotsix_mill/foo.py"
-    _FINDING_SYMPTOM = (
-        "wrapper at src/robotsix_mill/foo.py raised on tool error"
-    )
+    _FINDING_SYMPTOM = "wrapper at src/robotsix_mill/foo.py raised on tool error"
 
     def _patch_seams(self, monkeypatch, finding):
         """Wire up langfuse + inspector seams so a single flagged trace
@@ -820,6 +817,7 @@ class TestPreFilingDedup:
         self._patch_seams(monkeypatch, self._finding())
 
         import logging
+
         caplog.set_level(logging.INFO, logger="robotsix_mill.trace_review")
         result = run_trace_review_pass(
             session_id="sess-dedup-done",
@@ -852,9 +850,7 @@ class TestPreFilingDedup:
         )
         assert len(result.drafts_created) == 1
 
-    def test_file_when_only_match_is_closed_declined(
-        self, settings, monkeypatch
-    ):
+    def test_file_when_only_match_is_closed_declined(self, settings, monkeypatch):
         svc, ticket = self._seed_prior_ticket(
             settings,
             title="trace-review: tool_error — earlier wrapper bug",
@@ -873,9 +869,7 @@ class TestPreFilingDedup:
         # A fresh draft IS filed — the closed/declined ticket should not suppress.
         assert len(result.drafts_created) == 1
 
-    def test_skip_when_match_is_closed_after_done(
-        self, settings, monkeypatch
-    ):
+    def test_skip_when_match_is_closed_after_done(self, settings, monkeypatch):
         svc, ticket = self._seed_prior_ticket(
             settings,
             title="trace-review: tool_error — earlier wrapper bug",
@@ -894,9 +888,7 @@ class TestPreFilingDedup:
         )
         assert result.drafts_created == []
 
-    def test_recency_window_excludes_older_matches(
-        self, settings, monkeypatch
-    ):
+    def test_recency_window_excludes_older_matches(self, settings, monkeypatch):
         from datetime import timedelta
 
         svc, ticket = self._seed_prior_ticket(
@@ -916,9 +908,7 @@ class TestPreFilingDedup:
 
         old = datetime.now(timezone.utc) - timedelta(days=30)
         with db_session(settings, "test-board") as s:
-            row = s.exec(
-                _select(_Ticket).where(_Ticket.id == ticket.id)
-            ).first()
+            row = s.exec(_select(_Ticket).where(_Ticket.id == ticket.id)).first()
             assert row is not None
             row.created_at = old
             s.add(row)
@@ -932,9 +922,7 @@ class TestPreFilingDedup:
         # Older-than-window match is ignored; a fresh draft is filed.
         assert len(result.drafts_created) == 1
 
-    def test_symptom_fingerprint_matches_without_file_path(
-        self, settings, monkeypatch
-    ):
+    def test_symptom_fingerprint_matches_without_file_path(self, settings, monkeypatch):
         # Seed a ticket whose title carries the symptom fingerprint, but
         # whose body does NOT mention the candidate's target file (n/a
         # here since target_files=[]).
