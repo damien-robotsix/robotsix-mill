@@ -85,7 +85,7 @@ modules:
       Watermark-aware IMAP fetch logic.
     paths:
       - src/robotsix_auto_mail/fetch.py
-      - tests/test_fetch.py
+      - tests/fetch/test_fetch.py
 
   - id: imap
     description: >-
