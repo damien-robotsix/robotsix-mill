@@ -25,3 +25,4 @@ modules:
     paths:
       - src/robotsix_llmio/claude_sdk/**
       - tests/claude_sdk/test_claude_sdk.py
+      - tests/claude_sdk/test_confine_hook.py
