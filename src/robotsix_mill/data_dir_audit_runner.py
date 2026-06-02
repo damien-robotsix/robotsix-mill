@@ -50,6 +50,48 @@ class OrphanWorkspace:
     dir_size_bytes: int
 
 
+def _file_size_or_none(fp: str) -> int | None:
+    """Return ``os.path.getsize(fp)``, or ``None`` on OSError (logged)."""
+    try:
+        return os.path.getsize(fp)
+    except OSError as err:
+        log.warning("Cannot access %s: %s", fp, err)
+        return None
+
+
+def _accumulate_ancestors(
+    fp: str, data_dir: Path, size: int, dir_totals: defaultdict[str, int]
+) -> None:
+    """Add *size* to every ancestor of *fp* up to (but excluding) *data_dir*."""
+    ancestor = os.path.dirname(fp)
+    while ancestor != str(data_dir):
+        parent_rel = os.path.relpath(ancestor, data_dir)
+        dir_totals[parent_rel] += size
+        ancestor = os.path.dirname(ancestor)
+
+
+def _collect_sizes(
+    data_dir: Path,
+) -> tuple[dict[str, int], defaultdict[str, int]]:
+    """Walk *data_dir* and return (file_sizes, dir_totals)."""
+    file_sizes: dict[str, int] = {}
+    dir_totals: defaultdict[str, int] = defaultdict(int)
+
+    for dirpath_str, _dirnames, filenames in os.walk(data_dir, followlinks=False):
+        for fname in filenames:
+            fp = os.path.join(dirpath_str, fname)
+            if os.path.islink(fp):
+                continue
+            size = _file_size_or_none(fp)
+            if size is None or size == 0:
+                continue
+            rel = os.path.relpath(fp, data_dir)
+            file_sizes[rel] = size
+            _accumulate_ancestors(fp, data_dir, size, dir_totals)
+
+    return file_sizes, dir_totals
+
+
 def find_largest_items(
     data_dir: Path,
     top_n: int = 10,
@@ -63,44 +105,18 @@ def find_largest_items(
     if not data_dir.is_dir():
         return []
 
-    file_sizes: dict[str, int] = {}
-    dir_totals: defaultdict[str, int] = defaultdict(int)
+    file_sizes, dir_totals = _collect_sizes(data_dir)
 
-    for dirpath_str, dirnames, filenames in os.walk(data_dir, followlinks=False):
-        for fname in filenames:
-            fp = os.path.join(dirpath_str, fname)
-            if os.path.islink(fp):
-                continue
-            try:
-                size = os.path.getsize(fp)
-            except OSError as err:
-                log.warning("Cannot access %s: %s", fp, err)
-                continue
-            if size == 0:
-                continue
-            rel = os.path.relpath(fp, data_dir)
-            file_sizes[rel] = size
-
-            # Add to ancestor directories
-            ancestor = os.path.dirname(fp)
-            while ancestor != str(data_dir):
-                parent_rel = os.path.relpath(ancestor, data_dir)
-                dir_totals[parent_rel] += size
-                ancestor = os.path.dirname(ancestor)
-
-    results: list[dict] = []
-
-    # Collect files
-    for rel, size in file_sizes.items():
-        if size >= threshold_bytes:
-            results.append({"path": rel, "size_bytes": size, "is_directory": False})
-
-    # Collect directories (exclude root)
-    for rel, size in dir_totals.items():
-        if rel == "." or rel == "":
-            continue
-        if size >= threshold_bytes:
-            results.append({"path": rel, "size_bytes": size, "is_directory": True})
+    results: list[dict] = [
+        {"path": rel, "size_bytes": size, "is_directory": False}
+        for rel, size in file_sizes.items()
+        if size >= threshold_bytes
+    ]
+    results.extend(
+        {"path": rel, "size_bytes": size, "is_directory": True}
+        for rel, size in dir_totals.items()
+        if rel not in (".", "") and size >= threshold_bytes
+    )
 
     # Sort descending by size, then path for determinism
     results.sort(key=lambda r: (-r["size_bytes"], r["path"]))
