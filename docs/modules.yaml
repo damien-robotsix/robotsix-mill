@@ -469,6 +469,7 @@ modules:
     paths:
       - agent_definitions/*.yaml
       - agent_definitions/periodic/*.yaml
+      - agent_definitions/pipeline/*.yaml
       - expert_definitions/*.yaml
       - agent_definitions/language_instructions/*.md
     dependencies: []
