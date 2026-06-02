@@ -397,10 +397,10 @@ modules:
       - src/robotsix_mill/agents/meta_triage.py
       - src/robotsix_mill/meta_runner.py
       - src/robotsix_mill/meta_workspace.py
-      - tests/agents/test_meta_agent_build.py
-      - tests/agents/test_meta_triage.py
-      - tests/test_meta_runner.py
-      - tests/test_meta_workspace.py
+      - tests/meta/test_meta_agent_build.py
+      - tests/meta/test_meta_triage.py
+      - tests/meta/test_meta_runner.py
+      - tests/meta/test_meta_workspace.py
     dependencies: [config, core, agent-infra, agent-tools, forge, vcs, runners, runtime]
 
   # -------------------------------------------------------------------
