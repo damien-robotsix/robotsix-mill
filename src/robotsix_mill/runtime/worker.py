@@ -160,15 +160,11 @@ async def _handle_stage_error(
             f"Transient: {type(error).__name__} persisted after "
             f"{max_attempts} attempts — last: {error}"
         )[:200]
-        await _block_ticket_and_notify(
-            ticket_id, ctx, stage_name, note, trace_id
-        )
+        await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
     else:
         # FATAL — block immediately.
         note = f"Fatal: {type(error).__name__}: {error}"[:200]
-        await _block_ticket_and_notify(
-            ticket_id, ctx, stage_name, note, trace_id
-        )
+        await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
 
 
 def _maybe_reevaluate_epic(
@@ -315,9 +311,7 @@ async def _process_ticket_inner(
                 timeout,
             )
             note = f"stage {stage_name} timed out after {timeout}s"[:200]
-            await _block_ticket_and_notify(
-                ticket_id, ctx, stage_name, note, trace_id
-            )
+            await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
             return
         except NotImplementedError as e:
             log.warning(
