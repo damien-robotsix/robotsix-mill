@@ -151,7 +151,7 @@ def run_implement_agent(
                 f"primary={e}, fallback={fallback_e}",
                 [],
             ) from e
-    except (AgentBudgetError, AgentRunError):
+    except AgentBudgetError, AgentRunError:
         raise
     except Exception as e:  # noqa: BLE001 — block-as-resumable
         raise AgentRunError(str(e), [], cause=e) from e
