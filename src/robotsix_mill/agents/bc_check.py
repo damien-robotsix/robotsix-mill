@@ -43,6 +43,7 @@ def run_bc_check_agent(
     settings: Settings,
     memory: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
     repo_dir=None,
     definition_override=None,
 ) -> BcCheckResult:
@@ -86,5 +87,6 @@ def run_bc_check_agent(
         repo_dir=repo_dir,
         memory=memory,
         recent_proposals=recent_proposals,
+        verified_proposals=verified_proposals,
         prompt_tail="Scan the repository for backward-compatibility code and return your findings.",
     )

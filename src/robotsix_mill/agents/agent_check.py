@@ -43,6 +43,7 @@ def run_agent_check_agent(
     memory_dir: Path | None = None,
     memory: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
 ) -> AgentCheckResult:
     """Run the agent-definition coherence inspection pass.
 
@@ -77,6 +78,7 @@ def run_agent_check_agent(
         repo_dir=repo_dir,
         memory=memory,
         recent_proposals=recent_proposals,
+        verified_proposals=verified_proposals,
         prompt_tail="Inspect all agent definitions and return your coherence findings.",
         extra_roots=extra_roots,
     )

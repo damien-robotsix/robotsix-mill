@@ -24,6 +24,7 @@ def run_periodic_agent(
     repo_dir: Path | None,
     memory: str,
     recent_proposals: str,
+    verified_proposals: str = "",
     prompt_tail: str,
     include_forge_url: bool = False,
     include_jscpd: bool = False,
@@ -55,6 +56,13 @@ def run_periodic_agent(
         The agent's memory ledger as a Markdown string.
     recent_proposals:
         Prior proposals string from the pass runner.
+    verified_proposals:
+        Ephemeral verified-state table (rendered Markdown) recomputed
+        from the ticket DB every pass and injected into the prompt
+        between *recent_proposals* and *memory*. Passed separately —
+        not concatenated onto *memory* — so it does not round-trip
+        through the agent's ``updated_memory`` field into the persisted
+        ledger.  Empty string means no prior proposals to verify.
     prompt_tail:
         Agent-specific final sentence of the prompt.
     include_forge_url:
@@ -166,6 +174,9 @@ def run_periodic_agent(
     from .prompt_blocks import section
 
     prompt = recent_proposals
+
+    if verified_proposals:
+        prompt += "\n\n" + verified_proposals
 
     if include_forge_url:
         forge_url = settings.forge_remote_url or "(not configured)"

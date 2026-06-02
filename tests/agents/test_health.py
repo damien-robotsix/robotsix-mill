@@ -58,7 +58,7 @@ def _make_health_agent(
     if draft_bodies is None:
         draft_bodies = []
 
-    def agent_fn(*, settings, memory, recent_proposals=""):
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
         return _FakeHealthAgentResult(
             updated_memory=updated_memory,
             draft_titles=draft_titles,

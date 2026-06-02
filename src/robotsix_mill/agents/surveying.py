@@ -32,6 +32,7 @@ def run_survey_agent(
     settings: Settings,
     memory: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
     repo_dir=None,
     definition_override=None,
 ) -> SurveyResult:
@@ -84,6 +85,7 @@ def run_survey_agent(
         repo_dir=repo_dir,
         memory=memory,
         recent_proposals=recent_proposals,
+        verified_proposals=verified_proposals,
         prompt_tail="Survey similar open-source projects and return your proposals.",
         include_forge_url=True,
         usage_limits=limits,

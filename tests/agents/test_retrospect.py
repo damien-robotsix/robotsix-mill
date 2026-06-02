@@ -676,7 +676,10 @@ def test_no_marker_when_draft_gap_id_is_none(tmp_path, monkeypatch):
 
 def test_verified_state_block_in_memory(tmp_path, monkeypatch):
     """When a prior retrospect-spawned draft exists and is CLOSED with DONE,
-    the verified-state table appears in the memory passed to the agent."""
+    the verified-state table is passed to the agent as its own
+    ephemeral ``verified_proposals`` kwarg — NOT concatenated onto the
+    persisted memory ledger (which would round-trip back into
+    ``updated_memory`` and bake the DB-derived table into the file)."""
     ctx = _ctx(tmp_path)
     _no_langfuse(monkeypatch)
 
@@ -695,20 +698,69 @@ def test_verified_state_block_in_memory(tmp_path, monkeypatch):
     ctx.service.transition(draft.id, State.CLOSED)
 
     captured_memory = []
+    captured_verified = []
 
     def capture(**kwargs):
         captured_memory.append(kwargs.get("memory", ""))
+        captured_verified.append(kwargs.get("verified_proposals", ""))
         return _default_result()
 
     monkeypatch.setattr(retrospecting, "run_retrospect_agent", capture)
 
     t = _done(ctx)
     RetrospectStage().run(t, ctx)
-    assert len(captured_memory) == 1
-    mem = captured_memory[0]
-    assert "## Prior proposals — verified state" in mem
-    assert "slow_ci" in mem
-    assert "merged" in mem
+    assert len(captured_verified) == 1
+    verified = captured_verified[0]
+    assert "## Prior proposals — verified state" in verified
+    assert "slow_ci" in verified
+    assert "merged" in verified
+
+    # The verified-state header must NOT appear in the memory kwarg —
+    # that would round-trip into the persisted ledger.
+    assert "## Prior proposals — verified state" not in captured_memory[0]
+
+
+def test_retrospect_verified_state_not_persisted_to_memory_file(tmp_path, monkeypatch):
+    """Regression: the runner-injected verified-state table must NEVER
+    end up in the retrospect memory file on disk, even though the
+    retrospect agent is instructed to echo memory back via
+    ``updated_memory``.  Before this fix the table was prepended to
+    ``memory_text`` and round-tripped through the agent into the
+    persisted ledger, producing a self-perpetuating leak across ticks.
+    """
+    ctx = _ctx(tmp_path)
+    _no_langfuse(monkeypatch)
+
+    # Create a CLOSED retrospect-spawned ticket so verification yields
+    # a non-empty table.
+    draft = ctx.service.create(
+        "Fix slow CI",
+        "Speed up CI.\n\n<!-- retrospect-gap-id: slow_ci -->",
+        source=SourceKind.RETROSPECT,
+    )
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+        State.DONE,
+        State.CLOSED,
+    ):
+        ctx.service.transition(draft.id, st)
+
+    # Mimic the real retrospect agent: echo the ``memory`` kwarg back
+    # as ``updated_memory`` (what the prompt instructs it to do).
+    def echo_memory(**kwargs):
+        return _default_result(updated_memory=kwargs.get("memory", ""))
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", echo_memory)
+
+    t = _done(ctx)
+    RetrospectStage().run(t, ctx)
+
+    memory_file = ctx.settings.memory_file_for("retrospect", "test-board")
+    persisted = memory_file.read_text(encoding="utf-8") if memory_file.exists() else ""
+    assert "## Prior proposals — verified state" not in persisted
 
 
 def test_verify_prior_proposals_no_crash_on_markerless_retrospect_draft(tmp_path):

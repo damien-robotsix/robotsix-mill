@@ -53,6 +53,7 @@ def run_bespoke_agent(
     definition: BespokeAgentDefinition,
     memory: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
     repo_dir: Path | None = None,
 ) -> BespokeResult:
     """Execute one bespoke-agent pass.
@@ -111,8 +112,11 @@ def run_bespoke_agent(
     )
 
     forge_url = settings.forge_remote_url or "(not configured)"
+    verified_block = ("\n\n" + verified_proposals) if verified_proposals else ""
     prompt = (
         f"{recent_proposals}"
+        + verified_block
+        + "\n\n"
         + section("forge-remote-url", forge_url)
         + "\n\n"
         + section("memory", memory or "(empty — start a new ledger)")
