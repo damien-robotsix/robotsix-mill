@@ -231,9 +231,11 @@ modules:
     paths:
       - src/robotsix_mill/agents/__init__.py
       - src/robotsix_mill/agents/base.py
+      - src/robotsix_mill/agents/claude_concurrency.py
       - src/robotsix_mill/agents/yaml_loader.py
       - src/robotsix_mill/agents/expert_loader.py
       - src/robotsix_mill/agents/expert_manager.py
+      - src/robotsix_mill/agents/fallback.py
       - src/robotsix_mill/agents/tool_registry.py
       - src/robotsix_mill/agents/prompt_blocks.py
       - src/robotsix_mill/agents/retry.py
