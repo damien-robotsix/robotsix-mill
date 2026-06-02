@@ -1731,3 +1731,19 @@ def test_strip_noop_without_table():
         "## Patterns\nfoo"
     )
     assert strip_ephemeral_proposal_sections("") == ""
+
+
+def test_strip_preserves_prose_after_table():
+    """Only the heading + table rows are removed — trailing cross-ticket notes
+    (no bounding ## heading) must survive (regression: a whole ledger got
+    wiped to empty when prose followed the table)."""
+    from robotsix_mill.pass_runner import strip_ephemeral_proposal_sections
+
+    mem = (
+        "## Prior proposals — verified state\n\n"
+        "| gap_id | state |\n|--------|-------|\n| foo | CLOSED |\n\n"
+        "Real cross-ticket pattern worth keeping.\nA thing to monitor.\n"
+    )
+    out = strip_ephemeral_proposal_sections(mem)
+    assert "Prior proposals" not in out and "foo | CLOSED" not in out
+    assert "Real cross-ticket pattern" in out and "thing to monitor" in out
