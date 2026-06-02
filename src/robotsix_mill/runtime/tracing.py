@@ -130,50 +130,6 @@ def clear_export_failures() -> None:
         _export_failures.clear()
 
 
-def _check_rejected_generation(span) -> None:  # noqa: ANN001
-    """Annotate per-model-call spans where pydantic-ai's structured-
-    output validator threw before ``gen_ai.output.messages`` was set.
-
-    The model produced output tokens (paid for, visible in
-    ``gen_ai.usage.output_tokens``) but the response was rejected so
-    Langfuse renders empty output. Without this annotation the
-    operator has no signal of the silent failure.
-
-    Gated on ``gen_ai.operation.name == "chat"`` and the presence of
-    ``gen_ai.input.messages`` so AGENT-orchestration spans (which
-    aggregate child outputs and never carry their own output.messages)
-    don't get false-positive warnings.
-
-    Mutates ``span._attributes`` directly — OpenTelemetry's
-    ``BoundedAttributes`` is a regular ``MutableMapping`` subclass and
-    accepts writes even on already-ended spans.
-    """
-    attrs = span.attributes or {}
-    is_per_call_span = attrs.get("gen_ai.operation.name") == "chat" and attrs.get(
-        "gen_ai.input.messages"
-    )
-    if not is_per_call_span:
-        return
-    try:
-        out_tokens = int(attrs.get("gen_ai.usage.output_tokens") or 0)
-    except TypeError, ValueError:
-        out_tokens = 0
-    if out_tokens <= 0 or attrs.get("gen_ai.output.messages"):
-        return
-    msg = (
-        f"model produced {out_tokens} output token(s) but no "
-        "gen_ai.output.messages was set — pydantic-ai likely "
-        "rejected the response (structured-output validation "
-        "or schema mismatch). Check the parent run for an "
-        "UnexpectedModelBehavior / output-retry failure."
-    )
-    try:
-        span._attributes["langfuse.observation.status_message"] = msg
-        span._attributes["langfuse.observation.level"] = "WARNING"
-    except Exception:  # noqa: BLE001 — never break exporter
-        pass
-
-
 def make_session_id(kind: str) -> str:
     """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid8>``.
 
@@ -496,9 +452,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             global TracerProvider so each repo's traces land in its own
             Langfuse project.
 
-            Also annotates per-model-call spans where pydantic-ai's
-            structured-output validator silently rejected a response —
-            see :func:`_check_rejected_generation`."""
+            """
 
             def __init__(self, exp, *, target_public_key: str):
                 super().__init__(exp)
@@ -508,7 +462,6 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
                 attrs = span.attributes or {}
                 if attrs.get("langfuse.public_key") != self._target_pk:
                     return
-                _check_rejected_generation(span)
                 super().on_end(span)
 
         # Use the provider WE built (stored at init), not the OTel

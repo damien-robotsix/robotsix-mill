@@ -232,7 +232,6 @@ def _classify_trace(
     # Per-tool call count + tool-error scan in a single pass.
     tool_calls: dict[str, int] = {}
     tool_errors = 0
-    rejected_generations = 0
     ask_user_calls = 0
     explore_runs = 0
     for o in observations:
@@ -261,15 +260,8 @@ def _classify_trace(
             ):
                 tool_errors += 1
 
-        # Rejected-generation marker from tracing._check_rejected_generation.
-        level = (o.get("level") or "").upper()
-        if level == "WARNING" and "pydantic-ai likely" in status_msg:
-            rejected_generations += 1
-
     if tool_errors:
         flags.append(f"tool_errors ({tool_errors})")
-    if rejected_generations:
-        flags.append(f"rejected_generations ({rejected_generations})")
     if explore_runs > 5:
         flags.append(f"explore_storm ({explore_runs} explore runs)")
     if ask_user_calls > 1:
