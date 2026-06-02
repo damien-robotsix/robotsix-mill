@@ -153,20 +153,29 @@ class DeliverStage(Stage):
                 f"push failed — resumable: {(e.stderr or '')[:300]}",
             )
 
-        # Guard: skip PR creation when the branch has no new commits
-        # relative to origin/main. This avoids a 422 "No commits
-        # between main and branch" from GitHub when the implement agent
-        # produced no net diff.
+        # Guard: skip PR creation when the branch has no NET diff relative to
+        # origin/main. This avoids a 422 "No commits between main and branch"
+        # from GitHub. Two distinct cases both produce that 422 and both must
+        # route to DONE here:
+        #   1. the branch carries no commits ahead of main at all
+        #      (``branch_is_ahead_of_main`` is False); and
+        #   2. the branch carries a commit (ahead by commit count) whose net
+        #      content is identical to main — e.g. main independently landed
+        #      the same change, or the commit is a no-op. ``branch_is_ahead``
+        #      is True here, but the forge still sees "no commits between", so
+        #      ``branch_has_net_diff`` is the check that actually matches the
+        #      forge's own emptiness test.
         #
-        # Route to DONE rather than BLOCKED: the implement stage's
-        # own ``no_change_needed`` gate (and its silent-no-change
-        # BLOCK on fresh runs) has already filtered out the cases
-        # where there *should* have been a diff. By the time we
-        # reach deliver with an empty branch, the conclusion is
-        # "the spec is already satisfied; there is nothing to ship."
-        # Mirrors refine's ``no_change_needed`` bypass — same shape,
+        # Route to DONE rather than BLOCKED: the implement stage's own
+        # ``no_change_needed`` gate (and its silent-no-change BLOCK on fresh
+        # runs) has already filtered out the cases where there *should* have
+        # been a diff. By the time we reach deliver with an empty branch, the
+        # conclusion is "the spec is already satisfied; there is nothing to
+        # ship." Mirrors refine's ``no_change_needed`` bypass — same shape,
         # just one stage later.
-        if not git_ops.branch_is_ahead_of_main(repo_dir):
+        if not git_ops.branch_is_ahead_of_main(
+            repo_dir
+        ) or not git_ops.branch_has_net_diff(repo_dir):
             return Outcome(
                 State.DONE,
                 "no change needed — branch contains no new commits vs "
