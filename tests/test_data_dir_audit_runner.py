@@ -2,14 +2,19 @@
 
 Covers:
 - ticket 2 of the epic: ``find_largest_items`` (top-N largest files/dirs)
+- ticket 4 of the epic: ``check_unbounded_candidates`` (unbounded-
+  collection candidate detection) + its integration into
+  ``run_data_dir_audit_pass``.
 - ticket 5 of the epic: ``find_orphan_workspaces`` + its integration
   into ``run_data_dir_audit_pass``.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+from pathlib import Path
 
 import pytest
 
@@ -18,8 +23,14 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import Ticket
 from robotsix_mill.core.states import State
 from robotsix_mill.data_dir_audit_runner import (
+    _CI_MONITOR_STATE_CAP_BYTES,
+    _CI_PATTERNS_CAP_BYTES,
+    _GENERIC_JSON_CAP_BYTES,
+    _RUNS_JSON_CAP_BYTES,
+    _RUNS_JSON_MAX_ENTRIES,
     DataDirAuditPassResult,
     OrphanWorkspace,
+    check_unbounded_candidates,
     find_largest_items,
     find_orphan_workspaces,
     run_data_dir_audit_pass,
@@ -31,11 +42,13 @@ from robotsix_mill.data_dir_audit_runner import (
 # ---------------------------------------------------------------------------
 
 
-def _make_settings(tmp_path, **overrides) -> Settings:
+def _make_settings(tmp_path: Path, **overrides) -> Settings:
     """Build a fresh Settings rooted at *tmp_path*.
 
     Engines are also reset so each test gets a clean per-board DB
-    cache (the engine cache survives across tests otherwise).
+    cache (the engine cache survives across tests otherwise). Extra
+    keyword overrides are forwarded to :class:`Settings` so the
+    unbounded-candidate tests can dial ``max_memory_chars`` down.
     """
     overrides.setdefault("data_dir", str(tmp_path))
     overrides.setdefault("require_approval", "false")
@@ -81,8 +94,14 @@ def _insert_ticket(settings: Settings, board_id: str, ticket_id: str) -> None:
         s.commit()
 
 
+def _write_bytes(path: Path, size: int, *, fill: bytes = b"x") -> None:
+    """Create ``path`` containing exactly ``size`` bytes of ``fill``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(fill * size)
+
+
 # ---------------------------------------------------------------------------
-# Unit tests for find_largest_items
+# ticket 2 — Unit tests for find_largest_items
 # ---------------------------------------------------------------------------
 
 
@@ -316,7 +335,7 @@ def test_root_data_dir_excluded(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# find_orphan_workspaces
+# ticket 5 — find_orphan_workspaces
 # ---------------------------------------------------------------------------
 
 
@@ -447,7 +466,7 @@ def test_batch_query_used_for_large_set(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# run_data_dir_audit_pass integration
+# ticket 5 — run_data_dir_audit_pass orphan integration
 # ---------------------------------------------------------------------------
 
 
@@ -480,7 +499,8 @@ def test_pass_reports_orphans_per_board_in_summary(tmp_path, monkeypatch):
 
 
 def test_pass_no_findings_when_clean(tmp_path, monkeypatch):
-    """With no orphans or oversized items, the pass returns ``no findings``."""
+    """With no orphans, oversized items, or unbounded-collection
+    candidates, the pass returns ``no findings``."""
     s = _make_settings(tmp_path)
     db.init_db(s, "board-clean")
 
@@ -522,6 +542,311 @@ def test_pass_integrates_find_largest_items(tmp_path, monkeypatch):
     assert result.oversized_items[0]["size_bytes"] == 200 * 1024 * 1024
     assert result.oversized_items[0]["is_directory"] is False
     assert "1 oversized items" in result.summary
+
+
+# ---------------------------------------------------------------------------
+# ticket 4 — check_unbounded_candidates: specific patterns
+# ---------------------------------------------------------------------------
+
+
+class TestMemoryLedger:
+    def test_memory_md_over_cap_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "implement_memory.md"
+        _write_bytes(ledger, 200)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f["pattern"] == "*_memory.md"
+        assert f["path"] == "implement_memory.md"
+        assert f["current_size"] == 200
+        assert f["cap_size"] == 100
+        assert f["cap_detail"] == "max_memory_chars=100"
+        assert f["check"] == "unbounded_candidates"
+        assert f["severity"] == "warning"
+        assert f["record_count"] is None
+        assert f["record_max"] is None
+
+    def test_memory_md_under_cap_not_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path, max_memory_chars=8000)
+        ledger = tmp_path / "implement_memory.md"
+        _write_bytes(ledger, 100)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert findings == []
+
+    def test_nested_memory_md_flagged(self, tmp_path):
+        """Memory ledgers under per-board subdirectories are picked up
+        by the recursive ``rglob``."""
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "board-a" / "refine_memory.md"
+        _write_bytes(ledger, 500)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        assert findings[0]["path"] == str(Path("board-a") / "refine_memory.md")
+        assert findings[0]["pattern"] == "*_memory.md"
+
+
+class TestRunsJson:
+    def test_runs_json_over_size_cap_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        runs = tmp_path / "runs.json"
+        runs.write_text("[]" + " " * (_RUNS_JSON_CAP_BYTES))  # > 25 KB
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f["pattern"] == "runs.json"
+        assert f["path"] == "runs.json"
+        assert f["cap_size"] == _RUNS_JSON_CAP_BYTES
+        assert f["current_size"] > _RUNS_JSON_CAP_BYTES
+        assert f["cap_detail"] == f"MAX_ENTRIES={_RUNS_JSON_MAX_ENTRIES} (~25 KB)"
+        # Size-only flag: record_count should be None when JSON
+        # parses but entries are <= MAX_ENTRIES.
+        assert f["record_count"] is None
+        assert f["record_max"] is None
+
+    def test_runs_json_over_entry_count_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        runs = tmp_path / "runs.json"
+        # 60 small entries — under 25 KB but over MAX_ENTRIES=50.
+        entries = [{"id": i} for i in range(60)]
+        runs.write_text(json.dumps(entries))
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f["pattern"] == "runs.json"
+        assert f["record_count"] == 60
+        assert f["record_max"] == _RUNS_JSON_MAX_ENTRIES
+        # Size is under the cap — the flag is triggered solely by the
+        # record count.
+        assert f["current_size"] < _RUNS_JSON_CAP_BYTES
+
+    def test_runs_json_under_both_caps_not_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        runs = tmp_path / "runs.json"
+        runs.write_text(json.dumps([{"id": i} for i in range(10)]))
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert findings == []
+
+    def test_runs_json_corrupt_does_not_crash(self, tmp_path, caplog):
+        """A malformed runs.json must not raise — it is silently skipped
+        with a debug-level log entry. Size check still applies."""
+        settings = _make_settings(tmp_path)
+        runs = tmp_path / "runs.json"
+        runs.write_text("not valid json {{{")
+
+        with caplog.at_level(logging.DEBUG, logger="robotsix_mill.data_dir_audit"):
+            findings = check_unbounded_candidates(tmp_path, settings)
+
+        # File is small and JSON is corrupt → no flag, no crash.
+        assert findings == []
+        # And a debug log was emitted noting the parse skip.
+        assert any(
+            "runs.json" in rec.message and "record-count check" in rec.message
+            for rec in caplog.records
+        )
+
+    def test_runs_json_corrupt_but_oversized_still_flagged_by_size(self, tmp_path):
+        """Corrupt JSON does NOT silence the size check — a runs.json
+        whose bytes exceed the 25 KB cap is still flagged on size."""
+        settings = _make_settings(tmp_path)
+        runs = tmp_path / "runs.json"
+        runs.write_text("not valid json {{{" + " " * _RUNS_JSON_CAP_BYTES)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        assert findings[0]["pattern"] == "runs.json"
+        # No record-count info — JSON parse failed.
+        assert findings[0]["record_count"] is None
+        assert findings[0]["record_max"] is None
+
+
+class TestCiPatternsJson:
+    def test_ci_patterns_over_cap_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        path = tmp_path / "ci_patterns.json"
+        _write_bytes(path, _CI_PATTERNS_CAP_BYTES + 1)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f["pattern"] == "ci_patterns.json"
+        assert f["cap_size"] == _CI_PATTERNS_CAP_BYTES
+        assert f["cap_detail"] == "default=1 MB"
+
+    def test_ci_patterns_under_cap_not_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        path = tmp_path / "ci_patterns.json"
+        _write_bytes(path, 1024)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert findings == []
+
+
+class TestCiMonitorState:
+    def test_ci_monitor_state_over_cap_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        path = tmp_path / "ci_monitor_state.json"
+        _write_bytes(path, _CI_MONITOR_STATE_CAP_BYTES + 1)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f["pattern"] == "ci_monitor_state.json"
+        assert f["cap_size"] == _CI_MONITOR_STATE_CAP_BYTES
+        assert f["cap_detail"] == "default=500 KB"
+
+    def test_ci_monitor_state_under_cap_not_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        path = tmp_path / "ci_monitor_state.json"
+        _write_bytes(path, 1024)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert findings == []
+
+
+class TestGenericJson:
+    def test_generic_json_over_cap_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        path = tmp_path / "subdir" / "some_registry.json"
+        _write_bytes(path, _GENERIC_JSON_CAP_BYTES + 1)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f["pattern"] == "*.json"
+        assert f["cap_size"] == _GENERIC_JSON_CAP_BYTES
+        assert f["cap_detail"] == "default=5 MB"
+
+    def test_generic_json_under_cap_not_flagged(self, tmp_path):
+        settings = _make_settings(tmp_path)
+        path = tmp_path / "some_registry.json"
+        _write_bytes(path, 1024)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert findings == []
+
+    def test_specific_pattern_excluded_from_generic(self, tmp_path):
+        """A ``runs.json`` matched by the specific pattern must NOT
+        also be flagged by the generic ``*.json`` pattern (no
+        double-flagging)."""
+        settings = _make_settings(tmp_path)
+        runs = tmp_path / "runs.json"
+        # Over both caps — the spec says only the specific pattern
+        # claims the file.
+        _write_bytes(runs, _GENERIC_JSON_CAP_BYTES + 1)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert len(findings) == 1
+        assert findings[0]["pattern"] == "runs.json"
+
+
+class TestNonMatchingFiles:
+    def test_non_matching_file_ignored(self, tmp_path):
+        """Files that don't match any pattern are not checked, no
+        matter how large they are."""
+        settings = _make_settings(tmp_path)
+        path = tmp_path / "huge_blob.bin"
+        _write_bytes(path, _GENERIC_JSON_CAP_BYTES + 1)
+
+        findings = check_unbounded_candidates(tmp_path, settings)
+
+        assert findings == []
+
+    def test_missing_data_dir_returns_empty(self, tmp_path):
+        """A nonexistent ``data_dir`` returns an empty list rather
+        than raising."""
+        settings = _make_settings(tmp_path)
+        missing = tmp_path / "does_not_exist"
+
+        findings = check_unbounded_candidates(missing, settings)
+
+        assert findings == []
+
+
+# ---------------------------------------------------------------------------
+# ticket 4 — Integration with run_data_dir_audit_pass
+# ---------------------------------------------------------------------------
+
+
+class TestRunDataDirAuditPass:
+    def test_returns_findings_and_summary(self, tmp_path, monkeypatch):
+        """The pass result must surface flagged findings AND reflect
+        the count in ``summary``."""
+        settings = _make_settings(tmp_path, max_memory_chars=100)
+        ledger = tmp_path / "implement_memory.md"
+        _write_bytes(ledger, 500)
+
+        # Tests inject Settings via the module-level monkeypatch seam.
+        monkeypatch.setattr(
+            "robotsix_mill.data_dir_audit_runner.Settings",
+            lambda: settings,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        assert isinstance(result, DataDirAuditPassResult)
+        assert len(result.findings) == 1
+        assert result.findings[0]["pattern"] == "*_memory.md"
+        assert result.summary == "1 unbounded-collection candidate(s) flagged"
+
+    def test_no_findings_summary(self, tmp_path, monkeypatch):
+        settings = _make_settings(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.data_dir_audit_runner.Settings",
+            lambda: settings,
+        )
+
+        result = run_data_dir_audit_pass()
+
+        assert result.findings == []
+        assert result.summary == "no findings"
+
+    def test_findings_field_defaults_to_empty(self):
+        """``DataDirAuditPassResult.findings`` defaults to ``[]``."""
+        r = DataDirAuditPassResult(drafts_created=[], summary="no findings")
+        assert r.findings == []
+
+
+# ---------------------------------------------------------------------------
+# Session/repo passthrough
+# ---------------------------------------------------------------------------
+
+
+def test_run_pass_propagates_session_id(tmp_path, monkeypatch):
+    settings = _make_settings(tmp_path)
+    monkeypatch.setattr(
+        "robotsix_mill.data_dir_audit_runner.Settings",
+        lambda: settings,
+    )
+
+    result = run_data_dir_audit_pass(session_id="abc-123")
+
+    assert result.session_id == "abc-123"
+
+
+# ---------------------------------------------------------------------------
+# Shared engine-cleanup fixture
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)

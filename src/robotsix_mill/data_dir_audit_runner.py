@@ -12,6 +12,7 @@ monkeypatching.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -48,6 +49,11 @@ class OrphanWorkspace:
     ticket_id: str
     path: Path
     dir_size_bytes: int
+
+
+# ---------------------------------------------------------------------------
+#  Top-N largest items detection (ticket 2)
+# ---------------------------------------------------------------------------
 
 
 def _file_size_or_none(fp: str) -> int | None:
@@ -123,6 +129,146 @@ def find_largest_items(
     return results[:top_n]
 
 
+# ---------------------------------------------------------------------------
+#  Unbounded-collection candidate detection (ticket 4)
+# ---------------------------------------------------------------------------
+
+# Hardcoded byte caps for known unbounded patterns. The spec sources
+# `*_memory.md` from ``settings.max_memory_chars``; the rest are
+# hardcoded defaults because no corresponding ``Settings`` fields
+# exist (see ticket spec — caps for ci_patterns.json /
+# ci_monitor_state.json / generic JSON are tunable only via a future
+# settings expansion).
+_RUNS_JSON_CAP_BYTES = 25 * 1024  # ~25 KB (MAX_ENTRIES=50 × ~500 B)
+_RUNS_JSON_MAX_ENTRIES = 50
+_CI_PATTERNS_CAP_BYTES = 1024 * 1024  # 1 MB
+_CI_MONITOR_STATE_CAP_BYTES = 500 * 1024  # 500 KB
+_GENERIC_JSON_CAP_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+# Module-level pattern registry. Order matters: the specific patterns
+# come first, generic ``*.json`` is the fall-through. Files already
+# matched by an earlier specific pattern are excluded from later
+# patterns to avoid double-flagging.
+_UNBOUNDED_PATTERNS: list[dict] = [
+    {"pattern": "*_memory.md", "glob": "*_memory.md"},
+    {"pattern": "runs.json", "glob": "runs.json"},
+    {"pattern": "ci_patterns.json", "glob": "ci_patterns.json"},
+    {"pattern": "ci_monitor_state.json", "glob": "ci_monitor_state.json"},
+    {"pattern": "*.json", "glob": "*.json"},
+]
+
+
+def _resolve_cap(pattern: str, settings: Settings) -> tuple[int, str]:
+    """Return ``(cap_bytes, cap_detail)`` for the given pattern name."""
+    if pattern == "*_memory.md":
+        cap = settings.max_memory_chars
+        return cap, f"max_memory_chars={cap}"
+    if pattern == "runs.json":
+        return _RUNS_JSON_CAP_BYTES, f"MAX_ENTRIES={_RUNS_JSON_MAX_ENTRIES} (~25 KB)"
+    if pattern == "ci_patterns.json":
+        return _CI_PATTERNS_CAP_BYTES, "default=1 MB"
+    if pattern == "ci_monitor_state.json":
+        return _CI_MONITOR_STATE_CAP_BYTES, "default=500 KB"
+    if pattern == "*.json":
+        return _GENERIC_JSON_CAP_BYTES, "default=5 MB"
+    raise ValueError(f"Unknown unbounded pattern: {pattern!r}")
+
+
+def check_unbounded_candidates(
+    data_dir: Path,
+    settings: Settings,
+) -> list[dict]:
+    """Inspect ``data_dir`` for files exceeding known unbounded-pattern caps.
+
+    Walks ``data_dir`` recursively, applies the specific-pattern globs
+    first (``*_memory.md``, ``runs.json``, ``ci_patterns.json``,
+    ``ci_monitor_state.json``), then a generic ``*.json`` glob to any
+    remaining JSON files. For each match whose size exceeds the
+    documented cap — or, for ``runs.json``, whose top-level array
+    length exceeds ``MAX_ENTRIES`` (50) — a finding dict is produced.
+
+    Pure inspection: no state is mutated. Corrupt/unparseable JSON is
+    silently skipped with a debug-level log entry.
+
+    Args:
+        data_dir: Root directory to walk (typically ``settings.data_dir``).
+        settings: Loaded :class:`Settings` (only ``max_memory_chars`` is
+            consulted for the memory-ledger cap).
+
+    Returns:
+        A list of finding dicts; empty when nothing exceeds its cap.
+    """
+    if not data_dir.exists():
+        return []
+
+    findings: list[dict] = []
+    matched: set[Path] = set()
+
+    for entry in _UNBOUNDED_PATTERNS:
+        pattern = entry["pattern"]
+        glob = entry["glob"]
+        cap_bytes, cap_detail = _resolve_cap(pattern, settings)
+
+        for path in sorted(data_dir.rglob(glob)):
+            if not path.is_file():
+                continue
+            if path in matched:
+                continue
+            matched.add(path)
+
+            try:
+                size = path.stat().st_size
+            except OSError as exc:
+                log.debug("Could not stat %s — skipping: %s", path, exc)
+                continue
+
+            record_count: int | None = None
+            record_max: int | None = None
+
+            if pattern == "runs.json":
+                # Additionally parse the JSON to count top-level entries.
+                # Parse errors → silently skip the record-count check
+                # (size check still applies).
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    log.debug(
+                        "Could not parse %s — skipping record-count check: %s",
+                        path,
+                        exc,
+                    )
+                else:
+                    if isinstance(data, list) and len(data) > _RUNS_JSON_MAX_ENTRIES:
+                        record_count = len(data)
+                        record_max = _RUNS_JSON_MAX_ENTRIES
+
+            size_over = size > cap_bytes
+            if not size_over and record_count is None:
+                continue
+
+            try:
+                rel_path = str(path.relative_to(data_dir))
+            except ValueError:
+                rel_path = str(path)
+
+            findings.append(
+                {
+                    "check": "unbounded_candidates",
+                    "path": rel_path,
+                    "current_size": size,
+                    "cap_size": cap_bytes,
+                    "cap_detail": cap_detail,
+                    "pattern": pattern,
+                    "severity": "warning",
+                    "record_count": record_count,
+                    "record_max": record_max,
+                }
+            )
+
+    return findings
+
+
 @dataclass
 class DataDirAuditPassResult:
     """Result of running a data-dir audit pass."""
@@ -133,6 +279,7 @@ class DataDirAuditPassResult:
     # [{"path": "relative/path", "size_bytes": 123456, "is_directory": false}, …]
     updated_memory: str = ""
     session_id: str = ""
+    findings: list[dict] = field(default_factory=list)
 
 
 def _dir_size_bytes(path: Path) -> int:
@@ -274,6 +421,9 @@ def run_data_dir_audit_pass(
         threshold_bytes=settings.data_dir_audit_size_threshold_bytes,
     )
 
+    # Unbounded-collection candidate detection (ticket 4 of the epic).
+    findings = check_unbounded_candidates(settings.data_dir, settings)
+
     # Orphan-workspace detection (ticket 5 of the epic).
     # Iterate over every board with a ``mill.db`` on disk; ticket
     # filing is intentionally out of scope (ticket 6 consumes these
@@ -303,10 +453,14 @@ def run_data_dir_audit_pass(
                     o.dir_size_bytes,
                 )
 
-    # Compose summary covering both checks.
+    # Compose summary covering all three checks. Each segment is
+    # conditional: when no check produces anything, the summary
+    # falls back to "no findings".
     parts: list[str] = []
     if oversized:
         parts.append(f"{len(oversized)} oversized items")
+    if findings:
+        parts.append(f"{len(findings)} unbounded-collection candidate(s) flagged")
     if total_orphans > 0:
         per_board = ", ".join(
             f"{board}={len(items)}" for board, items in sorted(orphans_by_board.items())
@@ -320,4 +474,5 @@ def run_data_dir_audit_pass(
         summary=summary,
         updated_memory="",
         session_id=session_id,
+        findings=findings,
     )
