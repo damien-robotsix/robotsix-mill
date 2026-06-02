@@ -116,7 +116,6 @@ modules:
       - tests/runtime/test_worker.py
       - tests/runtime/test_tracing.py
       - tests/runtime/test_run_registry.py
-      - tests/runtime/test_cli.py
       - tests/runtime/test_ci_monitor.py
       - tests/runtime/test_cost_warmer.py
       - tests/runtime/test_recent_traces.py
@@ -437,6 +436,7 @@ modules:
       console-script target.
     paths:
       - src/robotsix_mill/cli.py
+      - tests/cli/test_cli.py
     dependencies: [config, core]
 
   - id: langfuse
@@ -446,7 +446,7 @@ modules:
       retrospect stage, and several agents.
     paths:
       - src/robotsix_mill/langfuse_client.py
-      - tests/runtime/test_langfuse_client.py
+      - tests/langfuse/test_langfuse_client.py
       - tests/runtime/test_trace_health.py
     dependencies: [config]
 
@@ -456,7 +456,7 @@ modules:
       notifications to configured webhook URLs.
     paths:
       - src/robotsix_mill/notify.py
-      - tests/runtime/test_notify.py
+      - tests/notify/test_notify.py
     dependencies: [config, core]
 
   # -------------------------------------------------------------------
