@@ -825,10 +825,20 @@ class Worker:
         return cls._STAGE_RANK.get(ticket.state, cls._DEFAULT_STAGE_RANK)
 
     def __init__(
-        self, ctx: StageContext, run_registry: "RunRegistry | None" = None
+        self,
+        ctx: StageContext,
+        run_registry: "RunRegistry | None" = None,
+        run_registries: "dict[str, RunRegistry] | None" = None,
     ) -> None:
         self.ctx = ctx
+        # ``run_registry`` is the default/fallback (board-less ticks).
+        # ``run_registries`` maps board_id -> that repo's RunRegistry so a
+        # periodic pass records into — and reads its cadence from — the SAME
+        # per-repo runs.json the per-repo /runs API serves. Without this every
+        # periodic run landed in the lead repo's registry and was invisible in
+        # other repos' run lists (e.g. audit on robotsix-llmio).
         self.run_registry = run_registry
+        self.run_registries = run_registries or {}
         # Per-repo (board_id) PriorityQueue topology — one queue per
         # repo, so a busy repo can't block another. Items in each queue:
         # (priority_rank, seq, ticket_id). priority_rank = 0 for
@@ -1204,7 +1214,21 @@ class Worker:
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("reconcile sweep failed")
 
-    def _initial_delay(self, kind: str, interval: int, repo_id: str = "") -> float:
+    def _registry_for(self, repo_config) -> "RunRegistry | None":
+        """The RunRegistry a periodic pass should read/write for *repo_config*.
+
+        Per-repo registry (``run_registries[board_id]``) when available so the
+        run is recorded in — and its cadence measured from — the same
+        ``<data_dir>/<board_id>/runs.json`` the per-repo /runs API serves.
+        Falls back to the default registry for board-less ticks.
+        """
+        if repo_config is not None and self.run_registries:
+            return self.run_registries.get(repo_config.board_id, self.run_registry)
+        return self.run_registry
+
+    def _initial_delay(
+        self, kind: str, interval: int, repo_id: str = "", registry=None
+    ) -> float:
         """Return the seconds to sleep before the first periodic pass.
 
         Queries ``RunRegistry.most_recent(kind, repo_id)`` to decide:
@@ -1221,10 +1245,15 @@ class Worker:
         restart resetting that wait. With a 24 h interval + frequent restarts
         the first run then never fires (the symptom: audit never ran on
         robotsix-llmio because mill's daily audit kept the shared clock warm).
+
+        *registry* selects which store to read (per-repo loops pass the repo's
+        own registry so the cadence matches where the run is recorded); defaults
+        to the worker's fallback registry.
         """
-        if self.run_registry is None:
+        reg = registry if registry is not None else self.run_registry
+        if reg is None:
             return float(interval)
-        entry = self.run_registry.most_recent(kind, repo_id=repo_id or None)
+        entry = reg.most_recent(kind, repo_id=repo_id or None)
         if entry is None:
             return 1.0
         try:
@@ -1466,6 +1495,9 @@ class Worker:
         propagate — the caller's loop continues across other repos.
         """
         run_id = None
+        # Record into the per-repo registry so the run shows up in that repo's
+        # /runs list (not the lead repo's).
+        reg = self._registry_for(repo_config)
         repo_label = repo_config.repo_id if repo_config else label
         session_id = tracing.make_session_id(label)
         try:
@@ -1474,8 +1506,8 @@ class Worker:
                 label,
                 repo_label,
             )
-            if self.run_registry:
-                run_id = self.run_registry.start(
+            if reg:
+                run_id = reg.start(
                     label,
                     repo_id=repo_config.repo_id if repo_config else "",
                 )
@@ -1495,7 +1527,7 @@ class Worker:
                 repo_label,
                 len(result.drafts_created),
             )
-            if self.run_registry and run_id:
+            if reg and run_id:
                 runner_summary = (getattr(result, "summary", "") or "").strip()
                 if runner_summary:
                     summary = runner_summary
@@ -1506,15 +1538,15 @@ class Worker:
                         f"{', '.join(draft_ids)}"
                         f"{'…' if len(result.drafts_created) > 5 else ''}"
                     )
-                self.run_registry.finish_ok(run_id, summary)
+                reg.finish_ok(run_id, summary)
         except Exception as e:  # noqa: BLE001 — periodic must survive
             log.exception(
                 "%s poll failed for repo %s",
                 label,
                 repo_label,
             )
-            if self.run_registry and run_id:
-                self.run_registry.finish_error(run_id, str(e))
+            if reg and run_id:
+                reg.finish_error(run_id, str(e))
 
     async def _run_periodic_pass(
         self,
@@ -2075,7 +2107,12 @@ class Worker:
         # doesn't re-fire every bespoke immediately. Scope to this repo so a
         # repo that has never run this bespoke fires promptly instead of
         # inheriting another repo's recent timestamp.
-        initial = self._initial_delay(label, interval, repo_id=repo_config.repo_id)
+        initial = self._initial_delay(
+            label,
+            interval,
+            repo_id=repo_config.repo_id,
+            registry=self._registry_for(repo_config),
+        )
         await asyncio.sleep(initial)
         while True:
             run_id = None
@@ -2199,7 +2236,12 @@ class Worker:
             return
 
         await asyncio.sleep(
-            self._initial_delay(label, interval, repo_id=repo_config.repo_id)
+            self._initial_delay(
+                label,
+                interval,
+                repo_id=repo_config.repo_id,
+                registry=self._registry_for(repo_config),
+            )
         )
         while True:
             await self._fire_periodic_pass(label, runner_fn, repo_config)

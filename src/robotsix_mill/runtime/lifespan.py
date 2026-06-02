@@ -117,7 +117,7 @@ def create_lifespan(
         # ticks — points at the lead repo's registry so legacy
         # callers without repo context still record somewhere.
         default_registry = run_registries[repo_config.board_id]
-        worker = Worker(ctx, default_registry)
+        worker = Worker(ctx, default_registry, run_registries=run_registries)
         app.state.settings = settings
         app.state.service = service
         app.state.worker = worker
