@@ -78,7 +78,7 @@ modules:
       (Mozilla ISPDB, autoconfig XML, LLM fallback).
     paths:
       - src/robotsix_auto_mail/detect.py
-      - tests/test_detect.py
+      - tests/detect/test_detect.py
 
   - id: fetch
     description: >-
