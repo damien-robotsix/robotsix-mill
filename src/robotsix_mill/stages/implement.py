@@ -148,6 +148,24 @@ class _SinglePassResult:
     ic: _ImplementContext | None = None
 
 
+@dataclass
+class _AgentRunOutcome:
+    """Result of the agent invocation phase.
+
+    Exactly one of ``success`` / ``failure`` is non-None.  ``success``
+    holds the 7-tuple returned by ``coding.run_implement_agent``
+    (summary, ref_files, updated_memory, conv_state, new_msgs,
+    no_change_needed, no_change_rationale); ``failure`` holds the
+    ``_SinglePassResult`` the orchestrator should return when the agent
+    call raised a caught error.  Used only inside ``implement.py`` to
+    let the orchestrator early-return cleanly without leaking the
+    dual-path complexity.
+    """
+
+    success: tuple | None = None
+    failure: _SinglePassResult | None = None
+
+
 # ---------------------------------------------------------------------------
 # Stage
 # ---------------------------------------------------------------------------
@@ -649,59 +667,63 @@ class ImplementStage(Stage):
         )
 
     @staticmethod
-    def _run_single_implement_pass(
+    def _resolve_language_instructions(
+        ctx: StageContext, ticket: Ticket, settings
+    ) -> str:
+        """Read the per-repo language snippet, or ``""`` when unavailable."""
+        if not (ctx.repo_config and ctx.repo_config.language):
+            return ""
+        lang = ctx.repo_config.language
+        snippet_path = settings.language_instructions_dir / f"{lang}.md"
+        try:
+            return snippet_path.read_text(encoding="utf-8")
+        except OSError:
+            log.info(
+                "%s: language '%s' configured but no snippet at %s — "
+                "skipping language instructions",
+                ticket.id,
+                lang,
+                snippet_path,
+            )
+            return ""
+
+    @staticmethod
+    def _select_agent_model(ic: _ImplementContext, settings) -> str | None:
+        """Pick the cheaper ``no_change_model`` on a no-change-needed re-check."""
+        # Gating heuristic: when the previous attempt already concluded
+        # ``no_change_needed`` (the summary or feedback carries that
+        # signal), the retry is a pure re-check — use the cheaper
+        # ``no_change_model`` instead of the primary model.
+        prev = (ic.previous_attempt_summary or "") + (ic.feedback or "")
+        if "no change needed" in prev.lower():
+            return settings.no_change_model
+        return None
+
+    @staticmethod
+    def _invoke_implement_agent(
         ctx: StageContext,
         ticket: Ticket,
         repo_dir: Path,
         branch: str,
         settings,
         ic: _ImplementContext,
-        attempt: int,
-        max_iters: int,
+        language_instructions: str,
+        agent_model: str | None,
         resume_history: list | None,
-        resuming: bool,
-        extra_roots: list[Path] | None = None,
-    ) -> _SinglePassResult:
-        """Run one iteration of the fix loop: agent → guardrail → test gate."""
-        ws = ctx.service.workspace(ticket)
-        memory_board_id = ImplementStage._memory_board_id(ctx, ticket)
+        extra_roots: list[Path] | None,
+        memory_board_id: str,
+    ) -> _AgentRunOutcome:
+        """Invoke ``coding.run_implement_agent`` and capture caught errors.
 
-        # Resolve per-repo language instructions for the implement agent.
-        language_instructions = ""
-        if ctx.repo_config and ctx.repo_config.language:
-            lang = ctx.repo_config.language
-            snippet_path = settings.language_instructions_dir / f"{lang}.md"
-            try:
-                language_instructions = snippet_path.read_text(encoding="utf-8")
-            except OSError:
-                log.info(
-                    "%s: language '%s' configured but no snippet at %s — "
-                    "skipping language instructions",
-                    ticket.id,
-                    lang,
-                    snippet_path,
-                )
-
-        # --- agent invocation ---
-        # Gating heuristic: when the previous attempt already concluded
-        # ``no_change_needed`` (the summary or feedback carries that
-        # signal), the retry is a pure re-check — use the cheaper
-        # ``no_change_model`` instead of the primary model.
-        agent_model: str | None = None
-        _prev = (ic.previous_attempt_summary or "") + (ic.feedback or "")
-        if "no change needed" in _prev.lower():
-            agent_model = settings.no_change_model
-
+        Returns an ``_AgentRunOutcome`` whose mutually-exclusive
+        ``success`` / ``failure`` fields let the orchestrator early-return
+        cleanly on budget / agent-error paths without duplicating control
+        flow.  ``success`` holds the raw 7-tuple from
+        ``run_implement_agent``; ``failure`` holds the
+        ``_SinglePassResult`` already finalized for return.
+        """
         try:
-            (
-                summary,
-                ref_files,
-                updated_memory,
-                conv_state,
-                new_msgs,
-                no_change_needed,
-                no_change_rationale,
-            ) = coding.run_implement_agent(
+            result = coding.run_implement_agent(
                 settings=settings,
                 repo_dir=repo_dir,
                 spec=ic.spec,
@@ -726,12 +748,14 @@ class ImplementStage(Stage):
                 ok=False,
                 extra_roots=extra_roots,
             )
-            return _SinglePassResult(
-                next_action="return",
-                outcome=Outcome(
-                    State.BLOCKED,
-                    f"agent budget cap — resumable (move to READY): {e}",
-                ),
+            return _AgentRunOutcome(
+                failure=_SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        f"agent budget cap — resumable (move to READY): {e}",
+                    ),
+                )
             )
         except AgentRunError as e:
             ImplementStage._finalize(
@@ -756,42 +780,70 @@ class ImplementStage(Stage):
 
                 if classify_stage_error(e.cause) == "transient":
                     raise e.cause
-            return _SinglePassResult(
-                next_action="return",
-                outcome=Outcome(
-                    State.BLOCKED,
-                    f"agent error — resumable: {e}",
-                ),
+            return _AgentRunOutcome(
+                failure=_SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        f"agent error — resumable: {e}",
+                    ),
+                )
             )
+        return _AgentRunOutcome(success=result)
 
-        # --- pause detection ---
-        if check_for_pause(new_msgs):
-            save_conversation_state(ws, conv_state, "implement")
-            ImplementStage._finalize(
-                ctx,
-                ticket,
-                repo_dir,
-                branch,
-                summary or "paused",
-                ok=False,
-                reference_files=ref_files,
-                extra_roots=extra_roots,
-            )
-            ctx.service.transition(
-                ticket.id,
-                State.AWAITING_USER_REPLY,
-                note="paused — agent asked a clarifying question",
-            )
-            log.info(
-                "%s: paused implement — agent invoked ask_user",
-                ticket.id,
-            )
-            return _SinglePassResult(
-                next_action="pause",
-                outcome=Outcome(State.AWAITING_USER_REPLY),
-            )
+    @staticmethod
+    def _maybe_handle_pause(
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        ws,
+        summary: str,
+        ref_files: list[str] | None,
+        conv_state,
+        new_msgs,
+        extra_roots: list[Path] | None,
+    ) -> _SinglePassResult | None:
+        """Persist conv_state and route to AWAITING_USER_REPLY on pause."""
+        if not check_for_pause(new_msgs):
+            return None
+        save_conversation_state(ws, conv_state, "implement")
+        ImplementStage._finalize(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            summary or "paused",
+            ok=False,
+            reference_files=ref_files,
+            extra_roots=extra_roots,
+        )
+        ctx.service.transition(
+            ticket.id,
+            State.AWAITING_USER_REPLY,
+            note="paused — agent asked a clarifying question",
+        )
+        log.info(
+            "%s: paused implement — agent invoked ask_user",
+            ticket.id,
+        )
+        return _SinglePassResult(
+            next_action="pause",
+            outcome=Outcome(State.AWAITING_USER_REPLY),
+        )
 
-        # --- persistence ---
+    @staticmethod
+    def _persist_pass_artifacts(
+        ws,
+        ticket: Ticket,
+        ic: _ImplementContext,
+        summary: str,
+        ref_files: list[str] | None,
+        updated_memory: str,
+        settings,
+        memory_board_id: str,
+    ) -> tuple[list | None, str | None]:
+        """Persist memory, ``reference_files.json`` and ``implement_summary.md``."""
         if updated_memory:
             persist_memory(
                 settings.memory_file_for("implement", memory_board_id),
@@ -830,57 +882,28 @@ class ImplementStage(Stage):
                 exc_info=True,
             )
 
-        # --- scope guardrail ---
-        guardrail = ImplementStage._run_scope_guardrail(
-            ctx,
-            ticket,
-            repo_dir,
-            branch,
-            summary,
-            ref_files,
-            ic.file_map,
-            settings,
-            ic.spec,
-            ic.feedback,
-        )
+        return updated_ref_files, updated_prev_summary
 
-        if guardrail.action == "return":
-            return _SinglePassResult(
-                next_action="return",
-                outcome=guardrail.outcome,
-            )
-
-        # Determine the updated file_map and feedback after the guardrail.
-        new_file_map = (
-            guardrail.file_map if guardrail.file_map is not None else ic.file_map
-        )
-        new_feedback = (
-            guardrail.feedback
-            if guardrail.action in ("continue", "skip_iteration")
-            else ic.feedback
-        )
-
-        # Build updated context for potential retry.
-        new_ic = _ImplementContext(
-            spec=ic.spec,
-            memory_text=ic.memory_text,
-            reference_files=updated_ref_files,
-            file_map=new_file_map,
-            feedback=new_feedback,
-            previous_attempt_summary=updated_prev_summary,
-            open_thread_ids=ic.open_thread_ids,
-        )
-
-        if guardrail.action == "continue":
-            return _SinglePassResult(
-                next_action="retry",
-                feedback=None,
-                ic=new_ic,
-            )
-
-        # guardrail.action == "skip_iteration" — fall through to test gate.
-
-        # --- test gate ---
+    @staticmethod
+    def _evaluate_test_results(
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings,
+        ic: _ImplementContext,
+        new_ic: _ImplementContext,
+        summary: str,
+        ref_files: list[str] | None,
+        new_msgs,
+        no_change_needed: bool,
+        no_change_rationale: str,
+        resuming: bool,
+        attempt: int,
+        max_iters: int,
+        extra_roots: list[Path] | None,
+    ) -> _SinglePassResult:
+        """Run the test gate, apply ``ValidationResult.decide``, route the pass."""
         passed, diag = run_test_agent(
             settings=settings,
             repo_dir=repo_dir,
@@ -1094,6 +1117,98 @@ class ImplementStage(Stage):
             next_action="retry",
             feedback=diag,
             ic=new_ic,
+        )
+
+    @staticmethod
+    def _run_single_implement_pass(
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings,
+        ic: _ImplementContext,
+        attempt: int,
+        max_iters: int,
+        resume_history: list | None,
+        resuming: bool,
+        extra_roots: list[Path] | None = None,
+    ) -> _SinglePassResult:
+        """Run one iteration of the fix loop: agent → guardrail → test gate."""
+        ws = ctx.service.workspace(ticket)
+        memory_board_id = ImplementStage._memory_board_id(ctx, ticket)
+
+        language_instructions = ImplementStage._resolve_language_instructions(
+            ctx, ticket, settings,
+        )
+        agent_model = ImplementStage._select_agent_model(ic, settings)
+
+        agent_result = ImplementStage._invoke_implement_agent(
+            ctx, ticket, repo_dir, branch, settings, ic,
+            language_instructions, agent_model, resume_history,
+            extra_roots, memory_board_id,
+        )
+        if agent_result.failure is not None:
+            return agent_result.failure
+        (
+            summary,
+            ref_files,
+            updated_memory,
+            conv_state,
+            new_msgs,
+            no_change_needed,
+            no_change_rationale,
+        ) = agent_result.success
+
+        pause = ImplementStage._maybe_handle_pause(
+            ctx, ticket, repo_dir, branch, ws, summary, ref_files,
+            conv_state, new_msgs, extra_roots,
+        )
+        if pause is not None:
+            return pause
+
+        updated_ref_files, updated_prev_summary = (
+            ImplementStage._persist_pass_artifacts(
+                ws, ticket, ic, summary, ref_files, updated_memory,
+                settings, memory_board_id,
+            )
+        )
+
+        guardrail = ImplementStage._run_scope_guardrail(
+            ctx, ticket, repo_dir, branch, summary, ref_files,
+            ic.file_map, settings, ic.spec, ic.feedback,
+        )
+        if guardrail.action == "return":
+            return _SinglePassResult(
+                next_action="return", outcome=guardrail.outcome,
+            )
+
+        new_file_map = (
+            guardrail.file_map if guardrail.file_map is not None else ic.file_map
+        )
+        new_feedback = (
+            guardrail.feedback
+            if guardrail.action in ("continue", "skip_iteration")
+            else ic.feedback
+        )
+        new_ic = _ImplementContext(
+            spec=ic.spec,
+            memory_text=ic.memory_text,
+            reference_files=updated_ref_files,
+            file_map=new_file_map,
+            feedback=new_feedback,
+            previous_attempt_summary=updated_prev_summary,
+            open_thread_ids=ic.open_thread_ids,
+        )
+        if guardrail.action == "continue":
+            return _SinglePassResult(
+                next_action="retry", feedback=None, ic=new_ic,
+            )
+
+        # guardrail.action == "skip_iteration" — fall through to test gate.
+        return ImplementStage._evaluate_test_results(
+            ctx, ticket, repo_dir, branch, settings, ic, new_ic, summary,
+            ref_files, new_msgs, no_change_needed, no_change_rationale,
+            resuming, attempt, max_iters, extra_roots,
         )
 
     # ------------------------------------------------------------------
