@@ -23,6 +23,7 @@ modules:
       - src/robotsix_mill/__init__.py
       - src/robotsix_mill/py.typed
       - config/mill.defaults.yaml
+      - config/mill.local.example.yaml
       - config/repos.example.yaml
       - config/secrets.example.yaml
       - tests/test_config.py
