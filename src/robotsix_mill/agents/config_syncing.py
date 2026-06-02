@@ -210,9 +210,7 @@ def run_config_sync_agent(
         repo_dir=repo_dir,  # confine SDK built-in edits to the workspace clone
     )
     forge_url = settings.forge_remote_url or "(not configured)"
-    verified_block = (
-        ("\n\n" + verified_proposals) if verified_proposals else ""
-    )
+    verified_block = ("\n\n" + verified_proposals) if verified_proposals else ""
     prompt = (
         f"{recent_proposals}"
         + verified_block

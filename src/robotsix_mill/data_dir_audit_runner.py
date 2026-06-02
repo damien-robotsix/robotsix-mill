@@ -729,12 +729,9 @@ def _build_growth_finding(flag: dict) -> tuple[str, str, str]:
     current_size = int(flag["current_size_bytes"])
     prior_size = int(flag["prior_size_bytes"])
     threshold_exceeded = flag.get("threshold_exceeded", "")
-    gap_id = (
-        f"growth:{_sanitize_gap_segment(board_id)}:{_sanitize_gap_segment(path)}"
-    )
+    gap_id = f"growth:{_sanitize_gap_segment(board_id)}:{_sanitize_gap_segment(path)}"
     title = (
-        f"data-dir audit: growth {path} "
-        f"(+{_human_bytes(delta_bytes)}, +{delta_pct}%)"
+        f"data-dir audit: growth {path} (+{_human_bytes(delta_bytes)}, +{delta_pct}%)"
     )
     body = (
         "_Filed by the periodic data-dir audit pass._\n\n"
@@ -763,24 +760,19 @@ def _build_unbounded_finding(finding: dict) -> tuple[str, str, str]:
     record_count = finding.get("record_count")
     record_max = finding.get("record_max")
     gap_id = f"unbounded:{_sanitize_gap_segment(path)}"
-    title = (
-        f"data-dir audit: unbounded {path} (>{_human_bytes(cap_bytes)})"
-    )
+    title = f"data-dir audit: unbounded {path} (>{_human_bytes(cap_bytes)})"
     body_lines = [
         "_Filed by the periodic data-dir audit pass._",
         "",
         "## Finding",
         "",
         f"- **Path:** `{path}`",
-        f"- **Current size:** {_human_bytes(current_size)} "
-        f"({current_size} bytes)",
+        f"- **Current size:** {_human_bytes(current_size)} ({current_size} bytes)",
         f"- **Cap:** {cap_detail} ({_human_bytes(cap_bytes)})",
         f"- **Pattern:** `{pattern}`",
     ]
     if record_count is not None and record_max is not None:
-        body_lines.append(
-            f"- **Record count:** {record_count} (max {record_max})"
-        )
+        body_lines.append(f"- **Record count:** {record_count} (max {record_max})")
     body_lines.append("")
     body_lines.append(
         f"This file exceeds its documented cap ({cap_detail}); "
@@ -796,8 +788,7 @@ def _build_orphan_finding(orphan: OrphanWorkspace) -> tuple[str, str, str]:
     ticket_id = orphan.ticket_id
     size = orphan.dir_size_bytes
     gap_id = (
-        f"orphan:{_sanitize_gap_segment(board_id)}:"
-        f"{_sanitize_gap_segment(ticket_id)}"
+        f"orphan:{_sanitize_gap_segment(board_id)}:{_sanitize_gap_segment(ticket_id)}"
     )
     title = (
         f"data-dir audit: orphan workspace {board_id}/{ticket_id} "
@@ -831,9 +822,7 @@ def _order_findings(
 
     # 1. Orphans: sort by board_id, then ticket_id.
     for board_id in sorted(orphans_by_board):
-        for orphan in sorted(
-            orphans_by_board[board_id], key=lambda o: o.ticket_id
-        ):
+        for orphan in sorted(orphans_by_board[board_id], key=lambda o: o.ticket_id):
             ordered.append(_build_orphan_finding(orphan))
 
     # 2. Growth flags: delta_bytes desc, then path for ties.
@@ -892,9 +881,7 @@ def _file_findings_as_tickets(
         gid for gid, info in prior.items() if info["resolution"] == "in-flight"
     }
 
-    ordered = _order_findings(
-        oversized, growth_flags, unbounded, orphans_by_board
-    )
+    ordered = _order_findings(oversized, growth_flags, unbounded, orphans_by_board)
 
     cap = settings.data_dir_audit_max_drafts_per_pass
     created: list[dict] = []

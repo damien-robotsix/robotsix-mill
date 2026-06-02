@@ -240,9 +240,7 @@ def run_retrospect_agent(
         )
 
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
-    verified_block = (
-        ("\n\n" + verified_proposals) if verified_proposals else ""
-    )
+    verified_block = ("\n\n" + verified_proposals) if verified_proposals else ""
     prompt = (
         f"{recent_proposals}"
         + verified_block
