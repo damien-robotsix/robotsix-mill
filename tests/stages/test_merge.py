@@ -2380,7 +2380,9 @@ def _make_meta_ticket(ctx, *, state=State.IMPLEMENT_COMPLETE):
     return ctx.service.get(t.id)
 
 
-def _route_by_remote(monkeypatch, *, pr_responses: dict, ci_responses: dict | None = None):
+def _route_by_remote(
+    monkeypatch, *, pr_responses: dict, ci_responses: dict | None = None
+):
     """Monkeypatch the GitHub forge's ``pr_status`` + ``check_status``
     so each call returns the response keyed by ``self._remote_url``.
 
@@ -2401,6 +2403,7 @@ def _route_by_remote(monkeypatch, *, pr_responses: dict, ci_responses: dict | No
     monkeypatch.setattr(github.GitHubForge, "pr_status", fake_pr_status)
 
     if ci_responses is not None:
+
         def fake_check_status(self, *, source_branch):
             seen_ci.append({"remote": self._remote_url, "branch": source_branch})
             resp = ci_responses.get(self._remote_url)
@@ -2711,9 +2714,7 @@ def test_multi_repo_corrupt_pr_urls_blocks(tmp_path):
     ctx = _gh(tmp_path)
     t = _make_meta_ticket(ctx)
     ws = ctx.service.workspace(t)
-    (ws.artifacts_dir / "pr_urls.json").write_text(
-        "{not valid json", encoding="utf-8"
-    )
+    (ws.artifacts_dir / "pr_urls.json").write_text("{not valid json", encoding="utf-8")
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED

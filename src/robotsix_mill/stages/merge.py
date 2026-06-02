@@ -96,16 +96,14 @@ def _repo_config_for_entry(entry: dict) -> RepoConfig:
     when the manifest is malformed)."""
     repo_id = entry.get("repo_id")
     if not isinstance(repo_id, str) or not repo_id:
-        raise ConfigError(
-            "pr_urls.json entry is missing a non-empty string 'repo_id'"
-        )
+        raise ConfigError("pr_urls.json entry is missing a non-empty string 'repo_id'")
     return get_repo_config(repo_id)
 
 
 def _read_counter(path) -> int:
     try:
         return int(path.read_text(encoding="utf-8").strip())
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError, ValueError:
         return 0
 
 
@@ -341,9 +339,7 @@ class MergeStage(Stage):
                 f"{first['url']} — resumable",
             )
 
-        broken = [
-            r for r in statuses if r["status"] in ("conflicting", "failing_ci")
-        ]
+        broken = [r for r in statuses if r["status"] in ("conflicting", "failing_ci")]
         if broken:
             first = broken[0]
             return Outcome(
@@ -357,9 +353,9 @@ class MergeStage(Stage):
             lines = ["# Merge (multi-repo)", "repos:"]
             for r in statuses:
                 lines.append(f"  - {r['repo_id']}: merged: {r['url']}")
-            ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                "merge.md"
-            ).write_text("\n".join(lines) + "\n", encoding="utf-8")
+            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
+                "\n".join(lines) + "\n", encoding="utf-8"
+            )
             urls = ", ".join(r["url"] for r in statuses)
             log.info("%s: all %d PRs merged → done", ticket.id, len(statuses))
             return Outcome(
@@ -821,7 +817,7 @@ class MergeStage(Stage):
 
         try:
             feedback = json.loads(feedback_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             return Outcome(
                 State.HUMAN_MR_APPROVAL,
                 "review_feedback.json corrupted — re-polling from human_mr_approval",

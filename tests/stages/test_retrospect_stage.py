@@ -1534,9 +1534,7 @@ def _write_multi_pr_urls(ctx, ticket, entries: list[dict]) -> None:
     )
 
 
-def test_multi_repo_retrospect_blocks_when_any_pr_not_merged(
-    ctx_factory, monkeypatch
-):
+def test_multi_repo_retrospect_blocks_when_any_pr_not_merged(ctx_factory, monkeypatch):
     """``pr_urls.json`` lists two PRs, one is not merged → BLOCKED. The
     retrospect agent is NOT invoked, no ``retrospect.md`` is written,
     and the ticket does not transition to CLOSED."""
