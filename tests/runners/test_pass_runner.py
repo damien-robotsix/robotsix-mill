@@ -1442,3 +1442,184 @@ def test_agent_returns_empty_updated_memory(tmp_path, monkeypatch):
     assert result.updated_memory == "old memory"
 
     db.reset_engine()
+
+
+# ------------------------------------------------------------------ mill-internal draft routing
+
+
+def _multirepo_settings(tmp_path):
+    """Build a two-repo registry (audited "test-repo" + mill maintenance
+    "robotsix-mill") plus a fresh DB on both boards, mirroring the
+    multi-repo deployment topology that run_agent_pass must route
+    against."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    import robotsix_mill.config as _cfg
+
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="t",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+            ),
+            "robotsix-mill": RepoConfig(
+                repo_id="robotsix-mill",
+                board_id="mill-board",
+                langfuse_project_name="mill",
+                langfuse_public_key="pk2",
+                langfuse_secret_key="sk2",
+            ),
+        }
+    )
+    db.reset_engine()
+    settings = Settings(
+        data_dir=str(tmp_path / "data"),
+        trace_review_target_repo_id="robotsix-mill",
+    )
+    db.init_db(settings, board_id="test-board")
+    db.init_db(settings, board_id="mill-board")
+    return settings
+
+
+def test_mill_internal_draft_routed_to_mill_board(tmp_path):
+    """When a periodic agent proposes a draft whose title+body names
+    mill-internal symbols and trace_review_target_repo_id resolves to
+    a known repo, the draft lands on the mill maintenance board — not
+    on the audited repo's board.
+
+    This is the module-curator / code-health incident the routing
+    discipline is being extended to cover: every periodic agent that
+    audits the audited repo can still propose drafts about mill source
+    paths, and those drafts must reach the board that can actually
+    implement them."""
+    import robotsix_mill.config as _cfg
+
+    settings = _multirepo_settings(tmp_path)
+    audited_svc = TicketService(settings, board_id="test-board")
+    mill_svc = TicketService(settings, board_id="mill-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["Refactor refine stage scope-triage loop"],
+        draft_bodies=[
+            "The bug lives in src/robotsix_mill/stages/refine.py — "
+            "the scope-triage agent loops indefinitely. Fix in stages/."
+        ],
+    )
+
+    try:
+        run_agent_pass(
+            agent_fn,
+            memory_file=memory_file,
+            source_label=SourceKind.AUDIT,
+            service=audited_svc,
+            settings=settings,
+        )
+
+        # Draft landed on the mill maintenance board.
+        on_mill = mill_svc.list()
+        assert len(on_mill) == 1
+        assert on_mill[0].title == "Refactor refine stage scope-triage loop"
+
+        # Audited board is empty — no false-positive duplicate.
+        on_audited = audited_svc.list()
+        assert on_audited == []
+    finally:
+        _cfg._reset_repos_config()
+        db.reset_engine()
+
+
+def test_repo_specific_draft_stays_on_audited_board(tmp_path):
+    """A draft whose title+body names ONLY audited-repo paths (no
+    mill-internal symbols) stays on the audited board — the routing
+    heuristic does not false-positive."""
+    import robotsix_mill.config as _cfg
+
+    settings = _multirepo_settings(tmp_path)
+    audited_svc = TicketService(settings, board_id="test-board")
+    mill_svc = TicketService(settings, board_id="mill-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["Fix user authentication in src/auth/login.py"],
+        draft_bodies=[
+            "The login flow in src/auth/login.py drops the session "
+            "cookie when the user logs out — patch the cookie clear-out."
+        ],
+    )
+
+    try:
+        run_agent_pass(
+            agent_fn,
+            memory_file=memory_file,
+            source_label=SourceKind.AUDIT,
+            service=audited_svc,
+            settings=settings,
+        )
+
+        # Draft landed on the audited board.
+        on_audited = audited_svc.list()
+        assert len(on_audited) == 1
+        assert on_audited[0].title == "Fix user authentication in src/auth/login.py"
+
+        # Mill board is empty.
+        on_mill = mill_svc.list()
+        assert on_mill == []
+    finally:
+        _cfg._reset_repos_config()
+        db.reset_engine()
+
+
+def test_mill_routing_falls_back_when_target_unset(tmp_path, caplog):
+    """When trace_review_target_repo_id is unset, mill-internal drafts
+    still file on the audited board (never lose a draft) — and a
+    warning is logged."""
+    import logging
+
+    settings = _make_settings(tmp_path)
+    # NOTE: trace_review_target_repo_id deliberately left at its
+    # default ("") to exercise the fallback path.
+    assert settings.trace_review_target_repo_id == ""
+
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    audited_svc = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["Refactor refine stage scope-triage loop"],
+        draft_bodies=[
+            "The bug lives in src/robotsix_mill/stages/refine.py — "
+            "the scope-triage agent loops indefinitely. Fix in stages/."
+        ],
+    )
+
+    caplog.set_level(logging.WARNING)
+    run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=audited_svc,
+        settings=settings,
+    )
+
+    # Draft still lands on the audited board — no data loss.
+    on_audited = audited_svc.list()
+    assert len(on_audited) == 1
+    assert on_audited[0].title == "Refactor refine stage scope-triage loop"
+
+    # Warning was logged about the unset mill target.
+    assert "trace_review_target_repo_id is unset" in caplog.text
+
+    db.reset_engine()
