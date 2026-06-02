@@ -1468,3 +1468,291 @@ def test_follow_up_target_mill_routes_to_mill_board(
         assert [tk.id for tk in on_current] == [t.id]
     finally:
         _cfg._reset_repos_config()
+
+
+# ---------------------------------------------------------------------------
+# Multi-repo defensive PR-merge verification
+# ---------------------------------------------------------------------------
+
+
+def _install_multirepo_registry(entries: list[tuple[str, str]]) -> None:
+    """Populate the global ``_repos_config`` for multi-repo retrospect
+    tests."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
+    import robotsix_mill.config as _cfg
+
+    _reset_repos_config()
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            rid: RepoConfig(
+                repo_id=rid,
+                board_id="meta",
+                langfuse_project_name=f"p-{rid}",
+                langfuse_public_key=f"pk-{rid}",
+                langfuse_secret_key=f"sk-{rid}",
+                forge_remote_url=url,
+            )
+            for rid, url in entries
+        }
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_multirepo_registry_after_each_test():
+    yield
+    from robotsix_mill.config import _reset_repos_config
+
+    _reset_repos_config()
+
+
+def _multirepo_forge_env() -> dict:
+    """Env required for ``get_forge(s, repo_config=rc)`` to return a real
+    GitHubForge whose ``pr_status`` monkeypatch can fire — without
+    these, ``get_forge`` raises a config error which retrospect's
+    try/except silently swallows."""
+    return {
+        "FORGE_KIND": "github",
+        "FORGE_REMOTE_URL": "https://github.com/o/global.git",
+        "FORGE_TOKEN": "t",
+    }
+
+
+def _set_forge_secrets() -> None:
+    from robotsix_mill.config import Secrets, _reset_secrets
+    import robotsix_mill.config as _cfg
+
+    _reset_secrets()
+    _cfg._secrets = Secrets(forge_token="t")
+
+
+def _write_multi_pr_urls(ctx, ticket, entries: list[dict]) -> None:
+    import json as _json
+
+    ws = ctx.service.workspace(ticket)
+    (ws.artifacts_dir / "pr_urls.json").write_text(
+        _json.dumps(entries, indent=2), encoding="utf-8"
+    )
+
+
+def test_multi_repo_retrospect_blocks_when_any_pr_not_merged(ctx_factory, monkeypatch):
+    """``pr_urls.json`` lists two PRs, one is not merged → BLOCKED. The
+    retrospect agent is NOT invoked, no ``retrospect.md`` is written,
+    and the ticket does not transition to CLOSED."""
+    from robotsix_mill import langfuse_client, pass_runner
+    from robotsix_mill.forge import github
+
+    ctx = ctx_factory(**_multirepo_forge_env())
+    _set_forge_secrets()
+
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    agent_calls = []
+
+    def fail_if_called(**kwargs):
+        agent_calls.append(kwargs)
+        return _result()
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", fail_if_called)
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    def fake_pr_status(self, *, source_branch):
+        rurl = self._remote_url
+        if rurl == remote_a:
+            return {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/a/pull/1",
+            }
+        if rurl == remote_b:
+            return {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+            }
+        raise AssertionError(f"unexpected remote {rurl}")
+
+    monkeypatch.setattr(github.GitHubForge, "pr_status", fake_pr_status)
+
+    t = _ticket(ctx)
+    _write_multi_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": "mill/x",
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": "mill/x",
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "repo-b" in (out.note or "")
+    # Retrospect agent must not have been invoked.
+    assert agent_calls == []
+    # No retrospect.md written.
+    assert not (ctx.service.workspace(t).artifacts_dir / "retrospect.md").exists()
+
+
+def test_multi_repo_retrospect_closes_when_all_prs_merged(ctx_factory, monkeypatch):
+    """All PRs merged → retrospect runs normally and the ticket
+    transitions to CLOSED."""
+    from robotsix_mill import langfuse_client, pass_runner
+    from robotsix_mill.forge import github
+
+    ctx = ctx_factory(**_multirepo_forge_env())
+    _set_forge_secrets()
+
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(findings="All good.", conclusion="done"),
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    def fake_pr_status(self, *, source_branch):
+        rurl = self._remote_url
+        return {
+            "merged": True,
+            "state": "closed",
+            "url": (
+                "https://github.com/o/a/pull/1"
+                if rurl == remote_a
+                else "https://github.com/o/b/pull/2"
+            ),
+        }
+
+    monkeypatch.setattr(github.GitHubForge, "pr_status", fake_pr_status)
+
+    t = _ticket(ctx)
+    _write_multi_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": "mill/x",
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": "mill/x",
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    artifact = ctx.service.workspace(t).artifacts_dir / "retrospect.md"
+    assert artifact.exists()
+
+
+def test_single_repo_retrospect_unchanged_when_no_pr_urls_json(
+    ctx_factory, monkeypatch
+):
+    """When ``pr_urls.json`` is absent, retrospect makes no forge calls
+    for verification — the single-repo path runs unchanged."""
+    from robotsix_mill import langfuse_client, pass_runner
+    from robotsix_mill.forge import github
+
+    ctx = ctx_factory()
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(findings="All good.", conclusion="done"),
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    pr_status_calls = []
+
+    def fail_if_called(self, *, source_branch):
+        pr_status_calls.append(source_branch)
+        return None
+
+    monkeypatch.setattr(github.GitHubForge, "pr_status", fail_if_called)
+
+    t = _ticket(ctx)
+    # Sanity: pr_urls.json must NOT exist.
+    assert not (ctx.service.workspace(t).artifacts_dir / "pr_urls.json").exists()
+
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    assert pr_status_calls == []  # no forge calls for verification
+    artifact = ctx.service.workspace(t).artifacts_dir / "retrospect.md"
+    assert artifact.exists()

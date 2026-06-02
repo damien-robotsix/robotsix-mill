@@ -197,6 +197,124 @@ def _parse_str_id_list(raw: str | None) -> list[str]:
     return [x for x in parsed if isinstance(x, str)] if isinstance(parsed, list) else []
 
 
+def _pr_urls_for_multi_repo(
+    ticket: Ticket,
+    service: TicketService,
+) -> str | None:
+    """Return the multi-repo ``pr_url`` string for *ticket* from
+    ``pr_urls.json`` (comma-joined ``"url1, url2"``), or ``None`` when
+    the file is absent / corrupt / empty.
+
+    No forge call is made — the URLs in the manifest are authoritative
+    once the deliver stage has written them.  The joined string is
+    capped at 1000 chars so the API read path stays bounded.
+
+    Read-time enrichment must never crash the API — any unexpected
+    error (mock-injected workspace, OS error, decode error) silently
+    falls back to ``None`` so the caller can use the single-repo path.
+    """
+    import json as _json
+
+    try:
+        ws = service.workspace(ticket)
+        path = ws.artifacts_dir / "pr_urls.json"
+        if not path.exists():
+            return None
+        data = _json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, list) or not data:
+        return None
+    urls = [
+        str(e["url"])
+        for e in data
+        if isinstance(e, dict) and isinstance(e.get("url"), str)
+    ]
+    if not urls:
+        return None
+    joined = ", ".join(urls)
+    if len(joined) > 1000:
+        joined = joined[:1000]
+    return joined
+
+
+def _cumulative_cost_for(
+    ticket: Ticket,
+    settings: Settings,
+    service: TicketService,
+    *,
+    blocking_cost: bool,
+    repo_config: RepoConfig | None,
+) -> float | None:
+    """Return cumulative cost when the ticket has descendants and the
+    rollup is meaningfully larger than the direct cost; ``None`` otherwise."""
+    if not service.list_children(ticket.id):
+        return None
+    cum = service.cumulative_cost(
+        ticket.id,
+        settings,
+        blocking=blocking_cost,
+        repo_config=repo_config,
+    )
+    return cum if cum > ticket.cost_usd else None
+
+
+def _parent_title_for(ticket: Ticket, service: TicketService) -> str | None:
+    """Resolve the parent ticket's title, if a parent exists."""
+    if not ticket.parent_id:
+        return None
+    parent = service.get(ticket.parent_id)
+    return parent.title if parent else None
+
+
+def _dependencies_for(ticket: Ticket, service: TicketService) -> list[dict]:
+    """Resolve each declared dependency to ``{id, title, state}`` so the
+    drawer can render a readable list instead of opaque IDs."""
+    if not ticket.depends_on:
+        return []
+    import json as _json
+
+    try:
+        dep_ids = _json.loads(ticket.depends_on)
+    except ValueError, TypeError:
+        return []
+    if not isinstance(dep_ids, list):
+        return []
+    out: list[dict] = []
+    for dep_id in dep_ids:
+        if not isinstance(dep_id, str):
+            continue
+        dep = service.get(dep_id)
+        out.append(
+            {
+                "id": dep_id,
+                "title": dep.title if dep else None,
+                "state": dep.state.value if dep else None,
+            }
+        )
+    return out
+
+
+def _pr_url_for(
+    ticket: Ticket,
+    settings: Settings,
+    service: TicketService,
+    *,
+    fetch_pr_url: bool,
+    repo_config: RepoConfig | None,
+) -> str | None:
+    """Prefer the multi-repo manifest (deliver wrote one URL per
+    touched repo) over the single-repo forge lookup.  ``pr_urls.json``
+    is the multi-repo discriminator and its URLs are authoritative —
+    no forge call needed."""
+    if not fetch_pr_url:
+        return None
+    multi = _pr_urls_for_multi_repo(ticket, service)
+    if multi is not None:
+        return multi
+    return _pr_url(ticket, settings, repo_config=repo_config)
+
+
 def enrich_ticket_read(
     ticket: Ticket,
     settings: Settings,
@@ -226,48 +344,22 @@ def enrich_ticket_read(
     """
     with_cost(ticket, settings, blocking=blocking_cost, repo_config=repo_config)
 
-    # Compute cumulative cost for any ticket with descendants.
-    cumulative: float | None = None
-    children = service.list_children(ticket.id)
-    if children:
-        cum = service.cumulative_cost(
-            ticket.id,
-            settings,
-            blocking=blocking_cost,
-            repo_config=repo_config,
-        )
-        # Only expose cumulative when it's meaningfully larger than direct.
-        if cum > ticket.cost_usd:
-            cumulative = cum
-
-    parent_title: str | None = None
-    if ticket.parent_id:
-        parent = service.get(ticket.parent_id)
-        if parent:
-            parent_title = parent.title
-
-    # Resolve each declared dependency to {id, title, state} so the
-    # drawer can render a readable list instead of opaque IDs.
-    import json as _json
-
-    dependencies: list[dict] = []
-    if ticket.depends_on:
-        try:
-            dep_ids = _json.loads(ticket.depends_on)
-        except ValueError, TypeError:
-            dep_ids = []
-        if isinstance(dep_ids, list):
-            for dep_id in dep_ids:
-                if not isinstance(dep_id, str):
-                    continue
-                dep = service.get(dep_id)
-                dependencies.append(
-                    {
-                        "id": dep_id,
-                        "title": dep.title if dep else None,
-                        "state": dep.state.value if dep else None,
-                    }
-                )
+    cumulative = _cumulative_cost_for(
+        ticket,
+        settings,
+        service,
+        blocking_cost=blocking_cost,
+        repo_config=repo_config,
+    )
+    parent_title = _parent_title_for(ticket, service)
+    dependencies = _dependencies_for(ticket, service)
+    pr_url_value = _pr_url_for(
+        ticket,
+        settings,
+        service,
+        fetch_pr_url=fetch_pr_url,
+        repo_config=repo_config,
+    )
     return TicketRead(
         id=ticket.id,
         title=ticket.title,
@@ -287,9 +379,7 @@ def enrich_ticket_read(
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
         dependencies=dependencies,
-        pr_url=_pr_url(ticket, settings, repo_config=repo_config)
-        if fetch_pr_url
-        else None,
+        pr_url=pr_url_value,
         retry_attempt=ticket.retry_attempt,
         last_transient_error=ticket.last_transient_error,
         next_retry_at=ticket.next_retry_at,
