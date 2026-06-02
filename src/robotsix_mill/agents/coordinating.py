@@ -384,6 +384,8 @@ def run_coordinator(
         # — both 400 on the DeepSeek capable tier. pydantic-ai round-trips
         # reasoning natively when the history is left intact.
 
+        from .structured_output_guard import reprompt_if_unstructured
+
         result = run_agent(
             agent,
             lambda h: h.run_sync(
@@ -394,6 +396,19 @@ def run_coordinator(
             settings=settings,
             what="implement",
         )
+        result = reprompt_if_unstructured(
+            result=result,
+            agent=agent,
+            expected_type=ImplementResult,
+            reprompt_message=(
+                "Your last response was all prose and no tool calls. Pick the "
+                "first file change and use edit_file or write_file now."
+            ),
+            settings=settings,
+            what="implement (re-prompt after prose-only)",
+            run_kwargs={"usage_limits": limits},
+            require_no_tool_calls=True,
+        )
         output: ImplementResult = result.output
         if not isinstance(output, ImplementResult):
             # The model's final message didn't parse as ImplementResult JSON, so
@@ -402,56 +417,12 @@ def run_coordinator(
             # text into a result — without this, the setattr below raises
             # "'str' object has no attribute 'conversation_state'" AND the
             # except branch re-raises it, blocking the ticket.
-            raw_output = str(output)
-            # ── Prose-only guard ──────────────────────────────────────────
-            # When the model spent 10K+ tokens producing prose with zero tool
-            # calls, re-prompt once to use edit_file/write_file.  This
-            # recovers from the known "all prose, no tools" failure mode
-            # without blocking the ticket or burning a full stage retry.
-            if len(raw_output) > 10_000:
-                try:
-                    messages = result.all_messages()
-                except Exception:
-                    messages = []
-                has_tool_call = any(
-                    getattr(part, "part_kind", "") in ("tool-call", "tool-return")
-                    for msg in messages
-                    for part in getattr(msg, "parts", [])
-                )
-                if not has_tool_call:
-                    log.warning(
-                        "implement: prose-only response (%d chars) with no "
-                        "tool calls detected; re-prompting agent to use tools",
-                        len(raw_output),
-                    )
-                    try:
-                        result = run_agent(
-                            agent,
-                            lambda h: h.run_sync(
-                                "Your last response was all prose and no tool "
-                                "calls. Pick the first file change and use "
-                                "edit_file or write_file now.",
-                                message_history=result.all_messages(),
-                                usage_limits=limits,
-                            ),
-                            settings=settings,
-                            what="implement (re-prompt after prose-only)",
-                        )
-                        output = result.output
-                    except Exception as reprompt_exc:
-                        log.warning(
-                            "implement: re-prompt after prose-only failed (%s); "
-                            "coercing original output",
-                            reprompt_exc,
-                        )
-            # ── End prose-only guard ──────────────────────────────────────
-            if not isinstance(output, ImplementResult):
-                log.warning(
-                    "implement: output did not parse as ImplementResult (got %s); "
-                    "coercing raw text into summary",
-                    type(output).__name__,
-                )
-                output = ImplementResult(summary=str(output).strip() or "(no summary)")
+            log.warning(
+                "implement: output did not parse as ImplementResult (got %s); "
+                "coercing raw text into summary",
+                type(output).__name__,
+            )
+            output = ImplementResult(summary=str(output).strip() or "(no summary)")
         try:
             output.conversation_state = result.all_messages_json()
         except AttributeError:
@@ -799,6 +770,7 @@ def run_coordinator_with_experts(
                 )
                 continue
 
+            # NOTE: prose-only guard intentionally not yet wired into the expert path — see ticket ce37
             expert_output: ImplementResult = run_result.output
             results.append((domain, expert_output))
 

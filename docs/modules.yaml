@@ -245,6 +245,7 @@ modules:
       - src/robotsix_mill/agents/tool_registry.py
       - src/robotsix_mill/agents/prompt_blocks.py
       - src/robotsix_mill/agents/retry.py
+      - src/robotsix_mill/agents/structured_output_guard.py
       - src/robotsix_mill/agents/openrouter_cost.py
       - src/robotsix_mill/agents/overlays.py
       - src/robotsix_mill/agents/periodic_base.py
@@ -254,6 +255,7 @@ modules:
       - tests/agents/test_expert_manager.py
       - tests/agents/test_tool_registry.py
       - tests/agents/test_retry.py
+      - tests/agents/test_structured_output_guard.py
       - tests/agents/test_claude_concurrency.py
       - tests/agents/test_claude_sdk_toggle.py
       - tests/agents/test_prompt_hygiene.py

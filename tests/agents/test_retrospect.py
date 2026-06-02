@@ -1254,3 +1254,59 @@ def test_coerce_result_degrades_none_to_empty():
     from robotsix_mill.agents.retrospecting import RetrospectResult, _coerce_result
 
     assert isinstance(_coerce_result(None), RetrospectResult)
+
+
+# --- Shared structured-output guard: re-prompt before terminal coercion -----
+
+
+class _StubAgentRunResult:
+    def __init__(self, output):
+        self.output = output
+
+    def all_messages(self):
+        return []
+
+
+def test_run_retrospect_agent_reprompts_once_on_unstructured_output(
+    tmp_path, monkeypatch
+):
+    """When ``run_agent`` first returns a raw 12K-char string, the
+    shared guard re-prompts once; the second invocation returns a
+    valid ``RetrospectResult`` which is returned without engaging the
+    ``_coerce_result`` fallback. ``run_agent`` is called exactly twice.
+    """
+    # Bypass build_agent_from_definition so no real agent is wired up.
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent_from_definition",
+        lambda settings, definition, **kw: object(),
+    )
+
+    s = Settings(data_dir=str(tmp_path / "data"))
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, settings, what, **kw):
+        calls.append(what)
+        if len(calls) == 1:
+            return _StubAgentRunResult("x" * 12_000)
+        return _StubAgentRunResult(
+            RetrospectResult(
+                findings="all good",
+                conclusion="closed",
+            )
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    out = retrospecting.run_retrospect_agent(
+        settings=s,
+        ticket_summary="t",
+        history_text="h",
+        langfuse_summary=None,
+    )
+    assert isinstance(out, RetrospectResult)
+    assert out.findings == "all good"
+    assert out.conclusion == "closed"
+    assert len(calls) == 2
+    assert calls[0] == "retrospect"
+    assert "re-prompt" in calls[1]

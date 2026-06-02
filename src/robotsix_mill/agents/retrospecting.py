@@ -265,6 +265,22 @@ def run_retrospect_agent(
         result = run_agent(
             agent, lambda h: h.run_sync(prompt), settings=settings, what="retrospect"
         )
+        from .structured_output_guard import reprompt_if_unstructured
+
+        result = reprompt_if_unstructured(
+            result=result,
+            agent=agent,
+            expected_type=RetrospectResult,
+            reprompt_message=(
+                "Your last response did not produce a structured RetrospectResult. "
+                "Reply now with a JSON object containing the required fields: "
+                "findings, conclusion, and the optional draft / memory fields "
+                "per the schema."
+            ),
+            settings=settings,
+            what="retrospect (re-prompt after prose-only)",
+            require_no_tool_calls=False,
+        )
     finally:
         _safe_close(agent)
     return _coerce_result(result.output)

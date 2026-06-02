@@ -211,6 +211,23 @@ def run_review_agent(
             settings=settings,
             what="review",
         )
+        from .structured_output_guard import reprompt_if_unstructured
+
+        result = reprompt_if_unstructured(
+            result=result,
+            agent=agent,
+            expected_type=ReviewVerdict,
+            reprompt_message=(
+                "Your last response did not produce a structured ReviewVerdict. "
+                "Reply now with a JSON object containing the required fields: "
+                "verdict (one of APPROVE, REQUEST_CHANGES, NEEDS_DISCUSSION), "
+                "comments, and request_changes."
+            ),
+            settings=settings,
+            what="review (re-prompt after prose-only)",
+            run_kwargs={"usage_limits": limits},
+            require_no_tool_calls=False,
+        )
     finally:
         _safe_close(agent)
     return _coerce_verdict(result.output)
