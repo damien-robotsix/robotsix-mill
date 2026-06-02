@@ -113,21 +113,13 @@ def _collect_sizes(
     return file_sizes, dir_totals
 
 
-def find_largest_items(
-    data_dir: Path,
-    top_n: int = 10,
-    threshold_bytes: int = 100 * 1024 * 1024,
+def _select_largest_from_sizes(
+    file_sizes: dict[str, int],
+    dir_totals: defaultdict[str, int],
+    top_n: int,
+    threshold_bytes: int,
 ) -> list[dict]:
-    """Return top-N items under *data_dir* whose size ≥ *threshold_bytes*.
-
-    Returns a list of dicts, each with keys ``path`` (str, relative to
-    *data_dir*), ``size_bytes`` (int), and ``is_directory`` (bool).
-    """
-    if not data_dir.is_dir():
-        return []
-
-    file_sizes, dir_totals = _collect_sizes(data_dir)
-
+    """Return the top-N items above *threshold_bytes* from pre-computed size dicts."""
     results: list[dict] = [
         {"path": rel, "size_bytes": size, "is_directory": False}
         for rel, size in file_sizes.items()
@@ -142,6 +134,25 @@ def find_largest_items(
     # Sort descending by size, then path for determinism
     results.sort(key=lambda r: (-r["size_bytes"], r["path"]))
     return results[:top_n]
+
+
+def find_largest_items(
+    data_dir: Path,
+    top_n: int = 10,
+    threshold_bytes: int = 100 * 1024 * 1024,
+) -> list[dict]:
+    """Return top-N items under *data_dir* whose size ≥ *threshold_bytes*.
+
+    Returns a list of dicts, each with keys ``path`` (str, relative to
+    *data_dir*), ``size_bytes`` (int), and ``is_directory`` (bool).
+    """
+    if not data_dir.is_dir():
+        return []
+
+    file_sizes, dir_totals = _collect_sizes(data_dir)
+    return _select_largest_from_sizes(
+        file_sizes, dir_totals, top_n, threshold_bytes
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -694,6 +705,17 @@ def _human_bytes(n: int) -> str:
     return f"{size:.1f} PiB"  # unreachable but appeases type checkers
 
 
+def _trim_path(p: str, max_len: int = 80) -> str:
+    """Middle-elide *p* with ``…`` so the result is at most *max_len* chars."""
+    if len(p) <= max_len:
+        return p
+    # Keep room for the ellipsis (1 char).
+    keep = max_len - 1
+    head = keep // 2
+    tail = keep - head
+    return p[:head] + "…" + p[-tail:]
+
+
 def _sanitize_gap_segment(s: str) -> str:
     """Replace any whitespace in *s* with ``_`` so the gap_id matches
     ``\\S+`` (no whitespace runs)."""
@@ -1004,6 +1026,99 @@ def _scan_growth_deltas(settings: Settings) -> tuple[list[dict], int]:
     return all_growth_flags, boards_with_flags
 
 
+def _build_summary(
+    total_bytes: int,
+    total_files: int,
+    oversized: list[dict],
+    all_growth_flags: list[dict],
+    findings: list[dict],
+    orphans_by_board: dict[str, list[OrphanWorkspace]],
+    total_orphans: int,
+    drafts_created: list[dict],
+) -> str:
+    """Render a multi-line summary for the runs panel.
+
+    Header is always ``"Scanned <bytes> in N files."``. When every
+    check produced zero results, returns the single-line short-circuit
+    ``"Scanned <bytes> in N files. No issues found."``. Otherwise each
+    non-empty category contributes one line (oversized → growth →
+    unbounded), the orphan line is always appended, and a final
+    ``"Filed N draft(s)."`` line is added when drafts were created.
+    """
+    header = f"Scanned {_human_bytes(total_bytes)} in {total_files:,} files."
+
+    if (
+        not oversized
+        and not all_growth_flags
+        and not findings
+        and total_orphans == 0
+    ):
+        return header + " No issues found."
+
+    lines: list[str] = [header]
+
+    if oversized:
+        n = len(oversized)
+        largest = oversized[0]
+        path = _trim_path(f".data/{largest['path']}")
+        size = int(largest["size_bytes"])
+        word = "item" if n == 1 else "items"
+        lines.append(
+            f"{n} oversized {word} (largest: {path} → {_human_bytes(size)})"
+        )
+
+    if all_growth_flags:
+        n = len(all_growth_flags)
+        largest = max(
+            all_growth_flags, key=lambda f: int(f.get("delta_bytes", 0))
+        )
+        path = _trim_path(
+            f".data/{largest.get('board_id', '')}/{largest['path']}"
+        )
+        delta = int(largest["delta_bytes"])
+        word = "flag" if n == 1 else "flags"
+        lines.append(
+            f"{n} growth {word} ({path} grew by {_human_bytes(delta)})"
+        )
+
+    if findings:
+        n = len(findings)
+        largest = max(
+            findings, key=lambda f: int(f.get("current_size", 0))
+        )
+        path = _trim_path(f".data/{largest['path']}")
+        current = int(largest["current_size"])
+        cap = int(largest["cap_size"])
+        word = "candidate" if n == 1 else "candidates"
+        lines.append(
+            f"{n} unbounded {word} "
+            f"({path}: {_human_bytes(current)}, cap: {_human_bytes(cap)})"
+        )
+
+    word = "workspace" if total_orphans == 1 else "workspaces"
+    orphan_line = f"{total_orphans} orphan {word}"
+    if total_orphans > 0 and orphans_by_board:
+        flat = [
+            o for items in orphans_by_board.values() for o in items
+        ]
+        if flat:
+            biggest = max(flat, key=lambda o: o.dir_size_bytes)
+            path = _trim_path(
+                f".data/{biggest.board_id}/workspaces/{biggest.ticket_id}"
+            )
+            orphan_line += (
+                f" (largest: {path}, {_human_bytes(biggest.dir_size_bytes)})"
+            )
+    lines.append(orphan_line)
+
+    if drafts_created:
+        n = len(drafts_created)
+        word = "draft" if n == 1 else "drafts"
+        lines.append(f"Filed {n} {word}.")
+
+    return "\n".join(lines)
+
+
 def run_data_dir_audit_pass(
     session_id: str = "",
     repo_config: RepoConfig | None = None,
@@ -1037,11 +1152,20 @@ def run_data_dir_audit_pass(
     # tmp_path-rooted instance.
     settings = Settings()
 
-    # Top-N largest items detection (ticket 2 of the epic).
-    oversized = find_largest_items(
-        data_dir=settings.data_dir,
-        top_n=10,
-        threshold_bytes=settings.data_dir_audit_size_threshold_bytes,
+    # Walk ``data_dir`` exactly once: the size dicts feed both the
+    # top-N oversized check (ticket 2) and the summary header's
+    # total-bytes / total-files anchor.
+    if settings.data_dir.is_dir():
+        file_sizes, dir_totals = _collect_sizes(settings.data_dir)
+    else:
+        file_sizes, dir_totals = {}, defaultdict(int)
+    total_bytes = sum(file_sizes.values())
+    total_files = len(file_sizes)
+    oversized = _select_largest_from_sizes(
+        file_sizes,
+        dir_totals,
+        10,
+        settings.data_dir_audit_size_threshold_bytes,
     )
 
     # Unbounded-collection candidate detection (ticket 4 of the epic).
@@ -1053,7 +1177,7 @@ def run_data_dir_audit_pass(
     orphans_by_board, total_orphans = _scan_orphan_workspaces(settings)
 
     # Growth-delta detection (ticket 3 of the epic).
-    all_growth_flags, boards_with_flags = _scan_growth_deltas(settings)
+    all_growth_flags, _boards_with_flags = _scan_growth_deltas(settings)
 
     # ----- Filing logic (ticket 6 of the epic) -----
     # Resolve a TicketService against the scheduling board. With no
@@ -1073,33 +1197,17 @@ def run_data_dir_audit_pass(
             session_id=session_id,
         )
 
-    # ----- Summary covering all checks -----
-    # Top-N oversized items, unbounded-collection findings, and
-    # orphan-workspace info are only included when found. The
-    # growth-delta status is always included (PR's contract for the
-    # new growth-delta feature).
-    summary_parts: list[str] = []
-    if oversized:
-        summary_parts.append(f"{len(oversized)} oversized items")
-    if findings:
-        summary_parts.append(
-            f"{len(findings)} unbounded-collection candidate(s) flagged"
-        )
-    if total_orphans:
-        per_board = ", ".join(
-            f"{board}={len(items)}" for board, items in sorted(orphans_by_board.items())
-        )
-        summary_parts.append(f"orphan workspaces: {total_orphans} ({per_board})")
-    if all_growth_flags:
-        summary_parts.append(
-            f"growth-delta check: {len(all_growth_flags)} items flagged "
-            f"across {boards_with_flags} board(s)"
-        )
-    else:
-        summary_parts.append("growth-delta check: no items exceeded thresholds")
-    if drafts_created:
-        summary_parts.append(f"{len(drafts_created)} drafts filed")
-    summary = "; ".join(summary_parts)
+    # ----- Summary covering all checks (ticket 7 of the epic) -----
+    summary = _build_summary(
+        total_bytes,
+        total_files,
+        oversized,
+        all_growth_flags,
+        findings,
+        orphans_by_board,
+        total_orphans,
+        drafts_created,
+    )
 
     log.info("data-dir audit pass done: %s", summary)
 
