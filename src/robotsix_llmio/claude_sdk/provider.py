@@ -121,28 +121,96 @@ def _get_inner_type(output_type: Any) -> Any:
     return output_type
 
 
+def _fenced_blocks(text: str) -> list[str]:
+    """Return the inner contents of every ```-fenced code block in *text*.
+
+    Matches ``` optionally tagged with a language (```json) and captures the
+    body. Models frequently wrap a structured answer in a ```json fence after
+    a prose preamble, so the fence is the most reliable delimiter.
+    """
+    return re.findall(r"```(?:[a-zA-Z0-9_-]+)?\s*\n?(.*?)```", text, re.DOTALL)
+
+
+def _balanced_objects(text: str) -> list[str]:
+    """Return every top-level balanced ``{...}`` substring of *text*.
+
+    A hand-rolled brace matcher that tracks JSON string state (so braces and
+    quotes inside string literals don't throw off the depth count). Unbalanced
+    stray braces in prose (``the {x} kwarg``) yield a short candidate that
+    simply fails to JSON-parse later; the real object is captured whole,
+    including nested objects/arrays. This replaces a naive
+    ``re.search(r"\\{.*\\}")`` that anchored on the FIRST prose brace and so
+    swallowed prose + JSON into one unparseable blob.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] != "{":
+            i += 1
+            continue
+        depth = 0
+        in_str = False
+        esc = False
+        j = i
+        while j < n:
+            c = text[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == "\\":
+                    esc = True
+                elif c == '"':
+                    in_str = False
+            elif c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    out.append(text[i : j + 1])
+                    break
+            j += 1
+        i = j + 1
+    return out
+
+
+def _extract_json_object(text: str) -> dict | None:
+    """Best-effort extraction of a JSON object from model *text*.
+
+    Tries, in order: (1) the whole text as JSON; (2) each ```-fenced block,
+    last first (a prose preamble + trailing ```json fence is the common shape);
+    (3) each top-level balanced ``{...}`` substring, last first. Returns the
+    first candidate that parses to a ``dict``, else ``None``.
+    """
+    candidates: list[str] = [text]
+    candidates += list(reversed(_fenced_blocks(text)))
+    candidates += list(reversed(_balanced_objects(text)))
+    for cand in candidates:
+        cand = cand.strip()
+        if not cand:
+            continue
+        try:
+            data = json.loads(cand)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
 def _parse_output(text: str, output_type: Any) -> Any:
     """Parse final assistant text against *output_type*.
 
-    ``str`` → text as-is.  Otherwise JSON-parse and validate with the inner
-    pydantic model.
+    ``str`` → text as-is.  Otherwise extract a JSON object (tolerating a prose
+    preamble and/or a ```json fence) and validate with the inner pydantic
+    model. Falls back to the raw text only when no JSON object can be found.
     """
     if output_type is str:
         return text
 
     validator = _get_inner_type(output_type)
-
-    data: Any = None
-    try:
-        data = json.loads(text)
-    except (json.JSONDecodeError, ValueError):
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group())
-            except (json.JSONDecodeError, ValueError):
-                pass
-
+    data = _extract_json_object(text)
     if isinstance(data, dict):
         return validator.model_validate(data)
     # Fallback: return raw text if JSON extraction failed.

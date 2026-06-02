@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from pydantic import BaseModel as _BM
 
 pytest.importorskip("pydantic_ai")
 
@@ -40,6 +41,8 @@ from robotsix_llmio.claude_sdk.provider import (
     _SdkToolResult,
     _chat_messages_input,
     _convert_tools,
+    _extract_json_object,
+    _parse_output,
 )
 from robotsix_llmio.claude_sdk.transient import (
     is_claude_sdk_transient,
@@ -291,7 +294,9 @@ def _fake_sdk_module() -> SimpleNamespace:
     tool_regs: list[dict[str, Any]] = []
     server_calls: list[dict[str, Any]] = []
 
-    def _fake_tool(name: str, description: str | None, parameters_json_schema: dict[str, Any]):
+    def _fake_tool(
+        name: str, description: str | None, parameters_json_schema: dict[str, Any]
+    ):
         tool_regs.append(
             dict(name=name, description=description, schema=parameters_json_schema)
         )
@@ -733,3 +738,71 @@ def test_live_tool_run_sync_honors_message_history():
     )
     assert "4273" in str(result.output)
     handle.close()
+
+
+# --- structured-output JSON extraction (prose + fenced / stray braces) -------
+
+class _Verdict(_BM):
+    verdict: str
+    auto_merge_eligible: bool = False
+
+
+def test_parse_output_str_passthrough():
+    assert _parse_output("anything", str) == "anything"
+
+
+def test_extract_clean_json():
+    assert _extract_json_object('{"verdict": "APPROVE"}') == {"verdict": "APPROVE"}
+
+
+def test_extract_fenced_json_after_prose():
+    # The 402b shape: prose preamble, then a ```json fence with the verdict.
+    text = (
+        "Looking at this review.\n\n## Analysis\nlooks good.\n\n"
+        '```json\n{"verdict": "APPROVE", "auto_merge_eligible": true}\n```\n'
+    )
+    v = _parse_output(text, _Verdict)
+    assert isinstance(v, _Verdict)
+    assert v.verdict == "APPROVE" and v.auto_merge_eligible is True
+
+
+def test_extract_ignores_stray_prose_brace():
+    # A stray `{...}` in prose must NOT derail extraction of the real object
+    # (the old greedy re.search anchored on the first brace and failed).
+    text = (
+        "The `{verified_proposals}` kwarg is passed through. Verdict below:\n"
+        '```json\n{"verdict": "REQUEST_CHANGES"}\n```'
+    )
+    v = _parse_output(text, _Verdict)
+    assert v.verdict == "REQUEST_CHANGES"
+
+
+def test_extract_prose_wrapped_json_no_fence():
+    # No fence, just prose then a JSON object with nested structures.
+    text = (
+        'Here is my verdict: {"verdict": "APPROVE", "auto_merge_eligible": false} done.'
+    )
+    v = _parse_output(text, _Verdict)
+    assert v.verdict == "APPROVE"
+
+
+def test_extract_picks_last_valid_object():
+    # An earlier non-matching object (e.g. an example) then the real one.
+    text = (
+        'Example shape: {"foo": 1}\n\nActual:\n'
+        '```json\n{"verdict": "NEEDS_DISCUSSION"}\n```'
+    )
+    v = _parse_output(text, _Verdict)
+    assert v.verdict == "NEEDS_DISCUSSION"
+
+
+def test_extract_no_json_falls_back_to_text():
+    assert _parse_output("no json at all here", _Verdict) == "no json at all here"
+
+
+def test_extract_nested_object_captured_whole():
+    text = '```json\n{"verdict": "APPROVE", "nested": {"a": {"b": [1,2]}}}\n```'
+    assert _extract_json_object(text) == {
+        "verdict": "APPROVE",
+        "nested": {"a": {"b": [1, 2]}},
+    }
