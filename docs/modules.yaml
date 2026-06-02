@@ -247,10 +247,12 @@ modules:
       - tests/agents/test_expert_manager.py
       - tests/agents/test_tool_registry.py
       - tests/agents/test_retry.py
+      - tests/agents/test_claude_concurrency.py
       - tests/agents/test_claude_sdk_toggle.py
       - tests/agents/test_prompt_hygiene.py
       - tests/agents/test_skills.py
       - tests/agents/test_agent_double_emit.py
+      - tests/agents/test_agent_fallback.py
       - tests/agents/test_agents_rework.py
       - tests/agents/test_overlays.py
       - tests/agents/test_periodic_base.py
@@ -338,6 +340,7 @@ modules:
       - src/robotsix_mill/agents/module_curator.py
       - tests/agents/test_coordinating.py
       - tests/agents/test_module_curator.py
+      - tests/agents/test_periodic_loader.py
       - tests/agents/test_documenting.py
       - tests/agents/test_answering.py
       - tests/agents/test_review_revision.py
@@ -355,6 +358,7 @@ modules:
       - tests/agents/test_completeness_check.py
       - tests/agents/test_scope_triage.py
       - tests/agents/test_epic_breakdown.py
+      - tests/agents/test_freshness.py
       - tests/agents/test_cost_reconciling.py
       - tests/agents/test_config_syncing.py
       - tests/agents/test_retrospect.py
