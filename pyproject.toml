@@ -78,7 +78,7 @@ max-complexity = 10
 # get refactored.
 "tests/runtime/test_worker.py" = ["C901"]
 "tests/runtime/test_api.py" = ["C901"]
-"tests/runtime/test_cli.py" = ["C901"]
+"tests/cli/test_cli.py" = ["C901"]
 # --- src/ legacy hot spots --------------------------------------------------
 # Cross-module re-exports of periodic_runner helpers. Each *_runner
 # stub re-exports ``_clone_token`` etc. so the worker can import them
@@ -146,7 +146,7 @@ max-complexity = 10
 # converting them to ``datetime.now(timezone.utc)`` triggers a much
 # wider refactor of the response-shape fixtures. Allow the legacy
 # call here while the rest of the codebase already moved off it.
-"tests/runtime/test_langfuse_client.py" = ["DTZ003"]
+"tests/langfuse/test_langfuse_client.py" = ["DTZ003"]
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]
