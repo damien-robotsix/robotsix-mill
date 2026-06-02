@@ -214,6 +214,7 @@ modules:
       - tests/stages/test_ci_fix.py
       - tests/stages/test_pause.py
       - tests/stages/test_retrospect_stage.py
+      - tests/stages/test_short_circuit_verify.py
       - tests/stages/test_answer.py
       - tests/test_spec_review.py
       - tests/test_multi_repo.py
