@@ -514,10 +514,13 @@ class RetrospectStage(Stage):
             _format_recent_proposals,
         )
 
+        # Render the verified-state table as an EPHEMERAL kwarg passed to
+        # the agent separately from memory. Concatenating it into
+        # memory_text would round-trip through ``updated_memory`` and bake
+        # the DB-derived table into the persisted ledger — see the
+        # matching note in ``pass_runner.run_agent_pass``.
         verified = _verify_prior_proposals(ctx.service, s, SourceKind.RETROSPECT)
-        if verified:
-            table = _render_verified_table(verified)
-            memory_text = table + "\n\n" + memory_text
+        verified_block = _render_verified_table(verified) if verified else ""
 
         # Build recent-proposals block for prompt injection.
         recent = ctx.service.recent_proposals_for(SourceKind.RETROSPECT, limit=100)
@@ -533,6 +536,7 @@ class RetrospectStage(Stage):
                 memory=memory_text,
                 comments_text=comments_text,
                 recent_proposals=rp_block,
+                verified_proposals=verified_block,
                 epic_context=epic_ctx,
                 sibling_context=sibling_ctx,
                 repo_dir=repo_dir,

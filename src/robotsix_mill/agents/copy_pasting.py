@@ -44,6 +44,7 @@ def run_copy_paste_agent(
     settings: Settings,
     memory: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
     repo_dir=None,
     definition_override=None,
 ) -> CopyPasteResult:
@@ -86,6 +87,7 @@ def run_copy_paste_agent(
         repo_dir=repo_dir,
         memory=memory,
         recent_proposals=recent_proposals,
+        verified_proposals=verified_proposals,
         prompt_tail="Run detect_duplication, triage the clone pairs, and return your findings.",
         include_jscpd=True,
     )

@@ -48,7 +48,7 @@ def _make_agent(updated_memory="new memory", draft_titles=None, draft_bodies=Non
     if draft_bodies is None:
         draft_bodies = []
 
-    def agent_fn(*, settings, memory, recent_proposals=""):
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
         return _FakeAgentResult(
             updated_memory=updated_memory,
             draft_titles=draft_titles,
@@ -118,7 +118,7 @@ def test_missing_memory_file_first_run(tmp_path, monkeypatch):
 
     captured_memory = []
 
-    def agent_fn(*, settings, memory, recent_proposals=""):
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
         captured_memory.append(memory)
         return _FakeAgentResult(
             updated_memory="initial memory",
@@ -353,9 +353,11 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
     )
 
     captured_memory = []
+    captured_verified = []
 
-    def echo_agent(*, settings, memory, recent_proposals=""):
+    def echo_agent(*, settings, memory, recent_proposals="", verified_proposals=""):
         captured_memory.append(memory)
+        captured_verified.append(verified_proposals)
         return _FakeAgentResult(
             updated_memory=memory,
             draft_titles=[],
@@ -370,16 +372,83 @@ def test_verified_state_table_in_agent_prompt(tmp_path):
         settings=settings,
     )
 
-    prompt = captured_memory[0]
-    assert "## Prior proposals — verified state" in prompt
-    assert "gap_alpha" in prompt
-    assert "gap_beta" in prompt
-    assert "gap_gamma" in prompt
-    assert "merged (via DONE)" in prompt
-    assert "declined (closed directly)" in prompt
-    assert "in-flight" in prompt
-    assert "CLOSED" in prompt
-    assert "HUMAN_MR_APPROVAL" in prompt
+    # The verified-state context arrives in its own ephemeral kwarg,
+    # NOT concatenated onto memory — otherwise the agent's
+    # ``updated_memory`` echo would round-trip it into the persisted
+    # ledger (see ``test_verified_state_not_persisted_to_memory_file``).
+    verified = captured_verified[0]
+    assert "## Prior proposals — verified state" in verified
+    assert "gap_alpha" in verified
+    assert "gap_beta" in verified
+    assert "gap_gamma" in verified
+    assert "merged (via DONE)" in verified
+    assert "declined (closed directly)" in verified
+    assert "in-flight" in verified
+    assert "CLOSED" in verified
+    assert "HUMAN_MR_APPROVAL" in verified
+
+    # And it must NOT have been mixed into the memory the agent sees.
+    memory_seen = captured_memory[0]
+    assert "## Prior proposals — verified state" not in memory_seen
+
+    db.reset_engine()
+
+
+# 7b. Regression — verified-state table is NEVER persisted to memory file
+def test_verified_state_not_persisted_to_memory_file(tmp_path):
+    """The verified-state table is an ephemeral DB-derived input that
+    must not leak into the persisted memory ledger.  This is the bug
+    fixed by passing the table as a separate kwarg (and not concatenating
+    it onto ``memory_text``): when the agent echoes memory back via
+    ``updated_memory``, the runner persists *only* the agent's own
+    observations — never the runner-injected table.
+    """
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Create one ticket with a gap-id marker so the runner has
+    # something to render in the verified-state table.
+    t = service.create(
+        "Some gap",
+        "body\n\n<!-- audit-gap-id: some_gap -->",
+        source=SourceKind.AUDIT,
+    )
+    with db.session(settings, "test-board") as s:
+        ticket = s.get(type(t), t.id)
+        ticket.state = State.DONE
+        s.add(TicketEvent(ticket_id=t.id, state=State.DONE, note="done"))
+        s.commit()
+
+    memory_file = tmp_path / "audit_memory.md"
+    memory_file.write_text(
+        "## My own observations\n- never seen the verified table here.\n",
+        encoding="utf-8",
+    )
+
+    # The agent echoes whatever memory it saw — this mimics the real
+    # audit/health/etc. agents which the prompt instructs to "return
+    # the full, updated memory document in ``updated_memory``".
+    def echo_agent(*, settings, memory, recent_proposals="", verified_proposals=""):
+        return _FakeAgentResult(
+            updated_memory=memory,
+            draft_titles=[],
+            draft_bodies=[],
+        )
+
+    run_agent_pass(
+        echo_agent,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+
+    # The header must not have been baked into the persisted file —
+    # neither on this tick nor (by induction) on any future tick.
+    persisted = memory_file.read_text(encoding="utf-8")
+    assert "## Prior proposals — verified state" not in persisted
 
     db.reset_engine()
 
@@ -395,7 +464,9 @@ def test_marker_round_trip(tmp_path):
     memory_file.write_text("old", encoding="utf-8")
 
     # Create an agent that returns gap_ids
-    def agent_with_gap_ids(*, settings, memory, recent_proposals=""):
+    def agent_with_gap_ids(
+        *, settings, memory, recent_proposals="", verified_proposals=""
+    ):
         return _FakeAgentResult(
             updated_memory="updated",
             draft_titles=["Fix Z"],
@@ -464,7 +535,7 @@ def test_missing_gap_ids_no_crash(tmp_path):
         draft_titles = ["Title"]
         draft_bodies = ["Body"]
 
-    def agent_fn(*, settings, memory, recent_proposals=""):
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
         return NoGapIdsResult()
 
     result = run_agent_pass(
@@ -883,7 +954,7 @@ def test_output_emit_failure_degrades_to_noop(tmp_path):
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("# Prior memory — must survive\n", encoding="utf-8")
 
-    def agent_fn(*, settings, memory, recent_proposals=""):
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
         raise UnexpectedModelBehavior("Exceeded maximum output retries (4)")
 
     result = run_agent_pass(
@@ -915,7 +986,7 @@ def test_non_output_exception_still_propagates(tmp_path):
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("m", encoding="utf-8")
 
-    def agent_fn(*, settings, memory, recent_proposals=""):
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
         raise RuntimeError("genuine bug, not an output-emit failure")
 
     import pytest

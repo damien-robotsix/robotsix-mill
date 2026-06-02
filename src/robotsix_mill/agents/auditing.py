@@ -40,6 +40,7 @@ def run_audit_agent(
     settings: Settings,
     memory: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
     repo_dir=None,
     definition_override=None,
 ) -> AuditResult:
@@ -99,6 +100,7 @@ def run_audit_agent(
         repo_dir=repo_dir,
         memory=memory,
         recent_proposals=recent_proposals,
+        verified_proposals=verified_proposals,
         prompt_tail="Perform the audit and return your result.",
         include_forge_url=True,
         include_jscpd=True,

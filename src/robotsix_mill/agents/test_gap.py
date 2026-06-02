@@ -43,6 +43,7 @@ def run_test_gap_agent(
     settings: Settings,
     memory: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
     repo_dir=None,
     definition_override=None,
 ) -> TestGapResult:
@@ -96,6 +97,7 @@ def run_test_gap_agent(
         repo_dir=repo_dir,
         memory=memory,
         recent_proposals=recent_proposals,
+        verified_proposals=verified_proposals,
         prompt_tail="Perform the test-gap inspection and return your result.",
         include_forge_url=True,
     )

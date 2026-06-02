@@ -179,6 +179,7 @@ def run_retrospect_agent(
     memory: str = "",
     comments_text: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
     epic_context: str = "",
     sibling_context: str = "",
     repo_dir: Path | None = None,
@@ -239,8 +240,13 @@ def run_retrospect_agent(
         )
 
     lf = langfuse_summary or "(no Langfuse trace data — workflow-only review)"
+    verified_block = (
+        ("\n\n" + verified_proposals) if verified_proposals else ""
+    )
     prompt = (
         f"{recent_proposals}"
+        + verified_block
+        + "\n\n"
         + section("ticket", ticket_summary)
         + "\n\n"
         + section("workflow", history_text)

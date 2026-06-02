@@ -34,6 +34,7 @@ def run_module_curator_agent(
     settings: Settings,
     memory: str = "",
     recent_proposals: str = "",
+    verified_proposals: str = "",
     repo_dir=None,
     definition_override=None,
 ) -> ModuleCuratorResult:
@@ -103,8 +104,12 @@ def run_module_curator_agent(
         model_name=definition.model or settings.module_curator_model,
         system_prompt=system_prompt,
     )
+    verified_block = (
+        ("\n\n" + verified_proposals) if verified_proposals else ""
+    )
     prompt = (
         f"{recent_proposals}"
+        + verified_block
         + section("memory", memory or "(empty — start a new ledger)")
         + "\n\n"
         + "Read docs/modules.yaml, walk the repo tree, and file draft tickets "

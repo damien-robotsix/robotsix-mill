@@ -275,11 +275,15 @@ def run_agent_pass(
     # 1. Read current memory — empty string if missing/unreadable.
     memory_text = load_memory(memory_file, max_chars=settings.max_memory_chars)
 
-    # 2. Verify prior proposals and prepend verified-state table.
+    # 2. Verify prior proposals; render an ephemeral verified-state table
+    #    passed to the agent as a SEPARATE kwarg (not concatenated onto
+    #    memory_text). The table is recomputed from the DB every pass —
+    #    persisting it into the memory ledger would cause a self-
+    #    perpetuating leak (the agent echoes memory back verbatim, the
+    #    runner persists it, the next tick re-prepends a fresh table on
+    #    top, …).
     verified = _verify_prior_proposals(service, settings, source_label)
-    if verified:
-        table = _render_verified_table(verified)
-        memory_text = table + "\n\n" + memory_text
+    verified_block = _render_verified_table(verified) if verified else ""
 
     # 3. Build the recent-proposals block for prompt injection.
     recent = service.recent_proposals_for(source_label, limit=100)
@@ -304,7 +308,12 @@ def run_agent_pass(
     from pydantic_ai.exceptions import UnexpectedModelBehavior
 
     try:
-        res = agent_fn(settings=settings, memory=memory_text, recent_proposals=rp_block)
+        res = agent_fn(
+            settings=settings,
+            memory=memory_text,
+            recent_proposals=rp_block,
+            verified_proposals=verified_block,
+        )
     except UnexpectedModelBehavior as e:
         log.warning(
             "%s: agent did not emit a parseable structured Result "
