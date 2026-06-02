@@ -124,14 +124,25 @@ def _render_verified_table(verified: dict[str, dict]) -> str:
 # cross-ticket patterns + things to monitor, not a per-ticket diary — ticket
 # history lives in the DB. Strip the section on persist so the invariant holds
 # regardless of whether the agent obeyed the prompt.
+# Match ONLY the heading line + its blank lines + the contiguous Markdown table
+# rows (``| … |``). Deliberately NOT ``.*?`` to the next heading — that would
+# also swallow any prose the agent wrote AFTER the table when no later ``##``
+# heading bounds it (observed wiping a whole ledger to empty). Stop at the first
+# line that is neither blank nor a table row.
 _EPHEMERAL_MEMORY_SECTION_RE = re.compile(
-    r"(?ms)^##\s*Prior proposals\b.*?(?=^##\s|\Z)"
+    r"(?m)^[ \t]*##\s*Prior proposals\b[^\n]*\n"  # heading line
+    r"(?:[ \t]*\n)*"  # optional blank lines
+    r"(?:[ \t]*\|[^\n]*\n?)+"  # one or more table rows (| … |)
 )
 
 
 def strip_ephemeral_proposal_sections(memory_text: str) -> str:
     """Remove the DB-derived ``## Prior proposals — verified state`` table from
-    a memory document before it is persisted to the cross-run ledger."""
+    a memory document before it is persisted to the cross-run ledger.
+
+    Removes only the heading + the contiguous table rows — any surrounding
+    cross-ticket notes the agent wrote are preserved.
+    """
     # Fast path: leave text byte-for-byte unchanged when there is nothing to
     # strip (the vast majority of memory documents) — only normalise whitespace
     # when a section is actually removed.
