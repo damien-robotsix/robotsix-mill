@@ -188,6 +188,29 @@ def _maybe_reevaluate_epic(
                 _spawn_epic_reeval(parent.id, ctx)
 
 
+def _root_input_summary(ticket, ticket_id: str, stage_name: str) -> dict:
+    """Build the input-summary dict attached to the Langfuse root span."""
+    return {
+        "ticket_id": ticket_id,
+        "title": ticket.title,
+        "state": ticket.state.value,
+        "stage": stage_name,
+        "source": ticket.source,
+        "priority": bool(getattr(ticket, "priority", False)),
+    }
+
+
+def _root_output_summary(outcome, ticket) -> dict:
+    """Build the output-summary dict attached to the Langfuse root span."""
+    return {
+        "next_state": outcome.next_state.value
+        if outcome and outcome.next_state
+        else None,
+        "note": (outcome.note or "") if outcome else "",
+        "no_op": bool(outcome and outcome.next_state == ticket.state),
+    }
+
+
 async def _process_ticket_inner(
     ticket_id: str, ctx: StageContext, active_map: dict | None = None
 ) -> None:
@@ -256,14 +279,7 @@ async def _process_ticket_inner(
                     # without drilling into children. Output is set
                     # below, once the stage returns.
                     root_io.set_input(
-                        {
-                            "ticket_id": ticket_id,
-                            "title": ticket.title,
-                            "state": ticket.state.value,
-                            "stage": stage_name,
-                            "source": ticket.source,
-                            "priority": bool(getattr(ticket, "priority", False)),
-                        }
+                        _root_input_summary(ticket, ticket_id, stage_name)
                     )
                     trace_id = root_io.trace_id if root_io is not None else None
                 # stage.run is sync (LLM/tool) — keep the loop responsive
@@ -287,17 +303,7 @@ async def _process_ticket_inner(
                 # Attach the outcome to the root span — visible at the
                 # top of the trace in Langfuse alongside the input.
                 if root_io is not None:
-                    root_io.set_output(
-                        {
-                            "next_state": outcome.next_state.value
-                            if outcome and outcome.next_state
-                            else None,
-                            "note": (outcome.note or "") if outcome else "",
-                            "no_op": bool(
-                                outcome and outcome.next_state == ticket.state
-                            ),
-                        }
-                    )
+                    root_io.set_output(_root_output_summary(outcome, ticket))
         except asyncio.TimeoutError:
             timeout = ctx.settings.stage_timeout_overrides.get(
                 stage_name, ctx.settings.stage_timeout_seconds
