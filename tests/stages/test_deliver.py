@@ -241,6 +241,62 @@ def test_pr_api_error_blocks_resumable(tmp_path, monkeypatch):
     assert "resumable" in out.note and "403" in out.note
 
 
+def test_pr_422_no_commits_routes_to_done(tmp_path, monkeypatch):
+    """A 422 "No commits between" from the forge routes to DONE, not BLOCKED.
+
+    The local branch_has_net_diff guard fail-opens when the workspace clone is
+    absent or its origin/main ref is stale, so an empty branch can slip past it
+    to the PR-create call. The forge's own emptiness verdict is authoritative —
+    routing to DONE stops the infinite block-loop (every resume re-hits the
+    identical 422) instead of stranding the ticket.
+    """
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+
+    def boom(self, *, source_branch, title, body):
+        raise RuntimeError(
+            'GitHub PR create failed: 422 {"message":"Validation Failed",'
+            '"errors":[{"resource":"PullRequest","code":"custom",'
+            '"message":"No commits between main and ' + source_branch + '"}]}'
+        )
+
+    monkeypatch.setattr(github.GitHubForge, "open_merge_request", boom)
+    # A branch WITH a real commit so the upstream net-diff guard passes and we
+    # actually reach the PR-create call (where the forge disagrees).
+    t, _ = _ticket_with_branch(ctx, remote)
+
+    out = DeliverStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert "no change needed" in out.note.lower()
+    assert "no commits between" in out.note.lower()
+
+
+def test_pr_non_422_error_still_blocks_resumable(tmp_path, monkeypatch):
+    """A non-422 forge error must still BLOCK-resumable (not be swallowed)."""
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL=remote,
+        FORGE_TOKEN="t",
+    )
+
+    def boom(self, *, source_branch, title, body):
+        raise RuntimeError("GitHub PR create failed: 500 internal error")
+
+    monkeypatch.setattr(github.GitHubForge, "open_merge_request", boom)
+    t, _ = _ticket_with_branch(ctx, remote)
+
+    out = DeliverStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "resumable" in out.note and "500" in out.note
+
+
 # --- zero-diff guard ----------------------------------------------------
 
 

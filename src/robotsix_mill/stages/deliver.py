@@ -217,6 +217,29 @@ class DeliverStage(Stage):
                 source_branch=branch, title=title, body=body
             )
         except Exception as e:  # noqa: BLE001 — resumable, don't lose branch
+            # A 422 "No commits between <base> and <branch>" means the head
+            # branch has no net diff vs the base — there is nothing to merge.
+            # This is the same empty-branch condition the branch_has_net_diff
+            # guard above catches, but that guard fail-opens when the workspace
+            # clone is absent (its ``git fetch`` errors out) or its local
+            # origin/main ref is stale, so the empty branch slips through to
+            # here. Treat the forge's OWN emptiness verdict as authoritative
+            # and route to DONE — the same conclusion the guard reaches — rather
+            # than looping forever in BLOCKED-resumable (every resume re-pushes
+            # the empty branch and re-hits the identical 422).
+            if "No commits between" in str(e):
+                log.info(
+                    "%s: forge reports no commits between %s and the branch — "
+                    "routing to DONE (nothing to deliver)",
+                    ticket.id,
+                    s.forge_target_branch,
+                )
+                return Outcome(
+                    State.DONE,
+                    "no change needed — the forge reports no commits between "
+                    f"{s.forge_target_branch} and the branch; there is nothing "
+                    "to deliver",
+                )
             log.exception("%s: open PR failed", ticket.id)
             return Outcome(State.BLOCKED, f"open PR failed — resumable: {e}")
 
