@@ -63,6 +63,9 @@ modules:
     paths:
       - src/robotsix_mill/vcs/git_ops.py
       - src/robotsix_mill/vcs/__init__.py
+      - tests/vcs/__init__.py
+      - tests/vcs/test_clone_all_repos.py
+      - tests/vcs/test_git_ops.py
     dependencies: []
 
   - id: forge
