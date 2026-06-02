@@ -182,6 +182,90 @@ def _resolve_cap(pattern: str, settings: Settings) -> tuple[int, str]:
     raise ValueError(f"Unknown unbounded pattern: {pattern!r}")
 
 
+def _count_runs_json_entries(path: Path) -> tuple[int | None, int | None]:
+    """Return ``(record_count, record_max)`` for a ``runs.json`` file.
+
+    Both values are ``None`` if the file parses cleanly but is within
+    the entry-count cap, or if the JSON is unparseable. Parse errors
+    are silently logged at debug level — the size check still applies
+    at the caller.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        log.debug(
+            "Could not parse %s — skipping record-count check: %s",
+            path,
+            exc,
+        )
+        return None, None
+    if isinstance(data, list) and len(data) > _RUNS_JSON_MAX_ENTRIES:
+        return len(data), _RUNS_JSON_MAX_ENTRIES
+    return None, None
+
+
+def _build_finding(
+    path: Path,
+    data_dir: Path,
+    size: int,
+    cap_bytes: int,
+    cap_detail: str,
+    pattern: str,
+    record_count: int | None,
+    record_max: int | None,
+) -> dict:
+    """Build a finding dict for ``path`` against its pattern's caps."""
+    try:
+        rel_path = str(path.relative_to(data_dir))
+    except ValueError:
+        rel_path = str(path)
+    return {
+        "check": "unbounded_candidates",
+        "path": rel_path,
+        "current_size": size,
+        "cap_size": cap_bytes,
+        "cap_detail": cap_detail,
+        "pattern": pattern,
+        "severity": "warning",
+        "record_count": record_count,
+        "record_max": record_max,
+    }
+
+
+def _evaluate_path(
+    path: Path,
+    data_dir: Path,
+    pattern: str,
+    cap_bytes: int,
+    cap_detail: str,
+) -> dict | None:
+    """Return a finding dict for ``path`` if it exceeds its cap, else None."""
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        log.debug("Could not stat %s — skipping: %s", path, exc)
+        return None
+
+    record_count: int | None = None
+    record_max: int | None = None
+    if pattern == "runs.json":
+        record_count, record_max = _count_runs_json_entries(path)
+
+    if size <= cap_bytes and record_count is None:
+        return None
+
+    return _build_finding(
+        path,
+        data_dir,
+        size,
+        cap_bytes,
+        cap_detail,
+        pattern,
+        record_count,
+        record_max,
+    )
+
+
 def check_unbounded_candidates(
     data_dir: Path,
     settings: Settings,
@@ -218,60 +302,13 @@ def check_unbounded_candidates(
         cap_bytes, cap_detail = _resolve_cap(pattern, settings)
 
         for path in sorted(data_dir.rglob(glob)):
-            if not path.is_file():
-                continue
-            if path in matched:
+            if not path.is_file() or path in matched:
                 continue
             matched.add(path)
 
-            try:
-                size = path.stat().st_size
-            except OSError as exc:
-                log.debug("Could not stat %s — skipping: %s", path, exc)
-                continue
-
-            record_count: int | None = None
-            record_max: int | None = None
-
-            if pattern == "runs.json":
-                # Additionally parse the JSON to count top-level entries.
-                # Parse errors → silently skip the record-count check
-                # (size check still applies).
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    log.debug(
-                        "Could not parse %s — skipping record-count check: %s",
-                        path,
-                        exc,
-                    )
-                else:
-                    if isinstance(data, list) and len(data) > _RUNS_JSON_MAX_ENTRIES:
-                        record_count = len(data)
-                        record_max = _RUNS_JSON_MAX_ENTRIES
-
-            size_over = size > cap_bytes
-            if not size_over and record_count is None:
-                continue
-
-            try:
-                rel_path = str(path.relative_to(data_dir))
-            except ValueError:
-                rel_path = str(path)
-
-            findings.append(
-                {
-                    "check": "unbounded_candidates",
-                    "path": rel_path,
-                    "current_size": size,
-                    "cap_size": cap_bytes,
-                    "cap_detail": cap_detail,
-                    "pattern": pattern,
-                    "severity": "warning",
-                    "record_count": record_count,
-                    "record_max": record_max,
-                }
-            )
+            finding = _evaluate_path(path, data_dir, pattern, cap_bytes, cap_detail)
+            if finding is not None:
+                findings.append(finding)
 
     return findings
 
