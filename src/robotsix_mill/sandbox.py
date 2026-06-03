@@ -95,10 +95,57 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
     ]
 
 
-def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
+def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> str:
+    """Prepend a read-only-safe project install to *command*, if warranted.
+
+    Returns *command* unchanged unless ALL of:
+
+    * the repo is a Python project (``pyproject.toml`` present), and
+    * the sandbox has egress (an egress proxy is configured) — without
+      network ``pip`` can't reach PyPI, so installing is impossible and
+      we must not turn a runnable gate into a guaranteed failure.
+
+    The install is made safe for the locked-down sandbox:
+
+    * ``--user`` installs into ``HOME=/tmp/.local`` — the sandbox's
+      writable tmpfs — so it works under the read-only container root.
+    * PEP 517 build isolation copies the source to ``TMPDIR=/tmp`` before
+      building, so the (writable) repo bind mount is never mutated — no
+      stray ``*.egg-info`` written back to the host clone.
+    * ``PYTHONPATH=src`` (injected separately for src-layout repos) still
+      shadows the freshly-installed package with the MOUNTED edits, so
+      the gate tests the ticket's code while importing its declared deps.
+
+    Build/runtime deps that are already baked into the image are simply
+    re-resolved as already-satisfied — cheap. The win is the deps the
+    image lacks (the ticket's newly-added ones)."""
+    if not settings.sandbox_proxy_url:
+        return command
+    if not (repo_dir / "pyproject.toml").exists():
+        return command
+    return "pip install --user --quiet --disable-pip-version-check . && " + command
+
+
+def run(
+    command: str,
+    *,
+    repo_dir: Path,
+    settings: Settings,
+    install_project: bool = False,
+) -> tuple[int, str]:
     """Execute ``command`` against ``repo_dir`` in a disposable
     container. Returns ``(exit_code, combined_output)``. Raises
-    :class:`SandboxError` on isolation-infrastructure failure."""
+    :class:`SandboxError` on isolation-infrastructure failure.
+
+    When *install_project* is set (the test gate passes it), the repo's
+    own dependencies are installed before *command* runs. The gate
+    otherwise executes against the sandbox image's FROZEN site-packages,
+    so a ticket that adds a new third-party runtime dependency (e.g.
+    converting to Jinja2 templates → adds ``jinja2``) fails forever with
+    ``ModuleNotFoundError`` no matter how the agent edits the code —
+    because nothing ever installs the declared dependency. See
+    ``_maybe_install_prefix`` for how the install is made
+    read-only-safe."""
     # Callers (e.g. the merge stage) may pass a str. We also resolve to
     # an absolute path because Docker's `-w` rejects relative arguments
     # (see _repo_mount for the same reason).
@@ -159,9 +206,17 @@ def run(command: str, *, repo_dir: Path, settings: Settings) -> tuple[int, str]:
             "-e",
             f"no_proxy={no_proxy}",
         ]
+    # Optionally prefix a dependency install so the gate runs against the
+    # repo's DECLARED deps, not just the image's frozen ones.
+    effective_command = (
+        _maybe_install_prefix(command, repo_dir, settings)
+        if install_project
+        else command
+    )
+
     # Override the image ENTRYPOINT: images like robotsix/mill have one
     # (it starts the server) which would otherwise swallow our command.
-    argv += ["--entrypoint", "sh", settings.sandbox_image, "-lc", command]
+    argv += ["--entrypoint", "sh", settings.sandbox_image, "-lc", effective_command]
 
     try:
         r = subprocess.run(
