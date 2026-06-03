@@ -24,10 +24,13 @@ class _FakeAgentResult:
     """Returned by mock agent callables — matches the interface that
     run_agent_pass accesses: .updated_memory, .draft_titles, .draft_bodies."""
 
-    def __init__(self, updated_memory, draft_titles, draft_bodies, gap_ids=None):
+    def __init__(
+        self, updated_memory, draft_titles, draft_bodies, gap_ids=None, summary=""
+    ):
         self.updated_memory = updated_memory
         self.draft_titles = draft_titles
         self.draft_bodies = draft_bodies
+        self.summary = summary
         if gap_ids is not None:
             self.gap_ids = gap_ids
 
@@ -1747,3 +1750,33 @@ def test_strip_preserves_prose_after_table():
     out = strip_ephemeral_proposal_sections(mem)
     assert "Prior proposals" not in out and "foo | CLOSED" not in out
     assert "Real cross-ticket pattern" in out and "thing to monitor" in out
+
+
+def test_agent_summary_threads_to_pass_result(tmp_path):
+    """The agent's `summary` flows to AgentPassResult.summary, so the run
+    registry can show what a 0-draft run actually examined."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("m", encoding="utf-8")
+
+    def agent_fn(*, settings, memory, recent_proposals="", verified_proposals=""):
+        return _FakeAgentResult(
+            updated_memory="m",
+            draft_titles=[],
+            draft_bodies=[],
+            summary="scanned 142 files; 3 clone pairs, 0 above threshold",
+        )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+    )
+    assert result.summary == "scanned 142 files; 3 clone pairs, 0 above threshold"
+    assert result.drafts_created == []
+    db.reset_engine()

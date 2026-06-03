@@ -1533,14 +1533,17 @@ class Worker:
             )
             if reg and run_id:
                 runner_summary = (getattr(result, "summary", "") or "").strip()
+                n = len(result.drafts_created)
                 if runner_summary:
-                    summary = runner_summary
+                    # The agent's own account + the draft count, so the count is
+                    # always visible alongside its reasoning.
+                    summary = f"{runner_summary} | {n} draft(s) filed"
                 else:
                     draft_ids = [d["id"] for d in result.drafts_created[:5]]
                     summary = (
-                        f"Created {len(result.drafts_created)} drafts: "
+                        f"Created {n} drafts: "
                         f"{', '.join(draft_ids)}"
-                        f"{'…' if len(result.drafts_created) > 5 else ''}"
+                        f"{'…' if n > 5 else ''}"
                     )
                 reg.finish_ok(run_id, summary)
         except Exception as e:  # noqa: BLE001 — periodic must survive
