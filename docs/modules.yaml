@@ -455,7 +455,7 @@ modules:
     paths:
       - src/robotsix_mill/langfuse_client.py
       - tests/langfuse/test_langfuse_client.py
-      - tests/runtime/test_trace_health.py
+      - tests/langfuse/test_trace_health.py
     dependencies: [config]
 
   - id: notify
