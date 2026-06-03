@@ -7,6 +7,13 @@ from .cost_log import CostLogSource, CostRecord, CostWindow, LoggedCost
 from .http import timeout_http_client
 from .langfuse_cost import LangfuseCostLogSource
 from .provider import LLMProvider, Tier
+from .provider_cost import (
+    DEFAULT_TOLERANCE,
+    Discrepancy,
+    ProviderCost,
+    ProviderCostSource,
+    reconcile,
+)
 from .retry import (
     call_with_retry,
     call_with_retry_and_fallback,
@@ -37,6 +44,11 @@ __all__ = [
     "LoggedCost",
     "CostLogSource",
     "LangfuseCostLogSource",
+    "ProviderCost",
+    "ProviderCostSource",
+    "Discrepancy",
+    "reconcile",
+    "DEFAULT_TOLERANCE",
     "timeout_http_client",
     "LLMProvider",
     "Tier",

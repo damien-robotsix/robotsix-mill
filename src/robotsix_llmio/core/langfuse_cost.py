@@ -105,6 +105,56 @@ class LangfuseCostLogSource:
             records=records,
         )
 
+    def prune_before(self, cutoff: datetime) -> int:
+        """Delete logged traces older than *cutoff* (``timestamp < cutoff``).
+
+        Time-based retention — keeps the cost log bounded while guaranteeing
+        any window at/after *cutoff* stays fully reconcilable (the consumer
+        reconciles only windows inside this horizon). Lists the oldest traces
+        up to *cutoff* (``toTimestamp`` + ``timestamp.asc``) and bulk-deletes
+        them in pages until none remain. Returns the count deleted; raises
+        ``RuntimeError`` on any non-2xx response.
+        """
+        url = f"{self._base_url}/api/public/traces"
+        headers = {"Authorization": self._auth_header()}
+        deleted = 0
+        with httpx.Client(timeout=_TIMEOUT) as client:
+            while True:
+                # page=1 + asc: after each delete the oldest shifts forward, so
+                # page 1 keeps yielding the next oldest batch ≤ cutoff.
+                resp = client.get(
+                    url,
+                    params={
+                        "toTimestamp": cutoff.isoformat(),
+                        "limit": _PAGE_LIMIT,
+                        "page": 1,
+                        "orderBy": "timestamp.asc",
+                    },
+                    headers=headers,
+                )
+                if not (200 <= resp.status_code < 300):
+                    raise RuntimeError(
+                        f"Langfuse traces list (prune) failed: "
+                        f"HTTP {resp.status_code}: {resp.text[:200]}"
+                    )
+                data = resp.json().get("data") or []
+                ids = [str(t["id"]) for t in data if t.get("id")]
+                if not ids:
+                    break
+                del_resp = client.request(
+                    "DELETE",
+                    url,
+                    json={"traceIds": ids},
+                    headers=headers,
+                )
+                if not (200 <= del_resp.status_code < 300):
+                    raise RuntimeError(
+                        f"Langfuse traces delete (prune) failed: "
+                        f"HTTP {del_resp.status_code}: {del_resp.text[:200]}"
+                    )
+                deleted += len(ids)
+        return deleted
+
     @staticmethod
     def _to_record(trace: dict[str, Any]) -> CostRecord:
         """Build a :class:`CostRecord` from one Langfuse trace dict."""
