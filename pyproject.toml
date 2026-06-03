@@ -155,10 +155,9 @@ max-complexity = 10
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]
-# ``robotsix-modules`` is a standalone package with its own pyproject.toml
-# and dependency declarations; the root scan would wrongly evaluate its
-# imports against this project's deps. Exclude it from the root run.
-extend_exclude = ["robotsix-modules"]
+# Nested standalone packages each have their own pyproject.toml and validate
+# their own dependencies; exclude them so the root scan doesn't flag imports.
+extend_exclude = ["robotsix-modules", "robotsix-yaml-config"]
 
 [tool.deptry.per_rule_ignores]
 # CLI-only dev/lint/docs tools that are never imported at runtime.
