@@ -15,6 +15,8 @@ __all__ = [
     "OpenRouterModel",
     "OpenRouterProvider",
     "OpenRouterProviderCostSource",
+    "OpenRouterKeyCostSource",
+    "KeyUsage",
     "record_openrouter_cost",
     "is_openrouter_transient",
     "is_openrouter_upstream_error",
@@ -30,8 +32,8 @@ def __getattr__(name: str) -> Any:  # PEP 562 — lazy heavy imports
         from .provider import OpenRouterProvider
 
         return OpenRouterProvider
-    if name == "OpenRouterProviderCostSource":
-        from .provider_cost import OpenRouterProviderCostSource
+    if name in ("OpenRouterProviderCostSource", "OpenRouterKeyCostSource", "KeyUsage"):
+        from . import provider_cost
 
-        return OpenRouterProviderCostSource
+        return getattr(provider_cost, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

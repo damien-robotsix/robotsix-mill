@@ -18,8 +18,13 @@ from robotsix_llmio.core.provider_cost import (
     ProviderCost,
     reconcile,
 )
+import os
+
+import pytest
+
 from robotsix_llmio.openrouter import provider_cost as orpc
 from robotsix_llmio.openrouter.provider_cost import (
+    OpenRouterKeyCostSource,
     OpenRouterProviderCostSource,
     _utc_dates,
 )
@@ -139,6 +144,55 @@ def test_openrouter_fetch_raises_on_error(monkeypatch):
         raise AssertionError("expected RuntimeError on non-2xx")
     except RuntimeError as e:
         assert "403" in str(e)
+
+
+# --- OpenRouter per-key usage (mocked + live) --------------------------------
+
+
+def test_openrouter_key_usage_parses(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/auth/key"
+        assert request.headers["Authorization"] == "Bearer proj-key"
+        return httpx.Response(
+            200,
+            json={"data": {"label": "robotsix-mill", "usage": 4.2, "limit": 50.0}},
+        )
+
+    _mock_client_factory(monkeypatch, orpc, handler)
+    ku = OpenRouterKeyCostSource(api_key="proj-key").fetch_key_usage()
+    assert ku.usage == 4.2 and ku.limit == 50.0 and ku.label == "robotsix-mill"
+
+
+def test_openrouter_key_usage_unlimited(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": {"usage": 1.0, "limit": None}})
+
+    _mock_client_factory(monkeypatch, orpc, handler)
+    ku = OpenRouterKeyCostSource(api_key="k").fetch_key_usage()
+    assert ku.usage == 1.0 and ku.limit is None
+
+
+def test_openrouter_key_usage_raises_on_error(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, text="nope")
+
+    _mock_client_factory(monkeypatch, orpc, handler)
+    with pytest.raises(RuntimeError, match="401"):
+        OpenRouterKeyCostSource(api_key="bad").fetch_key_usage()
+
+
+@pytest.mark.live
+def test_openrouter_key_usage_live():
+    """Against the real OpenRouter API, ``fetch_key_usage`` returns a valid
+    cumulative usage for the authenticating key — the per-key seam that backs
+    per-project reconciliation + isolated live cost tests."""
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        pytest.skip("OPENROUTER_API_KEY not set")
+    ku = OpenRouterKeyCostSource(api_key=key).fetch_key_usage()
+    assert ku.usage >= 0.0
+    # limit is either None (unlimited) or a positive ceiling.
+    assert ku.limit is None or ku.limit >= 0.0
 
 
 # --- Langfuse time-based prune (mocked httpx) --------------------------------

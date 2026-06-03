@@ -14,6 +14,7 @@ in explicitly — the adapter reads no env vars.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -23,6 +24,57 @@ from ..core.provider_cost import ProviderCost
 
 _DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 _TIMEOUT = 20
+
+
+@dataclass(frozen=True)
+class KeyUsage:
+    """An OpenRouter key's CUMULATIVE (lifetime) usage, from ``auth/key``.
+
+    *usage* is total USD spent on this key since creation; *limit* is the
+    credit ceiling (``None`` = unlimited). Cumulative, not windowed — a
+    per-day per-key cost is the consumer's daily snapshot diff.
+    """
+
+    usage: float
+    limit: float | None = None
+    label: str | None = None
+
+
+class OpenRouterKeyCostSource:
+    """Per-KEY cumulative usage from OpenRouter's ``GET /api/v1/auth/key``.
+
+    Reads the usage of the *authenticating inference key* (not the account
+    total). Two uses: (1) per-project reconciliation when each project has its
+    own key — snapshot ``fetch_key_usage`` daily and diff to get a window's
+    spend; (2) an isolated live test — read usage, make a known call, read the
+    delta. Credentials passed in explicitly; reads no env vars.
+    """
+
+    def __init__(self, *, api_key: str, base_url: str | None = None) -> None:
+        self._key = api_key
+        self._base_url = (base_url or _DEFAULT_BASE_URL).rstrip("/")
+
+    def fetch_key_usage(self) -> KeyUsage:
+        """Current cumulative usage of the authenticating key.
+
+        Raises ``RuntimeError`` on any non-2xx response.
+        """
+        url = f"{self._base_url}/auth/key"
+        headers = {"Authorization": f"Bearer {self._key}"}
+        with httpx.Client(timeout=_TIMEOUT) as client:
+            resp = client.get(url, headers=headers)
+        if not (200 <= resp.status_code < 300):
+            raise RuntimeError(
+                f"OpenRouter auth/key request failed: "
+                f"HTTP {resp.status_code}: {resp.text[:200]}"
+            )
+        data = resp.json().get("data") or {}
+        limit = data.get("limit")
+        return KeyUsage(
+            usage=float(data.get("usage", 0) or 0),
+            limit=None if limit is None else float(limit),
+            label=data.get("label"),
+        )
 
 
 class OpenRouterProviderCostSource:
