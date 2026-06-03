@@ -99,7 +99,7 @@ modules:
       MIME to MailRecord parsing.
     paths:
       - src/robotsix_auto_mail/parser.py
-      - tests/test_parser.py
+      - tests/parser/test_parser.py
 
   - id: pipeline
     description: >-
