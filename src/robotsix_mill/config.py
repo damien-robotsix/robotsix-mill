@@ -301,7 +301,7 @@ class Settings(BaseSettings):
     # user_facing=True, so a truncated diff at worst loses signal and
     # routes to the full doc agent — the harmless direction. The full
     # doc agent still receives the untruncated diff.
-    doc_classifier_diff_max_chars: int = 6000
+    doc_classifier_diff_max_chars: int = Field(default=6000)
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped (read-side
     # only — persist_memory is unchanged).  Applies to all memory ledgers
