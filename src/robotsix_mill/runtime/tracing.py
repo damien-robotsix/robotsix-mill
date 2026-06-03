@@ -431,15 +431,21 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
 
             from pydantic_ai.agent import Agent, InstrumentationSettings
 
-            # event_mode='logs' emits each pydantic-ai message (system
-            # prompt, user turn, tool call, model response) as a separate
-            # OTel LogRecord under the GenAI semantic conventions, rather
-            # than packing the whole chat into span attributes. Avoids
-            # the attribute-size truncation that the earlier strategy of
-            # stamping message content into span attributes suffered
-            # from, and gives Langfuse one observation per message for
-            # cleaner rendering.
-            Agent.instrument_all(InstrumentationSettings(event_mode="logs", version=1))
+            # event_mode='attributes' (the pydantic-ai default) stamps message
+            # content onto SPAN attributes, exported via the /v1/traces OTLP
+            # endpoint Langfuse supports.
+            #
+            # The previous 'logs' mode emitted each message as an OTel LogRecord
+            # exported to /v1/logs — which our Langfuse deployment returns 404
+            # for (no OTLP-logs ingestion). Net effect: message content was
+            # silently DROPPED, and the log exporter spammed "Langfuse log
+            # export FAILURE … code: 404" every batch (~every 2s). Attributes
+            # mode keeps the content visible (on spans) and emits no OTel logs,
+            # so the log exporter below stays dormant. If Langfuse later gains
+            # /v1/logs support, switching back to 'logs' is safe.
+            Agent.instrument_all(
+                InstrumentationSettings(event_mode="attributes", version=1)
+            )
             _provider = provider
             _logger_provider = logger_provider
             _provider_ready = True
