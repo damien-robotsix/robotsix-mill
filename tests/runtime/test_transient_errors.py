@@ -380,3 +380,43 @@ def test_reraise_if_transient_returns_on_plain_400():
 
     plain = ModelHTTPError(400, "x", {"error": {"message": "bad request"}})
     assert reraise_if_transient(plain) is None
+
+
+# --- workspace-gone git errors → transient (auto-retry → re-clone) ----------
+
+
+def test_workspace_gone_not_a_git_repo_is_transient():
+    import subprocess
+
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+
+    e = subprocess.CalledProcessError(
+        128,
+        ["git", "-C", "/data/ws/repo", "status", "--porcelain"],
+        stderr="fatal: not a git repository (or any of the parent directories): .git",
+    )
+    assert classify_stage_error(e) == "transient"
+
+
+def test_workspace_gone_missing_dir_is_transient():
+    import subprocess
+
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+
+    e = subprocess.CalledProcessError(
+        128,
+        ["git", "-C", "/data/ws/repo", "status"],
+        stderr="fatal: cannot change to '/data/ws/repo': No such file or directory",
+    )
+    assert classify_stage_error(e) == "transient"
+
+
+def test_real_git_error_stays_fatal():
+    import subprocess
+
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+
+    e = subprocess.CalledProcessError(
+        1, ["git", "status"], stderr="error: pathspec 'x' did not match any file(s)"
+    )
+    assert classify_stage_error(e) == "fatal"

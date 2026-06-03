@@ -30,6 +30,17 @@ _GIT_TRANSIENT_RE = re.compile(
 _GIT_FATAL_TRANSIENT_RE = re.compile(
     r"(remote rejected.*[Ii]nternal [Ss]erver|fatal: unable to access)"
 )
+# A reclaimed/missing workspace clone: the per-ticket clone dir vanished
+# mid-run (orphan-workspace reclaim, disk cleanup, …), so a ``git -C <dir> …``
+# fails with "not a git repository" or "cannot change to <dir>: No such file".
+# Treat it as transient so the worker RETRIES the stage instead of emitting a
+# cryptic "Fatal: CalledProcessError" block: implement's clone-or-resume
+# (_clone_and_branch) re-clones a fresh workspace on the retry, so it
+# self-heals with no manual resume.
+_GIT_WORKSPACE_GONE_RE = re.compile(
+    r"(fatal: not a git repository"
+    r"|fatal: cannot change to .*No such file or directory)"
+)
 
 _MAX_CHAIN_WALK = 10
 
@@ -65,7 +76,9 @@ def _is_transient_called_process_error(exc: BaseException) -> bool:
     if isinstance(stderr, bytes):
         stderr = stderr.decode("utf-8", errors="replace")
     return bool(
-        _GIT_TRANSIENT_RE.search(stderr) or _GIT_FATAL_TRANSIENT_RE.search(stderr)
+        _GIT_TRANSIENT_RE.search(stderr)
+        or _GIT_FATAL_TRANSIENT_RE.search(stderr)
+        or _GIT_WORKSPACE_GONE_RE.search(stderr)
     )
 
 
