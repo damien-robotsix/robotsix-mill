@@ -1756,8 +1756,8 @@ def test_meta_ticket_uses_triage_workspace_and_meta_memory(
     repo-triage agent, clone the triaged repos (passing them as extra_roots),
     and key the refine memory ledger on the ticket's board_id ('meta') —
     NOT crash in memory_file_for on an empty board_id."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     ctx.repo_config = None  # meta board is not a registered repo
@@ -1800,8 +1800,8 @@ def test_meta_ticket_uses_triage_workspace_and_meta_memory(
 def test_meta_ticket_blocks_when_no_repos_clonable(ctx_factory, monkeypatch):
     """If the triaged workspace yields no clone, refine BLOCKs the meta ticket
     with a clear note rather than proceeding with no repo_dir."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     ctx.repo_config = None

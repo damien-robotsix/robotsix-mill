@@ -1,17 +1,17 @@
-"""Tests for ``run_meta_pass`` in ``robotsix_mill.meta_runner``."""
+"""Tests for ``run_meta_pass`` in ``robotsix_mill.meta.runner``."""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 
-from robotsix_mill.agents.meta import DraftProposal, MetaAgentResult
+from robotsix_mill.meta.agent import DraftProposal, MetaAgentResult
 from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.workspace import Workspace
-from robotsix_mill.meta_runner import run_meta_pass, MetaPassResult
+from robotsix_mill.meta.runner import run_meta_pass, MetaPassResult
 
 
 # ---------------------------------------------------------------------------
@@ -58,15 +58,15 @@ class TestRunMetaPass:
         # Ensure run_meta_pass uses OUR settings, not a fresh Settings()
         # which would pick up the patched YAML data_dir.
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.Settings",
+            "robotsix_mill.meta.runner.Settings",
             lambda: settings,
         )
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.clone_all_repos",
+            "robotsix_mill.meta.runner.clone_all_repos",
             lambda _s: {},
         )
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.run_meta_agent",
+            "robotsix_mill.meta.runner.run_meta_agent",
             lambda **kw: MetaAgentResult(updated_memory=""),
         )
 
@@ -75,10 +75,10 @@ class TestRunMetaPass:
         def _fake_persist(path, text):
             persist_calls.append((path, text))
 
-        monkeypatch.setattr("robotsix_mill.meta_runner.persist_memory", _fake_persist)
-        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
+        monkeypatch.setattr("robotsix_mill.meta.runner.persist_memory", _fake_persist)
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner._gather_meta_proposals",
+            "robotsix_mill.meta.runner._gather_meta_proposals",
             lambda _s: "<recent_proposals>\n(no recent proposals)\n</recent_proposals>",
         )
 
@@ -110,7 +110,7 @@ class TestRunMetaPass:
 
         # Ensure run_meta_pass uses OUR settings
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.Settings",
+            "robotsix_mill.meta.runner.Settings",
             lambda: settings,
         )
 
@@ -121,7 +121,7 @@ class TestRunMetaPass:
         repo_b_path.mkdir(parents=True)
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.clone_all_repos",
+            "robotsix_mill.meta.runner.clone_all_repos",
             lambda _s: {"repo-a": repo_a_path, "repo-b": repo_b_path},
         )
 
@@ -150,7 +150,7 @@ class TestRunMetaPass:
             agent_kwargs.append(kw)
             return agent_result
 
-        monkeypatch.setattr("robotsix_mill.meta_runner.run_meta_agent", _fake_agent)
+        monkeypatch.setattr("robotsix_mill.meta.runner.run_meta_agent", _fake_agent)
 
         # Repos config
         reg = ReposRegistry(
@@ -159,7 +159,7 @@ class TestRunMetaPass:
                 "repo-b": _repo_cfg("repo-b", board_id="repo-b"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.meta_runner.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
 
         # Capture persist_memory
         persist_calls: list[tuple[Path, str]] = []
@@ -167,10 +167,10 @@ class TestRunMetaPass:
         def _fake_persist(path, text):
             persist_calls.append((path, text))
 
-        monkeypatch.setattr("robotsix_mill.meta_runner.persist_memory", _fake_persist)
-        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
+        monkeypatch.setattr("robotsix_mill.meta.runner.persist_memory", _fake_persist)
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner._gather_meta_proposals",
+            "robotsix_mill.meta.runner._gather_meta_proposals",
             lambda _s: "<recent_proposals>\n(no recent proposals)\n</recent_proposals>",
         )
 
@@ -239,12 +239,12 @@ class TestRunMetaPass:
         db.init_db(settings, board_id="repo-a")
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.Settings",
+            "robotsix_mill.meta.runner.Settings",
             lambda: settings,
         )
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.clone_all_repos",
+            "robotsix_mill.meta.runner.clone_all_repos",
             lambda _s: {},
         )
 
@@ -266,7 +266,7 @@ class TestRunMetaPass:
             ],
         )
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.run_meta_agent",
+            "robotsix_mill.meta.runner.run_meta_agent",
             lambda **kw: agent_result,
         )
 
@@ -275,14 +275,14 @@ class TestRunMetaPass:
                 "repo-a": _repo_cfg("repo-a", board_id="repo-a"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.meta_runner.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.persist_memory", lambda p, t: None
+            "robotsix_mill.meta.runner.persist_memory", lambda p, t: None
         )
-        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner._gather_meta_proposals",
+            "robotsix_mill.meta.runner._gather_meta_proposals",
             lambda _s: "",
         )
 
@@ -311,31 +311,31 @@ class TestRunMetaPass:
         db.init_db(settings, board_id="meta")
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.Settings",
+            "robotsix_mill.meta.runner.Settings",
             lambda: settings,
         )
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.clone_all_repos",
+            "robotsix_mill.meta.runner.clone_all_repos",
             lambda _s: {},
         )
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.run_meta_agent",
+            "robotsix_mill.meta.runner.run_meta_agent",
             lambda **kw: MetaAgentResult(updated_memory="ok"),
         )
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.persist_memory", lambda p, t: None
+            "robotsix_mill.meta.runner.persist_memory", lambda p, t: None
         )
-        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner._gather_meta_proposals",
+            "robotsix_mill.meta.runner._gather_meta_proposals",
             lambda _s: "",
         )
 
         # force_traces_to_mill should NOT be called — prove by
         # replacing it with something that raises if called.
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.force_traces_to_mill",
+            "robotsix_mill.meta.runner.force_traces_to_mill",
             lambda _rc: (_ for _ in ()).throw(
                 AssertionError("force_traces_to_mill was called!")
             ),
@@ -361,24 +361,24 @@ class TestRunMetaPass:
         db.init_db(settings, board_id="meta")
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.Settings",
+            "robotsix_mill.meta.runner.Settings",
             lambda: settings,
         )
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.clone_all_repos",
+            "robotsix_mill.meta.runner.clone_all_repos",
             lambda _s: {},
         )
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.run_meta_agent",
+            "robotsix_mill.meta.runner.run_meta_agent",
             lambda **kw: MetaAgentResult(updated_memory="ok"),
         )
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.persist_memory", lambda p, t: None
+            "robotsix_mill.meta.runner.persist_memory", lambda p, t: None
         )
-        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner._gather_meta_proposals",
+            "robotsix_mill.meta.runner._gather_meta_proposals",
             lambda _s: "",
         )
 
@@ -387,7 +387,7 @@ class TestRunMetaPass:
                 "mill-repo": _repo_cfg("mill-repo"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.meta_runner.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
 
         # Monkeypatch _ensure_tracing so the real context manager
         # doesn't try to set up real OTLP exporters.
@@ -409,7 +409,7 @@ class TestRunMetaPass:
 
             return nullcontext()
 
-        monkeypatch.setattr("robotsix_mill.meta_runner.force_traces_to_mill", _fake_ftc)
+        monkeypatch.setattr("robotsix_mill.meta.runner.force_traces_to_mill", _fake_ftc)
 
         result = run_meta_pass("test-session")
 
@@ -430,12 +430,12 @@ class TestRunMetaPass:
         db.init_db(settings, board_id="repo-b")
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.Settings",
+            "robotsix_mill.meta.runner.Settings",
             lambda: settings,
         )
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.clone_all_repos",
+            "robotsix_mill.meta.runner.clone_all_repos",
             lambda _s: {},
         )
 
@@ -462,7 +462,7 @@ class TestRunMetaPass:
             ],
         )
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.run_meta_agent",
+            "robotsix_mill.meta.runner.run_meta_agent",
             lambda **kw: agent_result,
         )
 
@@ -471,14 +471,14 @@ class TestRunMetaPass:
                 "repo-b": _repo_cfg("repo-b", board_id="repo-b"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.meta_runner.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.persist_memory", lambda p, t: None
+            "robotsix_mill.meta.runner.persist_memory", lambda p, t: None
         )
-        monkeypatch.setattr("robotsix_mill.meta_runner.load_memory", lambda _p: "")
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner._gather_meta_proposals",
+            "robotsix_mill.meta.runner._gather_meta_proposals",
             lambda _s: "",
         )
 
@@ -544,12 +544,12 @@ class TestRunMetaPass:
         db.init_db(settings, board_id="meta")
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.Settings",
+            "robotsix_mill.meta.runner.Settings",
             lambda: settings,
         )
 
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner.clone_all_repos",
+            "robotsix_mill.meta.runner.clone_all_repos",
             lambda _s: {},
         )
 
@@ -559,16 +559,16 @@ class TestRunMetaPass:
             captured_memory.append(kw["memory"])
             return MetaAgentResult(updated_memory="first memory")
 
-        monkeypatch.setattr("robotsix_mill.meta_runner.run_meta_agent", _fake_agent)
+        monkeypatch.setattr("robotsix_mill.meta.runner.run_meta_agent", _fake_agent)
 
         persist_calls: list[tuple[Path, str]] = []
 
         def _fake_persist(path, text):
             persist_calls.append((path, text))
 
-        monkeypatch.setattr("robotsix_mill.meta_runner.persist_memory", _fake_persist)
+        monkeypatch.setattr("robotsix_mill.meta.runner.persist_memory", _fake_persist)
         monkeypatch.setattr(
-            "robotsix_mill.meta_runner._gather_meta_proposals",
+            "robotsix_mill.meta.runner._gather_meta_proposals",
             lambda _s: "",
         )
 

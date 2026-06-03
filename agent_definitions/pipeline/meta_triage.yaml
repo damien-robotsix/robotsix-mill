@@ -21,7 +21,7 @@ close_thread: false
 ask_user: false
 output_type: RequiredReposResult
 retries: 2
-module: meta_triage
+module: meta.triage
 skills: []
 
 system_prompt: |

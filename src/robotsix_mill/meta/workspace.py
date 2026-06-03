@@ -2,7 +2,7 @@
 
 A meta ticket proposes cross-repo work, so its workspace holds a fresh
 clone of each required repo (chosen by the triage agent — see
-:mod:`robotsix_mill.agents.meta_triage`). The first clone is the primary
+:mod:`robotsix_mill.meta.triage`). The first clone is the primary
 ``repo_dir``; all clones are passed as ``extra_roots`` so the refine /
 implement agents (via ``explore`` + ``fs_tools``) can read and edit across
 every required repository.
@@ -16,15 +16,15 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .config import Settings, get_repos_config
-from .forge.auth import github_token
-from .vcs import git_ops
+from ..config import Settings, get_repos_config
+from ..forge.auth import github_token
+from ..vcs import git_ops
 
 if TYPE_CHECKING:
-    from .core.models import Ticket
-    from .stages.base import Outcome, StageContext
+    from ..core.models import Ticket
+    from ..stages.base import Outcome, StageContext
 
-log = logging.getLogger("robotsix_mill.meta_workspace")
+log = logging.getLogger("robotsix_mill.meta.workspace")
 
 
 def build_meta_workspace(
@@ -99,9 +99,9 @@ def build_triaged_meta_workspace(
     BLOCKED comments (e.g. ``"refine"`` or ``"implement"``) so the
     operator can see which stage hit the failure.
     """
-    from .agents.meta_triage import required_repos_for
-    from .core.states import State
-    from .stages.base import Outcome
+    from .triage import required_repos_for
+    from ..core.states import State
+    from ..stages.base import Outcome
 
     try:
         repo_ids = required_repos_for(settings=ctx.settings, spec=spec)

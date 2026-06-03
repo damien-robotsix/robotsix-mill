@@ -295,8 +295,8 @@ def test_meta_ticket_builds_multi_repo_workspace(ctx_factory, tmp_path, monkeypa
     build, threads ``extra_roots`` to ``run_implement_agent``, and keys
     its memory ledger on the meta board (not crash on an empty board_id).
     """
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     ctx = ctx_factory(test_command="true", review_enabled="false")
     ctx.repo_config = None  # meta board is not a registered repo
@@ -362,8 +362,8 @@ def test_meta_ticket_builds_multi_repo_workspace(ctx_factory, tmp_path, monkeypa
 def test_meta_ticket_blocks_when_no_repos_clonable(ctx_factory, monkeypatch):
     """If the triaged workspace yields no clone, implement BLOCKs the
     meta ticket with the same note refine uses."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     ctx = ctx_factory(test_command="true")
     ctx.repo_config = None
@@ -385,7 +385,7 @@ def test_meta_ticket_blocks_when_no_repos_clonable(ctx_factory, monkeypatch):
 def test_meta_ticket_blocks_when_triage_fails(ctx_factory, monkeypatch):
     """If ``required_repos_for`` raises, implement BLOCKs the meta ticket
     with a clear "meta repo-triage failed" note."""
-    import robotsix_mill.agents.meta_triage as mt
+    import robotsix_mill.meta.triage as mt
 
     ctx = ctx_factory(test_command="true")
     ctx.repo_config = None
@@ -3087,8 +3087,8 @@ def test_multi_repo_happy_path_two_repos_both_touched(
 ):
     """AC1: N=2 repos, both modified by the agent → both get a branch
     and a commit, and touched_repos.json lists both."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     remote_a = _make_bare_repo_in(tmp_path, "a")
     remote_b = _make_bare_repo_in(tmp_path, "b")
@@ -3165,8 +3165,8 @@ def test_multi_repo_partial_edit_one_of_two_touched(ctx_factory, tmp_path, monke
     """AC1 partial: N=2 repos, only one modified → only that one gets a
     commit, but both get branches. touched_repos.json lists only the
     touched repo."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     remote_a = _make_bare_repo_in(tmp_path, "a")
     remote_b = _make_bare_repo_in(tmp_path, "b")
@@ -3244,8 +3244,8 @@ def test_single_repo_meta_regression(ctx_factory, tmp_path, monkeypatch):
     """AC2: N=1 meta ticket produces one branch, one commit, and
     touched_repos.json with a single entry (backward-compatible with
     current single-repo flow)."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     remote = make_bare_repo(tmp_path)
 
@@ -3336,8 +3336,8 @@ def test_multi_repo_resume_after_blocked(ctx_factory, tmp_path, monkeypatch):
     """AC4: meta ticket BLOCKED mid-implement (budget cap) and later
     resumed correctly checkouts existing branches in all repos and
     commits only repos with new changes."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     remote_a = _make_bare_repo_in(tmp_path, "a")
     remote_b = _make_bare_repo_in(tmp_path, "b")
@@ -3435,8 +3435,8 @@ def test_no_change_needed_guard_multi_repo_extra_has_changes(
     """AC5: agent sets no_change_needed=True but an extra root has
     uncommitted changes → the DONE bypass must NOT fire; ticket
     proceeds normally so deliver can pick up the changes."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     remote_a = _make_bare_repo_in(tmp_path, "a")
     remote_b = _make_bare_repo_in(tmp_path, "b")
@@ -3502,8 +3502,8 @@ def test_silent_no_change_guard_multi_repo(ctx_factory, tmp_path, monkeypatch):
     """AC6: agent edits an extra repo but does NOT set no_change_needed
     and does NOT set the flag. The BLOCKED guard fires only if NO repo
     has changes — with an extra-root change it proceeds normally."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     remote_a = _make_bare_repo_in(tmp_path, "a")
     remote_b = _make_bare_repo_in(tmp_path, "b")
@@ -3554,8 +3554,8 @@ def test_touched_repos_json_content_validation(ctx_factory, tmp_path, monkeypatc
     """AC5 variant: verify touched_repos.json has correct schema —
     repo_id, branch, repo_path — and each repo_path points to an
     existing directory."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     remote_a = _make_bare_repo_in(tmp_path, "a")
     remote_b = _make_bare_repo_in(tmp_path, "b")
@@ -3615,8 +3615,8 @@ def test_touched_repos_json_content_validation(ctx_factory, tmp_path, monkeypatc
 def test_touched_repos_json_empty_on_no_change(ctx_factory, tmp_path, monkeypatch):
     """On the no-change-needed path (no commits anywhere), touched_repos.json
     is written as an empty list."""
-    import robotsix_mill.agents.meta_triage as mt
-    import robotsix_mill.meta_workspace as mw
+    import robotsix_mill.meta.triage as mt
+    import robotsix_mill.meta.workspace as mw
 
     remote_a = _make_bare_repo_in(tmp_path, "a")
     remote_b = _make_bare_repo_in(tmp_path, "b")

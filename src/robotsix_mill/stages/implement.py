@@ -209,7 +209,7 @@ class ImplementStage(Stage):
         # here.
         extra_roots: list[Path] | None = None
         if ticket.board_id == "meta":
-            from ..meta_workspace import build_triaged_meta_workspace
+            from ..meta.workspace import build_triaged_meta_workspace
 
             ws = ctx.service.workspace(ticket)
             spec = ws.read_description()

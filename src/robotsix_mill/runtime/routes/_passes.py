@@ -686,7 +686,7 @@ def meta_pass(
     meta board and per-repo boards respectively.  This is a global
     pass — it does not fan out per-repo.
     """
-    from ...meta_runner import MetaPassResult, run_meta_pass
+    from ...meta.runner import MetaPassResult, run_meta_pass
     from ..tracing import make_session_id
 
     def _run() -> None:
