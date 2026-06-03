@@ -563,7 +563,7 @@ def test_sample_yaml_parses():
     assert "src/**/*.py" in ed.module_paths
     assert isinstance(ed.system_prompt, str) and len(ed.system_prompt) > 0
     assert ed.memory.max_memory_chars == 8000
-    assert "board" in ed.skills
+    assert "board-report" in ed.skills
     assert "run_command" in ed.tools
 
 
