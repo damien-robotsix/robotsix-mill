@@ -8,6 +8,7 @@ modules:
       - tests/core/test_core_provider.py
       - tests/core/test_core_http.py
       - tests/core/test_core_cost_log.py
+      - tests/core/test_core_provider_cost.py
       - tests/core/test_tracing.py
       - tests/core/test_tracing_live.py
       - docs/core/
@@ -17,6 +18,7 @@ modules:
     paths:
       - src/robotsix_llmio/openrouter/**
       - tests/openrouter/test_openrouter.py
+      - tests/openrouter/test_openrouter_provider_cost.py
       - docs/openrouter/
   - id: robotsix_llmio-openrouter-deepseek
     description: >
