@@ -84,8 +84,14 @@ def _fetch_provider_cost(settings, window):
     return pc.total_cost, _fmt_breakdown(pc.breakdown)
 
 
-def _fetch_logged_cost(settings, window, repo_config):
+def _fetch_logged_cost(settings, window, repo_config, *, provider=None):
     """Langfuse-logged cost for *window* via llmio's CostLogSource.
+
+    When *provider* is set (e.g. ``"openrouter"``) only the slice of logged
+    cost stamped with that provider tag is summed — the per-key pass uses this
+    so the logged side matches the OpenRouter key's billing scope (Claude SDK
+    spend, which an OpenRouter key never bills, is excluded → 0-vs-0 on a
+    claude_sdk fleet instead of a false discrepancy).
 
     Returns ``(total, breakdown_text)``. On API error returns
     ``(0.0, error message)`` — graceful degradation. NOTE: only the most
@@ -106,9 +112,11 @@ def _fetch_logged_cost(settings, window, repo_config):
     from robotsix_llmio.core import LangfuseCostLogSource
 
     try:
-        logged = LangfuseCostLogSource(
-            public_key=pk, secret_key=sk, base_url=base
-        ).fetch_logged_cost(window)
+        source = LangfuseCostLogSource(public_key=pk, secret_key=sk, base_url=base)
+        if provider:
+            logged = source.fetch_logged_cost_by_provider(window, provider)
+        else:
+            logged = source.fetch_logged_cost(window)
     except Exception:
         log.exception("cost_reconciliation: Langfuse fetch failed")
         return 0.0, "Langfuse API error — unable to fetch traces"
@@ -283,7 +291,11 @@ def _run_per_key_pass(
     prev_cum, prev_at = prev
     or_total = max(0.0, cur.usage - prev_cum)
     window = CostWindow(start=prev_at, end=now)
-    lf_total, lf_breakdown = _fetch_logged_cost(settings, window, repo_config)
+    # An OpenRouter key only bills the OpenRouter slice, so reconcile the logged
+    # side filtered to provider="openrouter" — Claude SDK spend is excluded.
+    lf_total, lf_breakdown = _fetch_logged_cost(
+        settings, window, repo_config, provider="openrouter"
+    )
 
     disc = reconcile(
         LoggedCost(total_cost=lf_total, record_count=0),

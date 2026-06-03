@@ -131,6 +131,34 @@ def test_fetch_logged_cost_delegates_to_llmio(settings, monkeypatch):
     assert "implement" in breakdown and "refine" in breakdown
 
 
+def test_fetch_logged_cost_provider_filter_delegates(settings, monkeypatch):
+    """With ``provider=`` set, the adapter calls the provider-filtered read
+    (not the account-wide one) so the logged side matches the key's scope."""
+    from robotsix_llmio.core.cost_log import LoggedCost
+
+    captured = {}
+
+    class _FakeSource:
+        def __init__(self, *, public_key, secret_key, base_url):
+            pass
+
+        def fetch_logged_cost(self, window):
+            raise AssertionError("should use the provider-filtered read")
+
+        def fetch_logged_cost_by_provider(self, window, provider):
+            captured["provider"] = provider
+            return LoggedCost(total_cost=1.5, record_count=1, records=[])
+
+    import robotsix_llmio.core as core
+
+    monkeypatch.setattr(core, "LangfuseCostLogSource", _FakeSource)
+    total, _ = _fetch_logged_cost(
+        settings, _yesterday_window(), _test_repo_config(), provider="openrouter"
+    )
+    assert total == 1.5
+    assert captured["provider"] == "openrouter"
+
+
 # ---------------------------------------------------------------------------
 # Full pass policy
 # ---------------------------------------------------------------------------
@@ -313,7 +341,10 @@ def test_per_key_baseline_then_clean(tmp_path, monkeypatch):
     _patch_key_usage(monkeypatch, [10.0, 12.0])  # +$2 between runs
     monkeypatch.setattr(
         "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
-        lambda settings, window, repo_config: (1.8, "lf"),  # within $1 of $2
+        lambda settings, window, repo_config, *, provider=None: (
+            1.8,
+            "lf",
+        ),  # within $1 of $2
     )
     _patch_agent(monkeypatch)
     rc = _repo_config_with_key()
@@ -333,7 +364,10 @@ def test_per_key_dirty_files_draft(tmp_path, monkeypatch):
     _patch_key_usage(monkeypatch, [10.0, 18.0])  # +$8 provider spend
     monkeypatch.setattr(
         "robotsix_mill.cost_reconciliation_runner._fetch_logged_cost",
-        lambda settings, window, repo_config: (2.0, "lf"),  # logged only $2 → $6 gap
+        lambda settings, window, repo_config, *, provider=None: (
+            2.0,
+            "lf",
+        ),  # logged only $2 → $6 gap
     )
     agent_calls = _patch_agent(monkeypatch)
     rc = _repo_config_with_key()
