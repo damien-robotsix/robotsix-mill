@@ -392,6 +392,7 @@ async function refresh(){
  const activeUrl=repoId!=="all"?"/active?repo_id="+encodeURIComponent(repoId):"/active";
  fetchGates();
  fetchLangfuseStatus();
+ refreshCandidateBadge();
  const [ts, activeList]=await Promise.all([jget(url), jget(activeUrl)]);
  if(!ts)return;
  const active={};
@@ -1652,6 +1653,27 @@ let candidatesOpen=false;
 // .md file. Both routes update the file in place so re-opening the drawer
 // shows the candidate gone.
 
+// Surface a warning on the 📋 AGENT.md header button when the selected
+// repo has pending candidates. Per-board, so "all"/"meta" show nothing.
+async function refreshCandidateBadge(){
+ const btn=document.getElementById("agentmd-btn");
+ const badge=document.getElementById("agentmd-badge");
+ if(!btn||!badge)return;
+ const reset=()=>{badge.style.display="none";badge.textContent="";btn.style.borderColor="#3a2a4b";btn.style.boxShadow=""};
+ const repo=getRepoId();
+ if(!repo||repo==="all"||repo==="meta"){reset();return}
+ try{
+  const cands=await jget("/candidates?repo_id="+encodeURIComponent(repo));
+  if(!Array.isArray(cands))return;       // fetch failed → leave badge unchanged
+  if(cands.length>0){
+   badge.textContent="⚠ "+cands.length;
+   badge.style.display="";
+   btn.style.borderColor="#f59e0b";
+   btn.style.boxShadow="0 0 0 1px #f59e0b";
+  }else reset();
+ }catch(e){/* silently leave badge unchanged on error */}
+}
+
 async function openCandidates(){
  if(candidatesOpen){close_();return}
  if(sel||runsOpen||costDashboardOpen)close_();
@@ -1723,6 +1745,7 @@ async function validateCandidate(cid){
   // Refresh the list — the validated card drops out, the new ticket
   // appears in the kanban via the regular refresh tick.
   await renderCandidatesList();
+  refreshCandidateBadge();
  }catch(e){
   alert("Validate error: "+e);
   if(card){card.style.opacity='';card.querySelectorAll("button").forEach(b=>b.disabled=false)}
@@ -1736,6 +1759,7 @@ async function rejectCandidate(cid){
   const r=await fetch("/candidates/"+encodeURIComponent(cid)+"/reject?repo_id="+encodeURIComponent(repo),{method:"POST"});
   if(!r.ok){alert("Reject failed: "+await r.text());return}
   await renderCandidatesList();
+  refreshCandidateBadge();
  }catch(e){alert("Reject error: "+e)}
 }
 
