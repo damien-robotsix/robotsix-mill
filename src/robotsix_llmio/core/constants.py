@@ -31,6 +31,6 @@ TRANSIENT_RETRIES: int = 4
 TRANSIENT_BACKOFF_BASE: float = 2.0
 TRANSIENT_BACKOFF_CAP: float = 30.0
 
-# Rate-limit (UsageLimitExceeded) — longer, rate-limit-aware schedule.
-RATE_LIMIT_BACKOFF_BASE: float = 30.0
-RATE_LIMIT_BACKOFF_CAP: float = 120.0
+# Rate-limits (UsageLimitExceeded) trigger an immediate fallback (or raise)
+# rather than a separate backoff schedule — ``call_with_retry`` in retry.py
+# handles the fallback inline, so no dedicated backoff constants are needed.
