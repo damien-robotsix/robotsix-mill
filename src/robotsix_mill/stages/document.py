@@ -20,8 +20,8 @@ from ..agents.documenting import DocClassifierResult, DocResult
 from ..core.models import Ticket
 from ..notify import send_notification
 from ..core.states import State
-from ..forge.auth import _resolve_remote_url, github_token
 from ..vcs import git_ops
+from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.document")
@@ -56,10 +56,11 @@ class DocumentStage(Stage):
         s = ctx.settings
 
         ws = ctx.service.workspace(ticket)
-        repo_dir = ws.dir / "repo"
 
-        # Guard: missing clone → BLOCKED (resumable: re-run implement)
-        if not (repo_dir / ".git").exists():
+        # Resolve the implemented clone(s) — single-repo (ws.dir/"repo")
+        # or meta multi-repo (ws.dir/"repos/<id>" + touched_repos.json).
+        repos = implemented_repos(ws, s, ticket)
+        if not repos:
             return Outcome(
                 State.BLOCKED,
                 "no repository clone (re-run implement)",
@@ -67,25 +68,15 @@ class DocumentStage(Stage):
 
         target_branch = s.forge_target_branch
 
-        # Mint a fresh forge token for the fetch — the clone's baked-in
-        # GitHub App installation token expires ~1h after clone time,
-        # so a stale ``origin`` URL would 401 with exit 128. Same fix
-        # applied earlier to the review stage; document runs right
-        # after review on the same long-lived clone.
-        remote_url = _resolve_remote_url(s, ctx.repo_config)
-        try:
-            token = github_token(s, repo_config=ctx.repo_config)
-        except RuntimeError:
-            token = None
+        # Primary clone roots the doc agent's file tools; the rest (for a
+        # multi-repo ticket) are passed as extra_roots so cross-repo
+        # reads resolve. The combined diff fetches each repo with a
+        # freshly-minted token for its own forge.
+        repo_dir = repos[0].repo_dir
+        extra_roots = [r.repo_dir for r in repos[1:]] or None
 
-        # Compute diff of all commits on the current branch vs origin/<target>.
         try:
-            diff = git_ops.diff_base(
-                repo_dir,
-                target_branch,
-                remote_url=remote_url,
-                token=token,
-            )
+            diff = combined_diff(s, ctx.repo_config, repos, target_branch)
         except Exception as e:
             return Outcome(
                 State.BLOCKED,
@@ -158,7 +149,7 @@ class DocumentStage(Stage):
                 repo_dir=repo_dir,
                 diff=diff,
                 spec=spec,
-                extra_roots=None,
+                extra_roots=extra_roots,
                 board_id=ctx.repo_config.board_id if ctx.repo_config else "",
                 reference_files=preload_paths or None,
             )

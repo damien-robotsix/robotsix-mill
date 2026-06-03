@@ -16,8 +16,7 @@ import re
 from ..agents.reviewing import ReviewAsk, ReviewVerdict, run_review_agent
 from ..core.models import Ticket
 from ..core.states import State
-from ..forge.auth import _resolve_remote_url, github_token
-from ..vcs import git_ops
+from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.review")
@@ -216,10 +215,11 @@ class ReviewStage(Stage):
         s = ctx.settings
 
         ws = ctx.service.workspace(ticket)
-        repo_dir = ws.dir / "repo"
 
-        # Guard: missing clone → BLOCKED (resumable: re-run implement)
-        if not (repo_dir / ".git").exists():
+        # Resolve the implemented clone(s) — single-repo (ws.dir/"repo")
+        # or meta multi-repo (ws.dir/"repos/<id>" + touched_repos.json).
+        repos = implemented_repos(ws, s, ticket)
+        if not repos:
             return Outcome(
                 State.BLOCKED,
                 "no repository clone to review (re-run implement)",
@@ -227,31 +227,22 @@ class ReviewStage(Stage):
 
         target_branch = s.forge_target_branch
 
-        # Mint a fresh forge token for the fetch — the clone's baked-in
-        # GitHub App installation token expires ~1h after clone time,
-        # so by the time review runs (especially after a pause-and-resume
-        # cycle) the stale ``origin`` URL would 401 with exit 128.
-        # Best-effort: if creds aren't configured we fall back to a
-        # tokenless fetch, which still works for public repos.
-        remote_url = _resolve_remote_url(s, ctx.repo_config)
+        # Compute the combined diff across every implemented clone. Each
+        # repo is fetched with a freshly-minted token for ITS forge (the
+        # baked-in clone token expires ~1h after clone, so a stale origin
+        # URL would 401 on the fetch). For >1 repo, prefix each repo's
+        # diff with a header so the reviewer can tell them apart.
         try:
-            token = github_token(s, repo_config=ctx.repo_config)
-        except RuntimeError:
-            token = None
-
-        # Compute diff of all commits on the current branch vs origin/<target>.
-        try:
-            diff = git_ops.diff_base(
-                repo_dir,
-                target_branch,
-                remote_url=remote_url,
-                token=token,
-            )
+            diff = combined_diff(s, ctx.repo_config, repos, target_branch)
         except Exception as e:
             return Outcome(
                 State.BLOCKED,
                 f"failed to compute diff: {e}",
             )
+
+        # The review agent's file tools are rooted at the first clone;
+        # for multi-repo the per-file pre-seed (below) carries the rest.
+        repo_dir = repos[0].repo_dir
 
         # Empty diff → no-op implementation, approve so deliver can handle it.
         if not diff.strip():
