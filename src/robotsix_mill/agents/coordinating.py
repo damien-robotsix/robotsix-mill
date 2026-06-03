@@ -280,6 +280,13 @@ def run_coordinator(
         # changes produced" while the agent reports success. (#578 wired
         # workspace_root into build_agent; the caller must feed it repo_dir.)
         repo_dir=repo_dir,
+        # Thread the board so the report_issue tool can file a blocker/
+        # dependency ticket. Without it report_issue is built with board_id=""
+        # and fails at call time ("board_id is required"), so an agent that
+        # legitimately cannot proceed (e.g. its target file is created by an
+        # unmerged parent ticket) can't record WHY — it just surfaces as a
+        # generic "no changes produced" block.
+        board_id=board_id,
         tools=[
             make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
             make_consult_expert_tool(settings, repo_dir, board_id=board_id),
