@@ -44,6 +44,7 @@ import json
 import logging
 from pathlib import Path
 
+from ..agents.ci_fixing import run_ci_fix_agent
 from ..agents.rebasing import run_rebase_agent
 from ..agents.review_revision import run_review_revision_agent
 from ..config import RepoConfig, get_repo_config
@@ -110,6 +111,39 @@ def _read_counter(path) -> int:
 def _write_counter(path, value: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(value), encoding="utf-8")
+
+
+def _build_failing_summary(failing: list[dict], log_text: str = "") -> str:
+    """Markdown summary of failing checks for the CI-fix agent.
+
+    A local copy of ``stages.ci_fix._build_failing_summary`` — kept here
+    (not imported) to avoid a stage-to-stage dependency for a single
+    pure helper, mirroring how ``_paths_from_diff`` is duplicated across
+    the review/document stages.
+    """
+    parts: list[str] = []
+    for i, chk in enumerate(failing):
+        parts.append(f"## Failing check #{i + 1}: {chk['name']}")
+        if chk.get("summary"):
+            parts.append(f"\n**Summary:**\n{chk['summary']}")
+        if chk.get("text"):
+            parts.append(f"\n**Details:**\n{chk['text']}")
+        anns = chk.get("annotations") or []
+        if anns:
+            parts.append("\n**Annotations:**")
+            for a in anns:
+                loc = f"{a['path']}"
+                if a.get("start_line"):
+                    loc += f":{a['start_line']}"
+                parts.append(f"- [{a['level']}] {loc}: {a['message']}")
+        parts.append("")
+    if log_text:
+        parts.append("**Job logs:**")
+        parts.append("```")
+        parts.append(log_text)
+        parts.append("```")
+        parts.append("")
+    return "\n".join(parts)
 
 
 def _read_reason(path) -> str:
@@ -198,39 +232,37 @@ class MergeStage(Stage):
         ctx: StageContext,
         pr_entries: list[dict],
     ) -> Outcome:
-        """Aggregate per-repo PR status into one ticket-level outcome.
+        """Aggregate per-repo PR status into one ticket-level outcome, with
+        per-repo auto-recovery.
 
-        For every entry in ``pr_urls.json``, resolve the per-repo
-        :class:`RepoConfig` via :func:`get_repo_config` and query
-        ``pr_status`` / ``check_status`` against that repo's forge.
+        For every entry in ``pr_urls.json`` we resolve the per-repo
+        :class:`RepoConfig` and query ``pr_status`` / ``check_status``.
+        Per-repo statuses (``merged`` / ``open`` / ``closed_unmerged`` /
+        ``conflicting`` / ``failing_ci`` / ``green`` / ``pending``) are then
+        aggregated in priority order:
 
-        Per-repo statuses are classified as ``merged`` / ``open`` /
-        ``closed_unmerged`` / ``conflicting`` / ``failing_ci`` /
-        ``green`` / ``pending``, then aggregated in priority order:
-
-        * Any ``closed_unmerged`` → BLOCKED.
-        * Any ``conflicting`` or ``failing_ci`` → BLOCKED (per-repo
-          auto-recovery — rebase / ci_fix / auto-merge — is NOT yet
-          wired for multi-repo tickets; this is parked for a
-          follow-up ticket).
-        * All ``merged`` → write ``merge.md`` and transition to
-          ``DONE``.
-        * Otherwise (mix of green / pending / merged) → same-state
-          no-op so the next poll re-checks.
-
-        The poll states ``REBASING``, ``FIXING_CI``,
-        ``WAITING_AUTO_MERGE`` and ``ADDRESSING_REVIEW`` are
-        unreachable from this aggregator by design — only single-repo
-        tickets enter those states.
+        * Any ``closed_unmerged`` -> BLOCKED.
+        * Any ``conflicting`` -> BLOCKED (per-repo rebase auto-recovery is
+          still parked for a follow-up).
+        * Any ``failing_ci`` -> run the CI-fix agent on ONE failing repo this
+          poll (bounded by a per-repo attempt counter), push, and re-poll;
+          exhausting the counter -> BLOCKED. A multi-repo ticket has a single
+          state, so this recovery runs inline during the IMPLEMENT_COMPLETE
+          poll rather than via the single-repo FIXING_CI state.
+        * All ``merged`` -> write ``merge.md`` and -> DONE.
+        * All ``green`` (none pending) -> auto-merge the green PRs when the
+          review gate marks the ticket eligible; the next poll then sees them
+          merged and advances to DONE.
+        * Otherwise (mix of green / pending) -> same-state no-op, re-poll.
         """
         s = ctx.settings
 
-        # Per-repo status records.
         statuses: list[dict] = []
         for entry in pr_entries:
             repo_id = entry.get("repo_id", "")
             branch = entry.get("branch", "")
             url = entry.get("url", "")
+            base = {"repo_id": repo_id, "branch": branch, "url": url}
 
             try:
                 rc = _repo_config_for_entry(entry)
@@ -244,45 +276,23 @@ class MergeStage(Stage):
                 pr = get_forge(s, repo_config=rc).pr_status(source_branch=branch)
             except Exception as e:  # noqa: BLE001 — transient: re-poll next cycle
                 log.warning(
-                    "%s: pr_status failed for %s (retry): %s",
-                    ticket.id,
-                    repo_id,
-                    e,
+                    "%s: pr_status failed for %s (retry): %s", ticket.id, repo_id, e
                 )
-                statuses.append({"repo_id": repo_id, "url": url, "status": "pending"})
+                statuses.append({**base, "status": "pending"})
                 continue
 
             if pr is None:
-                statuses.append({"repo_id": repo_id, "url": url, "status": "pending"})
+                statuses.append({**base, "status": "pending"})
                 continue
+            base["url"] = pr.get("url", url)
             if pr.get("merged"):
-                statuses.append(
-                    {
-                        "repo_id": repo_id,
-                        "url": pr.get("url", url),
-                        "status": "merged",
-                    }
-                )
+                statuses.append({**base, "status": "merged"})
                 continue
             if pr.get("state") == "closed":
-                statuses.append(
-                    {
-                        "repo_id": repo_id,
-                        "url": pr.get("url", url),
-                        "status": "closed_unmerged",
-                    }
-                )
+                statuses.append({**base, "status": "closed_unmerged"})
                 continue
-
-            # PR is open — classify mergeability and CI.
             if pr.get("mergeable") is False:
-                statuses.append(
-                    {
-                        "repo_id": repo_id,
-                        "url": pr.get("url", url),
-                        "status": "conflicting",
-                    }
-                )
+                statuses.append({**base, "status": "conflicting"})
                 continue
 
             try:
@@ -294,42 +304,18 @@ class MergeStage(Stage):
                     repo_id,
                     e,
                 )
-                statuses.append(
-                    {
-                        "repo_id": repo_id,
-                        "url": pr.get("url", url),
-                        "status": "pending",
-                    }
-                )
+                statuses.append({**base, "status": "pending"})
                 continue
 
             conclusion = (ci or {}).get("conclusion")
             if conclusion == "failure":
-                statuses.append(
-                    {
-                        "repo_id": repo_id,
-                        "url": pr.get("url", url),
-                        "status": "failing_ci",
-                    }
-                )
+                statuses.append({**base, "status": "failing_ci"})
             elif conclusion == "success":
-                statuses.append(
-                    {
-                        "repo_id": repo_id,
-                        "url": pr.get("url", url),
-                        "status": "green",
-                    }
-                )
+                statuses.append({**base, "status": "green"})
             else:
-                statuses.append(
-                    {
-                        "repo_id": repo_id,
-                        "url": pr.get("url", url),
-                        "status": "pending",
-                    }
-                )
+                statuses.append({**base, "status": "pending"})
 
-        # Aggregate to a single ticket-level outcome in priority order.
+        # --- Aggregate to a single ticket-level outcome in priority order. ---
         closed_unmerged = [r for r in statuses if r["status"] == "closed_unmerged"]
         if closed_unmerged:
             first = closed_unmerged[0]
@@ -339,17 +325,21 @@ class MergeStage(Stage):
                 f"{first['url']} — resumable",
             )
 
-        broken = [r for r in statuses if r["status"] in ("conflicting", "failing_ci")]
-        if broken:
-            first = broken[0]
+        conflicting = [r for r in statuses if r["status"] == "conflicting"]
+        if conflicting:
+            first = conflicting[0]
             return Outcome(
                 State.BLOCKED,
-                f"PR for {first['repo_id']} {first['status']}: {first['url']} — "
-                "resumable (per-repo auto-recovery is not yet wired for "
-                "multi-repo tickets)",
+                f"PR for {first['repo_id']} conflicting: {first['url']} — "
+                "resumable (multi-repo rebase auto-recovery is not yet wired)",
             )
 
-        if all(r["status"] == "merged" for r in statuses):
+        failing = [r for r in statuses if r["status"] == "failing_ci"]
+        if failing:
+            # Fix one failing repo per poll; the rest re-check next cycle.
+            return self._multi_repo_fix_ci(ticket, ctx, failing[0])
+
+        if statuses and all(r["status"] == "merged" for r in statuses):
             lines = ["# Merge (multi-repo)", "repos:"]
             for r in statuses:
                 lines.append(f"  - {r['repo_id']}: merged: {r['url']}")
@@ -363,7 +353,195 @@ class MergeStage(Stage):
                 f"all {len(statuses)} PRs merged: {urls}",
             )
 
-        # Mix of green / pending / merged — same-state no-op.
+        # No failures/conflicts/closed remain. If every non-merged repo is
+        # green (nothing pending), auto-merge the green PRs (review-gated).
+        green = [r for r in statuses if r["status"] == "green"]
+        pending = [r for r in statuses if r["status"] == "pending"]
+        if green and not pending:
+            return self._multi_repo_auto_merge(ticket, ctx, green)
+
+        # Mix of green / pending / merged — same-state no-op; re-poll.
+        return Outcome(ticket.state)
+
+    def _multi_repo_fix_ci(
+        self, ticket: Ticket, ctx: StageContext, status: dict
+    ) -> Outcome:
+        """Run the CI-fix agent on one multi-repo PR whose CI is failing.
+
+        Mirrors the single-repo :class:`CIFixStage` but inline (a multi-repo
+        ticket has one state). Bounded by a per-repo attempt counter; a
+        ``DONE`` agent run that produces no new commits still counts toward the
+        cap so a flaky CI can't loop forever. Exhausting the cap -> BLOCKED.
+        Returns the ticket's current state (re-poll) while making progress.
+        """
+        s = ctx.settings
+        repo_id = status["repo_id"]
+        branch = status["branch"]
+        ws = ctx.service.workspace(ticket)
+        repo_dir = ws.dir / "repos" / repo_id
+        if not (repo_dir / ".git").exists():
+            return Outcome(
+                State.BLOCKED,
+                f"clone for {repo_id} missing — re-run implement",
+            )
+        try:
+            rc = get_repo_config(repo_id)
+        except ConfigError as e:
+            return Outcome(
+                State.BLOCKED, f"unknown repo_id '{repo_id}': {e} — resumable"
+            )
+
+        counter_path = ws.artifacts_dir / f"ci_fix_{repo_id}.count"
+        attempt = _read_counter(counter_path) + 1
+        max_attempts = s.ci_fix_max_attempts
+        if attempt > max_attempts:
+            _write_counter(counter_path, 0)
+            return Outcome(
+                State.BLOCKED,
+                f"ci fix for {repo_id} failed after {max_attempts} attempt(s) — "
+                "manual intervention required",
+            )
+
+        forge = get_forge(s, repo_config=rc)
+        try:
+            ci = forge.check_status(source_branch=branch)
+        except Exception as e:  # noqa: BLE001 — transient
+            log.warning(
+                "%s: check_status failed for %s (retry): %s", ticket.id, repo_id, e
+            )
+            return Outcome(ticket.state)
+        failing = (ci or {}).get("failing", [])
+
+        log_text = ""
+        try:
+            pr = forge.pr_status(source_branch=branch)
+            head_sha = (pr or {}).get("sha", "")
+            if head_sha:
+                for run in forge.list_workflow_runs(head_sha=head_sha):
+                    if run.get("conclusion") == "failure":
+                        logs = forge.fetch_workflow_job_logs(run_id=run["id"])
+                        if logs:
+                            log_text += (
+                                f"\n--- {run.get('name', 'workflow')} "
+                                f"(run {run['id']}) ---\n{logs}"
+                            )
+        except Exception:  # noqa: BLE001 — best-effort enrichment
+            log.warning("%s: failed to fetch job logs for %s", ticket.id, repo_id)
+
+        failing_summary = _build_failing_summary(failing, log_text)
+        log.info(
+            "%s: multi-repo CI failing for %s — ci-fix attempt %d/%d",
+            ticket.id,
+            repo_id,
+            attempt,
+            max_attempts,
+        )
+
+        ok = False
+        try:
+            # Attribute the agent's cost/traces to the ticket's session, and
+            # to the TARGET repo's Langfuse project, not an orphan trace.
+            with tracing.start_ticket_root_span(ticket.id, "ci_fix", repo_config=rc):
+                mem_path = s.memory_file_for("ci_fix", rc.board_id)
+                result = run_ci_fix_agent(
+                    settings=s,
+                    repo_dir=str(repo_dir),
+                    branch=branch,
+                    failing_summary=failing_summary,
+                    memory=load_memory(mem_path),
+                    ticket_id=ticket.id,
+                    board_id=rc.board_id,
+                )
+                ok = result.status == "DONE"
+                if result.updated_memory:
+                    persist_memory(mem_path, result.updated_memory)
+        except Exception as e:  # noqa: BLE001
+            log.exception(
+                "%s: multi-repo ci-fix crashed for %s: %s", ticket.id, repo_id, e
+            )
+            ok = False
+
+        if ok:
+            # No new commits (agent reported DONE but changed nothing) still
+            # counts toward the cap so a flaky check can't loop forever.
+            try:
+                local = git_ops.head_sha(repo_dir)
+                remote = git_ops.remote_branch_sha(repo_dir, branch)
+            except Exception:  # noqa: BLE001 — be safe: assume changes
+                local, remote = None, "force-push"
+            if local is not None and remote == local:
+                _write_counter(counter_path, attempt)
+                log.info(
+                    "%s: multi-repo ci-fix for %s made no changes (attempt %d/%d)",
+                    ticket.id,
+                    repo_id,
+                    attempt,
+                    max_attempts,
+                )
+                return Outcome(ticket.state)
+            try:
+                git_ops.push(
+                    repo_dir,
+                    branch=branch,
+                    remote_url=_resolve_remote_url(s, rc),
+                    token=github_token(s, repo_config=rc),
+                )
+            except Exception as e:  # noqa: BLE001
+                _write_counter(counter_path, attempt)
+                return Outcome(
+                    State.BLOCKED,
+                    f"ci fix for {repo_id} succeeded but force-push failed: {e}",
+                )
+            _write_counter(counter_path, 0)
+            log.info(
+                "%s: multi-repo ci fix pushed for %s — re-poll", ticket.id, repo_id
+            )
+            return Outcome(ticket.state)
+
+        # Agent failed — record the attempt and re-poll.
+        _write_counter(counter_path, attempt)
+        log.warning(
+            "%s: multi-repo ci-fix attempt %d/%d failed for %s — retrying next poll",
+            ticket.id,
+            attempt,
+            max_attempts,
+            repo_id,
+        )
+        return Outcome(ticket.state)
+
+    def _multi_repo_auto_merge(
+        self, ticket: Ticket, ctx: StageContext, green: list[dict]
+    ) -> Outcome:
+        """Auto-merge the green multi-repo PRs when the review gate marks the
+        ticket eligible. Held (same-state) when not eligible, so a human can
+        merge instead. Partial merges are fine — the next poll continues."""
+        s = ctx.settings
+        eligible, reason = self._auto_merge_eligible(ticket, ctx)
+        if not eligible:
+            self._maybe_comment(
+                ticket, ctx, f"multi-repo PRs green; auto-merge held: {reason}"
+            )
+            return Outcome(ticket.state)
+
+        for r in green:
+            try:
+                rc = get_repo_config(r["repo_id"])
+                get_forge(s, repo_config=rc).merge_pr(source_branch=r["branch"])
+                log.info(
+                    "%s: multi-repo auto-merged %s: %s",
+                    ticket.id,
+                    r["repo_id"],
+                    r["url"],
+                )
+            except Exception as e:  # noqa: BLE001 — transient; re-poll
+                log.warning(
+                    "%s: multi-repo merge failed for %s (retry): %s",
+                    ticket.id,
+                    r["repo_id"],
+                    e,
+                )
+                return Outcome(ticket.state)
+        # Next poll sees all PRs merged → DONE.
         return Outcome(ticket.state)
 
     def _handle_human_mr_approval(self, ticket: Ticket, ctx: StageContext) -> Outcome:

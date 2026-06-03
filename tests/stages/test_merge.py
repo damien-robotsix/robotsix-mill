@@ -1,3 +1,4 @@
+import contextlib
 import json
 
 import pytest
@@ -2625,12 +2626,13 @@ def test_multi_repo_one_pr_conflicting_blocks(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "repo-b" in out.note
-    assert "per-repo auto-recovery is not yet wired" in out.note
+    assert "rebase auto-recovery is not yet wired" in out.note
 
 
-def test_multi_repo_one_pr_failing_ci_blocks(tmp_path, monkeypatch):
-    """One PR green, one PR open + CI failure → BLOCKED naming the
-    failing repo."""
+def test_multi_repo_one_pr_failing_ci_missing_clone_blocks(tmp_path, monkeypatch):
+    """One PR green, one PR open + CI failure → the aggregator routes the
+    failing repo to the inline CI-fix path; with no workspace clone it
+    BLOCKS asking for re-implement (rather than the old immediate block)."""
     ctx = _gh(tmp_path)
     remote_a = "https://github.com/o/a.git"
     remote_b = "https://github.com/o/b.git"
@@ -2680,7 +2682,189 @@ def test_multi_repo_one_pr_failing_ci_blocks(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "repo-b" in out.note
-    assert "per-repo auto-recovery is not yet wired" in out.note
+    assert "missing" in out.note and "re-run implement" in out.note
+
+
+def test_multi_repo_failing_ci_with_clone_runs_ci_fix(tmp_path, monkeypatch):
+    """A failing-CI repo WITH a workspace clone runs the CI-fix agent on that
+    repo's clone, pushes the fix, and re-polls (same state) — the multi-repo
+    auto-recovery the d776 follow-up wires."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {"merged": True, "state": "closed", "url": "u-a"},
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+                "mergeable": True,
+                "sha": "deadbeef",
+            },
+        },
+        ci_responses={
+            remote_b: {"conclusion": "failure", "failing": [{"name": "tests"}]},
+        },
+    )
+    # Best-effort log enrichment must not require real network.
+    monkeypatch.setattr(
+        github.GitHubForge, "list_workflow_runs", lambda self, *, head_sha: []
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    # Materialise repo-b's clone under repos/<id> so the fix path proceeds.
+    repo_b_dir = ctx.service.workspace(t).dir / "repos" / "repo-b"
+    (repo_b_dir / ".git").mkdir(parents=True)
+
+    captured = {}
+    from robotsix_mill.stages import merge as merge_mod
+
+    def fake_ci_fix(*, settings, repo_dir, branch, failing_summary, **kw):
+        captured["repo_dir"] = repo_dir
+        captured["branch"] = branch
+
+        class _R:
+            status = "DONE"
+            updated_memory = ""
+
+        return _R()
+
+    monkeypatch.setattr(merge_mod, "run_ci_fix_agent", fake_ci_fix)
+    # Keep the test hermetic: don't open a real Langfuse-exporting span.
+    monkeypatch.setattr(
+        merge_mod.tracing,
+        "start_ticket_root_span",
+        lambda *a, **k: contextlib.nullcontext(),
+    )
+    # New commits present → push path taken.
+    monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda d: "newsha")
+    monkeypatch.setattr(merge_mod.git_ops, "remote_branch_sha", lambda d, b: "oldsha")
+    pushed = {}
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "push",
+        lambda repo_dir, *, branch, remote_url, token: pushed.update(
+            {"branch": branch, "remote": remote_url}
+        ),
+    )
+
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    # Stays in IMPLEMENT_COMPLETE to re-poll after the fix push.
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert captured["repo_dir"].endswith("repos/repo-b")
+    assert pushed["remote"] == remote_b
+    # Attempt counter reset on a productive push.
+    counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_repo-b.count"
+    assert merge_mod._read_counter(counter) == 0
+
+
+def test_multi_repo_all_green_auto_merges_when_eligible(tmp_path, monkeypatch):
+    """All PRs green + review marks auto-merge eligible → each green PR is
+    merged via its own forge; stays same-state so the next poll sees DONE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "u-a",
+                "mergeable": True,
+            },
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "u-b",
+                "mergeable": True,
+            },
+        },
+        ci_responses={
+            remote_a: {"conclusion": "success", "failing": []},
+            remote_b: {"conclusion": "success", "failing": []},
+        },
+    )
+    merged_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merged_calls.append(self._remote_url)
+        or {"merged": True},
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    # Review artifact marking auto-merge eligible.
+    ctx.service.workspace(t).artifacts_dir.joinpath("review.md").write_text(
+        "verdict: APPROVE\nauto_merge_eligible: true\n", encoding="utf-8"
+    )
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {"repo_id": "repo-b", "branch": branch, "url": "u-b"},
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE  # re-poll → next sees DONE
+    assert sorted(merged_calls) == [remote_a, remote_b]
+
+
+def test_multi_repo_all_green_holds_when_not_eligible(tmp_path, monkeypatch):
+    """All PRs green but no auto-merge-eligible review → no merges, same-state
+    (waits for a human to merge)."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    remote_a = "https://github.com/o/a.git"
+    _install_multirepo_registry([("repo-a", remote_a)])
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "u-a",
+                "mergeable": True,
+            },
+        },
+        ci_responses={remote_a: {"conclusion": "success", "failing": []}},
+    )
+    merged_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merged_calls.append(1) or {"merged": True},
+    )
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    # No review.md → not eligible.
+    _write_pr_urls(ctx, t, [{"repo_id": "repo-a", "branch": branch, "url": "u-a"}])
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert merged_calls == []  # nothing merged without an eligible review
 
 
 def test_multi_repo_unknown_repo_id_blocks(tmp_path, monkeypatch):
