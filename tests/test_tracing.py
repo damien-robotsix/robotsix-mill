@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import base64
 
+import pytest
+
 from robotsix_llmio.core import tracing
 from robotsix_llmio.core.tracing import (
     _active_public_key,
@@ -164,7 +166,11 @@ def test_on_export_result_hook_reports_outcomes(monkeypatch):
     throwaway ``TracerProvider`` so ``setup`` skips its one-time global install
     (no ``set_tracer_provider`` / ``instrument_all``) and just wires the
     filtered exporter onto our local provider.
+
+    Needs the ``tracing`` extra (OTLP exporter + SDK); skips without it, the
+    same way the rest of the offline suite avoids hard-depending on it.
     """
+    pytest.importorskip("opentelemetry.exporter.otlp.proto.http.trace_exporter")
     from opentelemetry.exporter.otlp.proto.http import trace_exporter as _te
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SpanExportResult
@@ -219,6 +225,7 @@ def test_on_export_result_hook_reports_outcomes(monkeypatch):
 
 def test_on_export_result_hook_exceptions_never_break_export(monkeypatch):
     """A raising health hook must not propagate out of ``export``."""
+    pytest.importorskip("opentelemetry.exporter.otlp.proto.http.trace_exporter")
     from opentelemetry.exporter.otlp.proto.http import trace_exporter as _te
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SpanExportResult
