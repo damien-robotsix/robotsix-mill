@@ -373,6 +373,50 @@ def test_pr_status_merged_mr(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# pr_status_by_url (URL-keyed fallback via _get_mr_by_iid)
+# ---------------------------------------------------------------------------
+
+
+def test_pr_status_by_url_resolves_merged_mr(tmp_path, monkeypatch):
+    """A recorded MR web url resolves by IID to its current status."""
+    project_json = {"id": 42}
+    mr = {
+        "iid": 7,
+        "state": "merged",
+        "web_url": "https://gitlab.com/ns/project/-/merge_requests/7",
+        "merge_status": "can_be_merged",
+        "sha": "abc123",
+        "diff_refs": {"head_sha": "abc123"},
+    }
+    get_map = {
+        "projects/42/merge_requests/7": _make_response(200, mr),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    status = forge.pr_status_by_url(
+        url="https://gitlab.com/ns/project/-/merge_requests/7"
+    )
+    assert status == {
+        "merged": True,
+        "state": "merged",
+        "url": "https://gitlab.com/ns/project/-/merge_requests/7",
+        "mergeable": True,
+        "sha": "abc123",
+        "number": 7,
+    }
+
+
+def test_pr_status_by_url_unparseable_returns_none(tmp_path, monkeypatch):
+    """A url without ``merge_requests/<n>`` → None (no API call)."""
+    _mock_httpx(monkeypatch, get_map={})
+
+    forge = _forge(tmp_path)
+    assert forge.pr_status_by_url(url="https://gitlab.com/ns/project") is None
+
+
+# ---------------------------------------------------------------------------
 # check_status
 # ---------------------------------------------------------------------------
 

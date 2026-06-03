@@ -281,6 +281,28 @@ class MergeStage(Stage):
                 statuses.append({**base, "status": "pending"})
                 continue
 
+            if pr is None and url:
+                # Branch-keyed lookup came back empty. When the repo/org
+                # has "Automatically delete head branches" enabled, GitHub
+                # removes the head branch on merge and the ``head=`` filter
+                # in the branch-keyed lookup returns nothing — so a merged
+                # PR looks like it doesn't exist. Fall back to the
+                # URL-keyed lookup (which resolves the PR by its recorded
+                # url) so a merged PR is still recognised. Same transient-
+                # exception discipline as ``pr_status``: log + treat as
+                # pending for this poll.
+                try:
+                    pr = get_forge(s, repo_config=rc).pr_status_by_url(url=url)
+                except Exception as e:  # noqa: BLE001 — transient: re-poll next cycle
+                    log.warning(
+                        "%s: pr_status_by_url failed for %s (retry): %s",
+                        ticket.id,
+                        repo_id,
+                        e,
+                    )
+                    statuses.append({**base, "status": "pending"})
+                    continue
+
             if pr is None:
                 statuses.append({**base, "status": "pending"})
                 continue
