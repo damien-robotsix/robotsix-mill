@@ -270,6 +270,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.dedup_requests": "dedup_request_limit",
     "core.limits.dedup_max_candidates": "dedup_max_candidates",
     "core.limits.doc_classifier_requests": "doc_classifier_request_limit",
+    "core.limits.doc_classifier_diff_max_chars": "doc_classifier_diff_max_chars",
     "core.limits.review_requests": "review_request_limit",
     "core.limits.web_research_requests": "web_research_request_limit",
     "core.limits.scope_triage_requests": "scope_triage_request_limit",

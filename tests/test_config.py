@@ -1440,6 +1440,15 @@ class TestFlattenYamlConfig:
         assert result["model"] == "test/model"
         assert result["data_dir"] == "/tmp/data"
 
+    def test_flatten_doc_classifier_diff_max_chars(self):
+        """``core.limits.doc_classifier_diff_max_chars`` flattens to the
+        ``doc_classifier_diff_max_chars`` Settings alias."""
+        from robotsix_mill.config_loader import flatten_yaml_config
+
+        yaml_config = {"core": {"limits": {"doc_classifier_diff_max_chars": 1234}}}
+        result = flatten_yaml_config(yaml_config)
+        assert result["doc_classifier_diff_max_chars"] == 1234
+
     def test_flatten_unknown_paths_ignored(self):
         """YAML paths without a mapping are silently ignored."""
         from robotsix_mill.config_loader import flatten_yaml_config

@@ -296,6 +296,12 @@ class Settings(BaseSettings):
     # Cheap classifier gate that runs *before* the full doc agent.
     doc_classifier_model: str = Field(default="deepseek/deepseek-v4-flash")
     doc_classifier_request_limit: int = Field(default=3)
+    # Caps the git diff fed to the cheap doc-classifier gate. Truncation
+    # is safe here: the classifier is conservatively biased toward
+    # user_facing=True, so a truncated diff at worst loses signal and
+    # routes to the full doc agent — the harmless direction. The full
+    # doc agent still receives the untruncated diff.
+    doc_classifier_diff_max_chars: int = 6000
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped (read-side
     # only — persist_memory is unchanged).  Applies to all memory ledgers
