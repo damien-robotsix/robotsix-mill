@@ -30,7 +30,7 @@ import contextvars
 import json
 import os
 import uuid
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from ._otel import get_recording_span as get_recording_span
 from ._otel import get_tracer, start_span
@@ -79,6 +79,7 @@ def setup_langfuse_tracing(
     base_url: str | None = None,
     project_id: str | None = None,
     service_name: str = "robotsix-llmio",
+    on_export_result: Callable[[str, bool, str | None], None] | None = None,
 ) -> bool:
     """Register a Langfuse project for trace export and start instrumentation.
 
@@ -88,6 +89,15 @@ def setup_langfuse_tracing(
     optional and only used to build web-UI links via :func:`langfuse_trace_url`.
     Idempotent per public key. Returns ``True`` when the project is registered,
     ``False`` when credentials are absent (no-op).
+
+    *on_export_result* is an optional health hook: when provided, every span
+    export attempt for THIS project invokes it as
+    ``on_export_result(public_key, ok, error)`` — ``ok=False`` with an error
+    string on an exception or a non-success OTLP result, ``ok=True`` with
+    ``None`` on success. Consumers use it to surface "Langfuse export broken"
+    in their own UI and to auto-clear the flag once exports recover. The hook
+    must not raise; exceptions from it are swallowed so it can never break the
+    export path.
     """
     global _provider, _default_public_key
 
@@ -163,10 +173,50 @@ def setup_langfuse_tracing(
                 return  # belongs to a different project
             super().on_end(span)
 
-    exporter = OTLPSpanExporter(
-        endpoint=_langfuse_otlp_endpoint(base_url),
-        headers={"Authorization": _basic_auth_header(public_key, secret_key)},
-    )
+    _endpoint = _langfuse_otlp_endpoint(base_url)
+    _headers = {"Authorization": _basic_auth_header(public_key, secret_key)}
+    if on_export_result is None:
+        exporter: Any = OTLPSpanExporter(endpoint=_endpoint, headers=_headers)
+    else:
+        from opentelemetry.sdk.trace.export import SpanExportResult
+
+        class _ReportingExporter(OTLPSpanExporter):
+            """Wrap the OTLP exporter so each export attempt reports its
+            outcome to *on_export_result* — letting a consumer surface
+            "Langfuse export broken" and auto-clear it on recovery, without
+            ever breaking the export path (a raising hook is swallowed)."""
+
+            def __init__(self, *a, _pk: str, _hook, **kw):  # type: ignore[no-untyped-def]
+                super().__init__(*a, **kw)
+                self._pk = _pk
+                self._hook = _hook
+
+            def _report(self, ok: bool, error: str | None) -> None:
+                try:
+                    self._hook(self._pk, ok, error)
+                except Exception:  # noqa: BLE001 — a health hook must never break export
+                    pass
+
+            def export(self, spans):  # type: ignore[no-untyped-def]
+                try:
+                    result = super().export(spans)
+                except Exception as e:  # noqa: BLE001
+                    self._report(False, f"{type(e).__name__}: {e}")
+                    return SpanExportResult.FAILURE
+                self._report(
+                    result == SpanExportResult.SUCCESS,
+                    None
+                    if result == SpanExportResult.SUCCESS
+                    else "OTLP export returned FAILURE",
+                )
+                return result
+
+        exporter = _ReportingExporter(
+            endpoint=_endpoint,
+            headers=_headers,
+            _pk=public_key,
+            _hook=on_export_result,
+        )
     _provider.add_span_processor(
         _FilteredBatchSpanProcessor(exporter, target_public_key=public_key)
     )
@@ -292,7 +342,9 @@ def start_trace(
             stack.enter_context(langfuse_session(session_id))
         if project is not None:
             stack.enter_context(langfuse_project(project))
-        span = stack.enter_context(start_span(get_tracer("robotsix_llmio.tracing"), name))
+        span = stack.enter_context(
+            start_span(get_tracer("robotsix_llmio.tracing"), name)
+        )
         yield TraceSpan(span)
 
 
