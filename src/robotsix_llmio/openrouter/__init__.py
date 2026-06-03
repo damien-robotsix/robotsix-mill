@@ -14,6 +14,7 @@ from .transient import is_openrouter_transient, is_openrouter_upstream_error
 __all__ = [
     "OpenRouterModel",
     "OpenRouterProvider",
+    "OpenRouterProviderCostSource",
     "record_openrouter_cost",
     "is_openrouter_transient",
     "is_openrouter_upstream_error",
@@ -29,4 +30,8 @@ def __getattr__(name: str) -> Any:  # PEP 562 — lazy heavy imports
         from .provider import OpenRouterProvider
 
         return OpenRouterProvider
+    if name == "OpenRouterProviderCostSource":
+        from .provider_cost import OpenRouterProviderCostSource
+
+        return OpenRouterProviderCostSource
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
