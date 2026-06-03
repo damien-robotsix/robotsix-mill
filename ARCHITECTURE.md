@@ -113,8 +113,7 @@ files are:
   `_walk_cause_chain`.
 - `constants.py` — the baked numeric parameters
   (`MODEL_REQUEST_TIMEOUT`, `CONNECT_TIMEOUT`, `SDK_QUERY_TIMEOUT`,
-  `TRANSIENT_RETRIES`, `TRANSIENT_BACKOFF_BASE`, `TRANSIENT_BACKOFF_CAP`,
-  `RATE_LIMIT_BACKOFF_BASE`, `RATE_LIMIT_BACKOFF_CAP`).
+  `TRANSIENT_RETRIES`, `TRANSIENT_BACKOFF_BASE`, `TRANSIENT_BACKOFF_CAP`).
 - `cost.py` — the generic `record_cost(response, get_cost)` that pulls
   a USD value from a response and stamps `gen_ai.usage.cost` +
   `langfuse.observation.cost_details` onto the active OTel span, plus
@@ -185,8 +184,7 @@ short rationale grounded in the source.
 
 - **Baked constants, not a config object.** Every numeric parameter
   (`MODEL_REQUEST_TIMEOUT`, `CONNECT_TIMEOUT`, `SDK_QUERY_TIMEOUT`,
-  `TRANSIENT_RETRIES`, `TRANSIENT_BACKOFF_BASE`, `TRANSIENT_BACKOFF_CAP`,
-  `RATE_LIMIT_BACKOFF_BASE`, `RATE_LIMIT_BACKOFF_CAP`) is a module
+  `TRANSIENT_RETRIES`, `TRANSIENT_BACKOFF_BASE`, `TRANSIENT_BACKOFF_CAP`) is a module
   constant in `core/constants.py` by design: the consumer's only choice
   is provider + tier. If a derived layer needs an override, it adds it
   explicitly — not as a general knob.
