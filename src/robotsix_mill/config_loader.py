@@ -408,7 +408,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.survey.interval_seconds": "survey_interval_seconds",
     "periodic.survey.memory_path": "survey_memory_path",
     # -- periodic.cost_reconciliation --
-    "periodic.cost_reconciliation.model": "cost_reconciliation_model",
     "periodic.cost_reconciliation.enabled": "cost_reconciliation_periodic",
     "periodic.cost_reconciliation.interval_seconds": "cost_reconciliation_interval_seconds",
     "periodic.cost_reconciliation.memory_path": "cost_reconciliation_memory_path",

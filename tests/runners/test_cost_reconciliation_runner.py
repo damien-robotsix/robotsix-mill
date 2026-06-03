@@ -150,39 +150,20 @@ def _patch_pass(monkeypatch, settings, *, or_total, lf_total, or_bd="or", lf_bd=
     )
 
 
-def _patch_agent(monkeypatch, *, analysis="a", conclusion="c"):
-    from robotsix_mill.agents.cost_reconciling import CostReconciliationResult
-
-    calls: list = []
-
-    def fake_agent(**kwargs):
-        calls.append(kwargs)
-        return CostReconciliationResult(analysis=analysis, conclusion=conclusion)
-
-    monkeypatch.setattr(
-        "robotsix_mill.agents.cost_reconciling.run_cost_reconciliation_agent",
-        fake_agent,
-    )
-    return calls
-
-
 def test_clean_pass_no_agent_no_ticket(tmp_path, monkeypatch):
-    """Delta within the $1 tolerance → no agent, no ticket."""
+    """Delta within the $1 tolerance → no ticket."""
     settings = _make_settings(tmp_path)
     _patch_pass(monkeypatch, settings, or_total=10.0, lf_total=9.5)
-    agent_calls = _patch_agent(monkeypatch)
 
     result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert result.drafts_created == []
     assert "clean" in result.summary
-    assert agent_calls == []
 
 
 def test_dirty_pass_creates_draft(tmp_path, monkeypatch):
-    """Delta over the $1 tolerance → agent + draft ticket."""
+    """Delta over the $1 tolerance → deterministic raw-numbers draft."""
     settings = _make_settings(tmp_path)
     _patch_pass(monkeypatch, settings, or_total=15.0, lf_total=10.0)
-    _patch_agent(monkeypatch, analysis="Analysis", conclusion="Investigate")
 
     result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert len(result.drafts_created) == 1
@@ -193,7 +174,9 @@ def test_dirty_pass_creates_draft(tmp_path, monkeypatch):
     service = TicketService(settings, board_id="test-board")
     ticket = service.get(draft["id"])
     assert ticket is not None and ticket.source == SourceKind.COST_RECONCILIATION
-    assert "cost_reconciliation-gap-id" in service.workspace(ticket).read_description()
+    body = service.workspace(ticket).read_description()
+    assert "cost_reconciliation-gap-id" in body
+    assert "$15.0000" in body and "$10.0000" in body
 
 
 def test_missing_management_key_skips_gracefully(tmp_path, monkeypatch):
@@ -220,7 +203,6 @@ def test_langfuse_error_runs_comparison(tmp_path, monkeypatch):
         lf_total=0.0,
         lf_bd="Langfuse API error — unable to fetch traces",
     )
-    _patch_agent(monkeypatch, conclusion="Langfuse was down")
     result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert len(result.drafts_created) == 1
     assert "5.00" in result.summary
@@ -234,7 +216,6 @@ def test_langfuse_error_runs_comparison(tmp_path, monkeypatch):
 def test_duplicate_date_suppressed(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     _patch_pass(monkeypatch, settings, or_total=15.0, lf_total=10.0)
-    agent_calls = _patch_agent(monkeypatch)
 
     service = TicketService(settings, board_id="test-board")
     date_str = _yesterday_date_str()
@@ -248,13 +229,11 @@ def test_duplicate_date_suppressed(tmp_path, monkeypatch):
     result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert result.drafts_created == []
     assert "already filed" in result.summary and prior.id in result.summary
-    assert agent_calls == []
 
 
 def test_new_date_creates_draft_when_prior_exists_for_other_date(tmp_path, monkeypatch):
     settings = _make_settings(tmp_path)
     _patch_pass(monkeypatch, settings, or_total=15.0, lf_total=10.0)
-    agent_calls = _patch_agent(monkeypatch)
 
     service = TicketService(settings, board_id="test-board")
     body = "old\n<!-- cost_reconciliation-gap-id: 2025-01-01 -->\n"
@@ -266,7 +245,6 @@ def test_new_date_creates_draft_when_prior_exists_for_other_date(tmp_path, monke
 
     result = run_cost_reconciliation_pass(repo_config=_test_repo_config())
     assert len(result.drafts_created) == 1
-    assert len(agent_calls) == 1
 
 
 # ---------------------------------------------------------------------------
