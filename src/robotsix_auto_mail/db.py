@@ -86,17 +86,6 @@ def init_db(path: str) -> sqlite3.Connection:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.executescript(_SCHEMA)
-    # Migration: add status column to databases created before the
-    # column was part of the schema.  On databases where the column
-    # already exists (brand-new or already-migrated) this raises
-    # sqlite3.OperationalError ("duplicate column name"), which we
-    # swallow to keep initialisation idempotent.
-    try:
-        conn.execute(
-            "ALTER TABLE mail_records ADD COLUMN status TEXT NOT NULL DEFAULT 'inbox'"
-        )
-    except sqlite3.OperationalError:
-        pass
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
