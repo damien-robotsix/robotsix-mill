@@ -136,6 +136,81 @@ def test_explore_subagent_is_read_only_and_uses_explore_model(tmp_path, monkeypa
     assert ms["max_tokens"] == 600
 
 
+def test_known_context_is_prepended_to_prompt(tmp_path, monkeypatch):
+    """When known_context is non-empty, the prompt handed to agent.run
+    contains both the known-context text and the original question."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        async def run(self, q, *, usage_limits=None):
+            cap["prompt"] = q
+            return type("R", (), {"output": "answer"})()
+
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s,
+            repo_dir=tmp_path,
+            question="where is tracing?",
+            known_context="src/robotsix_mill/runtime/tracing.py already read",
+        )
+    )
+    assert out == "answer"
+    assert "src/robotsix_mill/runtime/tracing.py already read" in cap["prompt"]
+    assert "where is tracing?" in cap["prompt"]
+    assert "Known context" in cap["prompt"]
+
+
+def test_prompt_unchanged_when_known_context_omitted(tmp_path, monkeypatch):
+    """When known_context is omitted, the prompt equals the original
+    question verbatim (no wrapper)."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model="explore/cheap")
+    cap = {}
+
+    class FakeModel:
+        def __init__(self, name, **kw):
+            pass
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        async def run(self, q, *, usage_limits=None):
+            cap["prompt"] = q
+            return type("R", (), {"output": "answer"})()
+
+    import pydantic_ai
+    import pydantic_ai.providers.openrouter as orp
+    from robotsix_mill.agents import openrouter_cost as oc
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
+    monkeypatch.setattr(oc, "CostInstrumentedOpenRouterModel", FakeModel)
+
+    out = asyncio.run(
+        explore.run_explore(settings=s, repo_dir=tmp_path, question="where is X?")
+    )
+    assert out == "answer"
+    assert cap["prompt"] == "where is X?"
+
+
 # --- bounded retry + sentinel tests -------------------------------------
 
 
