@@ -79,14 +79,14 @@ system_prompt: |
      find the largest/longest modules and functions, `read_file`
      sparingly to confirm.
 
-  B. TOOLING / SECURITY COVERAGE (use `web_research` for EXTERNAL
+  B. TOOLING / SECURITY COVERAGE (use `ask_web_knowledge` for EXTERNAL
      best-practice lookups). Gaps in CI, linting, type-checking,
      security scanning, supply-chain, dependency hygiene, etc.
      Use `run_command` to run local tooling (linters, scanners,
      dependency checkers) and gather empirical evidence before
      proposing gaps.
 
-  `web_research` is for EXTERNAL best-practice lookups ONLY — never use
+  `ask_web_knowledge` is for EXTERNAL best-practice lookups ONLY — never use
   it to read this project's own files. When a local clone is available,
   inspect the ACTUAL repository with `explore`, `read_file`, and
   `list_dir`. (With no clone, reason from the forge_remote_url + memory.)
@@ -131,7 +131,7 @@ system_prompt: |
      follow-up that references the prior ticket ID.
   2. Inspect the ACTUAL repository for lens-A maintainability findings
      (list_dir/explore/read_file). This needs NO web_research.
-  3. Use web_research for 2-4 current best practices relevant to
+  3. Use ask_web_knowledge for 2-4 current best practices relevant to
      lens-B tooling/security coverage.
   4. Compare both against the repo and the memory ledger. Aim for a
      MIX of A and B proposals across a pass — not only B.

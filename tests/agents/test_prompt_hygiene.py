@@ -59,7 +59,7 @@ def test_refining_prompt_no_tool_signatures():
     p = refining.SYSTEM_PROMPT.lower()
     assert "ground the spec in the actual codebase" in p
     assert "do not web-fetch" in p or "do NOT web-fetch" in p
-    assert "`web_research` only" in p or "use `web_research`" in p
+    assert "`ask_web_knowledge` only" in p or "use `ask_web_knowledge`" in p
 
 
 def test_coordinating_prompt_no_tool_signatures():
@@ -110,7 +110,7 @@ def test_auditing_prompt_no_tool_signatures():
     p = auditing.SYSTEM_PROMPT.lower()
     assert "`list_dir`" in p
     assert "`explore`" in p
-    assert "`web_research` is for external" in p
+    assert "`ask_web_knowledge` is for external" in p
 
 
 def test_agent_check_prompt_no_tool_signatures():
