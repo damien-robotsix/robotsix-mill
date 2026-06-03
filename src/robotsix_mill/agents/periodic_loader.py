@@ -205,9 +205,7 @@ class ResolvedPeriodicWorkflow:
 # backfills ``interval_seconds`` (which IS merged), so the raw ``interval``
 # string must not be forwarded into AgentDefinition (it would collide with
 # the backfilled ``interval_seconds`` and trip the mutual-exclusion check).
-_NON_MERGE_FIELDS = frozenset(
-    {"name", "prompt_overlay", "system_prompt", "interval"}
-)
+_NON_MERGE_FIELDS = frozenset({"name", "prompt_overlay", "system_prompt", "interval"})
 
 
 def _builtin_definition(name: str) -> AgentDefinition:
