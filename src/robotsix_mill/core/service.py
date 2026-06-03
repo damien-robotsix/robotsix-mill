@@ -1558,3 +1558,142 @@ class TicketService:
                 action.status = new_status
                 s.add(action)
                 s.commit()
+
+    # --- proposed-action executor ----------------------------------------
+
+    @staticmethod
+    def _action_note(verb: str, source: str, rationale: str) -> str:
+        """Format a ``TicketEvent`` note for a proposed action.
+
+        Examples::
+
+            "[health] closed via proposed action: stale ticket"
+            "[trace-review] transitioned to ready via proposed action: …"
+        """
+        return f"[{source}] {verb} via proposed action: {rationale}"
+
+    def execute_proposed_action(
+        self, action_id: int, decided_by: str
+    ) -> ProposedAction:
+        """Execute an approved proposed action against its target ticket.
+
+        Idempotent: calling on an already-EXECUTED or FAILED row returns
+        it unchanged. Only APPROVED rows are dispatched.
+
+        Raises :class:`KeyError` when *action_id* does not exist, and
+        :class:`ValueError` when ``self.board_id`` is empty.
+        """
+        if not self.board_id:
+            raise ValueError(
+                "execute_proposed_action requires a board_id; "
+                "call through a bound service instance"
+            )
+
+        # --- idempotency gate (load in a short-lived session) ---
+        with db.session(self.settings, self.board_id) as s:
+            action = s.get(ProposedAction, action_id)
+            if action is None:
+                raise KeyError(action_id)
+            if action.status != ProposedActionStatus.APPROVED:
+                return action
+            # Snapshot fields before closing the session.
+            action_type = action.action_type
+            target_id = action.target_ticket_id
+            payload = action.payload
+            rationale = action.rationale
+            source = action.source
+
+        # --- dispatch ---
+        note: str | None = None
+        failure: str | None = None
+        try:
+            if action_type == ActionType.CLOSE:
+                note = self._execute_close(target_id, rationale, source)
+            elif action_type == ActionType.TRANSITION:
+                note = self._execute_transition(
+                    target_id, payload, rationale, source
+                )
+            elif action_type == ActionType.COMMENT:
+                note = self._execute_comment(target_id, rationale, source)
+            elif action_type == ActionType.RELABEL:
+                note = self._execute_relabel(target_id, payload, rationale, source)
+            else:
+                raise ValueError(f"unknown action type: {action_type!r}")
+        except (KeyError, TransitionError, ValueError, json.JSONDecodeError) as exc:
+            failure = str(exc)
+        except NotImplementedError as exc:
+            failure = str(exc)
+
+        # --- persist outcome ---
+        status = ProposedActionStatus.FAILED if failure else ProposedActionStatus.EXECUTED
+        with db.session(self.settings, self.board_id) as s:
+            action = s.get(ProposedAction, action_id)
+            # Double-check: the row may have been changed since our
+            # first read (rare, but possible). If the status is no
+            # longer APPROVED, bail out — someone else decided it.
+            if action.status != ProposedActionStatus.APPROVED:
+                return action
+            action.status = status
+            action.decided_at = datetime.now(timezone.utc)
+            action.decided_by = decided_by
+            action.failure_reason = failure
+            s.add(action)
+            s.commit()
+            s.refresh(action)
+            return action
+
+    # -- dispatch helpers ------------------------------------------------
+
+    def _execute_close(
+        self, target_id: str, rationale: str, source: str
+    ) -> str:
+        """Transition *target_id* to CLOSED with a proposed-action note."""
+        self.transition(
+            target_id,
+            State.CLOSED,
+            note=self._action_note("closed", source, rationale),
+        )
+        return "closed"
+
+    def _execute_transition(
+        self,
+        target_id: str,
+        payload: str | None,
+        rationale: str,
+        source: str,
+    ) -> str:
+        """Parse *payload* for a target state and transition *target_id*."""
+        data = json.loads(payload or "{}")
+        state_str = data["state"]
+        dst = State(state_str)
+        self.transition(
+            target_id,
+            dst,
+            note=self._action_note(
+                f"transitioned to {dst.value}", source, rationale
+            ),
+        )
+        return f"transitioned to {dst.value}"
+
+    def _execute_comment(
+        self, target_id: str, rationale: str, source: str
+    ) -> str:
+        """Post *rationale* as a comment on *target_id* and leave a
+        history breadcrumb."""
+        self.add_comment(target_id, body=rationale, author=source)
+        self.add_history_note(
+            target_id,
+            note=self._action_note("comment added", source, rationale),
+        )
+        return "comment added"
+
+    def _execute_relabel(
+        self,
+        target_id: str,
+        payload: str | None,
+        rationale: str,
+        source: str,
+    ) -> str:
+        """RELABEL is a recognised placeholder that fails deterministically
+        until label infrastructure is built."""
+        raise NotImplementedError("label infrastructure not yet available")
