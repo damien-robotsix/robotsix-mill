@@ -37,10 +37,10 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
     <button onclick="runMeta()" class="meta-only" style="--agent-color:#a855f7">Meta</button>
   </div>
 </div>
-<button onclick="openCandidates()" style="font-size:11px;padding:3px 10px;
+<button id="agentmd-btn" onclick="openCandidates()" style="font-size:11px;padding:3px 10px;
 background:#2a1a3b;color:#c598fb;border:1px solid #3a2a4b;border-radius:4px;cursor:pointer;
 margin-left:4px" title="AGENT.md candidates from retrospect — validate to file a draft, reject to dismiss">
-  📋 AGENT.md
+  📋 AGENT.md<span id="agentmd-badge" style="display:none;margin-left:5px;padding:0 5px;border-radius:8px;background:#dc2626;color:#fff;font-size:10px;font-weight:bold"></span>
 </button>
 <span style="border-left:1px solid #2a2e37;align-self:stretch;margin-left:8px"></span>
 <button onclick="newInquiry()" style="font-size:11px;padding:3px 10px;
