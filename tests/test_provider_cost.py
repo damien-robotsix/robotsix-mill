@@ -198,6 +198,57 @@ def test_openrouter_key_usage_live():
 # --- Langfuse time-based prune (mocked httpx) --------------------------------
 
 
+def test_langfuse_fetch_logged_cost_by_provider_filters(monkeypatch):
+    from robotsix_llmio.core import langfuse_cost as lc
+
+    pages = [
+        [
+            {
+                "id": "o1",
+                "calculatedTotalCost": 1.5,
+                "metadata": {"provider": "openrouter"},
+                "startTime": "2026-06-02T01:00:00Z",
+            },
+            {
+                "id": "o2",
+                "calculatedTotalCost": 9.0,
+                "metadata": {"provider": "claude-sdk"},
+                "startTime": "2026-06-02T02:00:00Z",
+            },
+            {  # no provider tag → excluded
+                "id": "o3",
+                "calculatedTotalCost": 4.0,
+                "metadata": {},
+                "startTime": "2026-06-02T03:00:00Z",
+            },
+        ],
+        [],  # second page empty → stop
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/public/observations"
+        assert request.url.params.get("type") == "GENERATION"
+        return httpx.Response(200, json={"data": pages.pop(0)})
+
+    _mock_client_factory(monkeypatch, lc, handler)
+    src = lc.LangfuseCostLogSource(public_key="pk", secret_key="sk")
+    w = _window("2026-06-02T00:00:00", "2026-06-03T00:00:00")
+    logged = src.fetch_logged_cost_by_provider(w, "openrouter")
+    assert abs(logged.total_cost - 1.5) < 1e-9
+    assert logged.record_count == 1
+    assert logged.records[0].id == "o1"
+    assert logged.records[0].session_id is None  # no traceId on the obs
+
+
+def test_langfuse_observation_cost_fallbacks():
+    from robotsix_llmio.core.langfuse_cost import _observation_cost
+
+    assert _observation_cost({"calculatedTotalCost": 2.0}) == 2.0
+    assert _observation_cost({"totalCost": 3.0}) == 3.0
+    assert _observation_cost({"costDetails": {"total": 4.0}}) == 4.0
+    assert _observation_cost({}) == 0.0
+
+
 def test_langfuse_prune_before_deletes_old_traces(monkeypatch):
     from robotsix_llmio.core import langfuse_cost as lc
 

@@ -613,6 +613,7 @@ class _SdkToolAgentHandle:
         becomes the trace, not a summable observation.
         """
         from ..core.cost import record_cost
+        from .model import PROVIDER_NAME
 
         # Child generation span: the model exchange. Carries input/output +
         # token usage + the SDK cost estimate. Cost must sit on a child
@@ -641,7 +642,11 @@ class _SdkToolAgentHandle:
                     gen.set_attribute("gen_ai.usage.input_tokens", int(in_tok))
                 if out_tok is not None:
                     gen.set_attribute("gen_ai.usage.output_tokens", int(out_tok))
-            record_cost(result, lambda r: getattr(r, "total_cost_usd", None))
+            record_cost(
+                result,
+                lambda r: getattr(r, "total_cost_usd", None),
+                provider=PROVIDER_NAME,
+            )
 
     async def _run(
         self, user_prompt: str, message_history: list[Any] | None = None

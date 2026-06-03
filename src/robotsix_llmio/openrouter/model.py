@@ -76,6 +76,10 @@ def record_openrouter_cost(response: Any) -> None:
     span.set_attribute("gen_ai.operation.name", "chat")
     span.set_attribute("gen_ai.provider.name", "openrouter")
     span.set_attribute("gen_ai.system", "openrouter")
+    # Provider tag Langfuse indexes onto the observation's metadata, so a
+    # consumer can sum logged cost PER PROVIDER (cost reconciliation filters
+    # the logged side to "openrouter" to match an OpenRouter key's scope).
+    span.set_attribute("langfuse.observation.metadata.provider", "openrouter")
 
     model = getattr(response, "model", None)
     if model:

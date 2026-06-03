@@ -306,7 +306,11 @@ class ClaudeSDKModel(Model):
         # provider logs cost in traces like the OpenRouter providers do.
         from ..core.cost import record_cost
 
-        record_cost(result, lambda r: getattr(r, "total_cost_usd", None))
+        record_cost(
+            result,
+            lambda r: getattr(r, "total_cost_usd", None),
+            provider=PROVIDER_NAME,
+        )
         return ModelResponse(
             parts=[TextPart(content=text)],
             usage=_map_usage(result),

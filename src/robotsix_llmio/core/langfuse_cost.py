@@ -105,6 +105,66 @@ class LangfuseCostLogSource:
             records=records,
         )
 
+    def fetch_logged_cost_by_provider(
+        self, window: CostWindow, provider: str
+    ) -> LoggedCost:
+        """Fetch logged GENERATION cost over *window*, summing only the slice
+        whose observation metadata ``provider`` equals *provider*.
+
+        The write path stamps ``langfuse.observation.metadata.provider`` (e.g.
+        ``"openrouter"`` / ``"claude-sdk"``) so cost can be reconciled PER
+        PROVIDER — an OpenRouter key only bills the OpenRouter slice, so a
+        claude_sdk fleet (no independent billing API) reconciles 0-vs-0 instead
+        of false-flagging all Claude spend. The public observations endpoint has
+        no server-side metadata filter, so paginate ``type=GENERATION`` over the
+        window and filter client-side. Raises ``RuntimeError`` on non-2xx.
+        """
+        url = f"{self._base_url}/api/public/observations"
+        headers = {"Authorization": self._auth_header()}
+        base_params: dict[str, Any] = {
+            "type": "GENERATION",
+            "fromStartTime": window.start.isoformat(),
+            "toStartTime": window.end.isoformat(),
+            "limit": _PAGE_LIMIT,
+        }
+
+        matched: list[dict[str, Any]] = []
+        with httpx.Client(timeout=_TIMEOUT) as client:
+            page = 1
+            while True:
+                resp = client.get(
+                    url,
+                    params={**base_params, "page": page},
+                    headers=headers,
+                )
+                if not (200 <= resp.status_code < 300):
+                    raise RuntimeError(
+                        f"Langfuse observations request failed: "
+                        f"HTTP {resp.status_code}: {resp.text[:200]}"
+                    )
+                body = resp.json()
+                data = body.get("data") or []
+                if not data:
+                    break
+                for obs in data:
+                    if _observation_provider(obs) == provider:
+                        matched.append(obs)
+
+                meta = body.get("meta")
+                if isinstance(meta, dict):
+                    total_pages = meta.get("totalPages")
+                    if isinstance(total_pages, int) and page >= total_pages:
+                        break
+                page += 1
+
+        records = [self._observation_to_record(o) for o in matched]
+        total_cost = sum(_observation_cost(o) for o in matched)
+        return LoggedCost(
+            total_cost=total_cost,
+            record_count=len(records),
+            records=records,
+        )
+
     def prune_before(self, cutoff: datetime) -> int:
         """Delete logged traces older than *cutoff* (``timestamp < cutoff``).
 
@@ -167,6 +227,53 @@ class LangfuseCostLogSource:
             session_id=trace.get("sessionId"),
             name=trace.get("name"),
         )
+
+    @staticmethod
+    def _observation_to_record(obs: dict[str, Any]) -> CostRecord:
+        """Build a :class:`CostRecord` from one Langfuse observation dict.
+
+        ``id`` is the observation id (not a trace id); ``session_id`` falls back
+        to the parent ``traceId`` since observations carry no session directly.
+        """
+        raw_ts = obs.get("startTime") or obs.get("createdAt")
+        timestamp = _parse_timestamp(raw_ts)
+        return CostRecord(
+            id=str(obs.get("id", "")),
+            cost=_observation_cost(obs),
+            timestamp=timestamp,
+            session_id=obs.get("traceId"),
+            name=obs.get("name"),
+        )
+
+
+def _observation_provider(obs: dict[str, Any]) -> str | None:
+    """Pull the ``provider`` tag out of a Langfuse observation's metadata.
+
+    The write path stamps ``langfuse.observation.metadata.provider``, which
+    Langfuse surfaces under the observation's ``metadata`` dict.
+    """
+    metadata = obs.get("metadata")
+    if isinstance(metadata, dict):
+        provider = metadata.get("provider")
+        if provider is not None:
+            return str(provider)
+    return None
+
+
+def _observation_cost(obs: dict[str, Any]) -> float:
+    """USD cost of one Langfuse observation.
+
+    Prefers Langfuse's server-computed ``calculatedTotalCost``, then a raw
+    ``totalCost``, then ``costDetails.total`` (mirrors the write-side rollup).
+    """
+    for key in ("calculatedTotalCost", "totalCost"):
+        value = obs.get(key)
+        if value is not None:
+            return float(value or 0)
+    cost_details = obs.get("costDetails")
+    if isinstance(cost_details, dict) and cost_details.get("total") is not None:
+        return float(cost_details["total"] or 0)
+    return 0.0
 
 
 def _parse_timestamp(value: Any) -> datetime:

@@ -15,9 +15,21 @@ from typing import Any, Callable
 from ._otel import get_recording_span
 
 
-def record_cost(response: Any, get_cost: Callable[[Any], float | None]) -> None:
+def record_cost(
+    response: Any,
+    get_cost: Callable[[Any], float | None],
+    *,
+    provider: str | None = None,
+) -> None:
     """Pull the USD cost out of *response* via *get_cost* and stamp it onto the
-    current span using gen_ai semantic-convention attributes."""
+    current span using gen_ai semantic-convention attributes.
+
+    *provider* (e.g. ``"openrouter"`` / ``"claude-sdk"``) is stamped as
+    ``langfuse.observation.metadata.provider`` — Langfuse indexes it onto the
+    observation's metadata, so a consumer can sum logged cost PER PROVIDER
+    (e.g. reconcile only the OpenRouter slice against an OpenRouter key).
+    Harmless on backends that ignore it.
+    """
     cost = get_cost(response)
     if cost is None:
         return
@@ -28,6 +40,8 @@ def record_cost(response: Any, get_cost: Callable[[Any], float | None]) -> None:
     span.set_attribute("gen_ai.operation.name", "chat")
     # Langfuse cost rollup (harmless span attribute for other backends).
     span.set_attribute("langfuse.observation.cost_details", json.dumps({"total": cost}))
+    if provider:
+        span.set_attribute("langfuse.observation.metadata.provider", provider)
 
 
 def flush_current_provider() -> None:
