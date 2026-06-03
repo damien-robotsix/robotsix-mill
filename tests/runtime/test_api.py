@@ -1596,3 +1596,64 @@ def test_merge_reason_missing_ticket_404(client):
     """GET /tickets/{id}/merge-reason with a bogus id returns 404."""
     r = client.get("/tickets/nonexistent/merge-reason")
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /agents — per-repo enabled on-demand agent names
+# ---------------------------------------------------------------------------
+
+
+def _seed_periodic_clone(settings, repo_id, names, *, disabled=()):
+    """Create a fake per-repo clone with ``.robotsix-mill/periodic/<name>.yaml``
+    files so ``_find_config_clone_dir`` + ``discover_periodic_workflows``
+    resolve them (presence = enabled, unless the file sets enabled: false)."""
+    from pathlib import Path
+
+    clone = Path(settings.data_dir) / repo_id / "periodic_workspace" / "repo"
+    (clone / ".git").mkdir(parents=True, exist_ok=True)
+    pdir = clone / ".robotsix-mill" / "periodic"
+    pdir.mkdir(parents=True, exist_ok=True)
+    for n in names:
+        body = f"name: {n}\n"
+        if n in disabled:
+            body += "enabled: false\n"
+        (pdir / f"{n}.yaml").write_text(body, encoding="utf-8")
+    return clone
+
+
+def test_agents_lists_enabled_for_repo(client, settings):
+    """GET /agents?repo_id=<id> returns the periodic-agent names enabled
+    for that repo (file presence under .robotsix-mill/periodic/)."""
+    _seed_periodic_clone(settings, "test-repo", ["audit", "health"])
+    r = client.get("/agents?repo_id=test-repo")
+    assert r.status_code == 200
+    assert sorted(r.json()) == ["audit", "health"]
+
+
+def test_agents_respects_disabled_yaml_and_kill_switch(client, settings):
+    """An agent whose file sets enabled: false is skipped, and so is one
+    whose fleet-wide Settings.<name>_periodic kill-switch is False."""
+    _seed_periodic_clone(
+        settings, "test-repo", ["audit", "health", "survey"], disabled=["survey"]
+    )
+    settings.health_periodic = False  # fleet-wide kill-switch off
+    r = client.get("/agents?repo_id=test-repo")
+    assert r.status_code == 200
+    # survey skipped (enabled: false), health skipped (kill-switch False).
+    assert r.json() == ["audit"]
+
+
+def test_agents_all_or_omitted_returns_empty_list(client):
+    """GET /agents with repo_id omitted, 'all', or unknown returns an
+    empty list (HTTP 200, no error)."""
+    r_omitted = client.get("/agents")
+    assert r_omitted.status_code == 200
+    assert r_omitted.json() == []
+
+    r_all = client.get("/agents?repo_id=all")
+    assert r_all.status_code == 200
+    assert r_all.json() == []
+
+    r_unknown = client.get("/agents?repo_id=does-not-exist")
+    assert r_unknown.status_code == 200
+    assert r_unknown.json() == []
