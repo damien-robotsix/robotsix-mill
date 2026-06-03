@@ -213,3 +213,25 @@ def test_resume_blocked_failure(settings, service):
         assert rc == 1  # non-zero exit
     finally:
         cli_mod.httpx.Client = original
+
+
+def test_copy_paste_registered_in_runners():
+    """The copy-paste pass is wired into the generic _RUNNERS dispatch table."""
+    from robotsix_mill.cli import _RUNNERS
+
+    entry = _RUNNERS["copy-paste"]
+    assert entry["module"] == "copy_paste_runner"
+    assert entry["function"] == "run_copy_paste_pass"
+    assert entry["format"] == "memory_drafts"
+
+
+def test_copy_paste_cli_command(monkeypatch):
+    """`main(["copy-paste"])` dispatches into the runner and exits 0."""
+    from robotsix_mill.periodic_runner import CopyPastePassResult
+
+    def mock_run(session_id=None):
+        return CopyPastePassResult(updated_memory="mem", drafts_created=[])
+
+    monkeypatch.setattr("robotsix_mill.copy_paste_runner.run_copy_paste_pass", mock_run)
+
+    assert main(["copy-paste"]) == 0

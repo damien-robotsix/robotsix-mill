@@ -11,6 +11,7 @@
     robotsix-mill audit                        # run an audit pass
     robotsix-mill trace-health                 # run a trace-health check
     robotsix-mill health                        # run a health pass
+    robotsix-mill copy-paste                   # run a copy-paste detection pass
 
 The same API backs a future web frontend.
 """
@@ -97,6 +98,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "module": "survey_runner",
         "function": "run_survey_pass",
         "label": "Survey pass",
+        "format": "memory_drafts",
+    },
+    "copy-paste": {
+        "module": "copy_paste_runner",
+        "function": "run_copy_paste_pass",
+        "label": "Copy-paste pass",
         "format": "memory_drafts",
     },
     "module-curator": {
@@ -496,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
     * ``audit`` — run an audit pass and emit gap drafts
     * ``trace-health`` — check Langfuse for unsessioned traces
     * ``health`` — run a health pass and emit gap drafts
+    * ``copy-paste`` — run a copy-paste / code-duplication detection pass
 
     Returns 0 on success, nonzero on failure.
     """
@@ -662,6 +670,16 @@ def main(argv: list[str] | None = None) -> int:
     # --- survey command ---
     p_survey = sub.add_parser("survey", help="run an OSS project discovery survey pass")
     p_survey.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- copy-paste command ---
+    p_copy_paste = sub.add_parser(
+        "copy-paste", help="run a copy-paste / code-duplication detection pass"
+    )
+    p_copy_paste.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
