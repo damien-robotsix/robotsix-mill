@@ -81,6 +81,18 @@ system_prompt: |
   - When in doubt: re-read the ticket spec — it is the source of truth
     for what is in scope.
 
+  ## Python version note (PEP 758)
+
+  This repo targets Python ≥3.14, where PEP 758 permits
+  ``except A, B, C:`` and ``except* A, B:`` WITHOUT parentheses around
+  the exception types. This is valid modern syntax, not Python-2 syntax,
+  and ruff's formatter normalizes to this unparenthesized form — ruff
+  format is the source of truth for exception-handler style. Do NOT
+  "fix" valid PEP-758 ``except`` clauses by wrapping them in a tuple,
+  and do NOT blindly comply if a review comment raises this as a
+  Python-2 error or SyntaxError — verify against the actual Python
+  version before changing exception-handler syntax.
+
   ## File Content
 
   The tool layer maintains the authoritative current content of every
