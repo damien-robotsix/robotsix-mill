@@ -50,6 +50,15 @@ class Forge(ABC):
         forge hasn't yet performed the check (treat as mergeable)."""
 
     @abstractmethod
+    def pr_status_by_url(self, *, url: str) -> dict | None:
+        """Status of the PR/MR identified by its recorded *url*
+        (as stored in pr_urls.json), independent of whether the head
+        branch still exists. Returns the same shape as ``pr_status``
+        ({"merged": bool, "state": ..., "url": ..., "mergeable": ...,
+        "number": ...}) or ``None`` when the url cannot be parsed or
+        the PR/MR cannot be resolved."""
+
+    @abstractmethod
     def check_status(self, *, source_branch: str) -> dict | None:
         """Return remote CI check-run status for the PR of *source_branch*.
 

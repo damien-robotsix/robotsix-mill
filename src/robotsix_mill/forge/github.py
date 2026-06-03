@@ -99,6 +99,32 @@ def _parse_owner_repo(remote_url: str) -> tuple[str, str]:
     return m.group("owner"), m.group("repo")
 
 
+def _parse_pr_detail(pr: dict) -> dict:
+    """Normalize a GitHub PR detail dict into the standard status shape
+    (the same dict ``_get_pr`` / ``pr_status`` return).
+
+    GitHub computes mergeable asynchronously after every force-push.
+    Until the computation finishes, mergeable_state is "unknown" and
+    ``mergeable`` carries the STALE pre-push value — which the merge
+    stage previously treated as a real conflict and bounced into
+    REBASING. Surface "still computing" as ``None`` so the caller
+    waits the next poll instead.
+    """
+    mergeable_state = pr.get("mergeable_state")
+    mergeable = pr.get("mergeable")
+    if mergeable_state in (None, "unknown"):
+        mergeable = None
+    return {
+        "merged": bool(pr.get("merged")),
+        "state": pr.get("state", "open"),
+        "url": pr.get("html_url", ""),
+        "mergeable": mergeable,  # True/False/None
+        "mergeable_state": mergeable_state,
+        "sha": (pr.get("head") or {}).get("sha", ""),
+        "number": pr["number"],
+    }
+
+
 def _parse_repo_info(r: dict) -> RepoInfo:
     """Extract ``RepoInfo`` from a GitHub ``POST /repos`` response dict."""
     return RepoInfo(
@@ -258,6 +284,13 @@ class GitHubForge(Forge):
         owner, repo = self._owner_repo
         return self._get_pr(owner=owner, repo=repo, head=source_branch)
 
+    def pr_status_by_url(self, *, url: str) -> dict | None:
+        m = re.search(r"/pull/(\d+)", url or "")
+        if not m:
+            return None
+        owner, repo = self._owner_repo
+        return self._get_pr_by_number(owner=owner, repo=repo, number=int(m.group(1)))
+
     def check_status(self, *, source_branch: str) -> dict | None:
         owner, repo = self._owner_repo
         return self._check_status(owner=owner, repo=repo, head=source_branch)
@@ -387,25 +420,30 @@ class GitHubForge(Forge):
             d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers)
             d.raise_for_status()
             pr = d.json()
-        # GitHub computes mergeable asynchronously after every force-push.
-        # Until the computation finishes, mergeable_state is "unknown" and
-        # ``mergeable`` carries the STALE pre-push value — which the merge
-        # stage previously treated as a real conflict and bounced into
-        # REBASING. Surface "still computing" as ``None`` so the caller
-        # waits the next poll instead.
-        mergeable_state = pr.get("mergeable_state")
-        mergeable = pr.get("mergeable")
-        if mergeable_state in (None, "unknown"):
-            mergeable = None
-        return {
-            "merged": bool(pr.get("merged")),
-            "state": pr.get("state", "open"),
-            "url": pr.get("html_url", ""),
-            "mergeable": mergeable,  # True/False/None
-            "mergeable_state": mergeable_state,
-            "sha": (pr.get("head") or {}).get("sha", ""),
-            "number": pr["number"],
-        }
+        return _parse_pr_detail(pr)
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _get_pr_by_number(self, *, owner: str, repo: str, number: int) -> dict | None:
+        """Fetch a PR's status directly by number via a single
+        ``GET /repos/{owner}/{repo}/pulls/{number}``.
+
+        Returns the same dict shape as ``_get_pr`` (including the
+        ``mergeable_state`` → ``mergeable`` normalization). Used by
+        ``pr_status_by_url`` to resolve a recorded PR url even after the
+        head branch was auto-deleted on merge (which makes the
+        branch-keyed ``_get_pr`` list come back empty)."""
+        import httpx
+
+        from .auth import github_token  # lazy: avoid import cycle
+
+        s = self.settings
+        api = s.github_api_url.rstrip("/")
+        headers = _build_headers(github_token(s, repo_config=self._repo_config))
+        with httpx.Client(timeout=30) as c:
+            d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{number}", headers=headers)
+            d.raise_for_status()
+            pr = d.json()
+        return _parse_pr_detail(pr)
 
     # --- HTTP seam (monkeypatched in tests) ---
     def _pr_files(

@@ -2382,14 +2382,20 @@ def _make_meta_ticket(ctx, *, state=State.IMPLEMENT_COMPLETE):
 
 
 def _route_by_remote(
-    monkeypatch, *, pr_responses: dict, ci_responses: dict | None = None
+    monkeypatch,
+    *,
+    pr_responses: dict,
+    ci_responses: dict | None = None,
+    pr_by_url_responses: dict | None = None,
 ):
     """Monkeypatch the GitHub forge's ``pr_status`` + ``check_status``
-    so each call returns the response keyed by ``self._remote_url``.
+    (and optionally ``pr_status_by_url``) so each call returns the
+    response keyed by ``self._remote_url``.
 
-    *pr_responses* / *ci_responses* are ``{remote_url: response | Exception}``.
-    A value can be a callable taking no args, an Exception (raised), or a
-    plain dict / None (returned).
+    *pr_responses* / *ci_responses* / *pr_by_url_responses* are
+    ``{remote_url: response | Exception}``.  A value can be a callable
+    taking no args, an Exception (raised), or a plain dict / None
+    (returned).
     """
     seen_pr: list[dict] = []
     seen_ci: list[dict] = []
@@ -2402,6 +2408,20 @@ def _route_by_remote(
         return resp
 
     monkeypatch.setattr(github.GitHubForge, "pr_status", fake_pr_status)
+
+    if pr_by_url_responses is not None:
+
+        def fake_pr_status_by_url(self, *, url):
+            resp = pr_by_url_responses.get(self._remote_url)
+            if callable(resp) and not isinstance(resp, Exception):
+                resp = resp()
+            if isinstance(resp, Exception):
+                raise resp
+            return resp
+
+        monkeypatch.setattr(
+            github.GitHubForge, "pr_status_by_url", fake_pr_status_by_url
+        )
 
     if ci_responses is not None:
 
@@ -2473,6 +2493,128 @@ def test_multi_repo_all_prs_merged_transitions_to_done(tmp_path, monkeypatch):
     assert "repo-b" in merge_md
     assert "https://github.com/o/a/pull/1" in merge_md
     assert "https://github.com/o/b/pull/2" in merge_md
+
+
+def test_multi_repo_all_prs_merged_via_url_fallback_transitions_to_done(
+    tmp_path, monkeypatch
+):
+    """Head branches auto-deleted on merge → branch-keyed ``pr_status``
+    returns ``None`` for every repo, but the URL-keyed fallback reports
+    each PR merged → DONE with the recorded URLs in ``out.note`` and
+    ``merge.md``."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        # Branch-keyed lookup is empty (head branch auto-deleted).
+        pr_responses={remote_a: None, remote_b: None},
+        # URL-keyed fallback resolves the merged PRs.
+        pr_by_url_responses={
+            remote_a: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/a/pull/1",
+            },
+            remote_b: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/b/pull/2",
+            },
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert "https://github.com/o/a/pull/1" in out.note
+    assert "https://github.com/o/b/pull/2" in out.note
+
+    merge_md = (ctx.service.workspace(t).artifacts_dir / "merge.md").read_text(
+        encoding="utf-8"
+    )
+    assert merge_md.startswith("# Merge (multi-repo)")
+    assert "https://github.com/o/a/pull/1" in merge_md
+    assert "https://github.com/o/b/pull/2" in merge_md
+
+
+def test_multi_repo_url_fallback_partial_merge_stays_same_state(tmp_path, monkeypatch):
+    """One repo's branch-keyed ``pr_status`` is ``None`` but the URL-keyed
+    fallback reports it merged; the other is open with green CI →
+    same-state no-op (no premature DONE)."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            # repo-a: head branch gone → None (falls back to URL lookup).
+            remote_a: None,
+            # repo-b: still open + mergeable.
+            remote_b: {
+                "merged": False,
+                "state": "open",
+                "url": "https://github.com/o/b/pull/2",
+                "mergeable": True,
+            },
+        },
+        pr_by_url_responses={
+            remote_a: {
+                "merged": True,
+                "state": "closed",
+                "url": "https://github.com/o/a/pull/1",
+            },
+        },
+        ci_responses={
+            remote_b: {"conclusion": "success", "failing": []},
+        },
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    # repo-a merged (via fallback), repo-b green → not all merged → no-op.
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert not (ctx.service.workspace(t).artifacts_dir / "merge.md").exists()
 
 
 def test_multi_repo_partial_merge_stays_same_state(tmp_path, monkeypatch):

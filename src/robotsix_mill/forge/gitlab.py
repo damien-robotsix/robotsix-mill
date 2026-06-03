@@ -85,6 +85,26 @@ class GitLabForge(Forge):
         except Exception:
             return None
 
+    def pr_status_by_url(self, *, url: str) -> dict | None:
+        m = re.search(r"merge_requests/(\d+)", url or "")
+        if not m:
+            return None
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            mr = self._get_mr_by_iid(project_path=project_path, mr_iid=int(m.group(1)))
+            if mr is None:
+                return None
+            return {
+                "merged": mr["state"] == "merged",
+                "state": mr["state"],
+                "url": mr["web_url"],
+                "mergeable": _map_merge_status(mr.get("merge_status", "")),
+                "sha": (mr.get("diff_refs") or {}).get("head_sha") or mr.get("sha", ""),
+                "number": mr["iid"],
+            }
+        except Exception:
+            return None
+
     def check_status(self, *, source_branch: str) -> dict | None:
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
@@ -203,6 +223,26 @@ class GitLabForge(Forge):
             if not items:
                 return None
             return items[0]
+
+    def _get_mr_by_iid(self, *, project_path: str, mr_iid: int) -> dict | None:
+        """GET /projects/:id/merge_requests/:iid → MR dict (by IID).
+
+        Resolves a recorded MR web url to its current status independent
+        of whether the source branch still exists, mirroring the GitHub
+        ``_get_pr_by_number`` seam."""
+        import httpx
+
+        s = self.settings
+        api = s.gitlab_api_url.rstrip("/")
+        headers = _build_headers(get_secrets().forge_token or "")
+        pid = self._resolve_project_id(project_path)
+        with httpx.Client(timeout=30) as c:
+            r = c.get(
+                f"{api}/projects/{pid}/merge_requests/{mr_iid}",
+                headers=headers,
+            )
+            r.raise_for_status()
+            return r.json()
 
     def _get_latest_pipeline(self, project_path: str, mr_iid: int) -> dict | None:
         """GET /projects/:id/merge_requests/:iid/pipelines?per_page=1."""

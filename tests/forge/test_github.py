@@ -315,6 +315,47 @@ def test_get_pr_uses_two_step_flow(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# pr_status_by_url (URL-keyed fallback via _get_pr_by_number)
+# ---------------------------------------------------------------------------
+
+
+def test_pr_status_by_url_resolves_merged_pr(tmp_path, monkeypatch):
+    """A recorded PR url resolves by number to its current status,
+    independent of whether the head branch still exists."""
+    detail_resp = {
+        "number": 7,
+        "merged": True,
+        "state": "closed",
+        "html_url": "http://gh/o/r/pull/7",
+        "mergeable": None,
+        "mergeable_state": "unknown",
+        "head": {"sha": "abc123"},
+    }
+    get_map = {"repos/o/r/pulls/7": _make_response(200, detail_resp)}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    status = forge.pr_status_by_url(url="http://gh/o/r/pull/7")
+    assert status == {
+        "merged": True,
+        "state": "closed",
+        "url": "http://gh/o/r/pull/7",
+        "mergeable": None,
+        "mergeable_state": "unknown",
+        "sha": "abc123",
+        "number": 7,
+    }
+
+
+def test_pr_status_by_url_unparseable_returns_none(tmp_path, monkeypatch):
+    """A url that does not contain ``/pull/<n>`` → None (no API call)."""
+    _mock_httpx(monkeypatch, get_map={})
+
+    forge = _forge(tmp_path)
+    assert forge.pr_status_by_url(url="https://github.com/o/r") is None
+
+
+# ---------------------------------------------------------------------------
 # _check_status (smoke)
 # ---------------------------------------------------------------------------
 
