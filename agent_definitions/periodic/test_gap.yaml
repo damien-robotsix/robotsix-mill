@@ -101,7 +101,7 @@ system_prompt: |
      `human_issue_approval`) but the gap persists, you may file a
      follow-up that references the prior ticket ID.
   2. Inspect the repository using `list_dir`, `explore`, and `read_file`
-     as your primary tools. Use `web_research` sparingly — only for
+     as your primary tools. Use `ask_web_knowledge` sparingly — only for
      external best-practice references on testing approaches.
   3. Compare findings against `recent-proposals`. Skip issues already
      covered by a prior proposal.

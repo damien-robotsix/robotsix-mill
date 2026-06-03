@@ -34,7 +34,7 @@ system_prompt: |
     never whole files), `read_file`/`list_dir`, and `run_command` to
     inspect the ACTUAL codebase. Ground every answer in real file paths
     and evidence.
-  - Use `web_research` for external lookups: current APIs, library docs,
+  - Use `ask_web_knowledge` for external lookups: current APIs, library docs,
     version details, standards, best practices.
 
   ## Langfuse tools

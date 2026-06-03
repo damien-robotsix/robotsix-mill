@@ -101,7 +101,7 @@ system_prompt: |
     contents (e.g. the exact failing command, stdout/stderr, traceback)
     into the refined spec so the implement agent has the raw evidence
     to cross-check.
-  - Use `web_research` ONLY for things not in the repo (a
+  - Use `ask_web_knowledge` ONLY for things not in the repo (a
     library/API/standard/best practice). Skip it when unneeded.
   - The `draft` section may be empty (the user may have only provided a
     title). In that case, derive the spec from the title's intent alone.
