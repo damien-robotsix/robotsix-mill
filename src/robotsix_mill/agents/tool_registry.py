@@ -56,17 +56,3 @@ class ToolRegistry:
             cls._tools.values(),
             key=lambda t: (_CATEGORY_ORDER.get(t.category, 99), t.name),
         )
-
-    @classmethod
-    def describe_for_prompt(cls, tool_names: set[str] | None = None) -> str:
-        """Deprecated. Returns an empty string.
-
-        Tool descriptions are no longer injected into the system
-        prompt — pydantic-ai already forwards each tool's signature
-        and docstring to the model as a structured ``tools`` array
-        on every API call, so a prose Markdown copy was pure token
-        duplication. ``compose_prompt`` no longer calls this method;
-        the shim stays for any out-of-tree caller still wired to it.
-        """
-        del tool_names
-        return ""

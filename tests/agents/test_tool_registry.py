@@ -88,27 +88,6 @@ def test_tool_registry_register_and_list():
     assert tools[3].category == "exploration"
 
 
-def test_tool_registry_describe_for_prompt_is_deprecated_noop():
-    """``describe_for_prompt`` was a prose-Markdown copy of the tools
-    pydantic-ai already injects via the structured ``tools`` array.
-    After deduplication, the method is a deprecated shim that returns
-    an empty string regardless of registry contents."""
-    ToolRegistry.register(
-        ToolInfo(
-            name="read_file",
-            description="Return the text content of a file.",
-            category="fs",
-            parameters={"path": "str"},
-        )
-    )
-
-    out = ToolRegistry.describe_for_prompt()
-    assert out == ""
-
-    # Filtering also produces the empty shim.
-    assert ToolRegistry.describe_for_prompt(tool_names={"read_file"}) == ""
-
-
 def test_tool_registry_deduplicates_by_name():
     """Register two ToolInfo with the same name, assert only the last
     one survives."""

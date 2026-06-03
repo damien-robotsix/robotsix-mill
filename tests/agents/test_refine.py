@@ -1956,8 +1956,8 @@ def test_tool_strategy_present_in_system_prompt(monkeypatch, tmp_path):
     assert len(seen_system_prompt) == 1
     prompt = seen_system_prompt[0]
     # The old "## Tool strategy" section has been moved out of the
-    # refine agent's SYSTEM_PROMPT and into ToolRegistry.describe_for_prompt(),
-    # which is injected by _compose_prompt().  Because this test
+    # refine agent's SYSTEM_PROMPT — tool descriptions are no longer
+    # injected into the prompt at all.  Because this test
     # monkeypatches build_agent, _compose_prompt is bypassed — we just
     # verify the refine SYSTEM_PROMPT still exists and is non-trivial.
     assert "You turn a rough ticket draft" in prompt
