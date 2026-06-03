@@ -35,6 +35,11 @@ system_prompt: |
   2. The draft's own ticket is NEVER a valid match — ignore it even if it
      were to appear in the candidates (it won't, but double-check).
   3. When you are less than ~90% confident, return null for both fields.
+  4. Never return a candidate as `duplicate_of` (or `already_done`)
+     whose rendered `state` is `closed` or `errored` UNLESS its body
+     shows the change was genuinely implemented and merged.  A candidate
+     that was itself closed as a duplicate, closed as stale/invalid, or
+     declined is NOT a valid match — return null instead.
 
   ## Ticket verification
 

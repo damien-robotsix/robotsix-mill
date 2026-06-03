@@ -48,6 +48,21 @@ from .base import Outcome, Stage, StageContext
 log = logging.getLogger("robotsix_mill.stages.refine")
 
 
+# Note-prefix constants marking a **non-implementation** closure.
+# The dedup guard both *writes* these prefixes (on the DRAFT→DONE
+# transition) and *reads* them back in ``_is_valid_dedup_target`` to
+# reject a candidate that was itself dedup-/freshness-closed.  Keeping
+# them in one place stops the producer and the validator from drifting.
+DEDUP_DUPLICATE_PREFIX = "duplicate of "
+DEDUP_ALREADY_DONE_PREFIX = "already implemented in "
+FRESHNESS_STALE_PREFIX = "stale or invalid finding"
+NON_IMPLEMENTATION_CLOSE_PREFIXES = (
+    DEDUP_DUPLICATE_PREFIX,
+    DEDUP_ALREADY_DONE_PREFIX,
+    FRESHNESS_STALE_PREFIX,
+)
+
+
 def _resolve_next_state(
     ctx: StageContext,
     spec: str,
@@ -399,17 +414,108 @@ class RefineStage(Stage):
         # still analyses them — sanity-check the dedup verdict, capture
         # any lesson in the memory ledger, and keep the audit trail
         # consistent with every other terminal-ish ticket.
-        if verdict.get("duplicate_of"):
-            return Outcome(
-                State.DONE,
-                f"duplicate of {verdict['duplicate_of']}: {verdict.get('reason', 'no reason')}",
+        dup_id = verdict.get("duplicate_of")
+        if dup_id:
+            if RefineStage._is_valid_dedup_target(ctx, ticket, dup_id):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {verdict.get('reason', 'no reason')}",
+                )
+            log.info(
+                "%s: dedup verdict named duplicate_of=%s but it is not a "
+                "valid dedup target (terminal/declined/circular) — "
+                "proceeding with refine",
+                ticket.id,
+                dup_id,
             )
-        if verdict.get("already_done"):
-            return Outcome(
-                State.DONE,
-                f"already implemented in {verdict['already_done']}: {verdict.get('reason', 'no reason')}",
+        done_id = verdict.get("already_done")
+        if done_id:
+            if RefineStage._is_valid_dedup_target(ctx, ticket, done_id):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {verdict.get('reason', 'no reason')}",
+                )
+            log.info(
+                "%s: dedup verdict named already_done=%s but it is not a "
+                "valid dedup target (terminal/declined/circular) — "
+                "proceeding with refine",
+                ticket.id,
+                done_id,
             )
         return None
+
+    @staticmethod
+    def _is_valid_dedup_target(
+        ctx: StageContext,
+        ticket: Ticket,
+        candidate_id: str,
+    ) -> bool:
+        """Return whether *candidate_id* is an acceptable dedup target
+        for *ticket*.
+
+        Best-effort: any lookup failure degrades to ``True`` is wrong —
+        a failure should *not* close the ticket, so it returns ``False``
+        only for proven-bad candidates and ``True`` otherwise.  A
+        candidate that cannot be resolved to a ticket (e.g. a commit
+        hash for ``already_done``) is accepted.
+
+        Rejects (returns ``False``):
+        - a **circular** target whose history marks it as a dedup of
+          ``ticket`` itself;
+        - an ``ERRORED`` candidate (failed attempt);
+        - a ``CLOSED`` candidate that never passed through ``DONE``
+          (declined-as-noise / split parent);
+        - a candidate that reached ``DONE`` via a non-implementation
+          closure (dedup-closed or freshness-closed — never actually
+          implemented).
+        """
+        try:
+            cand = ctx.service.get(candidate_id)
+            if cand is None:
+                # Not a ticket id (e.g. a commit hash) — preserve the
+                # already-implemented-via-commit behaviour.
+                return True
+            history = ctx.service.history(cand.id)
+
+            # Circular guard: the candidate was itself closed as a
+            # dedup of the current ticket.
+            _dedup_prefixes = (DEDUP_DUPLICATE_PREFIX, DEDUP_ALREADY_DONE_PREFIX)
+            for ev in history:
+                note = ev.note or ""
+                if note.startswith(_dedup_prefixes) and ticket.id in note:
+                    return False
+
+            # Failed attempt — let refine re-escalate.
+            if cand.state == State.ERRORED:
+                return False
+
+            # Declined-as-noise / split parent: CLOSED but never DONE.
+            if cand.state == State.CLOSED and not any(
+                ev.state == State.DONE for ev in history
+            ):
+                return False
+
+            # Reached DONE via a non-implementation closure (dedup- or
+            # freshness-closed) — never actually implemented.  Applies
+            # whether the candidate is still DONE or has since CLOSED.
+            for ev in history:
+                if ev.state == State.DONE and (ev.note or "").startswith(
+                    NON_IMPLEMENTATION_CLOSE_PREFIXES
+                ):
+                    return False
+
+            return True
+        except Exception:
+            # Best-effort: a lookup error must never raise and must not
+            # close the ticket — degrade to "proceed with refine".
+            log.warning(
+                "%s: dedup target validation failed for %s, "
+                "proceeding with refine",
+                ticket.id,
+                candidate_id,
+                exc_info=True,
+            )
+            return False
 
     @staticmethod
     def _run_freshness_gate(
@@ -468,7 +574,7 @@ class RefineStage(Stage):
             # them — same pattern as the dedup guard.
             return Outcome(
                 State.DONE,
-                f"stale or invalid finding — {reason}",
+                f"{FRESHNESS_STALE_PREFIX} — {reason}",
             )
 
         log.debug(
