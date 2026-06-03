@@ -1,0 +1,6 @@
+# Per-repo periodic workflow: presence enables bc_check for this repo.
+# Scans the repo for backward-compatibility shims/aliases/no-op compat
+# code ripe for removal and files draft tickets. Repo-agnostic — this
+# file partial-merges over the built-in bc_check definition (lives in
+# robotsix-mill: agent_definitions/periodic/bc_check.yaml).
+name: bc_check
