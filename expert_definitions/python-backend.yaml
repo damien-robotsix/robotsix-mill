@@ -17,7 +17,7 @@ memory:
   max_chunks: 20
 
 skills:
-  - board
+  - board-report
 
 tools:
   - explore
