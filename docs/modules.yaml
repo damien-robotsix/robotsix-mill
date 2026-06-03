@@ -7,6 +7,7 @@ modules:
       - tests/core/test_core_retry.py
       - tests/core/test_core_provider.py
       - tests/core/test_core_http.py
+      - tests/core/test_core_cost_log.py
       - docs/core/
   - id: robotsix_llmio-openrouter
     description: >

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from .agent import AgentHandle, build_agent
+from .cost_log import CostLogSource, CostRecord, CostWindow, LoggedCost
 from .http import timeout_http_client
+from .langfuse_cost import LangfuseCostLogSource
 from .provider import LLMProvider, Tier
 from .retry import (
     call_with_retry,
@@ -30,6 +32,11 @@ from .tracing import (
 __all__ = [
     "AgentHandle",
     "build_agent",
+    "CostWindow",
+    "CostRecord",
+    "LoggedCost",
+    "CostLogSource",
+    "LangfuseCostLogSource",
     "timeout_http_client",
     "LLMProvider",
     "Tier",

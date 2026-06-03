@@ -545,6 +545,66 @@ def test_langfuse_trace_url_resolves_to_real_trace() -> None:
 
 
 @pytest.mark.live
+def test_langfuse_cost_log_source_reads_back_logged_cost() -> None:
+    """A freshly logged session's cost is readable back through the neutral
+    ``CostLogSource`` port (the read-side counterpart to the OTLP write seam)."""
+    _require()  # LANGFUSE_* + OPENROUTER_API_KEY
+
+    import datetime as _dt
+
+    from robotsix_llmio.core import (
+        CostWindow,
+        LangfuseCostLogSource,
+        Tier,
+        flush_tracing,
+        langfuse_session,
+        setup_langfuse_tracing,
+    )
+    from robotsix_llmio.openrouter_deepseek import OpenRouterDeepseekProvider
+
+    assert setup_langfuse_tracing() is True, "tracing should configure with creds"
+
+    start = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=5)
+    session_id = f"llmio-livetest-costlog-{uuid.uuid4().hex[:12]}"
+    provider = OpenRouterDeepseekProvider()
+    agent = provider.build_agent(
+        tier=Tier.CHEAP,
+        system_prompt="You are concise. Answer with just the number.",
+        name="costlog-livetest",
+    )
+    try:
+        with langfuse_session(session_id):
+            result = provider.call_with_retry(
+                lambda: agent.run_sync(
+                    "What is 2+2?", model_settings={"max_tokens": 20}
+                )
+            )
+        assert "4" in str(result.output)
+    finally:
+        agent.close()
+
+    flush_tracing()
+
+    # Langfuse ingestion is asynchronous — poll for the trace to appear.
+    traces: list[dict] | None = None
+    for _ in range(15):
+        traces = _langfuse_traces(session_id)
+        if traces:
+            break
+        time.sleep(4)
+    assert traces, f"no Langfuse trace for session {session_id!r} after polling"
+
+    pk, sk, base = _langfuse_creds()
+    source = LangfuseCostLogSource(public_key=pk, secret_key=sk, base_url=base)
+    end = _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(minutes=1)
+    logged = source.fetch_logged_cost(CostWindow(start=start, end=end))
+    assert logged.total_cost > 0, (
+        f"expected total_cost > 0 read back via LangfuseCostLogSource, "
+        f"got {logged.total_cost}"
+    )
+
+
+@pytest.mark.live
 def test_claude_sdk_workspace_confinement_blocks_out_of_scope_edit(tmp_path) -> None:
     """A tool-bearing claude_sdk agent built with ``workspace_root`` must be
     unable to edit files OUTSIDE that workspace, while edits inside succeed.
