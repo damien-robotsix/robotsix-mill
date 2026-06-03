@@ -1,28 +1,25 @@
-"""Optional OpenTelemetry tracing to Langfuse via OTLP/HTTP.
+"""Optional OpenTelemetry tracing to Langfuse, delegated to ``robotsix_llmio``.
 
-Zero imports from ``opentelemetry.*``, ``langfuse``, or ``pydantic_ai.agent``
-at module level — everything is lazy behind ``_ensure_tracing()``.
+The OTLP→Langfuse plumbing — the global ``TracerProvider``, the
+``OTLPSpanExporter``, ``Agent.instrument_all(...)`` instrumentation, and
+the session/project contextvars that stamp every span — lives in
+``robotsix_llmio.core.tracing``.  Mill delegates provider/exporter setup
+and session/project context to llmio and keeps only the mill-specific
+surface: per-repo credential resolution, the export-failure registry the
+UI reads, the ``RepoConfig``-aware Langfuse URL builder,
+``make_session_id``, and the shutdown signal handlers.
 
-When per-repo Langfuse credentials are available via ``RepoConfig``
-(stamped onto ``Secrets`` at startup), we configure a global
-``TracerProvider`` with an ``OTLPSpanExporter`` pointing to Langfuse's
-OTLP endpoint, call
-``Agent.instrument_all(InstrumentationSettings(event_mode='logs', version=1))``
-so every pydantic-ai agent run is automatically recorded — message
-content (prompts, tool calls, responses) is emitted as separate OTel
-``LogRecord`` events under the GenAI semantic conventions rather than
-being packed into span attributes, and expose context managers for
-root ticket spans and pipeline stage spans.
-
-When the credentials are absent, every function is a cheap no-op.
+Zero imports from ``opentelemetry.*``, ``langfuse``, ``pydantic_ai`` or
+``robotsix_llmio`` at module level — everything is lazy behind
+``_ensure_tracing()`` and the helpers below.  When credentials are
+absent, every function is a cheap no-op.
 """
 
 from __future__ import annotations
 
-import contextvars
 import logging
 import uuid
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from datetime import datetime, timezone
 from typing import Iterator
 
@@ -30,52 +27,19 @@ from ..config import RepoConfig, get_secrets
 
 log = logging.getLogger(__name__)
 
-# Tri-state init flag for the global TracerProvider (one per process).
-# Per-repo exporters are then registered lazily under the SAME provider —
-# see _registered_keys + _FilteredBatchSpanProcessor below.
-_provider_ready: bool | None = None  # None=unchecked, True=installed, False=disabled
+# Readiness flag, derived from llmio's ``setup_langfuse_tracing`` return.
+# Flipped to True once tracing has been configured for at least one
+# Langfuse public key; the no-op guards in start_ticket_root_span /
+# trace_stage / flush_tracing key off this.
+_provider_ready: bool = False
 
-# Set of Langfuse public_keys for which an exporter has been wired in.
-# Used to keep _ensure_tracing idempotent per-repo without short-circuiting
-# the whole function the way a single global flag did.
+# Set of Langfuse public_keys for which llmio has already been
+# configured. Keeps _ensure_tracing idempotent per-repo — llmio's
+# setup_langfuse_tracing is itself idempotent per key, but mill still
+# wants a cheap local signal to skip the credential-resolution work.
 _registered_keys: set[str] = set()
 
-# The TracerProvider we built and own. Held module-level so subsequent
-# per-repo registrations can call ``add_span_processor`` on it directly
-# rather than going through ``trace.get_tracer_provider()`` — the latter
-# can return a ``ProxyTracerProvider`` (no ``add_span_processor`` method)
-# when something else hit OTel's one-shot ``set_tracer_provider`` guard
-# before us. Set inside the one-time init block in ``_ensure_tracing``.
-_provider: object | None = None
-
-# The LoggerProvider we built and own. Same rationale as ``_provider``
-# above — OTel's one-shot ``set_logger_provider`` guard applies
-# symmetrically, so a ``ProxyLoggerProvider`` lookup at registration
-# time can return an object without ``add_log_record_processor``. Set
-# inside the one-time init block in ``_ensure_tracing``.
-_logger_provider: object | None = None
-
 _shutdown_requested: bool = False  # set by signal handlers to prevent double-flush
-
-# The session id (ticket id / audit id) currently in scope. A
-# context-var, not a parent span: pydantic-ai sub-agent runs (explore,
-# web_research, test, rebase) start their OWN pydantic-ai trace, so the
-# parent "ticket" span doesn't reliably propagate `session.id` to them.
-# A SpanProcessor stamps this onto EVERY span at creation instead, so
-# every trace — main or sub-agent — carries the session from the start.
-# contextvars are copied into asyncio tasks and asyncio.to_thread, so
-# this survives the agents' internal threading.
-_current_session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "mill_session_id", default=None
-)
-
-# The Langfuse public_key for the repo whose stage is currently running.
-# Stamped onto every span at start; _FilteredBatchSpanProcessor reads it
-# at on_end to route the span to the matching repo's exporter, so traces
-# for repo A never get billed to repo B's Langfuse project.
-_current_pk: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "mill_langfuse_pk", default=None
-)
 
 
 # Ring buffer of recent Langfuse export failures — surfaced to the UI
@@ -113,8 +77,8 @@ def get_export_failures() -> list[dict]:
 
 
 def clear_export_failures_for(project: str) -> None:
-    """Drop failure entries for *project*. Called from the exporter
-    when a SUCCESS comes back so the UI's red badge clears on its
+    """Drop failure entries for *project*. Called from the export-result
+    adapter when a SUCCESS comes back so the UI's red badge clears on its
     own as soon as Langfuse recovers — without this the badge sticks
     until an operator hits POST /langfuse-status/clear and they end
     up seeing stale errors long after the export path is healthy."""
@@ -194,33 +158,22 @@ def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:
 
 
 def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
-    """Lazily configure the global OTel tracer provider and register a
-    Langfuse exporter for *repo_config*'s project.
+    """Lazily configure tracing for *repo_config*'s Langfuse project by
+    delegating to :func:`robotsix_llmio.core.tracing.setup_langfuse_tracing`.
 
-    Two-phase idempotence: the global :class:`TracerProvider` is set up
-    on the FIRST call (any repo); subsequent calls with a NEW repo only
-    add another filtered exporter to the same provider, so traces are
-    routed per-repo via the ``langfuse.public_key`` span attribute
-    stamped by :class:`_SessionStampProcessor`.
+    Idempotent per Langfuse public key: the first call for a key
+    configures llmio's global provider and registers that project's
+    filtered exporter; later calls for the SAME key short-circuit.
+    Multiple repos register under the same llmio provider, so traces are
+    routed per-repo via the ``langfuse.public_key`` span attribute llmio
+    stamps from the active project context.
 
     When *repo_config* is ``None``, the global :class:`Secrets`
     singleton's langfuse keys are used (single-repo / legacy mode).
+    Repos without credentials are skipped silently.
     """
-    global _provider, _provider_ready, _logger_provider
-    # Only short-circuit on the global-disable flag when the caller has
-    # no per-repo credentials to offer (repo_config is None).  When a
-    # RepoConfig IS provided, always re-evaluate _tracing_enabled even
-    # if a previous call with a different (or absent) repo config
-    # disabled tracing — per-repo credentials may be valid.
-    if _provider_ready is False and repo_config is None:
-        return
+    global _provider_ready
     if not _tracing_enabled(repo_config):
-        # Only poison the global flag when the caller genuinely has no
-        # repo-level creds to offer AND global Secrets are absent.
-        # Per-repo calls with missing creds skip silently without
-        # disabling other repos.
-        if _provider_ready is None and repo_config is None:
-            _provider_ready = False
         return
 
     # Resolve credentials for THIS call.
@@ -240,341 +193,70 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         secret_key = secrets.langfuse_secret_key
         project_name = None
 
-    # Already registered for this Langfuse project? Nothing to do.
+    # Already configured for this Langfuse project? Nothing to do.
     if public_key in _registered_keys:
         return
 
-    # --- heavy imports: gated behind the env-var check ---
-    try:
-        # Bulky message content (prompts, tool calls, responses) is
-        # carried by OTel LogRecord events under event_mode='logs'
-        # (configured below) rather than span attributes, so the
-        # default OTel attribute size limits are sufficient.
+    # The label under which this project's failures are tracked in the
+    # registry the UI reads — prefer the human-readable project name.
+    label = project_name or public_key
 
-        from opentelemetry import trace
-        from opentelemetry._logs import get_logger_provider, set_logger_provider
-        from opentelemetry.exporter.otlp.proto.http._log_exporter import (
-            OTLPLogExporter,
-        )
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-            OTLPSpanExporter,
-        )
-        from opentelemetry.sdk._logs import LoggerProvider, LogRecordProcessor
-        from opentelemetry.sdk._logs.export import (
-            BatchLogRecordProcessor,
-            LogExportResult,
-        )
-        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-        from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-        from base64 import b64encode as _b64encode
-
-        from opentelemetry.sdk.trace.export import SpanExportResult
-
-        class _ReportingExporter(OTLPSpanExporter):
-            """OTLPSpanExporter wrapper that records failures so the
-            UI can surface "Langfuse export broken" without the
-            operator having to read worker logs."""
-
-            def __init__(self, *args, project_label: str = "", **kw):
-                super().__init__(*args, **kw)
-                self._project_label = project_label
-
-            def export(self, spans):  # noqa: ANN001
-                try:
-                    result = super().export(spans)
-                except Exception as e:  # noqa: BLE001
-                    record_export_failure(
-                        project=self._project_label,
-                        error=f"{type(e).__name__}: {e}",
-                    )
-                    log.warning(
-                        "Langfuse export raised for %s: %s",
-                        self._project_label,
-                        e,
-                    )
-                    return SpanExportResult.FAILURE
-                if result != SpanExportResult.SUCCESS:
-                    record_export_failure(
-                        project=self._project_label,
-                        error="OTLP export returned FAILURE — "
-                        "see worker logs for details",
-                    )
-                    log.warning(
-                        "Langfuse export FAILURE for %s",
-                        self._project_label,
-                    )
-                else:
-                    # Auto-clear stale errors for this project once a
-                    # batch lands successfully — Langfuse outages are
-                    # transient and the badge should self-heal.
-                    clear_export_failures_for(self._project_label)
-                return result
-
-        class _ReportingLogExporter(OTLPLogExporter):
-            """OTLPLogExporter wrapper that records failures so the
-            UI can surface "Langfuse log export broken" the same way
-            ``_ReportingExporter`` surfaces span-side failures."""
-
-            def __init__(self, *args, project_label: str = "", **kw):
-                super().__init__(*args, **kw)
-                self._project_label = project_label
-
-            def export(self, batch):  # noqa: ANN001
-                try:
-                    result = super().export(batch)
-                except Exception as e:  # noqa: BLE001
-                    record_export_failure(
-                        project=self._project_label,
-                        error=f"{type(e).__name__}: {e}",
-                    )
-                    log.warning(
-                        "Langfuse log export raised for %s: %s",
-                        self._project_label,
-                        e,
-                    )
-                    return LogExportResult.FAILURE
-                if result != LogExportResult.SUCCESS:
-                    record_export_failure(
-                        project=self._project_label,
-                        error="OTLP log export returned FAILURE — "
-                        "see worker logs for details",
-                    )
-                    log.warning(
-                        "Langfuse log export FAILURE for %s",
-                        self._project_label,
-                    )
-                else:
-                    clear_export_failures_for(self._project_label)
-                return result
-
-        endpoint = f"{base_url}/api/public/otel/v1/traces"
-        exporter = _ReportingExporter(
-            endpoint=endpoint,
-            project_label=project_name or public_key,
-            headers={
-                "Authorization": "Basic "
-                + _b64encode(f"{public_key}:{secret_key}".encode()).decode(),
-            },
-        )
-
-        # --- one-time global provider setup -----------------------------
-        if _provider is None:
-
-            class _SessionStampProcessor(SpanProcessor):
-                """Stamp ``session.id`` (+ Langfuse alias) and the
-                in-scope ``langfuse.public_key`` onto every span at
-                creation, from contextvars. Independent of span nesting
-                so pydantic-ai sub-agent runs — which open their own
-                trace — are still attributed to the right session AND
-                routed to the right repo's Langfuse project at export
-                time by :class:`_FilteredBatchSpanProcessor`."""
-
-                def on_start(self, span, parent_context=None):  # noqa: ANN001
-                    sid = _current_session.get()
-                    if sid:
-                        span.set_attribute("session.id", sid)
-                        span.set_attribute("langfuse.session.id", sid)
-                    pk = _current_pk.get()
-                    if pk:
-                        # Read at on_end by _FilteredBatchSpanProcessor.
-                        span.set_attribute("langfuse.public_key", pk)
-
-                def on_end(self, span):  # noqa: ANN001
-                    pass
-
-                def shutdown(self):
-                    pass
-
-                def force_flush(self, timeout_millis: int = 30000):
-                    return True
-
-            class _SessionStampLogProcessor(LogRecordProcessor):
-                """Stamp ``session.id`` (+ Langfuse alias) and the
-                in-scope ``langfuse.public_key`` onto every emitted
-                LogRecord, from contextvars. Logs do NOT inherit
-                attributes from the active span, so without this every
-                pydantic-ai event-mode LogRecord would lack the
-                session/project tags needed for Langfuse routing.
-                Read at emit time by :class:`_FilteredBatchLogRecordProcessor`
-                for per-repo routing."""
-
-                def on_emit(self, log_record):  # noqa: ANN001
-                    rec = log_record.log_record
-                    sid = _current_session.get()
-                    if sid:
-                        rec.attributes["session.id"] = sid
-                        rec.attributes["langfuse.session.id"] = sid
-                    pk = _current_pk.get()
-                    if pk:
-                        rec.attributes["langfuse.public_key"] = pk
-
-                def shutdown(self):
-                    pass
-
-                def force_flush(self, timeout_millis: int = 30000):
-                    return True
-
-            resource_attrs: dict[str, str] = {SERVICE_NAME: "robotsix-mill"}
-            provider = TracerProvider(
-                resource=Resource.create(resource_attrs),
-            )
-            provider.add_span_processor(_SessionStampProcessor())
-            trace.set_tracer_provider(provider)
-
-            logger_provider = LoggerProvider(
-                resource=Resource.create(resource_attrs),
-            )
-            logger_provider.add_log_record_processor(_SessionStampLogProcessor())
-            set_logger_provider(logger_provider)
-
-            from pydantic_ai.agent import Agent, InstrumentationSettings
-
-            # event_mode='attributes' (the pydantic-ai default) stamps message
-            # content onto SPAN attributes, exported via the /v1/traces OTLP
-            # endpoint Langfuse supports.
-            #
-            # The previous 'logs' mode emitted each message as an OTel LogRecord
-            # exported to /v1/logs — which our Langfuse deployment returns 404
-            # for (no OTLP-logs ingestion). Net effect: message content was
-            # silently DROPPED, and the log exporter spammed "Langfuse log
-            # export FAILURE … code: 404" every batch (~every 2s). Attributes
-            # mode keeps the content visible (on spans) and emits no OTel logs,
-            # so the log exporter below stays dormant. If Langfuse later gains
-            # /v1/logs support, switching back to 'logs' is safe.
-            Agent.instrument_all(
-                InstrumentationSettings(event_mode="attributes", version=1)
-            )
-            _provider = provider
-            _logger_provider = logger_provider
-            _provider_ready = True
-
-        # --- register this repo's filtered exporter ---------------------
-        class _FilteredBatchSpanProcessor(BatchSpanProcessor):
-            """Forward spans to a Langfuse project's OTLP endpoint only
-            when their ``langfuse.public_key`` attribute matches —
-            otherwise drop. Multiple instances coexist under the same
-            global TracerProvider so each repo's traces land in its own
-            Langfuse project.
-
-            """
-
-            def __init__(self, exp, *, target_public_key: str):
-                super().__init__(exp)
-                self._target_pk = target_public_key
-
-            def on_end(self, span):  # noqa: ANN001
-                attrs = span.attributes or {}
-                if attrs.get("langfuse.public_key") != self._target_pk:
-                    return
-                super().on_end(span)
-
-        # Use the provider WE built (stored at init), not the OTel
-        # global lookup — the latter can return a ``ProxyTracerProvider``
-        # (no ``add_span_processor``) when something else races our
-        # ``set_tracer_provider`` call. ``_provider`` is set inside the
-        # one-time init block above.
-        target_provider = (
-            _provider if _provider is not None else trace.get_tracer_provider()
-        )
-        if not hasattr(target_provider, "add_span_processor"):
-            log.warning(
-                "tracing: TracerProvider lacks add_span_processor — "
-                "skipping exporter registration for project %s "
-                "(type=%s). Traces for this repo will not be exported.",
-                project_name or public_key,
-                type(target_provider).__name__,
-            )
-            _registered_keys.add(public_key)  # don't retry forever
-            del project_name
-            return
-        target_provider.add_span_processor(
-            _FilteredBatchSpanProcessor(exporter, target_public_key=public_key)
-        )
-
-        class _FilteredBatchLogRecordProcessor(BatchLogRecordProcessor):
-            """Forward LogRecords to a Langfuse project's OTLP endpoint
-            only when their stamped ``langfuse.public_key`` attribute
-            matches — otherwise drop. The log analogue of
-            :class:`_FilteredBatchSpanProcessor`, so each repo's event-
-            mode logs land in its own Langfuse project."""
-
-            def __init__(self, exp, *, target_public_key: str):
-                super().__init__(exp)
-                self._target_pk = target_public_key
-
-            def on_emit(self, log_record):  # noqa: ANN001
-                attrs = log_record.log_record.attributes or {}
-                if attrs.get("langfuse.public_key") != self._target_pk:
-                    return
-                super().on_emit(log_record)
-
-        # Use the LoggerProvider WE built (stored at init), not the OTel
-        # global lookup — same rationale as the tracer-side comment above.
-        target_logger_provider = (
-            _logger_provider if _logger_provider is not None else get_logger_provider()
-        )
-        if hasattr(target_logger_provider, "add_log_record_processor"):
-            log_exporter = _ReportingLogExporter(
-                endpoint=f"{base_url}/api/public/otel/v1/logs",
-                project_label=project_name or public_key,
-                headers={
-                    "Authorization": "Basic "
-                    + _b64encode(f"{public_key}:{secret_key}".encode()).decode(),
-                },
-            )
-            target_logger_provider.add_log_record_processor(
-                _FilteredBatchLogRecordProcessor(
-                    log_exporter, target_public_key=public_key
-                )
-            )
+    def _on_export_result(_pk: str, ok: bool, error: str | None) -> None:
+        """Bridge llmio's per-project export-health hook to mill's
+        failure registry: clear the badge on a successful batch, record
+        an entry on failure so /langfuse-status surfaces it."""
+        if ok:
+            clear_export_failures_for(label)
         else:
-            log.warning(
-                "tracing: LoggerProvider lacks add_log_record_processor — "
-                "skipping log exporter registration for project %s (type=%s).",
-                project_name or public_key,
-                type(target_logger_provider).__name__,
+            record_export_failure(
+                project=label,
+                error=error or "OTLP export returned FAILURE",
             )
 
-        _registered_keys.add(public_key)
-        # project_name is informational; routing is by public_key.
-        del project_name
+    # --- heavy import: gated behind the credential check ---
+    try:
+        from robotsix_llmio.core import tracing as _llmio_tracing
     except ImportError:
-        _provider_ready = False
+        return
+
+    ok = _llmio_tracing.setup_langfuse_tracing(
+        public_key=public_key,
+        secret_key=secret_key,
+        base_url=base_url,
+        project_id=project_name or None,
+        service_name="robotsix-mill",
+        on_export_result=_on_export_result,
+    )
+    _registered_keys.add(public_key)
+    if ok:
+        _provider_ready = True
 
 
 def current_session() -> str | None:
     """Return the Langfuse session id currently in scope, or ``None``.
 
-    This is the single public access point for the session context-var.
-    No other module imports ``_current_session`` directly.
+    Delegates to :func:`robotsix_llmio.core.tracing.current_session` —
+    llmio owns the session context-var stamped onto every span.
     """
-    return _current_session.get()
+    from robotsix_llmio.core import tracing as _llmio_tracing
+
+    return _llmio_tracing.current_session()
 
 
 def flush_tracing(timeout: int = 10_000) -> None:
     """Force-flush any pending spans.  Call at worker shutdown.
 
-    *timeout*: milliseconds to wait for the flush (passed to
-    ``provider.force_flush(timeout_millis=...)``).  Default 10 s.
+    *timeout*: milliseconds to wait for the flush (forwarded to
+    ``robotsix_llmio.core.tracing.flush_tracing(timeout_millis=...)``).
+    Default 10 s.
 
-    No-op when tracing is off (env vars absent).
+    No-op when tracing is off (credentials absent).
     """
-    if _provider_ready is not True:
+    if not _provider_ready:
         return
-    from opentelemetry import trace
-    from opentelemetry._logs import get_logger_provider
+    from robotsix_llmio.core import tracing as _llmio_tracing
 
-    provider = _provider if _provider is not None else trace.get_tracer_provider()
-    if hasattr(provider, "force_flush"):
-        provider.force_flush(timeout_millis=timeout)  # type: ignore[union-attr]
-
-    logger_provider = (
-        _logger_provider if _logger_provider is not None else get_logger_provider()
-    )
-    if hasattr(logger_provider, "force_flush"):
-        logger_provider.force_flush(timeout_millis=timeout)  # type: ignore[union-attr]
+    _llmio_tracing.flush_tracing(timeout_millis=timeout)
 
 
 def install_signal_handlers() -> None:
@@ -715,20 +397,23 @@ def start_ticket_root_span(
         return
 
     from opentelemetry import trace
+    from robotsix_llmio.core import tracing as _llmio_tracing
 
     # Resolve the public_key for routing: per-repo first, fall back to
-    # the global secrets pk (single-repo / legacy mode). Set BOTH the
-    # session and pk context-vars FIRST so the SpanProcessor stamps them
-    # on the root span and every (sub-agent) span opened within — even
-    # ones that start their own pydantic-ai trace.
+    # the global secrets pk (single-repo / legacy mode). Enter llmio's
+    # session/project contexts FIRST so its installed _StampProcessor
+    # stamps session.id + langfuse.public_key on the root span and every
+    # (sub-agent) span opened within — even ones that start their own
+    # pydantic-ai trace.
     if repo_config is not None and repo_config.langfuse_public_key:
         pk = repo_config.langfuse_public_key
     else:
         pk = get_secrets().langfuse_public_key or ""
 
-    session_token = _current_session.set(ticket_id)
-    pk_token = _current_pk.set(pk or None)
-    try:
+    with ExitStack() as stack:
+        stack.enter_context(_llmio_tracing.langfuse_session(ticket_id))
+        if pk:
+            stack.enter_context(_llmio_tracing.langfuse_project(pk))
         tracer = trace.get_tracer("robotsix-mill")
         attrs: dict[str, str] = {"session.id": ticket_id}
         if extra_attributes:
@@ -738,9 +423,6 @@ def start_ticket_root_span(
             attributes=attrs,
         ) as span:
             yield _RootIO(span)
-    finally:
-        _current_pk.reset(pk_token)
-        _current_session.reset(session_token)
 
 
 @contextmanager
@@ -769,8 +451,8 @@ def trace_stage(
 
 @contextmanager
 def force_traces_to_mill(repo_config: RepoConfig) -> Iterator[None]:
-    """Override ``_current_pk`` so every span inside the block is stamped
-    with mill's own ``langfuse.public_key`` — not whatever per-repo key
+    """Override the active Langfuse project so every span inside the
+    block is routed to mill's own project — not whatever per-repo key
     the current loop iteration happens to target.
 
     Usage::
@@ -780,8 +462,7 @@ def force_traces_to_mill(repo_config: RepoConfig) -> Iterator[None]:
             ...
     """
     _ensure_tracing(repo_config=repo_config)
-    pk_token = _current_pk.set(repo_config.langfuse_public_key)
-    try:
+    from robotsix_llmio.core import tracing as _llmio_tracing
+
+    with _llmio_tracing.langfuse_project(repo_config.langfuse_public_key):
         yield
-    finally:
-        _current_pk.reset(pk_token)
