@@ -211,7 +211,9 @@ def fake_sandbox(monkeypatch):
     There is no 'local' mode to fall back on by design."""
     from robotsix_mill import sandbox
 
-    def _run(command, *, repo_dir, settings, epic_workspace_path=None):
+    def _run(command, *, repo_dir, settings, **kwargs):
+        # Accept any extra keyword (e.g. install_project from the test
+        # gate) so the fake tolerates sandbox.run signature growth.
         c = command.strip()
         if c == "false":
             return (1, "false: command failed")
