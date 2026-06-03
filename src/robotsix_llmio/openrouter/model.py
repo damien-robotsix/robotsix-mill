@@ -15,6 +15,8 @@ from pydantic_ai.models.openai import OpenAIChatModel
 
 from robotsix_llmio.core.tracing import get_recording_span
 
+PROVIDER_NAME: str = "openrouter"
+
 
 def _resolve_model_settings(args: tuple, kwargs: dict) -> Any:
     """Return the mutable ``model_settings`` dict from the parent call.
@@ -74,12 +76,12 @@ def record_openrouter_cost(response: Any) -> None:
     span.set_attribute("gen_ai.usage.cost", cost)
     span.set_attribute("langfuse.observation.cost_details", json.dumps({"total": cost}))
     span.set_attribute("gen_ai.operation.name", "chat")
-    span.set_attribute("gen_ai.provider.name", "openrouter")
-    span.set_attribute("gen_ai.system", "openrouter")
+    span.set_attribute("gen_ai.provider.name", PROVIDER_NAME)
+    span.set_attribute("gen_ai.system", PROVIDER_NAME)
     # Provider tag Langfuse indexes onto the observation's metadata, so a
     # consumer can sum logged cost PER PROVIDER (cost reconciliation filters
     # the logged side to "openrouter" to match an OpenRouter key's scope).
-    span.set_attribute("langfuse.observation.metadata.provider", "openrouter")
+    span.set_attribute("langfuse.observation.metadata.provider", PROVIDER_NAME)
 
     model = getattr(response, "model", None)
     if model:
