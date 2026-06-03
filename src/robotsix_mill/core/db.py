@@ -120,6 +120,15 @@ def init_db(settings: Settings, board_id: str) -> None:
             )
     except Exception:
         pass
+    # failure_reason column for ProposedAction: records why execution
+    # failed (exception message) when status = FAILED.
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE proposedaction ADD COLUMN failure_reason TEXT"
+            )
+    except Exception:
+        pass
     _initialized.add(board_id)
 
 
