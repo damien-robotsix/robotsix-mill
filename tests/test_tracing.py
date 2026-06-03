@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import base64
 
+import pytest
+
 from robotsix_llmio.core import tracing
 from robotsix_llmio.core.tracing import (
     _active_public_key,
@@ -153,3 +155,102 @@ def test_install_signal_handlers_is_safe():
     finally:  # restore so we don't affect the rest of the test session
         signal.signal(signal.SIGTERM, orig_term)
         signal.signal(signal.SIGINT, orig_int)
+
+
+def test_on_export_result_hook_reports_outcomes(monkeypatch):
+    """When ``on_export_result`` is supplied, the per-project exporter is
+    wrapped so every export attempt reports ``(public_key, ok, error)`` — True
+    on success, False (with a message) on a FAILURE result or an exception.
+
+    Isolated from global OTel state: we pre-seed ``tracing._provider`` with a
+    throwaway ``TracerProvider`` so ``setup`` skips its one-time global install
+    (no ``set_tracer_provider`` / ``instrument_all``) and just wires the
+    filtered exporter onto our local provider.
+
+    Needs the ``tracing`` extra (OTLP exporter + SDK); skips without it, the
+    same way the rest of the offline suite avoids hard-depending on it.
+    """
+    pytest.importorskip("opentelemetry.exporter.otlp.proto.http.trace_exporter")
+    from opentelemetry.exporter.otlp.proto.http import trace_exporter as _te
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SpanExportResult
+
+    fresh = TracerProvider()
+    monkeypatch.setattr(tracing, "_provider", fresh)
+    monkeypatch.setattr(tracing, "_projects", {})
+
+    behavior = {"mode": "success"}
+
+    def fake_export(self, spans):  # no network — controlled outcome
+        if behavior["mode"] == "raise":
+            raise RuntimeError("boom")
+        return (
+            SpanExportResult.SUCCESS
+            if behavior["mode"] == "success"
+            else SpanExportResult.FAILURE
+        )
+
+    monkeypatch.setattr(_te.OTLPSpanExporter, "export", fake_export)
+
+    events: list[tuple] = []
+    assert (
+        setup_langfuse_tracing(
+            public_key="pk-hook",
+            secret_key="sk-hook",
+            base_url="https://lf.example.com",
+            on_export_result=lambda pk, ok, err: events.append((pk, ok, err)),
+        )
+        is True
+    )
+
+    # Pull the wrapping exporter back off the provider's filtered processor.
+    procs = fresh._active_span_processor._span_processors
+    reporting = next(
+        p.span_exporter
+        for p in procs
+        if hasattr(getattr(p, "span_exporter", None), "_hook")
+    )
+
+    behavior["mode"] = "success"
+    reporting.export([])
+    behavior["mode"] = "failure"
+    reporting.export([])
+    behavior["mode"] = "raise"
+    reporting.export([])
+
+    assert events[0] == ("pk-hook", True, None)
+    assert events[1][:2] == ("pk-hook", False) and events[1][2]
+    assert events[2][:2] == ("pk-hook", False) and "RuntimeError" in events[2][2]
+
+
+def test_on_export_result_hook_exceptions_never_break_export(monkeypatch):
+    """A raising health hook must not propagate out of ``export``."""
+    pytest.importorskip("opentelemetry.exporter.otlp.proto.http.trace_exporter")
+    from opentelemetry.exporter.otlp.proto.http import trace_exporter as _te
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SpanExportResult
+
+    fresh = TracerProvider()
+    monkeypatch.setattr(tracing, "_provider", fresh)
+    monkeypatch.setattr(tracing, "_projects", {})
+    monkeypatch.setattr(
+        _te.OTLPSpanExporter, "export", lambda self, spans: SpanExportResult.SUCCESS
+    )
+
+    def _boom(pk, ok, err):
+        raise ValueError("hook blew up")
+
+    assert (
+        setup_langfuse_tracing(
+            public_key="pk-boom", secret_key="sk-boom", on_export_result=_boom
+        )
+        is True
+    )
+    procs = fresh._active_span_processor._span_processors
+    reporting = next(
+        p.span_exporter
+        for p in procs
+        if hasattr(getattr(p, "span_exporter", None), "_hook")
+    )
+    # Must return the underlying result, swallowing the hook's exception.
+    assert reporting.export([]) == SpanExportResult.SUCCESS
