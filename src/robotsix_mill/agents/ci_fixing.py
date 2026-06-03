@@ -101,6 +101,7 @@ def run_ci_fix_agent(
         settings,
         definition,
         repo_dir=Path(repo_dir),  # confine SDK built-in edit tools to the clone
+        board_id=board_id,  # so report_issue can file a blocker on the board
         tools=tools,
         system_prompt=system_prompt,
     )
