@@ -25,33 +25,43 @@ def list_runs(
 ) -> list[dict]:
     """Return recent background-run entries (newest first).
 
-    ``?repo_id=X`` filters to runs associated with that repo.
-    When omitted, returns all (current behaviour preserved).
+    ``?repo_id=X`` returns X's runs. Without it (or ``?repo_id=all``) the
+    aggregate view UNIONS every per-repo registry. Periodic runs (audit,
+    bc_check, health, …) are recorded into the per-repo registry, not the
+    lead repo's, so reading only the default registry would hide them on
+    the all-repos board even though they show on the per-repo board.
     """
-    entries = registry.list_all()
-    if repo_id is not None:
-        repos = request.app.state.repos
-        if repo_id == "all":
-            pass  # no filtering
-        elif repo_id not in repos.repos:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown repo: '{repo_id}'. Known repos: "
-                f"{sorted(repos.repos.keys())}",
-            )
-        else:
-            # Filter entries that carry a repo_id matching the request.
-            # Empty repo_id is treated as "applies to any repo" — covers
-            # legacy entries filed before per-repo tagging landed plus
-            # global runs from periodic agents that don't carry a
-            # repo_id today. Strict equality on a non-empty filter would
-            # hide every pre-wiring run in single-repo deployments.
-            entries = [
-                e
-                for e in entries
-                if e.get("repo_id") == repo_id or not e.get("repo_id")
-            ]
-    return entries
+    registries: dict = getattr(request.app.state, "run_registries", None) or {}
+
+    if repo_id is None or repo_id == "all":
+        seen: set = set()
+        merged: list[dict] = []
+        for reg in list(registries.values()) or [registry]:
+            for e in reg.list_all():
+                eid = e.get("id")
+                if eid is not None and eid in seen:
+                    continue
+                if eid is not None:
+                    seen.add(eid)
+                merged.append(e)
+        merged.sort(key=lambda e: e.get("started_at") or "", reverse=True)
+        return merged
+
+    # Specific repo: validate, then read THAT repo's registry (the Depends
+    # already resolved it from the repo_id query param).
+    repos = request.app.state.repos
+    if repo_id not in repos.repos:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown repo: '{repo_id}'. Known repos: "
+            f"{sorted(repos.repos.keys())}",
+        )
+    # Empty repo_id on an entry == "applies to any repo" (legacy/global runs).
+    return [
+        e
+        for e in registry.list_all()
+        if e.get("repo_id") == repo_id or not e.get("repo_id")
+    ]
 
 
 @router.get("/active")
