@@ -509,8 +509,7 @@ class RefineStage(Stage):
             # Best-effort: a lookup error must never raise and must not
             # close the ticket — degrade to "proceed with refine".
             log.warning(
-                "%s: dedup target validation failed for %s, "
-                "proceeding with refine",
+                "%s: dedup target validation failed for %s, proceeding with refine",
                 ticket.id,
                 candidate_id,
                 exc_info=True,

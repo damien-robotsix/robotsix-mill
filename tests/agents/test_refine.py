@@ -667,9 +667,7 @@ def test_dedup_circular_target_refused(ctx, service, monkeypatch):
     assert "already implemented in" not in (out.note or "")
 
 
-def test_dedup_closed_as_duplicate_of_third_ticket_refused(
-    ctx, service, monkeypatch
-):
+def test_dedup_closed_as_duplicate_of_third_ticket_refused(ctx, service, monkeypatch):
     """A candidate closed as a duplicate of some *other* ticket (not
     circular) is still a non-implementation closure → refine proceeds."""
     refine_state = _install_refine_spy(monkeypatch)
