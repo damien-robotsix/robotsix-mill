@@ -9,7 +9,9 @@ returns structured clone-pair data suitable for LLM consumption.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
@@ -23,48 +25,82 @@ def run_jscpd(repo_dir: Path) -> str:
     count, and token count.  If jscpd is unavailable or fails, returns
     a descriptive error string instead of raising.
     """
+    # Use a wrapper-controlled output directory so the JSON report location
+    # is deterministic and independent of ``.jscpd.json``'s ``output`` value.
+    # A per-invocation temp dir avoids collisions and stale reports across
+    # concurrent/repeat runs.
+    output_dir = tempfile.mkdtemp(prefix="jscpd-")
     try:
-        result = subprocess.run(
-            [
-                "npx",
-                "jscpd@4",
-                "--config",
-                ".jscpd.json",
-                "--reporters",
-                "json",
-                "--mode",
-                "strict",
-                ".",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=str(repo_dir),
-            timeout=120,
-        )
-    except FileNotFoundError:
-        return (
-            "ERROR: jscpd is not available — ``npx`` (Node.js) could not be "
-            "found. Install Node.js and npm to use deterministic copy-paste "
-            "detection."
-        )
-    except subprocess.TimeoutExpired:
-        return (
-            "ERROR: jscpd timed out after 120 seconds. The repository may be "
-            "too large for a single-pass scan."
-        )
-    except OSError as exc:
-        return f"ERROR: could not run jscpd — {exc}"
+        try:
+            result = subprocess.run(
+                [
+                    "npx",
+                    "jscpd@4",
+                    "--config",
+                    ".jscpd.json",
+                    "--reporters",
+                    "json",
+                    "--output",
+                    output_dir,
+                    "--mode",
+                    "strict",
+                    ".",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=str(repo_dir),
+                timeout=120,
+            )
+        except FileNotFoundError:
+            return (
+                "ERROR: jscpd is not available — ``npx`` (Node.js) could not be "
+                "found. Install Node.js and npm to use deterministic copy-paste "
+                "detection."
+            )
+        except subprocess.TimeoutExpired:
+            return (
+                "ERROR: jscpd timed out after 120 seconds. The repository may be "
+                "too large for a single-pass scan."
+            )
+        except OSError as exc:
+            return f"ERROR: could not run jscpd — {exc}"
 
-    # jscpd exits non-zero when clones are found (behaves like a linter).
-    # Treat empty stdout + non-zero as a genuine error; non-empty stdout
-    # (even with non-zero exit) is parseable JSON with findings.
-    if result.returncode != 0 and not result.stdout.strip():
-        return (
-            f"ERROR: jscpd exited with code {result.returncode}. "
-            f"stderr: {result.stderr.strip()[:500]}"
-        )
+        # The json reporter writes ``jscpd-report.json`` inside ``--output``.
+        # jscpd exits non-zero when clones are found (linter-like), so success
+        # is decided by whether a valid report file can be read, not on the
+        # return code.
+        report_path = Path(output_dir) / "jscpd-report.json"
+        try:
+            report_text = report_path.read_text()
+        except OSError:
+            report_text = ""
 
-    return _parse_jscpd_output(result.stdout)
+        if not report_text.strip():
+            return _jscpd_diagnostics_error(result)
+
+        try:
+            json.loads(report_text)
+        except json.JSONDecodeError:
+            return _jscpd_diagnostics_error(result)
+
+        return _parse_jscpd_output(report_text)
+    finally:
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+
+def _jscpd_diagnostics_error(result: subprocess.CompletedProcess) -> str:
+    """Build a descriptive ``ERROR:`` string surfacing raw jscpd diagnostics.
+
+    Used when no valid ``jscpd-report.json`` could be read, so that
+    failures are diagnosable (exit code + truncated stdout/stderr) instead
+    of producing a bare parse error.
+    """
+    return (
+        f"ERROR: jscpd did not produce a readable JSON report "
+        f"(exit code {result.returncode}). "
+        f"stdout: {result.stdout.strip()[:500]} "
+        f"stderr: {result.stderr.strip()[:500]}"
+    )
 
 
 def _parse_jscpd_output(stdout: str) -> str:
