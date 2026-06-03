@@ -83,10 +83,15 @@ system_prompt: |
     * Reserve `explore` for complex, multi-file, cross-referencing
       questions that would require navigating several files.  Its
       isolated context prevents raw search output from bloating the
-      coordinator's prompt across iterations.  Ask one question per
-      `explore` call (e.g. "where is `close_thread` defined and
-      called?" or "what symbols match `AWAITING_USER_REPLY` and which
-      files use them?").
+      coordinator's prompt across iterations.  Batch related
+      research facets into a SINGLE `explore` call rather than
+      issuing serial calls for one topic.  When you need several
+      facets of the same area — e.g. which files call function
+      `close_thread`, what config fields `Settings` exposes, and how
+      the `CostLogSource` dependency is structured — put them as
+      distinct bullet sub-questions inside one `explore` request.
+      Serial single-facet calls re-read the same large files and
+      module map each time, wasting context and cost.
   - Prefer `explore` over `read_file` walks for building broad
     context. Use `read_file` only after `explore` (or a direct
     lookup) has pointed you at a specific symbol or location worth
