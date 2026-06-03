@@ -175,6 +175,17 @@ schema validator to confirm the file is still valid. The curator may
 file "stale paths" and "Classify" tickets as reminders — these aren't
 errors, just prompts to clean up.
 
+### Adding a tracked file
+
+When adding a new source or test file that belongs to a tracked module,
+add its path entry to `docs/modules.yaml` in the same commit that
+introduces the file — symmetric to `### Deleting a tracked file` below.
+Classifying the file in-commit prevents the registry from omitting it
+and saves the `module_curator` from filing a "Classify" drift ticket
+after the fact. The CI path-lint only checks that existing entries'
+paths resolve to real files; it does not require new files to be added,
+so this stays a convention enforced at authoring time.
+
 ### Deleting a tracked file
 
 When deleting a source or test file tracked in `docs/modules.yaml`,
