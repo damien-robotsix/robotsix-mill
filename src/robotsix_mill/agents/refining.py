@@ -341,29 +341,6 @@ already exists — your only task is to address each comment in the
 - The revised spec must remain concrete and testable so the implement
   agent can act on it without asking questions.
 
-## Reviewer threads
-
-Each comment in ``<reviewer_feedback>`` includes a thread id
-(e.g. ``[id=42 @ …]``).  You have two tools:
-
-- ``reply_to_thread(thread_id, body)`` — reply to a comment thread.
-- ``close_thread(comment_id)`` — close a top-level thread (marks it
-  resolved; only call when you have fully addressed the issue in the
-  revised spec).
-
-For each reviewer comment:
-- If your spec revision fully addresses it: call
-  ``close_thread(comment_id)``.
-- If you addressed it but want to explain your approach: call
-  ``reply_to_thread(thread_id, body)`` then
-  ``close_thread(comment_id)``.
-- If the comment asks for clarification you cannot fully resolve
-  without more context: call ``reply_to_thread(thread_id, body)``
-  explaining what you need — do NOT close.
-
-Do NOT use ``report_issue`` for thread replies — that is for
-blocking issues only.
-
 ## Memory
 
 You are given a `<memory>` block containing a Markdown ledger of
