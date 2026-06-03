@@ -524,6 +524,15 @@ class Settings(BaseSettings):
     # ticket is short-circuited to DONE before the expensive refine
     # agent runs.  Default False (opt-in).
     freshness_gate_enabled: bool = Field(default=False)
+    # When True, a deterministic pre-implement gate verifies that
+    # external symbol/import prerequisites the spec declares in a
+    # ``## Prerequisites`` / ````prereq```` block are satisfiable in the
+    # cloned repo's environment.  When a declared prerequisite is not yet
+    # importable (e.g. an unmerged external port) the ticket is
+    # short-circuited to BLOCKED before the expensive implement agent
+    # runs — the work is still required once the upstream symbol lands.
+    # Default False (opt-in).
+    prerequisite_gate_enabled: bool = Field(default=False)
     # When True, the refine stage runs a post-refinement review pass that
     # strips verbose exploratory narrative from the spec, producing a
     # concise version while saving the verbose original as an artifact.

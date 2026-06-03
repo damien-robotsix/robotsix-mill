@@ -354,6 +354,7 @@ modules:
       - src/robotsix_mill/agents/bespoke_loader.py
       - src/robotsix_mill/agents/module_curator.py
       - src/robotsix_mill/agents/freshness.py
+      - src/robotsix_mill/agents/prerequisite.py
       - src/robotsix_mill/agents/periodic_loader.py
       - tests/agents/test_coordinating.py
       - tests/agents/test_module_curator.py
@@ -376,6 +377,7 @@ modules:
       - tests/agents/test_scope_triage.py
       - tests/agents/test_epic_breakdown.py
       - tests/agents/test_freshness.py
+      - tests/agents/test_prerequisite.py
       - tests/agents/test_cost_reconciling.py
       - tests/agents/test_config_syncing.py
       - tests/agents/test_retrospect.py

@@ -3669,3 +3669,128 @@ def test_touched_repos_json_empty_on_no_change(ctx_factory, tmp_path, monkeypatc
     assert tr_path.exists(), "touched_repos.json must be written even on no-change path"
     tr = json.loads(tr_path.read_text(encoding="utf-8"))
     assert tr == [], f"expected empty list, got {tr}"
+
+
+# --- prerequisite gate --------------------------------------------------
+
+
+def _no_prereq_block_spec():
+    return "## Problem\nDo a thing.\n## Acceptance criteria\n- works\n"
+
+
+def test_prereq_gate_disabled_never_checks(ctx_factory, tmp_path, monkeypatch):
+    """Default (gate disabled): run_prerequisite_check is never called and
+    behaviour is unchanged — the stage proceeds to the agent."""
+    from robotsix_mill.agents import prerequisite
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
+    assert ctx.settings.prerequisite_gate_enabled is False
+
+    called = {"n": 0}
+
+    def _spy(*a, **kw):
+        called["n"] += 1
+        return {"unmet": [], "reason": "x"}
+
+    monkeypatch.setattr(prerequisite, "run_prerequisite_check", _spy)
+    monkeypatch.setattr(
+        coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+    assert called["n"] == 0
+
+
+def test_prereq_gate_unmet_blocks_without_agent(ctx_factory, tmp_path, monkeypatch):
+    """Gate enabled + an unmet prerequisite → BLOCKED, naming the
+    directive, WITHOUT invoking run_implement_agent."""
+    from robotsix_mill.agents import prerequisite
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        prerequisite_gate_enabled="true",
+    )
+
+    monkeypatch.setattr(
+        prerequisite,
+        "run_prerequisite_check",
+        lambda *a, **kw: {
+            "unmet": ["symbol CostLogSource from robotsix_llmio"],
+            "reason": "unmet",
+        },
+    )
+
+    def _boom(*a, **kw):
+        raise AssertionError("run_implement_agent must NOT be called")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _boom)
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "CostLogSource" in out.note
+    assert "prerequisite" in out.note.lower()
+
+
+def test_prereq_gate_met_proceeds(ctx_factory, tmp_path, monkeypatch):
+    """Gate enabled + all prerequisites met → stage proceeds to the
+    agent exactly as before."""
+    from robotsix_mill.agents import prerequisite
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        prerequisite_gate_enabled="true",
+    )
+    monkeypatch.setattr(
+        prerequisite,
+        "run_prerequisite_check",
+        lambda *a, **kw: {"unmet": [], "reason": "ok"},
+    )
+    monkeypatch.setattr(
+        coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+
+
+def test_prereq_gate_best_effort_on_error(ctx_factory, tmp_path, monkeypatch):
+    """Gate enabled but run_prerequisite_check raises → stage logs a
+    warning and proceeds (best-effort), rather than blocking."""
+    from robotsix_mill.agents import prerequisite
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        prerequisite_gate_enabled="true",
+    )
+
+    def _boom(*a, **kw):
+        raise RuntimeError("checker exploded")
+
+    monkeypatch.setattr(prerequisite, "run_prerequisite_check", _boom)
+    monkeypatch.setattr(
+        coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
