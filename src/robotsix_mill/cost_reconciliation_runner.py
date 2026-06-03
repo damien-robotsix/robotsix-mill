@@ -15,6 +15,8 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from robotsix_llmio.core import CostWindow
+
 from .config import RepoConfig, Settings, get_secrets
 from .core.models import SourceKind
 from .core.service import TicketService
@@ -32,226 +34,96 @@ class CostReconciliationPassResult:
     session_id: str = ""
 
 
-def _yesterday_utc_range() -> tuple[str, str]:
-    """Return ``(from_timestamp, to_timestamp)`` ISO-8601 for yesterday UTC."""
+def _yesterday_window() -> CostWindow:
+    """The most recent fully-settled UTC day [yesterday 00:00, today 00:00)."""
     now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday_start = today_start - timedelta(days=1)
-    return yesterday_start.isoformat(), today_start.isoformat()
+    end = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return CostWindow(start=end - timedelta(days=1), end=end)
 
 
-def _yesterday_date_str() -> str:
-    """Return yesterday as ``YYYY-MM-DD`` (UTC)."""
-    now = datetime.now(timezone.utc)
-    yesterday = now - timedelta(days=1)
-    return yesterday.strftime("%Y-%m-%d")
+def _fmt_breakdown(items: dict) -> str:
+    """Render a ``label -> cost`` mapping as a sorted markdown block."""
+    if not items:
+        return "(no entries)"
+    return "\n".join(
+        f"  {name}: ${cost:.4f}"
+        for name, cost in sorted(items.items(), key=lambda kv: kv[1], reverse=True)
+    )
 
 
-# ---------------------------------------------------------------------------
-# OpenRouter fetch
-# ---------------------------------------------------------------------------
+def _fetch_provider_cost(settings, window):
+    """OpenRouter-billed cost for *window* via llmio's ProviderCostSource.
 
-
-def _fetch_openrouter_daily(
-    settings: Settings,
-    date_str: str,
-) -> tuple[float, str] | None:
-    """Fetch yesterday's spend from the OpenRouter management API.
-
-    Returns ``(total_usd, breakdown_text)`` on success, or ``None``
-    when the management key is missing or the API errors.
+    Returns ``(total, breakdown_text)`` or ``None`` when the management key is
+    absent or the activity API errors (skip gracefully — never crash the pass).
     """
-    secrets = get_secrets()
-    key = secrets.openrouter_management_key
+    key = get_secrets().openrouter_management_key
     if not key:
         log.warning(
             "cost_reconciliation: openrouter_management_key not set — "
             "skipping OpenRouter fetch"
         )
         return None
+    from robotsix_llmio.openrouter import OpenRouterProviderCostSource
 
     try:
-        import httpx
-    except ImportError:
-        log.warning("cost_reconciliation: httpx not available — skipping")
-        return None
-
-    url = f"https://openrouter.ai/api/v1/activity?date={date_str}"
-    try:
-        with httpx.Client(timeout=20) as c:
-            r = c.get(
-                url,
-                headers={"Authorization": f"Bearer {key}"},
-            )
+        pc = OpenRouterProviderCostSource(management_key=key).fetch_provider_cost(
+            window
+        )
     except Exception:
         log.warning(
-            "cost_reconciliation: OpenRouter API request failed for %s",
-            date_str,
-            exc_info=True,
+            "cost_reconciliation: OpenRouter activity fetch failed", exc_info=True
         )
         return None
-
-    if r.status_code == 401 or r.status_code == 403:
-        log.warning(
-            "cost_reconciliation: OpenRouter API returned %d — "
-            "management key may be invalid or lacking permissions",
-            r.status_code,
-        )
-        return None
-
-    if r.status_code != 200:
-        log.warning(
-            "cost_reconciliation: OpenRouter API returned %d for %s",
-            r.status_code,
-            date_str,
-        )
-        return None
-
-    try:
-        data = r.json()
-    except ValueError:
-        log.warning("cost_reconciliation: OpenRouter API returned non-JSON response")
-        return None
-
-    entries = data.get("data", [])
-    if not isinstance(entries, list):
-        entries = []
-
-    total_usd = 0.0
-    breakdown_lines: list[str] = []
-    for entry in entries:
-        usage = float(entry.get("usage", 0) or 0)
-        byok = float(entry.get("byok_usage_inference", 0) or 0)
-        model = entry.get("model", "unknown")
-        requests = entry.get("num_requests", 0) or 0
-        sub_total = usage + byok
-        total_usd += sub_total
-        breakdown_lines.append(
-            f"  {model}: ${sub_total:.4f} (usage=${usage:.4f} "
-            f"byok=${byok:.4f}) requests={requests}"
-        )
-
-    breakdown = "\n".join(breakdown_lines) if breakdown_lines else "(no entries)"
-
     log.info(
-        "cost_reconciliation: OpenRouter %s total = $%.4f (%d model entries)",
-        date_str,
-        total_usd,
-        len(entries),
+        "cost_reconciliation: OpenRouter %s total = $%.4f (%d requests)",
+        window.start.date().isoformat(),
+        pc.total_cost,
+        pc.request_count,
     )
-    return total_usd, breakdown
+    return pc.total_cost, _fmt_breakdown(pc.breakdown)
 
 
-# ---------------------------------------------------------------------------
-# Langfuse fetch
-# ---------------------------------------------------------------------------
+def _fetch_logged_cost(settings, window, repo_config):
+    """Langfuse-logged cost for *window* via llmio's CostLogSource.
 
-
-def _fetch_langfuse_daily(
-    settings: Settings,
-    from_ts: str,
-    to_ts: str,
-    repo_config: RepoConfig | None = None,
-) -> tuple[float, str]:
-    """Fetch yesterday's total cost from Langfuse by paginating all
-    traces in the UTC day window.
-
-    Returns ``(total_cost, breakdown_text)``.  On API error, returns
-    ``(0.0, error message)`` — graceful degradation.
+    Returns ``(total, breakdown_text)``. On API error returns
+    ``(0.0, error message)`` — graceful degradation. NOTE: only the most
+    recent settled day is reconciled, which is always inside the Langfuse
+    retention horizon (time-based prune), so the logged window is complete.
     """
-    from .langfuse_client import _langfuse_api_get
-
-    PAGE_SIZE = 100
-    EXAMINE_CAP = 2000  # safety cap — a single day shouldn't exceed this
-
-    all_traces: list[dict] = []
-    page = 1
-    api_ok = False
+    if repo_config is not None:
+        base = repo_config.langfuse_base_url
+        pk = repo_config.langfuse_public_key
+        sk = repo_config.langfuse_secret_key
+    else:
+        s = get_secrets()
+        base = s.langfuse_base_url
+        pk = s.langfuse_public_key
+        sk = s.langfuse_secret_key
+    if not (pk and sk):
+        return 0.0, "no Langfuse credentials"
+    from robotsix_llmio.core import LangfuseCostLogSource
 
     try:
-        while len(all_traces) < EXAMINE_CAP:
-            body = _langfuse_api_get(
-                settings,
-                "/api/public/traces",
-                params={
-                    "fromTimestamp": from_ts,
-                    "toTimestamp": to_ts,
-                    "limit": PAGE_SIZE,
-                    "page": page,
-                    "orderBy": "timestamp.desc",
-                },
-                repo_config=repo_config,
-            )
-            if body is None:
-                log.warning(
-                    "cost_reconciliation: Langfuse API request failed on page %d",
-                    page,
-                )
-                break
-
-            api_ok = True
-            data = body.get("data", [])
-            all_traces.extend(data)
-
-            meta = body.get("meta", {})
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages:
-                break
-            page += 1
-
+        logged = LangfuseCostLogSource(
+            public_key=pk, secret_key=sk, base_url=base
+        ).fetch_logged_cost(window)
     except Exception:
         log.exception("cost_reconciliation: Langfuse fetch failed")
         return 0.0, "Langfuse API error — unable to fetch traces"
 
-    if not api_ok:
-        return 0.0, "Langfuse API error — unable to fetch traces"
-
-    traces = all_traces[:EXAMINE_CAP]
-
-    # Aggregate by trace name for the breakdown.
-    agg: dict[str, dict] = {}
-    total_cost = 0.0
-    zero_cost_count = 0
-
-    for t in traces:
-        cost = float(t.get("totalCost") or 0)
-        total_cost += cost
-        name = (t.get("name") or "").strip()
-        if not name:
-            name = "(unnamed)"
-        if name not in agg:
-            agg[name] = {"cost": 0.0, "count": 0}
-        agg[name]["cost"] += cost
-        agg[name]["count"] += 1
-        if cost == 0.0:
-            zero_cost_count += 1
-
-    breakdown_lines: list[str] = []
-    for name in sorted(agg, key=lambda n: agg[n]["cost"], reverse=True):
-        entry = agg[name]
-        breakdown_lines.append(
-            f"  {name}: ${entry['cost']:.4f} ({entry['count']} traces)"
-        )
-
-    if zero_cost_count > 0:
-        breakdown_lines.append(f"\n  ({zero_cost_count} traces with zero cost)")
-
-    breakdown = "\n".join(breakdown_lines) if breakdown_lines else "(no traces)"
-
+    agg: dict = {}
+    for r in logged.records:
+        name = r.name or "(unnamed)"
+        agg[name] = agg.get(name, 0.0) + r.cost
     log.info(
-        "cost_reconciliation: Langfuse %s → %s total = $%.4f (%d traces, %d pages)",
-        from_ts[:10],
-        to_ts[:10],
-        total_cost,
-        len(traces),
-        page,
+        "cost_reconciliation: Langfuse %s total = $%.4f (%d traces)",
+        window.start.date().isoformat(),
+        logged.total_cost,
+        logged.record_count,
     )
-    return total_cost, breakdown
-
-
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
+    return logged.total_cost, _fmt_breakdown(agg)
 
 
 def run_cost_reconciliation_pass(
@@ -277,11 +149,11 @@ def run_cost_reconciliation_pass(
     else:
         service = TicketService(settings)
 
-    from_ts, to_ts = _yesterday_utc_range()
-    date_str = _yesterday_date_str()
+    window = _yesterday_window()
+    date_str = window.start.date().isoformat()
 
-    # --- OpenRouter ----------------------------------------------------
-    or_result = _fetch_openrouter_daily(settings, date_str)
+    # --- OpenRouter (provider-billed, via llmio ProviderCostSource) ----
+    or_result = _fetch_provider_cost(settings, window)
     if or_result is None:
         # Management key missing or API failed — skip gracefully.
         return CostReconciliationPassResult(
@@ -292,13 +164,17 @@ def run_cost_reconciliation_pass(
         )
     or_total, or_breakdown = or_result
 
-    # --- Langfuse ------------------------------------------------------
-    lf_total, lf_breakdown = _fetch_langfuse_daily(
-        settings, from_ts, to_ts, repo_config=repo_config
-    )
+    # --- Langfuse (logged, via llmio CostLogSource) --------------------
+    lf_total, lf_breakdown = _fetch_logged_cost(settings, window, repo_config)
 
-    # --- Compare -------------------------------------------------------
-    delta = abs(or_total - lf_total)
+    # --- Compare (llmio reconcile: window-total, flat $1 tolerance) ----
+    from robotsix_llmio.core import LoggedCost, ProviderCost, reconcile
+
+    disc = reconcile(
+        LoggedCost(total_cost=lf_total, record_count=0),
+        ProviderCost(total_cost=or_total),
+    )
+    delta = disc.delta
 
     log.info(
         "cost_reconciliation: %s — OR=$%.4f LF=$%.4f delta=$%.4f",
@@ -308,7 +184,7 @@ def run_cost_reconciliation_pass(
         delta,
     )
 
-    if delta <= 1.00:
+    if disc.within_tolerance:
         summary = f"clean: OR=${or_total:.2f} LF=${lf_total:.2f} delta=${delta:.2f}"
         log.info("cost_reconciliation: %s", summary)
         return CostReconciliationPassResult(
