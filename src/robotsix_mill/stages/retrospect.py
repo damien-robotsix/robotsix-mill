@@ -16,6 +16,7 @@ import re
 
 from .. import langfuse_client
 from ..agents import retrospecting
+from ..agents.retrospecting import RetrospectResult
 from ..config import Settings, get_repo_config
 from ..config_loader import ConfigError
 from ..core.models import SourceKind, Ticket
