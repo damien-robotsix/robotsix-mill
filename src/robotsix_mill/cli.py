@@ -11,6 +11,7 @@
     robotsix-mill audit                        # run an audit pass
     robotsix-mill trace-health                 # run a trace-health check
     robotsix-mill health                        # run a health pass
+    robotsix-mill copy-paste                   # run a copy-paste detection pass
 
 The same API backs a future web frontend.
 """
@@ -502,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
     * ``audit`` — run an audit pass and emit gap drafts
     * ``trace-health`` — check Langfuse for unsessioned traces
     * ``health`` — run a health pass and emit gap drafts
+    * ``copy-paste`` — run a copy-paste / code-duplication detection pass
 
     Returns 0 on success, nonzero on failure.
     """
