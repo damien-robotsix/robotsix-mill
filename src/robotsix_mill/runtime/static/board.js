@@ -268,6 +268,7 @@ function onRepoChange(value){
   else url.searchParams.set("repo",value);
   window.history.replaceState({},"",url);
   toggleMetaOnlyButtons();
+  updateAgentsMenu();
   refresh();
 }
 async function fetchRepos(){
@@ -387,6 +388,7 @@ async function refresh(){
  await fetchRepos();
  const repoId=getRepoId();
  toggleMetaOnlyButtons();
+ updateAgentsMenu();
  const ticketsBase=repoId!=="all"?"/tickets?repo_id="+encodeURIComponent(repoId):"/tickets";
  const url=wantClosed?ticketsBase:(ticketsBase+(ticketsBase.includes("?")?"&":"?")+"include_closed=false");
  const activeUrl=repoId!=="all"?"/active?repo_id="+encodeURIComponent(repoId):"/active";
@@ -1165,6 +1167,36 @@ async function runMeta(){
 function toggleMetaOnlyButtons(){
  const onMeta=getRepoId()==="meta";
  document.querySelectorAll(".meta-only").forEach(el=>{el.style.display=onMeta?"":"none"});
+}
+// Fetch the set of periodic-agent names enabled for the current repo.
+// "all" has no per-repo agents (the dropdown is hidden there anyway).
+async function fetchEnabledAgents(){
+ const repoId=getRepoId();
+ if(repoId==="all")return new Set();
+ const list=await jget("/agents?repo_id="+encodeURIComponent(repoId));
+ return new Set(Array.isArray(list)?list:[]);
+}
+// Filter the Agents dropdown for the current repo:
+//  * On the "All repos" board the per-repo run buttons make no sense
+//    (each POST /<agent> targets one repo) — hide the whole dropdown.
+//  * On a repo-specific board show only the agents enabled for that
+//    repo (GET /agents). The meta-only Meta button is governed solely
+//    by the meta board rule — meta/trace_health/roadmap_sync are
+//    global/non-periodic agents the /agents endpoint never returns, so
+//    the non-meta ones stay hidden on repo boards by design.
+async function updateAgentsMenu(){
+ const dd=document.querySelector(".agents-dropdown");
+ const repoId=getRepoId();
+ if(repoId==="all"){if(dd)dd.style.display="none";return}
+ if(dd)dd.style.display="";
+ const onMeta=repoId==="meta";
+ const enabled=await fetchEnabledAgents();
+ if(getRepoId()!==repoId)return;       // repo changed mid-flight — newer call wins
+ document.querySelectorAll("#agents-menu button[data-agent]").forEach(btn=>{
+  const metaOnly=btn.classList.contains("meta-only");
+  const show=metaOnly?onMeta:enabled.has(btn.dataset.agent);
+  btn.style.display=show?"":"none";
+ });
 }
 async function generateChildren(id){
  const btn=event.target;
