@@ -299,7 +299,9 @@ def test_install_project_prefixes_pip_when_pyproject_and_proxy(tmp_path, monkeyp
     sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
 
     cmd = seen["argv"][-1]
-    assert cmd == "pip install --user --quiet --disable-pip-version-check . && pytest -q"
+    assert (
+        cmd == "pip install --user --quiet --disable-pip-version-check . && pytest -q"
+    )
 
 
 def test_install_project_noop_without_pyproject(tmp_path, monkeypatch):
@@ -365,7 +367,9 @@ def test_install_project_off_by_default(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
-    sandbox.run("git status", repo_dir=repo, settings=s)  # default install_project=False
+    sandbox.run(
+        "git status", repo_dir=repo, settings=s
+    )  # default install_project=False
     assert seen["argv"][-1] == "git status"
 
 
