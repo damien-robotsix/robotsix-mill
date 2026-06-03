@@ -76,7 +76,7 @@ def worker(settings, repo_config):
 def _make_clone(tmp_path, board_id) -> Path:
     """Build a fake clone tree at the path the supervisor would use,
     so the no-op clone/fetch monkeypatches don't try to create one."""
-    clone = tmp_path / "data" / "my-app" / "bespoke_workspace" / "repo"
+    clone = tmp_path / "data" / "my-app" / "periodic_workspace" / "repo"
     clone.mkdir(parents=True)
     (clone / ".git").mkdir()  # so the "already cloned" branch hits
     return clone
@@ -157,6 +157,63 @@ class TestBespokeSupervisor:
 
         assert len(spawned) == 1
         assert spawned[0].name == "mail"
+
+    @pytest.mark.asyncio
+    async def test_legacy_bespoke_workspace_is_migrated(
+        self,
+        tmp_path,
+        monkeypatch,
+        worker,
+        repo_config,
+    ):
+        """A pre-existing legacy ``bespoke_workspace`` clone is renamed to
+        ``periodic_workspace`` on the first cycle (no re-clone), and discovery
+        still works through the migrated clone."""
+        _stub_clone_helpers(monkeypatch)
+        base = tmp_path / "data" / "my-app"
+        legacy = base / "bespoke_workspace" / "repo"
+        legacy.mkdir(parents=True)
+        (legacy / ".git").mkdir()
+        _write_yaml(
+            legacy / ".robotsix-mill" / "agents" / "mail.yaml",
+            {"name": "mail", "interval_seconds": 3600, "system_prompt": "P"},
+        )
+
+        spawned: list[BespokeAgentDefinition] = []
+
+        async def fake_loop(self, rc, definition, clone_dir):
+            spawned.append(definition)
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(Worker, "_run_bespoke_loop", fake_loop, raising=True)
+        monkeypatch.setattr(
+            worker.ctx.settings, "bespoke_discovery_interval_seconds", 60
+        )
+
+        task = asyncio.create_task(worker._periodic_supervisor(repo_config))
+        for _ in range(20):
+            if spawned:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Renamed: legacy gone, new path holds the clone + its committed yaml.
+        assert not (base / "bespoke_workspace").exists()
+        assert (base / "periodic_workspace" / "repo" / ".git").exists()
+        assert (
+            base
+            / "periodic_workspace"
+            / "repo"
+            / ".robotsix-mill"
+            / "agents"
+            / "mail.yaml"
+        ).exists()
+        # Discovery still found the workflow through the migrated clone.
+        assert [d.name for d in spawned] == ["mail"]
 
     @pytest.mark.asyncio
     async def test_removed_yaml_cancels_loop(
