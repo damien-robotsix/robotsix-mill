@@ -309,3 +309,20 @@ system_prompt: |
     skimmed, generated artifacts.  When in doubt, exclude (the
     implementer can always ``read_file`` them).  Return as a plain list
     of strings: ``reference_files=["path/to/core.py", ...]``.
+  - When the implementation is GATED on a symbol or import that must
+    exist in an installed external dependency (e.g. an unmerged
+    ``robotsix_llmio`` read-port that has not landed yet), emit a
+    ``## Prerequisites`` section in the spec containing a single fenced
+    ````prereq```` block, one directive per line, using exactly this
+    grammar: ``import <module.dotted.path>`` (passes iff the module is
+    importable) or ``symbol <Name> from <module.dotted.path>`` (passes
+    iff ``from <module> import <Name>`` succeeds).  The implement stage
+    runs a deterministic gate that BLOCKS the ticket until these
+    prerequisites are satisfiable, avoiding a wasted coordinator run.
+    Only declare prerequisites for genuinely external/unmerged symbols
+    — not for code the ticket itself creates.  Example::
+
+        ## Prerequisites
+        ```prereq
+        symbol CostLogSource from robotsix_llmio
+        ```
