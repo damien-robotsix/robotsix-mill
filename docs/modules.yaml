@@ -106,7 +106,7 @@ modules:
       Ingestion orchestration: fetch, parse, store, watermark.
     paths:
       - src/robotsix_auto_mail/pipeline.py
-      - tests/test_pipeline.py
+      - tests/pipeline/test_pipeline.py
 
   - id: smtp
     description: >-
