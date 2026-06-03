@@ -45,5 +45,8 @@ def flush_current_provider() -> None:
         flush = getattr(provider, "force_flush", None)
         if flush is not None:
             flush()
-    except Exception:  # pragma: no cover — never let flushing break a call
+    except (RuntimeError, OSError):  # pragma: no cover — never break a call
+        # Expected exporter flush failures (loop-state RuntimeError, socket
+        # OSError) are safe to ignore; other exception types propagate so a
+        # programming error surfaces instead of being silently swallowed.
         pass

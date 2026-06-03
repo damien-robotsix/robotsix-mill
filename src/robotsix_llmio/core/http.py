@@ -19,7 +19,11 @@ def _close_async_client(client: "Any") -> None:
         loop = asyncio.new_event_loop()
         loop.run_until_complete(client.aclose())
         loop.close()
-    except Exception:
+    except (RuntimeError, OSError):
+        # Expected event-loop/transport teardown errors during GC/finalize
+        # (loop-state RuntimeError, socket-close OSError) are safe to ignore;
+        # other exception types (e.g. AttributeError/TypeError from a broken
+        # aclose() call) propagate so genuine bugs aren't masked.
         pass
 
 
