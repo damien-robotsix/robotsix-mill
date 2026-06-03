@@ -1,0 +1,3 @@
+# Presence enables copy_paste (jscpd clone detection) for this repo.
+# Partial-merges over the built-in def in robotsix-mill. Repo-agnostic.
+name: copy_paste
