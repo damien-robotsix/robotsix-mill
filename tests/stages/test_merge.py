@@ -2806,12 +2806,12 @@ def test_multi_repo_all_green_auto_merges_when_eligible(tmp_path, monkeypatch):
         },
     )
     merged_calls = []
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "merge_pr",
-        lambda self, *, source_branch: merged_calls.append(self._remote_url)
-        or {"merged": True},
-    )
+
+    def _fake_merge(self, *, source_branch):
+        merged_calls.append(self._remote_url)
+        return {"merged": True}
+
+    monkeypatch.setattr(github.GitHubForge, "merge_pr", _fake_merge)
 
     t = _make_meta_ticket(ctx)
     branch = f"mill/{t.id}"
@@ -2852,11 +2852,12 @@ def test_multi_repo_all_green_holds_when_not_eligible(tmp_path, monkeypatch):
         ci_responses={remote_a: {"conclusion": "success", "failing": []}},
     )
     merged_calls = []
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "merge_pr",
-        lambda self, *, source_branch: merged_calls.append(1) or {"merged": True},
-    )
+
+    def _fake_merge(self, *, source_branch):
+        merged_calls.append(1)
+        return {"merged": True}
+
+    monkeypatch.setattr(github.GitHubForge, "merge_pr", _fake_merge)
     t = _make_meta_ticket(ctx)
     branch = f"mill/{t.id}"
     # No review.md → not eligible.
