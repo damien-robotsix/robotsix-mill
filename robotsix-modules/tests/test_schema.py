@@ -36,18 +36,14 @@ def test_empty_dict_reports_missing_modules() -> None:
 
 def test_valid_taxonomy_returns_empty_list() -> None:
     taxonomy = {
-        "modules": [
-            {"id": "foo", "description": "bar", "paths": ["src/foo.py"]}
-        ]
+        "modules": [{"id": "foo", "description": "bar", "paths": ["src/foo.py"]}]
     }
     assert validate(taxonomy) == []
 
 
 def test_bad_id_mentions_kebab_pattern() -> None:
     taxonomy = {
-        "modules": [
-            {"id": "BadId", "description": "bar", "paths": ["src/foo.py"]}
-        ]
+        "modules": [{"id": "BadId", "description": "bar", "paths": ["src/foo.py"]}]
     }
     errors = validate(taxonomy)
     assert errors
@@ -55,9 +51,7 @@ def test_bad_id_mentions_kebab_pattern() -> None:
 
 
 def test_empty_paths_mentions_minitems() -> None:
-    taxonomy = {
-        "modules": [{"id": "foo", "description": "bar", "paths": []}]
-    }
+    taxonomy = {"modules": [{"id": "foo", "description": "bar", "paths": []}]}
     errors = validate(taxonomy)
     assert errors
     assert any(

@@ -69,7 +69,9 @@ def validate(taxonomy: dict, *, schema: dict | None = None) -> list[str]:
     """
     active_schema = schema if schema is not None else load_schema()
     validator = Draft202012Validator(active_schema)
-    errors = sorted(validator.iter_errors(taxonomy), key=lambda e: list(e.absolute_path))
+    errors = sorted(
+        validator.iter_errors(taxonomy), key=lambda e: list(e.absolute_path)
+    )
     return [_format_error(error) for error in errors]
 
 
