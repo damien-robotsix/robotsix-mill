@@ -186,6 +186,13 @@ after the fact. The CI path-lint only checks that existing entries'
 paths resolve to real files; it does not require new files to be added,
 so this stays a convention enforced at authoring time.
 
+### Placing a module's tests
+
+Place a new module's tests under `tests/<module>/` matching that
+module's name in `docs/modules.yaml`; never default to `tests/runtime/`
+or the `tests/` root. Add the new test file's path to the module's
+`paths` entry in `docs/modules.yaml` in the same commit.
+
 ### Deleting a tracked file
 
 When deleting a source or test file tracked in `docs/modules.yaml`,
