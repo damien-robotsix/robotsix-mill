@@ -1,0 +1,3 @@
+# Presence enables completeness_check for this repo. Partial-merges over the
+# built-in agent_definitions/periodic/completeness_check.yaml.
+name: completeness_check

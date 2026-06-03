@@ -41,17 +41,21 @@ def _make_settings(tmp_path, **overrides):
 
 
 def test_completeness_check_system_prompt_covers_gap_patterns():
-    """The completeness-check agent prompt must cover all six gap patterns."""
+    """The prompt must cover the generic, framework-agnostic gap patterns."""
     p = cc_agent.SYSTEM_PROMPT.lower()
     for kw in (
-        "missing yaml mapping",
-        "missing yaml defaults",
-        "periodic runner with no route",
-        "route with no button",
-        "runner with no cli",
-        "agent file with no caller",
+        "defined but never referenced",
+        "registered",
+        "config declared",
+        "public-surface mismatch",
+        "handler with no entry point",
+        "sibling-pattern gap",
+        "reachable stub",
     ):
         assert kw in p, f"completeness_check prompt missing pattern cue: {kw}"
+    # Must be framework-agnostic — no hardcoded mill internals.
+    for mill_term in ("mill_x", "config_loader", "board_html", "_runners"):
+        assert mill_term not in p, f"prompt still references mill internal: {mill_term}"
     # Must exercise judgement, not just regex.
     assert "judgement" in p or "judgment" in p
     assert "not a static linter" in p or "static linter" in p
