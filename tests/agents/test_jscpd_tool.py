@@ -284,7 +284,7 @@ def _jscpd_runnable() -> bool:
             text=True,
             timeout=60,
         )
-    except FileNotFoundError, OSError, subprocess.TimeoutExpired:
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return False
     return proc.returncode == 0
 
