@@ -171,6 +171,7 @@ modules:
       - src/robotsix_mill/module_curator_runner.py
       - src/robotsix_mill/periodic_runner.py
       - src/robotsix_mill/verify_runner.py
+      - src/robotsix_mill/draft_target.py
       - tests/runners/test_pass_runner.py
       - tests/runners/test_periodic_runner.py
       - tests/runners/test_cost_reconciliation_runner.py
