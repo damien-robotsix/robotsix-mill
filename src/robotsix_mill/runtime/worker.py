@@ -1175,7 +1175,14 @@ class Worker:
                 # a poll-relevant state (READY after scope-triage
                 # REJECT, HUMAN_MR_APPROVAL, REBASING, …) would never
                 # be re-enqueued and would silently stall.
-                boards: list[str] = []
+                # Seed with the synthetic cross-repo meta board: its
+                # tickets ARE worked (refine builds a multi-repo
+                # workspace), but it is not a registered repo, so without
+                # this a meta ticket that becomes READY *after* startup
+                # (e.g. its dependency closes) would never be re-enqueued
+                # and would sit READY until the next restart —
+                # requeue_unfinished() seeds meta but only runs once.
+                boards: list[str] = [self._META_BOARD]
                 # Always sweep the worker's own context service first
                 # — covers single-repo / test setups where the lifespan
                 # service is the only one bound and get_repos_config()

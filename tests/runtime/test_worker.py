@@ -480,6 +480,34 @@ async def test_reconcile_sweep_enqueues_out_of_band_drafts(ctx, service, monkeyp
     assert t.id in w._pending  # swept in despite never being enqueued
 
 
+@pytest.mark.asyncio
+async def test_reconcile_sweep_enqueues_meta_board_tickets(ctx, monkeypatch):
+    """Regression: a ticket on the synthetic meta board that becomes
+    workable AFTER startup (e.g. its dependency closes) must be picked up
+    by the periodic reconcile sweep. requeue_unfinished() seeds the meta
+    board but only runs once at startup; the poll loop must sweep it too."""
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.runtime.worker import Worker
+
+    meta_svc = TicketService(ctx.settings, board_id=Worker._META_BOARD)
+    t = meta_svc.create("meta migrate thing", "body", source=SourceKind.META)
+    meta_svc.transition(t.id, State.READY)  # workable, no unmet deps
+    w = Worker(ctx)
+
+    calls = [0]
+
+    async def fake_sleep(_):
+        calls[0] += 1
+        if calls[0] >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("robotsix_mill.runtime.worker.asyncio.sleep", fake_sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await w._poll_loop()
+
+    assert t.id in w._pending  # meta board was swept
+
+
 # --- startup-aware periodic pass (last-run aware) ----------------------
 
 
