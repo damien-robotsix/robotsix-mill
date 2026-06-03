@@ -70,6 +70,7 @@ def test_sourcekind_member_count():
         "MODULE_CURATOR",
         "ROADMAP_SYNC",
         "META",
+        "BOARD_CLEANUP",
     }
     assert set(SourceKind.__members__) == expected
 
@@ -94,8 +95,8 @@ def test_sourcekind_members_are_str_instances():
 
 
 def test_actiontype_member_count():
-    """ActionType must contain exactly the four expected members."""
-    expected = {"CLOSE", "TRANSITION", "COMMENT", "RELABEL"}
+    """ActionType must contain exactly the two expected members."""
+    expected = {"CLOSE_TICKET", "CREATE_TICKET"}
     assert set(ActionType.__members__) == expected
 
 
@@ -115,10 +116,8 @@ def test_actiontype_members_are_str_instances():
 
 def test_actiontype_literal_values():
     """ActionType members have the exact values specified in the spec."""
-    assert ActionType.CLOSE.value == "close"
-    assert ActionType.TRANSITION.value == "transition"
-    assert ActionType.COMMENT.value == "comment"
-    assert ActionType.RELABEL.value == "relabel"
+    assert ActionType.CLOSE_TICKET.value == "close_ticket"
+    assert ActionType.CREATE_TICKET.value == "create_ticket"
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +126,8 @@ def test_actiontype_literal_values():
 
 
 def test_proposedactionstatus_member_count():
-    """ProposedActionStatus must contain exactly the five expected members."""
-    expected = {"PENDING", "APPROVED", "REJECTED", "EXECUTED", "FAILED"}
+    """ProposedActionStatus must contain exactly the four expected members."""
+    expected = {"PENDING", "APPROVED", "REJECTED", "EXECUTED"}
     assert set(ProposedActionStatus.__members__) == expected
 
 
@@ -152,7 +151,6 @@ def test_proposedactionstatus_literal_values():
     assert ProposedActionStatus.APPROVED.value == "approved"
     assert ProposedActionStatus.REJECTED.value == "rejected"
     assert ProposedActionStatus.EXECUTED.value == "executed"
-    assert ProposedActionStatus.FAILED.value == "failed"
 
 
 # ---------------------------------------------------------------------------
@@ -164,29 +162,22 @@ def test_proposed_action_defaults():
     """ProposedAction fields carry correct defaults when constructed with
     minimum required kwargs."""
     pa = ProposedAction(
-        source="health",
+        action_type=ActionType.CLOSE_TICKET,
         target_ticket_id="t-1",
-        action_type=ActionType.CLOSE,
         rationale="No longer needed",
+        source="health",
     )
     assert pa.id is None
-    assert pa.payload is None
+    assert pa.proposed_title is None
+    assert pa.proposed_body is None
     assert pa.status == ProposedActionStatus.PENDING
-    assert pa.decided_at is None
-    assert pa.decided_by is None
+    assert pa.approved_at is None
+    assert pa.rejected_at is None
+    assert pa.executed_at is None
+    assert pa.approver_id is None
+    assert pa.error_message is None
+    assert pa.board_id == ""
     assert pa.created_at.tzinfo == timezone.utc
-
-
-def test_proposed_action_required_source():
-    """source is required — omitting it raises ValidationError on validate."""
-    with pytest.raises(ValidationError):
-        ProposedAction.model_validate(
-            ProposedAction(
-                target_ticket_id="t-1",
-                action_type=ActionType.CLOSE,
-                rationale="No longer needed",
-            ).model_dump()
-        )
 
 
 def test_proposed_action_required_action_type():
@@ -194,9 +185,9 @@ def test_proposed_action_required_action_type():
     with pytest.raises(ValidationError):
         ProposedAction.model_validate(
             ProposedAction(
-                source="health",
                 target_ticket_id="t-1",
                 rationale="No longer needed",
+                source="health",
             ).model_dump()
         )
 
@@ -206,9 +197,21 @@ def test_proposed_action_required_rationale():
     with pytest.raises(ValidationError):
         ProposedAction.model_validate(
             ProposedAction(
-                source="health",
+                action_type=ActionType.CLOSE_TICKET,
                 target_ticket_id="t-1",
-                action_type=ActionType.CLOSE,
+                source="health",
+            ).model_dump()
+        )
+
+
+def test_proposed_action_required_source():
+    """source is required — omitting it raises ValidationError on validate."""
+    with pytest.raises(ValidationError):
+        ProposedAction.model_validate(
+            ProposedAction(
+                action_type=ActionType.CLOSE_TICKET,
+                target_ticket_id="t-1",
+                rationale="No longer needed",
             ).model_dump()
         )
 
@@ -217,52 +220,66 @@ def test_proposed_action_model_dump_and_validate_roundtrip():
     """ProposedAction model_dump() → model_validate() reproduces
     equivalent instance."""
     pa = ProposedAction(
-        source="audit",
-        target_ticket_id="t-42",
-        action_type=ActionType.TRANSITION,
-        payload='{"state": "draft"}',
-        rationale="Ticket is stale; move back to draft",
+        action_type=ActionType.CREATE_TICKET,
+        proposed_title="New ticket",
+        proposed_body="Body text",
+        rationale="Gap detected",
+        source="board_cleanup",
+        board_id="board-1",
     )
     dumped = pa.model_dump()
     assert isinstance(dumped, dict)
     restored = ProposedAction.model_validate(dumped)
-    assert restored.source == pa.source
-    assert restored.target_ticket_id == pa.target_ticket_id
     assert restored.action_type == pa.action_type
-    assert restored.payload == pa.payload
+    assert restored.proposed_title == pa.proposed_title
+    assert restored.proposed_body == pa.proposed_body
     assert restored.rationale == pa.rationale
+    assert restored.source == pa.source
     assert restored.status == pa.status
+    assert restored.board_id == pa.board_id
     assert restored.created_at == pa.created_at
-    assert restored.decided_at == pa.decided_at
-    assert restored.decided_by == pa.decided_by
+    assert restored.approved_at == pa.approved_at
+    assert restored.rejected_at == pa.rejected_at
+    assert restored.executed_at == pa.executed_at
+    assert restored.approver_id == pa.approver_id
+    assert restored.error_message == pa.error_message
 
 
 def test_proposed_action_nullable_fields_roundtrip_none():
-    """decided_at, decided_by, and payload survive None round-trip."""
+    """target_ticket_id, proposed_title, proposed_body, and timestamp
+    fields survive None round-trip."""
     pa = ProposedAction(
-        source="trace-review",
-        target_ticket_id="t-3",
-        action_type=ActionType.COMMENT,
-        rationale="Needs a follow-up note",
-        # payload, decided_at, decided_by left at their defaults (None)
+        action_type=ActionType.CREATE_TICKET,
+        proposed_title="T",
+        rationale="r",
+        source="board_cleanup",
+        # target_ticket_id, proposed_body, approved_at, rejected_at,
+        # executed_at, approver_id, error_message left at defaults
     )
-    assert pa.payload is None
-    assert pa.decided_at is None
-    assert pa.decided_by is None
+    assert pa.target_ticket_id is None
+    assert pa.proposed_body is None
+    assert pa.approved_at is None
+    assert pa.rejected_at is None
+    assert pa.executed_at is None
+    assert pa.approver_id is None
+    assert pa.error_message is None
     dumped = pa.model_dump()
     restored = ProposedAction.model_validate(dumped)
-    assert restored.payload is None
-    assert restored.decided_at is None
-    assert restored.decided_by is None
+    assert restored.target_ticket_id is None
+    assert restored.proposed_body is None
+    assert restored.approved_at is None
+    assert restored.executed_at is None
+    assert restored.approver_id is None
+    assert restored.error_message is None
 
 
 def test_proposed_action_status_is_enum_member():
     """status is a ProposedActionStatus enum member, not a bare string."""
     pa = ProposedAction(
-        source="health",
+        action_type=ActionType.CLOSE_TICKET,
         target_ticket_id="t-1",
-        action_type=ActionType.CLOSE,
         rationale="x",
+        source="health",
     )
     assert isinstance(pa.status, ProposedActionStatus)
     assert pa.status == ProposedActionStatus.PENDING
@@ -271,39 +288,46 @@ def test_proposed_action_status_is_enum_member():
 def test_proposed_action_action_type_is_enum_member():
     """action_type is an ActionType enum member, not a bare string."""
     pa = ProposedAction(
-        source="health",
+        action_type=ActionType.CLOSE_TICKET,
         target_ticket_id="t-1",
-        action_type=ActionType.CLOSE,
         rationale="x",
+        source="health",
     )
     assert isinstance(pa.action_type, ActionType)
-    assert pa.action_type == ActionType.CLOSE
+    assert pa.action_type == ActionType.CLOSE_TICKET
 
 
 def test_proposed_action_all_fields_populated_roundtrip():
     """Every field, including nullable ones set explicitly, survives
     model_dump() → model_validate()."""
-    dt = datetime(2025, 6, 1, tzinfo=timezone.utc)
+    dt_approved = datetime(2025, 6, 1, tzinfo=timezone.utc)
+    dt_executed = datetime(2025, 6, 2, tzinfo=timezone.utc)
     pa = ProposedAction(
-        source="survey",
+        action_type=ActionType.CLOSE_TICKET,
         target_ticket_id="t-99",
-        action_type=ActionType.RELABEL,
-        payload='{"add": ["bug"], "remove": ["feature"]}',
-        rationale="Wrong labels",
+        rationale="Stale",
+        source="board_cleanup",
         status=ProposedActionStatus.APPROVED,
-        decided_at=dt,
-        decided_by="alice",
+        approved_at=dt_approved,
+        rejected_at=None,
+        executed_at=dt_executed,
+        approver_id="alice",
+        error_message="timeout",
+        board_id="b",
     )
     dumped = pa.model_dump()
     restored = ProposedAction.model_validate(dumped)
-    assert restored.source == "survey"
+    assert restored.action_type == ActionType.CLOSE_TICKET
     assert restored.target_ticket_id == "t-99"
-    assert restored.action_type == ActionType.RELABEL
-    assert restored.payload == '{"add": ["bug"], "remove": ["feature"]}'
-    assert restored.rationale == "Wrong labels"
+    assert restored.rationale == "Stale"
+    assert restored.source == "board_cleanup"
     assert restored.status == ProposedActionStatus.APPROVED
-    assert restored.decided_at == dt
-    assert restored.decided_by == "alice"
+    assert restored.approved_at == dt_approved
+    assert restored.rejected_at is None
+    assert restored.executed_at == dt_executed
+    assert restored.approver_id == "alice"
+    assert restored.error_message == "timeout"
+    assert restored.board_id == "b"
     # created_at was auto-set; it must be aware UTC and preserved
     assert restored.created_at.tzinfo == timezone.utc
     assert restored.created_at == pa.created_at
@@ -320,12 +344,11 @@ def test_proposed_action_db_roundtrip(settings):
     from robotsix_mill.core.db import session as db_session
 
     pa = ProposedAction(
-        source="health",
+        action_type=ActionType.CLOSE_TICKET,
         target_ticket_id="t-db-1",
-        action_type=ActionType.CLOSE,
-        payload='{"reason": "duplicate"}',
         rationale="Duplicate of another ticket",
-        status=ProposedActionStatus.PENDING,
+        source="health",
+        board_id="test-board",
     )
 
     sess = db_session(settings, "test-board")
@@ -337,14 +360,19 @@ def test_proposed_action_db_roundtrip(settings):
         pa_read = sess.get(ProposedAction, pa.id)
         assert pa_read is not None
         assert pa_read.id == pa.id
-        assert pa_read.source == "health"
+        assert pa_read.action_type == ActionType.CLOSE_TICKET
         assert pa_read.target_ticket_id == "t-db-1"
-        assert pa_read.action_type == ActionType.CLOSE
-        assert pa_read.payload == '{"reason": "duplicate"}'
         assert pa_read.rationale == "Duplicate of another ticket"
+        assert pa_read.source == "health"
         assert pa_read.status == ProposedActionStatus.PENDING
-        assert pa_read.decided_at is None
-        assert pa_read.decided_by is None
+        assert pa_read.proposed_title is None
+        assert pa_read.proposed_body is None
+        assert pa_read.approved_at is None
+        assert pa_read.rejected_at is None
+        assert pa_read.executed_at is None
+        assert pa_read.approver_id is None
+        assert pa_read.error_message is None
+        assert pa_read.board_id == "test-board"
         assert pa_read.created_at.tzinfo == timezone.utc
         # Round-trip timestamps match
         assert pa_read.created_at == pa.created_at
