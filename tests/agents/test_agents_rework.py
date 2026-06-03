@@ -101,7 +101,7 @@ def test_test_agent_pass(tmp_path, monkeypatch):
     monkeypatch.setattr(
         sandbox,
         "run",
-        lambda cmd, *, repo_dir, settings, epic_workspace_path=None: (0, "ok"),
+        lambda cmd, *, repo_dir, settings, **kwargs: (0, "ok"),
     )
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is True and "passed" in fb
@@ -118,7 +118,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     monkeypatch.setattr(
         sandbox,
         "run",
-        lambda cmd, *, repo_dir, settings, epic_workspace_path=None: (
+        lambda cmd, *, repo_dir, settings, **kwargs: (
             1,
             "E   assert 1 == 2\n" * 50,
         ),
