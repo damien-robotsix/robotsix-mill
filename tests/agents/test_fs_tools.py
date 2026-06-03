@@ -37,13 +37,6 @@ def _build_extra(root, settings, extra_roots):
     return {t.__name__: t for t in tools}
 
 
-def _build_with_extra(root, settings, extra_roots):
-    """Return the 6 tools as a name→callable dict, built with
-    ``extra_roots`` so cross-repo (meta) edits are permitted."""
-    tools = build_fs_tools(root, settings, extra_roots=extra_roots)
-    return {t.__name__: t for t in tools}
-
-
 def _make_file(root, path, content):
     p = root / path
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -156,58 +149,6 @@ class TestSafe:
         result = _safe(root, "foo.txt", extra_roots=[extra])
         assert result == (root / "foo.txt").resolve()
 
-    # --- extra_roots (cross-repo / meta) -------------------------------
-    # Production layout: ws.dir/repos/<repo_id>. The primary ``root`` is
-    # repos/<primary>; sibling repos are extra_roots reached via a
-    # ``../<other>/…`` relative path.
-
-    def test_extra_root_allows_sibling(self, tmp_path):
-        """A relative path resolving into a single extra root returns the
-        resolved path (no raise)."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra = repos / "extra"
-        root.mkdir(parents=True)
-        extra.mkdir(parents=True)
-        (extra / "file.txt").write_text("hi")
-        result = _safe(root, "../extra/file.txt", extra_roots=[extra])
-        assert result == (extra / "file.txt").resolve()
-
-    def test_extra_root_allows_second_of_multiple(self, tmp_path):
-        """A path matching the 2nd of multiple extra_roots is allowed."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra1 = repos / "extra1"
-        extra2 = repos / "extra2"
-        for d in (root, extra1, extra2):
-            d.mkdir(parents=True)
-        (extra2 / "file.txt").write_text("hi")
-        result = _safe(root, "../extra2/file.txt", extra_roots=[extra1, extra2])
-        assert result == (extra2 / "file.txt").resolve()
-
-    def test_extra_root_still_rejects_outside_all(self, tmp_path):
-        """A path that escapes both root and all extra_roots still raises.
-        extra_roots widens the sandbox but does not disable it."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra = repos / "extra"
-        root.mkdir(parents=True)
-        extra.mkdir(parents=True)
-        with pytest.raises(ValueError, match="escapes"):
-            _safe(root, "../../../etc/passwd", extra_roots=[extra])
-
-    def test_extra_root_set_path_inside_primary_allowed(self, tmp_path):
-        """A path inside the primary root is still allowed when
-        extra_roots is also set (no false negative)."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra = repos / "extra"
-        root.mkdir(parents=True)
-        extra.mkdir(parents=True)
-        (root / "foo.txt").write_text("hi")
-        result = _safe(root, "foo.txt", extra_roots=[extra])
-        assert result == (root / "foo.txt").resolve()
-
 
 # ===================================================================
 # Return type / shape
@@ -307,31 +248,6 @@ class TestReadFile:
         root.mkdir(parents=True)
         extra.mkdir(parents=True)
         tools = _build_extra(root, settings, [extra])
-        result = tools["read_file"](path="../../../etc/passwd")
-        assert isinstance(result, str)
-        assert "error" in result.lower()
-
-    def test_read_across_extra_root(self, tmp_path, settings):
-        """A file seeded in an extra root is readable via ``../extra/…``
-        when the tools are built with extra_roots."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra = repos / "extra"
-        root.mkdir(parents=True)
-        extra.mkdir(parents=True)
-        _make_file(extra, "shared.txt", "from extra\n")
-        tools = _build_with_extra(root, settings, [extra])
-        assert tools["read_file"](path="../extra/shared.txt") == "from extra\n"
-
-    def test_read_outside_all_roots_with_extra_set(self, tmp_path, settings):
-        """A read outside root and all extra_roots still returns an error
-        string — the gateway holds even with extra_roots set."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra = repos / "extra"
-        root.mkdir(parents=True)
-        extra.mkdir(parents=True)
-        tools = _build_with_extra(root, settings, [extra])
         result = tools["read_file"](path="../../../etc/passwd")
         assert isinstance(result, str)
         assert "error" in result.lower()
@@ -549,33 +465,6 @@ class TestWriteFile:
         assert "error" in result.lower()
         assert not (tmp_path / "etc/hosts").exists()
 
-    def test_write_across_extra_root(self, tmp_path, settings):
-        """A write via ``../extra/…`` lands in the extra root when the
-        tools are built with extra_roots."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra = repos / "extra"
-        root.mkdir(parents=True)
-        extra.mkdir(parents=True)
-        tools = _build_with_extra(root, settings, [extra])
-        result = tools["write_file"]("../extra/new.txt", "hello")
-        assert "wrote 5 bytes to ../extra/new.txt" in result
-        assert (extra / "new.txt").read_text() == "hello"
-
-    def test_write_outside_all_roots_with_extra_set(self, tmp_path, settings):
-        """A write outside root and all extra_roots returns an error and
-        has no filesystem side effect, even with extra_roots set."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra = repos / "extra"
-        root.mkdir(parents=True)
-        extra.mkdir(parents=True)
-        tools = _build_with_extra(root, settings, [extra])
-        result = tools["write_file"]("../../../etc/hosts", "x")
-        assert isinstance(result, str)
-        assert "error" in result.lower()
-        assert not (tmp_path / "etc/hosts").exists()
-
     def test_write_file_python_syntax_error_refused(self, tmp_path, settings):
         """write_file must refuse a .py with a SyntaxError so the agent
         retries the edit instead of wasting a test cycle on broken code."""
@@ -699,20 +588,6 @@ class TestEditFile:
         result = tools["edit_file"]("../extra/f.py", "y = 2", "y = 3")
         assert "replaced 1 occurrence in ../extra/f.py" in result
         assert (extra / "f.py").read_text() == "x = 1\ny = 3\n"
-
-    def test_edit_across_extra_root(self, tmp_path, settings):
-        """A seeded file in an extra root is editable via ``../extra/…``
-        when the tools are built with extra_roots."""
-        repos = tmp_path / "repos"
-        root = repos / "primary"
-        extra = repos / "extra"
-        root.mkdir(parents=True)
-        extra.mkdir(parents=True)
-        _make_file(extra, "f.txt", "alpha beta\n")
-        tools = _build_with_extra(root, settings, [extra])
-        result = tools["edit_file"]("../extra/f.txt", "beta", "gamma")
-        assert "replaced 1 occurrence in ../extra/f.txt" in result
-        assert (extra / "f.txt").read_text() == "alpha gamma\n"
 
     def test_edit_file_python_syntax_error_refused(self, tmp_path, settings):
         """An edit that would leave the .py file with a SyntaxError must
