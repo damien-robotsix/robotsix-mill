@@ -1279,15 +1279,19 @@ class Worker:
         worker clone exists already (bespoke supervisor, or any
         ``<agent>_workspace/repo`` left behind by an earlier run).
 
-        Priority: bespoke_workspace > any *_workspace/repo. When no
-        clone exists yet the loader falls back to the built-in YAML.
+        Priority: periodic_workspace (legacy: bespoke_workspace) > any
+        *_workspace/repo. When no clone exists yet the loader falls back to
+        the built-in YAML.
         """
         if repo_config is None:
             return None
         base = Path(self.ctx.settings.data_dir) / repo_config.repo_id
         if not base.is_dir():
             return None
-        bespoke = base / "bespoke_workspace" / "repo"
+        periodic = base / "periodic_workspace" / "repo"
+        if (periodic / ".git").exists():
+            return periodic
+        bespoke = base / "bespoke_workspace" / "repo"  # legacy name (pre-rename)
         if (bespoke / ".git").exists():
             return bespoke
         try:
@@ -1908,7 +1912,8 @@ class Worker:
         """Per-repo periodic-workflow supervisor loop.
 
         Owns a clone of the managed repo at
-        ``<data_dir>/<board_id>/bespoke_workspace/repo`` and reconciles the
+        ``<data_dir>/<repo_id>/periodic_workspace/repo`` (legacy name:
+        ``bespoke_workspace`` — auto-migrated below) and reconciles the
         set of running per-workflow loop tasks against the files the repo
         ships, on each cycle:
 
@@ -1935,9 +1940,27 @@ class Worker:
         interval = max(60, settings.bespoke_discovery_interval_seconds)
         board_id = repo_config.board_id
         forge_url = repo_config.forge_remote_url or settings.forge_remote_url
-        clone_dir = (
-            settings.data_dir / repo_config.repo_id / "bespoke_workspace" / "repo"
-        )
+        repo_data_dir = settings.data_dir / repo_config.repo_id
+        periodic_ws = repo_data_dir / "periodic_workspace"
+        clone_dir = periodic_ws / "repo"
+
+        # One-time migration of the legacy ``bespoke_workspace`` name (the
+        # supervisor was the "bespoke supervisor" before it was generalized to
+        # own all per-repo periodic-workflow discovery). Rename rather than
+        # re-clone so the existing fetch history is preserved.
+        legacy_ws = repo_data_dir / "bespoke_workspace"
+        if legacy_ws.is_dir() and not periodic_ws.exists():
+            try:
+                legacy_ws.rename(periodic_ws)
+                log.info(
+                    "periodic supervisor (%s): migrated bespoke_workspace -> "
+                    "periodic_workspace",
+                    board_id,
+                )
+            except OSError:
+                log.exception(
+                    "periodic supervisor (%s): workspace rename failed", board_id
+                )
 
         # namespaced key -> (task, comparison object). The comparison object
         # (a ResolvedPeriodicWorkflow or BespokeAgentDefinition) drives
