@@ -70,7 +70,7 @@ modules:
       Mail-processing status read/write layer for the kanban board.
     paths:
       - src/robotsix_auto_mail/status.py
-      - tests/test_status.py
+      - tests/status/test_status.py
 
   - id: detect
     description: >-
