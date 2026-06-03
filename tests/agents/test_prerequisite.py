@@ -44,12 +44,7 @@ def test_parse_import_directive():
 
 def test_parse_multiple_directives():
     """Multiple directive lines are all extracted, in order."""
-    spec = (
-        "## Prerequisites\n```prereq\n"
-        "import foo.bar\n"
-        "symbol Baz from foo.qux\n"
-        "```\n"
-    )
+    spec = "## Prerequisites\n```prereq\nimport foo.bar\nsymbol Baz from foo.qux\n```\n"
     directives = parse_prerequisites(spec)
     assert [d["directive"] for d in directives] == [
         "import foo.bar",
@@ -89,12 +84,7 @@ def test_parse_ignores_prose_and_unrecognized_lines():
 
 def test_parse_ignores_other_code_fences():
     """Directives in a non-``prereq`` fence are not extracted."""
-    spec = (
-        "## Prerequisites\n"
-        "```bash\n"
-        "symbol CostLogSource from robotsix_llmio\n"
-        "```\n"
-    )
+    spec = "## Prerequisites\n```bash\nsymbol CostLogSource from robotsix_llmio\n```\n"
     assert parse_prerequisites(spec) == []
 
 
@@ -150,14 +140,18 @@ def test_check_empty_block_proceeds():
 
 def test_check_all_pass_proceeds():
     """Every directive exits zero → empty unmet."""
-    spec = "## Prerequisites\n```prereq\nsymbol CostLogSource from robotsix_llmio\n```\n"
+    spec = (
+        "## Prerequisites\n```prereq\nsymbol CostLogSource from robotsix_llmio\n```\n"
+    )
     result = run_prerequisite_check(spec, Path("/tmp"), runner=_runner_all_pass)
     assert result["unmet"] == []
 
 
 def test_check_unmet_directive_reported():
     """A failing import surfaces the directive in unmet."""
-    spec = "## Prerequisites\n```prereq\nsymbol CostLogSource from robotsix_llmio\n```\n"
+    spec = (
+        "## Prerequisites\n```prereq\nsymbol CostLogSource from robotsix_llmio\n```\n"
+    )
     result = run_prerequisite_check(spec, Path("/tmp"), runner=_runner_all_fail)
     assert result["unmet"] == ["symbol CostLogSource from robotsix_llmio"]
     assert "CostLogSource" in result["reason"]
@@ -165,12 +159,7 @@ def test_check_unmet_directive_reported():
 
 def test_check_partial_unmet():
     """Only the failing directives are reported."""
-    spec = (
-        "## Prerequisites\n```prereq\n"
-        "import foo.bar\n"
-        "symbol Baz from foo.qux\n"
-        "```\n"
-    )
+    spec = "## Prerequisites\n```prereq\nimport foo.bar\nsymbol Baz from foo.qux\n```\n"
 
     def runner(code, repo_dir, timeout):
         return 0 if code == "import foo.bar" else 1
