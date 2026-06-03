@@ -41,7 +41,13 @@ def run_test_agent(
     if not cmd:
         return True, "no test gate configured (treated as passing)"
     try:
-        rc, out = sandbox.run(cmd, repo_dir=repo_dir, settings=settings)
+        # install_project: install the repo's DECLARED deps before the
+        # gate runs. Without this the gate tests against the image's
+        # frozen site-packages, so any ticket adding a new third-party
+        # runtime dep fails forever with ModuleNotFoundError.
+        rc, out = sandbox.run(
+            cmd, repo_dir=repo_dir, settings=settings, install_project=True
+        )
     except sandbox.SandboxError as e:
         return False, f"sandbox unavailable: {e}"
     if rc == 0:

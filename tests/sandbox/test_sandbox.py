@@ -274,6 +274,101 @@ def test_sandbox_injects_pythonpath_for_src_layout(tmp_path, monkeypatch):
     )
 
 
+def test_install_project_prefixes_pip_when_pyproject_and_proxy(tmp_path, monkeypatch):
+    """The test gate (install_project=True) must prepend a --user pip
+    install of the repo so its DECLARED deps are importable — the gate
+    otherwise runs against the image's frozen site-packages and a
+    new-dependency ticket fails forever with ModuleNotFoundError."""
+    repo = tmp_path / "ticket"
+    (repo / "src").mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
+
+    cmd = seen["argv"][-1]
+    assert cmd == "pip install --user --quiet --disable-pip-version-check . && pytest -q"
+
+
+def test_install_project_noop_without_pyproject(tmp_path, monkeypatch):
+    """No pyproject → nothing to install; command runs unchanged."""
+    repo = tmp_path / "ticket"
+    repo.mkdir()
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
+    assert seen["argv"][-1] == "pytest -q"
+
+
+def test_install_project_noop_without_network(tmp_path, monkeypatch):
+    """No egress proxy → pip can't reach PyPI; skip the install rather
+    than turn a runnable gate into a guaranteed failure."""
+    repo = tmp_path / "ticket"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
+    assert seen["argv"][-1] == "pytest -q"
+
+
+def test_install_project_off_by_default(tmp_path, monkeypatch):
+    """Other sandbox.run callers (agent run_command, merge) must NOT
+    trigger a pip install — only the gate opts in."""
+    repo = tmp_path / "ticket"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("git status", repo_dir=repo, settings=s)  # default install_project=False
+    assert seen["argv"][-1] == "git status"
+
+
 def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
     """When repo_dir has no src/ subdirectory, no PYTHONPATH env var is
     injected into the Docker argv."""
