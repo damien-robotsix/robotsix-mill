@@ -304,6 +304,29 @@ class TestGetRunsEndpoint:
         assert data[0]["status"] == "running"
         assert data[0]["finished_at"] is None
 
+    def test_all_repos_view_unions_per_repo_registries(self, client, tmp_path):
+        """The all-repos view must merge EVERY per-repo registry, not just the
+        lead repo's. Regression: periodic runs are recorded into the per-repo
+        registry, so audit/bc_check for a non-lead repo showed on that repo's
+        board but were invisible in the all-repos view (which read only the
+        default registry)."""
+        from robotsix_mill.runtime.run_registry import RunRegistry
+
+        lead = client.app.state.run_registry
+        a = lead.start("audit", repo_id="test-repo")
+        lead.finish_ok(a, "lead audit")
+
+        # A second per-repo registry (another managed repo) records a run.
+        other = RunRegistry(tmp_path / "other_runs.json")
+        b = other.start("bc_check", repo_id="robotsix-llmio")
+        other.finish_ok(b, "llmio bc_check")
+        client.app.state.run_registries["robotsix-llmio"] = other
+
+        ids = {e["id"] for e in client.get("/runs").json()}
+        assert a in ids and b in ids  # all-repos view sees BOTH
+        ids_all = {e["id"] for e in client.get("/runs?repo_id=all").json()}
+        assert a in ids_all and b in ids_all
+
     def test_response_fields(self, client):
         """Every entry has all the expected top-level keys."""
         registry = client.app.state.run_registry
