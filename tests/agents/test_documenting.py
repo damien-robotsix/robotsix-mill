@@ -255,6 +255,67 @@ class TestRunDocClassifier:
         assert "````git-diff" in prompt
         assert self.DIFF in prompt
 
+    def test_long_diff_truncated_to_cap(self, settings, monkeypatch):
+        """A diff longer than doc_classifier_diff_max_chars is truncated
+        (and carries the omission marker) before being embedded in the
+        git-diff section."""
+        fake_agent = _FakeAgent(
+            DocClassifierResult(user_facing=True, classification="x")
+        )
+
+        def fake_build(*a, tools=None, **kw):
+            return fake_agent
+
+        _patch_build_agent_from_definition(monkeypatch, fake_build)
+        monkeypatch.setattr(
+            "robotsix_mill.agents.yaml_loader.load_agent_definition",
+            lambda path: _make_definition(),
+        )
+        cap = 200
+        settings.doc_classifier_diff_max_chars = cap
+        long_diff = "diff --git a/big.py b/big.py\n" + ("x" * 5000)
+
+        run_doc_classifier(
+            settings=settings,
+            diff=long_diff,
+            spec=self.SPEC,
+        )
+
+        prompt, _ = fake_agent.calls[0]
+        assert "[... description truncated;" in prompt
+        # The full untruncated diff body must NOT survive in the prompt.
+        assert long_diff not in prompt
+        # The embedded diff content is bounded by the cap (plus the
+        # short appended marker).
+        assert len(prompt) < len(self.SPEC) + cap + 200
+
+    def test_short_diff_unchanged(self, settings, monkeypatch):
+        """A diff at/under the cap is passed through verbatim with no
+        truncation marker."""
+        fake_agent = _FakeAgent(
+            DocClassifierResult(user_facing=False, classification="x")
+        )
+
+        def fake_build(*a, tools=None, **kw):
+            return fake_agent
+
+        _patch_build_agent_from_definition(monkeypatch, fake_build)
+        monkeypatch.setattr(
+            "robotsix_mill.agents.yaml_loader.load_agent_definition",
+            lambda path: _make_definition(),
+        )
+        settings.doc_classifier_diff_max_chars = 6000
+
+        run_doc_classifier(
+            settings=settings,
+            diff=self.DIFF,
+            spec=self.SPEC,
+        )
+
+        prompt, _ = fake_agent.calls[0]
+        assert self.DIFF in prompt
+        assert "truncated" not in prompt
+
     def test_usage_limits_wired(self, settings, monkeypatch):
         """usage_limits uses settings.doc_classifier_request_limit."""
         fake_agent = _FakeAgent(

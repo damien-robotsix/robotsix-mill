@@ -100,8 +100,19 @@ def run_doc_classifier(
     )
     try:
         from .prompt_blocks import section
+        from ..core.text_utils import truncate_at_boundary
 
-        user_prompt = section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
+        # The classifier only needs enough diff to judge user-facing vs
+        # internal-only; cap it (truncate_at_boundary is a no-op when the
+        # diff is already at/under the cap, and appends a clear omission
+        # marker otherwise). Safe: the classifier is biased toward
+        # user_facing=True, so lost signal routes to the full doc agent.
+        classifier_diff = truncate_at_boundary(
+            diff, settings.doc_classifier_diff_max_chars
+        )
+        user_prompt = (
+            section("ticket-spec", spec) + "\n\n" + section("git-diff", classifier_diff)
+        )
         limits = UsageLimits(request_limit=settings.doc_classifier_request_limit)
         result = run_agent(
             agent,
