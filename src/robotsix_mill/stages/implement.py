@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Literal
 
 from ..agents import coding
+from ..agents import prerequisite
 from ..agents.coding import AgentBudgetError, AgentRunError
 from ..agents.coordinating import ValidationResult
 from ..agents.testing import run_test_agent
@@ -241,6 +242,20 @@ class ImplementStage(Stage):
             if isinstance(result, Outcome):
                 return result
             repo_dir, branch, resuming = result
+
+        # --- prerequisite gate: cheapest pre-agent check, so it runs
+        # first. Verify that external symbol/import prerequisites the
+        # spec declares are satisfiable in the cloned repo's environment
+        # BEFORE spending the baseline run or the coordinator agent.
+        prereq_outcome = ImplementStage._run_prerequisite_gate(
+            ctx,
+            ticket,
+            ctx.service.workspace(ticket).read_description(),
+            repo_dir,
+            s,
+        )
+        if prereq_outcome is not None:
+            return prereq_outcome
 
         # --- test-baseline check: detect pre-existing failures BEFORE
         # the agent loop so we don't waste cycles on an unfixable base.
@@ -1048,9 +1063,22 @@ class ImplementStage(Stage):
                     reference_files=ref_files,
                     extra_roots=extra_roots,
                 )
+                # Surface the agent's OWN reason in the operator-visible
+                # block note — not a bare "no changes produced". Otherwise the
+                # ticket lands in BLOCKED with an opaque one-liner and the
+                # operator has to open artifacts/implement.md to learn why
+                # (the recurring "blocked with no explanation" complaint). The
+                # full narrative still lives in implement.md (_finalize above);
+                # this is the short, operator-facing form.
+                reason = " ".join(no_change_summary.split())
+                note = "no changes produced"
+                if reason:
+                    note = f"no changes produced — {reason[:300]}" + (
+                        "… (see implement.md)" if len(reason) > 300 else ""
+                    )
                 return _SinglePassResult(
                     next_action="return",
-                    outcome=Outcome(State.BLOCKED, "no changes produced"),
+                    outcome=Outcome(State.BLOCKED, note),
                 )
             # --- post-agent thread acknowledgment ---
             if ic.open_thread_ids and ic.feedback:
@@ -1258,6 +1286,61 @@ class ImplementStage(Stage):
             max_iters,
             extra_roots,
         )
+
+    # ------------------------------------------------------------------
+    # prerequisite gate
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _run_prerequisite_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        spec: str,
+        repo_dir: Path,
+        s,
+    ) -> Outcome | None:
+        """Deterministic pre-agent gate for external prerequisites.
+
+        Verifies that symbol/import prerequisites the spec declares in a
+        ````prereq```` block are satisfiable in the cloned repo's
+        environment before the expensive coordinator agent runs.  This
+        is the cheapest gate (regex parse + bounded subprocess), so it
+        runs first.
+
+        No-op (returns ``None``) when ``prerequisite_gate_enabled`` is
+        False.  When a declared prerequisite is unmet the ticket is
+        BLOCKED — the work is still required once the upstream symbol
+        lands (unlike the freshness gate, which routes stale findings to
+        DONE).  Best-effort: any checker error logs a warning and
+        proceeds (returns ``None``) rather than blocking.
+        """
+        if not s.prerequisite_gate_enabled:
+            return None
+
+        try:
+            result = prerequisite.run_prerequisite_check(spec, repo_dir)
+        except Exception:
+            log.warning(
+                "%s: prerequisite check failed, proceeding with implement",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        unmet = result.get("unmet") or []
+        if unmet:
+            joined = ", ".join(unmet)
+            log.info(
+                "%s: prerequisite gate blocked — unmet: %s",
+                ticket.id,
+                joined,
+            )
+            return Outcome(
+                State.BLOCKED,
+                f"prerequisite(s) not met: {joined}. Re-run implement "
+                "(resume-blocked) once the prerequisite is available.",
+            )
+        return None
 
     # ------------------------------------------------------------------
     # test-baseline check

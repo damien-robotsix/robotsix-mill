@@ -310,14 +310,22 @@ class ReviewStage(Stage):
                     State.DOCUMENTING,
                     f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
                 )
-            # Split asks against the ticket's file_map. Out-of-scope
-            # asks would have made the implement agent edit files
-            # outside the declared scope, get bounced by scope-triage
-            # next pass, and loop forever. Materialise each as a
-            # dependency ticket and park this one on those deps —
-            # the unmet-dep gate keeps the parent out of the queue
-            # until the new tickets close, then implement runs again
-            # with the out-of-scope work already merged into main.
+            # Split asks against the ticket's file_map. An out-of-scope ask
+            # touches files outside the ticket's declared scope; making the
+            # implement agent edit them would get bounced by scope-triage and
+            # loop forever. Spawn each as a SEPARATE ticket — but wire it as a
+            # FOLLOW-UP that depends on THIS ticket, NOT as a prerequisite the
+            # parent waits on.
+            #
+            # Direction matters: most out-of-scope asks are refinements of the
+            # parent's OWN new code (e.g. "harden the parser this ticket
+            # adds"). Such work can only run once the parent is merged, so
+            # parking the parent on it deadlocks — the parent waits for the
+            # child, but the child cannot act until the parent's (unmerged)
+            # code exists (the 104b/413d incident: review spawned a follow-up
+            # as a prerequisite and froze both). Making the child depend on the
+            # parent means it runs AFTER the parent merges, operating on merged
+            # code, and never gates the parent.
             file_map = _load_file_map(ws)
             in_scope, out_of_scope = _split_asks(
                 verdict.request_changes,
@@ -329,14 +337,14 @@ class ReviewStage(Stage):
                     out_of_scope,
                     ctx,
                 )
-                existing = ticket.depends_on or ""
-                prior_ids = json.loads(existing) if existing else []
-                merged = list(dict.fromkeys(prior_ids + new_ids))
-                ctx.service.set_depends_on(ticket.id, merged)
+                for nid in new_ids:
+                    # Follow-up: the spawned ticket waits for THIS ticket to
+                    # land (do NOT park the parent on it — that deadlocks).
+                    ctx.service.set_depends_on(nid, [ticket.id])
                 lines = [
-                    f"Review found {len(out_of_scope)} out-of-scope "
-                    f"ask(s) — spawned dependency ticket(s) and parked "
-                    f"this ticket until they close:",
+                    f"Review found {len(out_of_scope)} out-of-scope ask(s) — "
+                    "spawned as follow-up ticket(s) that depend on this one "
+                    "(they run after it merges):",
                     "",
                 ]
                 for nid, ask in zip(new_ids, out_of_scope):
@@ -347,28 +355,39 @@ class ReviewStage(Stage):
                     "\n".join(lines),
                     author="review",
                 )
-            # Normal in-scope feedback (if any) still goes to the
-            # implement agent as a single comment alongside the
-            # dep-spawn notice.
-            if in_scope or not out_of_scope:
+
+            if in_scope:
+                # In-scope changes remain — re-implement just those; the
+                # out-of-scope asks are now follow-ups and are not re-asked.
                 body = verdict.comments
-                if in_scope and out_of_scope:
-                    # When mixed: rewrite comments to only the in-scope
-                    # subset so implement isn't asked to fix the
-                    # out-of-scope work too. The narrative ``comments``
-                    # field still covers everything for the operator.
+                if out_of_scope:
                     body = (
-                        verdict.comments + "\n\nIn-scope items (the rest were spawned "
-                        "as deps and will be addressed first):\n"
+                        verdict.comments
+                        + "\n\nIn-scope items to fix now (out-of-scope asks were "
+                        "spawned as follow-ups):\n"
                         + "\n".join(
                             f"- {a.description.splitlines()[0][:200]}" for a in in_scope
                         )
                     )
                 ctx.service.add_comment(ticket.id, body, author="review")
-            return Outcome(
-                State.READY,
-                verdict.comments,
-            )
+                return Outcome(State.READY, verdict.comments)
+
+            if out_of_scope:
+                # No in-scope changes: the ticket's own work is sound and the
+                # only asks were out-of-scope (now follow-ups). Approve so it
+                # can merge and release them — rather than parking it on work
+                # that cannot run until it merges.
+                ctx.service.set_review_rounds(ticket.id, 0)
+                return Outcome(
+                    State.DOCUMENTING,
+                    f"approved; {len(out_of_scope)} out-of-scope ask(s) "
+                    "spawned as follow-ups",
+                )
+
+            # REQUEST_CHANGES with no actionable asks — historical behaviour:
+            # re-implement against the narrative comments.
+            ctx.service.add_comment(ticket.id, verdict.comments, author="review")
+            return Outcome(State.READY, verdict.comments)
         else:  # NEEDS_DISCUSSION
             # A genuine human-decision verdict (e.g. "AC5 vs the 13
             # pre-existing bandit findings — pick one of 3 options").
