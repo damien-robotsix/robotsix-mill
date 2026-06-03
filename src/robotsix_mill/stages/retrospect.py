@@ -448,6 +448,103 @@ class RetrospectStage(Stage):
             candidates_path,
         )
 
+    def _maybe_spawn_agented_proposal_tickets(
+        self,
+        res: RetrospectResult,
+        ticket: Ticket,
+        settings: Settings,
+        ctx: StageContext,
+    ) -> list[str]:
+        """File a draft ticket per AGENT.md proposal on the originating
+        repo's board.
+
+        Gated by the same ``retrospect_spawn_agented_proposals`` flag as
+        the AGENT_CANDIDATES.md write. AGENT.md proposals are always
+        relative to the repo retrospect just audited, so they are filed
+        on ``ctx.service`` — for a registered-repo run
+        ``ctx.service.board_id == ctx.repo_config.board_id``, i.e. *this*
+        repo's board. No mill-routing is applied: a proposal made for
+        repo X must land on repo X's board, never on mill.
+
+        (This direct-filing path makes the manual AGENT_CANDIDATES.md
+        validation gate partly redundant; retiring that path is a
+        deliberate follow-up, not this ticket.)
+
+        Returns the list of filed draft IDs (possibly empty).
+        """
+        if not settings.retrospect_spawn_agented_proposals:
+            return []
+        proposals = res.agented_md_proposals
+        if not proposals:
+            return []
+
+        # File on the originating repo's board only — proposals are
+        # board-scoped via ctx; no looks_like_mill_internal routing.
+        target_service = ctx.service
+        spawned: list[str] = []
+        for prop in proposals:
+            section = prop.get("section", "")
+            rule = prop.get("rule", "")
+            rationale = prop.get("rationale", "")
+
+            section_label = section.lstrip("#").strip() or "AGENT.md"
+            rule_snippet = " ".join(rule.split())  # collapse whitespace
+            if len(rule_snippet) > 80:
+                rule_snippet = rule_snippet[:79].rstrip() + "…"
+            if rule_snippet:
+                title = f"AGENT.md: {section_label} — {rule_snippet}"
+            else:
+                title = f"AGENT.md: {section_label} — proposed rule"
+
+            body = (
+                f"### Proposed addition to {section}\n\n"
+                f"> **Rule:** {rule}\n\n"
+                f"**Rationale:** {rationale}\n\n"
+                f"**Provenance:** proposed by retrospect from {ticket.id}\n"
+            )
+
+            # Dedup: skip if an open (non-done/non-closed) ticket with the
+            # same case-insensitive title already exists on the target
+            # board — same pattern as _maybe_spawn_follow_up. Re-querying
+            # list() each iteration also dedupes proposals filed earlier
+            # in this same loop.
+            norm = title.strip().casefold()
+            existing = next(
+                (
+                    t
+                    for t in target_service.list()
+                    if t.title.strip().casefold() == norm
+                    and t.state.value not in _DONE_WITH
+                ),
+                None,
+            )
+            if existing is not None:
+                log.info(
+                    "%s: AGENT.md proposal already filed as %s (state=%s) "
+                    "— not duplicating",
+                    ticket.id,
+                    existing.id,
+                    existing.state.value,
+                )
+                continue
+
+            draft = target_service.create(
+                title,
+                body,
+                source=SourceKind.RETROSPECT,
+                origin_session=current_session(),
+            )
+            # Same board as the originating ticket → parent link is safe.
+            ctx.service.set_parent(draft.id, ticket.id)
+            spawned.append(draft.id)
+            log.info(
+                "%s: retrospect filed AGENT.md proposal ticket %s on %s",
+                ticket.id,
+                draft.id,
+                target_service.board_id or "<default>",
+            )
+        return spawned
+
     # ------------------------------------------------------------------
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
@@ -616,6 +713,10 @@ class RetrospectStage(Stage):
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)
         self._maybe_write_agented_proposals(res, ticket, s, ctx)
+        # In addition to the candidates file, file a draft ticket per
+        # AGENT.md proposal on the originating repo's board so the change
+        # enters the normal refine → implement pipeline.
+        self._maybe_spawn_agented_proposal_tickets(res, ticket, s, ctx)
 
         (ws.artifacts_dir / "retrospect.md").write_text(
             f"# Retrospect\nlangfuse: "
