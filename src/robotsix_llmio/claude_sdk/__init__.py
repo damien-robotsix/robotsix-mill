@@ -16,13 +16,19 @@ __all__ = [
     "ClaudeSDKProvider",
     "ClaudeSDKModel",
     "ClaudeSDKTurnLimitError",
+    "ClaudeSDKQueryTimeout",
     "is_claude_sdk_transient",
     "is_claude_sdk_turn_limit",
 ]
 
 
 def __getattr__(name: str) -> Any:  # PEP 562 — lazy heavy imports
-    if name in ("ClaudeSDKProvider", "ClaudeSDKModel", "ClaudeSDKTurnLimitError"):
+    if name in (
+        "ClaudeSDKProvider",
+        "ClaudeSDKModel",
+        "ClaudeSDKTurnLimitError",
+        "ClaudeSDKQueryTimeout",
+    ):
         try:
             if name == "ClaudeSDKProvider":
                 from .provider import ClaudeSDKProvider
@@ -32,6 +38,10 @@ def __getattr__(name: str) -> Any:  # PEP 562 — lazy heavy imports
                 from .model import ClaudeSDKTurnLimitError
 
                 return ClaudeSDKTurnLimitError
+            if name == "ClaudeSDKQueryTimeout":
+                from .model import ClaudeSDKQueryTimeout
+
+                return ClaudeSDKQueryTimeout
             from .model import ClaudeSDKModel
 
             return ClaudeSDKModel
