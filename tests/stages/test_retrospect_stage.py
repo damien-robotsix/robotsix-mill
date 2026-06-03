@@ -1219,6 +1219,176 @@ def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
     assert not candidates_path.exists()
 
 
+# ------------------------------------------------------------------
+# 18. AGENT.md proposal ticket filing (in addition to the candidates file)
+# ------------------------------------------------------------------
+
+
+def _agented_seams(monkeypatch):
+    """Install the common seams used by the AGENT.md-proposal-ticket
+    tests (everything except run_retrospect_agent, which each test
+    supplies)."""
+    from robotsix_mill import langfuse_client
+    from robotsix_mill import pass_runner
+
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+
+def test_agented_proposals_file_tickets_on_enable(ctx_factory, monkeypatch):
+    """N proposals → N draft tickets on ctx.service's board, each in
+    State.DRAFT, source RETROSPECT, parent set to the originating
+    ticket; each body carries its section/rule/rationale + origin id."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = ctx_factory()
+    _agented_seams(monkeypatch)
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js when adding new UI.",
+                    "rationale": "Observed on T-abc.",
+                },
+                {
+                    "section": "## Git / CI",
+                    "rule": "Rebase before committing.",
+                    "rationale": "Main moves under you.",
+                },
+            ]
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+
+    spawned = [tk for tk in ctx.service.list() if tk.id != t.id]
+    assert len(spawned) == 2
+    for tk in spawned:
+        assert tk.state is State.DRAFT
+        assert tk.source == SourceKind.RETROSPECT
+        assert tk.parent_id == t.id
+
+    bodies = {tk.title: ctx.service.workspace(tk).read_description() for tk in spawned}
+    joined = "\n".join(bodies.values())
+    assert "## Board UI" in joined
+    assert "Always update board.js when adding new UI." in joined
+    assert "Observed on T-abc." in joined
+    assert "## Git / CI" in joined
+    assert "Rebase before committing." in joined
+    # Each body references the originating ticket id.
+    for body in bodies.values():
+        assert t.id in body
+
+
+def test_agented_proposal_tickets_gated_by_setting(ctx_factory, monkeypatch):
+    """When retrospect_spawn_agented_proposals is disabled, no proposal
+    tickets are filed (and no candidates file is written)."""
+    ctx = ctx_factory(MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS="false")
+    _agented_seams(monkeypatch)
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js.",
+                    "rationale": "T-abc.",
+                }
+            ]
+        ),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    # Only the original ticket — no proposal tickets filed.
+    assert [tk.id for tk in ctx.service.list()] == [t.id]
+
+
+@pytest.mark.parametrize("proposals", [None, []])
+def test_agented_proposal_tickets_none_or_empty_no_filing(
+    ctx_factory, monkeypatch, proposals
+):
+    """None or an empty proposal list → no proposal tickets filed."""
+    ctx = ctx_factory()
+    _agented_seams(monkeypatch)
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(agented_md_proposals=proposals),
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert [tk.id for tk in ctx.service.list()] == [t.id]
+
+
+def test_agented_proposal_tickets_dedup_on_repeat(ctx_factory, monkeypatch):
+    """Filing is idempotent at the title level: a second run with the
+    same proposal does not add a duplicate ticket."""
+    ctx = ctx_factory()
+    _agented_seams(monkeypatch)
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {
+                    "section": "## Board UI",
+                    "rule": "Always update board.js when adding new UI.",
+                    "rationale": "Observed on T-abc.",
+                }
+            ]
+        ),
+    )
+
+    t = _ticket(ctx)
+    RetrospectStage().run(t, ctx)
+    after_first = [tk for tk in ctx.service.list() if tk.id != t.id]
+    assert len(after_first) == 1
+
+    # Second run, same proposal → no duplicate.
+    RetrospectStage().run(t, ctx)
+    after_second = [tk for tk in ctx.service.list() if tk.id != t.id]
+    assert len(after_second) == 1
+    assert after_second[0].id == after_first[0].id
+
+
 # ---------------------------------------------------------------------------
 # 22. Draft routing: draft_target="mill" lands on the configured mill board
 # ---------------------------------------------------------------------------
