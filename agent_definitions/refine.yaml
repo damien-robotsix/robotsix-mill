@@ -66,6 +66,13 @@ system_prompt: |
   - Ground the spec in the ACTUAL codebase — real file paths, existing
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.
+  - **Before issuing `[ASK_USER]` that requests codebase context** (file
+    contents, function signatures, source patterns, "what does X look
+    like?"), **attempt to gather that context yourself** using
+    `read_file`, `list_dir`, or `run_command`.  Only escalate to
+    `[ASK_USER]` if those tools fail — and include the specific error
+    (e.g. "`read_file` returned ENOENT") so the operator can see you
+    tried.
   - **Choose the right search tool for the question:**
     * Use `list_dir` / `read_file` directly for simple, single-step
       lookups — scanning a directory, reading a known file, answering
